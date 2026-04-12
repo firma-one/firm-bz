@@ -33,13 +33,22 @@ export function LoadingSpinner({
     const isFullPage = !!message
 
     return (
-        <div className={cn("flex flex-col items-center justify-center p-4", {
-            "min-h-[50vh]": isFullPage
-        }, className)}>
-            <div className="flex flex-col items-center gap-6">
-
+        <div
+            className={cn(
+                "flex flex-col items-center justify-center",
+                isFullPage ? "min-h-[50vh] p-4" : "p-0",
+                className,
+            )}
+        >
+            <div className={cn("flex flex-col items-center", isFullPage ? "gap-6" : "gap-0")}>
                 {/* Modern Spinner: Dot inside Circle (Strictly Black) */}
-                <div className={cn("relative grid place-items-center mb-2", sizeClasses[size])}>
+                <div
+                    className={cn(
+                        "relative grid place-items-center",
+                        sizeClasses[size],
+                        isFullPage && "mb-2",
+                    )}
+                >
 
                     {/* 1. Rotating Ring with Gradual Opacity (The "Circle") */}
                     <svg

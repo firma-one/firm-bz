@@ -3,10 +3,10 @@
 import { prisma } from "@/lib/prisma"
 import { createClient } from "@/utils/supabase/server"
 import { sendEmail } from '@/lib/email'
-import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { logger } from '@/lib/logger'
 import { BRAND_NAME } from '@/config/brand'
 import { safeInngestSend } from '@/lib/inngest/client'
+import { grantEngagementDriveFolderAccess } from '@/lib/grant-engagement-drive-folder-access'
 import { invalidateUserSettingsPlus } from '@/lib/actions/user-settings'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { mergeLeanAppMetadata } from '@/lib/auth/supabase-jwt-metadata'
@@ -473,23 +473,16 @@ export async function acceptInvitation(token: string): Promise<{ success: true; 
             const firm = invite.engagement.client.firm as { connectorId?: string | null }
             const connectorId = firm?.connectorId
             if (connectorId) {
-                const folderIds = await googleDriveConnector.getProjectFolderIds(connectorId, invite.engagement.slug)
-                if (folderIds.generalFolderId) {
-                    await googleDriveConnector.grantFolderPermission(
-                        connectorId,
-                        folderIds.generalFolderId,
-                        user.email,
-                        'writer'
-                    )
-                }
-                if (invite.persona.slug === 'eng_admin' && folderIds.confidentialFolderId) {
-                    await googleDriveConnector.grantFolderPermission(
-                        connectorId,
-                        folderIds.confidentialFolderId,
-                        user.email,
-                        'writer'
-                    )
-                }
+                await grantEngagementDriveFolderAccess({
+                    connectorId,
+                    engagementSlug: invite.engagement.slug,
+                    email: user.email,
+                    role: invite.persona.slug as 'eng_admin' | 'eng_member' | 'eng_ext_collaborator' | 'eng_viewer',
+                    projectName: invite.engagement.name,
+                    clientSlug: invite.engagement.client.slug,
+                    clientName: invite.engagement.client.name,
+                    projectFolderId: invite.engagement.connectorRootFolderId,
+                })
             }
         } catch (error) {
             logger.error('Error granting Drive folder access (V2)', error as Error)

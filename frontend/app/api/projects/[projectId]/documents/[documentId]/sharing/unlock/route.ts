@@ -4,11 +4,11 @@ import { prisma } from '@/lib/prisma'
 import { getFileInfo } from '@/lib/file-utils'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { requireEngagementMember, isEngagementLeadRole } from '@/lib/engagement-access'
-import { getVersionLockFromSettings, type VersionLockDowngrade } from '@/lib/document-version-lock'
+import { getVersionLockFromSettings } from '@/lib/document-version-lock'
 
 /**
- * PATCH /api/projects/[projectId]/documents/[documentId]/sharing/finalize
- * Lock document version (Engagement Lead only): Drive read-only for collaborators + optional content restriction.
+ * PATCH /api/projects/[projectId]/documents/[documentId]/sharing/unlock
+ * Restore Drive roles recorded at lock time (Engagement Lead only).
  */
 export async function PATCH(
   _request: NextRequest,
@@ -42,12 +42,9 @@ export async function PATCH(
     if (!existing)
       return NextResponse.json({ error: 'Share record not found' }, { status: 404 })
 
-    if (existing.isFolder) {
-      return NextResponse.json({ error: 'Version lock applies to files only' }, { status: 400 })
-    }
-
-    if (getVersionLockFromSettings(existing.settings)) {
-      return NextResponse.json({ error: 'Document is already locked' }, { status: 409 })
+    const lock = getVersionLockFromSettings(existing.settings)
+    if (!lock) {
+      return NextResponse.json({ error: 'Document is not locked' }, { status: 409 })
     }
 
     let connectorId = existing.connectorId
@@ -62,39 +59,27 @@ export async function PATCH(
       return NextResponse.json({ error: 'No active Google Drive connection' }, { status: 500 })
     }
 
-    const downgraded: VersionLockDowngrade[] = []
-    const perms = await googleDriveConnector.listFilePermissions(connectorId, fileInfo.externalId)
-    const elevRoles = new Set(['writer', 'fileOrganizer', 'organizer', 'commenter'])
-
-    for (const p of perms) {
-      if (!p.id || p.deleted) continue
-      if (p.type !== 'user' || !p.emailAddress) continue
-      if (p.role === 'owner') continue
-      if (!elevRoles.has(p.role)) continue
-
-      const prev = p.role
-      const ok = await googleDriveConnector.patchFilePermissionRole(
-        connectorId,
-        fileInfo.externalId,
-        p.id,
-        'reader'
-      )
-      if (ok) downgraded.push({ permissionId: p.id, previousRole: prev })
+    for (const row of lock.downgraded) {
+      const role = row.previousRole as 'reader' | 'writer' | 'commenter' | 'fileOrganizer' | 'organizer'
+      if (['writer', 'reader', 'commenter', 'fileOrganizer', 'organizer'].includes(row.previousRole)) {
+        await googleDriveConnector.patchFilePermissionRole(
+          connectorId,
+          fileInfo.externalId,
+          row.permissionId,
+          role
+        )
+      }
     }
 
-    await googleDriveConnector.setFileContentReadOnly(connectorId, fileInfo.externalId, true)
+    await googleDriveConnector.setFileContentReadOnly(connectorId, fileInfo.externalId, false)
 
-    const now = new Date().toISOString()
     const prevSettings = (existing.settings as Record<string, unknown>) || {}
     const share = (prevSettings.share as Record<string, unknown> | undefined) || {}
     const nextSettings: Record<string, unknown> = {
       ...prevSettings,
-      share: { ...share, finalizedAt: now },
-      versionLock: {
-        lockedAt: now,
-        downgraded,
-      },
+      share: { ...share, finalizedAt: null },
     }
+    delete nextSettings.versionLock
 
     await prisma.engagementDocument.update({
       where: { id: existing.id },
@@ -106,7 +91,7 @@ export async function PATCH(
     })
     return NextResponse.json({ sharing: updated })
   } catch (e) {
-    console.error('PATCH sharing/finalize error', e)
-    return NextResponse.json({ error: 'Failed to finalize' }, { status: 500 })
+    console.error('PATCH sharing/unlock error', e)
+    return NextResponse.json({ error: 'Failed to unlock' }, { status: 500 })
   }
 }

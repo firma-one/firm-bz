@@ -17,7 +17,7 @@ const H = '[font-family:var(--font-kinetic-headline),system-ui,sans-serif]'
 const B = '[font-family:var(--font-kinetic-body),system-ui,sans-serif]'
 
 const LIME_CTA =
-  'group inline-flex w-full items-center justify-center gap-2 rounded bg-[#72ff70] px-6 py-3.5 text-xs font-bold uppercase tracking-[0.2em] text-[#002203] shadow-[0_1px_0_rgba(0,34,3,0.28)] transition-all duration-200 hover:bg-[#72ff70] hover:-translate-y-0.5 hover:shadow-[0_10px_24px_-12px_rgba(0,34,3,0.65)] active:translate-y-0 active:scale-95 disabled:opacity-50 disabled:translate-y-0 disabled:shadow-none [font-family:var(--font-kinetic-headline),system-ui,sans-serif]'
+  'group inline-flex h-12 w-full items-center justify-center gap-2 rounded bg-[#72ff70] px-6 text-xs font-bold uppercase tracking-[0.2em] text-[#002203] shadow-[0_1px_0_rgba(0,34,3,0.28)] transition-all duration-200 hover:bg-[#72ff70] hover:-translate-y-0.5 hover:shadow-[0_10px_24px_-12px_rgba(0,34,3,0.65)] active:translate-y-0 active:scale-95 disabled:opacity-50 disabled:translate-y-0 disabled:shadow-none [font-family:var(--font-kinetic-headline),system-ui,sans-serif]'
 
 const OUTLINE_SECONDARY =
   'w-full rounded-md border border-[#c6c6cc]/80 bg-white text-[15px] font-medium text-[#45474c] transition-all hover:border-[#9ea0a8] hover:bg-[#f6f3f4] hover:text-[#1b1b1d] active:scale-[0.98]'

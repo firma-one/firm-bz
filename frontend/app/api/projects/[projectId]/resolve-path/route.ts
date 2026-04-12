@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { SearchService } from '@/lib/services/search-service'
 import { logger } from '@/lib/logger'
 import { requireProjectView } from '@/lib/api/project-auth'
+import { requireEngagementMember } from '@/lib/engagement-access'
 
 export async function GET(
     request: NextRequest,
@@ -19,6 +20,11 @@ export async function GET(
 
         const authResult = await requireProjectView(request, projectId)
         if (authResult instanceof NextResponse) return authResult
+
+        const member = await requireEngagementMember(projectId, authResult.user.id)
+        if (!member) {
+            return NextResponse.json({ error: 'Not found' }, { status: 404 })
+        }
 
         let path = await SearchService.resolvePathToProjectRoot(authResult.ctx.orgId, fileId)
 

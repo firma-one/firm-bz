@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react"
 import type { ComponentType } from "react"
 import * as DialogPrimitive from "@radix-ui/react-dialog"
 import { animate, motion, useMotionValue, useTransform } from "framer-motion"
@@ -43,6 +43,10 @@ import {
   targetAudienceScrollMarginClass,
 } from "@/lib/marketing/target-audience-nav"
 import { cn } from "@/lib/utils"
+import {
+  markRealityCheckViewedFromTransformationModal,
+  markTrustArchitectureViewedFromTransformationModal,
+} from "@/lib/marketing/landing-section-dismissals"
 
 function WhatsAppCarrierIcon({ className }: { className?: string }) {
   return (
@@ -91,6 +95,19 @@ const TRUST_MODAL_CLOSE_BUTTON_CLASS = cn(
   REALITY_MODAL_CLOSE_BUTTON_CLASS,
   "focus-visible:ring-offset-[#f6f3f4]",
 )
+
+function useViewportMaxMd() {
+  return useSyncExternalStore(
+    (onStoreChange) => {
+      if (typeof window === "undefined") return () => {}
+      const mq = window.matchMedia("(max-width: 767px)")
+      mq.addEventListener("change", onStoreChange)
+      return () => mq.removeEventListener("change", onStoreChange)
+    },
+    () => (typeof window !== "undefined" ? window.matchMedia("(max-width: 767px)").matches : false),
+    () => false,
+  )
+}
 
 /** BEFORE row: fixed lane so chaos streams stay clipped inside `ChaosCenter`. */
 const TRANSFORM_VISUAL_MD_BOX = "md:h-[19rem] md:min-h-[19rem] md:max-h-[19rem] md:overflow-x-hidden md:overflow-y-clip"
@@ -230,15 +247,23 @@ type ChaosStream = {
 function ChaosDocChip({
   s,
   progress,
+  layoutVertical,
 }: {
   s: ChaosStream
   progress: MotionValue<number>
+  layoutVertical: boolean
 }) {
-  const left = useTransform(progress, (t) => {
+  const horizontalSweep = useTransform(progress, (t) => {
     const pct = s.dir === "lr" ? -8 + 116 * t : 108 - 116 * t
     return `${pct}%`
   })
-  const top = useTransform(progress, (t) => `${yOnPath(s.lane, s.ampPct, s.cycles, t).toFixed(3)}%`)
+  const verticalSweep = useTransform(progress, (t) => {
+    const pct = s.dir === "lr" ? -6 + 112 * t : 106 - 112 * t
+    return `${pct}%`
+  })
+  const crossAxisWiggle = useTransform(progress, (t) => `${yOnPath(s.lane, s.ampPct, s.cycles, t).toFixed(3)}%`)
+  const left = layoutVertical ? crossAxisWiggle : horizontalSweep
+  const top = layoutVertical ? verticalSweep : crossAxisWiggle
   const rotate = useTransform(progress, (t) => s.rotBase + 7 * Math.sin(2 * Math.PI * s.cycles * 1.08 * t))
   const Icon = s.style.icon
   return (
@@ -260,9 +285,9 @@ function ChaosDocChip({
 }
 
 /** One `t` timeline per document chip (no dotted trails — carriers implied by bottom icon row). */
-function ChaosStreamLayer({ s }: { s: ChaosStream }) {
+function ChaosStreamLayer({ s, layoutVertical }: { s: ChaosStream; layoutVertical: boolean }) {
   const progress = useChaosProgress(s.duration, s.delay)
-  return <ChaosDocChip s={s} progress={progress} />
+  return <ChaosDocChip s={s} progress={progress} layoutVertical={layoutVertical} />
 }
 
 function ChaosCenter() {
@@ -271,6 +296,8 @@ function ChaosCenter() {
    * top uses the same sine as the SVG (yOnPath). Separate useChaosProgress per subcomponent
    * uses identical duration/delay so they stay aligned.
    */
+  const layoutVertical = useViewportMaxMd()
+
   const streams = useMemo(() => {
     const count = 30
     return Array.from({ length: count }, (_, i) => {
@@ -292,7 +319,7 @@ function ChaosCenter() {
     <div className="relative flex h-full w-full min-h-[180px] flex-1 flex-col items-center justify-center gap-2 overflow-hidden bg-[#f1f5f9]/40 py-1 sm:min-h-[200px] md:min-h-0 md:gap-1.5 md:py-0">
       <div className="relative mx-auto h-[min(11rem,30vh)] w-full min-h-[7.5rem] max-h-[11rem] max-w-[min(100%,26rem)] shrink-0 sm:h-[11.5rem] sm:max-h-[11.5rem] md:h-[10.25rem] md:max-h-[10.25rem]">
         {streams.map((s) => (
-          <ChaosStreamLayer key={s.i} s={s} />
+          <ChaosStreamLayer key={s.i} s={s} layoutVertical={layoutVertical} />
         ))}
       </div>
       <div
@@ -408,6 +435,76 @@ function AfterTransmissionTrail({ side }: { side: "left" | "right" }) {
   )
 }
 
+/** Mobile-only: dots move top → bottom along pro→vault (blue) or client→vault (green). */
+function AfterTrailBubbleVertical({
+  side,
+  duration,
+  delay,
+}: {
+  side: "left" | "right"
+  duration: number
+  delay: number
+}) {
+  const progress = useChaosProgress(duration, delay)
+  const top = useTransform(progress, (t) =>
+    side === "left" ? `${(8 + 82 * t).toFixed(3)}%` : `${(90 - 82 * t).toFixed(3)}%`,
+  )
+  const opacity = useTransform(progress, (t) => {
+    if (t < 0.1) return t / 0.1
+    if (t > 0.9) return (1 - t) / 0.1
+    return 1
+  })
+  return (
+    <motion.div
+      className={cn(
+        "pointer-events-none absolute left-1/2 z-[12] h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full will-change-transform",
+        side === "left"
+          ? "bg-[#5a78ff] shadow-[0_0_10px_rgba(90,120,255,0.65)]"
+          : "bg-[#4aba5e] shadow-[0_0_12px_rgba(74,186,94,0.72)]",
+      )}
+      style={{ top, left: "50%", opacity }}
+    />
+  )
+}
+
+/** Mobile-only vertical “transmission” between persona row and vault. */
+function AfterVerticalMobileSpine({ side }: { side: "left" | "right" }) {
+  const proSide = side === "left"
+  return (
+    <div
+      className={cn(
+        "relative mx-auto flex h-12 w-full max-w-[3rem] shrink-0 flex-col items-center justify-center md:hidden",
+      )}
+      aria-hidden
+    >
+      <div className="absolute inset-y-0.5 left-1/2 w-px -translate-x-1/2 overflow-visible">
+        <motion.div
+          className={cn(
+            "h-full w-px",
+            proSide
+              ? "bg-gradient-to-b from-transparent via-[#5a78ff]/75 to-transparent"
+              : "bg-gradient-to-b from-transparent via-[#4aba5e]/80 to-transparent",
+          )}
+          animate={{ opacity: [0.45, 1, 0.45] }}
+          transition={{
+            duration: 2.8,
+            repeat: Infinity,
+            ease: "easeInOut",
+            delay: proSide ? 0 : 0.35,
+          }}
+        />
+        {proSide
+          ? [0, 1, 2].map((i) => (
+              <AfterTrailBubbleVertical key={`trail-v-l-${i}`} side="left" duration={3.1} delay={i * 0.55} />
+            ))
+          : [0, 1].map((i) => (
+              <AfterTrailBubbleVertical key={`trail-v-r-${i}`} side="right" duration={3.3} delay={0.25 + i * 0.65} />
+            ))}
+      </div>
+    </div>
+  )
+}
+
 function AfterVault() {
   const vaultShellW = "w-[11.5rem] sm:w-[12.5rem]"
 
@@ -480,19 +577,29 @@ export function FirmTransformationSection({ skin = "kinetic" as LandingSkin }: {
   const [realityModalOpen, setRealityModalOpen] = useState(false)
   const [trustArchitectureModalOpen, setTrustArchitectureModalOpen] = useState(false)
 
+  const onRealityModalOpenChange = useCallback((open: boolean) => {
+    setRealityModalOpen(open)
+    if (open) markRealityCheckViewedFromTransformationModal()
+  }, [])
+
+  const onTrustModalOpenChange = useCallback((open: boolean) => {
+    setTrustArchitectureModalOpen(open)
+    if (open) markTrustArchitectureViewedFromTransformationModal()
+  }, [])
+
   return (
     <section className="relative overflow-hidden border-y border-black/[0.06] bg-white pb-10 pt-6 md:pb-12 md:pt-8 lg:pb-16 lg:pt-10">
-      <DialogPrimitive.Root open={realityModalOpen} onOpenChange={setRealityModalOpen}>
+      <DialogPrimitive.Root open={realityModalOpen} onOpenChange={onRealityModalOpenChange}>
         <DialogPrimitive.Portal>
           <DialogPrimitive.Overlay
             className={cn(
-              "fixed inset-x-0 bottom-0 z-40 bg-black/35 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+              "fixed inset-x-0 bottom-0 z-[72] bg-black/35 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
               "top-16 lg:top-[4.25rem]",
             )}
           />
           <DialogPrimitive.Content
             className={cn(
-              "fixed inset-x-0 bottom-0 z-40 flex flex-col overflow-hidden border-0 bg-[#E1E1E1] p-0 shadow-none outline-none",
+              "fixed inset-x-0 bottom-0 z-[73] flex flex-col overflow-hidden border-0 bg-[#E1E1E1] p-0 shadow-none outline-none",
               "top-16 lg:top-[4.25rem]",
               "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
             )}
@@ -505,13 +612,14 @@ export function FirmTransformationSection({ skin = "kinetic" as LandingSkin }: {
             <DialogPrimitive.Close
               type="button"
               className={cn(
-                "absolute right-6 top-6 z-10",
+                "absolute right-4 top-4 z-20 sm:right-6 sm:top-6",
                 REALITY_MODAL_CLOSE_BUTTON_CLASS,
+                "max-md:gap-0 max-md:px-3 max-md:py-2",
               )}
               aria-label="Close reality check"
             >
               <SquareX className="h-4 w-4 shrink-0 text-[#72ff70]" aria-hidden strokeWidth={2} />
-              Close
+              <span className="hidden md:inline">Close</span>
             </DialogPrimitive.Close>
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
               <RealityCheckSection />
@@ -520,17 +628,17 @@ export function FirmTransformationSection({ skin = "kinetic" as LandingSkin }: {
         </DialogPrimitive.Portal>
       </DialogPrimitive.Root>
 
-      <DialogPrimitive.Root open={trustArchitectureModalOpen} onOpenChange={setTrustArchitectureModalOpen}>
+      <DialogPrimitive.Root open={trustArchitectureModalOpen} onOpenChange={onTrustModalOpenChange}>
         <DialogPrimitive.Portal>
           <DialogPrimitive.Overlay
             className={cn(
-              "fixed inset-x-0 bottom-0 z-40 bg-black/35 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+              "fixed inset-x-0 bottom-0 z-[72] bg-black/35 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
               "top-16 lg:top-[4.25rem]",
             )}
           />
           <DialogPrimitive.Content
             className={cn(
-              "fixed inset-x-0 bottom-0 z-40 flex flex-col overflow-hidden border-0 bg-[#f6f3f4] p-0 shadow-none outline-none",
+              "fixed inset-x-0 bottom-0 z-[73] flex flex-col overflow-hidden border-0 bg-[#f6f3f4] p-0 shadow-none outline-none",
               "top-16 lg:top-[4.25rem]",
               "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
             )}
@@ -542,11 +650,15 @@ export function FirmTransformationSection({ skin = "kinetic" as LandingSkin }: {
             </DialogPrimitive.Description>
             <DialogPrimitive.Close
               type="button"
-              className={cn("absolute right-6 top-6 z-10", TRUST_MODAL_CLOSE_BUTTON_CLASS)}
+              className={cn(
+                "absolute right-4 top-4 z-20 sm:right-6 sm:top-6",
+                TRUST_MODAL_CLOSE_BUTTON_CLASS,
+                "max-md:gap-0 max-md:px-3 max-md:py-2",
+              )}
               aria-label="Close trust architecture"
             >
               <SquareX className="h-4 w-4 shrink-0 text-[#72ff70]" aria-hidden strokeWidth={2} />
-              Close
+              <span className="hidden md:inline">Close</span>
             </DialogPrimitive.Close>
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
               <TrustArchitectureSection variant="modal" skin={skin} />
@@ -603,7 +715,7 @@ export function FirmTransformationSection({ skin = "kinetic" as LandingSkin }: {
                     backgroundSize: "16px 16px",
                   }}
                 />
-                <div className="relative z-10 flex h-full min-h-0 w-full flex-col items-stretch justify-center gap-3 md:flex-row md:items-center md:gap-4 lg:gap-6">
+                <div className="relative z-10 flex h-full min-h-0 w-full flex-col items-center justify-center gap-3 md:flex-row md:items-stretch md:gap-4 lg:gap-6">
                   <PersonaCard kind="pro" tone="before" />
                   <ChaosCenter />
                   <PersonaCard kind="client" tone="before" />
@@ -664,8 +776,10 @@ export function FirmTransformationSection({ skin = "kinetic" as LandingSkin }: {
                   <div className="relative z-[7] flex shrink-0 items-center justify-center">
                     <PersonaCard kind="pro" tone="after" />
                   </div>
+                  <AfterVerticalMobileSpine side="left" />
                   <AfterTransmissionTrail side="left" />
                   <AfterVault />
+                  <AfterVerticalMobileSpine side="right" />
                   <AfterTransmissionTrail side="right" />
                   <div className="relative z-[7] flex shrink-0 items-center justify-center">
                     <PersonaCard kind="client" tone="after" />

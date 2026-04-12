@@ -25,6 +25,7 @@ import {
   Check,
   Shield,
   ClipboardList,
+  MessageCircle,
 } from "lucide-react"
 import { FirmSelector, type FirmOption } from "@/components/projects/firm-selector"
 import { getUserFirms } from "@/lib/actions/firms"
@@ -113,7 +114,7 @@ export function AppSidebar({ variant = 'fixed' }: AppSidebarProps = {}) {
   const [isMoreOpen, setIsMoreOpen] = useState(false)
   // Projects Collapse State
   const [isProjectsOpen, setIsProjectsOpen] = useState(true)
-  // Project tab visibility (Members, Shares, Insights, Settings) when in an engagement
+  // Project tab visibility (Comments, Members, Shares, Insights, Settings) when in an engagement
   const [projectTabPermissions, setProjectTabPermissions] = useState<{
     canViewInternalTabs: boolean
     canViewSettings: boolean
@@ -538,6 +539,18 @@ export function AppSidebar({ variant = 'fixed' }: AppSidebarProps = {}) {
                             <Share2 className={`h-3.5 w-3.5 mr-2.5 ${pathname.includes('/shares') ? 'text-slate-900' : 'text-slate-400'}`} />
                             Shares
                           </Link>
+
+                          {canShowProjectInternalTabs && (
+                            <Link
+                              href={`${baseUrl}/c/${clientSlug}/e/${projectSlug}/comments`}
+                              className={`flex items-center d-sidebar-nav rounded-lg py-1.5 px-2.5 transition-colors ${pathname.includes('/comments')
+                                ? 'bg-slate-100 text-slate-900 hover:bg-slate-100/90'
+                                : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}
+                            >
+                              <MessageCircle className={`h-3.5 w-3.5 mr-2.5 ${pathname.includes('/comments') ? 'text-slate-900' : 'text-slate-400'}`} />
+                              Comments
+                            </Link>
+                          )}
 
                           {canShowProjectInternalTabs && (
                             <>

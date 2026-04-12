@@ -7,6 +7,8 @@ import {
   BriefcaseBusiness,
   Check,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Clock,
   FileCheck,
   FileText,
@@ -30,6 +32,10 @@ export function LegacyHeroScreenMock({
   edAccent,
   slides,
   onSlideChange,
+  compactSlideNav = false,
+  slideViewportHeightClass = "h-[330px]",
+  /** Unique Framer `layoutId` prefix when two mocks mount (hero + marketing strip). */
+  motionInstanceKey = "hero",
 }: {
   currentSlide: number
   t: LandingTheme
@@ -43,6 +49,9 @@ export function LegacyHeroScreenMock({
     icon: ComponentType<{ className?: string }>
   }>
   onSlideChange: (index: number) => void
+  compactSlideNav?: boolean
+  slideViewportHeightClass?: string
+  motionInstanceKey?: string
 }) {
   // Match kinetic institution palette in hero mock: lime + warm blush (not legacy purple).
   const redesignAccent = "text-[#006e16]"
@@ -70,7 +79,7 @@ export function LegacyHeroScreenMock({
           {getAppHostDisplay()}/workspace
         </div>
       </div>
-      <div className="relative h-[330px] overflow-hidden bg-slate-50/40">
+      <div className={cn("relative overflow-hidden bg-slate-50/40", slideViewportHeightClass)}>
         <AnimatePresence mode="wait">
           <motion.div
             key={`hero-visual-${currentSlide}`}
@@ -330,7 +339,7 @@ export function LegacyHeroScreenMock({
         </AnimatePresence>
       </div>
       <div className="border-t border-slate-100 bg-white">
-        <div className="relative min-h-[116px] bg-white">
+        <div className={cn("relative bg-white", compactSlideNav ? "min-h-[128px]" : "min-h-[116px]")}>
           <AnimatePresence mode="wait">
             <motion.div
               key={`flat-strip-${currentSlide}`}
@@ -338,25 +347,54 @@ export function LegacyHeroScreenMock({
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 16 }}
               transition={{ duration: 0.28, ease: "easeInOut" }}
-              className="absolute inset-0 flex items-center px-4 md:px-5"
+              className={cn(
+                "absolute inset-0 flex items-center px-4 md:px-5",
+                compactSlideNav &&
+                  "max-md:flex-col max-md:items-stretch max-md:justify-center max-md:gap-3 max-md:py-3",
+              )}
             >
               {(() => {
                 const current = slides[currentSlide]
                 const Icon = current.icon
                 return (
                   <>
-                    <div className="mr-3 w-11 h-11 rounded-md border flex items-center justify-center shrink-0 shadow-sm bg-[#72ff70]/18 border-[#006e16]/25 text-[#006e16]">
-                      <Icon className="w-5 h-5 stroke-[1.6]" />
-                    </div>
-                    <div className="mr-4 min-w-[128px] md:min-w-[148px] shrink-0">
-                      <h3 className="text-[1.2rem] md:text-[1.3rem] leading-none font-bold mb-0.5 text-[#0f1a15] [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
-                        {current.label}
-                      </h3>
-                      <div className="text-[8.5px] md:text-[9px] font-bold uppercase tracking-[0.11em] text-[#006e16] [font-family:var(--font-kinetic-headline),system-ui,sans-serif] whitespace-nowrap">
-                        {current.subtitle}
+                    {compactSlideNav ? (
+                      <div className="flex min-w-0 items-start gap-3 max-md:w-full md:contents">
+                        <div className="mr-3 flex w-11 shrink-0 items-center justify-center rounded-md border border-[#006e16]/25 bg-[#72ff70]/18 py-2 shadow-sm text-[#006e16] md:py-0">
+                          <Icon className="h-5 w-5 stroke-[1.6]" />
+                        </div>
+                        <div className="min-w-0 flex-1 md:mr-4 md:min-w-[148px] md:flex-none">
+                          <h3 className="text-[1.2rem] md:text-[1.3rem] leading-none font-bold text-[#0f1a15] [font-family:var(--font-kinetic-headline),system-ui,sans-serif] md:mb-0.5">
+                            {current.label}
+                          </h3>
+                          <div className="mt-0.5 text-[8.5px] font-bold uppercase tracking-[0.11em] text-[#006e16] [font-family:var(--font-kinetic-headline),system-ui,sans-serif] md:mt-0 md:text-[9px] md:whitespace-nowrap">
+                            {current.subtitle}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                    <p className="min-w-0 flex-1 font-medium leading-snug text-[13px] md:text-[14px] text-[#2f4338] [font-family:var(--font-kinetic-body),system-ui,sans-serif] pr-5">
+                    ) : (
+                      <>
+                        <div className="mr-3 flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-[#006e16]/25 bg-[#72ff70]/18 shadow-sm text-[#006e16]">
+                          <Icon className="h-5 w-5 stroke-[1.6]" />
+                        </div>
+                        <div className="mr-4 min-w-[128px] shrink-0 md:min-w-[148px]">
+                          <h3 className="mb-0.5 text-[1.2rem] font-bold leading-none text-[#0f1a15] [font-family:var(--font-kinetic-headline),system-ui,sans-serif] md:text-[1.3rem]">
+                            {current.label}
+                          </h3>
+                          <div className="text-[8.5px] font-bold uppercase tracking-[0.11em] text-[#006e16] [font-family:var(--font-kinetic-headline),system-ui,sans-serif] md:text-[9px] md:whitespace-nowrap">
+                            {current.subtitle}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                    <p
+                      className={cn(
+                        "min-w-0 flex-1 font-medium leading-snug text-[#2f4338] [font-family:var(--font-kinetic-body),system-ui,sans-serif] pr-5",
+                        compactSlideNav
+                          ? "max-md:w-full max-md:text-xs max-md:leading-snug max-md:pr-0 md:text-[13px] lg:text-[14px]"
+                          : "text-[13px] md:text-[14px]",
+                      )}
+                    >
                       {current.desc}
                     </p>
                     <div className={cn(t.carouselWatermark, "right-5 bottom-1")}>{currentSlide + 1}</div>
@@ -367,32 +405,83 @@ export function LegacyHeroScreenMock({
           </AnimatePresence>
         </div>
 
-        <div className="h-12 flex relative z-30 bg-white border-t border-slate-100 divide-x divide-slate-100">
-          {slides.map((slide, index) => {
-            const isActive = currentSlide === index
-            return (
-              <button
-                key={slide.id}
-                onClick={() => onSlideChange(index)}
-                className={cn(
-                  "flex-1 flex items-center justify-center gap-2 text-xs font-bold transition-all duration-300 relative [font-family:var(--font-kinetic-headline),system-ui,sans-serif]",
-                  isActive ? "bg-[#72ff70] text-[#0f2a16]" : "bg-white text-[#4a5563] hover:bg-[#72ff70]/10 hover:text-[#1c2f24]",
-                  index > 0 && "border-l border-slate-100",
-                )}
-              >
-                <div className={cn("w-2 h-2 rounded-full", isActive ? "bg-[#0f2a16]" : "bg-slate-300")} />
-                {slide.label}
-                {isActive && (
-                  <motion.div
-                    layoutId="activeTabIndicatorUnified"
-                    className="absolute top-0 left-0 right-0 h-0.5 bg-[#006e16]"
-                    transition={{ duration: 0.3 }}
-                  />
-                )}
-              </button>
-            )
-          })}
-        </div>
+        {compactSlideNav ? (
+          <div className="relative z-30 flex h-12 items-stretch border-t border-slate-100 bg-white">
+            <button
+              type="button"
+              aria-label="Previous slide"
+              className="flex w-10 shrink-0 items-center justify-center border-r border-slate-100 text-[#4a5563] transition-colors hover:bg-slate-50"
+              onClick={() =>
+                onSlideChange((currentSlide - 1 + slides.length) % slides.length)
+              }
+            >
+              <ChevronLeft className="h-5 w-5" aria-hidden strokeWidth={2} />
+            </button>
+            <div className="flex min-w-0 flex-1 overflow-x-auto overflow-y-hidden overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <div className="flex min-h-full min-w-min flex-1">
+                {slides.map((slide, index) => {
+                  const isActive = currentSlide === index
+                  return (
+                    <button
+                      key={slide.id}
+                      type="button"
+                      onClick={() => onSlideChange(index)}
+                      className={cn(
+                        "relative flex min-w-[4.25rem] shrink-0 flex-col items-center justify-center gap-0.5 border-r border-slate-100 px-2 py-1 text-[10px] font-bold transition-all duration-300 [font-family:var(--font-kinetic-headline),system-ui,sans-serif] last:border-r-0",
+                        isActive ? "bg-[#72ff70] text-[#0f2a16]" : "bg-white text-[#4a5563] hover:bg-[#72ff70]/10 hover:text-[#1c2f24]",
+                      )}
+                    >
+                      <div className={cn("h-1.5 w-1.5 rounded-full", isActive ? "bg-[#0f2a16]" : "bg-slate-300")} />
+                      <span className="leading-none">{slide.label}</span>
+                      {isActive ? (
+                        <motion.div
+                          layoutId={`activeTabStrip-${motionInstanceKey}`}
+                          className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#006e16]"
+                          transition={{ duration: 0.3 }}
+                        />
+                      ) : null}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+            <button
+              type="button"
+              aria-label="Next slide"
+              className="flex w-10 shrink-0 items-center justify-center border-l border-slate-100 text-[#4a5563] transition-colors hover:bg-slate-50"
+              onClick={() => onSlideChange((currentSlide + 1) % slides.length)}
+            >
+              <ChevronRight className="h-5 w-5" aria-hidden strokeWidth={2} />
+            </button>
+          </div>
+        ) : (
+          <div className="relative z-30 flex h-12 divide-x divide-slate-100 border-t border-slate-100 bg-white">
+            {slides.map((slide, index) => {
+              const isActive = currentSlide === index
+              return (
+                <button
+                  key={slide.id}
+                  type="button"
+                  onClick={() => onSlideChange(index)}
+                  className={cn(
+                    "relative flex flex-1 items-center justify-center gap-2 text-xs font-bold transition-all duration-300 [font-family:var(--font-kinetic-headline),system-ui,sans-serif]",
+                    isActive ? "bg-[#72ff70] text-[#0f2a16]" : "bg-white text-[#4a5563] hover:bg-[#72ff70]/10 hover:text-[#1c2f24]",
+                  )}
+                >
+                  <div className={cn("h-2 w-2 rounded-full", isActive ? "bg-[#0f2a16]" : "bg-slate-300")} />
+                  {slide.label}
+                  {isActive ? (
+                    <motion.div
+                      layoutId={`activeTabIndicatorUnified-${motionInstanceKey}`}
+                      className="absolute left-0 right-0 top-0 h-0.5 bg-[#006e16]"
+                      transition={{ duration: 0.3 }}
+                    />
+                  ) : null}
+                </button>
+              )
+            })}
+          </div>
+        )}
       </div>
     </div>
   )

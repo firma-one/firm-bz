@@ -7,9 +7,9 @@ import { prisma } from '@/lib/prisma'
 import { canAccessRbacAdmin } from '@/lib/permission-helpers'
 import { getViewAsPersonaFromCookie } from '@/lib/view-as-server'
 import { getSharedAndAncestorIdsForPersona } from '@/lib/project-sharing-ids'
+import { requireEngagementMember, getEngagementStatus, isExternalEngagementRole } from '@/lib/engagement-access'
 
 function notFound() {
-  // Prefer 404 to avoid leaking doc/project existence via deeplinks.
   return NextResponse.json({ error: 'Not found' }, { status: 404 })
 }
 
@@ -29,16 +29,14 @@ export async function GET(
     const canView = await canViewProject(ctx.orgId, ctx.clientId, ctx.projectId)
     if (!canView) return notFound()
 
+    const member = await requireEngagementMember(projectId, user.id)
+    if (!member) return notFound()
+
     const fileInfo = await getFileInfo(projectId, documentIdParam)
     if (!fileInfo) return notFound()
 
-    // Determine persona to enforce shared-only restrictions (View As overrides when allowed).
-    const member = await prisma.engagementMember.findFirst({
-      where: { engagementId: projectId, userId: user.id },
-      select: { role: true },
-    })
-    const actualRole = member?.role ?? null
-    const isActualExternal = actualRole === 'eng_ext_collaborator' || actualRole === 'eng_viewer'
+    const actualRole = member.role
+    const isActualExternal = isExternalEngagementRole(actualRole)
 
     const canUseViewAs = await canAccessRbacAdmin(user.id)
     const cookieViewAs = canUseViewAs ? await getViewAsPersonaFromCookie() : null
@@ -52,15 +50,29 @@ export async function GET(
       (isActualExternal ? actualRole : null)
 
     if (personaToEnforce === 'eng_ext_collaborator' || personaToEnforce === 'eng_viewer') {
-      // Allow when the file itself is shared OR is a descendant of a shared folder.
       const { sharedIds, descendantIds } = await getSharedAndAncestorIdsForPersona(projectId, personaToEnforce, { skipDescendants: false })
       const allow = sharedIds.includes(fileInfo.externalId) || descendantIds.includes(fileInfo.externalId)
       if (!allow) return notFound()
     }
 
-    return NextResponse.json({ externalId: fileInfo.externalId, fileName: fileInfo.fileName ?? null })
+    const engagementStatus = await getEngagementStatus(projectId)
+    const docRow = await prisma.engagementDocument.findFirst({
+      where: {
+        engagementId: projectId,
+        firmId: fileInfo.organizationId,
+        externalId: fileInfo.externalId,
+      },
+      select: { settings: true },
+    })
+    const { isDocumentVersionLocked } = await import('@/lib/document-version-lock')
+
+    return NextResponse.json({
+      externalId: fileInfo.externalId,
+      fileName: fileInfo.fileName ?? null,
+      engagementStatus,
+      versionLocked: docRow ? isDocumentVersionLocked(docRow.settings) : false,
+    })
   } catch (e) {
     return NextResponse.json({ error: 'Failed to resolve file info' }, { status: 500 })
   }
 }
-

@@ -41,6 +41,9 @@ CREATE TYPE "platform"."EngagementStatus" AS ENUM ('PLANNED', 'ACTIVE', 'COMPLET
 CREATE TYPE "platform"."NotificationPriority" AS ENUM ('INFO', 'WARNING', 'CRITICAL');
 
 -- CreateEnum
+CREATE TYPE "platform"."DocumentSharingPermissionStatus" AS ENUM ('GRANTED', 'REVOKED');
+
+-- CreateEnum
 CREATE TYPE "platform"."PlatformAuditScope" AS ENUM ('PROJECT');
 
 -- CreateEnum
@@ -424,6 +427,7 @@ CREATE TABLE "platform"."engagement_document_sharing_users" (
     "userId" UUID NOT NULL,
     "email" TEXT NOT NULL,
     "googlePermissionId" TEXT,
+    "sharingPermissionStatus" "platform"."DocumentSharingPermissionStatus" NOT NULL DEFAULT 'GRANTED',
 
     CONSTRAINT "engagement_document_sharing_users_pkey" PRIMARY KEY ("id")
 );

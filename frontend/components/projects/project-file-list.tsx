@@ -714,6 +714,11 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
         }
     }, [projectId, viewAsPersonaSlug])
 
+    const refreshShareStateAndFiles = useCallback(() => {
+        fetchSharedIds()
+        if (currentFolderId) void fetchFiles(currentFolderId, true)
+    }, [fetchSharedIds, currentFolderId, fetchFiles])
+
     useEffect(() => {
         if (currentFolderId && session?.access_token) {
             fetchFiles(currentFolderId)
@@ -1846,9 +1851,9 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
             onRestrictToConfidential: canManage && confidentialFolderId ? (doc) => handleMoveTree(doc, 'confidential') : undefined,
             onRestoreToGeneral: canManage && generalFolderId ? (doc) => handleMoveTree(doc, 'general') : undefined,
             onPromoteToGeneral: canManage && generalFolderId ? (doc) => handleMoveTree(doc, 'general') : undefined,
-            onShareSaved: fetchSharedIds,
+            onShareSaved: refreshShareStateAndFiles,
         }
-    }, [firmId, canEdit, canManage, currentFolderType, generalFolderId, confidentialFolderId, isProjectLead, handleSecureOpen, handleDuplicate, openCopyMoveModal, handleTrash, openRenameModal, handleMoveTree, fetchSharedIds])
+    }, [firmId, canEdit, canManage, currentFolderType, generalFolderId, confidentialFolderId, isProjectLead, handleSecureOpen, handleDuplicate, openCopyMoveModal, handleTrash, openRenameModal, handleMoveTree, refreshShareStateAndFiles])
 
     const handleConfirmRename = useCallback(() => {
         if (!renameTarget || !renameNewName.trim() || !sessionRef.current?.access_token) return
@@ -2847,22 +2852,28 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                         {/* Action Column - always visible, aligned with Sort header */}
                                         <div className="col-span-1 flex justify-end">
                                             <div onClick={(e) => e.stopPropagation()}>
-                                                <DocumentActionMenu
+                                                {(() => {
+                                                    const locked = !!file.versionLocked
+                                                    const canMutateFile = canEdit && !locked
+                                                    const canOrganizeTree = canManage && !locked
+                                                    return (
+                                                        <DocumentActionMenu
                                                     document={file}
                                                     showShareModal={isProjectLead}
+                                                    isEngagementLead={isProjectLead}
                                                     projectId={projectId}
-                                                    onShareSaved={fetchSharedIds}
-                                                    canManage={canManage}
+                                                    onShareSaved={refreshShareStateAndFiles}
+                                                    canManage={canOrganizeTree}
                                                     currentFolderType={currentFolderType}
                                                     onOpenCommentPane={(docId) => setActiveCommentDocId(docId)}
-                                                    onRenameDocument={canEdit ? (doc) => openRenameModal(doc as DriveFile) : undefined}
-                                                    onDuplicateDocument={canEdit ? (doc) => handleDuplicate(doc as DriveFile) : undefined}
-                                                    onCopyDocument={generalFolderId && canEdit ? (doc) => openCopyMoveModal(doc as DriveFile, 'copy') : undefined}
-                                                    onMoveDocument={generalFolderId && canEdit ? (doc) => openCopyMoveModal(doc as DriveFile, 'move') : undefined}
-                                                    onDeleteDocument={canEdit ? (doc) => handleTrash(doc as DriveFile) : undefined}
-                                                    onRestrictToConfidential={canManage && confidentialFolderId ? (doc) => handleMoveTree(doc as DriveFile, 'confidential') : undefined}
-                                                    onRestoreToGeneral={canManage && generalFolderId ? (doc) => handleMoveTree(doc as DriveFile, 'general') : undefined}
-                                                    onPromoteToGeneral={canManage && generalFolderId ? (doc) => handleMoveTree(doc as DriveFile, 'general') : undefined}
+                                                    onRenameDocument={canMutateFile ? (doc) => openRenameModal(doc as DriveFile) : undefined}
+                                                    onDuplicateDocument={canMutateFile ? (doc) => handleDuplicate(doc as DriveFile) : undefined}
+                                                    onCopyDocument={generalFolderId && canMutateFile ? (doc) => openCopyMoveModal(doc as DriveFile, 'copy') : undefined}
+                                                    onMoveDocument={generalFolderId && canMutateFile ? (doc) => openCopyMoveModal(doc as DriveFile, 'move') : undefined}
+                                                    onDeleteDocument={canMutateFile ? (doc) => handleTrash(doc as DriveFile) : undefined}
+                                                    onRestrictToConfidential={canOrganizeTree && confidentialFolderId ? (doc) => handleMoveTree(doc as DriveFile, 'confidential') : undefined}
+                                                    onRestoreToGeneral={canOrganizeTree && generalFolderId ? (doc) => handleMoveTree(doc as DriveFile, 'general') : undefined}
+                                                    onPromoteToGeneral={canOrganizeTree && generalFolderId ? (doc) => handleMoveTree(doc as DriveFile, 'general') : undefined}
                                                     onOpenChange={(open) => setActionMenuOpenFileId(open ? file.id : null)}
                                                     onOpenDocument={(doc) => {
                                                         const d = doc as DriveFile
@@ -2879,7 +2890,9 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                             docId
                                                         )
                                                     }}
-                                                />
+                                                        />
+                                                    )
+                                                })()}
                                             </div>
                                         </div>
                                         {(processingFileIds.has(file.id) || isRegrantingId === file.id) && (

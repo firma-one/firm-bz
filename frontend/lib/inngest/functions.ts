@@ -2,6 +2,8 @@ import { inngest } from "./client";
 import { prisma } from "@/lib/prisma";
 import { googleDriveConnector } from "@/lib/google-drive-connector";
 import { logger } from "@/lib/logger";
+import { DocumentSharingPermissionStatus } from "@prisma/client";
+import { grantEngagementDriveFolderAccess } from "@/lib/grant-engagement-drive-folder-access";
 import { safeInngestSend } from "./client";
 import { provisionSandboxHierarchyForFirm } from '@/lib/onboarding/onboarding-helper'
 
@@ -263,10 +265,14 @@ export const reconcileFileDeletion = inngest.createFunction(
             })
             const docIds = docs.map((d) => d.id)
             if (docIds.length === 0) return
-            await prisma.engagementDocumentSharingUser.deleteMany({
+            await prisma.engagementDocumentSharingUser.updateMany({
                 where: {
                     projectDocumentId: { in: docIds },
                     ...(googlePermissionId ? { googlePermissionId } : {}),
+                },
+                data: {
+                    sharingPermissionStatus: DocumentSharingPermissionStatus.REVOKED,
+                    googlePermissionId: null,
                 },
             })
         })
@@ -301,7 +307,10 @@ export const revokeProjectSharing = inngest.createFunction(
 
         const shares = await step.run("fetch-shares", async () => {
             return await prisma.engagementDocumentSharingUser.findMany({
-                where: { document: { engagementId: projectId } },
+                where: {
+                    engagementId: projectId,
+                    sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED,
+                },
                 include: { document: true },
             });
         });
@@ -321,11 +330,15 @@ export const revokeProjectSharing = inngest.createFunction(
         if (!connectorId) {
             logger.warn("Missing active Google Drive connector", { organizationId, projectId })
             await step.run("cleanup-db-no-connector", async () => {
-                await prisma.engagementDocumentSharingUser.deleteMany({
-                    where: { engagementId: projectId }
+                await prisma.engagementDocumentSharingUser.updateMany({
+                    where: { engagementId: projectId },
+                    data: {
+                        sharingPermissionStatus: DocumentSharingPermissionStatus.REVOKED,
+                        googlePermissionId: null,
+                    },
                 });
             });
-            return { message: "Cleaned up DB records only", projectId };
+            return { message: "Marked shares revoked (no connector)", projectId };
         }
 
         const revokeResults = await step.run("revoke-permissions", async () => {
@@ -334,7 +347,7 @@ export const revokeProjectSharing = inngest.createFunction(
 
             for (let i = 0; i < shares.length; i += BATCH_SIZE) {
                 const batch = shares.slice(i, i + BATCH_SIZE);
-                await Promise.all(batch.map(async (share: any) => {
+                await Promise.all(batch.map(async (share: { googlePermissionId: string | null; document: { externalId: string } | null }) => {
                     if (share.googlePermissionId && share.document?.externalId) {
                         try {
                             await googleDriveConnector.revokePermission(connectorId, share.document.externalId, share.googlePermissionId);
@@ -348,10 +361,56 @@ export const revokeProjectSharing = inngest.createFunction(
             return { successCount };
         });
 
-        await step.run("cleanup-db", async () => {
-            await prisma.engagementDocumentSharingUser.deleteMany({
-                where: { engagementId: projectId }
+        await step.run("mark-shares-revoked", async () => {
+            await prisma.engagementDocumentSharingUser.updateMany({
+                where: { engagementId: projectId },
+                data: {
+                    sharingPermissionStatus: DocumentSharingPermissionStatus.REVOKED,
+                    googlePermissionId: null,
+                },
             });
+        });
+
+        await step.run("downgrade-eng-member-folder-access", async () => {
+            const engagement = await prisma.engagement.findFirst({
+                where: { id: projectId, isDeleted: false },
+                select: {
+                    slug: true,
+                    name: true,
+                    connectorRootFolderId: true,
+                    client: { select: { slug: true, name: true, firm: { select: { connectorId: true } } } },
+                },
+            });
+            const cid = engagement?.client.firm.connectorId;
+            if (!cid || !engagement?.connectorRootFolderId) return { downgraded: 0 };
+
+            const members = await prisma.engagementMember.findMany({
+                where: { engagementId: projectId, role: "eng_member" },
+                select: { userId: true },
+            });
+            if (members.length === 0) return { downgraded: 0 };
+
+            const userIds = members.map((m) => `'${m.userId}'`).join(",");
+            const authUsers = await prisma.$queryRawUnsafe<Array<{ id: string; email: string }>>(
+                `SELECT id::text, email FROM auth.users WHERE id IN (${userIds})`
+            );
+            const folderIds = await googleDriveConnector.getProjectFolderIds(cid, engagement.slug, {
+                projectName: engagement.name,
+                clientSlug: engagement.client.slug,
+                clientName: engagement.client.name,
+                projectFolderId: engagement.connectorRootFolderId,
+            });
+            let n = 0;
+            for (const row of authUsers) {
+                if (!row.email) continue;
+                if (folderIds.generalFolderId) {
+                    if (await googleDriveConnector.downgradeFolderUserPermissionToReader(cid, folderIds.generalFolderId, row.email)) n++;
+                }
+                if (folderIds.confidentialFolderId) {
+                    await googleDriveConnector.downgradeFolderUserPermissionToReader(cid, folderIds.confidentialFolderId, row.email);
+                }
+            }
+            return { downgraded: n };
         });
 
         return { message: "Revoked project permissions", results: revokeResults, projectId };
@@ -421,9 +480,13 @@ export const revokeByDisabledPersona = inngest.createFunction(
         });
 
         await step.run("cleanup-db", async () => {
-            const userIdsToDelete = usersToRevoke.map((u: any) => u.id);
-            await prisma.engagementDocumentSharingUser.deleteMany({
-                where: { id: { in: userIdsToDelete } }
+            const userIdsToDelete = usersToRevoke.map((u: { id: string }) => u.id);
+            await prisma.engagementDocumentSharingUser.updateMany({
+                where: { id: { in: userIdsToDelete } },
+                data: {
+                    sharingPermissionStatus: DocumentSharingPermissionStatus.REVOKED,
+                    googlePermissionId: null,
+                },
             });
         });
 
@@ -482,9 +545,13 @@ export const revokeByMemberPersonaChange = inngest.createFunction(
         });
 
         await step.run("cleanup-db", async () => {
-            const userShareIds = sharesToRevoke.map((s: any) => s.user.id);
-            await prisma.engagementDocumentSharingUser.deleteMany({
-                where: { id: { in: userShareIds } }
+            const userShareIds = sharesToRevoke.map((s: { user: { id: string } }) => s.user.id);
+            await prisma.engagementDocumentSharingUser.updateMany({
+                where: { id: { in: userShareIds } },
+                data: {
+                    sharingPermissionStatus: DocumentSharingPermissionStatus.REVOKED,
+                    googlePermissionId: null,
+                },
             });
         });
 
@@ -511,32 +578,60 @@ export const grantPermissionsForNewMember = inngest.createFunction(
 
         if (!connectorId) return { message: "No connector" };
 
+        const folderGrant = await step.run("grant-folder-access", async () => {
+            if (!email) return { granted: false, reason: "no_email" };
+            const engagement = await prisma.engagement.findFirst({
+                where: { id: projectId, isDeleted: false },
+                select: {
+                    slug: true,
+                    name: true,
+                    connectorRootFolderId: true,
+                    client: { select: { slug: true, name: true } },
+                },
+            });
+            if (!engagement?.connectorRootFolderId) return { granted: false, reason: "no_connector_root" };
+            await grantEngagementDriveFolderAccess({
+                connectorId,
+                engagementSlug: engagement.slug,
+                email,
+                role: personaSlug as "eng_admin" | "eng_member" | "eng_ext_collaborator" | "eng_viewer",
+                projectName: engagement.name,
+                clientSlug: engagement.client.slug,
+                clientName: engagement.client.name,
+                projectFolderId: engagement.connectorRootFolderId,
+            });
+            return { granted: true };
+        });
+
         const documentsToGrant = await step.run("find-sharings-to-grant", async () => {
             const docs = await prisma.engagementDocument.findMany({
                 where: { engagementId: projectId },
-                include: { sharingUsers: { where: { userId } } }
+                include: {
+                    sharingUsers: {
+                        where: { userId, sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED },
+                    },
+                },
             });
 
-            const isGuest = personaSlug === 'eng_viewer';
-            const isExternalCollaborator = personaSlug === 'eng_ext_collaborator';
-            const isInternal = !isGuest && !isExternalCollaborator;
+            const isGuest = personaSlug === "eng_viewer";
+            const isExternalCollaborator = personaSlug === "eng_ext_collaborator";
 
-            return docs.filter((doc: any) => {
+            return docs.filter((doc: { sharingUsers: unknown[]; settings: unknown; externalId: string | null }) => {
                 if (doc.sharingUsers.length > 0) return false;
-                const settings = doc.settings as any;
+                const settings = doc.settings as { share?: { guest?: { enabled?: boolean }; externalCollaborator?: { enabled?: boolean } } };
                 const guestEnabled = settings?.share?.guest?.enabled === true;
                 const ecEnabled = settings?.share?.externalCollaborator?.enabled === true;
-
-                if (isInternal) return guestEnabled || ecEnabled;
                 if (isExternalCollaborator) return ecEnabled;
                 if (isGuest) return guestEnabled;
                 return false;
             });
         });
 
-        if (documentsToGrant.length === 0) return { message: "No shares to grant" };
+        if (documentsToGrant.length === 0) {
+            return { message: "Folder access only (no per-document shares)", folderGrant, docShares: 0 };
+        }
 
-        const role: 'writer' | 'reader' = personaSlug === 'eng_viewer' ? 'reader' : 'writer';
+        const role: "writer" | "reader" = personaSlug === "eng_viewer" ? "reader" : "writer";
 
         const grantResults = await step.run("grant-permissions", async () => {
             let successCount = 0;
@@ -549,17 +644,24 @@ export const grantPermissionsForNewMember = inngest.createFunction(
 
                     if (permissionId) {
                         await prisma.engagementDocumentSharingUser.create({
-                            data: { engagementId: projectId, projectDocumentId: doc.id, userId, email, googlePermissionId: permissionId }
+                            data: {
+                                engagementId: projectId,
+                                projectDocumentId: doc.id,
+                                userId,
+                                email,
+                                googlePermissionId: permissionId,
+                                sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED,
+                            },
                         });
                         successCount++;
                     }
                 } catch (e) {
-                    logger.error("Failed to grant permission in Inngest (V2)", e as Error)
+                    logger.error("Failed to grant permission in Inngest (V2)", e as Error);
                 }
             }
             return { successCount };
         });
 
-        return { message: "Granted permissions for new member", results: grantResults };
+        return { message: "Granted permissions for new member", folderGrant, results: grantResults };
     }
 );

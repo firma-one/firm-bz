@@ -36,11 +36,21 @@ import { BillingPageClient } from '@/components/billing/billing-page-client'
 const ONBOARDING_CREATING_STORAGE_KEY = 'firm_onboarding_creating'
 
 function readOnboardingCreatingSession(): string | null {
-    return sessionStorage.getItem(ONBOARDING_CREATING_STORAGE_KEY)
+    if (typeof window === 'undefined') return null
+    try {
+        return sessionStorage.getItem(ONBOARDING_CREATING_STORAGE_KEY)
+    } catch {
+        return null
+    }
 }
 
 function clearOnboardingCreatingSession(): void {
-    sessionStorage.removeItem(ONBOARDING_CREATING_STORAGE_KEY)
+    if (typeof window === 'undefined') return
+    try {
+        sessionStorage.removeItem(ONBOARDING_CREATING_STORAGE_KEY)
+    } catch {
+        /* private mode / quota */
+    }
 }
 
 /**
@@ -730,8 +740,11 @@ const OnboardingContent = () => {
 
     // Initial check: Params & Existing Org (use getSession() so token is valid right after OTP redirect)
     useEffect(() => {
-        // Prevent duplicate calls
-        if (initialCheckDoneRef.current) return
+        // Prevent duplicate in-flight bootstrap; if deps re-run (e.g. markStepSkipped), still re-assert layout mode.
+        if (initialCheckDoneRef.current) {
+            setOnboarding(true)
+            return
+        }
         initialCheckDoneRef.current = true
 
         const checkStatus = async () => {
@@ -845,7 +858,8 @@ const OnboardingContent = () => {
 
                                 const settings = (resolvedOrg as any).settings as any
                                 let onboarding = settings?.onboarding
-                                let fetchedRootId = rootFolderId
+                                /** Use connector root from this run (state may not have flushed yet). */
+                                let fetchedRootId = normalLoadRootId
                                 /** OAuth persisted connector row (may exist before firm.connectorId is linked). */
                                 let statusConnectorId: string | null = null
                                 let connectorOnboarding: { isComplete?: boolean; currentStep?: number } | null = null
@@ -899,7 +913,11 @@ const OnboardingContent = () => {
                                         })
                                         if (domainRes.ok) {
                                             const opts = await domainRes.json()
-                                            if (opts && (opts.orgsToJoin.length > 0 || opts.orgsAlreadyIn.length > 0)) {
+                                            if (
+                                                opts &&
+                                                ((opts.orgsToJoin?.length ?? 0) > 0 ||
+                                                    (opts.orgsAlreadyIn?.length ?? 0) > 0)
+                                            ) {
                                                 setDomainOptions(opts)
                                                 setStep(0) // Show domain choice screen
                                                 setOnboarding(true, 0)

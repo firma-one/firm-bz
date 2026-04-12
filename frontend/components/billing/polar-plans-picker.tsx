@@ -312,8 +312,8 @@ function PlanHighlightsScroll({
                         : 'scrollbar-thumb-slate-200/80 hover:scrollbar-thumb-slate-300/80'
                 )}
             >
-                {lines.map((line) => (
-                    <li key={line} className="flex gap-2.5 text-sm leading-snug text-slate-700">
+                {lines.map((line, index) => (
+                    <li key={`plan-highlight-${index}`} className="flex gap-2.5 text-sm leading-snug text-slate-700">
                         <Check
                             className={cn('mt-0.5 h-4 w-4 shrink-0', checkIconClassName)}
                             strokeWidth={2.25}
@@ -1684,8 +1684,11 @@ export function PolarPlansPicker({
                                             )}
                                         >
                                             <ul className="space-y-2.5">
-                                                {sandboxPlanHighlights.map((line) => (
-                                                    <li key={line} className="flex gap-2.5 text-sm leading-snug text-slate-700">
+                                                {sandboxPlanHighlights.map((line, index) => (
+                                                    <li
+                                                        key={`sandbox-highlight-${index}`}
+                                                        className="flex gap-2.5 text-sm leading-snug text-slate-700"
+                                                    >
                                                         <Check
                                                             className={cn(
                                                                 'mt-0.5 h-4 w-4 shrink-0',

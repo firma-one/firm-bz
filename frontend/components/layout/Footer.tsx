@@ -53,8 +53,8 @@ export function Footer({ onOpenModal: _onOpenModal }: FooterProps) {
     return (
         <footer className="border-t border-[#c6c6cc]/10 bg-white pb-6 pt-8 text-[#1b1b1d]">
             <div className={cn(MARKETING_PAGE_SHELL, "w-full")}>
-                <div className="mb-6 grid grid-cols-1 gap-6 md:grid-cols-12 md:gap-8">
-                    <div className="md:col-span-4">
+                <div className="mb-6 grid grid-cols-2 gap-x-8 gap-y-8 md:grid-cols-12 md:gap-8">
+                    <div className="col-span-2 md:col-span-4">
                         <div className="mb-3">
                             <Link
                                 href="/"
@@ -70,7 +70,7 @@ export function Footer({ onOpenModal: _onOpenModal }: FooterProps) {
                         </p>
                     </div>
 
-                    <div className="md:col-span-2 md:ml-auto">
+                    <div className="col-span-1 md:col-span-2 md:ml-auto">
                         <h4 className="mb-3 text-sm font-bold text-[#1b1b1d] [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
                             Platform
                         </h4>
@@ -96,7 +96,7 @@ export function Footer({ onOpenModal: _onOpenModal }: FooterProps) {
                         </ul>
                     </div>
 
-                    <div className="md:col-span-2 md:ml-auto">
+                    <div className="col-span-1 md:col-span-2 md:ml-auto">
                         <h4 className="mb-3 text-sm font-bold text-[#1b1b1d] [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
                             Resources
                         </h4>
@@ -120,7 +120,7 @@ export function Footer({ onOpenModal: _onOpenModal }: FooterProps) {
                         </ul>
                     </div>
 
-                    <div className="md:col-span-2 md:ml-auto">
+                    <div className="col-span-1 md:col-span-2 md:ml-auto">
                         <h4 className="mb-3 text-sm font-bold text-[#1b1b1d] [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
                             Contact
                         </h4>
@@ -146,7 +146,7 @@ export function Footer({ onOpenModal: _onOpenModal }: FooterProps) {
                         </ul>
                     </div>
 
-                    <div className="md:col-span-2 md:ml-auto">
+                    <div className="col-span-1 md:col-span-2 md:ml-auto">
                         <h4 className="mb-3 text-sm font-bold text-[#1b1b1d] [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
                             Legal
                         </h4>

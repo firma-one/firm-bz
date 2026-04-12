@@ -6,6 +6,7 @@ import { googleDriveConnector } from "@/lib/google-drive-connector"
 import { safeInngestSend } from '@/lib/inngest/client'
 import { logger } from '@/lib/logger'
 import { createPlatformAuditEvent } from '@/lib/platform-audit'
+import { blockIfEngagementFileMutationForbidden } from '@/lib/engagement-access'
 
 const supabase = createClient(
     (process.env.NEXT_PUBLIC_SUPABASE_URL || "http://127.0.0.1:54321"),
@@ -114,6 +115,11 @@ export async function POST(request: NextRequest) {
                     if (org?.sandboxOnly) {
                         return NextResponse.json({ error: 'Deleting documents is restricted for Sandbox Organizations.' }, { status: 403 })
                     }
+                }
+
+                if (typeof requestProjectId === 'string' && requestProjectId) {
+                    const closedDenied = await blockIfEngagementFileMutationForbidden(user.id, requestProjectId)
+                    if (closedDenied) return closedDenied
                 }
 
                 // Try to trash the file. If connectorId is provided, use it.

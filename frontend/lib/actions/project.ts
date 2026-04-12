@@ -448,10 +448,37 @@ export async function closeEngagement(projectId: string, firmSlug: string, clien
     })
     if (!project) throw new Error('Project not found')
 
-    await prisma.engagement.update({
-        where: { id: projectId },
-        data: { status: 'COMPLETED' }
+    const externalMembers = await prisma.engagementMember.findMany({
+        where: {
+            engagementId: projectId,
+            role: { in: ['eng_ext_collaborator', 'eng_viewer'] },
+        },
+        select: { userId: true },
     })
+    const allMemberIds = await prisma.engagementMember.findMany({
+        where: { engagementId: projectId },
+        select: { userId: true },
+    })
+
+    await prisma.$transaction(async (tx) => {
+        await tx.engagement.update({
+            where: { id: projectId },
+            data: { status: 'COMPLETED' },
+        })
+        await tx.engagementMember.deleteMany({
+            where: {
+                engagementId: projectId,
+                role: { in: ['eng_ext_collaborator', 'eng_viewer'] },
+            },
+        })
+    })
+
+    const { invalidateUserSettingsPlus } = await import('@/lib/actions/user-settings')
+    const toInvalidate = new Set<string>([
+        ...externalMembers.map((m) => m.userId),
+        ...allMemberIds.map((m) => m.userId),
+    ])
+    await Promise.all(Array.from(toInvalidate).map((uid) => invalidateUserSettingsPlus(uid)))
 
     const supabase = await createSupabaseClient()
     const { data: { user } } = await supabase.auth.getUser()

@@ -169,28 +169,28 @@ export function TrustArchitectureSection({
             </span>
           </div>
           <div className="flex w-full max-w-none flex-col gap-3 sm:flex-row sm:flex-nowrap sm:items-center sm:justify-between sm:gap-4">
-            <div className="flex shrink-0 flex-nowrap items-center gap-3 sm:gap-4">
+            <div className="flex w-full min-w-0 flex-col gap-3 sm:w-auto sm:flex-row sm:flex-nowrap sm:items-stretch sm:gap-4">
               <div
                 className={cn(
-                  "inline-flex h-14 shrink-0 items-center gap-2.5 rounded-lg px-5 text-base font-semibold",
+                  "inline-flex min-h-[3.25rem] w-full shrink-0 items-center justify-center gap-2.5 rounded-lg px-4 py-2.5 text-center text-sm font-semibold leading-snug sm:h-14 sm:w-auto sm:px-5 sm:text-base",
                   isEditorial
                     ? "border border-black/[0.1] bg-white text-[#041627]"
                     : "border border-slate-200 bg-white text-slate-900 shadow-sm",
                 )}
               >
                 <GoogleDriveProductMark className="h-6 w-6 shrink-0" />
-                Google Drive Integration
+                <span className="text-pretty">Google Drive Integration</span>
               </div>
               <div
                 className={cn(
-                  "inline-flex h-14 shrink-0 items-center gap-2.5 rounded-lg px-5 text-base font-medium",
+                  "inline-flex min-h-[3.25rem] w-full shrink-0 items-center justify-center gap-2.5 rounded-lg px-4 py-2.5 text-center text-sm font-medium leading-snug sm:h-14 sm:w-auto sm:px-5 sm:text-base",
                   isEditorial
                     ? "border border-dashed border-black/15 bg-white/80 text-[#44474c]"
                     : "border border-dashed border-slate-300 bg-white/90 text-slate-600",
                 )}
               >
                 <OneDriveMark className="h-6 w-6 shrink-0" />
-                OneDrive integration Coming Soon
+                <span className="text-pretty">OneDrive integration Coming Soon</span>
               </div>
             </div>
             <Link

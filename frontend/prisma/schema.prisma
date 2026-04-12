@@ -128,6 +128,13 @@ enum NotificationPriority {
   @@schema("platform")
 }
 
+enum DocumentSharingPermissionStatus {
+  GRANTED
+  REVOKED
+
+  @@schema("platform")
+}
+
 // ----------------------------------------------------------------------
 // PLATFORM SCHEMA (V2)
 // ----------------------------------------------------------------------
@@ -632,16 +639,17 @@ model EngagementCanvas {
 }
 
 model EngagementDocumentSharingUser {
-  id                 String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  createdAt          DateTime        @default(now())
-  updatedAt          DateTime        @updatedAt
-  createdBy          String?         @db.Uuid
-  updatedBy          String?         @db.Uuid
-  projectDocumentId  String          @db.Uuid
-  engagementId       String          @db.Uuid
-  userId             String          @db.Uuid
-  email              String
-  googlePermissionId String?
+  id                        String                           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  createdAt                 DateTime                         @default(now())
+  updatedAt                 DateTime                         @updatedAt
+  createdBy                 String?                          @db.Uuid
+  updatedBy                 String?                          @db.Uuid
+  projectDocumentId         String                           @db.Uuid
+  engagementId              String                           @db.Uuid
+  userId                    String                           @db.Uuid
+  email                     String
+  googlePermissionId        String?
+  sharingPermissionStatus   DocumentSharingPermissionStatus  @default(GRANTED)
 
   document           EngagementDocument @relation(fields: [projectDocumentId], references: [id], onDelete: Cascade)
   engagement         Engagement         @relation(fields: [engagementId], references: [id], onDelete: Cascade)

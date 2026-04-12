@@ -2968,6 +2968,139 @@ export class GoogleDriveConnector {
   }
 
   /**
+   * Lists permissions on a file (shared drive safe). Used for version lock / unlock.
+   */
+  async listFilePermissions(
+    connectorId: string,
+    fileId: string
+  ): Promise<Array<{ id: string; role: string; type: string; emailAddress?: string | null; deleted?: boolean }>> {
+    try {
+      const accessToken = await this.getAccessToken(connectorId)
+      if (!accessToken) throw new Error('Could not get access token')
+
+      const url = new URL(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`)
+      url.searchParams.set('supportsAllDrives', 'true')
+      url.searchParams.set('fields', 'permissions(id,role,type,emailAddress,deleted)')
+
+      const res = await fetch(url.toString(), {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      if (!res.ok) return []
+      const data = await res.json()
+      return Array.isArray(data.permissions) ? data.permissions : []
+    } catch (error) {
+      logger.error('Failed to list file permissions', error as Error, 'GoogleDrive', { fileId })
+      return []
+    }
+  }
+
+  /**
+   * PATCH a permission role on a file (e.g. writer → reader for version lock).
+   */
+  async patchFilePermissionRole(
+    connectorId: string,
+    fileId: string,
+    permissionId: string,
+    role: 'reader' | 'writer' | 'commenter' | 'fileOrganizer' | 'organizer'
+  ): Promise<boolean> {
+    try {
+      const accessToken = await this.getAccessToken(connectorId)
+      if (!accessToken) throw new Error('Could not get access token')
+
+      const url = new URL(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions/${permissionId}`)
+      url.searchParams.set('supportsAllDrives', 'true')
+
+      const res = await fetch(url.toString(), {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ role }),
+      })
+      return res.ok
+    } catch (error) {
+      logger.error('Failed to patch file permission role', error as Error, 'GoogleDrive', { fileId, permissionId })
+      return false
+    }
+  }
+
+  /**
+   * Sets Drive content restriction read-only on a file (binary / Office; ignored if unsupported).
+   */
+  async setFileContentReadOnly(connectorId: string, fileId: string, readOnly: boolean): Promise<boolean> {
+    try {
+      const accessToken = await this.getAccessToken(connectorId)
+      if (!accessToken) throw new Error('Could not get access token')
+
+      const res = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${fileId}?supportsAllDrives=true`,
+        {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contentRestrictions: readOnly ? [{ readOnly: true }] : [],
+          }),
+        }
+      )
+      return res.ok
+    } catch (error) {
+      logger.warn('setFileContentReadOnly failed (may be unsupported for this mime type)', {
+        fileId,
+        message: error instanceof Error ? error.message : String(error),
+      })
+      return false
+    }
+  }
+
+  /**
+   * Downgrades a user's folder permission from writer-like roles to reader (engagement closure).
+   */
+  async downgradeFolderUserPermissionToReader(
+    connectorId: string,
+    folderId: string,
+    email: string
+  ): Promise<boolean> {
+    try {
+      const accessToken = await this.getAccessToken(connectorId)
+      if (!accessToken) throw new Error('Could not get access token')
+
+      const listRes = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${folderId}/permissions?supportsAllDrives=true&fields=permissions(id,emailAddress,role)`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      )
+      if (!listRes.ok) return false
+      const listData = await listRes.json()
+      const permissions = listData.permissions || []
+      const permission = permissions.find(
+        (p: { emailAddress?: string; role?: string }) =>
+          p.emailAddress?.toLowerCase() === email.toLowerCase() &&
+          ['writer', 'fileOrganizer', 'organizer', 'commenter'].includes(p.role || '')
+      )
+      if (!permission?.id) return true
+
+      const patchRes = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${folderId}/permissions/${permission.id}?supportsAllDrives=true`,
+        {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ role: 'reader' }),
+        }
+      )
+      return patchRes.ok
+    } catch (error) {
+      logger.error('Failed to downgrade folder user permission', error as Error, 'GoogleDrive', { folderId, email })
+      return false
+    }
+  }
+
+  /**
    * Grants folder permission to a user by email
    * Note: Google Drive automatically inherits permissions - all files/folders under this folder
    * will automatically get the same permissions (both existing and newly created content).

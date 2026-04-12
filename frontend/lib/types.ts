@@ -234,6 +234,8 @@ export interface DriveFile {
     summary?: string
     [key: string]: any
   }
+  /** True when engagement lead locked the document version (Drive + settings). */
+  versionLocked?: boolean
 }
 
 export interface DriveRevision {

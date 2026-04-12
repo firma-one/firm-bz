@@ -137,7 +137,7 @@ export function CookieConsent() {
     })
   }
 
-  const handleRejectAll = () => {
+  const handleRejectNonEssential = () => {
     persistAndClose({
       necessary: true,
       analytics: false,
@@ -355,13 +355,13 @@ export function CookieConsent() {
               <div className="flex w-full shrink-0 flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-end md:w-auto md:flex-none">
                 <button
                   type="button"
-                  onClick={handleRejectAll}
+                  onClick={handleRejectNonEssential}
                   className={cn(
                     "px-4 py-2 text-xs font-bold uppercase tracking-widest text-[#1b1b1d]/60 transition-colors hover:text-[#1b1b1d]",
                     labelFont,
                   )}
                 >
-                  Reject all
+                  Reject non-essential
                 </button>
                 <button
                   type="button"
@@ -395,19 +395,19 @@ export function CookieConsent() {
       {/* Confirmation toast — v4 confirmation state */}
       {showSavedToast ? (
         <div
-          className="animate-in fade-in slide-in-from-bottom-4 fixed bottom-10 left-1/2 z-[100] flex -translate-x-1/2 duration-500"
+          className="animate-in fade-in slide-in-from-bottom-4 fixed bottom-10 left-1/2 z-[100] flex w-[calc(100vw-2rem)] max-w-none -translate-x-1/2 duration-500 sm:w-auto sm:max-w-[min(100vw-2rem,36rem)]"
           role="status"
           aria-live="polite"
         >
           <div
             className={cn(
-              "flex items-center gap-4 rounded-full border border-[#c6c6cc]/15 bg-white/90 px-5 py-3 shadow-[0_20px_50px_rgba(0,0,0,0.1)] backdrop-blur-xl",
+              "flex w-full items-center gap-3 rounded-2xl border border-[#c6c6cc]/15 bg-white/90 px-4 py-3 shadow-[0_20px_50px_rgba(0,0,0,0.1)] backdrop-blur-xl sm:gap-4 sm:rounded-full sm:px-5",
             )}
           >
             <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#00f93f]/90">
               <Check className="h-3.5 w-3.5 text-[#006e16]" strokeWidth={3} aria-hidden />
             </div>
-            <div className="flex min-w-0 flex-col gap-0 sm:flex-row sm:items-center sm:gap-2">
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-left sm:flex-row sm:items-center sm:gap-2 sm:text-left">
               <span className={cn("text-sm font-bold tracking-tight text-[#1b1b1d]", headlineFont)}>
                 Preferences saved.
               </span>

@@ -116,6 +116,7 @@ export function ProfileSection({
             <TooltipTrigger asChild>
               <button
                 type="button"
+                data-checkout-hint-profile="trigger"
                 aria-expanded={isProfileOpen}
                 aria-haspopup="menu"
                 onClick={() => setIsProfileOpen(!isProfileOpen)}
@@ -136,6 +137,7 @@ export function ProfileSection({
         ) : (
           <button
             type="button"
+            data-checkout-hint-profile="trigger"
             aria-expanded={isProfileOpen}
             aria-haspopup="menu"
             onClick={() => setIsProfileOpen(!isProfileOpen)}

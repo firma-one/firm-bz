@@ -5,9 +5,13 @@ const customSubdomainTooltip = `Use custom subdomain (e.g., ${getSubdomainExampl
 /** Per-plan value for comparison table: string (e.g. "10", "Unlimited"), true = check, false = dash */
 export type PlanValue = string | boolean
 
+export type PricingComparisonTooltipLayout = 'hierarchy-sample' | 'engagement-personas'
+
 export interface PricingComparisonRow {
     feature: string
     tooltip?: string
+    /** Rich layout for the comparison-table tooltip (see pricing page). */
+    tooltipLayout?: PricingComparisonTooltipLayout
     /** planId -> value */
     values: Record<string, PlanValue>
 }
@@ -31,7 +35,9 @@ export interface PricingPlan {
     priceBilledAnnually?: number
     prevPrice?: string
     duration: string
-    /** Cap for concurrent active engagements; pricing UI should label as “active engagements”. */
+    /** Firms covered per subscription (marketing cards + comparison). Defaults to 1 when omitted. */
+    firmsIncluded?: number
+    /** Cap for concurrent active engagements per subscription; pricing UI shows with firms line. */
     projectsIncluded?: number
     featuresHeader?: string // e.g. "Everything in Free, plus:"
     features: PricingFeature[]
@@ -43,33 +49,67 @@ export interface PricingPlan {
     theme: 'blue' | 'purple'
 }
 
+function firmLineForCard(firms: number): string {
+    return firms === 1 ? '1 firm per subscription' : `${firms} firms per subscription`
+}
+
 /** Lines under the plan title on the pricing page (firm scope + engagement cap). */
 export function planCardUsageSummary(plan: PricingPlan): string[] {
     if (plan.id === 'Enterprise') {
         return ['Custom firm package', 'Engagement limits negotiated']
     }
     if (plan.projectsIncluded != null) {
-        return ['1 firm workspace', `${plan.projectsIncluded} active engagements`]
+        const firms = plan.firmsIncluded ?? 1
+        return [
+            firmLineForCard(firms),
+            `${plan.projectsIncluded} active engagements per subscription`,
+        ]
     }
     return []
 }
 
+/** Free Sandbox card — same usage framing as the comparison table Sandbox column. */
+export function sandboxPlanUsageSummary(): string[] {
+    return ['1 firm per subscription', '10 active engagements per subscription']
+}
+
 /**
- * Long tooltip for the four engagement personas — same copy as `persona.description` in
- * `frontend/prisma/seed.ts`, shown on Engagement › Members (info menu per persona).
+ * Four engagement personas — same copy as `persona.description` in `frontend/prisma/seed.ts`.
+ * Used for rich pricing tooltips (`role` highlighted) and plain `ENGAGEMENT_PERSONAS_PRICING_TOOLTIP` elsewhere.
  */
+export const ENGAGEMENT_PERSONA_TOOLTIP_ROWS = [
+    {
+        role: 'Engagement Lead',
+        body: 'Responsible for managing a specific engagement. Can manage engagement members, update engagement content, and oversee collaboration within the engagement workspace. Usually a project manager, engagement lead, or team lead.',
+    },
+    {
+        role: 'Contributor (Internal)',
+        body: 'Internal team member contributing to engagement work. Can create and edit engagement content, collaborate with team members, and participate in discussions within assigned engagements. Typically full-time employees or core engagement team members.',
+    },
+    {
+        role: 'Contributor (External)',
+        body: 'External collaborator invited to contribute to an engagement. Can create or edit content within the engagement but has limited access outside the engagement scope. Typically contractors, consultants, vendors, or agency partners.',
+    },
+    {
+        role: 'Viewer (External)',
+        body: 'External stakeholder with read-only access to engagement content. Cannot modify content but can review materials and stay informed. Typically clients, sponsors, or external stakeholders.',
+    },
+] as const
+
+export const ENGAGEMENT_PERSONAS_TOOLTIP_FOOTER =
+    'Access and tabs (e.g. Files for handoffs) follow each persona automatically'
+
+/** Plain multi-paragraph string (plan cards, billing, any `whitespace-pre-line` tooltip). */
 export const ENGAGEMENT_PERSONAS_PRICING_TOOLTIP = [
-    'Engagement Lead — Responsible for managing a specific engagement. Can manage engagement members, update engagement content, and oversee collaboration within the engagement workspace. Usually a project manager, engagement lead, or team lead.',
-    'Contributor (Internal) — Internal team member contributing to engagement work. Can create and edit engagement content, collaborate with team members, and participate in discussions within assigned engagements. Typically full-time employees or core engagement team members.',
-    'Contributor (External) — External collaborator invited to contribute to an engagement. Can create or edit content within the engagement but has limited access outside the engagement scope. Typically contractors, consultants, vendors, or agency partners.',
-    'Viewer (External) — External stakeholder with read-only access to engagement content. Cannot modify content but can review materials and stay informed. Typically clients, sponsors, or external stakeholders.',
-    'Access and tabs (e.g. Files for handoffs) follow each persona automatically',
+    ...ENGAGEMENT_PERSONA_TOOLTIP_ROWS.map((r) => `${r.role} — ${r.body}`),
+    ENGAGEMENT_PERSONAS_TOOLTIP_FOOTER,
 ].join('\n\n')
 
 export const PRICING_PLANS: PricingPlan[] = [
     {
         id: 'Standard',
         title: 'Standard',
+        firmsIncluded: 1,
         projectsIncluded: 10,
         description:
             'Full client portal on your existing Google Drive—engagements, personas, and feedback in one place.',
@@ -107,7 +147,7 @@ export const PRICING_PLANS: PricingPlan[] = [
             },
             { 
                 name: "Engagement activity audit", 
-                tooltip: "Append-only audit trail for the engagement: lifecycle events, sharing actions, and key document operations—visible in the Audit tab." 
+                tooltip: "Append-only audit trail for the engagement: lifecycle events, sharing actions, and key document operations—visible in the Audit tab. On Standard, audit history is kept for 30 days (longer on higher tiers—see Technical comparison)." 
             },
             { 
                 name: "Document comment thread (feedback & approvals)", 
@@ -126,6 +166,7 @@ export const PRICING_PLANS: PricingPlan[] = [
     {
         id: 'Pro',
         title: 'Pro',
+        firmsIncluded: 5,
         projectsIncluded: 25,
         description: 'For growing firms needing advanced review and templates.',
         price: '$99',
@@ -139,7 +180,7 @@ export const PRICING_PLANS: PricingPlan[] = [
             { name: "Engagement templates", tooltip: "Choose from template engagements with pre-defined folder structures" },
             { name: "Duplicate engagement", tooltip: "Clone existing engagements with all configurations" },
             { name: "Engagement activity dashboard", tooltip: "See engagement activity, deadlines, and pending actions in one view" },
-            { name: "Document access tracking", tooltip: "See who viewed what and when, per document—for compliance and handoffs (beyond the engagement activity audit)." },
+            { name: "Document access tracking", tooltip: "See who viewed what and when, per document—for compliance and handoffs (beyond the engagement activity audit). On Pro, access history is kept for 90 days (longer on Business and Enterprise—see Technical comparison)." },
             { name: "Advanced Review & Approval Workflow", tooltip: "Approve / Finalize / Publish workflow with guest approvals (Contributor External, Viewer External)" },
             { name: "Document Versioning", tooltip: "Lock documents on approval, create version snapshots" },
             { name: "Download Historical Versions", tooltip: "Access and download previous document versions" },
@@ -155,6 +196,7 @@ export const PRICING_PLANS: PricingPlan[] = [
     {
         id: 'Business',
         title: 'Business',
+        firmsIncluded: 10,
         projectsIncluded: 50,
         description: 'For established firms and mid-size agencies.',
         price: '$149',
@@ -229,14 +271,14 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
                 values: {
                     Sandbox: "1",
                     Standard: "1",
-                    Pro: "1",
-                    Business: "1",
+                    Pro: "5",
+                    Business: "10",
                     Enterprise: "Custom",
                 },
             },
             {
-                feature: "Active engagements (per firm)",
-                tooltip: "Maximum concurrent open engagements for that firm. Closed or deleted engagements do not count. Enterprise includes a negotiated cap (often up to 100).",
+                feature: "Active engagements per subscription",
+                tooltip: "Maximum concurrent open engagements included with that subscription (per covered firm workspace). Closed or deleted engagements do not count. Enterprise includes a negotiated cap (often up to 100).",
                 values: {
                     Sandbox: "10",
                     Standard: "10",
@@ -256,13 +298,14 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
                 values: { Sandbox: false, Standard: true, Pro: true, Business: true, Enterprise: true },
             },
             {
-                feature: "Version history",
-                tooltip: "How long document version history is retained. View and restore previous versions of documents.",
+                feature: "Document Version history",
+                tooltip:
+                    "Each plan column shows how long prior document revisions stay available to view or restore. Older revisions roll off after that window except on Enterprise (Unlimited).",
                 values: {
-                    Sandbox: "90 days",
-                    Standard: "90 days",
-                    Pro: "365 days",
-                    Business: "Unlimited",
+                    Sandbox: false,
+                    Standard: "30 days",
+                    Pro: "90 days",
+                    Business: "365 days",
                     Enterprise: "Unlimited",
                 },
             },
@@ -284,17 +327,20 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
             {
                 feature: "Firm → Client → Engagement hierarchy",
                 tooltip: "Clean structure: Firm → Client → Engagement. Maps to folders in your Drive. Clients see a clear place for their engagement and document handoffs.",
+                tooltipLayout: "hierarchy-sample",
                 values: { Sandbox: false, Standard: true, Pro: true, Business: true, Enterprise: true },
             },
             {
                 feature: "Persona-based access (4 engagement roles)",
                 tooltip: ENGAGEMENT_PERSONAS_PRICING_TOOLTIP,
+                tooltipLayout: "engagement-personas",
                 values: { Sandbox: true, Standard: true, Pro: true, Business: true, Enterprise: true },
             },
             {
                 feature: "Engagement activity audit",
-                tooltip: "Append-only engagement audit trail: lifecycle, membership, sharing, and key document events—in the Audit tab.",
-                values: { Sandbox: true, Standard: true, Pro: true, Business: true, Enterprise: true },
+                tooltip:
+                    "Append-only engagement audit trail: lifecycle, membership, sharing, and key document events—in the Audit tab. Each column shows how long those audit events are retained.",
+                values: { Sandbox: false, Standard: "30 days", Pro: "90 days", Business: "365 days", Enterprise: "Unlimited" },
             },
             {
                 feature: "Document comment thread (feedback & approvals)",
@@ -313,8 +359,9 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
         rows: [
             {
                 feature: "Document access tracking",
-                tooltip: "Per-document visibility into who accessed files and when—beyond the engagement activity audit.",
-                values: { Sandbox: false, Standard: false, Pro: true, Business: true, Enterprise: true },
+                tooltip:
+                    "Per-document visibility into who accessed files and when—beyond the engagement-level activity audit. Included from Pro; not on Standard. Each plan column shows how long access events are retained.",
+                values: { Sandbox: false, Standard: false, Pro: "90 days", Business: "365 days", Enterprise: "Unlimited" },
             },
             {
                 feature: "Custom subdomain",

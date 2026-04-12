@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect, useMemo } from "react"
+import { useState, useRef, useEffect, useMemo, useSyncExternalStore } from "react"
 import Link from "next/link"
 import { motion, AnimatePresence } from "framer-motion"
 import {
@@ -71,6 +71,12 @@ import { KineticHeroSection } from "@/components/kinetic/KineticHeroSection"
 import { KineticMarketingBadge, KineticSectionIntro } from "@/components/kinetic/kinetic-section-intro"
 import { LegacyHeroScreenMock } from "@/components/landing/LegacyHeroScreenMock"
 import { LandingHeroPrimaryCtas } from "@/components/marketing/landing-hero-primary-ctas"
+import {
+  LANDING_REALITY_MODAL_VIEWED_EVENT,
+  LANDING_TRUST_ARCH_MODAL_VIEWED_EVENT,
+  readHideRealityCheckSectionAfterModal,
+  readHideTrustArchitectureSectionAfterModal,
+} from "@/lib/marketing/landing-section-dismissals"
 
 function TargetAudienceUseCaseCard({ block }: { block: UseCaseBlock }) {
   const shell = cn(targetAudienceScrollMarginClass, "w-full min-w-0 break-words", block.cardShellClass)
@@ -283,6 +289,36 @@ export function LandingPage({
   const activeModal = controlled ? activeModalProp! : activeModalInternal
   const setActiveModal = controlled ? onActiveModalChange! : setActiveModalInternal
   const [currentSlide, setCurrentSlide] = useState(0)
+
+  const hideTrustSectionAfterModal = useSyncExternalStore(
+    (onStoreChange) => {
+      if (typeof window === "undefined") return () => {}
+      const notify = () => onStoreChange()
+      window.addEventListener(LANDING_TRUST_ARCH_MODAL_VIEWED_EVENT, notify)
+      window.addEventListener("storage", notify)
+      return () => {
+        window.removeEventListener(LANDING_TRUST_ARCH_MODAL_VIEWED_EVENT, notify)
+        window.removeEventListener("storage", notify)
+      }
+    },
+    readHideTrustArchitectureSectionAfterModal,
+    () => false,
+  )
+
+  const hideRealitySectionAfterModal = useSyncExternalStore(
+    (onStoreChange) => {
+      if (typeof window === "undefined") return () => {}
+      const notify = () => onStoreChange()
+      window.addEventListener(LANDING_REALITY_MODAL_VIEWED_EVENT, notify)
+      window.addEventListener("storage", notify)
+      return () => {
+        window.removeEventListener(LANDING_REALITY_MODAL_VIEWED_EVENT, notify)
+        window.removeEventListener("storage", notify)
+      }
+    },
+    readHideRealityCheckSectionAfterModal,
+    () => false,
+  )
 
   const editorialStitchSlides = [
     {
@@ -667,6 +703,7 @@ export function LandingPage({
                   edAccent={edAccent}
                   slides={slides}
                   onSlideChange={handleSlideChange}
+                  motionInstanceKey="hero"
                 />
               </div>
             </div>
@@ -674,32 +711,21 @@ export function LandingPage({
 
           {isKinetic && <KineticBentoSection />}
 
-          {/* Central Floating Dashboard Visual (Carousel) */}
+          {/* Central Floating Dashboard Visual (Carousel) — mobile: same mock as desktop hero, compact nav */}
           <FadeIn delay={isEditorial ? 280 : 500} direction="up" className="relative w-full">
-            {/* MOBILE: Static Stack (Lean Content) */}
-            <div className="md:hidden space-y-4">
-              {slides.map((slide, idx) => {
-                const Icon = slide.icon
-                return (
-                  <div key={slide.id} className={cn(t.carouselMobileCard, t.carouselShadow, isEditorial && "border border-black/[0.1]")}>
-                    <div className="flex items-center gap-4">
-                      <div className={cn("w-12 h-12 rounded-lg border flex items-center justify-center shrink-0", slide.colorClass)}>
-                        <Icon className="w-6 h-6 stroke-[1.5]" />
-                              </div>
-                            <div>
-                        <h3 className={cn("text-xl font-bold", t.textPrimary)}>{slide.label}</h3>
-                        <div className={cn("text-[10px] font-bold uppercase tracking-widest", isEditorial ? cn(edAccent, "[font-family:var(--font-stitch-label),system-ui,sans-serif]") : "text-[#B07D62]")}>
-                          {slide.subtitle}
-                            </div>
-                            </div>
-                          </div>
-                    <p className={cn("font-medium leading-relaxed text-base", t.textBody)}>{slide.desc}</p>
-                                  </div>
-                    )
-                  })}
-                </div>
-
-            {/* DESKTOP strip moved into `LegacyHeroScreenMock` for unified component */}
+            <div className="md:hidden">
+              <LegacyHeroScreenMock
+                currentSlide={currentSlide}
+                t={t}
+                isEditorial={isEditorial}
+                edAccent={edAccent}
+                slides={slides}
+                onSlideChange={handleSlideChange}
+                compactSlideNav
+                slideViewportHeightClass="h-[260px]"
+                motionInstanceKey="marketing"
+              />
+            </div>
           </FadeIn>
 
         </div>
@@ -802,11 +828,13 @@ export function LandingPage({
         </div>
       </section>
 
-      <FadeIn>
-        <TrustArchitectureSection skin={skin} variant="page" />
-      </FadeIn>
+      {!hideTrustSectionAfterModal ? (
+        <FadeIn>
+          <TrustArchitectureSection skin={skin} variant="page" />
+        </FadeIn>
+      ) : null}
 
-      <RealityCheckSection fillViewportBelowHeader />
+      {!hideRealitySectionAfterModal ? <RealityCheckSection fillViewportBelowHeader /> : null}
 
     </>
   )

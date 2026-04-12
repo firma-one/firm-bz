@@ -31,7 +31,7 @@ export async function getFileInfo(projectId: string, documentIdParam: string): P
 export async function getProjectDocumentContext(
   projectId: string,
   documentIdParam: string
-): Promise<{ id: string; organizationId: string; clientId: string; projectId: string } | null> {
+): Promise<{ id: string; organizationId: string; clientId: string; projectId: string; externalId: string } | null> {
   const doc = await prisma.engagementDocument.findFirst({
     where: {
       engagementId: projectId,
@@ -45,6 +45,7 @@ export async function getProjectDocumentContext(
       firmId: true,
       clientId: true,
       engagementId: true,
+      externalId: true,
       engagement: { select: { clientId: true } },
     },
   })
@@ -56,5 +57,6 @@ export async function getProjectDocumentContext(
     organizationId: doc.firmId,
     clientId,
     projectId: doc.engagementId,
+    externalId: doc.externalId,
   }
 }

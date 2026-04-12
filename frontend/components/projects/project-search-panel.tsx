@@ -370,6 +370,7 @@ export function ProjectSearchPanel({
               <DocumentActionMenu
                 document={file}
                 showShareModal={actionMenuProps.isProjectLead}
+                isEngagementLead={actionMenuProps.isProjectLead}
                 projectId={projectId}
                 onShareSaved={actionMenuProps.onShareSaved}
                 canManage={actionMenuProps.canManage}

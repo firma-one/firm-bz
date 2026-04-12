@@ -6,6 +6,7 @@ import { supabase } from './supabase'
 import { config, getOAuthRedirectOrigin } from './config'
 import { logger } from './logger'
 import { buildUserSettingsPlus } from './actions/user-settings'
+import { clearCheckoutHintSessionKeys } from './marketing/checkout-hint-session'
 
 /** Cooldown (ms) to avoid calling buildUserSettingsPlus multiple times in a short period (e.g. initial load + SIGNED_IN + Strict Mode). */
 const BUILD_SETTINGS_COOLDOWN_MS = 5000
@@ -67,6 +68,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           maybeBuildUserSettingsPlus(session.user.id)
         }
 
+        if (event === 'SIGNED_OUT') {
+          clearCheckoutHintSessionKeys()
+        }
+
         setLoading(false)
       }
     )
@@ -109,6 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw error
     }
 
+    clearCheckoutHintSessionKeys()
     // Note: Redirect is handled by the calling component
   }
 

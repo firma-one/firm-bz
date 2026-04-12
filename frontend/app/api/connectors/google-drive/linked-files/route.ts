@@ -7,6 +7,8 @@ import { getSharedAndAncestorIdsForPersona, isFolderUnderSharedFolder } from '@/
 import { safeInngestSend } from '@/lib/inngest/client'
 import { logger } from '@/lib/logger'
 import { GoogleDriveAuthError } from '@/lib/google-drive-connector'
+import { blockIfEngagementFileMutationForbidden } from '@/lib/engagement-access'
+import { isDocumentVersionLocked } from '@/lib/document-version-lock'
 // GET: List linked files for a connector
 export async function GET(request: NextRequest) {
     try {
@@ -326,12 +328,16 @@ export async function POST(request: NextRequest) {
                 if (driveIds.length > 0) {
                     const rows = await prisma.engagementDocument.findMany({
                         where: { engagementId: bodyProjectId, externalId: { in: driveIds } },
-                        select: { id: true, externalId: true },
+                        select: { id: true, externalId: true, settings: true },
                     })
                     const internalByExternal = new Map<string, string>(rows.map((r: { id: string; externalId: string }) => [r.externalId, r.id]))
+                    const lockedByExternal = new Map<string, boolean>(
+                        rows.map((r: { externalId: string; settings: unknown }) => [r.externalId, isDocumentVersionLocked(r.settings)])
+                    )
                     files = files.map((f: any) => ({
                         ...f,
                         projectDocumentId: internalByExternal.get(f.id) ?? undefined,
+                        versionLocked: lockedByExternal.get(f.id) ?? false,
                     }))
                 }
             }
@@ -450,6 +456,8 @@ export async function POST(request: NextRequest) {
             if (typeof bodyProjectId !== 'string' || !bodyProjectId || typeof fileId !== 'string' || !fileId) {
                 return NextResponse.json({ error: 'Missing projectId or fileId' }, { status: 400 })
             }
+            const dupDenied = await blockIfEngagementFileMutationForbidden(user.id, bodyProjectId)
+            if (dupDenied) return dupDenied
             const project = await prisma.engagement.findFirst({
                 where: { id: bodyProjectId, isDeleted: false },
                 include: {
@@ -499,6 +507,8 @@ export async function POST(request: NextRequest) {
             if (typeof bodyProjectId !== 'string' || !bodyProjectId || typeof fileId !== 'string' || !fileId || typeof destinationFolderId !== 'string' || !destinationFolderId) {
                 return NextResponse.json({ error: 'Missing projectId, fileId, or destinationFolderId' }, { status: 400 })
             }
+            const copyMoveDenied = await blockIfEngagementFileMutationForbidden(user.id, bodyProjectId)
+            if (copyMoveDenied) return copyMoveDenied
 
             const project = await prisma.engagement.findFirst({
                 where: { id: bodyProjectId, isDeleted: false },
@@ -578,6 +588,8 @@ export async function POST(request: NextRequest) {
             if (typeof bodyProjectId !== 'string' || !bodyProjectId || typeof fileId !== 'string' || !fileId || typeof targetRoot !== 'string') {
                 return NextResponse.json({ error: 'Missing projectId, fileId, or targetRoot' }, { status: 400 })
             }
+            const treeDenied = await blockIfEngagementFileMutationForbidden(user.id, bodyProjectId)
+            if (treeDenied) return treeDenied
             if (!['general', 'confidential', 'staging'].includes(targetRoot)) {
                 return NextResponse.json({ error: 'Invalid targetRoot' }, { status: 400 })
             }
@@ -666,6 +678,8 @@ export async function POST(request: NextRequest) {
             if (typeof bodyProjectId !== 'string' || !bodyProjectId || typeof fileId !== 'string' || !fileId || typeof newName !== 'string' || !newName.trim()) {
                 return NextResponse.json({ error: 'Missing projectId, fileId, or name' }, { status: 400 })
             }
+            const renameDenied = await blockIfEngagementFileMutationForbidden(user.id, bodyProjectId)
+            if (renameDenied) return renameDenied
 
             const project = await prisma.engagement.findFirst({
                 where: { id: bodyProjectId, isDeleted: false },

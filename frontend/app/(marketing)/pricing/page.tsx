@@ -8,12 +8,13 @@ import {
     PRICING_PLANS,
     PRICING_SANDBOX_COLUMN_ID,
     planCardUsageSummary,
+    sandboxPlanUsageSummary,
 } from "@/config/pricing"
 import { Header } from "@/components/layout/Header"
 import { Footer } from "@/components/layout/Footer"
 import { Fragment, useEffect, useState } from "react"
 import { cn } from "@/lib/utils"
-import type { PlanValue, PricingPlan } from "@/config/pricing"
+import type { PlanValue, PricingPlan, PricingPlanColumnId } from "@/config/pricing"
 import { platformEmail } from "@/config/platform-domain"
 import { BRAND_NAME } from "@/config/brand"
 import { EmailInline } from "@/components/ui/email-inline"
@@ -22,10 +23,16 @@ import { CONTACT_HREF_SALES_INQUIRY } from "@/lib/marketing/contact-inquiry"
 import { persistCheckoutIntent, type CheckoutPlanName } from "@/lib/marketing/checkout-intent"
 import { CALENDLY_DEMO_URL, MARKETING_PAGE_SHELL } from "@/lib/marketing/target-audience-nav"
 import { MarketingBreadcrumb } from "@/components/marketing/marketing-breadcrumb"
+import { PricingEngagementPersonasTooltip } from "@/components/marketing/pricing-engagement-personas-tooltip"
+import { PricingFirmClientEngagementHierarchyVisual } from "@/components/marketing/pricing-firm-client-engagement-hierarchy-visual"
 import { KineticMarketingBadge, kineticSectionLeadClassName } from "@/components/kinetic/kinetic-section-intro"
 
 const H = "[font-family:var(--font-kinetic-headline),system-ui,sans-serif]"
 const B = "[font-family:var(--font-kinetic-body),system-ui,sans-serif]"
+
+/** Soft yellow highlighter for hero lead copy (marker pen, not lime CTA). */
+const KINETIC_LEAD_MARKER =
+    "box-decoration-clone rounded-sm bg-[#fdf6df] px-[0.22em] py-[0.06em] font-bold text-[#2a261c]"
 
 /** Three-line headline: kinetic hero scale but capped at `xl:text-7xl` (not `8xl`) and no max-width so each line stays one row. */
 const PRICING_HERO_H1 =
@@ -77,6 +84,27 @@ function checkoutPlanFromPricingPlanId(id: string): CheckoutPlanName {
     return "Standard"
 }
 
+type PricingComparisonRow = (typeof PRICING_COMPARISON)[number]["rows"][number]
+
+function PricingComparisonTooltipBody({ row }: { row: PricingComparisonRow }) {
+    if (row.tooltipLayout === "hierarchy-sample") {
+        return (
+            <div className="space-y-2">
+                <PricingFirmClientEngagementHierarchyVisual />
+                <p className="whitespace-pre-line text-sm">{row.tooltip}</p>
+            </div>
+        )
+    }
+    if (row.tooltipLayout === "engagement-personas") {
+        return <PricingEngagementPersonasTooltip />
+    }
+    return row.tooltip ? (
+        <p className="whitespace-pre-line text-sm">{row.tooltip}</p>
+    ) : null
+}
+
+type MobileMatrixColumnId = typeof PRICING_SANDBOX_COLUMN_ID | PricingPlanColumnId
+
 function getDisplayPrice(plan: PricingPlan, billingPeriod: "monthly" | "annual"): string | null {
     if (!plan.price || plan.price === "Contact Us") return null
     if (billingPeriod === "annual") {
@@ -92,10 +120,17 @@ export default function PricingPage() {
     /** Last plan the visitor expressed interest in — Title Case in localStorage via {@link persistCheckoutIntent}. */
     const [checkoutPlanFocus, setCheckoutPlanFocus] = useState<CheckoutPlanName>("Standard")
     const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0)
+    const [mobileMatrixColumn, setMobileMatrixColumn] = useState<MobileMatrixColumnId>("Standard")
 
     useEffect(() => {
         persistCheckoutIntent({ plan: checkoutPlanFocus, interval: billingPeriod })
     }, [checkoutPlanFocus, billingPeriod])
+
+    useEffect(() => {
+        if (mobileMatrixColumn !== PRICING_SANDBOX_COLUMN_ID) {
+            setCheckoutPlanFocus(checkoutPlanFromPricingPlanId(mobileMatrixColumn))
+        }
+    }, [mobileMatrixColumn])
 
     const faqs = [
         {
@@ -191,7 +226,7 @@ export default function PricingPage() {
                                 icon={<SquareFunction className="ds-badge-kinetic__icon stroke-[2]" aria-hidden />}
                                 tracking="tight"
                             >
-                                Value that scales — not seats
+                                Avoid per-seat surcharge — scales with engagements
                             </KineticMarketingBadge>
                             <h1 className={cn("mb-0", PRICING_HERO_H1)}>
                                 <span className="text-[#1b1b1d]">Firm-scale delivery.</span>
@@ -201,13 +236,22 @@ export default function PricingPage() {
                             <div className="mt-10 flex flex-col gap-8 lg:mt-12 lg:flex-row lg:items-end lg:justify-between">
                                 <div className={cn("max-w-3xl space-y-3", kineticSectionLeadClassName)}>
                                     <p>
-                                        Bring your own Google Drive—non-custodial. Your documents stay where they are; we
-                                        add the portal. No migration, no new storage. Professional client portal with
-                                        engagement personas and feedback tracking.
+                                        <span className={KINETIC_LEAD_MARKER}>Avoid per-seat surcharge</span>
+                                        . Add firm admins, engagement leads, clients, and external collaborators at no extra per-user cost.{" "}
                                     </p>
                                     <p>
-                                        Pricing scales with active engagements—add your whole team at no extra seat cost.
+                                        Pricing follows active engagements and your firm tier—not headcount. Your whole
+                                        team stays on the same price.
                                     </p>
+                                    <p>
+                                        <span className={KINETIC_LEAD_MARKER}>
+                                            Bring your own Google Drive—non-custodial
+                                        </span>
+                                        . Your documents stay where they are; we add the portal. No migration, no new
+                                        storage. Professional client portal with engagement personas and feedback
+                                        tracking.
+                                    </p>
+
                                 </div>
                                 <div
                                     className="inline-flex w-fit shrink-0 items-stretch gap-1 rounded-none border border-[#9ea0a8]/45 bg-[#cfd1d9] p-1 shadow-[inset_0_1px_3px_rgba(15,23,42,0.12)]"
@@ -273,6 +317,13 @@ export default function PricingPage() {
                                 <span className={cn("text-4xl font-bold tracking-tight text-[#1b1b1d]", H)}>Free</span>
                             </div>
                             <p className="mb-4 text-xs text-[#45474c]">Explore {BRAND_NAME} on your terms</p>
+                            <div className="mb-5 space-y-1">
+                                {sandboxPlanUsageSummary().map((line, idx) => (
+                                    <p key={idx} className="text-sm text-[#45474c]">
+                                        {line}
+                                    </p>
+                                ))}
+                            </div>
                             <p className="mb-8 flex-grow text-sm leading-relaxed text-[#45474c]">
                                 Explore the portal, firm hierarchy, and engagements on your Drive—no card. Step up to a{" "}
                                 <strong className="font-semibold text-[#1b1b1d]">30-day Standard trial</strong> when you
@@ -392,22 +443,150 @@ export default function PricingPage() {
                     </div>
                 </section>
 
-                {/* Comparison table */}
+                {/* Comparison: plan-picker matrix on small screens; full table from `lg` */}
                 <section className={cn(MARKETING_PAGE_SHELL, "mb-20 md:mb-28")}>
                     <h2
                         className={cn(
-                            "mb-10 text-3xl font-bold tracking-tight text-[#1b1b1d] md:text-4xl",
+                            "mb-6 text-3xl font-bold tracking-tight text-[#1b1b1d] md:mb-10 md:text-4xl",
                             H,
                         )}
                     >
                         Technical comparison
                     </h2>
-                    <div className="overflow-x-auto rounded-none border border-[#c6c6cc]/20 bg-[#fcf8fa] shadow-[0_20px_40px_rgba(27,27,29,0.06)]">
-                        <p className="px-4 py-2 text-center text-xs text-[#45474c] lg:hidden border-b border-[#c6c6cc]/15">
-                            Scroll horizontally to compare plans
-                        </p>
-                        <div className="min-w-[880px]">
-                            <TooltipProvider delayDuration={0}>
+
+                    <TooltipProvider delayDuration={0}>
+                        <div className="lg:hidden">
+                            <p className={cn("mb-4 text-sm leading-relaxed text-[#45474c]", B)}>
+                                Select a column to compare. Sandbox is always shown as a reference when a paid plan is
+                                selected.
+                            </p>
+                            <div
+                                className="mb-6 flex flex-wrap gap-2"
+                                role="tablist"
+                                aria-label="Comparison column"
+                            >
+                                <button
+                                    type="button"
+                                    role="tab"
+                                    aria-selected={mobileMatrixColumn === PRICING_SANDBOX_COLUMN_ID}
+                                    onClick={() => setMobileMatrixColumn(PRICING_SANDBOX_COLUMN_ID)}
+                                    className={cn(
+                                        "rounded-none border px-3 py-2 text-xs font-bold uppercase tracking-widest transition-colors min-h-[44px]",
+                                        H,
+                                        mobileMatrixColumn === PRICING_SANDBOX_COLUMN_ID
+                                            ? "border-[#006e16] bg-[#72ff70]/25 text-[#002203]"
+                                            : "border-[#c6c6cc]/40 bg-white text-[#45474c] hover:border-[#006e16]/40",
+                                    )}
+                                >
+                                    Sandbox
+                                </button>
+                                {PRICING_PLANS.map((plan) => (
+                                    <button
+                                        key={plan.id}
+                                        type="button"
+                                        role="tab"
+                                        aria-selected={mobileMatrixColumn === plan.id}
+                                        onClick={() => setMobileMatrixColumn(plan.id)}
+                                        className={cn(
+                                            "rounded-none border px-3 py-2 text-xs font-bold uppercase tracking-widest transition-colors min-h-[44px]",
+                                            H,
+                                            mobileMatrixColumn === plan.id
+                                                ? "border-[#006e16] bg-[#72ff70]/25 text-[#002203]"
+                                                : "border-[#c6c6cc]/40 bg-white text-[#45474c] hover:border-[#006e16]/40",
+                                            plan.id === highlightPlanId &&
+                                                mobileMatrixColumn !== plan.id &&
+                                                "ring-1 ring-[#72ff70]/40",
+                                        )}
+                                    >
+                                        {plan.title}
+                                    </button>
+                                ))}
+                            </div>
+
+                            <div className="space-y-8 rounded-none border border-[#c6c6cc]/20 bg-[#fcf8fa] p-4 shadow-[0_20px_40px_rgba(27,27,29,0.06)] sm:p-5">
+                                {PRICING_COMPARISON.map((category) => (
+                                    <div key={category.name}>
+                                        <div
+                                            className={cn(
+                                                "mb-3 border-b border-[#c6c6cc]/20 pb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[#45474c]",
+                                                H,
+                                            )}
+                                        >
+                                            {category.name}
+                                        </div>
+                                        <div className="space-y-3">
+                                            {category.rows.map((row) => {
+                                                const primary: PlanValue = row.values[mobileMatrixColumn] ?? false
+                                                const sandboxValue: PlanValue =
+                                                    row.values[PRICING_SANDBOX_COLUMN_ID] ?? false
+                                                const primaryHi =
+                                                    mobileMatrixColumn !== PRICING_SANDBOX_COLUMN_ID &&
+                                                    mobileMatrixColumn === highlightPlanId
+                                                return (
+                                                    <div
+                                                        key={`${category.name}-${row.feature}`}
+                                                        className="rounded-none border border-[#c6c6cc]/15 bg-white p-4 shadow-sm"
+                                                    >
+                                                        <div className="flex items-start justify-between gap-2">
+                                                            <span className="font-medium leading-snug text-[#1b1b1d]">
+                                                                {row.feature}
+                                                            </span>
+                                                            {row.tooltip ? (
+                                                                <Tooltip>
+                                                                    <TooltipTrigger asChild>
+                                                                        <span className="mt-0.5 shrink-0 cursor-help touch-manipulation">
+                                                                            <HelpCircle className="h-4 w-4 text-[#76777d]" />
+                                                                        </span>
+                                                                    </TooltipTrigger>
+                                                                    <TooltipContent className="max-w-md border-[#c6c6cc]/30 bg-white px-3 py-2 text-[#45474c] shadow-lg">
+                                                                        <PricingComparisonTooltipBody row={row} />
+                                                                    </TooltipContent>
+                                                                </Tooltip>
+                                                            ) : null}
+                                                        </div>
+                                                        <div className="mt-3 flex flex-col gap-1 border-t border-[#eae7e9] pt-3">
+                                                            <span className={cn("text-[10px] font-bold uppercase tracking-widest text-[#45474c]", H)}>
+                                                                {mobileMatrixColumn === PRICING_SANDBOX_COLUMN_ID
+                                                                    ? "Sandbox"
+                                                                    : PRICING_PLANS.find((p) => p.id === mobileMatrixColumn)
+                                                                          ?.title ?? mobileMatrixColumn}
+                                                            </span>
+                                                            <div className="flex justify-start">
+                                                                <PricingMatrixCell
+                                                                    value={primary}
+                                                                    standardHighlight={primaryHi}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                        {mobileMatrixColumn !== PRICING_SANDBOX_COLUMN_ID ? (
+                                                            <div className="mt-3 flex flex-col gap-1 border-t border-dashed border-[#c6c6cc]/30 pt-3">
+                                                                <span
+                                                                    className={cn(
+                                                                        "text-[10px] font-bold uppercase tracking-widest text-[#45474c]",
+                                                                        H,
+                                                                    )}
+                                                                >
+                                                                    vs Sandbox
+                                                                </span>
+                                                                <div className="flex justify-start">
+                                                                    <PricingMatrixCell
+                                                                        value={sandboxValue}
+                                                                        standardHighlight={false}
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                        ) : null}
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="hidden overflow-x-auto rounded-none border border-[#c6c6cc]/20 bg-[#fcf8fa] shadow-[0_20px_40px_rgba(27,27,29,0.06)] lg:block">
+                            <div className="min-w-[880px]">
                                 <table className="w-full border-collapse text-sm">
                                     <thead>
                                         <tr className="bg-[#eae7e9]">
@@ -461,7 +640,7 @@ export default function PricingPage() {
                                                         row.values[PRICING_SANDBOX_COLUMN_ID] ?? false
                                                     return (
                                                         <tr
-                                                            key={row.feature}
+                                                            key={`${category.name}-${row.feature}`}
                                                             className="border-b border-[#c6c6cc]/15 last:border-b-0"
                                                         >
                                                             <td className="border-r border-[#c6c6cc]/15 p-4 align-middle md:p-6">
@@ -477,9 +656,7 @@ export default function PricingPage() {
                                                                                 </span>
                                                                             </TooltipTrigger>
                                                                             <TooltipContent className="max-w-md border-[#c6c6cc]/30 bg-white px-3 py-2 text-[#45474c] shadow-lg">
-                                                                                <p className="text-sm whitespace-pre-line">
-                                                                                    {row.tooltip}
-                                                                                </p>
+                                                                                <PricingComparisonTooltipBody row={row} />
                                                                             </TooltipContent>
                                                                         </Tooltip>
                                                                     )}
@@ -521,9 +698,9 @@ export default function PricingPage() {
                                         ))}
                                     </tbody>
                                 </table>
-                            </TooltipProvider>
+                            </div>
                         </div>
-                    </div>
+                    </TooltipProvider>
                 </section>
 
                 {/* FAQ */}

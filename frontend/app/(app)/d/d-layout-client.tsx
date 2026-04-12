@@ -91,11 +91,15 @@ function AppLayoutContent({
                         paddingRight: rightPaneContent ? RIGHT_PANEL_DOCKED_WIDTH_PX + RIGHT_PANEL_GAP_PX + BOTTOM_INSET_PX : BOTTOM_INSET_PX,
                     }}
                 >
-                    {/* Middle pane - main content (white card); min-h-0 is required so overflow-y creates an internal scroll instead of growing the page */}
-                    <main className="z-0 min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden rounded-xl border border-slate-200/80 bg-white shadow-sm">
-                        <div className="w-full px-7 pt-3 pb-4 sm:px-10 md:px-12">
-                            {children}
+                    {/*
+                      Middle pane: flex column — scroll area first, then bottom strips (e.g. checkout hint)
+                      so hints span the white card only, not the fixed sidebar.
+                    */}
+                    <main className="z-0 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-sm">
+                        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+                            <div className="w-full px-7 pt-3 pb-4 sm:px-10 md:px-12">{children}</div>
                         </div>
+                        <StandardCheckoutIntentBanner />
                     </main>
                 </div>
 
@@ -113,7 +117,6 @@ function AppLayoutContent({
                         {rightPaneContent}
                     </LayoutRightPanel>
                 ) : null}
-                <StandardCheckoutIntentBanner />
                 <OnboardingExitGuardBanner />
                 <DebugFloatingTrigger />
             </div>

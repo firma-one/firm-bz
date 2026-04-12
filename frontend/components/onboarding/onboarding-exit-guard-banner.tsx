@@ -8,7 +8,7 @@ import { firmAdminMustCompleteOnboarding } from '@/lib/actions/firms'
 import { cn } from '@/lib/utils'
 import { buttonVariants } from '@/components/ui/button'
 
-/** Match `StandardCheckoutIntentBanner` stacking. */
+/** Full-viewport overlay for onboarding exit guard (checkout hint is in-pane via `AppShellHintStrip`). */
 const OVERLAY_Z = 100
 
 function isOnboardingPath(path: string): boolean {

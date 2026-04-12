@@ -2,7 +2,6 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Button } from "@/components/ui/button"
 import Logo from "@/components/Logo"
 import { BrandName } from "@/components/brand/BrandName"
 import {
@@ -31,7 +30,26 @@ interface HeaderProps {
     onOpenModal?: (modalName: string) => void
 }
 
+type MobileNavSection = "platform" | "contact" | "main" | "resources"
+
 const labelFont = "[font-family:var(--font-header-label),system-ui,sans-serif]"
+
+const mobileSectionTriggerClass = cn(
+    labelFont,
+    "flex w-full items-center justify-between gap-2 rounded-lg border border-slate-100 bg-white px-3 py-3 text-left text-[10px] font-semibold uppercase tracking-widest text-slate-600 transition-colors hover:bg-slate-50",
+)
+
+/** Black primary CTA — Sign in (header + mobile menu). */
+const headerSignInCtaClass = cn(
+    labelFont,
+    "inline-flex items-center justify-center gap-2 rounded-md border border-transparent bg-[#141c2a] px-4 py-2 text-xs font-bold uppercase tracking-widest text-white shadow-[0_1px_0_rgba(2,6,23,0.35)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-black hover:shadow-[0_10px_24px_-12px_rgba(2,6,23,0.7)] active:translate-y-0 active:scale-95 sm:px-6",
+)
+
+/** Lime primary CTA — Get started (header + mobile menu). */
+const headerGetStartedCtaClass = cn(
+    labelFont,
+    "group inline-flex items-center justify-center gap-2 rounded-md border border-transparent bg-[#72ff70] px-4 py-2 text-xs font-bold uppercase tracking-widest text-[#002203] shadow-[0_1px_0_rgba(0,34,3,0.28)] transition-all duration-200 hover:-translate-y-0.5 hover:brightness-105 hover:shadow-[0_10px_24px_-12px_rgba(0,34,3,0.65)] active:translate-y-0 active:scale-95 sm:px-6",
+)
 
 /** Shared desktop mega-menu (Platform + Contact + Resources): panel, stack, row hover. */
 const megaMenuDropdownClass =
@@ -53,8 +71,17 @@ const megaMenuDescClass =
 /** design1: flush `top-0` bar; main content needs ~`pt-24 lg:pt-28` (see PublicPageLayout, pricing, landing hero). */
 export function Header({ onOpenModal: _onOpenModal }: HeaderProps) {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+    const [mobileOpenSection, setMobileOpenSection] = useState<MobileNavSection | null>(null)
     const pathname = usePathname()
-    const isDevelopment = process.env.NODE_ENV === "development"
+
+    const closeMobileMenu = () => {
+        setIsMobileMenuOpen(false)
+        setMobileOpenSection(null)
+    }
+
+    const toggleMobileSection = (id: MobileNavSection) => {
+        setMobileOpenSection((cur) => (cur === id ? null : id))
+    }
 
     const isActive = (path: string) => {
         if (path === "/" && pathname === "/") return true
@@ -77,13 +104,22 @@ export function Header({ onOpenModal: _onOpenModal }: HeaderProps) {
         )
 
     return (
-        <header className="fixed top-0 left-0 right-0 z-50 w-full border-b border-slate-200/60 bg-white/70 backdrop-blur-md">
+        <>
+            {isMobileMenuOpen ? (
+                <button
+                    type="button"
+                    className="fixed inset-x-0 bottom-0 top-24 z-40 bg-slate-900/30 backdrop-blur-md md:hidden"
+                    aria-label="Dismiss menu"
+                    onClick={closeMobileMenu}
+                />
+            ) : null}
+            <header className="fixed top-0 left-0 right-0 z-50 w-full border-b border-slate-200/60 bg-white/70 backdrop-blur-md">
             <div className="relative mx-auto flex w-full max-w-[min(100%,92rem)] items-center justify-between gap-4 px-3 py-4 sm:px-4 md:px-5 lg:px-6 xl:px-10">
                 <div className="flex min-w-0 flex-1 items-center">
                     <Link
                         href="/"
                         className="shrink-0"
-                        onClick={() => setIsMobileMenuOpen(false)}
+                        onClick={closeMobileMenu}
                     >
                         <Logo size="md" showText wordmarkClassName="text-2xl leading-none" />
                     </Link>
@@ -211,26 +247,13 @@ export function Header({ onOpenModal: _onOpenModal }: HeaderProps) {
                 </div>
 
                 <div className="flex shrink-0 items-center gap-3 sm:gap-4 md:gap-6">
-                    <Link
-                        href="/signin"
-                        className={cn(
-                            labelFont,
-                            "hidden sm:inline-flex items-center justify-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-bold uppercase tracking-widest text-slate-900 shadow-sm transition-colors hover:border-slate-300 hover:bg-white active:scale-[0.98]",
-                        )}
-                    >
+                    <Link href="/signin" className={cn(headerSignInCtaClass, "hidden md:inline-flex")}>
                         <LogIn className="h-3.5 w-3.5 shrink-0" strokeWidth={2.25} aria-hidden />
                         Sign in
                     </Link>
 
-                    <Link
-                        href="/signup"
-                        className={cn(
-                            labelFont,
-                            "group inline-flex items-center justify-center gap-2 rounded bg-[#72ff70] px-4 py-2 text-xs font-bold uppercase tracking-widest text-[#002203] shadow-[0_1px_0_rgba(0,34,3,0.28)] transition-all duration-200 hover:-translate-y-0.5 hover:brightness-105 hover:shadow-[0_10px_24px_-12px_rgba(0,34,3,0.65)] active:translate-y-0 active:scale-95 sm:px-6",
-                        )}
-                    >
-                        <span className="sm:hidden">Start</span>
-                        <span className="hidden sm:inline">Get started</span>
+                    <Link href="/signup" className={cn(headerGetStartedCtaClass, "hidden md:inline-flex")}>
+                        Get started
                         <ArrowRight
                             className="h-3.5 w-3.5 shrink-0 transition-transform duration-200 group-hover:translate-x-0.5"
                             strokeWidth={2.5}
@@ -241,7 +264,10 @@ export function Header({ onOpenModal: _onOpenModal }: HeaderProps) {
                     <button
                         type="button"
                         className="p-2 text-slate-600 transition-colors hover:bg-slate-100/80 md:hidden"
-                        onClick={() => setIsMobileMenuOpen((o) => !o)}
+                        onClick={() => {
+                            setMobileOpenSection(null)
+                            setIsMobileMenuOpen((o) => !o)
+                        }}
                         aria-expanded={isMobileMenuOpen}
                         aria-controls="site-header-mobile-panel"
                         aria-label={isMobileMenuOpen ? "Close menu" : "Open menu"}
@@ -254,199 +280,237 @@ export function Header({ onOpenModal: _onOpenModal }: HeaderProps) {
             {isMobileMenuOpen && (
                 <div
                     id="site-header-mobile-panel"
-                    className="border-t border-slate-200/60 bg-white/95 px-4 py-4 backdrop-blur-md md:hidden"
+                    className="relative z-[45] border-t border-slate-200/60 bg-white/95 px-4 py-4 backdrop-blur-md md:hidden"
                 >
-                    <div className="mb-4">
-                        <div
-                            className={cn(
-                                labelFont,
-                                "mb-1 px-2 py-1.5 text-[10px] font-medium uppercase tracking-widest text-slate-400",
-                            )}
+                    <div className="mb-4 flex flex-col gap-2">
+                        <Link href="/signin" onClick={closeMobileMenu} className={cn(headerSignInCtaClass, "w-full justify-center")}>
+                            <LogIn className="h-3.5 w-3.5 shrink-0" strokeWidth={2.25} aria-hidden />
+                            Sign in
+                        </Link>
+                        <Link href="/signup" onClick={closeMobileMenu} className={cn(headerGetStartedCtaClass, "w-full justify-center")}>
+                            Get started
+                            <ArrowRight
+                                className="h-3.5 w-3.5 shrink-0 transition-transform duration-200 group-hover:translate-x-0.5"
+                                strokeWidth={2.5}
+                                aria-hidden
+                            />
+                        </Link>
+                    </div>
+
+                    <div className="mb-2 space-y-2">
+                        <button
+                            type="button"
+                            className={mobileSectionTriggerClass}
+                            aria-expanded={mobileOpenSection === "platform"}
+                            onClick={() => toggleMobileSection("platform")}
                         >
                             Platform
-                        </div>
-                        <div
-                            className={cn(
-                                megaMenuStackClass,
-                                "rounded-lg border border-slate-100 bg-white",
-                            )}
+                            <ChevronDown
+                                className={cn(
+                                    "h-4 w-4 shrink-0 text-slate-500 transition-transform duration-200",
+                                    mobileOpenSection === "platform" && "rotate-180",
+                                )}
+                                aria-hidden
+                            />
+                        </button>
+                        {mobileOpenSection === "platform" ? (
+                            <div
+                                className={cn(
+                                    megaMenuStackClass,
+                                    "rounded-lg border border-slate-100 bg-white",
+                                )}
+                            >
+                                {platformMegaMenuItems.map((item) => (
+                                    <Link
+                                        key={item.id}
+                                        href={item.href}
+                                        className={cn(megaMenuLinkClass, "active:bg-slate-100")}
+                                        onClick={closeMobileMenu}
+                                    >
+                                        <div className={megaMenuTitleClass}>{item.title}</div>
+                                        <div className={megaMenuDescClass}>{item.description}</div>
+                                    </Link>
+                                ))}
+                            </div>
+                        ) : null}
+
+                        <button
+                            type="button"
+                            className={mobileSectionTriggerClass}
+                            aria-expanded={mobileOpenSection === "contact"}
+                            onClick={() => toggleMobileSection("contact")}
                         >
-                            {platformMegaMenuItems.map((item) => (
-                                <Link
-                                    key={item.id}
-                                    href={item.href}
-                                    className={cn(megaMenuLinkClass, "active:bg-slate-100")}
-                                    onClick={() => setIsMobileMenuOpen(false)}
-                                >
-                                    <div className={megaMenuTitleClass}>{item.title}</div>
-                                    <div className={megaMenuDescClass}>{item.description}</div>
-                                </Link>
-                            ))}
-                        </div>
-                    </div>
-
-                    <div className="mb-4">
-                        <div className="mb-1 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
                             Contact
-                        </div>
-                        <div className="space-y-0">
-                            <Link
-                                href="/contact"
+                            <ChevronDown
                                 className={cn(
-                                    "flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors active:bg-slate-100",
-                                    pathname === "/contact" ? "bg-slate-100" : "",
+                                    "h-4 w-4 shrink-0 text-slate-500 transition-transform duration-200",
+                                    mobileOpenSection === "contact" && "rotate-180",
                                 )}
-                                onClick={() => setIsMobileMenuOpen(false)}
-                            >
-                                <Mail
+                                aria-hidden
+                            />
+                        </button>
+                        {mobileOpenSection === "contact" ? (
+                            <div className={cn(megaMenuStackClass, "overflow-hidden rounded-lg border border-slate-100 bg-white")}>
+                                <Link
+                                    href="/contact"
                                     className={cn(
-                                        "h-4 w-4 shrink-0",
-                                        pathname === "/contact" ? "text-slate-900" : "text-slate-700",
+                                        "flex items-center gap-3 px-3 py-3 transition-colors first:pt-2.5 last:pb-2.5 hover:bg-slate-50 active:bg-slate-100",
+                                        pathname === "/contact" ? "bg-slate-100" : "",
                                     )}
-                                />
-                                <span
-                                    className={cn(
-                                        "text-sm",
-                                        pathname === "/contact" ? "font-semibold text-slate-900" : "font-medium text-slate-900",
-                                    )}
+                                    onClick={closeMobileMenu}
                                 >
-                                    Get in touch
-                                </span>
-                            </Link>
-                            <a
-                                href={CALENDLY_DEMO_URL}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors active:bg-slate-100"
-                                aria-label="Book a demo (opens Calendly in a new tab)"
-                                onClick={() => setIsMobileMenuOpen(false)}
-                            >
-                                <CalendarClock className="h-4 w-4 shrink-0 text-slate-700" aria-hidden />
-                                <span className="flex min-w-0 flex-1 items-center gap-1.5 text-sm font-medium text-slate-900">
-                                    Book a demo
-                                    <ExternalLink className="h-3.5 w-3.5 shrink-0 text-slate-500" aria-hidden />
-                                </span>
-                            </a>
-                        </div>
-                    </div>
-
-                    <div className="mb-4">
-                        <div className="mb-1 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                            Main
-                        </div>
-                        <div className="space-y-0">
-                            <Link
-                                href="/pricing"
-                                className={cn(
-                                    "flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors active:bg-slate-100",
-                                    pathname === "/pricing" ? "bg-slate-100" : "",
-                                )}
-                                onClick={() => setIsMobileMenuOpen(false)}
-                            >
-                                <DollarSign
-                                    className={cn(
-                                        "h-4 w-4 shrink-0",
-                                        pathname === "/pricing" ? "text-slate-900" : "text-slate-700",
-                                    )}
-                                />
-                                <span
-                                    className={cn(
-                                        "text-sm",
-                                        pathname === "/pricing" ? "font-semibold text-slate-900" : "font-medium text-slate-900",
-                                    )}
-                                >
-                                    Pricing
-                                </span>
-                            </Link>
-                        </div>
-                    </div>
-
-                    <div className="mb-4">
-                        <div className="mb-1 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                            Resources
-                        </div>
-                        <div className="space-y-0">
-                            <Link
-                                href="/resources/faq"
-                                className={cn(
-                                    "relative flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors active:bg-slate-100",
-                                    pathname === "/resources/faq" ? "bg-slate-100" : "",
-                                )}
-                                onClick={() => setIsMobileMenuOpen(false)}
-                            >
-                                <div className="absolute bottom-0 left-[11px] top-0 w-px bg-slate-200" />
-                                <div className="absolute left-[11px] top-1/2 h-px w-3 bg-slate-200" />
-                                <HelpCircle
-                                    className={cn(
-                                        "relative z-10 ml-4 h-4 w-4 shrink-0",
-                                        pathname === "/resources/faq" ? "text-slate-900" : "text-slate-700",
-                                    )}
-                                />
-                                <span
-                                    className={cn(
-                                        "relative z-10 text-sm",
-                                        pathname === "/resources/faq" ? "font-semibold text-slate-900" : "font-medium text-slate-900",
-                                    )}
-                                >
-                                    FAQs
-                                </span>
-                            </Link>
-                            <Link
-                                href={BLOG_BASE_PATH}
-                                className={cn(
-                                    "relative flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors active:bg-slate-100",
-                                    pathname?.startsWith(BLOG_BASE_PATH) ? "bg-slate-100" : "",
-                                )}
-                                onClick={() => setIsMobileMenuOpen(false)}
-                            >
-                                <div className="absolute bottom-0 left-[11px] top-0 w-px bg-slate-200" />
-                                <div className="absolute left-[11px] top-1/2 h-px w-3 bg-slate-200" />
-                                <FileText
-                                    className={cn(
-                                        "relative z-10 ml-4 h-4 w-4 shrink-0",
-                                        pathname?.startsWith(BLOG_BASE_PATH) ? "text-slate-900" : "text-slate-700",
-                                    )}
-                                />
-                                <span
-                                    className={cn(
-                                        "relative z-10 text-sm",
-                                        pathname?.startsWith(BLOG_BASE_PATH)
-                                            ? "font-semibold text-slate-900"
-                                            : "font-medium text-slate-900",
-                                    )}
-                                >
-                                    Blog
-                                </span>
-                            </Link>
-                        </div>
-                    </div>
-
-                    {isDevelopment && (
-                        <>
-                            <div className="my-2 h-px bg-slate-200" />
-                            <div className="flex flex-col gap-2">
-                                <Link href="/signin" onClick={() => setIsMobileMenuOpen(false)}>
-                                    <Button
-                                        variant="outline"
+                                    <Mail
                                         className={cn(
-                                            labelFont,
-                                            "h-auto w-full justify-center gap-2 rounded-md border-slate-200 bg-slate-50 px-6 py-2.5 text-xs font-bold uppercase tracking-widest text-slate-900 hover:border-slate-300 hover:bg-white",
+                                            "h-4 w-4 shrink-0",
+                                            pathname === "/contact" ? "text-slate-900" : "text-slate-700",
+                                        )}
+                                    />
+                                    <span
+                                        className={cn(
+                                            "text-sm",
+                                            pathname === "/contact"
+                                                ? "font-semibold text-slate-900"
+                                                : "font-medium text-slate-900",
                                         )}
                                     >
-                                        <LogIn className="h-3.5 w-3.5 shrink-0" strokeWidth={2.25} aria-hidden />
-                                        Sign in
-                                    </Button>
+                                        Get in touch
+                                    </span>
                                 </Link>
-                                <Link href="/signup" onClick={() => setIsMobileMenuOpen(false)}>
-                                    <Button className="h-auto w-full justify-center rounded-lg bg-slate-900 px-6 py-2.5 text-sm font-semibold text-white hover:bg-slate-800">
-                                        Sign up
-                                    </Button>
+                                <a
+                                    href={CALENDLY_DEMO_URL}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-3 px-3 py-3 transition-colors first:pt-2.5 last:pb-2.5 hover:bg-slate-50 active:bg-slate-100"
+                                    aria-label="Book a demo (opens Calendly in a new tab)"
+                                    onClick={closeMobileMenu}
+                                >
+                                    <CalendarClock className="h-4 w-4 shrink-0 text-slate-700" aria-hidden />
+                                    <span className="flex min-w-0 flex-1 items-center gap-1.5 text-sm font-medium text-slate-900">
+                                        Book a demo
+                                        <ExternalLink className="h-3.5 w-3.5 shrink-0 text-slate-500" aria-hidden />
+                                    </span>
+                                </a>
+                            </div>
+                        ) : null}
+
+                        <button
+                            type="button"
+                            className={mobileSectionTriggerClass}
+                            aria-expanded={mobileOpenSection === "main"}
+                            onClick={() => toggleMobileSection("main")}
+                        >
+                            Main
+                            <ChevronDown
+                                className={cn(
+                                    "h-4 w-4 shrink-0 text-slate-500 transition-transform duration-200",
+                                    mobileOpenSection === "main" && "rotate-180",
+                                )}
+                                aria-hidden
+                            />
+                        </button>
+                        {mobileOpenSection === "main" ? (
+                            <div className={cn(megaMenuStackClass, "overflow-hidden rounded-lg border border-slate-100 bg-white")}>
+                                <Link
+                                    href="/pricing"
+                                    className={cn(
+                                        "flex items-center gap-3 px-3 py-3 transition-colors first:pt-2.5 last:pb-2.5 hover:bg-slate-50 active:bg-slate-100",
+                                        pathname === "/pricing" ? "bg-slate-100" : "",
+                                    )}
+                                    onClick={closeMobileMenu}
+                                >
+                                    <DollarSign
+                                        className={cn(
+                                            "h-4 w-4 shrink-0",
+                                            pathname === "/pricing" ? "text-slate-900" : "text-slate-700",
+                                        )}
+                                    />
+                                    <span
+                                        className={cn(
+                                            "text-sm",
+                                            pathname === "/pricing"
+                                                ? "font-semibold text-slate-900"
+                                                : "font-medium text-slate-900",
+                                        )}
+                                    >
+                                        Pricing
+                                    </span>
                                 </Link>
                             </div>
-                        </>
-                    )}
+                        ) : null}
+
+                        <button
+                            type="button"
+                            className={mobileSectionTriggerClass}
+                            aria-expanded={mobileOpenSection === "resources"}
+                            onClick={() => toggleMobileSection("resources")}
+                        >
+                            Resources
+                            <ChevronDown
+                                className={cn(
+                                    "h-4 w-4 shrink-0 text-slate-500 transition-transform duration-200",
+                                    mobileOpenSection === "resources" && "rotate-180",
+                                )}
+                                aria-hidden
+                            />
+                        </button>
+                        {mobileOpenSection === "resources" ? (
+                            <div className={cn(megaMenuStackClass, "overflow-hidden rounded-lg border border-slate-100 bg-white")}>
+                                <Link
+                                    href="/resources/faq"
+                                    className={cn(
+                                        "flex items-center gap-3 px-3 py-3 transition-colors first:pt-2.5 last:pb-2.5 hover:bg-slate-50 active:bg-slate-100",
+                                        pathname === "/resources/faq" ? "bg-slate-100" : "",
+                                    )}
+                                    onClick={closeMobileMenu}
+                                >
+                                    <HelpCircle
+                                        className={cn(
+                                            "h-4 w-4 shrink-0",
+                                            pathname === "/resources/faq" ? "text-slate-900" : "text-slate-700",
+                                        )}
+                                    />
+                                    <span
+                                        className={cn(
+                                            "text-sm",
+                                            pathname === "/resources/faq"
+                                                ? "font-semibold text-slate-900"
+                                                : "font-medium text-slate-900",
+                                        )}
+                                    >
+                                        FAQs
+                                    </span>
+                                </Link>
+                                <Link
+                                    href={BLOG_BASE_PATH}
+                                    className={cn(
+                                        "flex items-center gap-3 px-3 py-3 transition-colors first:pt-2.5 last:pb-2.5 hover:bg-slate-50 active:bg-slate-100",
+                                        pathname?.startsWith(BLOG_BASE_PATH) ? "bg-slate-100" : "",
+                                    )}
+                                    onClick={closeMobileMenu}
+                                >
+                                    <FileText
+                                        className={cn(
+                                            "h-4 w-4 shrink-0",
+                                            pathname?.startsWith(BLOG_BASE_PATH) ? "text-slate-900" : "text-slate-700",
+                                        )}
+                                    />
+                                    <span
+                                        className={cn(
+                                            "text-sm",
+                                            pathname?.startsWith(BLOG_BASE_PATH)
+                                                ? "font-semibold text-slate-900"
+                                                : "font-medium text-slate-900",
+                                        )}
+                                    >
+                                        Blog
+                                    </span>
+                                </Link>
+                            </div>
+                        ) : null}
+                    </div>
                 </div>
             )}
         </header>
+        </>
     )
 }

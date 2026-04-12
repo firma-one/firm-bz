@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { resolveProjectContext } from '@/lib/resolve-project-context'
 import { canViewProject } from '@/lib/permission-helpers'
 import { getProjectDocumentContext } from '@/lib/file-utils'
+import { requireEngagementMember, externalMemberCanAccessDocument } from '@/lib/engagement-access'
 
 const ALLOWED_KEYS = new Set([
   'urgent',
@@ -36,8 +37,14 @@ export async function POST(
     const canView = await canViewProject(ctx.orgId, ctx.clientId, ctx.projectId)
     if (!canView) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
+    const member = await requireEngagementMember(projectId, user.id)
+    if (!member) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
     const docCtx = await getProjectDocumentContext(projectId, documentIdParam)
     if (!docCtx) return NextResponse.json({ error: 'Document not found in this project' }, { status: 404 })
+
+    const canDoc = await externalMemberCanAccessDocument(projectId, member.role, docCtx.externalId)
+    if (!canDoc) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
     const body = await request.json().catch(() => ({}))
     const messageId = typeof body.messageId === 'string' ? body.messageId : ''

@@ -64,6 +64,20 @@ export const upgradeCopy = {
     checkoutIntentJoyrideTrail:
         ' on our pricing page. Confirm the billing period above, then continue to checkout when you are ready.',
     checkoutIntentJoyridePrimaryCta: 'Got it',
+    /** Non-blocking checkout hint strip — short headline (mirrors profile name line). */
+    checkoutHintStripTitle: 'Finish Standard checkout',
+    /** Verbose subtitle under headline (mirrors profile plan / email line). */
+    checkoutHintStripBodyIntent:
+        'Standard from pricing: use Profile (sidebar foot) → Billing, or Continue.',
+    /** Appended to `checkoutHintStripBodyIntent` only while the Show me control is visible. */
+    checkoutHintStripBodyIntentShowMeSuffix: 'Show me points at Profile.',
+    checkoutHintStripBodyUpgrade:
+        'Free plan: Profile (sidebar foot) → Billing to upgrade, or Continue.',
+    checkoutHintShowMe: 'Show me',
+    checkoutHintJoyrideTitle: 'Profile menu',
+    checkoutHintJoyrideBody:
+        'Click your avatar at the bottom of the sidebar, then choose Billing to compare plans and complete checkout.',
+    checkoutHintJoyrideDone: 'Got it',
     freeSandboxFootnote: 'No checkout needed—keep exploring in your sandbox.',
     addFirmModalHint: `The free plan includes your sandbox. Subscribe to add custom firms for your business.`,
     ctaContinueBilling: 'Continue to billing',
