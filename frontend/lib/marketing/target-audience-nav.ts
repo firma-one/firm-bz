@@ -30,9 +30,11 @@ export const CALENDLY_DEMO_URL = "https://calendly.com/firmaone/30min" as const
 
 /**
  * Max width + horizontal padding aligned with the marketing header rail (`Header`) and main landing sections.
+ * Kept intentionally tight from `md` up so the default `legacy` landing hero (grid + `LegacyHeroScreenMock`) and
+ * interior marketing pages visibly use more of the rail — small steps (e.g. 6→4) are easy to miss in the browser.
  */
 export const MARKETING_PAGE_SHELL =
-  "max-w-[min(100%,92rem)] mx-auto px-3 sm:px-4 md:px-5 lg:px-6 xl:px-10"
+  "max-w-[min(100%,92rem)] mx-auto px-3 sm:px-3 md:px-4 lg:px-3 xl:px-5 2xl:px-6"
 
 /**
  * Hover depth on bordered marketing tiles — matches `RealityStatCard` in

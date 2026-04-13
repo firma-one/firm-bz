@@ -644,7 +644,7 @@ export function LandingPage({
               </FadeIn>
               </div>
           ) : (
-            <div className="mb-12 grid grid-cols-1 items-start gap-10 lg:mb-0 lg:grid-cols-12 lg:gap-10 xl:gap-12">
+            <div className="mb-12 grid grid-cols-1 items-start gap-8 lg:mb-0 lg:grid-cols-12 lg:gap-6 xl:gap-8">
               <div className="lg:col-span-7 min-w-0 text-left space-y-6">
                 <FadeIn delay={0}>
                   <KineticMarketingBadge
