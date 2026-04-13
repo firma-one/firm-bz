@@ -2,6 +2,7 @@
 
 import { AnimatePresence, motion } from "framer-motion"
 import type { ComponentType } from "react"
+import { useLayoutEffect, useRef } from "react"
 import {
   Briefcase,
   BriefcaseBusiness,
@@ -60,6 +61,26 @@ export function LegacyHeroScreenMock({
   const redesignAccentIcon = "text-[#006e16]"
   const redesignPinkSoft = "bg-rose-50"
   const redesignPinkText = "text-rose-600"
+
+  const compactTabScrollRef = useRef<HTMLDivElement>(null)
+  const compactTabBtnRefs = useRef<Array<HTMLButtonElement | null>>([])
+
+  useLayoutEffect(() => {
+    if (!compactSlideNav) return
+    const scrollEl = compactTabScrollRef.current
+    const btn = compactTabBtnRefs.current[currentSlide]
+    if (!scrollEl || !btn) return
+
+    const alignActiveTab = () => {
+      const max = Math.max(0, scrollEl.scrollWidth - scrollEl.clientWidth)
+      const next =
+        btn.offsetLeft + btn.offsetWidth / 2 - scrollEl.clientWidth / 2
+      scrollEl.scrollLeft = Math.max(0, Math.min(max, next))
+    }
+
+    alignActiveTab()
+    requestAnimationFrame(alignActiveTab)
+  }, [compactSlideNav, currentSlide])
 
   return (
     <div
@@ -417,13 +438,19 @@ export function LegacyHeroScreenMock({
             >
               <ChevronLeft className="h-5 w-5" aria-hidden strokeWidth={2} />
             </button>
-            <div className="flex min-w-0 flex-1 overflow-x-auto overflow-y-hidden overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div
+              ref={compactTabScrollRef}
+              className="flex min-w-0 flex-1 overflow-x-auto overflow-y-hidden overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            >
               <div className="flex min-h-full min-w-min flex-1">
                 {slides.map((slide, index) => {
                   const isActive = currentSlide === index
                   return (
                     <button
                       key={slide.id}
+                      ref={(el) => {
+                        compactTabBtnRefs.current[index] = el
+                      }}
                       type="button"
                       onClick={() => onSlideChange(index)}
                       className={cn(

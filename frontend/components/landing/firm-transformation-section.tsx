@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore } from "react"
 import type { ComponentType } from "react"
 import * as DialogPrimitive from "@radix-ui/react-dialog"
 import { animate, motion, useMotionValue, useTransform } from "framer-motion"
@@ -579,13 +579,21 @@ export function FirmTransformationSection({ skin = "kinetic" as LandingSkin }: {
 
   const onRealityModalOpenChange = useCallback((open: boolean) => {
     setRealityModalOpen(open)
-    if (open) markRealityCheckViewedFromTransformationModal()
   }, [])
 
   const onTrustModalOpenChange = useCallback((open: boolean) => {
     setTrustArchitectureModalOpen(open)
-    if (open) markTrustArchitectureViewedFromTransformationModal()
   }, [])
+
+  // Controlled Radix Dialog does not call onOpenChange when the parent sets `open` (e.g. CTA clicks).
+  // Mark dismissals here so the landing page can hide duplicate sections below the fold.
+  useLayoutEffect(() => {
+    if (realityModalOpen) markRealityCheckViewedFromTransformationModal()
+  }, [realityModalOpen])
+
+  useLayoutEffect(() => {
+    if (trustArchitectureModalOpen) markTrustArchitectureViewedFromTransformationModal()
+  }, [trustArchitectureModalOpen])
 
   return (
     <section className="relative overflow-hidden border-y border-black/[0.06] bg-white pb-10 pt-6 md:pb-12 md:pt-8 lg:pb-16 lg:pt-10">
