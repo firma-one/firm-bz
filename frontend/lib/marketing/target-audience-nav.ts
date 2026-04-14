@@ -91,7 +91,7 @@ export const contactMegaMenuItems = [
   {
     id: "get-in-touch",
     title: "Get in touch",
-    description: "Send a message or reach our team through the contact form.",
+    description: "Send a message to our team through the contact form.",
     href: "/contact",
     external: false,
   },
