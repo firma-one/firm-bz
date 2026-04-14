@@ -175,7 +175,7 @@ const PRO = {
 const CLIENT = {
   businessRole: "Ops Director",
   displayName: "Avery Stone",
-  firm: "Acme Group",
+  firm: "Acme Co.",
 }
 
 const INTERNAL_CONTRIBUTOR = {
@@ -186,7 +186,7 @@ const INTERNAL_CONTRIBUTOR = {
 
 const EXTERNAL_CONTRACTOR = {
   businessRole: "Design Lead",
-  displayName: "Riley Park",
+  displayName: "Casey Morgan",
   firm: "Vertex Studio",
 }
 
@@ -234,7 +234,7 @@ function PersonaCard({
   return (
     <div
       className={cn(
-        "relative shrink-0 border border-dashed border-[#94a3b8] bg-white/90 text-center shadow-sm",
+        "relative shrink-0 border border-dashed border-[#94a3b8] bg-white/90 text-center shadow-sm lg:rounded-none",
         tightClientTile
           ? "w-[148px] min-h-0 px-2 pb-2 pt-6 sm:w-[158px] sm:px-2.5 sm:pb-2.5 sm:pt-6"
           : "w-[168px] min-h-[188px] px-3 pb-4 pt-9 sm:w-[188px] sm:min-h-[200px] sm:pb-5 sm:pt-10",
@@ -245,7 +245,9 @@ function PersonaCard({
       <div
         className={cn(
           "absolute left-1/2 z-[1] w-[80%] max-w-[calc(100%-2px)] -translate-x-1/2 border border-dashed [font-family:var(--font-kinetic-headline),system-ui,sans-serif]",
-          tightClientTile ? "-top-1.5 px-1.5 py-0.5" : "-top-2.5 px-2 py-1",
+          tightClientTile
+            ? "-top-1.5 px-1.5 py-0.5 lg:py-0.5"
+            : "-top-2.5 px-2 py-1 lg:px-1.5 lg:py-1",
           !after && kind === "pro" && "border-[#94a3b8] bg-white text-[#475569]",
           after && kind === "pro" && "border-[#5a78ff]/45 bg-white text-[#5a78ff]",
           kind === "client" && "border-[#4aba5e]/60 bg-white text-[#2d6d3a]",
@@ -254,7 +256,7 @@ function PersonaCard({
         <span
           className={cn(
             "inline-flex max-w-full items-center justify-center font-bold leading-tight tracking-tight",
-            tightClientTile ? "gap-1 text-[9px]" : "gap-1.5 text-[10px]",
+            tightClientTile ? "gap-1 text-[9px]" : "gap-1.5 text-[10px] lg:gap-1 lg:text-[9px]",
           )}
         >
           <Building2 className={cn("shrink-0 opacity-80", tightClientTile ? "h-2.5 w-2.5" : "h-3 w-3")} aria-hidden />
@@ -407,8 +409,7 @@ function BeforePersonaNode({
   return (
     <div
       className={cn(
-        "pointer-events-none absolute z-[28] w-[min(7.75rem,23vw)] max-w-[8rem] rounded-md border border-dashed bg-white/95 px-1.5 pb-2 pt-6 text-center shadow-sm md:w-[7.5rem] md:pt-6 lg:w-[9rem] lg:max-w-[9.5rem] lg:px-2 lg:pb-2.5 lg:pt-8",
-        ownerDesktopTweak && "lg:w-[10.75rem] lg:max-w-[11.25rem]",
+        "pointer-events-none absolute z-[28] w-[min(7.75rem,23vw)] max-w-[8rem] rounded-md lg:rounded-none border border-dashed bg-white/95 px-1.5 pb-2 pt-6 text-center shadow-sm md:w-[7.5rem] md:pt-6 lg:w-[9rem] lg:max-w-[9.5rem] lg:px-2 lg:pb-2.5 lg:pt-8",
         t.shell,
       )}
       style={{
@@ -419,9 +420,9 @@ function BeforePersonaNode({
     >
       <div
         className={cn(
-          "absolute -top-1 left-1/2 z-[1] flex min-h-[2.5rem] max-w-[min(calc(100%+0.5rem),10.5rem)] -translate-x-1/2 flex-col items-center justify-center gap-1 border border-dashed px-2 py-1.5 [font-family:var(--font-kinetic-headline),system-ui,sans-serif] lg:-top-1.5 lg:min-h-[2.85rem] lg:max-w-[min(calc(100%+0.75rem),11rem)] lg:px-2.5 lg:py-2",
+          "absolute -top-1 left-1/2 z-[1] flex min-h-[2.25rem] max-w-[min(calc(100%+0.5rem),10.5rem)] -translate-x-1/2 flex-col items-center justify-center gap-1 border border-dashed px-2 py-1 [font-family:var(--font-kinetic-headline),system-ui,sans-serif] lg:-top-1.5 lg:min-h-[2.25rem] lg:w-[80%] lg:max-w-none lg:px-2 lg:py-1",
           ownerDesktopTweak &&
-            "lg:max-w-[min(calc(100%+1.25rem),12.5rem)] lg:min-w-[10.25rem] lg:px-3",
+            "lg:min-w-[7.2rem]",
           t.chip,
         )}
       >
@@ -436,16 +437,10 @@ function BeforePersonaNode({
             {data.firm}
           </span>
         </span>
-        {variant === "contractor" ? (
-          <span className="rounded-sm border border-orange-400/55 bg-orange-50/95 px-1.5 py-0.5 text-[6px] font-bold uppercase leading-none tracking-[0.12em] text-orange-900 lg:text-[7px] lg:tracking-[0.14em]">
-            Contractor
-          </span>
-        ) : null}
       </div>
       <div
         className={cn(
           "mt-1.5 flex flex-col items-center gap-1 lg:mt-2",
-          ownerDesktopTweak && "lg:mt-4",
         )}
       >
         <div
@@ -467,6 +462,11 @@ function BeforePersonaNode({
         <span className="text-[8px] leading-tight text-[#45474c] [font-family:var(--font-kinetic-body),system-ui,sans-serif] lg:text-[9px]">
           {data.displayName}
         </span>
+        {variant === "contractor" ? (
+          <span className="rounded-sm border border-orange-400/55 bg-orange-50/95 px-1.5 py-0.5 text-[6px] font-bold uppercase leading-none tracking-[0.12em] text-orange-900 lg:text-[7px] lg:tracking-[0.14em]">
+            Contractor
+          </span>
+        ) : null}
       </div>
     </div>
   )
@@ -475,7 +475,7 @@ function BeforePersonaNode({
 /** AFTER mobile only: single full-width NorthStar firm chip (col-span 2). */
 function AfterMobileNorthStarFirmChipFullWidth() {
   return (
-    <div className="mb-2 border-b border-slate-200/70 pb-2">
+    <div>
       <div className="w-full border border-dashed border-[#5a78ff]/45 bg-white px-2 py-1 text-[#5a78ff] [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
         <span className="inline-flex w-full max-w-full items-center justify-center gap-1 text-[8.5px] font-bold leading-tight tracking-tight">
           <Building2 className="h-2 w-2 shrink-0 opacity-80" aria-hidden />
