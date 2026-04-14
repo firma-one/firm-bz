@@ -1,0 +1,13 @@
+---
+description: Output + token discipline
+alwaysApply: true
+---
+
+# Output
+- Explain code/reasoning only if the user asks **why?** (any case). No pleasantries or filler; code first; one-line build/commit offer OK (repo policy).
+- Copy/paste snippets: full contiguous block—never `// ...`, block-comment ellipses, or “rest of code”. Preserve existing comments. Use `@/` imports, not `../`.
+
+# Tokens
+- Smallest read/write scope; avoid full-file rewrites unless necessary.
+- Do not narrate or duplicate long tool output, diffs, or file bodies in chat unless asked.
+- Parallelize independent reads/searches; avoid unrelated exploratory reads.

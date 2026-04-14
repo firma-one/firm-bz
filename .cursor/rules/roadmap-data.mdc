@@ -1,5 +1,5 @@
 ---
-description: Internal roadmap page data + git sync (dev branch)
+description: `/system/roadmap` data + git sync
 globs:
   - frontend/data/roadmap.json
   - frontend/app/(app)/system/roadmap/**
@@ -7,41 +7,7 @@ globs:
   - docs/mvp/roadmap.md
 ---
 
-# Roadmap data (`/system/roadmap`)
-
-## Source of truth
-
-- **Structured data:** `frontend/data/roadmap.json` (bars, tracks, tier milestones, `gitPaths` per bar).
-- **Narrative / planning doc:** `docs/mvp/roadmap.md` (keep in sync when dates or scope change materially).
-
-## Git metadata on every commit to `dev`
-
-After **committing** on branch **`dev`**, or when changing anything that affects roadmap progress (billing, `docs/mvp/roadmap.md`, or `frontend/data/roadmap.json`), run from **`frontend/`**:
-
-```bash
-npm run roadmap:sync-git
-```
-
-This updates `roadmap.json` fields:
-
-- `git.recordedAt`, `git.branch`, `git.headShort`, `git.dataFileLastCommitIso`
-- Each bar’s optional `lastProgressCommitIso` from `git log -1` on that bar’s `gitPaths` (repo-root paths, e.g. `frontend/lib/billing/polar-webhook-sync.ts`).
-
-**Then** stage the updated JSON if it changed:
-
-```bash
-git add frontend/data/roadmap.json
-```
-
-If the roadmap commit is already made, amend or follow with a small “chore: sync roadmap git metadata” commit (per normal team rules).
-
-## Agent workflow
-
-1. When editing milestone dates, bars, or tiers, update **`frontend/data/roadmap.json`** first so `/system/roadmap` stays accurate.
-2. Keep **`gitPaths`** on each bar truthful so “last commit” reflects real progress for that slice of work.
-3. Run **`npm run roadmap:sync-git`** before pushing `dev` when roadmap-related files changed.
-4. Do **not** auto-commit unless the user explicitly asks (see `git-workflow.mdc`).
-
-## Optional local hook
-
-To run sync automatically on commit while on `dev`, install a `pre-commit` hook that executes `cd frontend && npm run roadmap:sync-git && git add frontend/data/roadmap.json` when `frontend/data/roadmap.json` or listed paths change. Husky is not required; document any team-standard hook in the repo README if added.
+- SoT: `frontend/data/roadmap.json` (bars/tracks/tiers/`gitPaths`). Narrative: `docs/mvp/roadmap.md`—update when scope/dates shift materially.
+- After commits on **`dev`**, or when changing billing / `roadmap.md` / `roadmap.json`: from **`frontend/`** run `npm run roadmap:sync-git`, then `git add frontend/data/roadmap.json` if dirty; amend or small follow-up chore if JSON updated post-commit.
+- Keep each bar’s `gitPaths` accurate. Run sync before pushing `dev` when roadmap-related paths changed. No auto-commit (`git-workflow.mdc`).
+- Optional: `pre-commit` on `dev` running sync + `git add` for touched roadmap paths—document in README if adopted.

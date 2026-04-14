@@ -545,28 +545,73 @@ function AfterInternalColumn() {
         <div className="md:hidden">
           <AfterMobileNorthStarFirmChipFullWidth />
         </div>
-        <div className="mb-2 hidden grid-cols-3 items-center gap-1.5 border-b border-slate-200/80 pb-2.5 sm:mb-2.5 sm:gap-2 sm:pb-3 md:grid lg:mb-3">
-          <div className="col-span-2 flex items-center justify-center px-0.5 sm:px-1">
-            <div className="max-w-full border border-dashed border-[#5a78ff]/45 bg-white px-2 py-1 text-[#5a78ff] [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
-              <span className="inline-flex max-w-full items-center justify-center gap-1 text-[7px] font-bold leading-tight tracking-tight sm:text-[8px]">
-                <Building2 className="h-2.5 w-2.5 shrink-0 opacity-80" aria-hidden />
-                <span className="line-clamp-2 text-center">{PRO.firm}</span>
-              </span>
+        <div className="hidden md:grid grid-cols-3 gap-2 sm:gap-2 lg:gap-3">
+          <div className="col-span-2 rounded-md border border-dashed border-[#5a78ff]/45 bg-white p-2 sm:p-2.5">
+            <div className="flex items-center justify-center">
+              <div className="max-w-full border border-dashed border-[#5a78ff]/45 bg-white px-2 py-1 text-[#5a78ff] [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
+                <span className="inline-flex max-w-full items-center justify-center gap-1 text-[7px] font-bold leading-tight tracking-tight sm:text-[8px]">
+                  <Building2 className="h-2.5 w-2.5 shrink-0 opacity-80" aria-hidden />
+                  <span className="line-clamp-2 text-center">{PRO.firm}</span>
+                </span>
+              </div>
+            </div>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <div className="rounded-md border border-dashed border-[#5a78ff]/45 bg-white px-2 py-2 text-center">
+                <span className="text-[8.5px] font-bold text-[#5a78ff] [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
+                  {AFTER_FIRMA_PERSONA_ENGAGEMENT_LEAD}
+                </span>
+                <div className="mx-auto mt-2 flex h-9 w-9 items-center justify-center rounded-full border-2 border-[#5a78ff]/35 bg-white shadow-sm">
+                  <User className="h-4 w-4 stroke-[1.5] text-[#5a78ff]" aria-hidden />
+                </div>
+                <span className="mt-2 block text-center text-[8.5px] font-semibold leading-snug text-[#4c5d9e] [font-family:var(--font-kinetic-body),system-ui,sans-serif]">
+                  {PRO.businessRole}
+                </span>
+                <span className="mt-1 block text-[10px] leading-tight text-[#45474c] [font-family:var(--font-kinetic-body),system-ui,sans-serif]">
+                  {PRO.displayName}
+                </span>
+              </div>
+              <div className="rounded-md border border-dashed border-[#5a78ff]/45 bg-white px-2 py-2 text-center">
+                <span className="text-[8.5px] font-bold text-[#5a78ff] [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
+                  {AFTER_FIRMA_PERSONA_CONTRIBUTOR_INTERNAL}
+                </span>
+                <div className="mx-auto mt-2 flex h-9 w-9 items-center justify-center rounded-full border-2 border-[#5a78ff]/25 bg-white shadow-sm">
+                  <User className="h-4 w-4 stroke-[1.5] text-[#5a78ff]" aria-hidden />
+                </div>
+                <span className="mt-2 block text-center text-[8px] font-semibold leading-snug text-[#4c5d9e] [font-family:var(--font-kinetic-body),system-ui,sans-serif]">
+                  {INTERNAL_CONTRIBUTOR.businessRole}
+                </span>
+                <span className="mt-1 block text-[10px] leading-tight text-[#45474c] [font-family:var(--font-kinetic-body),system-ui,sans-serif]">
+                  {INTERNAL_CONTRIBUTOR.displayName}
+                </span>
+              </div>
             </div>
           </div>
-          <div className="col-span-1 flex flex-col items-center justify-center gap-1 border-l border-slate-200/60 pl-1.5 sm:pl-2 lg:pl-3">
-            <div className="inline-flex max-w-full items-center justify-center gap-1 rounded-sm border border-dashed border-orange-400/70 bg-orange-50/95 px-1 py-0.5 text-orange-900 [font-family:var(--font-kinetic-headline),system-ui,sans-serif] sm:px-1.5 sm:py-1">
-              <Building2 className="h-2 w-2 shrink-0 opacity-90 sm:h-2.5 sm:w-2.5" aria-hidden />
-              <span className="line-clamp-2 text-center text-[6.5px] font-bold leading-tight tracking-tight sm:text-[7.5px]">
-                {EXTERNAL_CONTRACTOR.firm}
+          <div className="rounded-md border border-dashed border-orange-400/75 bg-orange-50/50 p-2 sm:p-2.5">
+            <div className="flex items-center justify-center">
+              <div className="max-w-full border border-dashed border-orange-400/70 bg-orange-50/95 px-1.5 py-0.5 text-orange-900 [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
+                <span className="inline-flex max-w-full items-center justify-center gap-1 text-[6.5px] font-bold leading-tight tracking-tight sm:text-[7.5px]">
+                  <Building2 className="h-2 w-2 shrink-0 opacity-90" aria-hidden />
+                  <span className="line-clamp-2 text-center">{EXTERNAL_CONTRACTOR.firm}</span>
+                </span>
+              </div>
+            </div>
+            <div className="mt-2 flex flex-col items-center gap-2 text-center">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-orange-300 bg-white shadow-sm">
+                <User className="h-4 w-4 stroke-[1.5] text-orange-600" aria-hidden />
+              </div>
+              <span className="text-[8.5px] font-bold leading-tight text-orange-800 [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
+                {EXTERNAL_CONTRACTOR.businessRole}
+              </span>
+              <span className="text-[10px] leading-tight text-[#45474c] [font-family:var(--font-kinetic-body),system-ui,sans-serif]">
+                {EXTERNAL_CONTRACTOR.displayName}
+              </span>
+              <span className="rounded-sm border border-orange-400/55 bg-orange-50/95 px-1 py-0.5 text-[7.5px] font-bold uppercase leading-none tracking-[0.1em] text-orange-900">
+                Contractor
               </span>
             </div>
-            <span className="rounded-sm border border-orange-400/55 bg-orange-50/95 px-1 py-0.5 text-[5.5px] font-bold uppercase leading-none tracking-[0.12em] text-orange-900 sm:text-[7px] sm:tracking-[0.14em]">
-              Contractor
-            </span>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-1.5 pt-2 max-md:gap-1.5 sm:grid-cols-3 sm:gap-2 sm:pt-3 lg:gap-3">
+        <div className="grid grid-cols-2 gap-1.5 pt-2 max-md:gap-1.5 sm:grid-cols-3 sm:gap-2 sm:pt-3 md:hidden lg:gap-3">
           <div className="flex flex-col items-center gap-1 max-md:rounded-sm max-md:border max-md:border-dashed max-md:border-[#94a3b8] max-md:bg-white max-md:px-1 max-md:py-1.5 md:gap-1.5 sm:px-1 md:border-0 md:bg-transparent lg:px-2">
             <span className="text-[8.5px] font-bold text-[#5a78ff] [font-family:var(--font-kinetic-headline),system-ui,sans-serif] sm:text-[8px] md:text-[7.5px]">
               {AFTER_FIRMA_PERSONA_ENGAGEMENT_LEAD}
@@ -1258,33 +1303,33 @@ export function FirmTransformationSection({ skin = "kinetic" as LandingSkin }: {
             transition={{ duration: 0.45 }}
           >
             <div className="grid min-h-0 flex-1 grid-cols-1 items-stretch md:grid-cols-12 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-visible">
-              <div className="flex shrink-0 flex-col justify-center border-b border-[#c6c6cc]/15 p-5 md:col-span-4 md:col-start-9 md:row-start-1 md:border-b-0 md:border-l md:border-[#c6c6cc]/15 md:p-6 lg:col-span-full lg:col-start-auto lg:row-start-auto lg:w-full lg:border-b lg:border-l-0 lg:p-3 lg:pb-2.5">
-                <div className="mb-2 flex items-center gap-2 lg:mb-1.5">
-                  <motion.div
-                    className="h-2 w-2 rounded-full bg-[#ba1a1a]"
-                    animate={reducedMotion ? { opacity: 1 } : { opacity: [1, 0.4, 1] }}
-                    transition={reducedMotion ? undefined : { duration: 1.2, repeat: Infinity }}
-                  />
-                  <span className="text-xs font-bold tracking-[0.2em] text-[#64748b] [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
-                    BEFORE
-                  </span>
-                </div>
-                <div className="mb-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-                  <h3 className="min-w-0 flex-1 text-xl font-bold tracking-tight text-[#1b1b1d] md:text-2xl [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
+              <div className="flex shrink-0 flex-row justify-between items-start gap-4 border-b border-[#c6c6cc]/15 p-5 md:col-span-4 md:col-start-9 md:row-start-1 md:border-b-0 md:border-l md:border-[#c6c6cc]/15 md:p-6 lg:col-span-full lg:col-start-auto lg:row-start-auto lg:w-full lg:border-b lg:border-l-0 lg:p-3 lg:pb-2.5">
+                <div className="flex min-w-0 flex-col">
+                  <div className="mb-2 flex items-center gap-2 lg:mb-1">
+                    <motion.div
+                      className="h-2 w-2 rounded-full bg-[#ba1a1a]"
+                      animate={reducedMotion ? { opacity: 1 } : { opacity: [1, 0.4, 1] }}
+                      transition={reducedMotion ? undefined : { duration: 1.2, repeat: Infinity }}
+                    />
+                    <span className="text-xs font-bold tracking-[0.2em] text-[#64748b] [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
+                      BEFORE
+                    </span>
+                  </div>
+                  <h3 className="mb-2 min-w-0 text-xl font-bold tracking-tight text-[#1b1b1d] md:text-2xl [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
                     Document Chaos
                   </h3>
-                  <button
-                    type="button"
-                    className={cn(REALITY_CHECK_CTA_CLASS, "mt-0 shrink-0 self-start sm:self-center sm:ml-4")}
-                    onClick={() => setRealityModalOpen(true)}
-                  >
-                    Reality check
-                    <ExternalLink className="h-4 w-4 shrink-0 opacity-95" aria-hidden strokeWidth={2} />
-                  </button>
+                  <p className="text-sm leading-snug text-[#45474c] [font-family:var(--font-kinetic-body),system-ui,sans-serif] md:text-[15px] md:leading-relaxed lg:text-[13px] lg:leading-snug">
+                    Inefficient, manual document sharing results in productivity loss, client dissatisfaction & security gaps.
+                  </p>
                 </div>
-                <p className="text-sm leading-snug text-[#45474c] [font-family:var(--font-kinetic-body),system-ui,sans-serif] md:text-[15px] md:leading-relaxed lg:text-[13px] lg:leading-snug">
-                  Inefficient, manual document sharing creates security gaps and friction.
-                </p>
+                <button
+                  type="button"
+                  className={cn(REALITY_CHECK_CTA_CLASS, "mt-0 shrink-0")}
+                  onClick={() => setRealityModalOpen(true)}
+                >
+                  Reality check
+                  <ExternalLink className="h-4 w-4 shrink-0 opacity-95" aria-hidden strokeWidth={2} />
+                </button>
               </div>
               <div
                 className={cn(
@@ -1323,29 +1368,29 @@ export function FirmTransformationSection({ skin = "kinetic" as LandingSkin }: {
             transition={{ duration: 0.45, delay: 0.05 }}
           >
             <div className="grid min-h-0 flex-1 grid-cols-1 items-stretch md:grid-cols-12 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-visible">
-              <div className="flex shrink-0 flex-col justify-center border-b border-[#c6c6cc]/15 p-5 md:col-span-4 md:col-start-1 md:row-start-1 md:border-b-0 md:border-r md:border-[#c6c6cc]/15 md:p-6 lg:col-span-full lg:col-start-auto lg:row-start-auto lg:w-full lg:border-b lg:border-r-0 lg:p-3 lg:pb-2.5">
-                <div className="mb-2 flex items-center gap-2 lg:mb-1.5">
-                  <div className="h-2 w-2 rounded-full bg-[#22c55e] shadow-[0_0_8px_rgba(34,197,94,0.55)]" />
-                  <span className="text-xs font-bold tracking-[0.2em] text-[#001256] [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
-                    AFTER
-                  </span>
-                </div>
-                <div className="mb-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-                  <h3 className="min-w-0 flex-1 text-xl font-bold tracking-tight text-[#1b1b1d] md:text-2xl [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
+              <div className="flex shrink-0 flex-row justify-between items-start gap-4 border-b border-[#c6c6cc]/15 p-5 md:col-span-4 md:col-start-1 md:row-start-1 md:border-b-0 md:border-r md:border-[#c6c6cc]/15 md:p-6 lg:col-span-full lg:col-start-auto lg:row-start-auto lg:w-full lg:border-b lg:border-r-0 lg:p-3 lg:pb-2.5">
+                <div className="flex min-w-0 flex-col">
+                  <div className="mb-2 flex items-center gap-2 lg:mb-1">
+                    <div className="h-2 w-2 rounded-full bg-[#22c55e] shadow-[0_0_8px_rgba(34,197,94,0.55)]" />
+                    <span className="text-xs font-bold tracking-[0.2em] text-[#001256] [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
+                      AFTER
+                    </span>
+                  </div>
+                  <h3 className="mb-2 min-w-0 text-xl font-bold tracking-tight text-[#1b1b1d] md:text-2xl [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
                     The {BRAND_NAME} Calm
                   </h3>
-                  <button
-                    type="button"
-                    className={cn(TRUST_ARCHITECTURE_MODAL_CTA_CLASS, "mt-0 shrink-0 self-start sm:self-center sm:ml-4")}
-                    onClick={() => setTrustArchitectureModalOpen(true)}
-                  >
-                    Trust architecture
-                    <ExternalLink className="h-4 w-4 shrink-0 text-[#002203] opacity-90" aria-hidden strokeWidth={2} />
-                  </button>
+                  <p className="text-sm leading-snug text-[#45474c] [font-family:var(--font-kinetic-body),system-ui,sans-serif] md:text-[15px] md:leading-relaxed lg:text-[13px] lg:leading-snug">
+                    {BRAND_NAME} centralizes document management, allowing information to flow securely and seamlessly.
+                  </p>
                 </div>
-                <p className="text-sm leading-snug text-[#45474c] [font-family:var(--font-kinetic-body),system-ui,sans-serif] md:text-[15px] md:leading-relaxed lg:text-[13px] lg:leading-snug">
-                  {BRAND_NAME} centralizes document management, allowing information to flow securely and seamlessly.
-                </p>
+                <button
+                  type="button"
+                  className={cn(TRUST_ARCHITECTURE_MODAL_CTA_CLASS, "mt-0 shrink-0")}
+                  onClick={() => setTrustArchitectureModalOpen(true)}
+                >
+                  Trust architecture
+                  <ExternalLink className="h-4 w-4 shrink-0 text-[#002203] opacity-90" aria-hidden strokeWidth={2} />
+                </button>
               </div>
               <div
                 className={cn(

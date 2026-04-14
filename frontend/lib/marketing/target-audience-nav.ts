@@ -58,7 +58,7 @@ export const platformMegaMenuItems = [
     id: "why-this-exists",
     title: "Why this exists",
     description:
-      "Inefficient, manual document sharing creates security gaps and friction.",
+      "Inefficient, manual document sharing results in productivity loss, client dissatisfaction & security gaps.",
     href: WHY_THIS_EXISTS_HREF,
   },
   {

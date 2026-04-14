@@ -1,11 +1,7 @@
 ---
-description: Vercel Deployment Configuration
+description: Vercel build wiring
 globs: vercel.json, package.json
 ---
 
-# Vercel Deployment
-
-- **Build Command**: Set to `npm run build` in Vercel Settings.
-  - This ensures `postbuild` (migrations) runs automatically.
-  - Do NOT set to `next build --webpack` directly.
-- **Build Script**: `package.json` should have `"build": "next build --webpack"` if Turbopack fails.
+- Vercel **Build Command** = `npm run build` (so `postbuild`/migrations run). Do not set Vercel to raw `next build` only.
+- In `package.json`, `"build": "next build --webpack"` when Turbopack/PostCSS breaks the default pipeline.
