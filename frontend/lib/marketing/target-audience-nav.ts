@@ -30,9 +30,11 @@ export const CALENDLY_DEMO_URL = "https://calendly.com/firmaone/30min" as const
 
 /**
  * Max width + horizontal padding aligned with the marketing header rail (`Header`) and main landing sections.
+ * Kept intentionally tight from `md` up so the default `legacy` landing hero (grid + `LegacyHeroScreenMock`) and
+ * interior marketing pages visibly use more of the rail — small steps (e.g. 6→4) are easy to miss in the browser.
  */
 export const MARKETING_PAGE_SHELL =
-  "max-w-[min(100%,92rem)] mx-auto px-3 sm:px-4 md:px-5 lg:px-6 xl:px-10"
+  "max-w-[min(100%,92rem)] mx-auto px-3 sm:px-3 md:px-4 lg:px-3 xl:px-5 2xl:px-6"
 
 /**
  * Hover depth on bordered marketing tiles — matches `RealityStatCard` in
@@ -56,7 +58,7 @@ export const platformMegaMenuItems = [
     id: "why-this-exists",
     title: "Why this exists",
     description:
-      "Inefficient, manual document sharing creates security gaps and friction.",
+      "Inefficient, manual document sharing results in productivity loss, client dissatisfaction & security gaps.",
     href: WHY_THIS_EXISTS_HREF,
   },
   {
@@ -89,7 +91,7 @@ export const contactMegaMenuItems = [
   {
     id: "get-in-touch",
     title: "Get in touch",
-    description: "Send a message or reach our team through the contact form.",
+    description: "Send a message to our team through the contact form.",
     href: "/contact",
     external: false,
   },

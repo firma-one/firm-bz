@@ -1,15 +1,7 @@
 ---
-description: Database and Prisma Migration Standards
+description: Prisma + Supabase migrations
 globs: prisma/**/*, package.json
 ---
 
-# Database & Migrations
-
-- **NEVER** use `prisma db push` in production. It causes data loss/drift.
-- **ALWAYS** use `prisma migrate dev` locally to create migration files.
-- **DEPLOYMENT**: `postbuild` script must run `prisma migrate deploy`.
-
-## Connection Standards (Supabase)
-- **Transaction Pooler (Port 6543)**: Use for `DATABASE_URL` (App Runtime).
-- **Session Pooler (Port 5432)**: Use for `DIRECT_URL` (Migrations).
-- **Credentials**: User must be `postgres.[project-ref]`.
+- Never `prisma db push` for real environments; use `prisma migrate dev` locally; ship SQL; deploy runs `prisma migrate deploy` (via `postbuild`).
+- `DATABASE_URL`: port **6543** (transaction pooler, app). `DIRECT_URL`: **5432** (session, migrations). DB user: `postgres.[project-ref]`.

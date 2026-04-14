@@ -114,7 +114,7 @@ export function Header({ onOpenModal: _onOpenModal }: HeaderProps) {
                 />
             ) : null}
             <header className="fixed top-0 left-0 right-0 z-50 w-full border-b border-slate-200/60 bg-white/70 backdrop-blur-md">
-            <div className="relative mx-auto flex w-full max-w-[min(100%,92rem)] items-center justify-between gap-4 px-3 py-4 sm:px-4 md:px-5 lg:px-6 xl:px-10">
+            <div className="relative mx-auto flex w-full max-w-[min(100%,92rem)] items-center justify-between gap-4 px-3 py-4 sm:px-3 md:px-4 lg:px-3 xl:px-5 2xl:px-6">
                 <div className="flex min-w-0 flex-1 items-center">
                     <Link
                         href="/"
@@ -282,12 +282,20 @@ export function Header({ onOpenModal: _onOpenModal }: HeaderProps) {
                     id="site-header-mobile-panel"
                     className="relative z-[45] border-t border-slate-200/60 bg-white/95 px-4 py-4 backdrop-blur-md md:hidden"
                 >
-                    <div className="mb-4 flex flex-col gap-2">
-                        <Link href="/signin" onClick={closeMobileMenu} className={cn(headerSignInCtaClass, "w-full justify-center")}>
+                    <div className="mb-4 flex min-w-0 flex-row gap-2">
+                        <Link
+                            href="/signin"
+                            onClick={closeMobileMenu}
+                            className={cn(headerSignInCtaClass, "min-w-0 flex-1 justify-center")}
+                        >
                             <LogIn className="h-3.5 w-3.5 shrink-0" strokeWidth={2.25} aria-hidden />
                             Sign in
                         </Link>
-                        <Link href="/signup" onClick={closeMobileMenu} className={cn(headerGetStartedCtaClass, "w-full justify-center")}>
+                        <Link
+                            href="/signup"
+                            onClick={closeMobileMenu}
+                            className={cn(headerGetStartedCtaClass, "min-w-0 flex-1 justify-center")}
+                        >
                             Get started
                             <ArrowRight
                                 className="h-3.5 w-3.5 shrink-0 transition-transform duration-200 group-hover:translate-x-0.5"
