@@ -1,6 +1,7 @@
 ---
 description: Git safety
 globs: .git/**/*
+alwaysApply: true
 ---
 
 - No `git commit` / `git push` without explicit user instruction; confirm before those commands.

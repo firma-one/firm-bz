@@ -1,0 +1,18 @@
+---
+description: Lean replies, ~200k context, cost hints, minimal tool chatter
+alwaysApply: true
+---
+
+# Replies
+- Explain code/reasoning only if the user asks **why?** (any case). No pleasantries/filler; code first; one-line build/commit offer OK (repo policy).
+- Copy/paste snippets: one **full** contiguous block—no `// ...`, truncated block comments, or “rest of code”. Preserve existing comments. `@/` imports, not `../`.
+
+# Context (~200k) & cost
+- Treat ~**200k** as the practical ceiling; stay terse; suggest **`/clear`** when the thread is huge, stale, or the task pivoted.
+- Prefer **Auto / Composer 2 / Composer 2 Fast** for routine work; heavier models only for rare deep architecture; avoid **Max / 1M** unless the user explicitly wants them. Optional user workflow: short plan on a stronger model, bulk edits on a fast model (user switches models).
+- After finishing a scoped task, remind the user they can drop finished **`@`** / **`@folder`** attachments from the composer input to save tokens.
+
+# Workspace tokens
+- Smallest read/write scope; avoid full-file rewrites unless necessary.
+- Do not narrate or replay long tool output, diffs, or whole files in chat unless asked.
+- Parallelize independent reads/searches; skip unrelated exploratory reads.
