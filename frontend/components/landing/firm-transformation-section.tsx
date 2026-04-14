@@ -175,7 +175,7 @@ const PRO = {
 const CLIENT = {
   businessRole: "Ops Director",
   displayName: "Avery Stone",
-  firm: "Holloway Group",
+  firm: "Meridian Group",
 }
 
 const INTERNAL_CONTRIBUTOR = {
@@ -220,7 +220,7 @@ function PersonaCard({
 }: {
   kind: "pro" | "client"
   tone: "before" | "after"
-  /** Tighter client tile (AFTER Holloway, or BEFORE Holloway on mobile-only stack). */
+  /** Tighter client tile (AFTER Meridian, or BEFORE Meridian on mobile-only stack). */
   compact?: boolean
   /** When set (AFTER client), shown above `businessRole` — e.g. Viewer (External). */
   firmaPersona?: string
@@ -722,7 +722,7 @@ function AfterInternalColumn() {
   )
 }
 
-/** Holloway client only — Avery sits below the vault in the AFTER stack. */
+/** Meridian client only — Avery sits below the vault in the AFTER stack. */
 function AfterExternalColumn() {
   return (
     <div className="relative z-[7] flex w-full max-w-[14rem] shrink-0 flex-col items-center sm:max-w-[15rem] lg:max-w-[11rem]">
@@ -775,7 +775,7 @@ function AfterVerticalSpine({ side, segment }: { side: "left" | "right"; segment
   )
 }
 
-/** Mobile: vertical stack. Desktop (lg+): vertical stack — NorthStar → spine → vault → spine → Holloway. */
+/** Mobile: vertical stack. Desktop (lg+): vertical stack — NorthStar → spine → vault → spine → Meridian. */
 function AfterFlowVisual() {
   return (
     <>
@@ -1154,7 +1154,7 @@ function AfterVault() {
     >
       {/*
         Visual stack: firmä portal chrome → bridge copy → nested Google Drive (4×2 grid).
-        Outer frame: blue top (NorthStar / pro) · green bottom (Holloway / client).
+        Outer frame: blue top (NorthStar / pro) · green bottom (Meridian / client).
       */}
       <div
         className={cn(
