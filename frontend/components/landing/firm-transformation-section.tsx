@@ -175,7 +175,7 @@ const PRO = {
 const CLIENT = {
   businessRole: "Ops Director",
   displayName: "Avery Stone",
-  firm: "Acme Co.",
+  firm: "Holloway Group",
 }
 
 const INTERNAL_CONTRIBUTOR = {
@@ -220,21 +220,21 @@ function PersonaCard({
 }: {
   kind: "pro" | "client"
   tone: "before" | "after"
-  /** Tighter client tile (AFTER Acme, or BEFORE Acme on mobile-only stack). */
+  /** Tighter client tile (AFTER Holloway, or BEFORE Holloway on mobile-only stack). */
   compact?: boolean
   /** When set (AFTER client), shown above `businessRole` — e.g. Viewer (External). */
   firmaPersona?: string
 }) {
   const p = kind === "pro" ? PRO : CLIENT
   const after = tone === "after"
-  const acmeCompact = compact && after && kind === "client"
-  const beforeAcmeCompact = compact && !after && kind === "client"
-  const tightClientTile = acmeCompact || beforeAcmeCompact
+  const clientCompact = compact && after && kind === "client"
+  const beforeClientCompact = compact && !after && kind === "client"
+  const tightClientTile = clientCompact || beforeClientCompact
   const showFirmaPersona = Boolean(firmaPersona && after && kind === "client")
   return (
     <div
       className={cn(
-        "relative shrink-0 border border-dashed border-[#94a3b8] bg-white/90 text-center shadow-sm lg:rounded-none",
+        "relative shrink-0 rounded-none border border-dashed border-[#94a3b8] bg-white/90 text-center shadow-sm",
         tightClientTile
           ? "w-[148px] min-h-0 px-2 pb-2 pt-6 sm:w-[158px] sm:px-2.5 sm:pb-2.5 sm:pt-6"
           : "w-[168px] min-h-[188px] px-3 pb-4 pt-9 sm:w-[188px] sm:min-h-[200px] sm:pb-5 sm:pt-10",
@@ -244,7 +244,7 @@ function PersonaCard({
     >
       <div
         className={cn(
-          "absolute left-1/2 z-[1] w-[80%] max-w-[calc(100%-2px)] -translate-x-1/2 border border-dashed [font-family:var(--font-kinetic-headline),system-ui,sans-serif]",
+          "absolute left-1/2 z-[1] w-[80%] max-w-[calc(100%-2px)] -translate-x-1/2 rounded-none border border-dashed [font-family:var(--font-kinetic-headline),system-ui,sans-serif]",
           tightClientTile
             ? "-top-1.5 px-1.5 py-0.5 lg:py-0.5"
             : "-top-2.5 px-2 py-1 lg:px-1.5 lg:py-1",
@@ -343,8 +343,8 @@ function PersonaCard({
 
 type BeforeCircleVariant = "owner" | "internal" | "contractor" | "client"
 
-/** Matches AFTER firm chrome: NorthStar (blue), Acme (green), Vertex (orange). */
-type BeforeFirmTone = "northstar" | "acme" | "vertex"
+/** Matches AFTER firm chrome: NorthStar (blue), client firm (green), Vertex (orange). */
+type BeforeFirmTone = "northstar" | "client" | "vertex"
 
 const BEFORE_VARIANT_ANCHOR: Record<BeforeCircleVariant, number> = {
   owner: 0,
@@ -355,7 +355,7 @@ const BEFORE_VARIANT_ANCHOR: Record<BeforeCircleVariant, number> = {
 
 function beforeFirmTone(variant: BeforeCircleVariant): BeforeFirmTone {
   if (variant === "contractor") return "vertex"
-  if (variant === "client") return "acme"
+  if (variant === "client") return "client"
   return "northstar"
 }
 
@@ -371,7 +371,7 @@ const BEFORE_TILE_BY_TONE: Record<
     icon: "text-[#5a78ff]",
     role: "text-[#5a78ff]",
   },
-  acme: {
+  client: {
     shell: "border-[#4aba5e]/80 text-[#334155]",
     chip: "border-[#4aba5e]/60 bg-white text-[#2d6d3a]",
     iconRing: "border-[#4aba5e]/50",
@@ -409,7 +409,7 @@ function BeforePersonaNode({
   return (
     <div
       className={cn(
-        "pointer-events-none absolute z-[28] w-[min(7.75rem,23vw)] max-w-[8rem] rounded-md lg:rounded-none border border-dashed bg-white/95 px-1.5 pb-2 pt-6 text-center shadow-sm md:w-[7.5rem] md:pt-6 lg:w-[9rem] lg:max-w-[9.5rem] lg:px-2 lg:pb-2.5 lg:pt-8",
+        "pointer-events-none absolute z-[28] w-[min(7.75rem,23vw)] max-w-[8rem] rounded-none border border-dashed bg-white/95 px-1.5 pb-2 pt-6 text-center shadow-sm md:w-[7.5rem] md:pt-6 lg:w-[9rem] lg:max-w-[9.5rem] lg:px-2 lg:pb-2.5 lg:pt-8",
         t.shell,
       )}
       style={{
@@ -420,7 +420,7 @@ function BeforePersonaNode({
     >
       <div
         className={cn(
-          "absolute -top-1 left-1/2 z-[1] flex min-h-[2.25rem] max-w-[min(calc(100%+0.5rem),10.5rem)] -translate-x-1/2 flex-col items-center justify-center gap-1 border border-dashed px-2 py-1 [font-family:var(--font-kinetic-headline),system-ui,sans-serif] lg:-top-1.5 lg:min-h-[2.25rem] lg:w-[80%] lg:max-w-none lg:px-2 lg:py-1",
+          "absolute -top-1 left-1/2 z-[1] flex min-h-[2.25rem] max-w-[min(calc(100%+0.5rem),10.5rem)] -translate-x-1/2 flex-col items-center justify-center gap-1 rounded-none border border-dashed px-2 py-1 [font-family:var(--font-kinetic-headline),system-ui,sans-serif] lg:-top-1.5 lg:min-h-[2.25rem] lg:w-[80%] lg:max-w-none lg:px-2 lg:py-1",
           ownerDesktopTweak &&
             "lg:min-w-[7.2rem]",
           t.chip,
@@ -463,7 +463,7 @@ function BeforePersonaNode({
           {data.displayName}
         </span>
         {variant === "contractor" ? (
-          <span className="rounded-sm border border-orange-400/55 bg-orange-50/95 px-1.5 py-0.5 text-[6px] font-bold uppercase leading-none tracking-[0.12em] text-orange-900 lg:text-[7px] lg:tracking-[0.14em]">
+          <span className="rounded-none border border-orange-400/55 bg-orange-50/95 px-1.5 py-0.5 text-[6px] font-bold uppercase leading-none tracking-[0.12em] text-orange-900 lg:text-[7px] lg:tracking-[0.14em]">
             Contractor
           </span>
         ) : null}
@@ -476,7 +476,7 @@ function BeforePersonaNode({
 function AfterMobileNorthStarFirmChipFullWidth() {
   return (
     <div>
-      <div className="w-full border border-dashed border-[#5a78ff]/45 bg-white px-2 py-1 text-[#5a78ff] [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
+      <div className="w-full rounded-none border border-dashed border-[#5a78ff]/45 bg-white px-2 py-1 text-[#5a78ff] [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
         <span className="inline-flex w-full max-w-full items-center justify-center gap-1 text-[8.5px] font-bold leading-tight tracking-tight">
           <Building2 className="h-2 w-2 shrink-0 opacity-80" aria-hidden />
           <span className="line-clamp-2 text-center">{PRO.firm}</span>
@@ -486,13 +486,13 @@ function AfterMobileNorthStarFirmChipFullWidth() {
   )
 }
 
-/** BEFORE mobile only: NorthStar+Jordan | Vertex+Riley — each column matches Acme PersonaCard (outer frame, chip on top edge, persona inside). */
+/** BEFORE mobile only: NorthStar+Jordan | Vertex+Casey — each column matches client PersonaCard (outer frame, chip on top edge, persona inside). */
 function BeforeMobileNorthStarJordanRiley() {
   return (
     <div className="w-full max-w-[19rem] text-center">
       <div className="grid grid-cols-2 gap-1.5">
-        <div className="relative min-w-0 rounded-md border border-dashed border-[#5a78ff]/80 bg-white px-2 pb-2 pt-6 text-center shadow-sm">
-          <div className="absolute -top-1.5 left-1/2 z-[1] w-[80%] max-w-[calc(100%-2px)] -translate-x-1/2 border border-dashed border-[#5a78ff]/45 bg-white px-1.5 py-0.5 text-[#5a78ff] [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
+        <div className="relative min-w-0 rounded-none border border-dashed border-[#5a78ff]/80 bg-white px-2 pb-2 pt-6 text-center shadow-sm">
+          <div className="absolute -top-1.5 left-1/2 z-[1] w-[80%] max-w-[calc(100%-2px)] -translate-x-1/2 rounded-none border border-dashed border-[#5a78ff]/45 bg-white px-1.5 py-0.5 text-[#5a78ff] [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
             <span className="inline-flex max-w-full items-center justify-center gap-0.5 text-[6.5px] font-bold leading-tight tracking-tight">
               <Building2 className="h-2 w-2 shrink-0 opacity-80" aria-hidden />
               <span className="line-clamp-2 text-center">{PRO.firm}</span>
@@ -510,8 +510,8 @@ function BeforeMobileNorthStarJordanRiley() {
             </span>
           </div>
         </div>
-        <div className="relative min-w-0 rounded-md border border-dashed border-amber-400/85 bg-white px-2 pb-2 pt-6 text-center shadow-sm">
-          <div className="absolute -top-1.5 left-1/2 z-[1] w-[80%] max-w-[calc(100%-2px)] -translate-x-1/2 border border-dashed border-amber-500/65 bg-amber-50/95 px-1.5 py-0.5 text-amber-950 [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
+        <div className="relative min-w-0 rounded-none border border-dashed border-amber-400/85 bg-white px-2 pb-2 pt-6 text-center shadow-sm">
+          <div className="absolute -top-1.5 left-1/2 z-[1] w-[80%] max-w-[calc(100%-2px)] -translate-x-1/2 rounded-none border border-dashed border-amber-500/65 bg-amber-50/95 px-1.5 py-0.5 text-amber-950 [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
             <span className="inline-flex max-w-full items-center justify-center gap-0.5 text-[7.5px] font-bold leading-tight tracking-tight">
               <Building2 className="h-2 w-2 shrink-0 opacity-90" aria-hidden />
               <span className="line-clamp-2 text-center">{EXTERNAL_CONTRACTOR.firm}</span>
@@ -527,7 +527,7 @@ function BeforeMobileNorthStarJordanRiley() {
             <span className="text-[9px] leading-tight text-[#45474c] [font-family:var(--font-kinetic-body),system-ui,sans-serif]">
               {EXTERNAL_CONTRACTOR.displayName}
             </span>
-            <span className="rounded-sm border border-orange-400/55 bg-orange-50/95 px-1 py-px text-[7.5px] font-bold uppercase leading-none tracking-[0.1em] text-orange-900">
+            <span className="rounded-none border border-orange-400/55 bg-orange-50/95 px-1 py-px text-[7.5px] font-bold uppercase leading-none tracking-[0.1em] text-orange-900">
               Contractor
             </span>
           </div>
@@ -541,14 +541,14 @@ function BeforeMobileNorthStarJordanRiley() {
 function AfterInternalColumn() {
   return (
     <div className="relative z-[7] flex w-full max-w-[20.5rem] shrink-0 flex-col items-stretch max-md:max-w-[19rem] sm:max-w-[22rem] lg:max-w-[min(100%,38rem)] xl:max-w-[40rem]">
-      <div className="relative rounded-md border border-dashed border-[#5a78ff]/55 bg-white px-2.5 pb-3 pt-3 text-center shadow-sm max-md:px-2 max-md:pb-2 max-md:pt-2 sm:px-3 lg:px-4 lg:pb-4 lg:pt-3.5">
+      <div className="relative rounded-none border border-dashed border-[#5a78ff]/55 bg-white px-2.5 pb-3 pt-3 text-center shadow-sm max-md:px-2 max-md:pb-2 max-md:pt-2 sm:px-3 lg:px-4 lg:pb-4 lg:pt-3.5">
         <div className="md:hidden">
           <AfterMobileNorthStarFirmChipFullWidth />
         </div>
-        <div className="hidden md:grid grid-cols-3 gap-2 sm:gap-2 lg:gap-3">
-          <div className="col-span-2 rounded-md border border-dashed border-[#5a78ff]/45 bg-white p-2 sm:p-2.5">
+        <div className="hidden md:grid md:grid-cols-3 gap-2 sm:gap-2 lg:hidden">
+          <div className="col-span-2 rounded-none border border-dashed border-[#5a78ff]/45 bg-white p-2 sm:p-2.5">
             <div className="flex items-center justify-center">
-              <div className="max-w-full border border-dashed border-[#5a78ff]/45 bg-white px-2 py-1 text-[#5a78ff] [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
+              <div className="max-w-full rounded-none border border-dashed border-[#5a78ff]/45 bg-white px-2 py-1 text-[#5a78ff] [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
                 <span className="inline-flex max-w-full items-center justify-center gap-1 text-[7px] font-bold leading-tight tracking-tight sm:text-[8px]">
                   <Building2 className="h-2.5 w-2.5 shrink-0 opacity-80" aria-hidden />
                   <span className="line-clamp-2 text-center">{PRO.firm}</span>
@@ -556,7 +556,7 @@ function AfterInternalColumn() {
               </div>
             </div>
             <div className="mt-2 grid grid-cols-2 gap-2">
-              <div className="rounded-md border border-dashed border-[#5a78ff]/45 bg-white px-2 py-2 text-center">
+              <div className="rounded-none border border-dashed border-[#5a78ff]/45 bg-white px-2 py-2 text-center">
                 <span className="text-[8.5px] font-bold text-[#5a78ff] [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
                   {AFTER_FIRMA_PERSONA_ENGAGEMENT_LEAD}
                 </span>
@@ -570,7 +570,7 @@ function AfterInternalColumn() {
                   {PRO.displayName}
                 </span>
               </div>
-              <div className="rounded-md border border-dashed border-[#5a78ff]/45 bg-white px-2 py-2 text-center">
+              <div className="rounded-none border border-dashed border-[#5a78ff]/45 bg-white px-2 py-2 text-center">
                 <span className="text-[8.5px] font-bold text-[#5a78ff] [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
                   {AFTER_FIRMA_PERSONA_CONTRIBUTOR_INTERNAL}
                 </span>
@@ -586,9 +586,9 @@ function AfterInternalColumn() {
               </div>
             </div>
           </div>
-          <div className="rounded-md border border-dashed border-orange-400/75 bg-orange-50/50 p-2 sm:p-2.5">
+          <div className="rounded-none border border-dashed border-orange-400/75 bg-orange-50/50 p-2 sm:p-2.5">
             <div className="flex items-center justify-center">
-              <div className="max-w-full border border-dashed border-orange-400/70 bg-orange-50/95 px-1.5 py-0.5 text-orange-900 [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
+              <div className="max-w-full rounded-none border border-dashed border-orange-400/70 bg-orange-50/95 px-1.5 py-0.5 text-orange-900 [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
                 <span className="inline-flex max-w-full items-center justify-center gap-1 text-[6.5px] font-bold leading-tight tracking-tight sm:text-[7.5px]">
                   <Building2 className="h-2 w-2 shrink-0 opacity-90" aria-hidden />
                   <span className="line-clamp-2 text-center">{EXTERNAL_CONTRACTOR.firm}</span>
@@ -605,14 +605,73 @@ function AfterInternalColumn() {
               <span className="text-[10px] leading-tight text-[#45474c] [font-family:var(--font-kinetic-body),system-ui,sans-serif]">
                 {EXTERNAL_CONTRACTOR.displayName}
               </span>
-              <span className="rounded-sm border border-orange-400/55 bg-orange-50/95 px-1 py-0.5 text-[7.5px] font-bold uppercase leading-none tracking-[0.1em] text-orange-900">
+              <span className="rounded-none border border-orange-400/55 bg-orange-50/95 px-1 py-0.5 text-[7.5px] font-bold uppercase leading-none tracking-[0.1em] text-orange-900">
                 Contractor
               </span>
             </div>
           </div>
         </div>
+        {/*
+          lg+ only: single NorthStar operations frame — full-width firm chip, three contributor columns;
+          external contractor (Casey) has a dotted frame only; Vertex firm chip removed.
+        */}
+        <div className="hidden w-full lg:grid lg:grid-cols-3 lg:gap-3">
+          <div className="lg:col-span-3">
+            <div className="w-full rounded-none border border-dashed border-[#5a78ff]/45 bg-white px-2 py-1.5 text-[#5a78ff] [font-family:var(--font-kinetic-headline),system-ui,sans-serif] sm:py-2">
+              <span className="inline-flex w-full max-w-full items-center justify-center gap-1.5 text-[8px] font-bold leading-tight tracking-tight lg:text-[9px]">
+                <Building2 className="h-3 w-3 shrink-0 opacity-80 lg:h-3.5 lg:w-3.5" aria-hidden />
+                <span className="text-center">{PRO.firm}</span>
+              </span>
+            </div>
+          </div>
+          <div className="rounded-none border border-dashed border-[#5a78ff]/45 bg-white px-2 py-2.5 text-center lg:px-2.5 lg:py-3">
+            <span className="text-[8.5px] font-bold text-[#5a78ff] [font-family:var(--font-kinetic-headline),system-ui,sans-serif] lg:text-[9px]">
+              {AFTER_FIRMA_PERSONA_ENGAGEMENT_LEAD}
+            </span>
+            <div className="mx-auto mt-2 flex h-9 w-9 items-center justify-center rounded-full border-2 border-[#5a78ff]/35 bg-white shadow-sm lg:h-10 lg:w-10">
+              <User className="h-4 w-4 stroke-[1.5] text-[#5a78ff] lg:h-[18px] lg:w-[18px]" aria-hidden />
+            </div>
+            <span className="mt-2 block text-center text-[8.5px] font-semibold leading-snug text-[#4c5d9e] [font-family:var(--font-kinetic-body),system-ui,sans-serif]">
+              {PRO.businessRole}
+            </span>
+            <span className="mt-1 block text-[10px] leading-tight text-[#45474c] [font-family:var(--font-kinetic-body),system-ui,sans-serif]">
+              {PRO.displayName}
+            </span>
+          </div>
+          <div className="rounded-none border border-dashed border-[#5a78ff]/45 bg-white px-2 py-2.5 text-center lg:px-2.5 lg:py-3">
+            <span className="text-[8.5px] font-bold text-[#5a78ff] [font-family:var(--font-kinetic-headline),system-ui,sans-serif] lg:text-[9px]">
+              {AFTER_FIRMA_PERSONA_CONTRIBUTOR_INTERNAL}
+            </span>
+            <div className="mx-auto mt-2 flex h-9 w-9 items-center justify-center rounded-full border-2 border-[#5a78ff]/25 bg-white shadow-sm lg:h-10 lg:w-10">
+              <User className="h-4 w-4 stroke-[1.5] text-[#5a78ff] lg:h-[18px] lg:w-[18px]" aria-hidden />
+            </div>
+            <span className="mt-2 block text-center text-[8px] font-semibold leading-snug text-[#4c5d9e] [font-family:var(--font-kinetic-body),system-ui,sans-serif]">
+              {INTERNAL_CONTRIBUTOR.businessRole}
+            </span>
+            <span className="mt-1 block text-[10px] leading-tight text-[#45474c] [font-family:var(--font-kinetic-body),system-ui,sans-serif]">
+              {INTERNAL_CONTRIBUTOR.displayName}
+            </span>
+          </div>
+          <div className="rounded-none border-2 border-dotted border-orange-400/85 bg-white px-2 py-2.5 text-center shadow-sm lg:px-2.5 lg:py-3">
+            <span className="text-center text-[8.5px] font-bold leading-tight text-orange-800 [font-family:var(--font-kinetic-headline),system-ui,sans-serif] lg:text-[9px]">
+              {AFTER_FIRMA_PERSONA_CONTRIBUTOR_EXTERNAL}
+            </span>
+            <div className="mx-auto mt-2 flex h-9 w-9 items-center justify-center rounded-full border-2 border-orange-300 bg-white shadow-sm lg:mx-auto lg:h-10 lg:w-10">
+              <User className="h-4 w-4 stroke-[1.5] text-orange-600 lg:h-[18px] lg:w-[18px]" aria-hidden />
+            </div>
+            <span className="mt-2 block text-center text-[8.5px] font-semibold leading-snug text-orange-700 [font-family:var(--font-kinetic-body),system-ui,sans-serif]">
+              {EXTERNAL_CONTRACTOR.businessRole}
+            </span>
+            <span className="mt-1 block text-[10px] leading-tight text-[#45474c] [font-family:var(--font-kinetic-body),system-ui,sans-serif]">
+              {EXTERNAL_CONTRACTOR.displayName}
+            </span>
+            <span className="mx-auto mt-2 inline-block rounded-none border border-orange-400/55 bg-orange-50/95 px-1 py-0.5 text-[7.5px] font-bold uppercase leading-none tracking-[0.1em] text-orange-900">
+              Contractor
+            </span>
+          </div>
+        </div>
         <div className="grid grid-cols-2 gap-1.5 pt-2 max-md:gap-1.5 sm:grid-cols-3 sm:gap-2 sm:pt-3 md:hidden lg:gap-3">
-          <div className="flex flex-col items-center gap-1 max-md:rounded-sm max-md:border max-md:border-dashed max-md:border-[#94a3b8] max-md:bg-white max-md:px-1 max-md:py-1.5 md:gap-1.5 sm:px-1 md:border-0 md:bg-transparent lg:px-2">
+          <div className="flex flex-col items-center gap-1 max-md:rounded-none max-md:border max-md:border-dashed max-md:border-[#94a3b8] max-md:bg-white max-md:px-1 max-md:py-1.5 md:gap-1.5 sm:px-1 md:border-0 md:bg-transparent lg:px-2">
             <span className="text-[8.5px] font-bold text-[#5a78ff] [font-family:var(--font-kinetic-headline),system-ui,sans-serif] sm:text-[8px] md:text-[7.5px]">
               {AFTER_FIRMA_PERSONA_ENGAGEMENT_LEAD}
             </span>
@@ -640,7 +699,7 @@ function AfterInternalColumn() {
               {INTERNAL_CONTRIBUTOR.displayName}
             </span>
           </div>
-          <div className="flex flex-col items-center gap-1 max-md:rounded-sm max-md:border max-md:border-dashed max-md:border-orange-400/75 max-md:bg-orange-50/50 max-md:px-1 max-md:py-1.5 md:gap-1.5 md:border-l md:border-slate-200/60 md:pl-1.5 sm:pl-2 sm:border-t-0 lg:pl-3">
+          <div className="flex flex-col items-center gap-1 max-md:rounded-none max-md:border max-md:border-dashed max-md:border-orange-400/75 max-md:bg-orange-50/50 max-md:px-1 max-md:py-1.5 md:gap-1.5 md:border-l md:border-slate-200/60 md:pl-1.5 sm:pl-2 sm:border-t-0 lg:pl-3">
             <span className="text-center text-[8.5px] font-bold leading-tight text-orange-800 [font-family:var(--font-kinetic-headline),system-ui,sans-serif] sm:text-[8px] md:text-[7.5px]">
               {AFTER_FIRMA_PERSONA_CONTRIBUTOR_EXTERNAL}
             </span>
@@ -653,7 +712,7 @@ function AfterInternalColumn() {
             <span className="text-[10px] leading-tight text-[#45474c] [font-family:var(--font-kinetic-body),system-ui,sans-serif] sm:text-[10px] md:text-[9px]">
               {EXTERNAL_CONTRACTOR.displayName}
             </span>
-            <span className="rounded-sm border border-orange-400/55 bg-orange-50/95 px-1 py-0.5 text-[7.5px] font-bold uppercase leading-none tracking-[0.1em] text-orange-900 max-md:inline-block md:hidden">
+            <span className="rounded-none border border-orange-400/55 bg-orange-50/95 px-1 py-0.5 text-[7.5px] font-bold uppercase leading-none tracking-[0.1em] text-orange-900 max-md:inline-block md:hidden">
               Contractor
             </span>
           </div>
@@ -663,7 +722,7 @@ function AfterInternalColumn() {
   )
 }
 
-/** Acme client only — external contractor (Riley) sits inside NorthStar cluster. */
+/** Holloway client only — Avery sits below the vault in the AFTER stack. */
 function AfterExternalColumn() {
   return (
     <div className="relative z-[7] flex w-full max-w-[14rem] shrink-0 flex-col items-center sm:max-w-[15rem] lg:max-w-[11rem]">
@@ -716,7 +775,7 @@ function AfterVerticalSpine({ side, segment }: { side: "left" | "right"; segment
   )
 }
 
-/** Mobile: vertical stack. Desktop (lg+): vertical stack — NorthStar → spine → vault → spine → Acme. */
+/** Mobile: vertical stack. Desktop (lg+): vertical stack — NorthStar → spine → vault → spine → Holloway. */
 function AfterFlowVisual() {
   return (
     <>
@@ -1095,11 +1154,11 @@ function AfterVault() {
     >
       {/*
         Visual stack: firmä portal chrome → bridge copy → nested Google Drive (4×2 grid).
-        Outer frame: blue top (NorthStar / pro) · green bottom (Acme / client).
+        Outer frame: blue top (NorthStar / pro) · green bottom (Holloway / client).
       */}
       <div
         className={cn(
-          "relative z-10 rounded-sm border-x border-x-black/[0.08] border-t-[3px] border-t-[#5a78ff] border-b-[3px] border-b-[#4aba5e] bg-gradient-to-b from-[#f6f8ff]/90 via-[#f0fdf4]/85 to-white p-[3px] shadow-[0_12px_36px_-10px_rgba(90,120,255,0.18)]",
+          "relative z-10 rounded-none border-x border-x-black/[0.08] border-t-[3px] border-t-[#5a78ff] border-b-[3px] border-b-[#4aba5e] bg-gradient-to-b from-[#f6f8ff]/90 via-[#f0fdf4]/85 to-white p-[3px] shadow-[0_12px_36px_-10px_rgba(90,120,255,0.18)]",
           vaultShellW,
         )}
       >
@@ -1125,14 +1184,14 @@ function AfterVault() {
             </span>
           </div>
           <div
-            className="rounded-sm border border-[#bdc1c6] bg-gradient-to-b from-[#f8f9fa] to-[#eceff1] p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)] sm:p-1.5 md:p-0.5"
+            className="rounded-none border border-[#bdc1c6] bg-gradient-to-b from-[#f8f9fa] to-[#eceff1] p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)] sm:p-1.5 md:p-0.5"
             title="Your files remain in Google Drive"
           >
             <div className="grid shrink-0 grid-cols-4 grid-rows-2 gap-0.5 sm:gap-1 md:gap-0.5">
               {VAULT_GRID_CELLS_AFTER.map(({ icon: Icon, iconClass }, idx) => (
                 <div
                   key={`vault-${idx}`}
-                  className="flex aspect-square items-center justify-center border border-black/[0.08] bg-[#f6f3f4]"
+                  className="flex aspect-square items-center justify-center rounded-none border border-black/[0.08] bg-[#f6f3f4]"
                 >
                   <Icon className={cn("h-3 w-3 sm:h-3.5 sm:w-3.5 md:h-3 md:w-3", iconClass)} />
                 </div>
