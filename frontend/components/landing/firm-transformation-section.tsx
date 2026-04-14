@@ -381,10 +381,12 @@ function BeforePersonaNode({
   const tone = beforeFirmTone(variant)
   const t = BEFORE_TILE_BY_TONE[tone]
   const pos = anchors[BEFORE_VARIANT_ANCHOR[variant]]
+  const ownerDesktopTweak = variant === "owner"
   return (
     <div
       className={cn(
         "pointer-events-none absolute z-[28] w-[min(7.75rem,23vw)] max-w-[8rem] rounded-md border border-dashed bg-white/95 px-1.5 pb-2 pt-6 text-center shadow-sm md:w-[7.5rem] md:pt-6 lg:w-[9rem] lg:max-w-[9.5rem] lg:px-2 lg:pb-2.5 lg:pt-8",
+        ownerDesktopTweak && "lg:w-[10.75rem] lg:max-w-[11.25rem]",
         t.shell,
       )}
       style={{
@@ -396,12 +398,21 @@ function BeforePersonaNode({
       <div
         className={cn(
           "absolute -top-1 left-1/2 z-[1] flex min-h-[2.5rem] max-w-[min(calc(100%+0.5rem),10.5rem)] -translate-x-1/2 flex-col items-center justify-center gap-1 border border-dashed px-2 py-1.5 [font-family:var(--font-kinetic-headline),system-ui,sans-serif] lg:-top-1.5 lg:min-h-[2.85rem] lg:max-w-[min(calc(100%+0.75rem),11rem)] lg:px-2.5 lg:py-2",
+          ownerDesktopTweak &&
+            "lg:max-w-[min(calc(100%+1.25rem),12.5rem)] lg:min-w-[10.25rem] lg:px-3",
           t.chip,
         )}
       >
         <span className="inline-flex max-w-full items-center justify-center gap-1 text-[7px] font-bold leading-tight tracking-tight lg:gap-1.5 lg:text-[8px]">
           <Building2 className="h-2.5 w-2.5 shrink-0 opacity-90 lg:h-3 lg:w-3" aria-hidden />
-          <span className="line-clamp-2 text-center leading-snug">{data.firm}</span>
+          <span
+            className={cn(
+              "text-center leading-snug",
+              ownerDesktopTweak ? "line-clamp-2 lg:line-clamp-none lg:whitespace-nowrap" : "line-clamp-2",
+            )}
+          >
+            {data.firm}
+          </span>
         </span>
         {variant === "contractor" ? (
           <span className="rounded-sm border border-orange-400/55 bg-orange-50/95 px-1.5 py-0.5 text-[6px] font-bold uppercase leading-none tracking-[0.12em] text-orange-900 lg:text-[7px] lg:tracking-[0.14em]">
@@ -409,7 +420,12 @@ function BeforePersonaNode({
           </span>
         ) : null}
       </div>
-      <div className="mt-1.5 flex flex-col items-center gap-1 lg:mt-2">
+      <div
+        className={cn(
+          "mt-1.5 flex flex-col items-center gap-1 lg:mt-2",
+          ownerDesktopTweak && "lg:mt-4",
+        )}
+      >
         <div
           className={cn(
             "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 bg-white shadow-sm lg:h-8 lg:w-8",
