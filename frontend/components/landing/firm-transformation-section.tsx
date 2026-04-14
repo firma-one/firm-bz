@@ -79,7 +79,7 @@ function BeforeChaosCarriersRow({
     >
       <span
         className={cn(
-          "w-full text-center text-[8px] font-bold uppercase tracking-widest text-[#64748b] [font-family:var(--font-kinetic-headline),system-ui,sans-serif]",
+          "w-full text-center text-[9px] font-bold uppercase tracking-widest text-[#64748b] [font-family:var(--font-kinetic-headline),system-ui,sans-serif]",
           multipleCarriersLabel === "sm-up" ? "hidden sm:block sm:w-auto lg:text-[7px]" : "block",
         )}
       >
@@ -244,7 +244,7 @@ function PersonaCard({
     >
       <div
         className={cn(
-          "absolute left-1/2 z-[1] max-w-[calc(100%-4px)] -translate-x-1/2 border border-dashed [font-family:var(--font-kinetic-headline),system-ui,sans-serif]",
+          "absolute left-1/2 z-[1] w-[80%] max-w-[calc(100%-2px)] -translate-x-1/2 border border-dashed [font-family:var(--font-kinetic-headline),system-ui,sans-serif]",
           tightClientTile ? "-top-1.5 px-1.5 py-0.5" : "-top-2.5 px-2 py-1",
           !after && kind === "pro" && "border-[#94a3b8] bg-white text-[#475569]",
           after && kind === "pro" && "border-[#5a78ff]/45 bg-white text-[#5a78ff]",
@@ -254,7 +254,7 @@ function PersonaCard({
         <span
           className={cn(
             "inline-flex max-w-full items-center justify-center font-bold leading-tight tracking-tight",
-            tightClientTile ? "gap-1 text-[8px]" : "gap-1.5 text-[9px]",
+            tightClientTile ? "gap-1 text-[9px]" : "gap-1.5 text-[10px]",
           )}
         >
           <Building2 className={cn("shrink-0 opacity-80", tightClientTile ? "h-2.5 w-2.5" : "h-3 w-3")} aria-hidden />
@@ -262,52 +262,74 @@ function PersonaCard({
         </span>
       </div>
       <div className={cn("flex flex-col items-center pt-1", tightClientTile ? "gap-0.5 sm:gap-1" : "gap-2.5")}>
-        <div
-          className={cn(
-            "flex shrink-0 items-center justify-center rounded-full border-2 bg-white shadow-sm",
-            tightClientTile ? "h-8 w-8 sm:h-9 sm:w-9" : "h-12 w-12 sm:h-[3.25rem] sm:w-[3.25rem]",
-            !after && kind === "pro" && "border-[#c6c6cc]",
-            after && kind === "pro" && "border-[#5a78ff]/35",
-            kind === "client" && "border-[#4aba5e]/50",
-          )}
-        >
-          <User
-            className={cn(
-              "stroke-[1.5]",
-              tightClientTile ? "h-3.5 w-3.5 sm:h-4 sm:w-4" : "h-6 w-6 sm:h-7 sm:w-7",
-              !after && kind === "pro" && "text-[#64748b]",
-              after && kind === "pro" && "text-[#5a78ff]",
-              kind === "client" && "text-[#2d6d3a]",
-            )}
-            aria-hidden
-          />
-        </div>
         {showFirmaPersona ? (
           <>
             <span className="text-center text-[7.5px] font-bold leading-tight text-[#2d6d3a] [font-family:var(--font-kinetic-headline),system-ui,sans-serif] sm:text-[8px]">
               {firmaPersona}
             </span>
+            <div
+              className={cn(
+                "flex shrink-0 items-center justify-center rounded-full border-2 bg-white shadow-sm",
+                tightClientTile ? "h-8 w-8 sm:h-9 sm:w-9" : "h-12 w-12 sm:h-[3.25rem] sm:w-[3.25rem]",
+                !after && kind === "pro" && "border-[#c6c6cc]",
+                after && kind === "pro" && "border-[#5a78ff]/35",
+                kind === "client" && "border-[#4aba5e]/50",
+              )}
+            >
+              <User
+                className={cn(
+                  "stroke-[1.5]",
+                  tightClientTile ? "h-3.5 w-3.5 sm:h-4 sm:w-4" : "h-6 w-6 sm:h-7 sm:w-7",
+                  !after && kind === "pro" && "text-[#64748b]",
+                  after && kind === "pro" && "text-[#5a78ff]",
+                  kind === "client" && "text-[#2d6d3a]",
+                )}
+                aria-hidden
+              />
+            </div>
             <span className="text-center text-[7px] font-semibold leading-snug text-emerald-800 [font-family:var(--font-kinetic-body),system-ui,sans-serif] sm:text-[7.5px]">
               {p.businessRole}
             </span>
           </>
         ) : (
-          <span
-            className={cn(
-              "font-bold leading-tight [font-family:var(--font-kinetic-headline),system-ui,sans-serif]",
-              tightClientTile ? "text-[7.5px] sm:text-[8px]" : "text-[9px]",
-              !after && kind === "pro" && "text-[#64748b]",
-              after && kind === "pro" && "text-[#5a78ff]",
-              kind === "client" && "text-[#2d6d3a]",
-            )}
-          >
-            {p.businessRole}
-          </span>
+          <>
+            <div
+              className={cn(
+                "flex shrink-0 items-center justify-center rounded-full border-2 bg-white shadow-sm",
+                tightClientTile ? "h-8 w-8 sm:h-9 sm:w-9" : "h-12 w-12 sm:h-[3.25rem] sm:w-[3.25rem]",
+                !after && kind === "pro" && "border-[#c6c6cc]",
+                after && kind === "pro" && "border-[#5a78ff]/35",
+                kind === "client" && "border-[#4aba5e]/50",
+              )}
+            >
+              <User
+                className={cn(
+                  "stroke-[1.5]",
+                  tightClientTile ? "h-3.5 w-3.5 sm:h-4 sm:w-4" : "h-6 w-6 sm:h-7 sm:w-7",
+                  !after && kind === "pro" && "text-[#64748b]",
+                  after && kind === "pro" && "text-[#5a78ff]",
+                  kind === "client" && "text-[#2d6d3a]",
+                )}
+                aria-hidden
+              />
+            </div>
+            <span
+              className={cn(
+                "font-bold leading-tight [font-family:var(--font-kinetic-headline),system-ui,sans-serif]",
+                tightClientTile ? "text-[8.5px] sm:text-[8px]" : "text-[10px]",
+                !after && kind === "pro" && "text-[#64748b]",
+                after && kind === "pro" && "text-[#5a78ff]",
+                kind === "client" && "text-[#2d6d3a]",
+              )}
+            >
+              {p.businessRole}
+            </span>
+          </>
         )}
         <span
           className={cn(
             "leading-snug text-[#45474c] [font-family:var(--font-kinetic-body),system-ui,sans-serif]",
-            tightClientTile ? "text-[8.5px] sm:text-[9px]" : "text-[10px]",
+            tightClientTile ? "text-[9.5px] sm:text-[9px]" : "text-[10px]",
           )}
         >
           {p.displayName}
@@ -455,7 +477,7 @@ function AfterMobileNorthStarFirmChipFullWidth() {
   return (
     <div className="mb-2 border-b border-slate-200/70 pb-2">
       <div className="w-full border border-dashed border-[#5a78ff]/45 bg-white px-2 py-1 text-[#5a78ff] [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
-        <span className="inline-flex w-full max-w-full items-center justify-center gap-1 text-[6.5px] font-bold leading-tight tracking-tight">
+        <span className="inline-flex w-full max-w-full items-center justify-center gap-1 text-[8.5px] font-bold leading-tight tracking-tight">
           <Building2 className="h-2 w-2 shrink-0 opacity-80" aria-hidden />
           <span className="line-clamp-2 text-center">{PRO.firm}</span>
         </span>
@@ -470,7 +492,7 @@ function BeforeMobileNorthStarJordanRiley() {
     <div className="w-full max-w-[19rem] text-center">
       <div className="grid grid-cols-2 gap-1.5">
         <div className="relative min-w-0 rounded-md border border-dashed border-[#5a78ff]/80 bg-white px-2 pb-2 pt-6 text-center shadow-sm">
-          <div className="absolute -top-1.5 left-1/2 z-[1] max-w-[calc(100%-6px)] -translate-x-1/2 border border-dashed border-[#5a78ff]/45 bg-white px-1.5 py-0.5 text-[#5a78ff] [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
+          <div className="absolute -top-1.5 left-1/2 z-[1] w-[80%] max-w-[calc(100%-2px)] -translate-x-1/2 border border-dashed border-[#5a78ff]/45 bg-white px-1.5 py-0.5 text-[#5a78ff] [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
             <span className="inline-flex max-w-full items-center justify-center gap-0.5 text-[6.5px] font-bold leading-tight tracking-tight">
               <Building2 className="h-2 w-2 shrink-0 opacity-80" aria-hidden />
               <span className="line-clamp-2 text-center">{PRO.firm}</span>
@@ -480,33 +502,33 @@ function BeforeMobileNorthStarJordanRiley() {
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-[#5a78ff]/35 bg-white shadow-sm">
               <User className="h-3.5 w-3.5 stroke-[1.5] text-[#5a78ff]" aria-hidden />
             </div>
-            <span className="text-[6.5px] font-bold leading-tight text-[#5a78ff] [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
+            <span className="text-[8.5px] font-bold leading-tight text-[#5a78ff] [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
               {PRO.businessRole}
             </span>
-            <span className="text-[8px] leading-tight text-[#45474c] [font-family:var(--font-kinetic-body),system-ui,sans-serif]">
+            <span className="text-[10px] leading-tight text-[#45474c] [font-family:var(--font-kinetic-body),system-ui,sans-serif]">
               {PRO.displayName}
             </span>
           </div>
         </div>
         <div className="relative min-w-0 rounded-md border border-dashed border-amber-400/85 bg-white px-2 pb-2 pt-6 text-center shadow-sm">
-          <div className="absolute -top-1.5 left-1/2 z-[1] max-w-[calc(100%-6px)] -translate-x-1/2 border border-dashed border-amber-500/65 bg-amber-50/95 px-1.5 py-0.5 text-amber-950 [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
-            <span className="inline-flex max-w-full items-center justify-center gap-0.5 text-[6.5px] font-bold leading-tight tracking-tight">
+          <div className="absolute -top-1.5 left-1/2 z-[1] w-[80%] max-w-[calc(100%-2px)] -translate-x-1/2 border border-dashed border-amber-500/65 bg-amber-50/95 px-1.5 py-0.5 text-amber-950 [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
+            <span className="inline-flex max-w-full items-center justify-center gap-0.5 text-[7.5px] font-bold leading-tight tracking-tight">
               <Building2 className="h-2 w-2 shrink-0 opacity-90" aria-hidden />
               <span className="line-clamp-2 text-center">{EXTERNAL_CONTRACTOR.firm}</span>
             </span>
           </div>
           <div className="flex flex-col items-center gap-0.5 pt-1">
-            <span className="rounded-sm border border-orange-400/55 bg-orange-50/95 px-1 py-px text-[5.5px] font-bold uppercase leading-none tracking-[0.1em] text-orange-900">
-              Contractor
-            </span>
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-orange-300 bg-white shadow-sm">
               <User className="h-3.5 w-3.5 stroke-[1.5] text-orange-600" aria-hidden />
             </div>
-            <span className="text-center text-[6.5px] font-bold leading-tight text-orange-800 [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
+            <span className="text-center text-[7.5px] font-bold leading-tight text-orange-800 [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
               {EXTERNAL_CONTRACTOR.businessRole}
             </span>
-            <span className="text-[8px] leading-tight text-[#45474c] [font-family:var(--font-kinetic-body),system-ui,sans-serif]">
+            <span className="text-[9px] leading-tight text-[#45474c] [font-family:var(--font-kinetic-body),system-ui,sans-serif]">
               {EXTERNAL_CONTRACTOR.displayName}
+            </span>
+            <span className="rounded-sm border border-orange-400/55 bg-orange-50/95 px-1 py-px text-[7.5px] font-bold uppercase leading-none tracking-[0.1em] text-orange-900">
+              Contractor
             </span>
           </div>
         </div>
@@ -546,48 +568,48 @@ function AfterInternalColumn() {
         </div>
         <div className="grid grid-cols-2 gap-1.5 pt-2 max-md:gap-1.5 sm:grid-cols-3 sm:gap-2 sm:pt-3 lg:gap-3">
           <div className="flex flex-col items-center gap-1 max-md:rounded-sm max-md:border max-md:border-dashed max-md:border-[#94a3b8] max-md:bg-white max-md:px-1 max-md:py-1.5 md:gap-1.5 sm:px-1 md:border-0 md:bg-transparent lg:px-2">
+            <span className="text-[8.5px] font-bold text-[#5a78ff] [font-family:var(--font-kinetic-headline),system-ui,sans-serif] sm:text-[8px] md:text-[7.5px]">
+              {AFTER_FIRMA_PERSONA_ENGAGEMENT_LEAD}
+            </span>
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-[#5a78ff]/35 bg-white shadow-sm sm:h-10 sm:w-10 md:h-9 md:w-9 lg:h-9 lg:w-9">
               <User className="h-3.5 w-3.5 stroke-[1.5] text-[#5a78ff] sm:h-5 sm:w-5 md:h-4 md:w-4 lg:h-4 lg:w-4" aria-hidden />
             </div>
-            <span className="text-[6.5px] font-bold text-[#5a78ff] [font-family:var(--font-kinetic-headline),system-ui,sans-serif] sm:text-[8px] md:text-[7.5px]">
-              {AFTER_FIRMA_PERSONA_ENGAGEMENT_LEAD}
-            </span>
-            <span className="text-center text-[6.5px] font-semibold leading-snug text-[#4c5d9e] [font-family:var(--font-kinetic-body),system-ui,sans-serif] sm:text-[7.5px] md:text-[7px]">
+            <span className="text-center text-[8.5px] font-semibold leading-snug text-[#4c5d9e] [font-family:var(--font-kinetic-body),system-ui,sans-serif] sm:text-[7.5px] md:text-[7px]">
               {PRO.businessRole}
             </span>
-            <span className="text-[8px] leading-tight text-[#45474c] [font-family:var(--font-kinetic-body),system-ui,sans-serif] sm:text-[10px] md:text-[9px]">
+            <span className="text-[10px] leading-tight text-[#45474c] [font-family:var(--font-kinetic-body),system-ui,sans-serif] sm:text-[10px] md:text-[9px]">
               {PRO.displayName}
             </span>
           </div>
           <div className="hidden flex-col items-center gap-1.5 border-t border-slate-200/70 pt-4 sm:flex sm:border-l sm:border-t-0 sm:border-slate-200/60 sm:pt-0 sm:pl-2 lg:pl-3">
+            <span className="text-center text-[8.5px] font-bold leading-tight text-[#5a78ff] [font-family:var(--font-kinetic-headline),system-ui,sans-serif] sm:text-[8px]">
+              {AFTER_FIRMA_PERSONA_CONTRIBUTOR_INTERNAL}
+            </span>
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-[#5a78ff]/25 bg-white shadow-sm sm:h-9 sm:w-9 lg:h-8 lg:w-8">
               <User className="h-4 w-4 stroke-[1.5] text-[#5a78ff] lg:h-3.5 lg:w-3.5" aria-hidden />
             </div>
-            <span className="text-center text-[7.5px] font-bold leading-tight text-[#5a78ff] [font-family:var(--font-kinetic-headline),system-ui,sans-serif] sm:text-[8px]">
-              {AFTER_FIRMA_PERSONA_CONTRIBUTOR_INTERNAL}
-            </span>
-            <span className="text-center text-[7px] font-semibold leading-snug text-[#4c5d9e] [font-family:var(--font-kinetic-body),system-ui,sans-serif] sm:text-[7.5px]">
+            <span className="text-center text-[8px] font-semibold leading-snug text-[#4c5d9e] [font-family:var(--font-kinetic-body),system-ui,sans-serif] sm:text-[7.5px]">
               {INTERNAL_CONTRIBUTOR.businessRole}
             </span>
-            <span className="text-[9px] leading-tight text-[#45474c] [font-family:var(--font-kinetic-body),system-ui,sans-serif] sm:text-[10px]">
+            <span className="text-[10px] leading-tight text-[#45474c] [font-family:var(--font-kinetic-body),system-ui,sans-serif] sm:text-[10px]">
               {INTERNAL_CONTRIBUTOR.displayName}
             </span>
           </div>
           <div className="flex flex-col items-center gap-1 max-md:rounded-sm max-md:border max-md:border-dashed max-md:border-orange-400/75 max-md:bg-orange-50/50 max-md:px-1 max-md:py-1.5 md:gap-1.5 md:border-l md:border-slate-200/60 md:pl-1.5 sm:pl-2 sm:border-t-0 lg:pl-3">
-            <span className="hidden rounded-sm border border-orange-400/55 bg-orange-50/95 px-1 py-px text-[5.5px] font-bold uppercase leading-none tracking-[0.1em] text-orange-900 max-md:inline-block md:hidden">
-              Contractor
+            <span className="text-center text-[8.5px] font-bold leading-tight text-orange-800 [font-family:var(--font-kinetic-headline),system-ui,sans-serif] sm:text-[8px] md:text-[7.5px]">
+              {AFTER_FIRMA_PERSONA_CONTRIBUTOR_EXTERNAL}
             </span>
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-orange-300 bg-white shadow-sm sm:h-9 sm:w-9 md:h-9 md:w-9 lg:h-8 lg:w-8">
               <User className="h-3.5 w-3.5 stroke-[1.5] text-orange-600 sm:h-4 sm:w-4 md:h-4 md:w-4 lg:h-3.5 lg:w-3.5" aria-hidden />
             </div>
-            <span className="text-center text-[6.5px] font-bold leading-tight text-orange-800 [font-family:var(--font-kinetic-headline),system-ui,sans-serif] sm:text-[8px] md:text-[7.5px]">
-              {AFTER_FIRMA_PERSONA_CONTRIBUTOR_EXTERNAL}
-            </span>
-            <span className="text-center text-[6.5px] font-semibold leading-snug text-orange-700 [font-family:var(--font-kinetic-body),system-ui,sans-serif] sm:text-[7.5px] md:text-[7px]">
+            <span className="text-center text-[8.5px] font-semibold leading-snug text-orange-700 [font-family:var(--font-kinetic-body),system-ui,sans-serif] sm:text-[7.5px] md:text-[7px]">
               {EXTERNAL_CONTRACTOR.businessRole}
             </span>
-            <span className="text-[8px] leading-tight text-[#45474c] [font-family:var(--font-kinetic-body),system-ui,sans-serif] sm:text-[10px] md:text-[9px]">
+            <span className="text-[10px] leading-tight text-[#45474c] [font-family:var(--font-kinetic-body),system-ui,sans-serif] sm:text-[10px] md:text-[9px]">
               {EXTERNAL_CONTRACTOR.displayName}
+            </span>
+            <span className="rounded-sm border border-orange-400/55 bg-orange-50/95 px-1 py-0.5 text-[7.5px] font-bold uppercase leading-none tracking-[0.1em] text-orange-900 max-md:inline-block md:hidden">
+              Contractor
             </span>
           </div>
         </div>
@@ -1028,11 +1050,11 @@ function AfterVault() {
     >
       {/*
         Visual stack: firmä portal chrome → bridge copy → nested Google Drive (4×2 grid).
-        Outer frame: blue left (NorthStar / pro) · green right (Acme / client).
+        Outer frame: blue top (NorthStar / pro) · green bottom (Acme / client).
       */}
       <div
         className={cn(
-          "relative z-10 rounded-sm border-y border-y-black/[0.08] border-l-[3px] border-l-[#5a78ff] border-r-[3px] border-r-[#4aba5e] bg-gradient-to-b from-[#f6f8ff]/90 via-[#f0fdf4]/85 to-white p-[3px] shadow-[0_12px_36px_-10px_rgba(90,120,255,0.18)]",
+          "relative z-10 rounded-sm border-x border-x-black/[0.08] border-t-[3px] border-t-[#5a78ff] border-b-[3px] border-b-[#4aba5e] bg-gradient-to-b from-[#f6f8ff]/90 via-[#f0fdf4]/85 to-white p-[3px] shadow-[0_12px_36px_-10px_rgba(90,120,255,0.18)]",
           vaultShellW,
         )}
       >
