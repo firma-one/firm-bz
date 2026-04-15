@@ -402,6 +402,7 @@ export function BillingPageClient({
                             portalReturnPath={portalReturnPath}
                             density="default"
                             currentPlanState={currentPlanState}
+                            fallbackCanManageBilling={firmManageChecked && firmManageOk}
                             blueAccentTrial={false}
                             hideStandaloneFreePlan
                             enableCheckoutIntentJoyride={isOnboardingSubscribe}

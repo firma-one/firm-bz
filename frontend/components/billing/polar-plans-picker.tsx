@@ -55,6 +55,11 @@ interface PolarPlansPickerProps {
      * `firma.checkoutIntent`. Dismissal applies until this component unmounts (full refresh clears it).
      */
     enableCheckoutIntentJoyride?: boolean
+    /**
+     * Optional permissions precheck from `/api/permissions/firm`.
+     * Used as fallback while `current-plan` is loading or temporarily unavailable.
+     */
+    fallbackCanManageBilling?: boolean
 }
 
 const PRICING_PAGE_BILLING_TOGGLE_BTN =
@@ -425,6 +430,19 @@ function withBrandName(text: string | null | undefined): string {
     return text.replace(/\bfirma\b/gi, BRAND_NAME)
 }
 
+function formatTrialPeriodLabel(days: number): string {
+    return `${days}-Day`
+}
+
+function checkoutCtaLabel(plan: BillingCatalogPlan, isPaidRecurringCurrent: boolean): string {
+    if (isPaidRecurringCurrent) return upgradeCopy.planPickerSwitchPlanCta
+    const trialDays = plan.trialDays
+    if (typeof trialDays === 'number' && trialDays > 0) {
+        return `Start ${formatTrialPeriodLabel(trialDays)} Trial`
+    }
+    return upgradeCopy.planPickerCta
+}
+
 /** Polar-style monthly suffix (space + `/mo`, same as Polar checkout UI). */
 const POLAR_MONTHLY_FREQ_LABEL = ' / mo'
 
@@ -637,6 +655,7 @@ export function PolarPlansPicker({
     blueAccentTrial,
     hideStandaloneFreePlan = false,
     enableCheckoutIntentJoyride = false,
+    fallbackCanManageBilling,
 }: PolarPlansPickerProps) {
     const [plans, setPlans] = useState<BillingCatalogPlan[] | null>(null)
     const [error, setError] = useState<string | null>(null)
@@ -1019,10 +1038,11 @@ export function PolarPlansPicker({
         (currentPlanState?.pricingModel === 'recurring_subscription' && isActiveLikeStatus) ||
         (hasPaidMatch && !['canceled', 'none'].includes(normalizedStatus))
     const portalSwitchUi = isPaidRecurringCurrent
-    const isFirmBillingAdmin = Boolean(currentPlanState?.isFirmBillingAdmin)
+    const explicitAdminFlag = currentPlanState?.isFirmBillingAdmin
+    const isFirmBillingAdmin = explicitAdminFlag ?? Boolean(fallbackCanManageBilling)
     const canOpenCustomerPortal = Boolean(currentPlanState?.canOpenCustomerPortal)
     const showPortalButton = isFirmBillingAdmin && portalSwitchUi && canOpenCustomerPortal
-    const showAdminOnlyBlock = !isFirmBillingAdmin
+    const showAdminOnlyBlock = explicitAdminFlag === false && !fallbackCanManageBilling
 
     const openBillingPortal = async () => {
         setPortalError(null)
@@ -1441,9 +1461,7 @@ export function PolarPlansPicker({
                                                     <span className="relative z-10">
                                                         <span className="inline-flex items-center justify-center gap-2">
                                                             <CreditCard className="h-4 w-4 opacity-90" aria-hidden />
-                                                            {isPaidRecurringCurrent
-                                                                ? upgradeCopy.planPickerSwitchPlanCta
-                                                                : upgradeCopy.planPickerCta}
+                                                            {checkoutCtaLabel(selectedPlan, isPaidRecurringCurrent)}
                                                         </span>
                                                     </span>
                                                 </Button>
@@ -1787,9 +1805,7 @@ export function PolarPlansPicker({
                                                 <span className="relative z-10">
                                                     <span className="inline-flex items-center justify-center gap-2">
                                                         <CreditCard className="h-4 w-4 opacity-90" aria-hidden />
-                                                        {isPaidRecurringCurrent
-                                                            ? upgradeCopy.planPickerSwitchPlanCta
-                                                            : upgradeCopy.planPickerCta}
+                                                        {checkoutCtaLabel(plan, isPaidRecurringCurrent)}
                                                     </span>
                                                 </span>
                                             </Button>

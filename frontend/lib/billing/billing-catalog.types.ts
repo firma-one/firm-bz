@@ -15,4 +15,6 @@ export type BillingCatalogPlan = {
     recurringAmountCents: number | null
     priceCurrency: string
     recurringInterval: BillingCatalogRecurringInterval | null
+    /** Trial length in days when configured on the product/price; null when no trial is configured. */
+    trialDays: number | null
 }
