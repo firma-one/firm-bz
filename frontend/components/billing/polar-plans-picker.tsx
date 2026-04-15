@@ -55,6 +55,11 @@ interface PolarPlansPickerProps {
      * `firma.checkoutIntent`. Dismissal applies until this component unmounts (full refresh clears it).
      */
     enableCheckoutIntentJoyride?: boolean
+    /**
+     * Optional permissions precheck from `/api/permissions/firm`.
+     * Used as fallback while `current-plan` is loading or temporarily unavailable.
+     */
+    fallbackCanManageBilling?: boolean
 }
 
 const PRICING_PAGE_BILLING_TOGGLE_BTN =
@@ -637,6 +642,7 @@ export function PolarPlansPicker({
     blueAccentTrial,
     hideStandaloneFreePlan = false,
     enableCheckoutIntentJoyride = false,
+    fallbackCanManageBilling,
 }: PolarPlansPickerProps) {
     const [plans, setPlans] = useState<BillingCatalogPlan[] | null>(null)
     const [error, setError] = useState<string | null>(null)
@@ -1019,10 +1025,11 @@ export function PolarPlansPicker({
         (currentPlanState?.pricingModel === 'recurring_subscription' && isActiveLikeStatus) ||
         (hasPaidMatch && !['canceled', 'none'].includes(normalizedStatus))
     const portalSwitchUi = isPaidRecurringCurrent
-    const isFirmBillingAdmin = Boolean(currentPlanState?.isFirmBillingAdmin)
+    const explicitAdminFlag = currentPlanState?.isFirmBillingAdmin
+    const isFirmBillingAdmin = explicitAdminFlag ?? Boolean(fallbackCanManageBilling)
     const canOpenCustomerPortal = Boolean(currentPlanState?.canOpenCustomerPortal)
     const showPortalButton = isFirmBillingAdmin && portalSwitchUi && canOpenCustomerPortal
-    const showAdminOnlyBlock = !isFirmBillingAdmin
+    const showAdminOnlyBlock = explicitAdminFlag === false && !fallbackCanManageBilling
 
     const openBillingPortal = async () => {
         setPortalError(null)

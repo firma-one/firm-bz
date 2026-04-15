@@ -770,6 +770,23 @@ model SystemAdmin {
   @@schema("system")
 }
 
+model SystemSignupInvite {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email         String   @unique
+  firstName     String   @map("first_name")
+  lastName      String   @map("last_name")
+  couponCode    String?  @map("coupon_code")
+  inviteCount   Int      @default(1) @map("invite_count")
+  createdBy     String?  @map("created_by") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamp(6)
+  lastInvitedAt DateTime @default(now()) @map("last_invited_at") @db.Timestamp(6)
+
+  @@index([lastInvitedAt], map: "idx_system_signup_invites_last_invited_at")
+  @@map("system_signup_invites")
+  @@schema("system")
+}
+
 model ContactSubmission {
   id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamp(6)
