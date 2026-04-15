@@ -3,7 +3,7 @@
  * Used by the Pockett structure service for folder structure and meta.json operations.
  */
 
-import type { IConnectorStorageAdapter } from '../types'
+import { METADATA_FOLDER_NAME, type IConnectorStorageAdapter } from '../types'
 
 const DRIVE_FOLDER_MIME = 'application/vnd.google-apps.folder'
 const DRIVE_API = 'https://www.googleapis.com/drive/v3'
@@ -11,6 +11,44 @@ const DRIVE_UPLOAD = 'https://www.googleapis.com/upload/drive/v3'
 const DRIVE_OPTS = 'supportsAllDrives=true&includeItemsFromAllDrives=true'
 
 export type GetAccessToken = (connectionId: string) => Promise<string>
+type DriveFolderRow = { id: string; createdTime?: string }
+
+function buildFolderQuery(parentFolderId: string, name: string): string {
+  return `mimeType = '${DRIVE_FOLDER_MIME}' and name = '${name.replace(/'/g, "\\'")}' and trashed = false and '${parentFolderId}' in parents`
+}
+
+function pickCanonicalFolderId(folders: DriveFolderRow[]): string | null {
+  if (!folders.length) return null
+  const sorted = [...folders].sort((a, b) => {
+    const aTime = a.createdTime ?? ''
+    const bTime = b.createdTime ?? ''
+    if (aTime === bTime) return a.id.localeCompare(b.id)
+    return aTime.localeCompare(bTime)
+  })
+  return sorted[0]?.id ?? null
+}
+
+async function searchFoldersByName(token: string, parentFolderId: string, name: string): Promise<DriveFolderRow[]> {
+  const q = buildFolderQuery(parentFolderId, name)
+  const res = await fetch(
+    `${DRIVE_API}/files?q=${encodeURIComponent(q)}&fields=files(id,createdTime)&orderBy=createdTime asc&${DRIVE_OPTS}`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  )
+  if (!res.ok) return []
+  const data = await res.json()
+  return (data.files || []).map((f: DriveFolderRow) => ({ id: f.id, createdTime: f.createdTime }))
+}
+
+async function deleteFolderIfExists(token: string, folderId: string): Promise<void> {
+  const res = await fetch(`${DRIVE_API}/files/${folderId}?${DRIVE_OPTS}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` }
+  })
+  if (!res.ok && res.status !== 404) {
+    const err = await res.text()
+    throw new Error(`Failed to delete duplicate folder ${folderId}: ${res.status} - ${err}`)
+  }
+}
 
 export function createGoogleDriveAdapter(getAccessToken: GetAccessToken): IConnectorStorageAdapter {
   async function auth(connectionId: string) {
@@ -157,14 +195,18 @@ export function createGoogleDriveAdapter(getAccessToken: GetAccessToken): IConne
 
     async findOrCreateFolder(connectionId: string, parentFolderId: string, name: string): Promise<string> {
       const token = await auth(connectionId)
-      const q = `mimeType = '${DRIVE_FOLDER_MIME}' and name = '${name.replace(/'/g, "\\'")}' and trashed = false and '${parentFolderId}' in parents`
-      const searchRes = await fetch(
-        `${DRIVE_API}/files?q=${encodeURIComponent(q)}&fields=files(id)&${DRIVE_OPTS}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      )
-      if (searchRes.ok) {
-        const data = await searchRes.json()
-        if (data.files?.length > 0) return data.files[0].id
+      const existingFolders = await searchFoldersByName(token, parentFolderId, name)
+      const canonicalExistingId = pickCanonicalFolderId(existingFolders)
+      if (canonicalExistingId) {
+        if (name === METADATA_FOLDER_NAME && existingFolders.length > 1) {
+          await Promise.all(
+            existingFolders
+              .map((f) => f.id)
+              .filter((id) => id !== canonicalExistingId)
+              .map((id) => deleteFolderIfExists(token, id))
+          )
+        }
+        return canonicalExistingId
       }
       const createRes = await fetch(`${DRIVE_API}/files?${DRIVE_OPTS}`, {
         method: 'POST',
@@ -182,8 +224,23 @@ export function createGoogleDriveAdapter(getAccessToken: GetAccessToken): IConne
         const err = await createRes.text()
         throw new Error(`Failed to create folder ${name}: ${createRes.status} - ${err}`)
       }
-      const created = await createRes.json()
-      return created.id
+      const created = await createRes.json() as { id?: string }
+      const foldersAfterCreate = await searchFoldersByName(token, parentFolderId, name)
+      const canonicalAfterCreateId = pickCanonicalFolderId(foldersAfterCreate)
+
+      // Race-safe behavior: if two callers create the same folder concurrently, keep one canonical folder.
+      if (name === METADATA_FOLDER_NAME && foldersAfterCreate.length > 1 && canonicalAfterCreateId) {
+        await Promise.all(
+          foldersAfterCreate
+            .map((f) => f.id)
+            .filter((id) => id !== canonicalAfterCreateId)
+            .map((id) => deleteFolderIfExists(token, id))
+        )
+      }
+
+      if (canonicalAfterCreateId) return canonicalAfterCreateId
+      if (created.id) return created.id
+      throw new Error(`Failed to resolve folder id for ${name}`)
     },
 
     async getFileParent(connectionId: string, fileId: string): Promise<string | null> {

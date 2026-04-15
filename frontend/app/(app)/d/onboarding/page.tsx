@@ -34,6 +34,7 @@ import {
 import { BillingPageClient } from '@/components/billing/billing-page-client'
 
 const ONBOARDING_CREATING_STORAGE_KEY = 'firm_onboarding_creating'
+const FINALIZE_AUTO_NAV_TOTAL_SECONDS = 5
 
 function readOnboardingCreatingSession(): string | null {
     if (typeof window === 'undefined') return null
@@ -1140,8 +1141,8 @@ const OnboardingContent = () => {
             finalizeAutoNavIntervalRef.current = null
         }
 
-        let remaining = 5
-        setFinalizeAutoNavSeconds(5)
+        let remaining = FINALIZE_AUTO_NAV_TOTAL_SECONDS
+        setFinalizeAutoNavSeconds(FINALIZE_AUTO_NAV_TOTAL_SECONDS)
         finalizeAutoNavIntervalRef.current = setInterval(() => {
             remaining -= 1
             setFinalizeAutoNavSeconds(remaining > 0 ? remaining : 0)
@@ -1673,17 +1674,34 @@ const OnboardingContent = () => {
                                 <div className="mt-6 w-full">
                                     <Button
                                         type="button"
-                                        className="h-12 w-full rounded-xl bg-slate-900 font-bold text-white hover:bg-slate-800"
+                                        className="relative h-12 w-full overflow-hidden rounded-xl bg-slate-900 font-bold text-white hover:bg-slate-800"
                                         onClick={() => void handleFinish()}
                                     >
-                                        <span className="inline-flex flex-col items-center justify-center gap-0.5 sm:flex-row sm:gap-2">
+                                        {finalizeAutoNavSeconds !== null && finalizeAutoNavSeconds > 0 ? (
+                                            <span
+                                                aria-hidden="true"
+                                                className="absolute inset-y-0 left-0 bg-white/20 transition-[width] duration-1000 ease-linear"
+                                                style={{
+                                                    width: `${Math.max(
+                                                        0,
+                                                        Math.min(
+                                                            100,
+                                                            ((FINALIZE_AUTO_NAV_TOTAL_SECONDS - finalizeAutoNavSeconds) /
+                                                                FINALIZE_AUTO_NAV_TOTAL_SECONDS) *
+                                                                100
+                                                        )
+                                                    )}%`,
+                                                }}
+                                            />
+                                        ) : null}
+                                        <span className="relative z-10 inline-flex flex-col items-center justify-center gap-0.5 sm:flex-row sm:gap-2">
                                             <span className="inline-flex items-center gap-2">
                                                 Continue to workspace
                                                 <ArrowRight className="h-4 w-4 shrink-0" />
                                             </span>
                                             {finalizeAutoNavSeconds !== null && finalizeAutoNavSeconds > 0 ? (
                                                 <span className="text-xs font-medium text-white/85">
-                                                    Continuing automatically in {finalizeAutoNavSeconds}s…
+                                                    {finalizeAutoNavSeconds}s
                                                 </span>
                                             ) : null}
                                         </span>

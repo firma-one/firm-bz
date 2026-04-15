@@ -42,15 +42,8 @@ function AppLayoutContent({
 
     // Reset right pane on navigation or reload so state is not persisted
     useEffect(() => {
-      clearPane()
-    }, [pathname])
-
-    const publicRoutes: string[] = []
-    const isPublicRoute = publicRoutes.includes(pathname)
-
-    if (isPublicRoute) {
-        return <>{children}</>
-    }
+        clearPane()
+    }, [pathname, clearPane])
 
     const sidebarWidth = isCollapsed ? 64 : 256
 

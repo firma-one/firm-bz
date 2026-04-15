@@ -3,10 +3,19 @@ import { createServerClient } from "@supabase/ssr";
 import { getDeploymentVersion, DEPLOYMENT_VERSION_COOKIE, isDeploymentVersionValid } from "@/lib/deployment-version";
 import { logger } from "@/lib/logger";
 
+/** Forward pathname to Server Components (e.g. `/d` layout entry redirect). */
+const INVOKE_PATH_HEADER = "x-invoke-path";
+
+function requestHeadersWithInvokePath(request: NextRequest): Headers {
+    const headers = new Headers(request.headers);
+    headers.set(INVOKE_PATH_HEADER, request.nextUrl.pathname);
+    return headers;
+}
+
 export async function proxy(request: NextRequest) {
     let response = NextResponse.next({
         request: {
-            headers: request.headers,
+            headers: requestHeadersWithInvokePath(request),
         },
     });
 
@@ -23,7 +32,9 @@ export async function proxy(request: NextRequest) {
                         request.cookies.set(name, value);
                     });
                     response = NextResponse.next({
-                        request,
+                        request: {
+                            headers: requestHeadersWithInvokePath(request),
+                        },
                     });
                     cookiesToSet.forEach(({ name, value, options }) => {
                         response.cookies.set(name, value, options);
@@ -155,13 +166,12 @@ export async function proxy(request: NextRequest) {
         return NextResponse.redirect(new URL('/d', request.url))
     }
 
-    // Protect /d/f/* routes logic
-    if (request.nextUrl.pathname.startsWith('/d/f/')) {
-        if (!user) {
-            const loginUrl = new URL('/signin', request.url)
-            loginUrl.searchParams.set('redirect', request.nextUrl.pathname)
-            return NextResponse.redirect(loginUrl)
-        }
+    // Protect all /d routes
+    const isDRoute = pathname === '/d' || pathname.startsWith('/d/')
+    if (isDRoute && !user) {
+        const loginUrl = new URL('/signin', request.url)
+        loginUrl.searchParams.set('redirect', pathname + request.nextUrl.search)
+        return NextResponse.redirect(loginUrl)
     }
 
     // Redirect old /o/* routes to /d/f/* for backward compatibility
