@@ -37,6 +37,40 @@ function metadataFirmId(payload: UnknownRecord): string | null {
     return asString(metadata.firmId)
 }
 
+function couponCodeFromDiscountRecord(discount: UnknownRecord | null): string | null {
+    if (!discount) return null
+    const nestedCoupon = asRecord(discount.coupon)
+    return (
+        asString(discount.couponCode) ??
+        asString(discount.coupon_code) ??
+        asString(discount.code) ??
+        asString(discount.promotionCode) ??
+        asString(discount.promotion_code) ??
+        asString(nestedCoupon?.code) ??
+        asString(nestedCoupon?.name) ??
+        asString(nestedCoupon?.id)
+    )
+}
+
+function extractCouponCode(body: UnknownRecord): string | null {
+    const direct =
+        asString(body.couponCode) ??
+        asString(body.coupon_code) ??
+        asString(body.promotionCode) ??
+        asString(body.promotion_code)
+    if (direct) return direct
+
+    const discount = couponCodeFromDiscountRecord(asRecord(body.discount))
+    if (discount) return discount
+
+    const discounts = Array.isArray(body.discounts) ? body.discounts : []
+    for (const row of discounts) {
+        const code = couponCodeFromDiscountRecord(asRecord(row))
+        if (code) return code
+    }
+    return null
+}
+
 /**
  * Polar Next.js webhooks pass `{ type, timestamp, data: Subscription }`.
  * Accept either that shape or a bare subscription-like object.
@@ -100,6 +134,7 @@ function extractSubscriptionDetails(body: UnknownRecord) {
             asDate(body.current_period_end) ??
             asDate(body.endsAt) ??
             asDate(body.endedAt),
+        couponCode: extractCouponCode(body),
         productMetadata,
     }
 }
@@ -212,6 +247,7 @@ export async function syncFirmSubscriptionFromPolarEvent(
                     provider: 'polar',
                     pricingModel: recurringModel,
                     currentPeriodEnd: details.periodEnd ?? null,
+                    couponCode: details.couponCode ?? null,
                     polarCustomerId: details.customerId ?? null,
                     polarSubscriptionId: details.subscriptionId ?? null,
                     polarOrderId: null,
@@ -230,6 +266,7 @@ export async function syncFirmSubscriptionFromPolarEvent(
                     provider: 'polar',
                     pricingModel: recurringModel,
                     currentPeriodEnd: details.periodEnd ?? null,
+                    couponCode: details.couponCode ?? null,
                     polarCustomerId: details.customerId ?? null,
                     polarSubscriptionId: details.subscriptionId ?? null,
                     polarOrderId: null,

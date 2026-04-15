@@ -25,8 +25,8 @@ function isRecord(x: unknown): x is Record<string, unknown> {
 const INTERVAL_SUFFIX: Record<string, string> = {
     day: '/day',
     week: '/week',
-    month: '/mo',
-    year: '/yr',
+    month: '/month',
+    year: '/year',
 }
 
 function formatMoney(cents: number, currency: string): string {
@@ -93,6 +93,43 @@ function polarRecurringIntervalFromApi(
         normalizePolarIntervalString(price.interval) ??
         fromNested
     )
+}
+
+function toPositiveInt(value: unknown): number | null {
+    if (typeof value === 'number' && Number.isFinite(value) && value > 0) return Math.floor(value)
+    if (typeof value === 'string') {
+        const parsed = Number.parseInt(value.trim(), 10)
+        if (Number.isFinite(parsed) && parsed > 0) return parsed
+    }
+    return null
+}
+
+function trialDaysFromRecord(record: Record<string, unknown> | null): number | null {
+    if (!record) return null
+    return (
+        toPositiveInt(record.trial_interval_count) ??
+        toPositiveInt(record.trialIntervalCount) ??
+        toPositiveInt(record.trial_days) ??
+        toPositiveInt(record.trialDays) ??
+        toPositiveInt(record.free_trial_days) ??
+        toPositiveInt(record.freeTrialDays) ??
+        toPositiveInt(record.trial_period_days) ??
+        toPositiveInt(record.trialPeriodDays)
+    )
+}
+
+function extractTrialDays(product: Record<string, unknown>): number | null {
+    const prices = Array.isArray(product.prices) ? product.prices.filter(isRecord) : []
+    for (const price of prices) {
+        const direct = trialDaysFromRecord(price)
+        if (direct) return direct
+        const recurring = isRecord(price.recurring) ? trialDaysFromRecord(price.recurring) : null
+        if (recurring) return recurring
+    }
+    const productDirect = trialDaysFromRecord(product)
+    if (productDirect) return productDirect
+    const metadata = isRecord(product.metadata) ? trialDaysFromRecord(product.metadata) : null
+    return metadata
 }
 
 function isRecurringLikePrice(price: Record<string, unknown>, product: Record<string, unknown>): boolean {
@@ -267,6 +304,7 @@ function toPlan(product: unknown): BillingCatalogPlan | null {
         recurringAmountCents: extracted?.amountCents ?? null,
         priceCurrency: extracted?.currency ?? 'usd',
         recurringInterval,
+        trialDays: extractTrialDays(product),
     }
 }
 

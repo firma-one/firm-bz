@@ -430,6 +430,19 @@ function withBrandName(text: string | null | undefined): string {
     return text.replace(/\bfirma\b/gi, BRAND_NAME)
 }
 
+function formatTrialPeriodLabel(days: number): string {
+    return `${days}-Day`
+}
+
+function checkoutCtaLabel(plan: BillingCatalogPlan, isPaidRecurringCurrent: boolean): string {
+    if (isPaidRecurringCurrent) return upgradeCopy.planPickerSwitchPlanCta
+    const trialDays = plan.trialDays
+    if (typeof trialDays === 'number' && trialDays > 0) {
+        return `Start ${formatTrialPeriodLabel(trialDays)} Trial`
+    }
+    return upgradeCopy.planPickerCta
+}
+
 /** Polar-style monthly suffix (space + `/mo`, same as Polar checkout UI). */
 const POLAR_MONTHLY_FREQ_LABEL = ' / mo'
 
@@ -1448,9 +1461,7 @@ export function PolarPlansPicker({
                                                     <span className="relative z-10">
                                                         <span className="inline-flex items-center justify-center gap-2">
                                                             <CreditCard className="h-4 w-4 opacity-90" aria-hidden />
-                                                            {isPaidRecurringCurrent
-                                                                ? upgradeCopy.planPickerSwitchPlanCta
-                                                                : upgradeCopy.planPickerCta}
+                                                            {checkoutCtaLabel(selectedPlan, isPaidRecurringCurrent)}
                                                         </span>
                                                     </span>
                                                 </Button>
@@ -1794,9 +1805,7 @@ export function PolarPlansPicker({
                                                 <span className="relative z-10">
                                                     <span className="inline-flex items-center justify-center gap-2">
                                                         <CreditCard className="h-4 w-4 opacity-90" aria-hidden />
-                                                        {isPaidRecurringCurrent
-                                                            ? upgradeCopy.planPickerSwitchPlanCta
-                                                            : upgradeCopy.planPickerCta}
+                                                        {checkoutCtaLabel(plan, isPaidRecurringCurrent)}
                                                     </span>
                                                 </span>
                                             </Button>

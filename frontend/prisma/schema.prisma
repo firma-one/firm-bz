@@ -249,6 +249,7 @@ model Subscription {
   /** `recurring_subscription` | `one_time_purchase` — mirrors Polar product recurrence for caps/UI. */
   pricingModel       String?
   currentPeriodEnd   DateTime? @db.Timestamptz(6)
+  couponCode         String?   @map("coupon_code")
   polarCustomerId    String?
   polarSubscriptionId String?
   polarOrderId       String?
