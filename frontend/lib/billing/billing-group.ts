@@ -1,5 +1,8 @@
 import { prisma } from '@/lib/prisma'
-import { getActiveSubscriptionForFirm } from '@/lib/billing/active-billing-subscription'
+import {
+    getActiveSubscriptionForFirm,
+    subscriptionAccessStatusLabel,
+} from '@/lib/billing/active-billing-subscription'
 
 /** Default max firms per paid subscription when `billingGroupFirmCap` is null. */
 export const DEFAULT_BILLING_GROUP_FIRM_CAP = 1
@@ -38,7 +41,7 @@ async function firmRowToBillingAnchor(row: FirmGateSelect): Promise<BillingAncho
     const sub = await getActiveSubscriptionForFirm(row.id)
     return {
         id: row.id,
-        subscriptionStatus: sub?.status ?? null,
+        subscriptionStatus: subscriptionAccessStatusLabel(sub),
         sandboxOnly: row.sandboxOnly,
         anchorFirmId: row.anchorFirmId,
         billingGroupFirmCap: row.billingGroupFirmCap,

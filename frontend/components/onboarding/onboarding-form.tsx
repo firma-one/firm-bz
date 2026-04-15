@@ -1,14 +1,14 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { isValidEmail, isGoogleEmail, isPotentiallyGoogleWorkspace, generateDefaultOrgName } from '@/lib/email-utils'
 import { AuthService } from '@/lib/auth-service'
 import { supabase } from '@/lib/supabase'
-import { useAuth } from '@/lib/auth-context'
 import { ArrowLeft, ArrowRight, Check } from 'lucide-react'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import {
@@ -104,9 +104,7 @@ export function OnboardingForm({
     onStepChange,
     onProgressIndexChange,
 }: OnboardingFormProps) {
-    const router = useRouter()
     const searchParams = useSearchParams()
-    const { user } = useAuth()
     const firstNameInputRef = useRef<HTMLInputElement>(null)
     const emailInputRef = useRef<HTMLInputElement>(null)
     const isSplitLight = layout === 'split-light'
@@ -125,6 +123,7 @@ export function OnboardingForm({
     const [showTurnstile, setShowTurnstile] = useState(false)
     const [emailVerifiedNewUser, setEmailVerifiedNewUser] = useState(false)
     const [isReturningUser, setIsReturningUser] = useState(false) // User exists, OTP already sent
+    const [existingAccountMessage, setExistingAccountMessage] = useState('')
 
     useEffect(() => {
         onStepChange?.(step)
@@ -142,22 +141,22 @@ export function OnboardingForm({
         }
     }, [searchParams])
 
-    // Check if user is already logged in
+    // Check if user is already logged in — full navigation so `/d` RSC sees auth cookies (same as post-OTP).
     useEffect(() => {
         const checkSession = async () => {
             const { data: { session } } = await supabase.auth.getSession()
             if (session) {
-                // User is already logged in; let onboarding page decide (step 0 / resume / org).
-                router.push('/d/onboarding')
+                window.location.href = '/d/onboarding'
             }
         }
-        checkSession()
-    }, [router])
+        void checkSession()
+    }, [])
 
     // Handle email check via OTP (called after Turnstile success)
     const handleEmailCheckWithOTP = async (token: string) => {
         setLoading(true)
         setError('')
+        setExistingAccountMessage('')
 
         try {
             // Send OTP with checkExistingFirst=true to detect existing users
@@ -172,9 +171,10 @@ export function OnboardingForm({
             }
 
             if (result.data?.userExists) {
-                // Existing user - OTP already sent, go directly to verify
-                setIsReturningUser(true)
-                setStep('otp-verify')
+                setIsReturningUser(false)
+                setStep('info')
+                setEmailVerifiedNewUser(false)
+                setExistingAccountMessage('An account with this email already exists. Please sign in to continue.')
             } else {
                 // New user - show name fields
                 const parsedName = parseNameFromEmail(email)
@@ -202,6 +202,7 @@ export function OnboardingForm({
     const handleBackToEmail = () => {
         if (searchParams.get('email')) return
         setEmailVerifiedNewUser(false)
+        setExistingAccountMessage('')
         setShowTurnstile(false)
         setTurnstileToken(null)
         setError('')
@@ -221,6 +222,7 @@ export function OnboardingForm({
     const handleInfoSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         setError('')
+        setExistingAccountMessage('')
 
         if (!email) {
             setError('Please enter your email')
@@ -347,9 +349,15 @@ export function OnboardingForm({
         // Clear onboarding data
         AuthService.clearOnboardingData()
 
-        const nextRel = searchParams.get('next')
+        const {
+            data: { session },
+        } = await supabase.auth.getSession()
+        if (!session) {
+            setError('Failed to establish session')
+            setLoading(false)
+            return
+        }
 
-        // Success! Redirect
         sendEvent({
             action: ANALYTICS_EVENTS.SIGN_UP,
             category: 'User',
@@ -357,18 +365,38 @@ export function OnboardingForm({
             method: 'email'
         })
 
-        if (nextRel && nextRel.startsWith('/')) {
-            router.push(nextRel)
-        } else {
-            // Domain join / org options are loaded on `/d/onboarding` via `/api/onboarding/domain-options`
-            // (Bearer auth). Do not call a non-existent `/api/onboarding/domain-choice` — that returned HTML
-            // and broke `res.json()` with SyntaxError.
-            router.push('/d/onboarding')
+        const nextRel = searchParams.get('next') || searchParams.get('redirect')
+        const isSafeRedirect = nextRel && nextRel.startsWith('/')
+        if (isSafeRedirect && nextRel) {
+            const normalized =
+                nextRel === '/dash' || nextRel.startsWith('/dash/')
+                    ? '/d' + (nextRel === '/dash' ? '' : nextRel.slice(5))
+                    : nextRel
+            window.location.href = normalized
+            return
         }
+
+        await new Promise((resolve) => setTimeout(resolve, 150))
+
+        try {
+            const response = await fetch('/api/firms/default-slug', { cache: 'no-store' })
+            if (response.ok) {
+                const data = await response.json()
+                if (data.slug && data.onboardingComplete) {
+                    window.location.href = `/d/f/${data.slug}`
+                    return
+                }
+            }
+        } catch {
+            /* fall through to onboarding */
+        }
+
+        window.location.href = '/d/onboarding'
     }
 
     const inputClass = isSplitLight ? inputLight : inputDark
     const labelClass = isSplitLight ? labelLight : labelDark
+    const signinHref = email.trim() ? `/signin?email=${encodeURIComponent(email.trim())}` : '/signin'
 
     return (
         <div
@@ -446,6 +474,14 @@ export function OnboardingForm({
                                         We&apos;ll check if you already have an account.
                                     </p>
                                 )}
+                                {existingAccountMessage && (
+                                    <p className="mt-2 text-xs text-[#8a2b2b]">
+                                        {existingAccountMessage}{' '}
+                                        <Link href={signinHref} className="font-semibold underline underline-offset-2 hover:text-[#5f1f1f]">
+                                            Go to sign in
+                                        </Link>
+                                    </p>
+                                )}
                             </div>
                         ) : (
                             <>
@@ -486,6 +522,14 @@ export function OnboardingForm({
                                 {!emailVerifiedNewUser && (
                                     <p className="mt-1.5 text-xs text-slate-500">
                                         We&apos;ll check if you already have an account.
+                                    </p>
+                                )}
+                                {existingAccountMessage && (
+                                    <p className="mt-2 text-xs text-red-300">
+                                        {existingAccountMessage}{' '}
+                                        <Link href={signinHref} className="font-semibold underline underline-offset-2 hover:text-red-200">
+                                            Go to sign in
+                                        </Link>
                                     </p>
                                 )}
                             </>

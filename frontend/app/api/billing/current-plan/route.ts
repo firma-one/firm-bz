@@ -2,7 +2,10 @@ import { Polar } from '@polar-sh/sdk'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { createClient } from '@/utils/supabase/server'
-import { getActiveSubscriptionForFirm } from '@/lib/billing/active-billing-subscription'
+import {
+    getActiveSubscriptionForFirm,
+    subscriptionAccessStatusLabel,
+} from '@/lib/billing/active-billing-subscription'
 import { resolveBillingAnchorFirmId } from '@/lib/billing/billing-group'
 
 function polarServer(): 'production' | 'sandbox' {
@@ -53,7 +56,7 @@ export async function GET(request: Request) {
     const anchorSub = await getActiveSubscriptionForFirm(anchorId)
 
     let periodEnd = anchorSub?.currentPeriodEnd ?? null
-    let normalizedStatus = (anchorSub?.status ?? '').toLowerCase()
+    let normalizedStatus = (subscriptionAccessStatusLabel(anchorSub) ?? '').toLowerCase()
     let subscriptionPlan = anchorSub?.plan ?? null
     let canOpenCustomerPortal = Boolean(anchorSub?.polarCustomerId)
     let subscriptionProductId: string | null = null
@@ -75,8 +78,9 @@ export async function GET(request: Request) {
                 const subProduct = asRecord(subRecord?.product)
                 const subCustomer = asRecord(subRecord?.customer)
                 const statusFromPolar = asString(subRecord?.status)?.toLowerCase() ?? null
+                const statusForPeriod = statusFromPolar || normalizedStatus
                 periodEnd =
-                    normalizedStatus === 'trialing'
+                    statusForPeriod === 'trialing'
                         ? (sub.trialEnd ?? sub.currentPeriodEnd ?? null)
                         : (sub.currentPeriodEnd ?? null)
                 subscriptionPlan =

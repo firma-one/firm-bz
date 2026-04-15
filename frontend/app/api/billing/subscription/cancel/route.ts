@@ -5,8 +5,6 @@ import { createClient } from '@/utils/supabase/server'
 import { getActiveSubscriptionForFirm } from '@/lib/billing/active-billing-subscription'
 import { resolveBillingAnchorFirmId } from '@/lib/billing/billing-group'
 import { refreshBillingPlanForFirmGroupUsers } from '@/lib/billing/billing-user-session-sync'
-import { mapPolarSubscriptionStatusToDb } from '@/lib/billing/polar-webhook-sync'
-
 function polarServer(): 'production' | 'sandbox' {
     return process.env.POLAR_SERVER === 'production' ? 'production' : 'sandbox'
 }
@@ -63,7 +61,6 @@ export async function POST(request: NextRequest) {
     await prisma.subscription.update({
         where: { id: activeSub.id },
         data: {
-            status: mapPolarSubscriptionStatusToDb(updated.status),
             currentPeriodEnd: updated.currentPeriodEnd ?? null,
         },
     })

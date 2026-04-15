@@ -2,7 +2,10 @@ import { createAdminClient } from '@/utils/supabase/admin'
 import { prisma } from '@/lib/prisma'
 import { isWorkspaceOnboardingComplete } from '@/lib/onboarding/workspace-onboarding-complete'
 import { resolveBillingAnchorFirmId } from '@/lib/billing/billing-group'
-import { getActiveSubscriptionForFirm } from '@/lib/billing/active-billing-subscription'
+import {
+    getActiveSubscriptionForFirm,
+    subscriptionAccessStatusLabel,
+} from '@/lib/billing/active-billing-subscription'
 
 const SYS_ADMIN_ROLE = 'SYS_ADMIN'
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -319,7 +322,7 @@ export async function buildUserDataMap(identifier: string): Promise<UserDataMapR
                 anchorExists,
                 activeSubscription: activeSubscription
                     ? {
-                          status: activeSubscription.status,
+                          status: subscriptionAccessStatusLabel(activeSubscription),
                           plan: activeSubscription.plan,
                           pricingModel: activeSubscription.pricingModel,
                           polarCustomerId: activeSubscription.polarCustomerId,

@@ -18,13 +18,13 @@ import { mergeLeanAppMetadata } from '@/lib/auth/supabase-jwt-metadata'
  *
  * **Not** “only an INSERT into `platform.firms`”. The HTTP handler always does a small **sync bundle**:
  * - **Firm row** create/reuse (`platform.firms`) and, on first create, **membership** (`firm_member` via `createFirmWithMember`)
- * - **Anchor billing (shell path)**: `ensurePolarFreePlanForSandboxFirm` — Polar **API** creates/resolves the customer, then on success inserts **`platform.subscriptions`** (FREE) + firm billing fields (not webhook-driven for this step)
+ * - **Anchor billing (Stage 1 sync)**: `ensurePolarFreePlanForSandboxFirm` — Polar **API** creates/resolves the customer, then on success writes **`platform.subscriptions`** (FREE) + firm billing fields (not webhook-driven). Uses billing anchor `firmId` only; **`connectionId` is not passed to Polar** (Drive routing only).
  * - **Firm.settings** merge (`onboarding` flags / stage)
  * - **Default firm** for the user, **Supabase** `user_metadata` / `app_metadata`, **invalidateUserSettingsPlus`
  * - **With `connectionId`**: also link `firm.connectorId` + `connector.firmId`
  *
  * **Inngest** (`sandbox.provision.requested` → `provisionSandboxHierarchyForFirm`, then chained jobs) does the **heavy async** work:
- * Google Drive folders, **clients / engagements / contacts** in DB, connector org map, sample files, indexing; same Polar API→DB free plan helper runs again if Stage 1 was skipped (idempotent), final “completed” firm onboarding flags.
+ * Google Drive folders, **clients / engagements / contacts** in DB, connector org map, sample files, indexing; final “completed” firm onboarding flags. **Does not** call `ensurePolarFreePlanForSandboxFirm` (free plan is sync Stage 1 only).
  *
  * **A) Shell only** (omit `connectionId`) — sync bundle above, **no** Inngest. Firm onboarding is set to
  * `stage: 'awaiting_subscribe'` (flow v3: subscribe before Drive).
@@ -299,6 +299,19 @@ export async function POST(request: NextRequest) {
       user,
       connectionId,
       resolvedFirmName,
+    })
+
+    const customerNameWithConnector =
+      [user.user_metadata?.first_name, user.user_metadata?.last_name]
+        .map((x) => (typeof x === 'string' ? x.trim() : ''))
+        .filter(Boolean)
+        .join(' ')
+        .trim() || null
+    await ensurePolarFreePlanForSandboxFirm({
+      firmId: firm.id,
+      userEmail: user.email || '',
+      customerName: customerNameWithConnector,
+      userId: user.id,
     })
 
     await markSandboxProvisioningQueuedOnFirm(firm)

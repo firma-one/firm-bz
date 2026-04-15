@@ -32,10 +32,8 @@ export async function GET() {
     const onboarding = (settings.onboarding as Record<string, unknown> | undefined) ?? {}
     const subscription = (onboarding.subscription as Record<string, unknown> | undefined) ?? {}
     const paidPlan = subscription.paidPlan
-    const subscriptionStatus = (activeSub?.status ?? 'none').toLowerCase()
     const hasPaid =
-        activeSub?.pricingModel === 'recurring_subscription' &&
-        ['active', 'trialing', 'past_due'].includes(subscriptionStatus)
+        Boolean(activeSub?.active) && activeSub?.pricingModel === 'recurring_subscription'
 
     return NextResponse.json({
         shouldShow: paidPlan === 'skipped' && !hasPaid,

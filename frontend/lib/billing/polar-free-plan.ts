@@ -1,10 +1,12 @@
 import { Polar } from '@polar-sh/sdk'
 import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
+import { resolveBillingAnchorFirmId } from '@/lib/billing/billing-group'
 import { type PricingModel, pricingModelFromRecurringFlag } from '@/lib/billing/pricing-model'
 import { getDefaultCapsForPlanColumn } from '@/lib/billing/plan-default-caps'
 import { refreshBillingPlanForFirmGroupUsers } from '@/lib/billing/billing-user-session-sync'
 import { resolveSubscriptionAuditUserId } from '@/lib/billing/subscription-audit'
+import { subscriptionAccessStatusLabel } from '@/lib/billing/active-billing-subscription'
 
 type PolarProduct = Awaited<ReturnType<Polar['products']['get']>>
 
@@ -61,7 +63,7 @@ async function loadPolarFreeCatalogProduct(polar: Polar, productId: string): Pro
 
 /** Writes firm + `platform.subscriptions` after Polar API has returned a stable `customerId` (not webhook-driven). */
 async function persistFirmWithLifetimeFreePlan(
-    firmId: string,
+    anchorFirmId: string,
     customerId: string,
     actorUserId: string | null | undefined,
     polarProduct: PolarProduct
@@ -72,9 +74,78 @@ async function persistFirmWithLifetimeFreePlan(
     const polarPlanMetadataFlat = polarEntityToJsonSnapshot(polarProduct.metadata ?? {})
     const sandboxCaps = getDefaultCapsForPlanColumn('sandbox')
     await prisma.$transaction(async (tx) => {
-        const auditUserId = await resolveSubscriptionAuditUserId(tx, firmId, actorUserId)
+        const auditUserId = await resolveSubscriptionAuditUserId(tx, anchorFirmId, actorUserId)
+
+        const activePaidPolar = await tx.subscription.findFirst({
+            where: {
+                firmId: anchorFirmId,
+                active: true,
+                deletedAt: null,
+                polarSubscriptionId: { not: null },
+            },
+            select: { id: true },
+        })
+        if (activePaidPolar) {
+            logger.warn('[polar-free-plan] persistFirmWithLifetimeFreePlan skipped: active paid Polar subscription', {
+                anchorFirmId,
+            })
+            return
+        }
+
+        const activeRecurring = await tx.subscription.findFirst({
+            where: {
+                firmId: anchorFirmId,
+                active: true,
+                deletedAt: null,
+                pricingModel: 'recurring_subscription',
+            },
+            select: { id: true },
+        })
+        if (activeRecurring) {
+            logger.warn('[polar-free-plan] persistFirmWithLifetimeFreePlan skipped: active recurring subscription', {
+                anchorFirmId,
+            })
+            return
+        }
+
+        const existingActiveSameCustomer = await tx.subscription.findFirst({
+            where: {
+                firmId: anchorFirmId,
+                active: true,
+                deletedAt: null,
+                polarCustomerId: customerId,
+            },
+            select: { id: true, settings: true, plan: true },
+        })
+        if (existingActiveSameCustomer) {
+            const settings = (existingActiveSameCustomer.settings as Record<string, unknown> | null) ?? {}
+            const metadata =
+                settings && typeof settings.metadata === 'object' && settings.metadata !== null
+                    ? (settings.metadata as Record<string, unknown>)
+                    : {}
+            const metaProductId = typeof metadata.polarProductId === 'string' ? metadata.polarProductId : null
+            const alreadyFreeProduct =
+                metaProductId === polarProduct.id ||
+                (metadata.source === 'polar_free_product_sync' &&
+                    existingActiveSameCustomer.plan?.trim() === planLabel)
+            if (alreadyFreeProduct) {
+                await tx.firm.update({
+                    where: { id: anchorFirmId },
+                    data: {
+                        billingActiveEngagementCap: sandboxCaps.activeEngagementCap,
+                        billingGroupFirmCap: sandboxCaps.firmGroupCap,
+                        billingCapsLocked: false,
+                    },
+                })
+                logger.info('[polar-free-plan] Free plan row already active for customer; refreshed firm caps only', {
+                    anchorFirmId,
+                })
+                return
+            }
+        }
+
         await tx.firm.update({
-            where: { id: firmId },
+            where: { id: anchorFirmId },
             data: {
                 billingActiveEngagementCap: sandboxCaps.activeEngagementCap,
                 billingGroupFirmCap: sandboxCaps.firmGroupCap,
@@ -83,7 +154,12 @@ async function persistFirmWithLifetimeFreePlan(
         })
 
         await tx.subscription.updateMany({
-            where: { firmId, active: true, deletedAt: null },
+            where: {
+                firmId: anchorFirmId,
+                active: true,
+                deletedAt: null,
+                polarSubscriptionId: null,
+            },
             data: {
                 active: false,
                 deactivatedAt: new Date(),
@@ -93,9 +169,8 @@ async function persistFirmWithLifetimeFreePlan(
 
         await tx.subscription.create({
             data: {
-                firmId,
+                firmId: anchorFirmId,
                 provider: 'polar',
-                status: 'active',
                 plan: planLabel,
                 pricingModel,
                 currentPeriodEnd: null,
@@ -126,7 +201,7 @@ async function assertFirmBillingLinked(firmId: string, expectedPricingModel: Pri
             polarCustomerId: true,
             polarSubscriptionId: true,
             polarOrderId: true,
-            status: true,
+            active: true,
             plan: true,
             pricingModel: true,
         },
@@ -136,16 +211,15 @@ async function assertFirmBillingLinked(firmId: string, expectedPricingModel: Pri
         hasPolarCustomerId: Boolean(sub?.polarCustomerId),
         hasPolarSubscriptionId: Boolean(sub?.polarSubscriptionId),
         hasPolarOrderId: Boolean(sub?.polarOrderId),
-        subscriptionStatus: sub?.status ?? null,
+        subscriptionStatus: subscriptionAccessStatusLabel(sub),
         subscriptionPlan: sub?.plan ?? null,
         pricingModel: sub?.pricingModel ?? null,
     })
     if (!sub?.polarCustomerId) {
         throw new Error('Firm billing link verification failed: missing polarCustomerId on active subscription after Polar setup.')
     }
-    const st = (sub.status ?? '').toLowerCase()
-    if (!st || st === 'none') {
-        throw new Error('Firm billing link verification failed: subscription status is missing or none after Polar setup.')
+    if (!sub.active) {
+        throw new Error('Firm billing link verification failed: active subscription row is not active after Polar setup.')
     }
     if (!sub.plan?.trim()) {
         throw new Error('Firm billing link verification failed: plan not set on subscription after Polar setup.')
@@ -155,6 +229,37 @@ async function assertFirmBillingLinked(firmId: string, expectedPricingModel: Pri
             `Firm billing link verification failed: pricingModel must match Polar product (${expectedPricingModel}), got ${sub.pricingModel ?? 'null'}.`
         )
     }
+}
+
+async function shouldSkipFreeProvisioningForActivePaid(anchorFirmId: string): Promise<boolean> {
+    const paidPolar = await prisma.subscription.findFirst({
+        where: {
+            firmId: anchorFirmId,
+            active: true,
+            deletedAt: null,
+            polarSubscriptionId: { not: null },
+        },
+        select: { id: true },
+    })
+    if (paidPolar) {
+        logger.info('[polar-free-plan] Skipping free provision: active paid Polar subscription row', { anchorFirmId })
+        return true
+    }
+
+    const recurring = await prisma.subscription.findFirst({
+        where: {
+            firmId: anchorFirmId,
+            active: true,
+            deletedAt: null,
+            pricingModel: 'recurring_subscription',
+        },
+        select: { id: true },
+    })
+    if (recurring) {
+        logger.info('[polar-free-plan] Skipping free provision: active recurring subscription', { anchorFirmId })
+        return true
+    }
+    return false
 }
 
 /**
@@ -198,10 +303,17 @@ export async function ensurePolarFreePlanForSandboxFirm(params: {
             'Set POLAR_FREE_PRODUCT_ID to your Polar free/sandbox product id. Plan name, pricing model, and a full product snapshot are read from the Polar API (products.get) and written to the database.'
         )
     }
+
+    const anchorFirmId = await resolveBillingAnchorFirmId(params.firmId)
+    if (await shouldSkipFreeProvisioningForActivePaid(anchorFirmId)) {
+        return
+    }
+
     const server = polarServer()
 
     logger.info('[polar-free-plan] Starting free-plan provisioning', {
         firmId: params.firmId,
+        anchorFirmId,
         polarServer: server,
         userEmailDomain: params.userEmail.includes('@') ? params.userEmail.split('@')[1] : 'unknown',
     })
@@ -232,10 +344,13 @@ export async function ensurePolarFreePlanForSandboxFirm(params: {
     }
 
     if (state) {
-        await persistFirmWithLifetimeFreePlan(params.firmId, state.id, params.userId, polarProduct)
-        logger.info('[polar-free-plan] Linked existing Polar customer to lifetime free plan', { firmId: params.firmId })
-        await assertFirmBillingLinked(params.firmId, expectedPricingModel)
-        await refreshBillingPlanForFirmGroupUsers(params.firmId)
+        await persistFirmWithLifetimeFreePlan(anchorFirmId, state.id, params.userId, polarProduct)
+        logger.info('[polar-free-plan] Linked existing Polar customer to lifetime free plan', {
+            firmId: params.firmId,
+            anchorFirmId,
+        })
+        await assertFirmBillingLinked(anchorFirmId, expectedPricingModel)
+        await refreshBillingPlanForFirmGroupUsers(anchorFirmId)
         return
     }
 
@@ -273,8 +388,8 @@ export async function ensurePolarFreePlanForSandboxFirm(params: {
     }
 
     const refreshed = await polar.customers.getStateExternal({ externalId: params.firmId })
-    await persistFirmWithLifetimeFreePlan(params.firmId, refreshed.id, params.userId, polarProduct)
-    await assertFirmBillingLinked(params.firmId, expectedPricingModel)
-    logger.info('[polar-free-plan] Lifetime free plan provisioning complete', { firmId: params.firmId })
-    await refreshBillingPlanForFirmGroupUsers(params.firmId)
+    await persistFirmWithLifetimeFreePlan(anchorFirmId, refreshed.id, params.userId, polarProduct)
+    await assertFirmBillingLinked(anchorFirmId, expectedPricingModel)
+    logger.info('[polar-free-plan] Lifetime free plan provisioning complete', { firmId: params.firmId, anchorFirmId })
+    await refreshBillingPlanForFirmGroupUsers(anchorFirmId)
 }
