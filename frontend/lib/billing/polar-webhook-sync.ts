@@ -242,7 +242,6 @@ export async function syncFirmSubscriptionFromPolarEvent(
             await tx.subscription.update({
                 where: { id: existing.id },
                 data: {
-                    status,
                     plan: details.planName ?? null,
                     provider: 'polar',
                     pricingModel: recurringModel,
@@ -261,7 +260,6 @@ export async function syncFirmSubscriptionFromPolarEvent(
             await tx.subscription.create({
                 data: {
                     firmId: anchorFirmId,
-                    status,
                     plan: details.planName ?? null,
                     provider: 'polar',
                     pricingModel: recurringModel,

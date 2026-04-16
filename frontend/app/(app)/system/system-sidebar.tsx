@@ -49,13 +49,13 @@ export function SystemSidebar() {
         return name.charAt(0).toUpperCase()
     }
 
+    const { isCollapsed } = useSidebar()
+
     const navigation = [
         { name: 'Home', href: '/', icon: Home, external: true },
         { name: 'Dashboard', href: '/d', icon: LayoutDashboard, external: true },
         { name: 'Admin', href: '/system', icon: Wrench, external: false },
     ]
-
-    const { isCollapsed } = useSidebar()
 
     return (
         <div className={`fixed inset-y-0 left-0 z-40 bg-white border-r border-slate-200 flex flex-col transition-all duration-300 ${isCollapsed ? 'w-16' : 'w-64'}`}>

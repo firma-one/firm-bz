@@ -1,6 +1,9 @@
 import { Polar } from '@polar-sh/sdk'
 import { prisma } from '@/lib/prisma'
-import { getActiveSubscriptionForFirm } from '@/lib/billing/active-billing-subscription'
+import {
+    getActiveSubscriptionForFirm,
+    subscriptionAccessStatusLabel,
+} from '@/lib/billing/active-billing-subscription'
 import { resolveBillingAnchorFirmId } from '@/lib/billing/billing-group'
 
 export type BillingProfilePayload = {
@@ -114,13 +117,14 @@ async function buildPayload(
 
     const activeSub = await getActiveSubscriptionForFirm(anchor.id)
     let periodEnd = activeSub?.currentPeriodEnd ?? null
-    const isTrialing = (activeSub?.status ?? '').toLowerCase() === 'trialing'
-    if (isTrialing && !periodEnd && activeSub?.polarSubscriptionId) {
+    const polarSubscriptionId = activeSub?.polarSubscriptionId ?? null
+    const shouldFetchPolarPeriod = Boolean(polarSubscriptionId) && !periodEnd
+    if (shouldFetchPolarPeriod && polarSubscriptionId) {
         const token = process.env.POLAR_ACCESS_TOKEN?.trim()
         if (token) {
             try {
                 const polar = new Polar({ accessToken: token, server: polarServer() })
-                const sub = await polar.subscriptions.get({ id: activeSub.polarSubscriptionId })
+                const sub = await polar.subscriptions.get({ id: polarSubscriptionId })
                 periodEnd = sub.trialEnd ?? sub.currentPeriodEnd ?? null
             } catch {
                 // Best-effort fallback only; leave period end null if Polar fetch fails.
@@ -136,7 +140,7 @@ async function buildPayload(
             name: anchor.name,
             slug: anchor.slug,
             sandboxOnly: anchor.sandboxOnly,
-            subscriptionStatus: activeSub?.status ?? null,
+            subscriptionStatus: subscriptionAccessStatusLabel(activeSub),
             subscriptionPlan: activeSub?.plan ?? null,
             pricingModel: activeSub?.pricingModel ?? null,
             subscriptionCurrentPeriodEnd: periodEnd,

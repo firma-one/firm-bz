@@ -3,6 +3,7 @@
 import { headers } from 'next/headers'
 
 import { serverActionWrapper, ActionResponse } from '@/lib/server-action-wrapper'
+import { prisma } from '@/lib/prisma'
 
 interface SendOTPResult {
     userExists: boolean
@@ -69,16 +70,29 @@ export async function sendOTPWithTurnstile(
         const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
         const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
+        const normalizedEmail = email.trim().toLowerCase()
         let userExists = false
 
+        // In signup flow, short-circuit if account already exists and avoid sending OTP.
+        if (checkExistingFirst) {
+            const existingUsers = await prisma.$queryRaw<Array<{ id: string }>>`
+                SELECT id::text
+                FROM auth.users
+                WHERE lower(email) = ${normalizedEmail}
+                LIMIT 1
+            `
+            userExists = existingUsers.length > 0
+            if (userExists) {
+                console.log('[sendOTPWithTurnstile] Existing account detected; skipping OTP send')
+                return { userExists: true }
+            }
+        }
+
         // Single OTP request to avoid Supabase rate limit ("For security purposes, you can only request this after X seconds").
-        // When checkExistingFirst is true we used to call signInWithOtp twice (shouldCreateUser: false then true), which
-        // triggered rate limiting in production. Now we send once with shouldCreateUser: true; we no longer detect
-        // existing users before sending, so "Welcome back!" is not shown for returning users (they still get the OTP).
-        console.log('[sendOTPWithTurnstile] Sending OTP (signInWithOtp)...', checkExistingFirst ? 'single call (no pre-check)' : '')
+        console.log('[sendOTPWithTurnstile] Sending OTP (signInWithOtp)...')
         const sStart = Date.now()
         const { error } = await supabase.auth.signInWithOtp({
-            email,
+            email: normalizedEmail,
             options: {
                 shouldCreateUser: true
             }

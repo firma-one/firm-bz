@@ -202,7 +202,7 @@ export const populateSandboxSampleFiles = inngest.createFunction(
     }
 )
 
-/** Async half of onboarding Stage 1 (sandbox): Drive + DB hierarchy + documents (after create-sandbox sync). */
+/** Async sandbox provisioning: Drive + DB hierarchy + sample files (after create-sandbox sync). Polar free plan is sync-only on create-sandbox. */
 export const provisionSandboxHierarchy = inngest.createFunction(
     { id: 'provision-sandbox-hierarchy' },
     { event: 'sandbox.provision.requested' },

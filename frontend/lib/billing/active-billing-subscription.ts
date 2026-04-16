@@ -9,6 +9,12 @@ export async function getActiveSubscriptionForFirm(firmId: string): Promise<Subs
     })
 }
 
+/** Replaces removed `platform.subscriptions.status` for API/UI: access follows `active`. */
+export function subscriptionAccessStatusLabel(sub: Pick<Subscription, 'active'> | null): string | null {
+    if (!sub?.active) return null
+    return 'active'
+}
+
 export async function findFirmIdByPolarCustomerId(customerId: string): Promise<string | null> {
     const row = await prisma.subscription.findFirst({
         where: { polarCustomerId: customerId, deletedAt: null },

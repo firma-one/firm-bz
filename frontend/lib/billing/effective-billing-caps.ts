@@ -1,5 +1,8 @@
 import { prisma } from '@/lib/prisma'
-import { getActiveSubscriptionForFirm } from '@/lib/billing/active-billing-subscription'
+import {
+    getActiveSubscriptionForFirm,
+    subscriptionAccessStatusLabel,
+} from '@/lib/billing/active-billing-subscription'
 import {
     resolveBillingAnchorFirmId,
     countFirmsInBillingGroup,
@@ -54,7 +57,7 @@ export async function loadAnchorForCaps(firmId: string): Promise<AnchorCapsRow |
     const sub = await getActiveSubscriptionForFirm(anchorId)
     return {
         ...firm,
-        subscriptionStatus: sub?.status ?? null,
+        subscriptionStatus: subscriptionAccessStatusLabel(sub),
         subscriptionPlan: sub?.plan ?? null,
         pricingModel: sub?.pricingModel ?? null,
     }

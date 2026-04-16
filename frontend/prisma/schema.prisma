@@ -244,7 +244,6 @@ model Subscription {
   deactivatedAt      DateTime? @db.Timestamptz(6)
   firmId             String    @db.Uuid
   provider           String?   @default("polar")
-  status             String    @default("active")
   plan               String?
   /** `recurring_subscription` | `one_time_purchase` — mirrors Polar product recurrence for caps/UI. */
   pricingModel       String?
