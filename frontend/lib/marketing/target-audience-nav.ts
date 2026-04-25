@@ -111,13 +111,17 @@ export const contactMegaMenuItems = [
 export const targetAudienceScrollMarginClass = "scroll-mt-28 lg:scroll-mt-32"
 
 export const audienceRoles = [
-  { id: "audience-fractional-executives", label: "Fractional Executives" },
-  { id: "audience-marketing-agencies", label: "Marketing Agencies" },
-  { id: "audience-strategic-consultants", label: "Strategic Consultants" },
-  { id: "audience-strategic-advisory", label: "Advisory Partners" },
-  { id: "audience-management-consulting", label: "Management Consulting" },
-  { id: "audience-audit-compliance", label: "Audit & Compliance" },
-  { id: "audience-corporate-trainers", label: "Corporate Trainers" },
+  { id: "audience-fractional-cmo", label: "Fractional CMO", href: "/landing/fractional-cmos" },
+  { id: "audience-fulltime-cmo", label: "Fulltime CMO", href: "/landing/fulltime-cmos" },
+  { id: "audience-marketing-agencies", label: "Marketing Agencies", href: "/landing/marketing-agencies" },
+  { id: "audience-fractional-cfo", label: "Fractional CFO", href: `#audience-fractional-cfo` },
+  { id: "audience-fractional-caio", label: "Fractional CAIO", href: `#audience-fractional-caio` },
+  { id: "audience-fractional-coo", label: "Fractional COO", href: `#audience-fractional-coo` },
+  { id: "audience-strategic-consultants", label: "Strategic Consultants", href: `#audience-strategic-consultants` },
+  { id: "audience-strategic-advisory", label: "Advisory Partners", href: `#audience-strategic-advisory` },
+  { id: "audience-management-consulting", label: "Management Consulting", href: `#audience-management-consulting` },
+  { id: "audience-audit-compliance", label: "Audit & Compliance", href: `#audience-audit-compliance` },
+  { id: "audience-corporate-trainers", label: "Corporate Trainers", href: `#audience-corporate-trainers` },
 ] as const
 
 export type UseCaseVariant =

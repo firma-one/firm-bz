@@ -1,0 +1,68 @@
+---
+title: '"CC Me on the Email" Is Not an Access Control Strategy'
+date: '2025-08-04'
+excerpt: >-
+  Using email forwarding and CC fields to manage document access is a workflow antipattern that creates version chaos, permission sprawl, and zero auditability. Here's what to do instead.
+category: best-practices
+tags:
+  - email
+  - access-control
+  - document-management
+  - workflow
+image: /images/blog/blog-7.jpg
+id: best-practices-cc-me-not-access-control-2025-08-04
+author: Firma Editorial
+authorTitle: Document Security Expert
+focusKeyword: email CC document access control problems
+tldr: '"CC me" is a common workaround for managing who gets access to documents — but it''s not access control. It distributes frozen document copies without creating any audit trail, version hierarchy, or revocation mechanism.'
+---
+
+# "CC Me on the Email" Is Not an Access Control Strategy
+
+"CC me on that email so I have the document too." It's one of the most common requests in a marketing team — and one of the most problematic document management behaviours.
+
+CC-based document distribution feels like access control. You're deciding who gets the file. You're managing who has it. But from a document management perspective, it's creating a new class of problems with every send.
+
+## What "CC Me" Actually Does
+
+When you CC someone on an email with a document attachment, you:
+1. Create a new copy of the document in their inbox
+2. Grant them permanent, uncontrolled access to that specific version
+3. Create no record in your system of who has the document
+4. Create no mechanism to update or revoke that copy
+5. Duplicate the version problem — they now have version N, and when you make revisions, they won't automatically receive version N+1
+
+This is the opposite of what access control should do. Good access control centralises knowledge of who has what, creates a mechanism for updating and revoking, and maintains a single source of truth.
+
+## The Scale of the Problem
+
+In a typical marketing agency, how many document copies exist in inboxes that the agency doesn't know about? Consider:
+
+- Every client email with an attachment
+- Every internal team email with an attached draft
+- Every CC'd email from a meeting follow-up
+- Every forwarded email chain that included a document
+- Every "here's the latest version" email that wasn't the actual latest version
+
+The answer is: hundreds, possibly thousands, of document fragments scattered across inboxes with no central record, no version hierarchy, and no revocation mechanism.
+
+## The Alternative: Portal-First, Email-Second
+
+The structural solution is to treat email as a notification channel, not a delivery channel. The document lives in the portal. The email says "your document is ready in your portal." The recipient clicks through to the portal, where they see the current version with appropriate permissions.
+
+When you update the document, the portal reflects the update automatically. You don't need to send a new email. There are no stale inbox copies. Everyone with access sees the current version through the single source of truth.
+
+When the engagement ends, you close the portal. All access ends. The inbox copies still exist — that's unavoidable — but new access is no longer being created, and the source of truth is controlled.
+
+---
+
+## Frequently Asked Questions
+
+### Why is CC-based document sharing a problem?
+CC-based sharing distributes frozen document copies to inboxes with no central tracking, no version hierarchy, and no revocation mechanism. Each CC creates a permanent, uncontrolled copy of the document in the recipient's possession — the opposite of what proper access control requires.
+
+### What should replace email attachment sharing for marketing agencies?
+Portal-first delivery: documents live in a central client portal, and emails serve as notifications pointing to the portal. This keeps documents in a single managed location, eliminates version fragmentation, and provides access control and revocation capability.
+
+### Can you revoke access to a document that was sent as an email attachment?
+No — once an email attachment is delivered, it cannot be recalled or revoked. The recipient has a permanent local copy. This is one of the fundamental limitations of email as a document management system and the primary reason professional document delivery should route through a portal rather than direct email.

@@ -5,7 +5,7 @@
       "name": "frontend",
       "runtimeExecutable": "bash",
       "runtimeArgs": ["-c", "source ~/.nvm/nvm.sh && nvm use 24.3.0 && npm --prefix frontend run dev"],
-      "port": 3000,
+      "port": 3001,
       "autoPort": true
     },
     {

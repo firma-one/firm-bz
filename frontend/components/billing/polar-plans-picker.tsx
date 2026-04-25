@@ -18,7 +18,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { EmailInline } from '@/components/ui/email-inline'
 import { PLATFORM_SUPPORT_EMAIL } from '@/config/platform-emails'
 import { formatSubscriptionStatus } from '@/lib/billing/subscription-display'
-import { readCheckoutIntent, type CheckoutPlanName } from '@/lib/marketing/checkout-intent'
+import { persistCheckoutIntent, readCheckoutIntent, type CheckoutPlanName } from '@/lib/marketing/checkout-intent'
 import { cn } from '@/lib/utils'
 import { Check, ChevronDown, ChevronUp, Clock, CreditCard, ExternalLink, Loader2, Rows3, Ticket } from 'lucide-react'
 import { EVENTS, Joyride, STATUS, type Controls, type EventData } from 'react-joyride'
@@ -1455,6 +1455,10 @@ export function PolarPlansPicker({
                                                             : polarBillingCtaButtonClass
                                                     )}
                                                     onClick={() => {
+                                                        persistCheckoutIntent({
+                                                            plan: row.name as CheckoutPlanName,
+                                                            interval: period === 'annual' ? 'annual' : 'monthly',
+                                                        })
                                                         window.location.assign(checkoutHref)
                                                     }}
                                                 >
@@ -1799,6 +1803,10 @@ export function PolarPlansPicker({
                                                     blueAccentTrial ? polarBillingPeachCtaClass : polarBillingCtaButtonClass
                                                 )}
                                                 onClick={() => {
+                                                    persistCheckoutIntent({
+                                                        plan: plan.name as CheckoutPlanName,
+                                                        interval: effectiveCatalogInterval(plan) === 'year' ? 'annual' : 'monthly',
+                                                    })
                                                     window.location.assign(checkoutHref)
                                                 }}
                                             >
