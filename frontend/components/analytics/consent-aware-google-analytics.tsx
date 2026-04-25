@@ -58,24 +58,27 @@ export function ConsentAwareGoogleAnalytics() {
     s1.src = src
     s1.setAttribute('data-fm-ga', 'loader')
     s1.setAttribute('data-fm-ga-id', gaId)
-    document.head.appendChild(s1)
 
-    const s2 = document.createElement('script')
-    s2.setAttribute('data-fm-ga', 'inline')
-    s2.setAttribute('data-fm-ga-id', gaId)
-    s2.textContent = `
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('consent', 'default', {
-        analytics_storage: 'granted',
-        ad_storage: 'denied',
-        ad_user_data: 'denied',
-        ad_personalization: 'denied'
-      });
-      gtag('js', new Date());
-      gtag('config', ${JSON.stringify(gaId)});
-    `
-    document.head.appendChild(s2)
+    s1.onload = () => {
+      const s2 = document.createElement('script')
+      s2.setAttribute('data-fm-ga', 'inline')
+      s2.setAttribute('data-fm-ga-id', gaId)
+      s2.textContent = `
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('consent', 'default', {
+          analytics_storage: 'granted',
+          ad_storage: 'denied',
+          ad_user_data: 'denied',
+          ad_personalization: 'denied'
+        });
+        gtag('js', new Date());
+        gtag('config', ${JSON.stringify(gaId)});
+      `
+      document.head.appendChild(s2)
+    }
+
+    document.head.appendChild(s1)
 
     return () => {
       revokeGoogleAnalyticsClientSide(gaId)
