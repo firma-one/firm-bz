@@ -1,0 +1,30 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "frontend",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "source ~/.nvm/nvm.sh && nvm use 24.3.0 && npm --prefix frontend run dev"],
+      "port": 3001,
+      "autoPort": true
+    },
+    {
+      "name": "backend",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "uvicorn", "backend.app.main:app", "--reload", "--host", "0.0.0.0", "--port", "8000"],
+      "port": 8000
+    },
+    {
+      "name": "prisma-studio",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "db:studio"],
+      "port": 5555
+    },
+    {
+      "name": "inngest-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "inngest:dev"],
+      "port": 8288
+    }
+  ]
+}

@@ -64,10 +64,10 @@ export function BlogCard({ post }: BlogCardProps) {
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <div className="relative mb-6 aspect-video overflow-hidden rounded-[4px] bg-[#f0edee]">
+      <div className="relative mb-6 aspect-video overflow-hidden bg-[#f0edee]">
         <Link
           href={href}
-          className="absolute inset-0 z-0 block rounded-[4px] outline-none focus-visible:ring-2 focus-visible:ring-[#001256] focus-visible:ring-inset"
+          className="absolute inset-0 z-0 block outline-none focus-visible:ring-2 focus-visible:ring-[#001256] focus-visible:ring-inset"
           aria-label={`Open article: ${post.title}`}
         >
           <Image
@@ -83,7 +83,7 @@ export function BlogCard({ post }: BlogCardProps) {
         </Link>
         <div className="pointer-events-none absolute left-4 top-4 z-[1]">
           <span
-            className={`rounded-[2px] bg-white/90 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-[#1b1b1d] shadow-sm backdrop-blur-sm ${H}`}
+            className={`bg-white/90 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-[#1b1b1d] shadow-sm backdrop-blur-sm ${H}`}
           >
             {categoryUpper}
           </span>

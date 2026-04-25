@@ -46,8 +46,8 @@ export async function generateMetadata({ params }: BlogPostPageProps): Promise<M
   return {
     title: `${post.title} | Blog | ${BRAND_NAME}`,
     description: post.excerpt,
-    keywords: [...post.tags, category, 'blog', 'article'],
-    authors: [{ name: BRAND_NAME_TEAM }],
+    keywords: [...(post.focusKeyword ? [post.focusKeyword] : []), ...post.tags, category, 'blog', 'article'],
+    authors: [{ name: post.author || BRAND_NAME_TEAM }],
     robots: {
       index: true,
       follow: true,
@@ -140,6 +140,9 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
 
   const hx = 'font-bold tracking-tight text-[#1b1b1d] [font-family:var(--font-kinetic-headline),system-ui,sans-serif] mt-10 mb-4 first:mt-0'
 
+  const authorName = post.author || BRAND_NAME_TEAM
+  const authorLabel = post.authorTitle || BRAND_NAME
+
   return (
     <>
       <script
@@ -207,14 +210,28 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
                 {BRAND_NAME_TEAM.charAt(0)}
               </div>
               <div>
-                <p className={cn('text-sm font-bold text-[#1b1b1d]', H)}>{BRAND_NAME_TEAM}</p>
-                <p className={cn('text-xs text-[#45474c]', B)}>{BRAND_NAME}</p>
+                <p className={cn('text-sm font-bold text-[#1b1b1d]', H)}>{authorName}</p>
+                <p className={cn('text-xs text-[#45474c]', B)}>{authorLabel}</p>
               </div>
             </div>
           </header>
 
           <div className="grid grid-cols-1 gap-14 lg:grid-cols-12 lg:gap-16">
             <div className="lg:col-span-8">
+              {post.tldr ? (
+                <div
+                  className={cn(
+                    'mb-10 rounded-[4px] border border-[#72ff70]/30 bg-[#f0fff0] px-6 py-5',
+                    B,
+                  )}
+                >
+                  <p className={cn('mb-1 text-[10px] font-bold uppercase tracking-widest text-[#006e16]', H)}>
+                    TL;DR
+                  </p>
+                  <p className="text-sm leading-relaxed text-[#1b1b1d]">{post.tldr}</p>
+                </div>
+              ) : null}
+
               {post.image ? (
                 <div className="relative mb-12 aspect-[21/9] w-full overflow-hidden rounded-[4px] bg-[#f6f3f4] lg:mb-16">
                   <Image

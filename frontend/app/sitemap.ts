@@ -74,13 +74,13 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.8,
     }))
 
-    // Blog post pages
+    // Blog post pages — pillar posts get higher priority
     const posts = getAllPosts()
     const blogPostPages: MetadataRoute.Sitemap = posts.map((post) => ({
       url: `${baseUrl}${BLOG_BASE_PATH}/${post.category}/${post.slug}`,
       lastModified: new Date(post.date),
       changeFrequency: 'weekly',
-      priority: 0.7,
+      priority: post.pillar ? 0.9 : 0.7,
     }))
 
     return [...staticPages, ...categoryPages, ...blogPostPages]

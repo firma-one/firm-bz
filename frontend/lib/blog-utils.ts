@@ -47,7 +47,7 @@ export function getAllPosts(): BlogPost[] {
     return []
   }
 
-  const categories = ['comparisons', 'use-cases', 'guides', 'product']
+  const categories = ['comparisons', 'use-cases', 'guides', 'product', 'best-practices']
   const allPosts: BlogPost[] = []
 
   categories.forEach((category) => {
@@ -79,6 +79,12 @@ export function getAllPosts(): BlogPost[] {
           image: data.image || `/images/blog/${category}-default.jpg`,
           content,
           readingTime: getReadingTime(content),
+          author: data.author,
+          authorTitle: data.authorTitle,
+          focusKeyword: data.focusKeyword,
+          series: data.series,
+          tldr: data.tldr,
+          pillar: data.pillar ?? false,
         } as BlogPost
       })
 
@@ -128,9 +134,36 @@ export function getPostBySlug(category: string, slug: string): BlogPost | null {
     image: data.image || `/images/blog/${category}-default.jpg`,
     content,
     readingTime: getReadingTime(content),
+    author: data.author,
+    authorTitle: data.authorTitle,
+    focusKeyword: data.focusKeyword,
+    series: data.series,
+    tldr: data.tldr,
+    pillar: data.pillar ?? false,
   } as BlogPost
 }
 
 export function getAllCategories(): string[] {
-  return ['comparisons', 'use-cases', 'guides', 'product']
+  return ['comparisons', 'use-cases', 'guides', 'product', 'best-practices']
+}
+
+// Map audience types to relevant blog tags for filtering
+const audienceTagMap: Record<string, string[]> = {
+  'fractional-cmo': ['fractional-cmo', 'cmo', 'consultants', 'client-portal', 'perception', 'branding'],
+  'fulltime-cmo': ['fulltime-cmo', 'cmo', 'alignment', 'strategy', 'team', 'marketing-leadership'],
+  'marketing-agencies': ['agencies', 'client-delivery', 'client-portal', 'competitive-advantage', 'pricing'],
+}
+
+export function getPostsByAudienceId(audienceId: string, limit = 3): BlogPost[] {
+  const tags = audienceTagMap[audienceId]
+  if (!tags) return []
+
+  try {
+    return getAllPosts()
+      .filter(post => post.tags.some(tag => tags.includes(tag)))
+      .slice(0, limit)
+  } catch (error) {
+    console.error(`Error fetching posts for audience ${audienceId}:`, error)
+    return []
+  }
 }

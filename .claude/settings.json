@@ -1,9 +1,0 @@
-{
-  "env": {
-    "ANTHROPIC_BASE_URL": "http://localhost:8080",
-    "ANTHROPIC_AUTH_TOKEN": "test",
-    "ANTHROPIC_MODEL": "sonnet",
-    "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-sonnet-4-5-thinking"
-  }
-}
-

@@ -40,6 +40,7 @@ import {
   SquareFunction,
 } from "lucide-react"
 import { GoogleDriveProductMark } from "@/components/ui/google-drive-icon"
+import { BrandMarkIcon } from "@/components/brand/BrandMarkIcon"
 import { Button } from "@/components/ui/button"
 import { Header } from "@/components/layout/Header"
 import { Footer } from "@/components/layout/Footer"
@@ -289,6 +290,7 @@ export function LandingPage({
   const activeModal = controlled ? activeModalProp! : activeModalInternal
   const setActiveModal = controlled ? onActiveModalChange! : setActiveModalInternal
   const [currentSlide, setCurrentSlide] = useState(0)
+  const [currentTaglineIndex, setCurrentTaglineIndex] = useState(0)
 
   const hideTrustSectionAfterModal = useSyncExternalStore(
     (onStoreChange) => {
@@ -486,6 +488,13 @@ export function LandingPage({
     return () => clearInterval(timer)
   }, [slides.length])
 
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTaglineIndex((prev) => (prev + 1) % 2)
+    }, 4000)
+    return () => clearInterval(timer)
+  }, [])
+
   const handleSlideChange = (index: number) => {
     setCurrentSlide(index)
   }
@@ -522,16 +531,44 @@ export function LandingPage({
             </FadeIn>
 
                 <FadeIn delay={80}>
-                  <h2 className={t.heroTitle}>
-                Turn Your{" "}
-                <span className="inline-flex items-center gap-3 align-bottom">
-                  <GoogleDriveProductMark className="mb-2 h-10 w-10 shrink-0 md:h-14 md:w-14" />
-                  Google Drive
-                </span>{" "}
-                <br />
-                into a Professional <br />
-                    <span className={t.heroGradient}>Client Portal.</span>
-              </h2>
+                  <div className="h-32 md:h-40 lg:h-48 flex items-center">
+                    <AnimatePresence mode="wait">
+                      {currentTaglineIndex === 0 ? (
+                        <motion.h2
+                          key="tagline-0"
+                          className={t.heroTitle}
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -20 }}
+                          transition={{ duration: 0.6, ease: "easeInOut" }}
+                        >
+                          A premium offering demands{" "}
+                          <span className="inline-flex items-center justify-center gap-3 align-middle">
+                            <BrandMarkIcon className="h-10 w-10 md:h-14 md:w-14 shrink-0" />
+                          </span>{" "}
+                          <span className={t.heroGradient}>A premium client showcase</span>
+                        </motion.h2>
+                      ) : (
+                        <motion.h2
+                          key="tagline-1"
+                          className={t.heroTitle}
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -20 }}
+                          transition={{ duration: 0.6, ease: "easeInOut" }}
+                        >
+                          Turn Your{" "}
+                          <span className="inline-flex items-center gap-3 align-bottom">
+                            <GoogleDriveProductMark className="mb-2 h-10 w-10 shrink-0 md:h-14 md:w-14" />
+                            Google Drive
+                          </span>{" "}
+                          <br />
+                          Into A Professional <br />
+                          <span className={t.heroGradient}>Client Portal</span>
+                        </motion.h2>
+                      )}
+                    </AnimatePresence>
+                  </div>
             </FadeIn>
 
                 <FadeIn delay={120}>
@@ -657,14 +694,42 @@ export function LandingPage({
                 </FadeIn>
 
                 <FadeIn delay={80}>
-                  <h2 className="text-5xl sm:text-6xl md:text-7xl lg:text-[4.2rem] font-bold leading-[0.92] tracking-tighter text-[#1b1b1d] [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
-                    Turn Your{" "}
-                    <span className="inline-flex items-center gap-2 align-bottom">
-                      <GoogleDriveProductMark className="mb-1 h-10 w-10 shrink-0 md:h-12 md:w-12" />
-                      <span className="text-[#5a78ff]">Google Drive</span>
-                    </span>{" "}
-                    into a Professional Client Portal
-                  </h2>
+                  <div className="h-32 md:h-40 lg:h-48 flex items-center">
+                    <AnimatePresence mode="wait">
+                      {currentTaglineIndex === 0 ? (
+                        <motion.h2
+                          key="kinetic-tagline-0"
+                          className="text-5xl sm:text-6xl md:text-7xl lg:text-[4.2rem] font-bold leading-[0.92] tracking-tighter text-[#1b1b1d] [font-family:var(--font-kinetic-headline),system-ui,sans-serif]"
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -20 }}
+                          transition={{ duration: 0.6, ease: "easeInOut" }}
+                        >
+                          A premium offering demands{" "}
+                          <span className="inline-flex items-center justify-center gap-2 align-middle">
+                            <BrandMarkIcon className="h-10 w-10 md:h-12 md:w-12 shrink-0" />
+                          </span>{" "}
+                          <span className="text-[#5a78ff]">A premium client showcase</span>
+                        </motion.h2>
+                      ) : (
+                        <motion.h2
+                          key="kinetic-tagline-1"
+                          className="text-5xl sm:text-6xl md:text-7xl lg:text-[4.2rem] font-bold leading-[0.92] tracking-tighter text-[#1b1b1d] [font-family:var(--font-kinetic-headline),system-ui,sans-serif]"
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -20 }}
+                          transition={{ duration: 0.6, ease: "easeInOut" }}
+                        >
+                          Turn Your{" "}
+                          <span className="inline-flex items-center gap-2 align-bottom">
+                            <GoogleDriveProductMark className="mb-1 h-10 w-10 shrink-0 md:h-12 md:w-12" />
+                            <span className="text-[#5a78ff]">Google Drive</span>
+                          </span>{" "}
+                          Into A Professional Client Portal
+                        </motion.h2>
+                      )}
+                    </AnimatePresence>
+                  </div>
                 </FadeIn>
 
                 <FadeIn delay={150}>
@@ -796,7 +861,7 @@ export function LandingPage({
             {audienceRoles.map((role) => (
               <Link
                 key={role.id}
-                href={`/#${role.id}`}
+                href={role.href}
                 className={cn(
                   targetAudienceScrollMarginClass,
                   "inline-flex rounded-none border border-[#c6c6cc] bg-white px-5 py-2 text-[10px] font-medium uppercase tracking-widest text-[#1b1b1d] transition-colors [font-family:var(--font-kinetic-headline),system-ui,sans-serif] hover:border-ds-kinetic-lime hover:text-ds-kinetic-lime-icon",

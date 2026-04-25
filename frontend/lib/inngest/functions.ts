@@ -15,8 +15,7 @@ import { provisionSandboxHierarchyForFirm } from '@/lib/onboarding/onboarding-he
  * Index a single file or folder for search (V2)
  */
 export const indexFileForSearch = inngest.createFunction(
-    { id: "index-file-for-search" },
-    { event: "file.index.requested" },
+    { id: "index-file-for-search", triggers: [{ event: "file.index.requested" }] },
     async ({ event, step }) => {
         await step.run("index-file", async () => {
             const { SearchService } = await import("@/lib/services/search-service")
@@ -37,8 +36,7 @@ export const indexFileForSearch = inngest.createFunction(
  * Index a batch of files/folders for search (V2)
  */
 export const indexBatchForSearch = inngest.createFunction(
-    { id: "index-batch-for-search" },
-    { event: "file.index.batch.requested" },
+    { id: "index-batch-for-search", triggers: [{ event: "file.index.batch.requested" }] },
     async ({ event, step }) => {
         const { organizationId, clientId, projectId, files } = event.data
         const BATCH_SIZE = 10
@@ -68,8 +66,7 @@ export const indexBatchForSearch = inngest.createFunction(
  * Recursively scan all files in a project's Drive folder tree and index them (V2)
  */
 export const scanAndIndexProject = inngest.createFunction(
-    { id: "scan-and-index-project" },
-    { event: "project.index.scan.requested" },
+    { id: "scan-and-index-project", triggers: [{ event: "project.index.scan.requested" }] },
     async ({ event, step }) => {
         const { organizationId, clientId, projectId, connectorId, rootFolderIds } = event.data
 
@@ -157,8 +154,7 @@ type SandboxPopulateProject = {
  * Runs in background so create-sandbox API returns in <30s and avoids Vercel/DB timeouts.
  */
 export const populateSandboxSampleFiles = inngest.createFunction(
-    { id: "populate-sandbox-sample-files" },
-    { event: "sandbox.populate.sample-files.requested" },
+    { id: "populate-sandbox-sample-files", triggers: [{ event: "sandbox.populate.sample-files.requested" }] },
     async ({ event, step }) => {
         const { organizationId, connectionId, projects } = event.data as {
             organizationId: string
@@ -204,8 +200,7 @@ export const populateSandboxSampleFiles = inngest.createFunction(
 
 /** Async sandbox provisioning: Drive + DB hierarchy + sample files (after create-sandbox sync). Polar free plan is sync-only on create-sandbox. */
 export const provisionSandboxHierarchy = inngest.createFunction(
-    { id: 'provision-sandbox-hierarchy' },
-    { event: 'sandbox.provision.requested' },
+    { id: "provision-sandbox-hierarchy", triggers: [{ event: "sandbox.provision.requested" }] },
     async ({ event, step }) => {
         const payload = event.data as {
             firmId: string
@@ -235,8 +230,7 @@ export const provisionSandboxHierarchy = inngest.createFunction(
  * Reconciliation for file deletion (V2)
  */
 export const reconcileFileDeletion = inngest.createFunction(
-    { id: "reconcile-file-deletion" },
-    { event: "file.delete.requested" },
+    { id: "reconcile-file-deletion", triggers: [{ event: "file.delete.requested" }] },
     async ({ event, step }) => {
         const { organizationId, externalId, googlePermissionId } = event.data
 
@@ -285,8 +279,7 @@ export const reconcileFileDeletion = inngest.createFunction(
  * Reconciliation for folder deletion (V2)
  */
 export const reconcileFolderDeletion = inngest.createFunction(
-    { id: "reconcile-folder-deletion" },
-    { event: "folder.delete.requested" },
+    { id: "reconcile-folder-deletion", triggers: [{ event: "folder.delete.requested" }] },
     async ({ event, step }) => {
         const { organizationId, externalId } = event.data
 
@@ -300,8 +293,7 @@ export const reconcileFolderDeletion = inngest.createFunction(
 )
 
 export const revokeProjectSharing = inngest.createFunction(
-    { id: "revoke-project-sharing" },
-    { event: "project/archived" },
+    { id: "revoke-project-sharing", triggers: [{ event: "project/archived" }] },
     async ({ event, step }) => {
         const { projectId, organizationId, reason = "unknown" } = event.data;
 
@@ -421,8 +413,7 @@ export const revokeProjectSharing = inngest.createFunction(
  * Revoke permissions when sharing settings updated (V2)
  */
 export const revokeByDisabledPersona = inngest.createFunction(
-    { id: "revoke-by-disabled-persona" },
-    { event: "sharing.settings.updated" },
+    { id: "revoke-by-disabled-persona", triggers: [{ event: "sharing.settings.updated" }] },
     async ({ event, step }) => {
         const { projectId, organizationId, sharingId, disabledPersonas, documentId } = event.data;
 
@@ -498,8 +489,7 @@ export const revokeByDisabledPersona = inngest.createFunction(
  * Revoke permissions due to persona change (V2)
  */
 export const revokeByMemberPersonaChange = inngest.createFunction(
-    { id: "revoke-by-member-persona-change" },
-    { event: "project.member.persona.updated" },
+    { id: "revoke-by-member-persona-change", triggers: [{ event: "project.member.persona.updated" }] },
     async ({ event, step }) => {
         const { projectId, organizationId, userId, oldPersonaSlug, newPersonaSlug } = event.data;
 
@@ -563,8 +553,7 @@ export const revokeByMemberPersonaChange = inngest.createFunction(
  * Grant permissions for new member (V2)
  */
 export const grantPermissionsForNewMember = inngest.createFunction(
-    { id: "grant-permissions-for-new-member" },
-    { event: "project.member.added" },
+    { id: "grant-permissions-for-new-member", triggers: [{ event: "project.member.added" }] },
     async ({ event, step }) => {
         const { projectId, organizationId, userId, email, personaSlug } = event.data;
 

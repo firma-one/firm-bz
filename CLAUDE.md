@@ -1,21 +1,15 @@
-# Claude AI Assistant Instructions
+# Claude Instructions
 
-## Global Configuration
-- **Default Mode:** Auto Accept Edits
-- **Default Model:** Sonnet 4.6
+## Settings
+- Mode: Auto Accept Edits
+- Model: Haiku 4.5
+- Context Limit: 200K tokens
 
-## Post-Change Workflow
-After *every* change, the AI MUST explicitly offer the user the option to:
-1. Run the build
-2. Commit and push the changes
+## Post-Change
+After changes, offer to: 1) run build, 2) commit/push. **Never auto-execute**—wait for explicit confirmation.
 
-**CRITICAL RULE:** NEVER automatically perform the build, commit, or push operations. Always wait for the user's explicit confirmation before running these commands.
+## Agents
+For specific roles, use: `.claude/agents/{product-manager,architecture,ux-coding,coding,quality-engineer,devops}.md`
 
-## Available Agent Profiles
-When asked to assume a specific role, refer to the corresponding agent profile in `.claude/agents/`:
-- **Product-Manager agent:** `.claude/agents/product-manager.md`
-- **Architecture agent:** `.claude/agents/architecture.md`
-- **UX coding agent:** `.claude/agents/ux-coding.md`
-- **Coding agent:** `.claude/agents/coding.md`
-- **Quality engineer agent:** `.claude/agents/quality-engineer.md`
-- **DevOps agent:** `.claude/agents/devops.md`
+## Memory
+Run `/anthropic-skills:consolidate-memory` periodically (or enable auto-compact via `/update-config`) to keep memory lean.
