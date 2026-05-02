@@ -4,7 +4,7 @@
 
 **Audience:** Technical and non-technical stakeholders, implementation partners, and client delivery teams.
 
-**Related documents:** [PRD](prd.md) (requirements and features), [Roadmap](roadmap.md) (milestones and releases). **Subscriptions (Polar + plans):** [prd-subscriptions.md](prd-subscriptions.md), [hld-subscription.md](hld-subscription.md).
+**Related documents:** [PRD](prd.md) (requirements and features), [Roadmap](roadmap.md) (milestones and releases). **Subscriptions (Polar + plans):** [prd-subscriptions.md](prd-subscriptions.md), [hld-subscription.md](hld-subscription.md). **Operations:** [hld-admin-operations.md](hld-admin-operations.md) (integration monitoring and onboarding recovery), [hld-inngest-jobs.md](hld-inngest-jobs.md) (background tasks).
 
 ---
 
