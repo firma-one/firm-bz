@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { prisma } from '@/lib/prisma'
 import { isSysAdminUser } from '@/lib/system/user-data-map'
 import { logger } from '@/lib/logger'
+import { decrypt } from '@/lib/encryption'
 
 interface StuckFirm {
   id: string
@@ -81,17 +82,30 @@ export async function GET(request: NextRequest) {
 
     const userMap = new Map(authUsers.map(u => [u.id, u.email]))
 
-    // Merge data
-    const firms: StuckFirm[] = stuckRows.map(row => ({
-      id: row.id,
-      name: row.name,
-      slug: row.slug,
-      connectorId: row.connectorId,
-      createdAt: row.createdAt.toISOString(),
-      stuckSince: row.stuck_since,
-      userId: row.admin_user_id,
-      userEmail: userMap.get(row.admin_user_id) || 'unknown',
-    }))
+    // Merge data and decrypt firm names
+    const firms: StuckFirm[] = stuckRows.map(row => {
+      let decryptedName = row.name
+      try {
+        // Attempt to decrypt name if it looks encrypted (starts with v1$, v2$, etc.)
+        if (row.name && /^v\d+\$/.test(row.name)) {
+          decryptedName = decrypt(row.name)
+        }
+      } catch (error) {
+        logger.error('Failed to decrypt firm name', { firmId: row.id, error })
+        // Fall back to encrypted name if decryption fails
+      }
+
+      return {
+        id: row.id,
+        name: decryptedName,
+        slug: row.slug,
+        connectorId: row.connectorId,
+        createdAt: row.createdAt.toISOString(),
+        stuckSince: row.stuck_since,
+        userId: row.admin_user_id,
+        userEmail: userMap.get(row.admin_user_id) || 'unknown',
+      }
+    })
 
     const response: StuckFirmsResponse = { firms }
     return NextResponse.json(response)

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
-import { Activity, AlertCircle, CheckCircle2, Loader2, RotateCw } from 'lucide-react'
+import { Activity, AlertCircle, CheckCircle2, Loader2, RotateCw, Copy, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useAuth } from '@/lib/auth-context'
@@ -59,6 +59,8 @@ export default function IntegrationsPage() {
   const [isReprovisioning, setIsReprovisioning] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
   const fetchStatus = async () => {
     try {
@@ -128,11 +130,19 @@ export default function IntegrationsPage() {
       const result: ReprovisionResponse = await res.json()
       setError(null)
 
+      // Clear selection and show success message
+      const queued = result.queued
+      setSelectedFirms(new Set())
+      setSuccessMessage(`Queued ${queued} firm${queued === 1 ? '' : 's'} for provisioning. Will refresh in 30 seconds.`)
+
+      // Clear success message after 5 seconds
+      setTimeout(() => setSuccessMessage(null), 5000)
+
       // Refresh after a short delay
       setTimeout(() => {
         fetchStuckFirms()
         setIsReprovisioning(false)
-      }, 1000)
+      }, 1500)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to reprovision')
       setIsReprovisioning(false)
@@ -166,6 +176,12 @@ export default function IntegrationsPage() {
       newSelected.add(firmId)
     }
     setSelectedFirms(newSelected)
+  }
+
+  const copyToClipboard = (value: string, itemId: string) => {
+    navigator.clipboard.writeText(value)
+    setCopiedId(itemId)
+    setTimeout(() => setCopiedId(null), 2000)
   }
 
   const getServiceStatus = (service: ServiceKey): { icon: any; bgColor: string; textColor: string } => {
@@ -204,6 +220,13 @@ export default function IntegrationsPage() {
       {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
           {error}
+        </div>
+      )}
+
+      {/* Success banner */}
+      {successMessage && (
+        <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-900">
+          ✓ {successMessage}
         </div>
       )}
 
@@ -256,12 +279,12 @@ export default function IntegrationsPage() {
                       {isUp ? 'UP' : 'DOWN'}
                     </div>
                   </div>
-                  <p className="mt-2 text-xs text-gray-500 space-y-0.5">
-                    {service === 'inngest' && `Mode: ${(data as any)?.mode || 'unknown'}`}
-                    {service === 'smtp' && (data as any)?.host && `Host: ${(data as any).host}`}
-                    {(data as any)?.latencyMs && `Latency: ${(data as any).latencyMs}ms`}
-                    {(data as any)?.error && <div className="text-red-600 text-xs">{(data as any).error}</div>}
-                  </p>
+                  <div className="mt-2 text-xs text-gray-500 space-y-0.5">
+                    {service === 'inngest' && <p>{`Mode: ${(data as any)?.mode || 'unknown'}`}</p>}
+                    {service === 'smtp' && (data as any)?.host && <p>{`Host: ${(data as any).host}`}</p>}
+                    {(data as any)?.latencyMs && <p>{`Latency: ${(data as any).latencyMs}ms`}</p>}
+                    {(data as any)?.error && <p className="text-red-600 text-xs">{(data as any).error}</p>}
+                  </div>
                 </div>
               )
             })}
@@ -295,7 +318,9 @@ export default function IntegrationsPage() {
                         className="rounded"
                       />
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700">Firm</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700">Firm Name</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700">Slug</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700">Firm ID</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700">User</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700">Stuck Since</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700">Created</th>
@@ -313,8 +338,52 @@ export default function IntegrationsPage() {
                         />
                       </td>
                       <td className="px-4 py-3 text-sm">
-                        <span className="font-medium text-gray-900">{firm.name}</span>
-                        <span className="text-gray-400 ml-2">/{firm.slug}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-gray-900">{firm.name}</span>
+                          <button
+                            onClick={() => copyToClipboard(firm.name, `name-${firm.id}`)}
+                            className="p-1 hover:bg-gray-200 rounded transition-colors"
+                            title="Copy firm name"
+                          >
+                            {copiedId === `name-${firm.id}` ? (
+                              <Check className="h-3.5 w-3.5 text-green-600" />
+                            ) : (
+                              <Copy className="h-3.5 w-3.5 text-gray-400 hover:text-gray-600" />
+                            )}
+                          </button>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        <div className="flex items-center gap-2">
+                          <span className="text-gray-600">{firm.slug}</span>
+                          <button
+                            onClick={() => copyToClipboard(firm.slug, `slug-${firm.id}`)}
+                            className="p-1 hover:bg-gray-200 rounded transition-colors"
+                            title="Copy slug"
+                          >
+                            {copiedId === `slug-${firm.id}` ? (
+                              <Check className="h-3.5 w-3.5 text-green-600" />
+                            ) : (
+                              <Copy className="h-3.5 w-3.5 text-gray-400 hover:text-gray-600" />
+                            )}
+                          </button>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-gray-600 text-xs">{firm.id}</span>
+                          <button
+                            onClick={() => copyToClipboard(firm.id, `id-${firm.id}`)}
+                            className="p-1 hover:bg-gray-200 rounded transition-colors"
+                            title="Copy firm ID"
+                          >
+                            {copiedId === `id-${firm.id}` ? (
+                              <Check className="h-3.5 w-3.5 text-green-600" />
+                            ) : (
+                              <Copy className="h-3.5 w-3.5 text-gray-400 hover:text-gray-600" />
+                            )}
+                          </button>
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-600">{firm.userEmail}</td>
                       <td className="px-4 py-3 text-sm text-gray-600">
@@ -331,13 +400,18 @@ export default function IntegrationsPage() {
 
             <div className="flex items-center justify-between">
               <p className="text-sm text-gray-500">{selectedFirms.size} selected</p>
-              <Button
-                onClick={() => setShowConfirm(true)}
-                disabled={selectedFirms.size === 0 || isReprovisioning}
-              >
-                {isReprovisioning && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                Resume Provisioning ({selectedFirms.size})
-              </Button>
+              <div className="flex flex-col items-end gap-2">
+                <Button
+                  onClick={() => setShowConfirm(true)}
+                  disabled={selectedFirms.size === 0 || isReprovisioning || statusData?.inngest?.status === 'down'}
+                >
+                  {isReprovisioning && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                  Resume Provisioning ({selectedFirms.size})
+                </Button>
+                {statusData?.inngest?.status === 'down' && (
+                  <p className="text-xs text-red-600">Inngest is DOWN — resume provisioning is disabled</p>
+                )}
+              </div>
             </div>
           </>
         )}
