@@ -1231,6 +1231,7 @@ Using this mapping, an implementer can produce LLD documents (e.g. one per epic 
 - [PRD](prd.md) – Product requirements and feature list
 - [PRD — Subscriptions](prd-subscriptions.md) – Polar contract, checkout, webhooks, `platform.subscriptions`, tier matrix, roadmap
 - [HLD — Subscriptions](hld-subscription.md) – Billing component map
+- [HLD — Inngest Jobs](hld-inngest-jobs.md) – Event-driven job architecture, all background tasks (indexing, permissions, onboarding)
 - [Roadmap](roadmap.md) – Milestones and schedule
 - [LLD](lld.md) – Low-level implementation details (permission framework, API contracts, component specs)
 - [AGENTS.md](../../AGENTS.md) – Database migrations, Vercel, Git workflow
