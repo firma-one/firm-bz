@@ -85,3 +85,16 @@ export function BillingCheckoutFootnote({ dense }: { dense?: boolean }) {
         </p>
     )
 }
+
+export function BillingRefundPolicyNote({ compact }: { compact?: boolean }) {
+    return (
+        <p
+            className={cn(
+                'leading-relaxed text-slate-500',
+                compact ? 'text-xs' : 'text-xs sm:text-xs'
+            )}
+        >
+            {upgradeCopy.billingRefundPolicyNote}
+        </p>
+    )
+}

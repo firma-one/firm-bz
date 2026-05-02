@@ -22,6 +22,8 @@ const nextConfig = {
   images: {
     unoptimized: true
   },
+  // Allow Tailscale dev origins for HMR (hot module reloading)
+  allowedDevOrigins: ['macbook-air.tail48717e.ts.net'],
   // Configure `pageExtensions` to include MDX files
   pageExtensions: ['js', 'jsx', 'mdx', 'ts', 'tsx'],
 

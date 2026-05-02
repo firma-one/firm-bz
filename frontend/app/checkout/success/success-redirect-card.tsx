@@ -57,11 +57,12 @@ export function SuccessRedirectCard({
     const searchParams = useSearchParams()
     const paidPlanFromUrl = searchParams.get('paid_plan') === 'true'
     const resolvedCheckoutId = useResolvedCheckoutId(checkoutId)
-    const [secondsLeft, setSecondsLeft] = useState(REDIRECT_SECONDS)
+    const isOnboarding = mode === 'onboardingAfterCheckout'
+    const ONBOARDING_REDIRECT_SECONDS = 10
+    const [secondsLeft, setSecondsLeft] = useState(isOnboarding ? ONBOARDING_REDIRECT_SECONDS : REDIRECT_SECONDS)
     const [invoiceLoading, setInvoiceLoading] = useState(false)
     const [invoiceError, setInvoiceError] = useState<string | null>(null)
     const [continueOnboardingPending, setContinueOnboardingPending] = useState(false)
-    const isOnboarding = mode === 'onboardingAfterCheckout'
 
     /** Client-resolved: `firma.checkoutIntent` drives hiding the billing link until Continue clears it. */
     const [onboardingCtasResolved, setOnboardingCtasResolved] = useState(false)
@@ -92,23 +93,26 @@ export function SuccessRedirectCard({
     }, [pathname, router, searchParams])
 
     useEffect(() => {
-        if (isOnboarding) return
         const intervalId = window.setInterval(() => {
             setSecondsLeft((prev) => Math.max(0, prev - 1))
         }, 1000)
         return () => window.clearInterval(intervalId)
-    }, [isOnboarding])
+    }, [])
 
     useEffect(() => {
-        if (isOnboarding) return
         if (secondsLeft !== 0) return
-        router.push(primaryHref)
-    }, [isOnboarding, secondsLeft, primaryHref, router])
+        if (isOnboarding) {
+            clearCheckoutIntent()
+            router.push(continueOnboardingHref)
+        } else {
+            router.push(primaryHref)
+        }
+    }, [secondsLeft, isOnboarding, primaryHref, continueOnboardingHref, router])
 
     const progressPercent = useMemo(() => {
-        if (isOnboarding) return 100
-        const elapsed = REDIRECT_SECONDS - secondsLeft
-        return Math.min(100, Math.max(0, (elapsed / REDIRECT_SECONDS) * 100))
+        const redirectSeconds = isOnboarding ? ONBOARDING_REDIRECT_SECONDS : REDIRECT_SECONDS
+        const elapsed = redirectSeconds - secondsLeft
+        return Math.min(100, Math.max(0, (elapsed / redirectSeconds) * 100))
     }, [secondsLeft, isOnboarding])
 
     const persistOnboardingThenContinue = useCallback(async () => {
@@ -220,24 +224,18 @@ export function SuccessRedirectCard({
                     </div>
 
                     <div className="relative z-10 mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-slate-200/80 bg-gradient-to-br from-slate-100 to-slate-50 text-slate-900">
-                        {isOnboarding ? (
-                            <span className="text-2xl" aria-hidden>
-                                ✓
-                            </span>
-                        ) : (
-                            <span className="text-xl font-semibold tabular-nums">{secondsLeft}</span>
-                        )}
+                        <span className="text-2xl" aria-hidden>
+                            ✓
+                        </span>
                     </div>
 
                     <h1 className="relative z-10 text-2xl font-semibold tracking-tight text-slate-900">You&apos;re all set</h1>
                     <p className="relative z-10 mt-2 text-sm leading-relaxed text-slate-600">
-                        Thanks for subscribing. {isOnboarding ? 'Choose your next step below.' : "We'll take you back automatically when your workspace is ready."}
+                        Thanks for subscribing. {isOnboarding ? 'Continuing setup in a moment.' : "We'll take you back automatically when your workspace is ready."}
                     </p>
-                    {!isOnboarding ? (
-                        <p className="relative z-10 mt-3 text-sm font-medium text-slate-700">
-                            Redirecting in <span className="tabular-nums">{secondsLeft}s</span>
-                        </p>
-                    ) : null}
+                    <p className="relative z-10 mt-3 text-sm font-medium text-slate-700">
+                        Redirecting in <span className="tabular-nums">{secondsLeft}s</span>
+                    </p>
 
                     <div className="relative z-10 mx-auto mt-5 max-w-md border-t border-slate-100 pt-5 text-left">
                         <p className="text-xs leading-relaxed text-slate-600">
@@ -258,57 +256,26 @@ export function SuccessRedirectCard({
 
                     <div className={ctaRowClass}>
                         {isOnboarding ? (
-                            !onboardingCtasResolved ? (
-                                <div
-                                    className="flex h-11 w-full max-w-md animate-pulse rounded-lg bg-slate-100 sm:mx-auto sm:w-44"
-                                    aria-hidden
-                                />
-                            ) : showContinuePricingFlow ? (
-                                <>
-                                    {downloadInvoiceButton}
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            clearPricingIntentAndQuery()
-                                            void persistOnboardingThenContinue()
-                                        }}
-                                        disabled={continueOnboardingPending}
-                                        className={cn(
-                                            buttonVariants({ variant: 'blackCta' }),
-                                            'inline-flex h-11 min-w-[10rem] shrink-0 items-center justify-center gap-2 rounded-lg px-5 text-sm font-semibold disabled:opacity-60 sm:min-w-[12rem]'
-                                        )}
-                                    >
-                                        {continueOnboardingPending ? (
-                                            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                                        ) : null}
-                                        Continue onboarding
-                                    </button>
-                                    {!hasCheckoutIntent ? (
-                                        <Link
-                                            href={billingPlansHref}
-                                            className={cn(
-                                                buttonVariants({ variant: 'outline' }),
-                                                'inline-flex h-11 min-w-[10rem] shrink-0 items-center justify-center rounded-lg border-slate-200 bg-white px-5 text-sm font-semibold text-slate-800 sm:min-w-[12rem]'
-                                            )}
-                                        >
-                                            Return to Billing &amp; Plans
-                                        </Link>
+                            <>
+                                {downloadInvoiceButton}
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        clearPricingIntentAndQuery()
+                                        void persistOnboardingThenContinue()
+                                    }}
+                                    disabled={continueOnboardingPending}
+                                    className={cn(
+                                        buttonVariants({ variant: 'blackCta' }),
+                                        'inline-flex h-11 min-w-[10rem] shrink-0 items-center justify-center gap-2 rounded-lg px-5 text-sm font-semibold disabled:opacity-60 sm:min-w-[12rem]'
+                                    )}
+                                >
+                                    {continueOnboardingPending ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
                                     ) : null}
-                                </>
-                            ) : (
-                                <>
-                                    {downloadInvoiceButton}
-                                    <Link
-                                        href={billingPlansHref}
-                                        className={cn(
-                                            buttonVariants({ variant: 'blackCta' }),
-                                            'inline-flex h-11 min-w-[12rem] shrink-0 items-center justify-center rounded-lg px-5 text-sm font-semibold sm:min-w-[14rem]'
-                                        )}
-                                    >
-                                        Return to Billing &amp; Plans
-                                    </Link>
-                                </>
-                            )
+                                    Continue onboarding
+                                </button>
+                            </>
                         ) : hasCheckoutId ? (
                             <>
                                 {downloadInvoiceButton}

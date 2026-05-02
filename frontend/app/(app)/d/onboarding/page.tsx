@@ -32,6 +32,7 @@ import {
     googleDriveOAuthPopupFailureMessage,
 } from '@/lib/google-drive-popup-oauth'
 import { BillingPageClient } from '@/components/billing/billing-page-client'
+import { clearCheckoutIntent } from '@/lib/marketing/checkout-intent'
 
 const ONBOARDING_CREATING_STORAGE_KEY = 'firm_onboarding_creating'
 const FINALIZE_AUTO_NAV_TOTAL_SECONDS = 5
@@ -593,6 +594,7 @@ const OnboardingContent = () => {
     useEffect(() => {
         if (isLoading) return
         if (afterCheckoutParam !== '1') return
+        clearCheckoutIntent()
         router.replace('/d/onboarding', { scroll: false })
     }, [isLoading, afterCheckoutParam, router])
 
@@ -1659,7 +1661,7 @@ const OnboardingContent = () => {
                                             <Info className="h-4 w-4 text-slate-600" />
                                         </div>
                                         <p className="text-xs leading-relaxed text-slate-700">
-                                            Sample data is provisioned on <strong>your</strong> Google Drive. You can continue to your workspace whenever you&apos;re ready—provisioning keeps running in the background and will finish asynchronously.
+                                            Sample data is provisioned on <strong>your </strong> Google Drive. You can continue to your workspace whenever you&apos;re ready—provisioning keeps running in the background and will finish asynchronously.
                                         </p>
                                     </div>
                                 </div>

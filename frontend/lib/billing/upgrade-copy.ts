@@ -109,4 +109,7 @@ export const upgradeCopy = {
     checkoutSuccessPolarFootnoteSuffix: `. Payments run on Stripe-backed infrastructure—${BRAND_NAME} never collects or stores your full card number.`,
     checkoutSuccessReceiptLine:
         'A receipt is also emailed to the address you used at checkout. Use Download invoice below if you need a PDF right away.',
+    /** Refund policy note shown on billing page */
+    billingRefundPolicyNote:
+        'If you experience any billing issues or accidental duplicate charges, contact us and we\'ll process a refund promptly. Note: valid subscription orders cannot be refunded per Firma\'s billing policy.',
 } as const

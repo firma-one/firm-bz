@@ -190,6 +190,28 @@ export default function PricingPage() {
             q: "When should I choose Enterprise over Business?",
             a: `Enterprise is for organizations that need custom DNS for the client portal, SSO/SAML, stricter controls (for example download restrictions and advanced auditing), multi-firm arrangements, or negotiated engagement limits. If that sounds like you, contact ${platformEmail("sales")} and we’ll scope options.`,
         },
+        {
+            q: "What is your refund policy?",
+            a: "Valid subscription orders cannot be refunded per Firma’s billing policy. However, if you experience any billing issues—such as accidental duplicate charges or payment errors—please contact our support team and we’ll investigate and process a refund promptly.",
+        },
+        {
+            q: "What if I experience a billing issue or duplicate charge?",
+            a: (
+                <>
+                    <span>
+                        Contact us at{" "}
+                    </span>
+                    <EmailInline email={PLATFORM_SUPPORT_EMAIL} className="mx-1" />
+                    <span>
+                        and describe the issue. We’ll verify the charge and process a refund if a genuine billing error occurred. Our team reviews all billing disputes within 48 hours.
+                    </span>
+                </>
+            ),
+        },
+        {
+            q: "Can I pause or downgrade my subscription instead of canceling?",
+            a: "You can downgrade to a lower-tier plan at any time through the Polar billing portal. Downgrades take effect at your next billing date. If you need to temporarily pause your account, contact our support team to discuss options.",
+        },
     ] as const
 
     const highlightPlanId = "Standard"
