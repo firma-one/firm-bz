@@ -46,6 +46,7 @@ import { cn } from "@/lib/utils"
 import {
   markRealityCheckViewedFromTransformationModal,
   markTrustArchitectureViewedFromTransformationModal,
+  readHideRealityCheckSectionAfterModal,
 } from "@/lib/marketing/landing-section-dismissals"
 
 function WhatsAppCarrierIcon({ className }: { className?: string }) {
@@ -1217,6 +1218,10 @@ export function FirmTransformationSection({ skin = "kinetic" as LandingSkin }: {
 
   const onRealityModalOpenChange = useCallback((open: boolean) => {
     setRealityModalOpen(open)
+    // Clear hash when closing the modal so it can be navigated to again
+    if (!open && window.location.hash === "#reality-check") {
+      window.history.replaceState(null, "", window.location.pathname)
+    }
   }, [])
 
   const onTrustModalOpenChange = useCallback((open: boolean) => {
@@ -1232,6 +1237,25 @@ export function FirmTransformationSection({ skin = "kinetic" as LandingSkin }: {
   useLayoutEffect(() => {
     if (trustArchitectureModalOpen) markTrustArchitectureViewedFromTransformationModal()
   }, [trustArchitectureModalOpen])
+
+  // Open the modal if navigating to #reality-check and the section is already hidden
+  useEffect(() => {
+    const handleHashChange = () => {
+      if (
+        window.location.hash === "#reality-check" &&
+        readHideRealityCheckSectionAfterModal()
+      ) {
+        setRealityModalOpen(true)
+      }
+    }
+
+    // Check on mount
+    handleHashChange()
+
+    // Listen for hash changes
+    window.addEventListener("hashchange", handleHashChange)
+    return () => window.removeEventListener("hashchange", handleHashChange)
+  }, [])
 
   return (
     <section

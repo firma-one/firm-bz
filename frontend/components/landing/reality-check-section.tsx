@@ -278,6 +278,7 @@ export function RealityCheckSection({
 
   return (
     <section
+      id="reality-check"
       className={cn(
         "relative overflow-hidden bg-[#E1E1E1] pb-8 pt-16 md:pb-9 md:pt-20",
         fillViewportBelowHeader &&
