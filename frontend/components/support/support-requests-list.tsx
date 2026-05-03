@@ -174,7 +174,7 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
                   {/* Status */}
                   <td className="px-3 py-2" style={{ width: '80px' }}>
                     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${statusColor}`}>
-                      {request.status || 'NEW'}
+                      {(request.status || 'NEW').replace(/_/g, ' ')}
                     </span>
                   </td>
 
