@@ -85,12 +85,13 @@ export function ViewSupportRequestModal({
     attachmentName: string
     shown: boolean
   } | null>(null)
+  const [deletedDriveFileIds, setDeletedDriveFileIds] = useState<Set<string>>(new Set())
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { addToast } = useToast()
 
   const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50 MB
   const allAttachments = [
-    ...(ticket.attachments ?? []),
+    ...(ticket.attachments ?? []).filter((a: AttachmentMeta) => !deletedDriveFileIds.has(a.driveFileId)),
     ...newAttachments.filter(a => a.status === 'done' && a.meta),
   ] as (AttachmentMeta & { isNew?: boolean })[]
 
@@ -277,12 +278,14 @@ export function ViewSupportRequestModal({
         return
       }
 
+      // Remove row immediately from UI
+      setDeletedDriveFileIds(prev => new Set(Array.from(prev).concat(attachment.driveFileId)))
+
       setDeletionConfirmation({
         attachmentName: attachment.originalName,
         shown: true,
       })
 
-      // Auto-hide confirmation after 3 seconds
       setTimeout(() => setDeletionConfirmation(null), 3000)
     } catch (err: any) {
       console.error('Failed to delete attachment:', err)
@@ -295,16 +298,13 @@ export function ViewSupportRequestModal({
       const { data: { session } } = await supabase.auth.getSession()
 
       if (!session?.access_token) {
-        addToast({
-          title: 'Error',
-          message: 'No active session',
-          type: 'error',
-          duration: 3000,
-        })
+        addToast({ title: 'Error', message: 'No active session', type: 'error', duration: 3000 })
         return
       }
 
-      const downloadUrl = `/api/documents/download?fileId=${attachment.driveFileId}&connectorId=${ticket.firmId || ''}&filename=${encodeURIComponent(attachment.originalName)}&token=${session.access_token}`
+      const downloadUrl =
+        `/api/support/requests/${ticket.ticketNumber}/attachments/${attachment.driveFileId}/download` +
+        `?token=${session.access_token}&filename=${encodeURIComponent(attachment.originalName)}`
 
       const a = window.document.createElement('a')
       a.href = downloadUrl
@@ -314,12 +314,7 @@ export function ViewSupportRequestModal({
       window.document.body.removeChild(a)
     } catch (error) {
       console.error('Download error:', error)
-      addToast({
-        title: 'Error',
-        message: 'Failed to download file',
-        type: 'error',
-        duration: 3000,
-      })
+      addToast({ title: 'Error', message: 'Failed to download file', type: 'error', duration: 3000 })
     }
   }
 
