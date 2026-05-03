@@ -2,8 +2,14 @@
 
 import React, { useState, useEffect } from 'react'
 import { TicketType } from '@prisma/client'
-import { AlertCircle, Lightbulb, HelpCircle, MessageCircle, Copy, Check, Eye } from "lucide-react"
+import { AlertCircle, Lightbulb, HelpCircle, MessageCircle, Copy, Check, Eye, Clock } from "lucide-react"
 import { formatDistanceToNow } from 'date-fns'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { SupportRequestCommentsSidebar } from './support-request-comments-sidebar'
 import { ViewSupportRequestModal } from './view-support-request-modal'
 
@@ -15,7 +21,7 @@ interface SupportRequest {
   comments?: any[]
   attachments?: any[]
   createdAt: Date
-  updatedAt: Date
+  updatedAt?: Date
   status?: string
   firm?: {
     name: string
@@ -36,9 +42,9 @@ interface SupportRequestsListProps {
 }
 
 const TYPE_CONFIG = {
-  [TicketType.BUG]: { label: 'Bug Report', icon: AlertCircle, color: 'text-red-500', bgColor: 'bg-red-50' },
-  [TicketType.REQUEST]: { label: 'Feature Request', icon: Lightbulb, color: 'text-yellow-500', bgColor: 'bg-yellow-50' },
-  [TicketType.ENQUIRY]: { label: 'General Enquiry', icon: HelpCircle, color: 'text-blue-500', bgColor: 'bg-blue-50' },
+  [TicketType.BUG]: { label: 'Bug Report', icon: AlertCircle, color: 'text-red-600', bgColor: 'bg-red-50' },
+  [TicketType.REQUEST]: { label: 'Feature Request', icon: Lightbulb, color: 'text-amber-600', bgColor: 'bg-amber-50' },
+  [TicketType.ENQUIRY]: { label: 'General Enquiry', icon: HelpCircle, color: 'text-blue-600', bgColor: 'bg-blue-50' },
 }
 
 export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
@@ -100,18 +106,27 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
     )
   }
 
+  const STATUS_COLORS: Record<string, string> = {
+    NEW: 'bg-blue-50 text-blue-600 border-blue-200',
+    IN_PROGRESS: 'bg-amber-50 text-amber-600 border-amber-200',
+    RESOLVED: 'bg-emerald-50 text-emerald-600 border-emerald-200',
+    CLOSED: 'bg-slate-100 text-slate-600 border-slate-200',
+  }
+
   return (
     <>
       {/* Table */}
-      <div className="overflow-x-auto">
+      <div className="border border-slate-200 rounded-lg overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50">
-              <th className="px-4 py-3 text-left font-semibold text-slate-900 w-32">Type</th>
-              <th className="px-4 py-3 text-left font-semibold text-slate-900 w-32">Ticket ID</th>
-              <th className="px-4 py-3 text-left font-semibold text-slate-900 flex-1 min-w-0">Description</th>
-              <th className="px-4 py-3 text-left font-semibold text-slate-900 w-32">Created</th>
-              <th className="px-4 py-3 text-center font-semibold text-slate-900 w-24">Quick Links</th>
+              <th className="px-3 py-2 text-left font-semibold text-slate-900 text-xs" style={{ width: '110px' }}>Type</th>
+              <th className="px-3 py-2 text-left font-semibold text-slate-900 text-xs" style={{ width: '130px' }}>Ticket ID</th>
+              <th className="px-3 py-2 text-left font-semibold text-slate-900 text-xs">Description</th>
+              <th className="px-3 py-2 text-left font-semibold text-slate-900 text-xs" style={{ width: '80px' }}>Status</th>
+              <th className="px-3 py-2 text-left font-semibold text-slate-900 text-xs" style={{ width: '120px' }}>Created</th>
+              <th className="px-3 py-2 text-left font-semibold text-slate-900 text-xs" style={{ width: '120px' }}>Modified</th>
+              <th className="px-3 py-2 text-center font-semibold text-slate-900 text-xs" style={{ width: '80px' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -119,69 +134,106 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
               const config = TYPE_CONFIG[request.type]
               const Icon = config.icon
               const commentCount = Array.isArray(request.comments) ? request.comments.length : 0
+              const statusColor = STATUS_COLORS[request.status || 'NEW']
 
               return (
-                <tr key={request.id} className="border-b border-slate-200 hover:bg-slate-50 transition-colors">
+                <tr key={request.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
                   {/* Type */}
-                  <td className="px-4 py-3">
-                    <div className={`flex items-center gap-2 w-fit px-2.5 py-1.5 rounded-lg ${config.bgColor}`}>
-                      <Icon className={`h-4 w-4 ${config.color}`} />
-                      <span className={`text-xs font-medium ${config.color}`}>{config.label}</span>
+                  <td className="px-3 py-2" style={{ width: '110px' }}>
+                    <div className={`flex items-center gap-1 w-fit px-2 py-1 rounded text-xs font-medium ${config.bgColor} ${config.color}`}>
+                      <Icon className="h-3.5 w-3.5" />
+                      <span className="whitespace-nowrap">{config.label}</span>
                     </div>
                   </td>
 
                   {/* Ticket ID */}
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <code className="text-sm font-mono text-slate-700 bg-slate-100 px-2 py-1 rounded">
+                  <td className="px-3 py-2" style={{ width: '130px' }}>
+                    <div className="flex items-center gap-1">
+                      <code className="text-xs font-mono text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded whitespace-nowrap">
                         {request.ticketNumber}
                       </code>
                       <button
                         onClick={() => handleCopyTicketNumber(request.ticketNumber)}
-                        className="p-1 hover:bg-slate-100 rounded transition-colors"
+                        className="p-0.5 hover:bg-slate-200 rounded transition-colors flex-shrink-0"
                         title="Copy ticket ID"
                       >
                         {copiedTicketId === request.ticketNumber ? (
-                          <Check className="h-4 w-4 text-green-600" />
+                          <Check className="h-3.5 w-3.5 text-green-600" />
                         ) : (
-                          <Copy className="h-4 w-4 text-slate-400 hover:text-slate-600" />
+                          <Copy className="h-3.5 w-3.5 text-slate-400" />
                         )}
                       </button>
                     </div>
                   </td>
 
                   {/* Description */}
-                  <td className="px-4 py-3">
-                    <p className="text-slate-700 line-clamp-2">{request.description}</p>
+                  <td className="px-3 py-2 min-w-0">
+                    <p className="text-slate-700 truncate text-xs" title={request.description}>{request.description}</p>
+                  </td>
+
+                  {/* Status */}
+                  <td className="px-3 py-2" style={{ width: '80px' }}>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${statusColor}`}>
+                      {request.status || 'NEW'}
+                    </span>
                   </td>
 
                   {/* Created */}
-                  <td className="px-4 py-3 text-slate-600">
-                    {formatDistanceToNow(request.createdAt, { addSuffix: true })}
+                  <td className="px-3 py-2" style={{ width: '120px' }}>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger className="flex items-center gap-1 text-slate-600 hover:text-slate-900 cursor-help whitespace-nowrap text-xs">
+                          <Clock className="h-3.5 w-3.5 flex-shrink-0" />
+                          <span>{formatDistanceToNow(request.createdAt, { addSuffix: true })}</span>
+                        </TooltipTrigger>
+                        <TooltipContent className="text-xs">
+                          {new Date(request.createdAt).toLocaleString()}
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   </td>
 
-                  {/* Quick Links */}
-                  <td className="px-4 py-3 text-center">
-                    <div className="flex items-center justify-center gap-2">
+                  {/* Modified */}
+                  <td className="px-3 py-2" style={{ width: '120px' }}>
+                    {request.updatedAt && request.updatedAt !== request.createdAt ? (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger className="flex items-center gap-1 text-slate-600 hover:text-slate-900 cursor-help whitespace-nowrap text-xs">
+                            <Clock className="h-3.5 w-3.5 flex-shrink-0" />
+                            <span>{formatDistanceToNow(request.updatedAt, { addSuffix: true })}</span>
+                          </TooltipTrigger>
+                          <TooltipContent className="text-xs">
+                            {new Date(request.updatedAt).toLocaleString()}
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    ) : (
+                      <span className="text-xs text-slate-400">-</span>
+                    )}
+                  </td>
+
+                  {/* Actions */}
+                  <td className="px-3 py-2 text-center" style={{ width: '80px' }}>
+                    <div className="flex items-center justify-center gap-1">
                       <button
                         onClick={() => {
                           setSelectedRequestId(request.id)
                           setDetailsOpen(true)
                         }}
-                        className="p-1 hover:bg-slate-200 rounded-lg transition-colors"
+                        className="p-1 hover:bg-slate-200 rounded transition-colors"
                         title="View Details"
                       >
-                        <Eye className="h-4 w-4 text-slate-600 hover:text-slate-900" />
+                        <Eye className="h-4 w-4 text-slate-600" />
                       </button>
                       <button
                         onClick={() => {
                           setSelectedRequestId(request.id)
                           setIsSidebarOpen(true)
                         }}
-                        className="p-1 hover:bg-slate-200 rounded-lg transition-colors"
+                        className="p-1 hover:bg-slate-200 rounded transition-colors"
                         title={`Comments (${commentCount})`}
                       >
-                        <MessageCircle className="h-4 w-4 text-slate-600 hover:text-slate-900" />
+                        <MessageCircle className="h-4 w-4 text-slate-600" />
                       </button>
                     </div>
                   </td>

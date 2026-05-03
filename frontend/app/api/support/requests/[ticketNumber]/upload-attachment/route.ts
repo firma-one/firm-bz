@@ -7,7 +7,6 @@ import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { getStorageAdapter } from '@/lib/connectors/registry'
 import { METADATA_FOLDER_NAME } from '@/lib/connectors/types'
 
-const ASSETS_FOLDER = 'assets'
 const SUPPORT_FOLDER = 'support'
 
 export async function POST(
@@ -106,10 +105,9 @@ export async function POST(
       return NextResponse.json({ error: 'Firm folder not configured' }, { status: 400 })
     }
 
-    // Build folder hierarchy: .meta → assets → support → <ticketNumber>
+    // Build folder hierarchy: assets → support → <ticketNumber>
     const adapter = await getStorageAdapter(connector.id)
-    const metaId = await adapter.findOrCreateFolder(connector.id, firmFolderId, METADATA_FOLDER_NAME)
-    const assetsId = await adapter.findOrCreateFolder(connector.id, metaId, ASSETS_FOLDER)
+    const assetsId = await adapter.findOrCreateFolder(connector.id, firmFolderId, 'assets')
     const supportId = await adapter.findOrCreateFolder(connector.id, assetsId, SUPPORT_FOLDER)
     const ticketFolderId = await adapter.findOrCreateFolder(connector.id, supportId, params.ticketNumber)
 
@@ -127,7 +125,7 @@ export async function POST(
       )
     }
 
-    const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+    const response = await fetch('https://www.googleapis.com/drive/v3/files', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -141,14 +139,26 @@ export async function POST(
     })
 
     if (!response.ok) {
-      console.error('Failed to create file in Google Drive:', await response.text())
+      const errorText = await response.text()
+      console.error('Failed to create file in Google Drive:', {
+        status: response.status,
+        statusText: response.statusText,
+        body: errorText,
+      })
       return NextResponse.json(
-        { error: 'Failed to upload file to Google Drive' },
+        { error: 'Failed to create file in Google Drive' },
         { status: 500 }
       )
     }
 
     const googleResponse = await response.json() as { id: string }
+    if (!googleResponse.id) {
+      console.error('Google Drive response missing file id:', googleResponse)
+      return NextResponse.json(
+        { error: 'Google Drive response invalid' },
+        { status: 500 }
+      )
+    }
     const driveFileId = googleResponse.id
 
     // Upload file content
@@ -163,12 +173,25 @@ export async function POST(
     })
 
     if (!uploadResponse.ok) {
-      console.error('Failed to upload file content to Google Drive:', await uploadResponse.text())
+      const errorText = await uploadResponse.text()
+      console.error('Failed to upload file content to Google Drive:', {
+        fileId: driveFileId,
+        status: uploadResponse.status,
+        statusText: uploadResponse.statusText,
+        body: errorText,
+      })
       return NextResponse.json(
         { error: 'Failed to upload file content' },
         { status: 500 }
       )
     }
+
+    console.log('Successfully uploaded file to Google Drive:', {
+      ticketNumber: params.ticketNumber,
+      fileName: file.name,
+      driveFileId,
+      size: file.size,
+    })
 
     return NextResponse.json({
       success: true,

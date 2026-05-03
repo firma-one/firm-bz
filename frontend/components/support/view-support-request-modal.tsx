@@ -4,18 +4,31 @@ import React, { useState, useRef } from 'react'
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { Copy, ExternalLink, Download, FileIcon, Paperclip, CheckCircle2, X } from "lucide-react"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Copy, Download, FileIcon, Paperclip, CheckCircle2, X, Trash2, Clock } from "lucide-react"
 import { TicketType } from '@prisma/client'
 import { useToast } from "@/components/ui/toast"
 import { uploadSupportAttachment, type AttachmentMeta } from '@/lib/support-attachment-upload'
 import { supabase } from '@/lib/supabase'
+import { formatDistanceToNow } from 'date-fns'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 interface ViewSupportRequestModalProps {
   open: boolean
@@ -28,7 +41,9 @@ interface ViewSupportRequestModalProps {
     description: string
     attachments?: AttachmentMeta[]
     createdAt: Date
+    updatedAt?: Date
     status?: string
+    firmId?: string | null
   }
 }
 
@@ -48,10 +63,10 @@ const REQUEST_TYPE_LABELS: Record<TicketType, string> = {
   [TicketType.ENQUIRY]: 'General Enquiry',
 }
 
-const REQUEST_TYPE_COLORS: Record<TicketType, string> = {
-  [TicketType.BUG]: 'bg-red-100 text-red-800',
-  [TicketType.REQUEST]: 'bg-blue-100 text-blue-800',
-  [TicketType.ENQUIRY]: 'bg-amber-100 text-amber-800',
+const REQUEST_TYPE_CONFIG: Record<TicketType, { label: string; color: string; bgColor: string }> = {
+  [TicketType.BUG]: { label: 'Bug Report', color: 'text-red-600', bgColor: 'bg-red-50' },
+  [TicketType.REQUEST]: { label: 'Feature Request', color: 'text-amber-600', bgColor: 'bg-amber-50' },
+  [TicketType.ENQUIRY]: { label: 'General Enquiry', color: 'text-blue-600', bgColor: 'bg-blue-50' },
 }
 
 export function ViewSupportRequestModal({
@@ -64,6 +79,12 @@ export function ViewSupportRequestModal({
   const [newAttachments, setNewAttachments] = useState<PendingAttachment[]>([])
   const [isDragOver, setIsDragOver] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [currentStatus, setCurrentStatus] = useState(ticket.status || 'NEW')
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false)
+  const [deletionConfirmation, setDeletionConfirmation] = useState<{
+    attachmentName: string
+    shown: boolean
+  } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { addToast } = useToast()
 
@@ -232,6 +253,130 @@ export function ViewSupportRequestModal({
     })
   }
 
+  const handleDeleteAttachment = async (attachment: AttachmentMeta & { isNew?: boolean }) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+
+      if (!session?.access_token) {
+        setError('No active session')
+        return
+      }
+
+      const response = await fetch(
+        `/api/support/requests/${ticket.ticketNumber}/attachments/${attachment.driveFileId}/delete`,
+        {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+        }
+      )
+
+      if (!response.ok) {
+        setError('Failed to delete attachment')
+        return
+      }
+
+      setDeletionConfirmation({
+        attachmentName: attachment.originalName,
+        shown: true,
+      })
+
+      // Auto-hide confirmation after 3 seconds
+      setTimeout(() => setDeletionConfirmation(null), 3000)
+    } catch (err: any) {
+      console.error('Failed to delete attachment:', err)
+      setError('Failed to delete attachment')
+    }
+  }
+
+  const handleDownloadAttachment = async (attachment: AttachmentMeta) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+
+      if (!session?.access_token) {
+        addToast({
+          title: 'Error',
+          message: 'No active session',
+          type: 'error',
+          duration: 3000,
+        })
+        return
+      }
+
+      const downloadUrl = `/api/documents/download?fileId=${attachment.driveFileId}&connectorId=${ticket.firmId || ''}&filename=${encodeURIComponent(attachment.originalName)}&token=${session.access_token}`
+
+      const a = window.document.createElement('a')
+      a.href = downloadUrl
+      a.download = attachment.originalName
+      window.document.body.appendChild(a)
+      a.click()
+      window.document.body.removeChild(a)
+    } catch (error) {
+      console.error('Download error:', error)
+      addToast({
+        title: 'Error',
+        message: 'Failed to download file',
+        type: 'error',
+        duration: 3000,
+      })
+    }
+  }
+
+  const handleStatusChange = async (newStatus: string) => {
+    if (newStatus === currentStatus) return
+
+    setIsUpdatingStatus(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+
+      if (!session?.access_token) {
+        addToast({
+          title: 'Error',
+          message: 'No active session',
+          type: 'error',
+          duration: 3000,
+        })
+        setIsUpdatingStatus(false)
+        return
+      }
+
+      const response = await fetch(
+        `/api/support/requests/${ticket.ticketNumber}/status`,
+        {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ status: newStatus }),
+        }
+      )
+
+      if (!response.ok) {
+        throw new Error('Failed to update status')
+      }
+
+      setCurrentStatus(newStatus)
+      addToast({
+        title: 'Status updated',
+        message: `Ticket status changed to ${newStatus}`,
+        type: 'success',
+        duration: 2000,
+      })
+    } catch (err: any) {
+      console.error('Failed to update status:', err)
+      addToast({
+        title: 'Error',
+        message: err.message || 'Failed to update status',
+        type: 'error',
+        duration: 3000,
+      })
+    } finally {
+      setIsUpdatingStatus(false)
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[600px] border-slate-200 max-h-[90vh] overflow-y-auto p-6">
@@ -243,7 +388,7 @@ export function ViewSupportRequestModal({
           {/* Ticket Info */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-slate-600">Ticket ID</span>
+              <span className="text-sm font-semibold text-slate-900">Ticket ID</span>
               <div className="flex items-center gap-2">
                 <code className="text-sm font-mono bg-slate-100 px-2 py-1 rounded text-slate-900">
                   {ticket.ticketNumber}
@@ -261,17 +406,57 @@ export function ViewSupportRequestModal({
             </div>
 
             <div className="flex items-center justify-between">
-              <span className="text-sm text-slate-600">Type</span>
-              <Badge className={`${REQUEST_TYPE_COLORS[ticket.type]}`}>
-                {REQUEST_TYPE_LABELS[ticket.type]}
-              </Badge>
+              <span className="text-sm font-semibold text-slate-900">Type</span>
+              <div className={`inline-flex items-center px-3 py-1.5 rounded-md text-sm font-medium ${REQUEST_TYPE_CONFIG[ticket.type].bgColor} ${REQUEST_TYPE_CONFIG[ticket.type].color}`}>
+                {REQUEST_TYPE_CONFIG[ticket.type].label}
+              </div>
             </div>
 
             <div className="flex items-center justify-between">
-              <span className="text-sm text-slate-600">Created</span>
-              <span className="text-sm text-slate-900">
-                {new Date(ticket.createdAt).toLocaleString()}
-              </span>
+              <span className="text-sm font-semibold text-slate-900">Created</span>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger className="flex items-center gap-1 text-slate-600 hover:text-slate-900 cursor-help whitespace-nowrap text-xs">
+                    <Clock className="h-3.5 w-3.5 flex-shrink-0" />
+                    <span>{formatDistanceToNow(new Date(ticket.createdAt), { addSuffix: true })}</span>
+                  </TooltipTrigger>
+                  <TooltipContent className="text-xs">
+                    {new Date(ticket.createdAt).toLocaleString()}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+
+            {ticket.updatedAt && ticket.updatedAt !== ticket.createdAt && (
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-semibold text-slate-900">Modified</span>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger className="flex items-center gap-1 text-slate-600 hover:text-slate-900 cursor-help whitespace-nowrap text-xs">
+                      <Clock className="h-3.5 w-3.5 flex-shrink-0" />
+                      <span>{formatDistanceToNow(new Date(ticket.updatedAt), { addSuffix: true })}</span>
+                    </TooltipTrigger>
+                    <TooltipContent className="text-xs">
+                      {new Date(ticket.updatedAt).toLocaleString()}
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold text-slate-900">Status</span>
+              <Select value={currentStatus} onValueChange={handleStatusChange} disabled={isUpdatingStatus}>
+                <SelectTrigger className="w-48 h-9 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent side="bottom" align="end" sideOffset={6}>
+                  <SelectItem value="NEW">New</SelectItem>
+                  <SelectItem value="IN_PROGRESS">In Progress</SelectItem>
+                  <SelectItem value="RESOLVED">Resolved</SelectItem>
+                  <SelectItem value="CLOSED">Closed</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
@@ -279,10 +464,12 @@ export function ViewSupportRequestModal({
 
           {/* Description */}
           <div className="space-y-2">
-            <Label className="text-slate-900">Description</Label>
-            <div className="bg-slate-50 p-3 rounded border border-slate-200 text-slate-900 text-sm whitespace-pre-wrap">
-              {ticket.description}
-            </div>
+            <Label className="text-slate-900 font-semibold">Description</Label>
+            <textarea
+              readOnly
+              value={ticket.description}
+              className="w-full h-20 p-3 bg-slate-50 border border-slate-200 rounded text-slate-900 text-sm resize-none overflow-y-auto"
+            />
           </div>
 
           {/* Attachments Section */}
@@ -342,11 +529,12 @@ export function ViewSupportRequestModal({
 
             {/* Existing + Pending Attachments */}
             {allAttachments.length > 0 && (
-              <div className="space-y-2 max-h-64 overflow-y-auto">
+              <div className="space-y-2 max-h-96 overflow-y-auto">
                 {allAttachments.map((a, idx) => (
-                  <div key={idx} className="space-y-2">
-                    {isImage(a.mimeType) ? (
-                      <div className="border border-slate-200 rounded overflow-hidden">
+                  <div key={idx} className="space-y-1">
+                    {/* Image Preview */}
+                    {isImage(a.mimeType) && (
+                      <div className="border border-slate-200 rounded overflow-hidden max-h-48">
                         <img
                           src={getGoogleDriveViewUrl(a.driveFileId)}
                           alt={a.originalName}
@@ -356,43 +544,47 @@ export function ViewSupportRequestModal({
                             (e.target as HTMLImageElement).style.display = 'none'
                           }}
                         />
-                        <div className="p-2 bg-slate-50 flex items-center justify-between">
-                          <span className="text-sm text-slate-900 truncate">{a.originalName}</span>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="h-auto p-1 text-slate-500 hover:text-slate-900"
-                            asChild
-                          >
-                            <a href={getGoogleDriveViewUrl(a.driveFileId)} target="_blank" rel="noopener noreferrer">
-                              <ExternalLink className="h-4 w-4" />
-                            </a>
-                          </Button>
-                        </div>
                       </div>
-                    ) : (
-                      <div className="flex items-center gap-2 p-2 bg-slate-50 rounded border border-slate-200">
-                        <FileIcon className="h-4 w-4 text-slate-500 flex-shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm text-slate-900 truncate">{a.originalName}</p>
+                    )}
+
+                    {/* File Row with Actions */}
+                    <div className="flex items-center gap-2 p-2 bg-slate-50 rounded border border-slate-200">
+                      <FileIcon className="h-4 w-4 text-slate-500 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-slate-900 truncate">{a.originalName}</p>
+                        {a.size ? (
                           <p className="text-xs text-slate-500">
                             {(a.size / 1024 / 1024).toFixed(2)} MB
                           </p>
-                        </div>
+                        ) : (
+                          <p className="text-xs text-slate-400">Size unknown</p>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1 flex-shrink-0">
                         <Button
                           type="button"
                           variant="ghost"
                           size="sm"
                           className="h-auto p-1 text-slate-500 hover:text-slate-900"
-                          asChild
+                          title="Download"
+                          onClick={() => handleDownloadAttachment(a)}
                         >
-                          <a href={getGoogleDriveViewUrl(a.driveFileId)} target="_blank" rel="noopener noreferrer">
-                            <Download className="h-4 w-4" />
-                          </a>
+                          <Download className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-auto p-1 text-slate-500 hover:text-red-600"
+                          title="Delete"
+                          onClick={() => handleDeleteAttachment(a)}
+                          disabled={isLoading || isUpdatingStatus}
+                        >
+                          <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
-                    )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -458,6 +650,16 @@ export function ViewSupportRequestModal({
               </Button>
             )}
           </div>
+
+          {/* Deletion Confirmation Toast */}
+          {deletionConfirmation?.shown && (
+            <div className="mt-4 p-3 bg-emerald-50 border border-emerald-200 rounded-md flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+              <p className="text-sm text-emerald-700">
+                <strong>{deletionConfirmation.attachmentName}</strong> has been deleted
+              </p>
+            </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>
