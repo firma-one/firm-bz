@@ -110,6 +110,9 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
     const { viewAsPersonaSlug } = useViewAs()
     const rightPane = useRightPane()
     const [activeCommentDocId, setActiveCommentDocId] = useState<string | null>(null)
+    const [activeInfoDocId, setActiveInfoDocId] = useState<string | null>(null)
+    const [activeActivityDocId, setActiveActivityDocId] = useState<string | null>(null)
+    const [activeVersionDocId, setActiveVersionDocId] = useState<string | null>(null)
     const lastHandledDeeplinkHashRef = useRef<string>('')
     const { handleSecureOpen, secureModalOpen, secureModalData, setSecureModalOpen, isRegrantingId } = useSecureOpenDocument({
         projectId,
@@ -132,14 +135,19 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
     }, [session])
 
     useEffect(() => {
-        // Clear row highlight when the right pane closes or switches away from Comments.
+        // Clear row highlight when the right pane closes or switches away from specific panes.
         // Title is "Comments" from the file list / hash; ProjectCommentsTab uses "Comment".
         const isCommentsPane =
             Boolean(rightPane.content) &&
             (rightPane.title === 'Comment' || rightPane.title === 'Comments')
-        if (!isCommentsPane) {
-            setActiveCommentDocId(null)
-        }
+        const isInfoPane = Boolean(rightPane.content) && rightPane.title === 'File information'
+        const isActivityPane = Boolean(rightPane.content) && rightPane.title === 'Activity Stream'
+        const isVersionPane = Boolean(rightPane.content) && rightPane.title === 'Version History'
+
+        if (!isCommentsPane) setActiveCommentDocId(null)
+        if (!isInfoPane) setActiveInfoDocId(null)
+        if (!isActivityPane) setActiveActivityDocId(null)
+        if (!isVersionPane) setActiveVersionDocId(null)
     }, [rightPane.content, rightPane.title])
 
     /** Same behavior as DocumentActionMenu → Comment (direct right pane; no URL hash). */
@@ -2659,7 +2667,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                             isFolder && "cursor-pointer",
                                             "hover:bg-slate-50",
                                             file.id === actionMenuOpenFileId && "bg-slate-50",
-                                            file.id === activeCommentDocId && "bg-slate-50",
+                                            (file.id === activeCommentDocId || file.id === activeInfoDocId || file.id === activeActivityDocId || file.id === activeVersionDocId) && "bg-slate-50",
                                             draggedItem?.id === file.id && "opacity-40 grayscale",
                                             dragOverFolderId === file.id && "bg-slate-100 ring-2 ring-inset ring-slate-300/60 shadow-sm z-[1]"
                                         )}
@@ -2707,7 +2715,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                                         strokeWidth={2}
                                                                     />
                                                                 </div>
-                                                            ) : file.id === activeCommentDocId && !isFolder ? (
+                                                            ) : (file.id === activeCommentDocId || file.id === activeInfoDocId || file.id === activeActivityDocId || file.id === activeVersionDocId) && !isFolder ? (
                                                                 <div className="flex w-full min-w-0 items-center gap-3">
                                                                     <span
                                                                         className={cn(
@@ -2719,7 +2727,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                                     </span>
                                                                     <CircleChevronLeft
                                                                         className="h-3.5 w-3.5 shrink-0 text-black animate-deeplink-icon-pulse"
-                                                                        aria-label="Comments open for this file"
+                                                                        aria-label="Sidebar open for this file"
                                                                         strokeWidth={2}
                                                                     />
                                                                 </div>
@@ -2866,6 +2874,9 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                     canManage={canOrganizeTree}
                                                     currentFolderType={currentFolderType}
                                                     onOpenCommentPane={(docId) => setActiveCommentDocId(docId)}
+                                                    onOpenInfoPane={(docId) => setActiveInfoDocId(docId)}
+                                                    onOpenActivityPane={(docId) => setActiveActivityDocId(docId)}
+                                                    onOpenVersionPane={(docId) => setActiveVersionDocId(docId)}
                                                     onRenameDocument={canMutateFile ? (doc) => openRenameModal(doc as DriveFile) : undefined}
                                                     onDuplicateDocument={canMutateFile ? (doc) => handleDuplicate(doc as DriveFile) : undefined}
                                                     onCopyDocument={generalFolderId && canMutateFile ? (doc) => openCopyMoveModal(doc as DriveFile, 'copy') : undefined}

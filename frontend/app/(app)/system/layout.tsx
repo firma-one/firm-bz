@@ -14,8 +14,7 @@ import { Button } from "@/components/ui/button"
 
 const systemFont = Outfit({ subsets: ["latin"] })
 
-/** Access controlled by JWT app_metadata.role === 'SYS_ADMIN'. */
-const JWT_ADMIN_ROLE = "SYS_ADMIN"
+/** Access controlled by SYSTEM_ADMIN_EMAILS env var. */
 
 function SystemLayoutContent({
     children,
@@ -35,20 +34,10 @@ function SystemLayoutContent({
             return
         }
 
-        const jwtRole = user.app_metadata?.role
-        if (jwtRole === JWT_ADMIN_ROLE) {
-            setAuthState("authorized")
-            return
-        }
-
         fetch("/api/permissions/is-system-admin")
             .then((r) => r.ok ? r.json() : { isSystemAdmin: false })
             .then((data) => {
-                if (data.isSystemAdmin) {
-                    setAuthState("authorized")
-                } else {
-                    setAuthState("unauthorized")
-                }
+                setAuthState(data.isSystemAdmin ? "authorized" : "unauthorized")
             })
             .catch(() => setAuthState("unauthorized"))
     }, [user, loading, router])
@@ -74,7 +63,7 @@ function SystemLayoutContent({
                 <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm">
                     <h1 className="text-lg font-semibold text-slate-900">System access denied</h1>
                     <p className="mt-2 text-sm text-slate-600">
-                        Your account is signed in, but it does not have the SYS_ADMIN role required for this area.
+                        Your account does not have system admin access.
                     </p>
                     <div className="mt-5">
                         <Link

@@ -827,11 +827,13 @@ model Waitlist {
 
 model CustomerRequest {
   id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticketNumber   String   @unique
   type           TicketType
   status         TicketStatus @default(NEW)
   description    String
   errorDetails   Json?
   metadata       Json?
+  comments       Json     @default("[]")
   firmId         String?  @db.Uuid
   clientId       String?  @db.Uuid
   engagementId   String?  @db.Uuid

@@ -5,10 +5,12 @@ import { createPortal } from "react-dom"
 import { Button } from "@/components/ui/button"
 import { DateTimePicker } from "@/components/ui/date-time-picker"
 import { DocumentIcon } from "@/components/ui/document-icon"
+import { UserAvatarWithTooltip } from "@/components/ui/user-avatar-with-tooltip"
 import { formatFileSize, formatSmartDateTime } from "@/lib/utils"
 import { DocumentEditPanelContent, DocumentPreviewPanelContent, getDocumentEditUrl } from "@/components/files/document-edit-sheet"
 import { useRightPane } from "@/lib/right-pane-context"
-import { VersionHistorySheet } from "@/components/files/version-history-sheet"
+import { DocumentActivityPane } from "@/components/files/document-activity-pane"
+import { DocumentHistoryPane } from "@/components/files/document-history-pane"
 import { DocumentShareModal } from "@/components/files/document-share-modal"
 import { DocumentDocCommentsPane } from "@/components/projects/document-doc-comments-pane"
 import {
@@ -36,6 +38,8 @@ import {
   Link2,
   Lock,
   Unlock,
+  ChevronRight,
+  Folder,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -88,6 +92,12 @@ interface DocumentActionMenuProps {
   triggerIcon?: React.ReactNode
   /** Optional: notify parent when comment pane is opened (e.g. to highlight row). */
   onOpenCommentPane?: (documentId: string) => void
+  /** Optional: notify parent when info pane is opened (e.g. to highlight row). */
+  onOpenInfoPane?: (documentId: string) => void
+  /** Optional: notify parent when activity pane is opened (e.g. to highlight row). */
+  onOpenActivityPane?: (documentId: string) => void
+  /** Optional: notify parent when version pane is opened (e.g. to highlight row). */
+  onOpenVersionPane?: (documentId: string) => void
   /** Engagement Lead only: Lock / Unlock version (files). Prefer explicit over showShareModal. */
   isEngagementLead?: boolean
 }
@@ -115,14 +125,15 @@ export function DocumentActionMenu({
   onOpenChange,
   triggerIcon,
   onOpenCommentPane,
+  onOpenInfoPane,
+  onOpenActivityPane,
+  onOpenVersionPane,
   isEngagementLead,
 }: DocumentActionMenuProps) {
   const [showDueDatePicker, setShowDueDatePicker] = useState(false)
-  const [showVersionHistory, setShowVersionHistory] = useState(false)
   const [showShareModalOpen, setShowShareModalOpen] = useState(false)
   /** Drive id or project document UUID — disables Finalize row while request in flight */
   const [finalizeLockActiveId, setFinalizeLockActiveId] = useState<string | null>(null)
-  const [showFileInfo, setShowFileInfo] = useState(false)
   const [selectedDueDate, setSelectedDueDate] = useState<string>("")
   const [hasCopiedName, setHasCopiedName] = useState(false)
   const [mounted, setMounted] = useState(false)
@@ -823,18 +834,112 @@ export function DocumentActionMenu({
                   </DropdownMenuSubTrigger>
                   <DropdownMenuSubContent className="w-56">
                     <DropdownMenuItem
-                      onClick={() => setShowFileInfo(true)}
+                      onClick={() => {
+                        onOpenInfoPane?.(document.id)
+                        rightPane.setTitle('File information')
+                        rightPane.setHeaderIcon(<DocumentIcon mimeType={document.mimeType} className="h-4 w-4" />)
+                        rightPane.setHeaderSubtitle('')
+                        rightPane.setHeaderActions(null)
+                        rightPane.setContent(
+                          <div className="flex flex-col h-full min-h-0 p-4 min-w-0">
+                            {document.parentName && (
+                              <div className="flex items-center gap-1 text-[11px] text-slate-400 mb-2">
+                                <Folder className="h-3 w-3" />
+                                <span>{document.parentName}</span>
+                                <ChevronRight className="h-3 w-3" />
+                                <span className="text-slate-600 font-medium truncate max-w-[180px]">{document.name}</span>
+                              </div>
+                            )}
+                            <div className="inline-flex max-w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 mb-4">
+                              <DocumentIcon mimeType={document.mimeType} className="h-4 w-4 flex-shrink-0" />
+                              <span className="truncate text-xs font-medium text-slate-700" title={document.name}>{document.name}</span>
+                            </div>
+                            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 space-y-3">
+                              <div className="flex justify-between items-center">
+                                <span className="text-xs text-slate-500">File type</span>
+                                <span className="text-xs">{getDisplayType(document)}</span>
+                              </div>
+                              {(document.mimeType ?? '').trim() !== '' && (
+                                <div className="flex justify-between items-center">
+                                  <span className="text-xs text-slate-500">Mime type</span>
+                                  <span className="font-mono text-[10px] truncate max-w-[240px] text-right" title={document.mimeType ?? ''}>{document.mimeType}</span>
+                                </div>
+                              )}
+                              {document.size != null && typeof document.size === 'number' && (
+                                <div className="flex justify-between items-center">
+                                  <span className="text-xs text-slate-500">Size</span>
+                                  <span className="text-xs">{formatFileSize(document.size)}</span>
+                                </div>
+                              )}
+                              {document.modifiedTime && !Number.isNaN(new Date(document.modifiedTime).getTime()) && (
+                                <div className="flex justify-between items-center">
+                                  <span className="text-xs text-slate-500">Modified</span>
+                                  <span className="text-xs">{formatSmartDateTime(document.modifiedTime)}</span>
+                                </div>
+                              )}
+                              {document.createdTime && !Number.isNaN(new Date(document.createdTime).getTime()) && (
+                                <div className="flex justify-between items-center">
+                                  <span className="text-xs text-slate-500">Created</span>
+                                  <span className="text-xs">{formatSmartDateTime(document.createdTime)}</span>
+                                </div>
+                              )}
+                              {(document.owners?.[0]?.displayName || document.lastModifyingUser?.displayName) && (
+                                <div className="flex justify-between items-center">
+                                  <span className="text-xs text-slate-500">Owner</span>
+                                  {document.owners?.[0] ? (
+                                    <UserAvatarWithTooltip
+                                      displayName={document.owners[0].displayName}
+                                      photoLink={document.owners[0].photoLink}
+                                      email={document.owners[0].emailAddress}
+                                      avatarSize="md"
+                                      showEmail={true}
+                                      showRole={false}
+                                    />
+                                  ) : (
+                                    <span className="text-xs">{document.lastModifyingUser?.displayName || '—'}</span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )
+                        rightPane.setExpanded?.(false)
+                      }}
                       className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
                     >
                       <Info className="h-4 w-4 text-gray-600" />
                       <span>File information</span>
                     </DropdownMenuItem>
                     <DropdownMenuItem
-                      onClick={() => { setShowVersionHistory(true); onVersionHistory?.(document) }}
+                      onClick={() => {
+                        onOpenActivityPane?.(document.id)
+                        rightPane.setTitle('Activity Stream')
+                        rightPane.setHeaderIcon(<DocumentIcon mimeType={document.mimeType} className="h-4 w-4" />)
+                        rightPane.setHeaderSubtitle('Last 30 days')
+                        rightPane.setHeaderActions(null)
+                        rightPane.setContent(<DocumentActivityPane document={document} />)
+                        rightPane.setExpanded?.(false)
+                      }}
                       className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
                     >
                       <Clock className="h-4 w-4 text-gray-600" />
-                      <span>Version history</span>
+                      <span>Activity Stream</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => {
+                        onOpenVersionPane?.(document.id)
+                        rightPane.setTitle('Version History')
+                        rightPane.setHeaderIcon(<DocumentIcon mimeType={document.mimeType} className="h-4 w-4" />)
+                        rightPane.setHeaderSubtitle('Full history')
+                        rightPane.setHeaderActions(null)
+                        rightPane.setContent(<DocumentHistoryPane document={document} />)
+                        rightPane.setExpanded?.(false)
+                        onVersionHistory?.(document)
+                      }}
+                      className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                    >
+                      <Clock className="h-4 w-4 text-gray-600" />
+                      <span>Version History</span>
                     </DropdownMenuItem>
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
@@ -947,59 +1052,6 @@ export function DocumentActionMenu({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <VersionHistorySheet
-        isOpen={showVersionHistory}
-        onClose={() => setShowVersionHistory(false)}
-        document={document}
-      />
-
-      <Dialog open={showFileInfo} onOpenChange={setShowFileInfo}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>File information</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-3 py-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-gray-500">Name</span>
-              <span className="font-medium truncate max-w-[240px]" title={document.name}>{document.name}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">Type</span>
-              <span>{getDisplayType(document)}</span>
-            </div>
-            {(document.mimeType ?? '').trim() !== '' && (
-              <div className="flex justify-between">
-                <span className="text-gray-500">Mime type</span>
-                <span className="font-mono text-xs truncate max-w-[240px]" title={document.mimeType ?? ''}>{document.mimeType}</span>
-              </div>
-            )}
-            {document.size != null && typeof document.size === 'number' && (
-              <div className="flex justify-between">
-                <span className="text-gray-500">Size</span>
-                <span>{formatFileSize(document.size)} ({document.size.toLocaleString()} B)</span>
-              </div>
-            )}
-            {document.modifiedTime && !Number.isNaN(new Date(document.modifiedTime).getTime()) && (
-              <div className="flex justify-between">
-                <span className="text-gray-500">Modified</span>
-                <span>{formatSmartDateTime(document.modifiedTime)}</span>
-              </div>
-            )}
-            {document.createdTime && !Number.isNaN(new Date(document.createdTime).getTime()) && (
-              <div className="flex justify-between">
-                <span className="text-gray-500">Created</span>
-                <span>{formatSmartDateTime(document.createdTime)}</span>
-              </div>
-            )}
-            {(document.owners?.[0]?.displayName || document.lastModifyingUser?.displayName) && (
-              <div className="flex justify-between">
-                <span className="text-gray-500">Owner</span>
-                <span>{document.owners?.[0]?.displayName || document.lastModifyingUser?.displayName || '—'}</span>
-              </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {showShareModal && projectId && (
         <DocumentShareModal

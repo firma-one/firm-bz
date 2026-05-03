@@ -13,7 +13,10 @@ import {
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
-import { SquarePlus } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { SquarePlus, Info, ChevronDown, Check } from "lucide-react"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { SandboxInfoBanner } from "@/components/ui/sandbox-info-banner"
 import { createProject, type LwCrmEngagementStatus } from '@/lib/actions/project'
@@ -36,6 +39,8 @@ export function AddProjectModal({ orgSlug, clientSlug, firmSandboxOnly = false, 
     const [startDate, setStartDate] = useState('')
     const [endDate, setEndDate] = useState('')
     const [contractType, setContractType] = useState('')
+    const [contractTypeOpen, setContractTypeOpen] = useState(false)
+    const [contractTypeIsCustom, setContractTypeIsCustom] = useState(false)
     const [rateOrValue, setRateOrValue] = useState('')
     const [tagsInput, setTagsInput] = useState('')
     const [error, setError] = useState<string | null>(null)
@@ -122,6 +127,8 @@ export function AddProjectModal({ orgSlug, clientSlug, firmSandboxOnly = false, 
             setStartDate('')
             setEndDate('')
             setContractType('')
+            setContractTypeIsCustom(false)
+            setContractTypeOpen(false)
             setRateOrValue('')
             setTagsInput('')
             setError(null)
@@ -188,18 +195,17 @@ export function AddProjectModal({ orgSlug, clientSlug, firmSandboxOnly = false, 
                     </div>
                     <div className="space-y-2">
                         <Label htmlFor="eng-status" className={isSandboxFirm ? 'text-slate-500' : 'text-slate-900'}>Status</Label>
-                        <select
-                            id="eng-status"
-                            value={status}
-                            onChange={(e) => setStatus(e.target.value as LwCrmEngagementStatus)}
-                            disabled={isSandboxFirm || capBlocked || isLoading}
-                            className="w-full h-10 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                            <option value="PLANNED">Planned</option>
-                            <option value="ACTIVE">Active</option>
-                            <option value="PAUSED">Paused</option>
-                            <option value="COMPLETED">Completed</option>
-                        </select>
+                        <Select value={status} onValueChange={(value) => setStatus(value as LwCrmEngagementStatus)} disabled={isSandboxFirm || capBlocked || isLoading}>
+                            <SelectTrigger id="eng-status" className="border-slate-200 text-slate-900 disabled:cursor-not-allowed disabled:opacity-60">
+                                <SelectValue placeholder="Select status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="PLANNED">Planned</SelectItem>
+                                <SelectItem value="ACTIVE">Active</SelectItem>
+                                <SelectItem value="PAUSED">Paused</SelectItem>
+                                <SelectItem value="COMPLETED">Completed</SelectItem>
+                            </SelectContent>
+                        </Select>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                         <div className="space-y-2">
@@ -239,32 +245,103 @@ export function AddProjectModal({ orgSlug, clientSlug, firmSandboxOnly = false, 
                             className="flex w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 disabled:cursor-not-allowed disabled:opacity-60"
                         />
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-2">
-                            <Label htmlFor="ctype" className={isSandboxFirm ? 'text-slate-500' : 'text-slate-900'}>Contract type</Label>
-                            <Input
-                                id="ctype"
-                                value={contractType}
-                                onChange={(e) => setContractType(e.target.value)}
-                                placeholder="Optional"
-                                disabled={isSandboxFirm || capBlocked || isLoading}
-                                className="border-slate-200 text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="rate" className={isSandboxFirm ? 'text-slate-500' : 'text-slate-900'}>Rate / value</Label>
-                            <Input
-                                id="rate"
-                                value={rateOrValue}
-                                onChange={(e) => setRateOrValue(e.target.value)}
-                                placeholder="Optional"
-                                disabled={isSandboxFirm || capBlocked || isLoading}
-                                className="border-slate-200 text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
-                            />
-                        </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="ctype" className={isSandboxFirm ? 'text-slate-500' : 'text-slate-900'}>Contract type (optional)</Label>
+                        <DropdownMenu open={contractTypeOpen} onOpenChange={setContractTypeOpen}>
+                            <DropdownMenuTrigger asChild disabled={isSandboxFirm || capBlocked || isLoading}>
+                                <button
+                                    id="ctype"
+                                    className="w-full h-10 flex items-center justify-between rounded-md border border-slate-200 bg-white px-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                    <span className={contractType ? 'text-slate-900' : 'text-slate-400'}>
+                                        {contractType || 'Select a contract type'}
+                                    </span>
+                                    <ChevronDown className="h-4 w-4 text-slate-500 shrink-0" />
+                                </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent
+                                className="w-[var(--radix-dropdown-menu-trigger-width)] p-1"
+                                onCloseAutoFocus={(e) => e.preventDefault()}
+                            >
+                                {[
+                                    'Fixed Price',
+                                    'Retainer',
+                                    'Time & Material',
+                                    'Case Management',
+                                    'Milestone-Based',
+                                    'Strategic Advisory',
+                                    'Success Fee',
+                                    'Subscription / Recurring',
+                                ].map((label) => (
+                                    <DropdownMenuItem
+                                        key={label}
+                                        className="flex items-center justify-between cursor-pointer"
+                                        onSelect={() => {
+                                            setContractType(label)
+                                            setContractTypeIsCustom(false)
+                                            setContractTypeOpen(false)
+                                        }}
+                                    >
+                                        {label}
+                                        {contractType === label && !contractTypeIsCustom && (
+                                            <Check className="h-4 w-4 text-slate-700" />
+                                        )}
+                                    </DropdownMenuItem>
+                                ))}
+                                <DropdownMenuSeparator />
+                                <div className="px-2 py-1.5 flex items-center gap-2">
+                                    <input
+                                        value={contractTypeIsCustom ? contractType : ''}
+                                        onChange={(e) => {
+                                            setContractType(e.target.value)
+                                            setContractTypeIsCustom(true)
+                                        }}
+                                        onKeyDown={(e) => {
+                                            e.stopPropagation()
+                                            if (e.key === 'Enter') setContractTypeOpen(false)
+                                        }}
+                                        onClick={(e) => e.stopPropagation()}
+                                        placeholder="Other..."
+                                        className="flex-1 text-sm text-slate-900 placeholder:text-slate-400 outline-none bg-transparent"
+                                    />
+                                    {contractTypeIsCustom && contractType && (
+                                        <Check className="h-4 w-4 text-slate-700 shrink-0" />
+                                    )}
+                                </div>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                     </div>
                     <div className="space-y-2">
-                        <Label htmlFor="tags" className={isSandboxFirm ? 'text-slate-500' : 'text-slate-900'}>Tags</Label>
+                        <Label htmlFor="rate" className={isSandboxFirm ? 'text-slate-500' : 'text-slate-900'}>Rate / value</Label>
+                        <Input
+                            id="rate"
+                            value={rateOrValue}
+                            onChange={(e) => setRateOrValue(e.target.value)}
+                            placeholder="Optional"
+                            disabled={isSandboxFirm || capBlocked || isLoading}
+                            className="border-slate-200 text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                            <Label htmlFor="tags" className={isSandboxFirm ? 'text-slate-500' : 'text-slate-900'}>Tags</Label>
+                            <TooltipProvider delayDuration={100}>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Info className="h-3.5 w-3.5 text-slate-400 cursor-help" />
+                                    </TooltipTrigger>
+                                    <TooltipContent variant="light" side="right">
+                                        <div className="text-xs space-y-1">
+                                            <div className="font-semibold">Suggested tags:</div>
+                                            <div><span className="font-medium">Priority:</span> high-priority, urgent, rush</div>
+                                            <div><span className="font-medium">Client:</span> new-client, key-account, vip, pro-bono</div>
+                                            <div><span className="font-medium">Work type:</span> tax, audit, compliance, m&a, litigation, advisory, restructuring</div>
+                                            <div><span className="font-medium">Billing:</span> billable, non-billable, recurring, one-time</div>
+                                        </div>
+                                    </TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
+                        </div>
                         <Input
                             id="tags"
                             value={tagsInput}

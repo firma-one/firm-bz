@@ -15,6 +15,7 @@ interface HealthCheckResult {
 interface SmtpStatus {
   status: 'configured' | 'unconfigured'
   host?: string
+  error?: string
 }
 
 interface StatusResponse {
@@ -123,7 +124,7 @@ async function checkSmtp(): Promise<SmtpStatus> {
 
 export async function GET(request: NextRequest) {
   try {
-    // Verify SYS_ADMIN access
+    // Verify system admin access
     const authHeader = request.headers.get('authorization')
     if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -137,7 +138,7 @@ export async function GET(request: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser(token)
 
     if (!user?.id || !(await isSysAdminUser(user.id))) {
-      return NextResponse.json({ error: 'Forbidden: SYS_ADMIN role required' }, { status: 403 })
+      return NextResponse.json({ error: 'Forbidden: System admin access required' }, { status: 403 })
     }
 
     // Run all checks in parallel

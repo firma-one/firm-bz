@@ -26,6 +26,7 @@ import {
   Shield,
   ClipboardList,
   MessageCircle,
+  LifeBuoy,
 } from "lucide-react"
 import { FirmSelector, type FirmOption } from "@/components/projects/firm-selector"
 import { getUserFirms } from "@/lib/actions/firms"
@@ -630,16 +631,16 @@ export function AppSidebar({ variant = 'fixed' }: AppSidebarProps = {}) {
                 </>
               )}
 
-              {/* OTHERS (Connectors) */}
+              {/* OTHERS (Connectors, Contact Support) */}
               {showSettings && (
                 <>
-                  <div className={isCollapsed ? 'w-full flex items-center gap-0.5' : 'pt-2'}>
-                    {!isCollapsed && <h3 className={`d-sidebar-section px-3 ${spaceTitle}`}>Others</h3>}
+                  {!isCollapsed && <h3 className={`d-sidebar-section px-3 ${spaceTitle}`}>Others</h3>}
+                  <div className={isCollapsed ? 'w-full flex flex-col items-center gap-0.5' : 'space-y-0.5'}>
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Link
                           href={`${firmScopedNavBase}/connectors`}
-                          className={`flex items-center d-sidebar-nav rounded-lg transition-colors ${isCollapsed ? 'flex-1 px-0 justify-center' : 'px-3'} py-2 ${pathname.includes('/connectors')
+                          className={`flex items-center d-sidebar-nav rounded-lg transition-colors ${isCollapsed ? 'px-0 justify-center w-full' : 'px-3'} py-2 ${pathname.includes('/connectors')
                             ? 'bg-slate-100 text-slate-900 hover:bg-slate-100/90'
                             : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                             }`}
@@ -649,6 +650,21 @@ export function AppSidebar({ variant = 'fixed' }: AppSidebarProps = {}) {
                         </Link>
                       </TooltipTrigger>
                       {isCollapsed && <TooltipContent side="right">Connectors</TooltipContent>}
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Link
+                          href={`${firmScopedNavBase}/support`}
+                          className={`flex items-center d-sidebar-nav rounded-lg transition-colors ${isCollapsed ? 'px-0 justify-center w-full' : 'px-3'} py-2 ${pathname.includes('/support')
+                            ? 'bg-slate-100 text-slate-900 hover:bg-slate-100/90'
+                            : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                            }`}
+                        >
+                          <LifeBuoy className={`h-4 w-4 ${isCollapsed ? 'mx-auto' : 'mr-3'} ${pathname.includes('/support') ? 'text-slate-900' : 'text-slate-500'}`} />
+                          {!isCollapsed && <span>Contact Support</span>}
+                        </Link>
+                      </TooltipTrigger>
+                      {isCollapsed && <TooltipContent side="right">Contact Support</TooltipContent>}
                     </Tooltip>
                   </div>
                   {!isCollapsed && <SeparatorLine />}

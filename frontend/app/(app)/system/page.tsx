@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Link2, Wrench, Shield, ChevronRight, Users, CalendarRange, MailPlus, Database, Activity } from "lucide-react"
+import { Link2, Wrench, Shield, ChevronRight, Users, CalendarRange, MailPlus, Database, Activity, Cpu } from "lucide-react"
 
 const tools = [
     {
@@ -57,6 +57,14 @@ const tools = [
         description: "Live health status of integrations and onboarding recovery for stuck firms.",
         href: "/system/integrations",
         icon: Activity,
+        className: "group bg-white border border-gray-200 rounded-xl p-6 hover:shadow-sm hover:border-gray-400 transition-all duration-200 flex flex-col items-start",
+        iconClassName: "w-10 h-10 rounded-lg flex items-center justify-center mb-4 bg-gray-100 text-gray-900 group-hover:bg-black group-hover:text-white transition-colors"
+    },
+    {
+        title: "Background Jobs",
+        description: "Monitor Inngest function runs with status, duration, and firm-level filtering.",
+        href: "/system/jobs",
+        icon: Cpu,
         className: "group bg-white border border-gray-200 rounded-xl p-6 hover:shadow-sm hover:border-gray-400 transition-all duration-200 flex flex-col items-start",
         iconClassName: "w-10 h-10 rounded-lg flex items-center justify-center mb-4 bg-gray-100 text-gray-900 group-hover:bg-black group-hover:text-white transition-colors"
     }

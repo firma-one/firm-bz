@@ -17,7 +17,7 @@ interface ReprovisionResponse {
 
 export async function POST(request: NextRequest) {
   try {
-    // Verify SYS_ADMIN access
+    // Verify system admin access
     const authHeader = request.headers.get('authorization')
     if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser(token)
 
     if (!user?.id || !(await isSysAdminUser(user.id))) {
-      return NextResponse.json({ error: 'Forbidden: SYS_ADMIN role required' }, { status: 403 })
+      return NextResponse.json({ error: 'Forbidden: System admin access required' }, { status: 403 })
     }
 
     const body = await request.json() as ReprovisionRequest
@@ -141,7 +141,7 @@ export async function POST(request: NextRequest) {
           firmId,
           error: error instanceof Error ? error.message : 'Unknown error',
         })
-        logger.error('Error re-provisioning firm', { firmId, error })
+        logger.error(`Error re-provisioning firm ${firmId}`, error as Error)
       }
     }
 

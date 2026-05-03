@@ -4,6 +4,7 @@ import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { TicketType } from '@prisma/client'
 import { z } from 'zod'
+import { generateTicketNumber } from '@/lib/system/ticket-number-generator'
 
 // Schema for validation
 const TicketSchema = z.object({
@@ -39,11 +40,18 @@ export async function submitErrorTicket(input: z.infer<typeof TicketSchema>): Pr
 
         const resolvedFirmSlug = data.firmSlug || data.orgSlug
         if (resolvedFirmSlug) {
-            const firm = await prisma.firm.findUnique({
-                where: { slug: resolvedFirmSlug },
-                select: { id: true }
-            })
-            firmId = firm?.id ?? null
+            try {
+                const firm = await prisma.firm.findUnique({
+                    where: { slug: resolvedFirmSlug },
+                    select: { id: true }
+                })
+                firmId = firm?.id ?? null
+                if (!firmId) {
+                    console.warn(`[submitErrorTicket] Firm not found for slug: ${resolvedFirmSlug}`)
+                }
+            } catch (error) {
+                console.error(`[submitErrorTicket] Error looking up firm: ${resolvedFirmSlug}`, error)
+            }
 
             if (firmId && data.clientSlug) {
                 const client = await prisma.client.findFirst({
@@ -62,9 +70,13 @@ export async function submitErrorTicket(input: z.infer<typeof TicketSchema>): Pr
             }
         }
 
+        // Generate ticket number
+        const ticketNumber = await generateTicketNumber()
+
         // Create ticket
         await (prisma as any).customerRequest.create({
             data: {
+                ticketNumber,
                 type: data.type,
                 description: data.description,
                 errorDetails: data.errorDetails ?? {},

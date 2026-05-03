@@ -267,3 +267,7 @@ node_modules/
 SUPABASE-USAGE.md
 scripts/form-config.json
 scripts/create-google-form-simple.js
+
+
+# Playwright
+.playwright-mcp/**
