@@ -216,7 +216,7 @@ export function ViewSupportRequestModal({
     }
   }
 
-  const isImage = (mimeType: string) => mimeType.startsWith('image/')
+  const isImage = (mimeType?: string) => mimeType?.startsWith('image/') ?? false
 
   const getGoogleDriveViewUrl = (driveFileId: string) => {
     return `https://drive.google.com/file/d/${driveFileId}/view`

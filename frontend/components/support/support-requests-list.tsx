@@ -2,14 +2,8 @@
 
 import React, { useState, useEffect } from 'react'
 import { TicketType } from '@prisma/client'
-import { AlertCircle, Lightbulb, HelpCircle, MessageCircle, MoreHorizontal, Copy, Check } from "lucide-react"
+import { AlertCircle, Lightbulb, HelpCircle, MessageCircle, Copy, Check, Eye } from "lucide-react"
 import { formatDistanceToNow } from 'date-fns'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { SupportRequestCommentsSidebar } from './support-request-comments-sidebar'
 import { ViewSupportRequestModal } from './view-support-request-modal'
 
@@ -113,12 +107,11 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50">
-              <th className="px-4 py-3 text-left font-semibold text-slate-900">Type</th>
-              <th className="px-4 py-3 text-left font-semibold text-slate-900">Ticket ID</th>
-              <th className="px-4 py-3 text-left font-semibold text-slate-900">Description</th>
-              <th className="px-4 py-3 text-left font-semibold text-slate-900">Created</th>
-              <th className="px-4 py-3 text-center font-semibold text-slate-900">Comments</th>
-              <th className="px-4 py-3 text-right font-semibold text-slate-900">Actions</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-900 w-32">Type</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-900 w-32">Ticket ID</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-900 flex-1 min-w-0">Description</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-900 w-32">Created</th>
+              <th className="px-4 py-3 text-center font-semibold text-slate-900 w-24">Quick Links</th>
             </tr>
           </thead>
           <tbody>
@@ -167,43 +160,30 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
                     {formatDistanceToNow(request.createdAt, { addSuffix: true })}
                   </td>
 
-                  {/* Comments Count */}
+                  {/* Quick Links */}
                   <td className="px-4 py-3 text-center">
-                    <span className="px-2 py-1 bg-slate-100 text-slate-700 rounded-full text-xs font-medium">
-                      {commentCount}
-                    </span>
-                  </td>
-
-                  {/* Actions */}
-                  <td className="px-4 py-3 text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <button className="p-1 hover:bg-slate-200 rounded-lg transition-colors">
-                          <MoreHorizontal className="h-4 w-4 text-slate-500" />
-                        </button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-48">
-                        <DropdownMenuItem
-                          onClick={() => {
-                            setSelectedRequestId(request.id)
-                            setDetailsOpen(true)
-                          }}
-                          className="cursor-pointer"
-                        >
-                          View Details
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => {
-                            setSelectedRequestId(request.id)
-                            setIsSidebarOpen(true)
-                          }}
-                          className="cursor-pointer"
-                        >
-                          <MessageCircle className="h-4 w-4 mr-2" />
-                          Comments ({commentCount})
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    <div className="flex items-center justify-center gap-2">
+                      <button
+                        onClick={() => {
+                          setSelectedRequestId(request.id)
+                          setDetailsOpen(true)
+                        }}
+                        className="p-1 hover:bg-slate-200 rounded-lg transition-colors"
+                        title="View Details"
+                      >
+                        <Eye className="h-4 w-4 text-slate-600 hover:text-slate-900" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          setSelectedRequestId(request.id)
+                          setIsSidebarOpen(true)
+                        }}
+                        className="p-1 hover:bg-slate-200 rounded-lg transition-colors"
+                        title={`Comments (${commentCount})`}
+                      >
+                        <MessageCircle className="h-4 w-4 text-slate-600 hover:text-slate-900" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               )
