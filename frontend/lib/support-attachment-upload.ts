@@ -18,29 +18,7 @@ export async function uploadSupportAttachment(
       return { success: false, error: 'No authentication token available' }
     }
 
-    // Step 1: Get resumable upload URL from our API
-    const prepareRes = await fetch('/api/support/attachments/prepare-upload', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${bearerToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        firmSlug,
-        ticketNumber,
-        fileName: file.name,
-        mimeType: file.type || 'application/octet-stream',
-      }),
-    })
-
-    if (!prepareRes.ok) {
-      const errorData = await prepareRes.json()
-      return { success: false, error: errorData.error || 'Failed to prepare upload' }
-    }
-
-    const { uploadUrl, storedName } = await prepareRes.json()
-
-    // Step 2: Upload file directly to Google Drive resumable upload URL
+    // Upload file to backend endpoint which handles Google Drive upload server-side
     return new Promise((resolve) => {
       const xhr = new XMLHttpRequest()
 
@@ -56,39 +34,18 @@ export async function uploadSupportAttachment(
       xhr.addEventListener('load', () => {
         if (xhr.status >= 200 && xhr.status < 300) {
           try {
-            // Google Drive returns JSON with the file metadata including ID
-            const responseText = xhr.responseText
-            let driveFileId = ''
-
-            // Try to parse as JSON (standard response)
-            try {
-              const response = JSON.parse(responseText)
-              driveFileId = response.id
-            } catch {
-              // If not JSON, try to extract from response (Google sometimes returns different formats)
-              const idMatch = responseText.match(/"id"\s*:\s*"([^"]+)"/)
-              if (idMatch) {
-                driveFileId = idMatch[1]
-              }
-            }
-
-            if (!driveFileId) {
-              return resolve({
+            const response = JSON.parse(xhr.responseText)
+            if (response.success && response.meta) {
+              resolve({
+                success: true,
+                meta: response.meta,
+              })
+            } else {
+              resolve({
                 success: false,
-                error: 'No file ID in upload response',
+                error: response.error || 'Upload failed',
               })
             }
-
-            resolve({
-              success: true,
-              meta: {
-                originalName: file.name,
-                storedName,
-                driveFileId,
-                mimeType: file.type || 'application/octet-stream',
-                size: file.size,
-              },
-            })
           } catch (e) {
             resolve({
               success: false,
@@ -96,10 +53,18 @@ export async function uploadSupportAttachment(
             })
           }
         } else {
-          resolve({
-            success: false,
-            error: `Upload failed with status ${xhr.status}`,
-          })
+          try {
+            const errorData = JSON.parse(xhr.responseText)
+            resolve({
+              success: false,
+              error: errorData.error || `Upload failed with status ${xhr.status}`,
+            })
+          } catch {
+            resolve({
+              success: false,
+              error: `Upload failed with status ${xhr.status}`,
+            })
+          }
         }
       })
 
@@ -108,7 +73,7 @@ export async function uploadSupportAttachment(
         console.error(`XHR error: status=${xhr.status}, statusText=${xhr.statusText}`)
         let errorMsg = 'Network error during upload'
         if (xhr.status === 0) {
-          errorMsg = 'Connection failed - check network and CORS settings'
+          errorMsg = 'Connection failed'
         } else if (xhr.status >= 400) {
           errorMsg = `Upload failed with status ${xhr.status}`
         }
@@ -125,11 +90,15 @@ export async function uploadSupportAttachment(
         })
       })
 
-      // Send the file
-      xhr.open('PUT', uploadUrl)
-      xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream')
-      xhr.setRequestHeader('Content-Length', file.size.toString())
-      xhr.send(file)
+      // Prepare form data
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('firmSlug', firmSlug)
+
+      // Send to backend endpoint
+      xhr.open('POST', `/api/support/requests/${ticketNumber}/upload-attachment`)
+      xhr.setRequestHeader('Authorization', `Bearer ${bearerToken}`)
+      xhr.send(formData)
     })
   } catch (error) {
     return {
