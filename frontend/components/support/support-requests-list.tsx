@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { SupportRequestCommentsSidebar } from './support-request-comments-sidebar'
+import { ViewSupportRequestModal } from './view-support-request-modal'
 
 interface SupportRequest {
   id: string
@@ -18,8 +19,10 @@ interface SupportRequest {
   type: TicketType
   description: string
   comments?: any[]
+  attachments?: any[]
   createdAt: Date
   updatedAt: Date
+  status?: string
   firm?: {
     name: string
     slug: string
@@ -49,6 +52,7 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const [detailsOpen, setDetailsOpen] = useState(false)
   const [copiedTicketId, setCopiedTicketId] = useState<string | null>(null)
 
   const selectedRequest = requests.find(r => r.id === selectedRequestId)
@@ -182,6 +186,15 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
                         <DropdownMenuItem
                           onClick={() => {
                             setSelectedRequestId(request.id)
+                            setDetailsOpen(true)
+                          }}
+                          className="cursor-pointer"
+                        >
+                          View Details
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setSelectedRequestId(request.id)
                             setIsSidebarOpen(true)
                           }}
                           className="cursor-pointer"
@@ -210,6 +223,16 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
               r.id === selectedRequest.id ? { ...r, comments: updatedComments } : r
             ))
           }}
+        />
+      )}
+
+      {/* View Details Modal */}
+      {selectedRequest && (
+        <ViewSupportRequestModal
+          open={detailsOpen}
+          onOpenChange={setDetailsOpen}
+          firmSlug={firmSlug}
+          ticket={selectedRequest}
         />
       )}
     </>

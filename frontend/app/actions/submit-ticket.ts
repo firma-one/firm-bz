@@ -23,6 +23,7 @@ const TicketSchema = z.object({
 export type SubmitTicketResult = {
     success: boolean
     message: string
+    ticketNumber?: string
 }
 
 export async function submitErrorTicket(input: z.infer<typeof TicketSchema>): Promise<SubmitTicketResult> {
@@ -89,7 +90,7 @@ export async function submitErrorTicket(input: z.infer<typeof TicketSchema>): Pr
             }
         })
 
-        return { success: true, message: 'Ticket submitted successfully' }
+        return { success: true, message: 'Ticket submitted successfully', ticketNumber }
     } catch (error) {
         console.error('Failed to submit ticket:', error)
         return { success: false, message: 'Failed to submit ticket' }

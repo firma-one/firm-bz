@@ -834,6 +834,7 @@ model CustomerRequest {
   errorDetails   Json?
   metadata       Json?
   comments       Json     @default("[]")
+  attachments    Json     @default("[]")
   firmId         String?  @db.Uuid
   clientId       String?  @db.Uuid
   engagementId   String?  @db.Uuid
