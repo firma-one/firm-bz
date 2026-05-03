@@ -363,7 +363,7 @@ export const revokeProjectSharing = inngest.createFunction(
             });
         });
 
-        await step.run("downgrade-eng-member-folder-access", async () => {
+        await step.run("downgrade-internal-member-folder-access", async () => {
             const engagement = await prisma.engagement.findFirst({
                 where: { id: projectId, isDeleted: false },
                 select: {
@@ -377,7 +377,7 @@ export const revokeProjectSharing = inngest.createFunction(
             if (!cid || !engagement?.connectorRootFolderId) return { downgraded: 0 };
 
             const members = await prisma.engagementMember.findMany({
-                where: { engagementId: projectId, role: "eng_member" },
+                where: { engagementId: projectId, role: { in: ["eng_member", "eng_admin"] } },
                 select: { userId: true },
             });
             if (members.length === 0) return { downgraded: 0 };
@@ -403,6 +403,38 @@ export const revokeProjectSharing = inngest.createFunction(
                 }
             }
             return { downgraded: n };
+        });
+
+        await step.run("clear-share-configs", async () => {
+            const documents = await prisma.engagementDocument.findMany({
+                where: { engagementId: projectId, slug: { not: null } },
+                select: { id: true, settings: true },
+            });
+
+            if (documents.length === 0) return { cleared: 0 };
+
+            const updatePromises = documents.map((doc) => {
+                const settings = (doc.settings as Record<string, any>) || {};
+                const clearedSettings = {
+                    ...settings,
+                    share: {
+                        ...settings.share,
+                        externalCollaborator: { enabled: false },
+                        guest: { enabled: false },
+                    },
+                };
+
+                return prisma.engagementDocument.update({
+                    where: { id: doc.id },
+                    data: {
+                        slug: null,
+                        settings: clearedSettings,
+                    },
+                });
+            });
+
+            await Promise.all(updatePromises);
+            return { cleared: documents.length };
         });
 
         return { message: "Revoked project permissions", results: revokeResults, projectId };

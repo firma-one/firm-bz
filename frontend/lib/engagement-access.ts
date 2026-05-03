@@ -35,12 +35,12 @@ export function isExternalEngagementRole(role: EngagementRole | null | undefined
   return role === 'eng_ext_collaborator' || role === 'eng_viewer'
 }
 
-/** After closure: internal contributors are read-only in product + Drive; leads keep manage/edit. */
+/** After closure: all internal roles (lead + contributors) are read-only for file mutations; leads still manage lifecycle. */
 export function isEngagementMemberReadOnlyWhenCompleted(
   status: EngagementStatus | null | undefined,
   role: EngagementRole | null | undefined
 ): boolean {
-  return status === 'COMPLETED' && role === 'eng_member'
+  return status === 'COMPLETED' && (role === 'eng_member' || role === 'eng_admin')
 }
 
 export function isEngagementLeadRole(role: EngagementRole | null | undefined): boolean {

@@ -330,9 +330,14 @@ export async function updateEngagement(
 
     const project = await prisma.engagement.findFirst({
         where: { id: projectId, isDeleted: false },
-        select: { firmId: true, clientId: true, dueDate: true, kickoffDate: true }
+        select: { firmId: true, clientId: true, dueDate: true, kickoffDate: true, status: true }
     })
     if (!project) throw new Error('Project not found')
+
+    // Only allow status changes on completed engagements (for reopening); block all other updates
+    if (project.status === 'COMPLETED' && (!data.status || data.status === 'COMPLETED')) {
+        throw new Error('Cannot update a completed engagement.')
+    }
 
     const parsedKickoff = data.kickoffDate === undefined ? undefined : (data.kickoffDate ? new Date(data.kickoffDate) : null)
     const parsedDue = data.dueDate === undefined ? undefined : (data.dueDate ? new Date(data.dueDate) : null)
@@ -469,6 +474,14 @@ export async function closeEngagement(projectId: string, firmSlug: string, clien
             where: {
                 engagementId: projectId,
                 role: { in: ['eng_ext_collaborator', 'eng_viewer'] },
+            },
+        })
+        // Revoke pending external invitations
+        await tx.engagementInvitation.deleteMany({
+            where: {
+                engagementId: projectId,
+                persona: { slug: { in: ['eng_ext_collaborator', 'eng_viewer'] } },
+                acceptedAt: null,
             },
         })
     })
