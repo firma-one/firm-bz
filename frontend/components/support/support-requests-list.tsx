@@ -42,9 +42,9 @@ interface SupportRequestsListProps {
 }
 
 const TYPE_CONFIG = {
-  [TicketType.BUG]: { label: 'Bug Report', icon: AlertCircle, color: 'text-red-600', bgColor: 'bg-red-50' },
-  [TicketType.REQUEST]: { label: 'Feature Request', icon: Lightbulb, color: 'text-amber-600', bgColor: 'bg-amber-50' },
-  [TicketType.ENQUIRY]: { label: 'General Enquiry', icon: HelpCircle, color: 'text-blue-600', bgColor: 'bg-blue-50' },
+  [TicketType.BUG]: { label: 'Bug Report', icon: AlertCircle, color: 'text-rose-500', bgColor: 'bg-rose-50' },
+  [TicketType.REQUEST]: { label: 'Feature Request', icon: Lightbulb, color: 'text-amber-500', bgColor: 'bg-amber-50' },
+  [TicketType.ENQUIRY]: { label: 'General Enquiry', icon: HelpCircle, color: 'text-sky-500', bgColor: 'bg-sky-50' },
 }
 
 export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
@@ -107,10 +107,10 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
   }
 
   const STATUS_COLORS: Record<string, string> = {
-    NEW: 'bg-blue-50 text-blue-600 border-blue-200',
-    IN_PROGRESS: 'bg-amber-50 text-amber-600 border-amber-200',
-    RESOLVED: 'bg-emerald-50 text-emerald-600 border-emerald-200',
-    CLOSED: 'bg-slate-100 text-slate-600 border-slate-200',
+    NEW: 'bg-sky-50 text-sky-500 border-sky-200',
+    IN_PROGRESS: 'bg-amber-50 text-amber-500 border-amber-200',
+    RESOLVED: 'bg-emerald-50 text-emerald-500 border-emerald-200',
+    CLOSED: 'bg-slate-50 text-slate-400 border-slate-200',
   }
 
   return (
@@ -123,7 +123,7 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
               <th className="px-3 py-2 text-left font-semibold text-slate-900 text-xs" style={{ width: '110px' }}>Type</th>
               <th className="px-3 py-2 text-left font-semibold text-slate-900 text-xs" style={{ width: '130px' }}>Ticket ID</th>
               <th className="px-3 py-2 text-left font-semibold text-slate-900 text-xs">Description</th>
-              <th className="px-3 py-2 text-left font-semibold text-slate-900 text-xs" style={{ width: '80px' }}>Status</th>
+              <th className="px-3 py-2 text-left font-semibold text-slate-900 text-xs" style={{ width: '110px' }}>Status</th>
               <th className="px-3 py-2 text-left font-semibold text-slate-900 text-xs" style={{ width: '120px' }}>Created</th>
               <th className="px-3 py-2 text-left font-semibold text-slate-900 text-xs" style={{ width: '120px' }}>Modified</th>
               <th className="px-3 py-2 text-center font-semibold text-slate-900 text-xs" style={{ width: '80px' }}>Actions</th>
@@ -172,8 +172,8 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
                   </td>
 
                   {/* Status */}
-                  <td className="px-3 py-2" style={{ width: '80px' }}>
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${statusColor}`}>
+                  <td className="px-3 py-2" style={{ width: '110px' }}>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border whitespace-nowrap ${statusColor}`}>
                       {(request.status || 'NEW').replace(/_/g, ' ')}
                     </span>
                   </td>
