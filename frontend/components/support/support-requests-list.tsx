@@ -424,20 +424,32 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
                   {/* Actions */}
                   <td className="px-3 py-2 text-center" style={{ width: '70px' }}>
                     <div className="flex items-center justify-center gap-1">
-                      <button
-                        onClick={() => { setSelectedRequestId(request.id); setDetailsOpen(true) }}
-                        className="p-1 hover:bg-slate-200 rounded transition-colors"
-                        title="View Details"
-                      >
-                        <Eye className="h-4 w-4 text-slate-600" />
-                      </button>
-                      <button
-                        onClick={() => { setSelectedRequestId(request.id); setIsSidebarOpen(true) }}
-                        className="p-1 hover:bg-slate-200 rounded transition-colors"
-                        title={`Comments (${commentCount})`}
-                      >
-                        <MessageCircle className="h-4 w-4 text-slate-600" />
-                      </button>
+                      <TooltipProvider delayDuration={300}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              onClick={() => { setSelectedRequestId(request.id); setDetailsOpen(true) }}
+                              className="p-1 hover:bg-slate-200 rounded transition-colors"
+                            >
+                              <Eye className="h-4 w-4 text-slate-600" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" className="text-xs">View Details</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                      <TooltipProvider delayDuration={300}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              onClick={() => { setSelectedRequestId(request.id); setIsSidebarOpen(true) }}
+                              className="p-1 hover:bg-slate-200 rounded transition-colors"
+                            >
+                              <MessageCircle className="h-4 w-4 text-slate-600" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" className="text-xs">Comments ({commentCount})</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
                     </div>
                   </td>
 
