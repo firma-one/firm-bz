@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { TicketType } from '@prisma/client'
 import { AlertCircle, Lightbulb, HelpCircle, MessageCircle, Copy, Check, Eye, Clock, ChevronDown, RefreshCw, Search, X } from "lucide-react"
 import { formatDistanceToNow } from 'date-fns'
@@ -15,7 +15,6 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -333,8 +332,8 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
       </div>
 
       {/* Table */}
-      <div className="border border-slate-200 rounded-lg overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="border border-slate-200 rounded-lg overflow-x-auto">
+        <table className="w-full min-w-[860px] text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50">
               <th className="px-3 py-2 text-left font-semibold text-slate-900 text-xs" style={{ width: '110px' }}>Type</th>
