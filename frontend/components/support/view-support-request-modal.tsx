@@ -274,8 +274,9 @@ export function ViewSupportRequestModal({
         return
       }
 
-      // Remove row immediately from UI
+      // Remove row immediately from UI (file may live in either source)
       setLocalAttachments(prev => prev.filter(a => a.driveFileId !== attachment.driveFileId))
+      setNewAttachments(prev => prev.filter(a => a.meta?.driveFileId !== attachment.driveFileId))
 
       setDeletionConfirmation({
         attachmentName: attachment.originalName,
