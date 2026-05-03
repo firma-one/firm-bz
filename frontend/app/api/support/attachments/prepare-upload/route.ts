@@ -110,20 +110,35 @@ export async function POST(request: NextRequest) {
     // Get resumable upload URL from Google Drive
     const accessToken = await googleDriveConnector.getAccessToken(connector.id)
     if (!accessToken) {
+      console.error('Failed to get Google Drive access token for connector:', connector.id)
       return NextResponse.json(
         { error: 'Failed to get Google Drive access token' },
         { status: 500 }
       )
     }
 
-    const uploadUrl = await googleDriveConnector.getResumableUploadUrl(
-      accessToken,
-      {
-        name: storedName,
-        mimeType,
-        parents: [ticketFolderId],
-      }
-    )
+    let uploadUrl: string
+    try {
+      uploadUrl = await googleDriveConnector.getResumableUploadUrl(
+        accessToken,
+        {
+          name: storedName,
+          mimeType,
+          parents: [ticketFolderId],
+        }
+      )
+    } catch (urlError) {
+      console.error('Failed to get resumable upload URL:', urlError)
+      throw urlError
+    }
+
+    if (!uploadUrl) {
+      console.error('Resumable upload URL is empty')
+      return NextResponse.json(
+        { error: 'Failed to generate upload URL' },
+        { status: 500 }
+      )
+    }
 
     return NextResponse.json({ uploadUrl, storedName })
   } catch (error) {
