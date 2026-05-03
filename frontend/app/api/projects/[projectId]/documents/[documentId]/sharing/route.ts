@@ -253,41 +253,44 @@ export async function PUT(
         })
       }
 
-      // Enforce allowDownload and sharePdfOnly settings on Drive files
+      // Enforce allowDownload on Drive files whenever guest sharing is active
       if (guest) {
-        const connectorId = updated.connectorId
-        if (!connectorId) {
+        let resolvedConnectorId = updated.connectorId
+        if (!resolvedConnectorId) {
           const org = await prisma.firm.findUnique({
             where: { id: fileInfo.organizationId },
             include: { connector: true },
           })
-          const activeConnector = org?.connector
-          if (activeConnector?.type === 'GOOGLE_DRIVE' && activeConnector?.status === 'ACTIVE') {
-            const drive = GoogleDriveConnector.getInstance()
-            const allowDownload = guestOptions.allowDownload ?? false
-            const sharePdfOnly = guestOptions.sharePdfOnly ?? false
+          if (org?.connector?.type === 'GOOGLE_DRIVE' && org.connector.status === 'ACTIVE') {
+            resolvedConnectorId = org.connector.id
+          }
+        }
 
-            // If sharePdfOnly and sharedPdfDriveId exists: enforce on PDF file
-            if (sharePdfOnly) {
-              const sharedPdfDriveId = guestOptions.sharedPdfDriveId
-              if (sharedPdfDriveId) {
-                try {
-                  await drive.patchFileProperties(activeConnector.id, sharedPdfDriveId, {
-                    copyRequiresWriterPermission: !allowDownload
-                  })
-                } catch (e) {
-                  console.error('Failed to patch PDF file properties:', e)
-                }
-              }
-            } else {
-              // If not sharePdfOnly: enforce on original file
+        if (resolvedConnectorId) {
+          const drive = GoogleDriveConnector.getInstance()
+          const allowDownload = guestOptions.allowDownload ?? false
+          const sharePdfOnly = guestOptions.sharePdfOnly ?? false
+
+          if (sharePdfOnly) {
+            // Enforce on the PDF copy if it already exists
+            const sharedPdfDriveId = guestOptions.sharedPdfDriveId
+            if (sharedPdfDriveId) {
               try {
-                await drive.patchFileProperties(activeConnector.id, fileInfo.externalId, {
+                await drive.patchFileProperties(resolvedConnectorId, sharedPdfDriveId, {
                   copyRequiresWriterPermission: !allowDownload
                 })
               } catch (e) {
-                console.error('Failed to patch file properties:', e)
+                console.error('Failed to patch PDF file properties:', e)
               }
+            }
+          } else {
+            // Enforce on the original Drive file
+            try {
+              await drive.patchFileProperties(resolvedConnectorId, fileInfo.externalId, {
+                copyRequiresWriterPermission: !allowDownload
+              })
+            } catch (e) {
+              console.error('Failed to patch file properties:', e)
             }
           }
         }

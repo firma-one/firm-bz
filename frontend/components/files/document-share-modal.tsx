@@ -12,7 +12,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import { Share2, Users, UserCircle, FileDown, Droplets } from 'lucide-react'
+import { Share2, Users, UserCircle, FileDown, Droplets, Info } from 'lucide-react'
 import { useToast } from '@/components/ui/toast'
 import { SandboxInfoBanner } from '@/components/ui/sandbox-info-banner'
 import { useOrgSandbox } from '@/lib/use-org-sandbox'
@@ -20,6 +20,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { parseSettingsFromDb } from '@/lib/sharing-settings'
 import { useProjectPersonaLabels } from '@/lib/hooks/use-project-persona-labels'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
 export interface DocumentShareSettings {
   externalCollaborator: boolean
@@ -247,9 +248,44 @@ export function DocumentShareModal({
                           onCheckedChange={(v) =>
                             setSettings((s) => ({
                               ...s,
-                              guestOptions: { ...s.guestOptions, sharePdfOnly: v },
+                              guestOptions: {
+                                ...s.guestOptions,
+                                sharePdfOnly: v,
+                                // reset watermark when PDF-only is turned off
+                                addWatermark: v ? s.guestOptions.addWatermark : false,
+                              },
                             }))
                           }
+                        />
+                      </div>
+                      <div className={cn("flex items-center justify-between gap-3", !settings.guestOptions.sharePdfOnly && "opacity-40")}>
+                        <Label
+                          htmlFor="guest-watermark"
+                          className={cn("text-sm text-slate-700 flex items-center gap-2", settings.guestOptions.sharePdfOnly ? "cursor-pointer" : "cursor-not-allowed")}
+                        >
+                          <Droplets className="h-4 w-4" />
+                          Add watermark
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="h-3.5 w-3.5 text-slate-400 cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-[200px] text-center">
+                                Your firm name will be applied as a diagonal watermark on each page. Requires &ldquo;Share PDF version only&rdquo;.
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </Label>
+                        <Switch
+                          id="guest-watermark"
+                          checked={settings.guestOptions.addWatermark}
+                          onCheckedChange={(v) =>
+                            setSettings((s) => ({
+                              ...s,
+                              guestOptions: { ...s.guestOptions, addWatermark: v },
+                            }))
+                          }
+                          disabled={isSandboxFirm || !settings.guestOptions.sharePdfOnly}
                         />
                       </div>
                       <div className="flex items-center justify-between gap-3">
@@ -263,22 +299,6 @@ export function DocumentShareModal({
                             setSettings((s) => ({
                               ...s,
                               guestOptions: { ...s.guestOptions, allowDownload: v },
-                            }))
-                          }
-                          disabled={isSandboxFirm}
-                        />
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <Label htmlFor="guest-watermark" className="text-sm text-slate-700 flex items-center gap-2 cursor-pointer">
-                          <Droplets className="h-4 w-4" /> Add watermark (organization name)
-                        </Label>
-                        <Switch
-                          id="guest-watermark"
-                          checked={settings.guestOptions.addWatermark}
-                          onCheckedChange={(v) =>
-                            setSettings((s) => ({
-                              ...s,
-                              guestOptions: { ...s.guestOptions, addWatermark: v },
                             }))
                           }
                           disabled={isSandboxFirm}
