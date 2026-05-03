@@ -3966,7 +3966,7 @@ export class GoogleDriveConnector {
             'Authorization': `Bearer ${accessToken}`,
             'Content-Type': mimeType
           },
-          body: fileContent
+          body: new Uint8Array(fileContent)
         }
       )
 

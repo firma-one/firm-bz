@@ -105,9 +105,16 @@ export async function uploadSupportAttachment(
 
       // Handle errors
       xhr.addEventListener('error', () => {
+        console.error(`XHR error: status=${xhr.status}, statusText=${xhr.statusText}`)
+        let errorMsg = 'Network error during upload'
+        if (xhr.status === 0) {
+          errorMsg = 'Connection failed - check network and CORS settings'
+        } else if (xhr.status >= 400) {
+          errorMsg = `Upload failed with status ${xhr.status}`
+        }
         resolve({
           success: false,
-          error: 'Network error during upload',
+          error: errorMsg,
         })
       })
 
@@ -121,6 +128,7 @@ export async function uploadSupportAttachment(
       // Send the file
       xhr.open('PUT', uploadUrl)
       xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream')
+      xhr.setRequestHeader('Content-Length', file.size.toString())
       xhr.send(file)
     })
   } catch (error) {
