@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Copy, Download, FileIcon, Paperclip, CheckCircle2, X, Trash2, Clock } from "lucide-react"
+import { Copy, Download, FileIcon, Paperclip, CheckCircle2, X, Trash2, Clock, AlertCircle, Lightbulb, HelpCircle } from "lucide-react"
 import { TicketType } from '@prisma/client'
 import { useToast } from "@/components/ui/toast"
 import { uploadSupportAttachment, type AttachmentMeta } from '@/lib/support-attachment-upload'
@@ -56,10 +56,10 @@ type PendingAttachment = {
   error?: string
 }
 
-const REQUEST_TYPE_CONFIG: Record<TicketType, { label: string; color: string; bgColor: string }> = {
-  [TicketType.BUG]: { label: 'Bug Report', color: 'text-red-600', bgColor: 'bg-red-50' },
-  [TicketType.REQUEST]: { label: 'Feature Request', color: 'text-amber-600', bgColor: 'bg-amber-50' },
-  [TicketType.ENQUIRY]: { label: 'General Enquiry', color: 'text-blue-600', bgColor: 'bg-blue-50' },
+const REQUEST_TYPE_CONFIG: Record<TicketType, { label: string; color: string; bgColor: string; icon: React.ElementType }> = {
+  [TicketType.BUG]: { label: 'Bug Report', color: 'text-rose-500', bgColor: 'bg-rose-50', icon: AlertCircle },
+  [TicketType.REQUEST]: { label: 'Feature Request', color: 'text-amber-500', bgColor: 'bg-amber-50', icon: Lightbulb },
+  [TicketType.ENQUIRY]: { label: 'General Enquiry', color: 'text-sky-500', bgColor: 'bg-sky-50', icon: HelpCircle },
 }
 
 export function ViewSupportRequestModal({
@@ -78,13 +78,16 @@ export function ViewSupportRequestModal({
     attachmentName: string
     shown: boolean
   } | null>(null)
-  const [deletedDriveFileIds, setDeletedDriveFileIds] = useState<Set<string>>(new Set())
+  const [localAttachments, setLocalAttachments] = useState<AttachmentMeta[]>(
+    () => (ticket.attachments as AttachmentMeta[]) ?? []
+  )
+  const [isDropzoneActive, setIsDropzoneActive] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { addToast } = useToast()
 
   const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50 MB
   const allAttachments = [
-    ...(ticket.attachments ?? []).filter((a: AttachmentMeta) => !deletedDriveFileIds.has(a.driveFileId)),
+    ...localAttachments,
     ...newAttachments.filter(a => a.status === 'done' && a.meta).map(a => a.meta!),
   ] as (AttachmentMeta & { isNew?: boolean })[]
 
@@ -272,7 +275,7 @@ export function ViewSupportRequestModal({
       }
 
       // Remove row immediately from UI
-      setDeletedDriveFileIds(prev => new Set(Array.from(prev).concat(attachment.driveFileId)))
+      setLocalAttachments(prev => prev.filter(a => a.driveFileId !== attachment.driveFileId))
 
       setDeletionConfirmation({
         attachmentName: attachment.originalName,
@@ -395,9 +398,16 @@ export function ViewSupportRequestModal({
 
             <div className="flex items-center justify-between">
               <span className="text-sm font-semibold text-slate-900">Type</span>
-              <div className={`inline-flex items-center px-3 py-1.5 rounded-md text-sm font-medium ${REQUEST_TYPE_CONFIG[ticket.type].bgColor} ${REQUEST_TYPE_CONFIG[ticket.type].color}`}>
-                {REQUEST_TYPE_CONFIG[ticket.type].label}
-              </div>
+              {(() => {
+                const cfg = REQUEST_TYPE_CONFIG[ticket.type]
+                const Icon = cfg.icon
+                return (
+                  <div className={`flex items-center gap-1 w-fit px-2 py-1 rounded text-xs font-medium ${cfg.bgColor} ${cfg.color}`}>
+                    <Icon className="h-3.5 w-3.5" />
+                    <span className="whitespace-nowrap">{cfg.label}</span>
+                  </div>
+                )
+              })()}
             </div>
 
             <div className="flex items-center justify-between">
@@ -492,20 +502,23 @@ export function ViewSupportRequestModal({
 
             {/* Drop Zone */}
             <div
-              onDragOver={(e) => {
-                e.preventDefault()
-                setIsDragOver(true)
-              }}
+              onDragOver={(e) => { e.preventDefault(); setIsDragOver(true) }}
               onDragLeave={() => setIsDragOver(false)}
               onDrop={handleDrop}
               onPaste={handlePaste}
-              className={`border-2 border-dashed rounded-md p-4 text-center transition-colors ${
-                isDragOver ? 'border-slate-400 bg-slate-50' : 'border-slate-300 bg-slate-100'
+              onClick={() => { setIsDropzoneActive(true); fileInputRef.current?.click() }}
+              onBlur={() => setIsDropzoneActive(false)}
+              className={`border-2 border-dashed rounded-md py-8 text-center transition-colors cursor-pointer ${
+                isDragOver
+                  ? 'border-slate-400 bg-slate-50'
+                  : isDropzoneActive
+                  ? 'border-slate-200 bg-slate-50'
+                  : 'border-slate-300 bg-slate-100'
               }`}
             >
               <Paperclip className="h-5 w-5 text-slate-400 mx-auto mb-2" />
-              <p className="text-sm text-slate-600">
-                Drop files here, click above to browse, or paste a screenshot
+              <p className="text-sm text-slate-500">
+                Drop files here, click to browse, or paste a screenshot
               </p>
             </div>
 
