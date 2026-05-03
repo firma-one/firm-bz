@@ -3855,6 +3855,169 @@ export class GoogleDriveConnector {
     const data = await response.json()
     return data.files || []
   }
+
+  /**
+   * Export a Drive file to PDF format
+   * @param connectorId - The Google Drive connector ID
+   * @param fileId - The Google Drive file ID
+   * @returns PDF file content as Buffer
+   */
+  async exportFileToPdf(connectorId: string, fileId: string): Promise<Buffer> {
+    try {
+      const accessToken = await this.getAccessToken(connectorId)
+      if (!accessToken) throw new Error('Could not get access token')
+
+      const res = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${fileId}/export?mimeType=application/pdf&supportsAllDrives=true`,
+        {
+          headers: { 'Authorization': `Bearer ${accessToken}` }
+        }
+      )
+
+      if (!res.ok) {
+        const errorText = await res.text()
+        logger.error('Failed to export file to PDF', new Error(`Status: ${res.status} - ${errorText}`), 'GoogleDrive', { fileId })
+        throw new Error(`Failed to export PDF: ${res.status}`)
+      }
+
+      const arrayBuffer = await res.arrayBuffer()
+      return Buffer.from(arrayBuffer)
+    } catch (error) {
+      logger.error('Failed to export file to PDF', error as Error, 'GoogleDrive', { fileId })
+      throw error
+    }
+  }
+
+  /**
+   * Upload a new file to Google Drive
+   * @param connectorId - The Google Drive connector ID
+   * @param fileName - Name for the new file
+   * @param fileContent - File content as Buffer
+   * @param mimeType - MIME type of the file
+   * @param parentFolderId - Optional parent folder ID (if not specified, uploads to My Drive root)
+   * @returns The newly created file ID
+   */
+  async uploadNewFile(
+    connectorId: string,
+    fileName: string,
+    fileContent: Buffer,
+    mimeType: string,
+    parentFolderId?: string
+  ): Promise<string> {
+    try {
+      const accessToken = await this.getAccessToken(connectorId)
+      if (!accessToken) throw new Error('Could not get access token')
+
+      const metadata = {
+        name: fileName,
+        mimeType: mimeType,
+        ...(parentFolderId && { parents: [parentFolderId] })
+      }
+
+      const form = new FormData()
+      form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }))
+      form.append('file', new Blob([new Uint8Array(fileContent)], { type: mimeType }))
+
+      const res = await fetch(
+        'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true',
+        {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${accessToken}` },
+          body: form
+        }
+      )
+
+      if (!res.ok) {
+        const errorText = await res.text()
+        logger.error('Failed to upload file', new Error(`Status: ${res.status} - ${errorText}`), 'GoogleDrive', { fileName })
+        throw new Error(`Failed to upload file: ${res.status}`)
+      }
+
+      const data = await res.json()
+      return data.id
+    } catch (error) {
+      logger.error('Failed to upload file', error as Error, 'GoogleDrive', { fileName })
+      throw error
+    }
+  }
+
+  /**
+   * Overwrite the content of an existing Drive file
+   * @param connectorId - The Google Drive connector ID
+   * @param fileId - The Google Drive file ID
+   * @param fileContent - New file content as Buffer
+   * @param mimeType - MIME type of the file
+   */
+  async overwriteFileContent(
+    connectorId: string,
+    fileId: string,
+    fileContent: Buffer,
+    mimeType: string
+  ): Promise<void> {
+    try {
+      const accessToken = await this.getAccessToken(connectorId)
+      if (!accessToken) throw new Error('Could not get access token')
+
+      const res = await fetch(
+        `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media&supportsAllDrives=true`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': mimeType
+          },
+          body: fileContent
+        }
+      )
+
+      if (!res.ok) {
+        const errorText = await res.text()
+        logger.error('Failed to overwrite file content', new Error(`Status: ${res.status} - ${errorText}`), 'GoogleDrive', { fileId })
+        throw new Error(`Failed to overwrite file: ${res.status}`)
+      }
+    } catch (error) {
+      logger.error('Failed to overwrite file content', error as Error, 'GoogleDrive', { fileId })
+      throw error
+    }
+  }
+
+  /**
+   * Patch file metadata properties (e.g., copyRequiresWriterPermission)
+   * @param connectorId - The Google Drive connector ID
+   * @param fileId - The Google Drive file ID
+   * @param properties - Properties to patch (e.g., { copyRequiresWriterPermission: true })
+   */
+  async patchFileProperties(
+    connectorId: string,
+    fileId: string,
+    properties: Record<string, unknown>
+  ): Promise<void> {
+    try {
+      const accessToken = await this.getAccessToken(connectorId)
+      if (!accessToken) throw new Error('Could not get access token')
+
+      const res = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${fileId}?supportsAllDrives=true`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(properties)
+        }
+      )
+
+      if (!res.ok) {
+        const errorText = await res.text()
+        logger.error('Failed to patch file properties', new Error(`Status: ${res.status} - ${errorText}`), 'GoogleDrive', { fileId })
+        throw new Error(`Failed to patch file properties: ${res.status}`)
+      }
+    } catch (error) {
+      logger.error('Failed to patch file properties', error as Error, 'GoogleDrive', { fileId })
+      throw error
+    }
+  }
 }
 
 export const googleDriveConnector = GoogleDriveConnector.getInstance()

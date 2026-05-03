@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createServerClient } from '@supabase/ssr'
 import { prisma } from '@/lib/prisma'
 
 export async function PATCH(
@@ -15,21 +15,23 @@ export async function PATCH(
     }
 
     const token = authHeader.slice(7)
-    const supabase = createClient(
+    const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321',
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
       {
-        global: {
-          headers: {
-            authorization: `Bearer ${token}`,
+        cookies: {
+          getAll() {
+            return []
           },
+          setAll() {},
         },
       }
     )
 
+    // Get user from the JWT token
     const {
       data: { user },
-    } = await supabase.auth.getUser()
+    } = await supabase.auth.getUser(token)
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }

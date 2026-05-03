@@ -10,6 +10,7 @@ export interface ShareGuestOptions {
   addWatermark?: boolean
   sharePdfOnly?: boolean
   allowDownload?: boolean
+  sharedPdfDriveId?: string | null
 }
 
 export interface ShareBlock {
@@ -73,6 +74,7 @@ const DEFAULT_SHARE: ShareBlock = {
       addWatermark: false,
       sharePdfOnly: false,
       allowDownload: false,
+      sharedPdfDriveId: null,
     },
   },
   externalCollaborator: { enabled: true },
@@ -108,6 +110,7 @@ export function parseSettingsFromDb(settings: unknown): ProjectDocumentSharingSe
             addWatermark: share.guest?.options?.addWatermark ?? legacyOpts.addWatermark ?? false,
             sharePdfOnly: share.guest?.options?.sharePdfOnly ?? legacyOpts.sharePdfOnly ?? false,
             allowDownload: share.guest?.options?.allowDownload ?? legacyOpts.allowDownload ?? false,
+            sharedPdfDriveId: share.guest?.options?.sharedPdfDriveId ?? legacyOpts.sharedPdfDriveId ?? null,
           },
         },
         externalCollaborator: {
@@ -128,6 +131,7 @@ export function parseSettingsFromDb(settings: unknown): ProjectDocumentSharingSe
             addWatermark: legacyOpts.addWatermark ?? false,
             sharePdfOnly: legacyOpts.sharePdfOnly ?? false,
             allowDownload: legacyOpts.allowDownload ?? false,
+            sharedPdfDriveId: legacyOpts.sharedPdfDriveId ?? null,
           },
         },
         externalCollaborator: { enabled: legacyEc },

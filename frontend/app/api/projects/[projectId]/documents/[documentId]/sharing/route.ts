@@ -8,6 +8,7 @@ import { getFileInfo } from '@/lib/file-utils'
 import { safeInngestSend } from '@/lib/inngest/client'
 import { resolveProjectContext } from '@/lib/resolve-project-context'
 import { canManageProject } from '@/lib/permission-helpers'
+import { GoogleDriveConnector } from '@/lib/google-drive-connector'
 
 /** ProjectDocument can contain BigInt (fileSize); JSON.stringify cannot serialize it. */
 function toJsonSafeSharing(doc: Record<string, unknown> | null): Record<string, unknown> | null {
@@ -135,6 +136,7 @@ export async function PUT(
       allowDownload: body.guestOptions?.allowDownload === true,
       addWatermark: body.guestOptions?.addWatermark === true,
       publish: body.guestOptions?.publish === true,
+      sharedPdfDriveId: body.guestOptions?.sharedPdfDriveId ?? null,
     }
 
     const existing = await prisma.engagementDocument.findUnique({
@@ -250,6 +252,46 @@ export async function PUT(
           userId: user.id,
         })
       }
+
+      // Enforce allowDownload and sharePdfOnly settings on Drive files
+      if (guest) {
+        const connectorId = updated.connectorId
+        if (!connectorId) {
+          const org = await prisma.firm.findUnique({
+            where: { id: fileInfo.organizationId },
+            include: { connector: true },
+          })
+          const activeConnector = org?.connector
+          if (activeConnector?.type === 'GOOGLE_DRIVE' && activeConnector?.status === 'ACTIVE') {
+            const drive = GoogleDriveConnector.getInstance()
+            const allowDownload = guestOptions.allowDownload ?? false
+            const sharePdfOnly = guestOptions.sharePdfOnly ?? false
+
+            // If sharePdfOnly and sharedPdfDriveId exists: enforce on PDF file
+            if (sharePdfOnly) {
+              const sharedPdfDriveId = guestOptions.sharedPdfDriveId
+              if (sharedPdfDriveId) {
+                try {
+                  await drive.patchFileProperties(activeConnector.id, sharedPdfDriveId, {
+                    copyRequiresWriterPermission: !allowDownload
+                  })
+                } catch (e) {
+                  console.error('Failed to patch PDF file properties:', e)
+                }
+              }
+            } else {
+              // If not sharePdfOnly: enforce on original file
+              try {
+                await drive.patchFileProperties(activeConnector.id, fileInfo.externalId, {
+                  copyRequiresWriterPermission: !allowDownload
+                })
+              } catch (e) {
+                console.error('Failed to patch file properties:', e)
+              }
+            }
+          }
+        }
+      }
     }
 
     return NextResponse.json({ sharing: toJsonSafeSharing(updated as Record<string, unknown> | null) })
@@ -303,6 +345,31 @@ export async function DELETE(
     })
 
     await syncDocumentSharingUsers(existing.id)
+
+    // Clean up PDF file if sharePdfOnly was enabled
+    const existingSettings = parseSettingsFromDb((existing.settings as Record<string, unknown>) || {})
+    const sharedPdfDriveId = existingSettings.share?.guest?.options?.sharedPdfDriveId
+    if (sharedPdfDriveId) {
+      const connector = existing.connectorId
+        ? await prisma.connector.findUnique({ where: { id: existing.connectorId } })
+        : await prisma.firm.findUnique({
+            where: { id: fileInfo.organizationId },
+            include: { connector: true },
+          }).then(org => org?.connector || null)
+
+      if (connector?.type === 'GOOGLE_DRIVE' && connector?.status === 'ACTIVE') {
+        try {
+          const drive = GoogleDriveConnector.getInstance()
+          // Delete all permissions from the PDF file (which will revoke access)
+          const permissions = await drive.listFilePermissions(connector.id, sharedPdfDriveId)
+          for (const perm of permissions.filter((p: any) => p.role !== 'owner')) {
+            await drive.revokePermission(connector.id, sharedPdfDriveId, perm.id)
+          }
+        } catch (e) {
+          console.error('Failed to clean up PDF file permissions:', e)
+        }
+      }
+    }
 
     await safeInngestSend('sharing.settings.updated', {
       projectId,

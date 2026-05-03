@@ -120,6 +120,10 @@ export const scanAndIndexProject = inngest.createFunction(
             await step.run(`index-batch-${i}`, async () => {
                 const { SearchService } = await import("@/lib/services/search-service")
                 for (const file of batch) {
+                    // Skip FIRMA_PDF files (internal shared PDF copies that shouldn't be visible)
+                    if (file.fileName.startsWith('[FIRMA_PDF]')) {
+                        continue
+                    }
                     await SearchService.indexFile({
                         organizationId,
                         clientId: clientId ?? undefined,

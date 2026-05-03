@@ -14,6 +14,10 @@ export async function uploadSupportAttachment(
   onProgress?: (pct: number) => void
 ): Promise<{ success: boolean; meta?: AttachmentMeta; error?: string }> {
   try {
+    if (!bearerToken) {
+      return { success: false, error: 'No authentication token available' }
+    }
+
     // Step 1: Get resumable upload URL from our API
     const prepareRes = await fetch('/api/support/attachments/prepare-upload', {
       method: 'POST',

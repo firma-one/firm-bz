@@ -11,6 +11,8 @@ import {
   requireEngagementMember,
 } from '@/lib/engagement-access'
 import { isDocumentVersionLocked } from '@/lib/document-version-lock'
+import { parseSettingsFromDb, buildSettingsForDb } from '@/lib/sharing-settings'
+import { applyDiagonalWatermark } from '@/lib/watermark-pdf'
 
 export async function POST(
     _request: NextRequest,
@@ -121,10 +123,101 @@ export async function POST(
             role = 'reader'
         }
 
+        // Parse sharing settings
+        const parsedSettings = parseSettingsFromDb(document.settings)
+        const guestOptions = parsedSettings.share?.guest?.options || {}
+        const isViewer = projectMember.role === 'eng_viewer'
+        const sharePdfOnly = isViewer && guestOptions.sharePdfOnly
+        const addWatermark = isViewer && guestOptions.addWatermark
+        const allowDownload = guestOptions.allowDownload ?? false
+
         const fileName = document.fileName || 'a document'
         const message = `POCKETT SECURE ACCESS\n\nYou have requested to open "${fileName}". For your security, Google Drive requires a one-time email verification. Please click the "Open" button below to receive your one-time passcode and access the document.`
         const options = { rm: 'minimal', ui: '2', sendNotificationEmail: 'true' }
-        const permissionId = await drive.grantFilePermission(connectorId, fileInfo.externalId, email, role, message, options)
+
+        let targetFileId = fileInfo.externalId
+
+        // Branch A: Viewer + sharePdfOnly = true
+        if (sharePdfOnly) {
+            try {
+                // 1. Export to PDF
+                const pdfBytes = await drive.exportFileToPdf(connectorId, fileInfo.externalId)
+
+                // 2. Apply watermark if needed
+                let finalPdfBytes = pdfBytes
+                if (addWatermark) {
+                    const firm = await prisma.firm.findUnique({
+                        where: { id: fileInfo.organizationId },
+                        select: { name: true }
+                    })
+                    const watermarkText = firm?.name || 'FIRMA'
+                    finalPdfBytes = await applyDiagonalWatermark(pdfBytes, watermarkText)
+                }
+
+                // 3. Upload or overwrite PDF file
+                let pdfDriveId = guestOptions.sharedPdfDriveId
+                const pdfFileName = `[FIRMA_PDF] ${fileName}.pdf`
+
+                if (pdfDriveId) {
+                    // Overwrite existing PDF
+                    await drive.overwriteFileContent(connectorId, pdfDriveId, finalPdfBytes, 'application/pdf')
+                } else {
+                    // Upload new PDF
+                    pdfDriveId = await drive.uploadNewFile(connectorId, pdfFileName, finalPdfBytes, 'application/pdf')
+
+                    // Update document settings with the PDF Drive ID
+                    const updatedSettings = buildSettingsForDb(document.settings as Record<string, unknown>, {
+                        share: {
+                            guest: {
+                                enabled: parsedSettings.share?.guest?.enabled ?? true,
+                                options: {
+                                    ...guestOptions,
+                                    sharedPdfDriveId: pdfDriveId
+                                }
+                            }
+                        }
+                    })
+                    await prisma.engagementDocument.update({
+                        where: { id: document.id },
+                        data: { settings: updatedSettings }
+                    })
+                }
+
+                // 4. Set copyRequiresWriterPermission on PDF based on allowDownload
+                await drive.patchFileProperties(connectorId, pdfDriveId, {
+                    copyRequiresWriterPermission: !allowDownload
+                })
+
+                // 5. Revoke old permission on PDF if exists
+                if (sharingUser.googlePermissionId) {
+                    try {
+                        await drive.revokePermission(connectorId, pdfDriveId, sharingUser.googlePermissionId)
+                    } catch (e) {
+                        // Ignore revoke errors on PDF (may not exist yet)
+                    }
+                }
+
+                // 6. Grant permission on PDF file
+                targetFileId = pdfDriveId
+            } catch (pdfError) {
+                console.error('Failed to process PDF-only sharing:', pdfError)
+                return NextResponse.json({ error: 'Failed to process document for sharing' }, { status: 500 })
+            }
+        } else {
+            // Branch B: Viewer + sharePdfOnly = false -> enforce allowDownload on original file
+            if (isViewer && !allowDownload) {
+                try {
+                    await drive.patchFileProperties(connectorId, fileInfo.externalId, {
+                        copyRequiresWriterPermission: true
+                    })
+                } catch (e) {
+                    console.error('Failed to set copyRequiresWriterPermission:', e)
+                    // Continue anyway - this is not a blocker
+                }
+            }
+        }
+
+        const permissionId = await drive.grantFilePermission(connectorId, targetFileId, email, role, message, options)
 
         if (!permissionId) {
             return NextResponse.json({ error: 'Failed to re-grant Google Drive permission' }, { status: 500 })

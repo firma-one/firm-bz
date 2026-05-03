@@ -695,7 +695,7 @@ export function DocumentActionMenu({
                         const docIdForComments = (document as any)?.projectDocumentId || document.id
                         rightPane.setTitle('Comments')
                         rightPane.setHeaderActions(null)
-                        rightPane.setHeaderIcon(<MessageCircle className="h-4 w-4" />)
+                        rightPane.setHeaderIcon(<DocumentIcon mimeType={document.mimeType} className="h-4 w-4" />)
                         rightPane.setHeaderSubtitle('Append-only. Visible to all project members.')
                         rightPane.setContent(
                           <DocumentDocCommentsPane
@@ -851,7 +851,6 @@ export function DocumentActionMenu({
                               </div>
                             )}
                             <div className="inline-flex max-w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 mb-4">
-                              <DocumentIcon mimeType={document.mimeType} className="h-4 w-4 flex-shrink-0" />
                               <span className="truncate text-xs font-medium text-slate-700" title={document.name}>{document.name}</span>
                             </div>
                             <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 space-y-3">
