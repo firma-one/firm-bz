@@ -151,7 +151,7 @@ export function InviteMemberModal({ projectId, open, onOpenChange, personas, pre
                         <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                             Cancel
                         </Button>
-                        <Button type="submit" disabled={isSandboxFirm || isSubmitting || !selectedPersonaId || !email}>
+                        <Button type="submit" variant="blackCta" disabled={isSandboxFirm || isSubmitting || !selectedPersonaId || !email}>
                             {isSubmitting ? 'Sending...' : 'Send Invitation'}
                         </Button>
                     </div>

@@ -78,7 +78,7 @@ export function FirmInviteModal({ firmId, open, onOpenChange, onSuccess }: FirmI
                         <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
                             Cancel
                         </Button>
-                        <Button type="submit" disabled={isSandboxFirm || isSubmitting || !email.trim()}>
+                        <Button type="submit" variant="blackCta" disabled={isSandboxFirm || isSubmitting || !email.trim()}>
                             {isSubmitting ? 'Sending...' : 'Send Invitation'}
                         </Button>
                     </div>
