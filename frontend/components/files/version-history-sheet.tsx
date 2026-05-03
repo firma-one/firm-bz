@@ -33,23 +33,14 @@ export function VersionHistorySheet({
     const [loadingVersions, setLoadingVersions] = useState(false)
     const [versionsError, setVersionsError] = useState<string | null>(null)
 
-    // Activity State
-    const [activities, setActivities] = useState<any[]>([]) // Using any for now to avoid strict typing issues with complex Activity API
-    const [loadingActivity, setLoadingActivity] = useState(false)
-    const [activityError, setActivityError] = useState<string | null>(null)
-
     // Reset when opening
     useEffect(() => {
         if (isOpen && document?.id && document?.connectorId) {
-            // Load both by default or just active tab? Load both for snappiness
             loadRevisions()
-            loadActivity()
-            setActiveTab('activity') // Default to activity like requested
+            setActiveTab('activity')
         } else {
             setRevisions([])
-            setActivities([])
             setLoadingVersions(false)
-            setLoadingActivity(false)
         }
     }, [isOpen, document])
 
@@ -74,28 +65,11 @@ export function VersionHistorySheet({
         }
     }
 
-    const loadActivity = async () => {
-        if (!session?.access_token || !document.connectorId) return
-        setLoadingActivity(true)
-        setActivityError(null)
-        try {
-            const response = await fetch(`/api/documents/activity?fileId=${document.id}&connectorId=${document.connectorId}`)
-            if (response.ok) {
-                const data = await response.json()
-                setActivities(data.activities)
-            } else {
-                const errorText = await response.json().catch(() => ({}))
-                if (errorText.error?.includes('scope')) {
-                    setActivityError('Permission required. Please reconnect Drive.')
-                } else {
-                    setActivityError('Failed to load activity')
-                }
-            }
-        } catch (err) {
-            setActivityError('Error loading activity')
-        } finally {
-            setLoadingActivity(false)
-        }
+    const getActivityFromRevisions = () => {
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+        return revisions
+            .filter(rev => new Date(rev.modifiedTime) >= thirtyDaysAgo)
+            .sort((a, b) => new Date(b.modifiedTime).getTime() - new Date(a.modifiedTime).getTime())
     }
 
     if (!document) return null
@@ -157,7 +131,7 @@ export function VersionHistorySheet({
                     {/* Activity Tab */}
                     {activeTab === 'activity' && (
                         <div className="p-6">
-                            {loadingActivity ? (
+                            {loadingVersions ? (
                                 <div className="space-y-4 animate-pulse">
                                     {[1, 2, 3].map(i => (
                                         <div key={i} className="flex gap-4">
@@ -169,79 +143,57 @@ export function VersionHistorySheet({
                                         </div>
                                     ))}
                                 </div>
-                            ) : activityError ? (
+                            ) : versionsError ? (
                                 <div className="flex flex-col items-center justify-center py-12 text-center">
                                     <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mb-3">
                                         <AlertCircle className="h-6 w-6 text-red-500" />
                                     </div>
-                                    <p className="text-sm font-medium text-gray-900">{activityError}</p>
-                                    {activityError.includes('Permission') && (
-                                        <Button variant="link" className="text-blue-600 text-xs mt-1" onClick={() => window.open('/dash/connectors', '_self')}>
-                                            Go to Connectors
-                                        </Button>
-                                    )}
+                                    <p className="text-sm font-medium text-gray-900">{versionsError}</p>
                                 </div>
-                            ) : activities.length === 0 ? (
-                                <div className="text-center py-12 text-gray-500 text-sm">
-                                    No recent activity found.
-                                </div>
-                            ) : (
-                                <div className="space-y-6">
-                                    {/* Group by Date logic ideally, simpler list for now */}
-                                    {activities.map((act, idx) => {
-                                        const rawName = act.actors?.[0]?.user?.knownUser?.personName
-                                        // If name is explicitly "people/...", it means the API didn't resolve a display name.
-                                        // We can try to format it or just say "User".
-                                        // Sometimes the API returns the actual name in 'personName' field if resolved.
-                                        // Let's check if it looks like an ID.
-                                        const displayName = (rawName && !rawName.startsWith('people/'))
-                                            ? rawName
-                                            : 'User'
+                            ) : (() => {
+                                const activity = getActivityFromRevisions()
+                                return activity.length === 0 ? (
+                                    <div className="text-center py-12 text-gray-500 text-sm">
+                                        No activity in the last 30 days.
+                                    </div>
+                                ) : (
+                                    <div className="space-y-6">
+                                        {activity.map((rev, idx) => {
+                                            const displayName = rev.lastModifyingUser?.displayName || 'Unknown'
+                                            const initials = displayName.split(' ').map(n => n[0]).join('').slice(0, 2)
 
-                                        return (
-                                            <div key={idx} className="flex gap-4 group">
-                                                <div className="flex flex-col items-center">
-                                                    {/* Actor Avatar */}
-                                                    <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 text-xs font-bold border-2 border-white shadow-sm z-10">
-                                                        {displayName[0] || 'U'}
-                                                    </div>
-                                                    {idx !== activities.length - 1 && (
-                                                        <div className="w-px bg-gray-200 flex-grow mt-2 group-hover:bg-gray-300 transition-colors" />
-                                                    )}
-                                                </div>
-                                                <div className="pb-6">
-                                                    <p className="text-sm text-gray-900">
-                                                        <span className="font-medium">
-                                                            {displayName}
-                                                        </span>
-                                                        {' '}
-                                                        <span className="text-gray-600">
-                                                            {act.primaryActionDetail?.edit ? 'edited' :
-                                                                act.primaryActionDetail?.rename ? 'renamed' :
-                                                                    act.primaryActionDetail?.move ? 'moved' :
-                                                                        act.primaryActionDetail?.create ? 'created' :
-                                                                            act.primaryActionDetail?.permissionChange ? 'changed sharing' :
-                                                                                'modified'}
-                                                        </span>
-                                                        {' '}
-                                                        this item
-                                                    </p>
-                                                    {act.primaryActionDetail?.rename && (
-                                                        <div className="mt-1.5 bg-white border border-gray-200 rounded p-2 text-xs text-gray-600">
-                                                            <span className="line-through text-gray-400">{act.primaryActionDetail.rename.oldTitle}</span>
-                                                            {' → '}
-                                                            <span className="font-medium text-gray-900">{act.primaryActionDetail.rename.newTitle}</span>
+                                            return (
+                                                <div key={rev.id} className="flex gap-4 group">
+                                                    <div className="flex flex-col items-center">
+                                                        <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 text-xs font-bold border-2 border-white shadow-sm z-10 flex-shrink-0 overflow-hidden">
+                                                            {rev.lastModifyingUser?.photoLink ? (
+                                                                <img src={rev.lastModifyingUser.photoLink} alt="" className="w-full h-full" />
+                                                            ) : (
+                                                                initials
+                                                            )}
                                                         </div>
-                                                    )}
-                                                    <p className="text-xs text-gray-400 mt-1">
-                                                        {formatSmartDateTime(act.timestamp)}
-                                                    </p>
+                                                        {idx !== activity.length - 1 && (
+                                                            <div className="w-px bg-gray-200 flex-grow mt-2 group-hover:bg-gray-300 transition-colors" />
+                                                        )}
+                                                    </div>
+                                                    <div className="pb-6">
+                                                        <p className="text-sm text-gray-900">
+                                                            <span className="font-medium">{displayName}</span>
+                                                            {' '}
+                                                            <span className="text-gray-600">edited</span>
+                                                            {' '}
+                                                            this file
+                                                        </p>
+                                                        <p className="text-xs text-gray-400 mt-1">
+                                                            {formatSmartDateTime(rev.modifiedTime)}
+                                                        </p>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        )
-                                    })}
-                                </div>
-                            )}
+                                            )
+                                        })}
+                                    </div>
+                                )
+                            })()}
                         </div>
                     )}
 
