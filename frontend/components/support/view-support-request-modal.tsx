@@ -9,7 +9,6 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
 import {
   Select,
   SelectContent,
@@ -57,12 +56,6 @@ type PendingAttachment = {
   error?: string
 }
 
-const REQUEST_TYPE_LABELS: Record<TicketType, string> = {
-  [TicketType.BUG]: 'Bug Report',
-  [TicketType.REQUEST]: 'Feature Request',
-  [TicketType.ENQUIRY]: 'General Enquiry',
-}
-
 const REQUEST_TYPE_CONFIG: Record<TicketType, { label: string; color: string; bgColor: string }> = {
   [TicketType.BUG]: { label: 'Bug Report', color: 'text-red-600', bgColor: 'bg-red-50' },
   [TicketType.REQUEST]: { label: 'Feature Request', color: 'text-amber-600', bgColor: 'bg-amber-50' },
@@ -92,7 +85,7 @@ export function ViewSupportRequestModal({
   const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50 MB
   const allAttachments = [
     ...(ticket.attachments ?? []).filter((a: AttachmentMeta) => !deletedDriveFileIds.has(a.driveFileId)),
-    ...newAttachments.filter(a => a.status === 'done' && a.meta),
+    ...newAttachments.filter(a => a.status === 'done' && a.meta).map(a => a.meta!),
   ] as (AttachmentMeta & { isNew?: boolean })[]
 
   const updateAttachment = (id: string, updates: Partial<PendingAttachment>) => {
@@ -586,9 +579,9 @@ export function ViewSupportRequestModal({
             )}
 
             {/* Pending/Uploading Attachments */}
-            {newAttachments.length > 0 && (
+            {newAttachments.some(a => a.status !== 'done') && (
               <div className="space-y-2 max-h-48 overflow-y-auto">
-                {newAttachments.map((a) => (
+                {newAttachments.filter(a => a.status !== 'done').map((a) => (
                   <div
                     key={a.id}
                     className="flex items-center gap-2 p-2 bg-slate-50 rounded border border-slate-200"
