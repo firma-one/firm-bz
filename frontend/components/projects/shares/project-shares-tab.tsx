@@ -16,14 +16,14 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core'
-import { Share2, User, Lock, ListTodo, Loader2, CheckCircle, GripVertical, List, FolderOpen, LayoutGrid, Clock, Copy, Check, Search, MessageCircle, Link2 } from 'lucide-react'
+import { Share2, User, Lock, ListTodo, Loader2, CheckCircle, GripVertical, List, FolderOpen, LayoutGrid, Clock, Copy, Check, Search, MessageCircle, Link2, X, Folder } from 'lucide-react'
+import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { SharedFolderIcon } from '@/components/ui/folder-shared-icon'
 import { DocumentActionMenu } from '@/components/ui/document-action-menu'
 import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { ShareDetailPanel } from './share-detail-panel'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { SecureAccessModal } from './secure-access-modal'
@@ -51,13 +51,17 @@ interface ShareRecord {
   thumbnailLink?: string | null
   webViewLink?: string | null
   slug?: string | null
+  parentId?: string | null
+  parentName?: string | null
   createdBy: string
   createdByEmail?: string | null
+  createdByName?: string | null
   createdByAvatarUrl?: string | null
   createdAt: string
   updatedAt: string
   updatedBy?: string | null
   updatedByEmail?: string | null
+  updatedByName?: string | null
   updatedByAvatarUrl?: string | null
   settings: {
     externalCollaborator: boolean
@@ -187,6 +191,8 @@ function DraggableCard({
   handleSecureOpen,
   isRegrantingId,
   onOpenComments,
+  extCollaboratorLabel,
+  viewerLabel,
 }: {
   id: string
   share: ShareRecord
@@ -202,6 +208,8 @@ function DraggableCard({
   handleSecureOpen: (share: ShareRecord) => void
   isRegrantingId: string | null
   onOpenComments?: (share: ShareRecord) => void
+  extCollaboratorLabel: string
+  viewerLabel: string
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id })
   const { setNodeRef: setDropRef, isOver } = useDroppable({ id })
@@ -253,8 +261,20 @@ function DraggableCard({
         isRegrantingId={isRegrantingId}
         onClickTitle={() => handleSecureOpen(share)}
         onOpenComments={onOpenComments}
+        extCollaboratorLabel={extCollaboratorLabel}
+        viewerLabel={viewerLabel}
       />
     </motion.div>
+  )
+}
+
+function DocumentBreadcrumb({ parentName }: { parentName?: string | null }) {
+  if (!parentName) return null
+  return (
+    <div className="flex items-center gap-1 min-w-0">
+      <Folder className="h-3 w-3 shrink-0 stroke-slate-400 stroke-[1.5] fill-slate-200" aria-hidden />
+      <span className="text-[10px] text-slate-500 truncate">{parentName}</span>
+    </div>
   )
 }
 
@@ -274,6 +294,8 @@ function ShareCardContent({
   handleSecureOpen,
   isRegrantingId,
   onOpenComments,
+  extCollaboratorLabel,
+  viewerLabel,
 }: {
   share: ShareRecord
   laneHeaderBg: string
@@ -290,6 +312,8 @@ function ShareCardContent({
   handleSecureOpen: (share: ShareRecord) => void
   isRegrantingId: string | null
   onOpenComments?: (share: ShareRecord) => void
+  extCollaboratorLabel: string
+  viewerLabel: string
 }) {
   const latestComment = share.comments?.[0]
   const isFinalized = !!share.finalizedAt
@@ -314,40 +338,26 @@ function ShareCardContent({
             >
               {share.documentName}
             </div>
-            <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">
-              {latestComment ? latestComment.comment : 'Shared document'}
-            </p>
+            <DocumentBreadcrumb parentName={share.parentName} />
           </div>
         </div>
       </div>
-      <div className="px-3 pb-3 pt-1 bg-white">
-        <div className="flex items-center gap-2">
-          <Avatar className="h-5 w-5 rounded-full border border-slate-200/80">
-            <AvatarFallback className="text-[10px] bg-slate-100 text-slate-600">
-              {getInitials(share.createdBy)}
-            </AvatarFallback>
-          </Avatar>
-          <span className="text-[11px] text-slate-500 truncate" title={share.createdBy}>
-            Engagement member
-          </span>
-          <span className="text-[11px] text-slate-400">·</span>
+      <div className="px-3 pb-3 pt-2 bg-white space-y-1.5">
+        {/* Datetime + quick links */}
+        <div className="flex items-center justify-between">
           <RelativeDateTime
             date={share.updatedAt}
             textClassName="text-[11px] text-slate-400"
             iconClassName="text-slate-300 hover:text-slate-500"
             tooltipSide="top"
           />
-        </div>
-      </div>
-      {showActions && (
-        <div className="px-3 pb-3 pt-2 flex flex-wrap items-center gap-2 border-t border-slate-100/80 bg-white" onClick={(e) => e.stopPropagation()}>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
                     type="button"
-                    className="h-7 px-2 rounded-lg border border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-50 text-xs flex items-center gap-1.5"
+                    className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors"
                     onClick={(e) => {
                       e.stopPropagation()
                       if (!share.webViewLink) return
@@ -356,40 +366,80 @@ function ShareCardContent({
                       setTimeout(() => setLinkCopied(false), 1500)
                     }}
                     disabled={!share.webViewLink}
-                    title={share.webViewLink ? 'Copy link' : 'No link available'}
                   >
                     {linkCopied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Link2 className="h-3.5 w-3.5" />}
-                    <span className="hidden sm:inline">{linkCopied ? 'Copied' : 'Copy link'}</span>
                   </button>
                 </TooltipTrigger>
-                <TooltipContent side="top" className="text-xs">
-                  {share.webViewLink ? 'Copy link' : 'No link available'}
-                </TooltipContent>
+                <TooltipContent side="top" className="text-xs">{share.webViewLink ? 'Copy link' : 'No link available'}</TooltipContent>
               </Tooltip>
             </TooltipProvider>
-
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
                     type="button"
-                    className="h-7 px-2 rounded-lg border border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-50 text-xs flex items-center gap-1.5"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      onOpenComments?.(share)
-                    }}
-                    title="Comments"
+                    className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors"
+                    onClick={(e) => { e.stopPropagation(); onOpenComments?.(share) }}
                   >
                     <MessageCircle className="h-3.5 w-3.5" />
-                    <span className="hidden sm:inline">Comments</span>
                   </button>
                 </TooltipTrigger>
-                <TooltipContent side="top" className="text-xs">
-                  Comments
-                </TooltipContent>
+                <TooltipContent side="top" className="text-xs">Comments</TooltipContent>
               </Tooltip>
             </TooltipProvider>
+            <DocumentActionMenu
+              document={getDocumentForMenu(share)}
+              showShareModal={canManage}
+              projectId={share.projectId}
+              onShareSaved={onShareSaved}
+              onOpenDocument={() => handleSecureOpen(share)}
+            />
+            {isRegrantingId === share.id && <LoadingSpinner size="sm" className="min-h-0 ml-0.5" />}
           </div>
+        </div>
+        {/* Shared by */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px] text-slate-400 w-14 shrink-0 whitespace-nowrap">Shared by</span>
+          <TooltipProvider>
+            <ProfileBubbleWithPopup
+              name={share.createdByName || share.createdByEmail || 'Team Member'}
+              email={share.createdByEmail || ''}
+              avatarUrl={share.createdByAvatarUrl}
+              size="default"
+            />
+          </TooltipProvider>
+        </div>
+        {/* Shared with */}
+        {(share.settings?.externalCollaborator || share.settings?.guest) && (
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-slate-400 w-14 shrink-0 whitespace-nowrap">Shared with</span>
+            <div className="flex items-center gap-1">
+              {share.settings?.externalCollaborator && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="h-5 w-5 rounded-lg bg-violet-100 text-violet-800 flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EC</div>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="text-xs">{extCollaboratorLabel}</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+              {share.settings?.guest && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="h-5 w-5 rounded-lg bg-sky-100 text-sky-800 flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EV</div>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="text-xs">{viewerLabel}</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+      {showActions && (canManage && isDoneLane && !isFinalized || isFinalized) && (
+        <div className="px-3 pb-3 pt-1 flex items-center gap-2 border-t border-slate-100/80 bg-white" onClick={(e) => e.stopPropagation()}>
           {canManage && isDoneLane && !isFinalized && (
             <Button
               size="sm"
@@ -406,18 +456,6 @@ function ShareCardContent({
               <Lock className="h-3 w-3" /> Finalized
             </span>
           )}
-          <div className="flex items-center gap-2">
-            <DocumentActionMenu
-              document={getDocumentForMenu(share)}
-              showShareModal={canManage}
-              projectId={share.projectId}
-              onShareSaved={onShareSaved}
-              onOpenDocument={() => handleSecureOpen(share)}
-            />
-            {isRegrantingId === share.id && (
-              <LoadingSpinner size="sm" className="min-h-0 ml-1" />
-            )}
-          </div>
         </div>
       )}
     </>
@@ -436,74 +474,6 @@ const STATUS_PILL_CLASS: Record<ActivityStatus, string> = {
   done: 'bg-[#e0f2fe]/90 text-[#0369a1]',
 }
 
-function PersonBubble({
-  email,
-  avatarUrl,
-  userId,
-  formatDate,
-  sharedAt,
-  modifiedAt,
-}: {
-  email: string | null
-  avatarUrl: string | null
-  userId: string
-  formatDate: (s: string) => string
-  sharedAt: string
-  modifiedAt?: string | null
-}) {
-  const [copied, setCopied] = useState(false)
-  const initials = email ? email.slice(0, 2).toUpperCase() : getInitials(userId)
-
-  const handleCopy = (e: React.MouseEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    if (email) {
-      navigator.clipboard.writeText(email)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    }
-  }
-
-  const hasModified = modifiedAt && new Date(modifiedAt).getTime() > new Date(sharedAt).getTime()
-
-  return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div className="h-8 w-8 rounded-lg border border-slate-200/80 bg-slate-50 flex items-center justify-center overflow-hidden shrink-0 cursor-default">
-            {avatarUrl ? (
-              <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
-            ) : (
-              <span className="text-[10px] font-medium text-slate-600">{initials}</span>
-            )}
-          </div>
-        </TooltipTrigger>
-        <TooltipContent side="top" className="bg-slate-50 border border-slate-200 text-slate-700 text-xs p-3 max-w-[280px] shadow-md">
-          <div className="space-y-2">
-            {email && (
-              <div className="flex items-center gap-2">
-                <span className="truncate max-w-[200px]">{email}</span>
-                <button type="button" onClick={handleCopy} className="shrink-0 p-1 rounded hover:bg-slate-100 text-slate-500 hover:text-slate-700" title="Copy email">
-                  {copied ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
-                </button>
-              </div>
-            )}
-            <div className="flex items-center gap-1.5">
-              <Clock className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-              <span>Shared at {formatDate(sharedAt)}</span>
-            </div>
-            {hasModified && modifiedAt && (
-              <div className="flex items-center gap-1.5">
-                <Clock className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                <span>Modified at {formatDate(modifiedAt)}</span>
-              </div>
-            )}
-          </div>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  )
-}
 
 function ModifierBubble({
   updatedBy,
@@ -626,7 +596,7 @@ function SharesListView({
           >
             <div className="p-5 flex items-start justify-between gap-4">
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 min-w-0">
+                <div className="flex items-center gap-2 w-full">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-50">
                     {share.documentMimeType?.includes('folder') ? (
                       <SharedFolderIcon fillLevel={1} tooltip="shared" />
@@ -634,10 +604,10 @@ function SharesListView({
                       <DocumentIcon mimeType={share.documentMimeType ?? undefined} size={20} />
                     )}
                   </div>
-                  <h3 className="font-semibold text-slate-900 truncate min-w-0" title={share.documentName}>
+                  <h3 className="font-semibold text-slate-900 truncate flex-1 min-w-0" title={share.documentName}>
                     {share.documentName}
                   </h3>
-                  <div className="flex items-center gap-1 shrink-0">
+                  <div className="flex items-center gap-1 shrink-0 ml-auto">
                     <button
                       type="button"
                       className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors"
@@ -682,6 +652,7 @@ function SharesListView({
                     )}
                   </div>
                 </div>
+                <DocumentBreadcrumb parentName={share.parentName} />
                 {(() => {
                   const isModified = new Date(share.updatedAt).getTime() > new Date(share.createdAt).getTime()
                   const samePerson = share.updatedBy && share.updatedBy === share.createdBy
@@ -689,64 +660,54 @@ function SharesListView({
                   const showModifierProfile = isModified && share.updatedBy && !samePerson
                   const showModifiedAtOnly = isModified && !share.updatedBy
                   return (
-                    <div className="flex flex-row flex-wrap items-center gap-1.5 mt-3">
-                      {showCreatorProfile && (
-                        <PersonBubble
-                          email={share.createdByEmail ?? null}
-                          avatarUrl={share.createdByAvatarUrl ?? null}
-                          userId={share.createdBy}
-                          formatDate={formatDate}
-                          sharedAt={share.createdAt}
-                          modifiedAt={samePerson ? undefined : (isModified ? share.updatedAt : undefined)}
-                        />
-                      )}
-                      {!showCreatorProfile && samePerson && isModified && (
-                        <PersonBubble
-                          email={share.createdByEmail ?? null}
-                          avatarUrl={share.createdByAvatarUrl ?? null}
-                          userId={share.createdBy}
-                          formatDate={formatDate}
-                          sharedAt={share.createdAt}
-                          modifiedAt={share.updatedAt}
-                        />
-                      )}
-                      {showModifierProfile && share.updatedBy && (
-                        <ModifierBubble
-                          updatedBy={share.updatedBy}
-                          updatedByEmail={share.updatedByEmail}
-                          updatedByAvatarUrl={share.updatedByAvatarUrl}
-                          updatedAt={share.updatedAt}
-                          formatDate={formatDate}
-                        />
-                      )}
-                      {showModifiedAtOnly && <ModifiedAtOnlyBubble updatedAt={share.updatedAt} formatDate={formatDate} />}
-                      {ec && (
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <div className="h-8 w-8 rounded-lg bg-violet-100 text-violet-800 flex items-center justify-center text-xs font-semibold shrink-0 cursor-default w-8">
-                                EC
-                              </div>
-                            </TooltipTrigger>
-                            <TooltipContent side="top" className="bg-slate-50 border border-slate-200 text-slate-700 text-xs p-2 shadow-md">
-                              {extCollaboratorLabel}
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      )}
-                      {guest && (
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <div className="h-8 w-8 rounded-lg bg-sky-100 text-sky-800 flex items-center justify-center text-xs font-semibold shrink-0 cursor-default w-8">
-                                G
-                              </div>
-                            </TooltipTrigger>
-                            <TooltipContent side="top" className="bg-slate-50 border border-slate-200 text-slate-700 text-xs p-2 shadow-md">
-                              {viewerLabel}
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
+                    <div className="flex items-center justify-between mt-3">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] text-slate-400 shrink-0">Shared by</span>
+                        {(showCreatorProfile || (!showCreatorProfile && samePerson && isModified)) && (
+                          <TooltipProvider>
+                            <ProfileBubbleWithPopup
+                              name={share.createdByName || share.createdByEmail || 'Team Member'}
+                              email={share.createdByEmail || ''}
+                              avatarUrl={share.createdByAvatarUrl}
+                              size="default"
+                            />
+                          </TooltipProvider>
+                        )}
+                        {showModifierProfile && share.updatedBy && (
+                          <ModifierBubble
+                            updatedBy={share.updatedBy}
+                            updatedByEmail={share.updatedByEmail}
+                            updatedByAvatarUrl={share.updatedByAvatarUrl}
+                            updatedAt={share.updatedAt}
+                            formatDate={formatDate}
+                          />
+                        )}
+                        {showModifiedAtOnly && <ModifiedAtOnlyBubble updatedAt={share.updatedAt} formatDate={formatDate} />}
+                      </div>
+                      {(ec || guest) && (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] text-slate-400 shrink-0">Shared with</span>
+                          {ec && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div className="h-6 w-6 rounded-lg bg-violet-100 text-violet-800 flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EC</div>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="bg-slate-50 border border-slate-200 text-slate-700 text-xs p-2 shadow-md">{extCollaboratorLabel}</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
+                          {guest && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div className="h-6 w-6 rounded-lg bg-sky-100 text-sky-800 flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EV</div>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="bg-slate-50 border border-slate-200 text-slate-700 text-xs p-2 shadow-md">{viewerLabel}</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
+                        </div>
                       )}
                     </div>
                   )
@@ -833,18 +794,7 @@ function ShareCard({
   onOpenComments?: (share: ShareRecord) => void
 }) {
   const isFolder = share.documentMimeType?.includes('folder')
-
-  // Build a minimal document object compatible with DocumentPreviewPanelContent
-  const previewDoc = {
-    id: share.documentId,
-    externalId: share.documentExternalId,
-    name: share.documentName,
-    mimeType: share.documentMimeType ?? undefined,
-    size: (share as any).metadata?.size ?? null,
-    modifiedTime: share.updatedAt,
-    projectId: share.projectId,
-    isGuest: share.settings?.guest ?? false,
-  }
+  const [linkCopied, setLinkCopied] = useState(false)
 
   const handleOpenPreview = () => handleSecureOpen(share)
 
@@ -858,7 +808,7 @@ function ShareCard({
       layout
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="group relative bg-white rounded-3xl border border-slate-200/80 shadow-[0_2px_15px_-3px_rgba(0,0,0,0.07),0_4px_6px_-2px_rgba(0,0,0,0.05)] hover:shadow-[0_20px_25px_-5px_rgba(0,0,0,0.1),0_10px_10px_-5px_rgba(0,0,0,0.04)] transition-all duration-300 overflow-hidden flex flex-col h-full"
+      className="group relative bg-white rounded-xl border border-slate-200/80 shadow-[0_2px_15px_-3px_rgba(0,0,0,0.07),0_4px_6px_-2px_rgba(0,0,0,0.05)] hover:shadow-[0_20px_25px_-5px_rgba(0,0,0,0.1),0_10px_10px_-5px_rgba(0,0,0,0.04)] transition-all duration-300 overflow-hidden flex flex-col h-full"
     >
       {/* Thumbnail / Large Icon Area */}
       <div
@@ -931,57 +881,61 @@ function ShareCard({
 
       {/* Content Area */}
       <div className="p-5 flex flex-col flex-1 bg-white relative">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <h3
-              className="font-bold text-slate-800 text-[15px] leading-tight truncate cursor-pointer hover:text-indigo-600 transition-colors"
-              title={share.documentName}
-              onClick={handleOpenPreview}
-            >
-              {share.documentName}
-            </h3>
-            <div className="flex items-center gap-1.5 mt-2">
-              <div className="h-1.5 w-1.5 rounded-full bg-green-500" />
-              <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Shared {formatDate(share.createdAt)}</p>
-            </div>
+        <h3
+          className="font-bold text-slate-800 text-[15px] leading-tight truncate cursor-pointer hover:text-indigo-600 transition-colors"
+          title={share.documentName}
+          onClick={handleOpenPreview}
+        >
+          {share.documentName}
+        </h3>
+        <DocumentBreadcrumb parentName={share.parentName} />
+
+        {/* DateTime + quick links row */}
+        <div className="flex items-center justify-between mt-2">
+          <div className="flex items-center gap-1.5">
+            <RelativeDateTime
+              date={share.createdAt}
+              textClassName="text-xs text-slate-500"
+              iconClassName="text-slate-300 hover:text-slate-500"
+              tooltipSide="top"
+            />
           </div>
-        </div>
-
-        <div className="mt-8 pt-4 flex items-center justify-between border-t border-slate-50">
-          <div className="flex items-center gap-3">
-            <Avatar className="h-8 w-8 rounded-full border-2 border-white ring-1 ring-slate-100 shadow-sm">
-              {share.createdByAvatarUrl ? (
-                <img src={share.createdByAvatarUrl} alt="" className="h-full w-full object-cover" />
-              ) : (
-                <AvatarFallback className="text-[11px] bg-slate-50 text-slate-600 font-black">{getInitials(share.createdByEmail)}</AvatarFallback>
-              )}
-            </Avatar>
-            <div className="flex flex-col">
-              <span className="text-[11px] text-slate-500 font-bold uppercase tracking-tight leading-none mb-1">Shared by</span>
-              <span className="text-[13px] text-slate-800 font-bold leading-tight">{share.createdByEmail?.split('@')[0] || 'Team Member'}</span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <div className="flex -space-x-1.5 mr-2">
-              {share.settings.guest && (
-                <div
-                  className="h-5 w-5 rounded-full ring-2 ring-white bg-sky-100 text-sky-700 flex items-center justify-center text-[9px] font-black shadow-sm"
-                  title={`${viewerLabel} Enabled`}
-                >
-                  G
-                </div>
-              )}
-              {share.settings.externalCollaborator && (
-                <div
-                  className="h-5 w-5 rounded-full ring-2 ring-white bg-violet-100 text-violet-700 flex items-center justify-center text-[9px] font-black shadow-sm"
-                  title={`${extCollaboratorLabel} Enabled`}
-                >
-                  EC
-                </div>
-              )}
-            </div>
-
+          <div className="flex items-center gap-0.5">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (!share.webViewLink) return
+                      navigator.clipboard.writeText(share.webViewLink)
+                      setLinkCopied(true)
+                      setTimeout(() => setLinkCopied(false), 1500)
+                    }}
+                    disabled={!share.webViewLink}
+                  >
+                    {linkCopied ? <Check className="h-4 w-4 text-emerald-600" /> : <Link2 className="h-4 w-4" />}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">{share.webViewLink ? 'Copy link' : 'No link available'}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors"
+                    onClick={(e) => { e.stopPropagation(); onOpenComments?.(share) }}
+                  >
+                    <MessageCircle className="h-4 w-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">Comments</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             <DocumentActionMenu
               document={getDocumentForMenu(share)}
               showShareModal={canManage}
@@ -993,6 +947,48 @@ function ShareCard({
               <LoadingSpinner size="sm" className="min-h-0 ml-1" />
             )}
           </div>
+        </div>
+
+        {/* Shared by / Shared with rows */}
+        <div className="mt-4 pt-4 -mx-5 px-5 border-t border-slate-100 space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-slate-400 w-14 shrink-0 whitespace-nowrap">Shared by</span>
+            <TooltipProvider>
+              <ProfileBubbleWithPopup
+                name={share.createdByName || share.createdByEmail || 'Team Member'}
+                email={share.createdByEmail || ''}
+                avatarUrl={share.createdByAvatarUrl}
+                size="default"
+              />
+            </TooltipProvider>
+          </div>
+          {(share.settings.externalCollaborator || share.settings.guest) && (
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-slate-400 w-14 shrink-0 whitespace-nowrap">Shared with</span>
+              <div className="flex items-center gap-1">
+                {share.settings.externalCollaborator && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="h-6 w-6 rounded-lg bg-violet-100 text-violet-800 flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EC</div>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="text-xs">{extCollaboratorLabel}</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
+                {share.settings.guest && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="h-6 w-6 rounded-lg bg-sky-100 text-sky-800 flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EV</div>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="text-xs">{viewerLabel}</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1030,7 +1026,14 @@ export function ProjectSharesTab({
     secureModalData,
     setSecureModalOpen,
     isRegrantingId,
-  } = useSecureOpenDocument({ projectId, logContext: 'ProjectShares' })
+  } = useSecureOpenDocument({
+    projectId,
+    logContext: 'ProjectShares',
+    onRegrantFailed: (doc) => {
+      const link = doc.webViewLink || (doc.externalId ? `https://drive.google.com/file/d/${doc.externalId}/view` : null)
+      if (link && typeof window !== 'undefined') window.open(link, '_blank')
+    },
+  })
 
   const viewMode = (pathViewMode ?? 'grid') as SharesViewMode
   const { projExtCollaborator, projViewer } = useProjectPersonaLabels()
@@ -1270,28 +1273,8 @@ export function ProjectSharesTab({
           </p>
         </div>
 
-        <div className="mt-4 flex items-center gap-2">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <Input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search shared documents..."
-              className="pl-9 border-slate-200"
-            />
-          </div>
-          {searchQuery.trim().length > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="border-slate-200 text-slate-700 hover:bg-slate-50"
-              onClick={() => setSearchQuery('')}
-            >
-              Clear
-            </Button>
-          )}
-        </div>
-        <nav className="flex items-center gap-1 mt-4 border-b border-slate-200" aria-label="View mode">
+        <div className="mt-4 flex items-center gap-2 border-b border-slate-200">
+          <nav className="flex items-center gap-1 -mb-px" aria-label="View mode">
           <button
             type="button"
             onClick={() => { if (sharesBasePath) router.push(`${sharesBasePath}/grid`) }}
@@ -1331,7 +1314,28 @@ export function ProjectSharesTab({
             <ListTodo className="h-4 w-4" />
             Board
           </button>
-        </nav>
+          </nav>
+          <div className="ml-auto pb-1">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+              <Input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Quick search ..."
+                className="pl-9 pr-8 h-8 text-sm border-slate-200 w-56"
+              />
+              {searchQuery.trim().length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="flex flex-1 min-h-0 overflow-hidden gap-4">
@@ -1421,6 +1425,8 @@ export function ProjectSharesTab({
                               handleSecureOpen={handleSecureOpenShare}
                               isRegrantingId={isRegrantingId}
                               onOpenComments={handleOpenComments}
+                              extCollaboratorLabel={projExtCollaborator}
+                              viewerLabel={projViewer}
                             />
                           ))}
                         </AnimatePresence>
@@ -1459,6 +1465,8 @@ export function ProjectSharesTab({
                           handleSecureOpen={handleSecureOpenShare}
                           isRegrantingId={isRegrantingId}
                           onOpenComments={handleOpenComments}
+                          extCollaboratorLabel={projExtCollaborator}
+                          viewerLabel={projViewer}
                         />
                       </motion.div>
                     )

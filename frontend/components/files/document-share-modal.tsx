@@ -50,10 +50,10 @@ function parseSettings(settings: unknown): DocumentShareSettings {
   const share = parsed.share
   if (!share) return defaultSettings
   return {
-    externalCollaborator: share.externalCollaborator?.enabled !== false,
+    externalCollaborator: share.externalCollaborator?.enabled === true,
     guest: share.guest?.enabled === true,
     guestOptions: {
-      sharePdfOnly: share.guest?.options?.sharePdfOnly !== false,
+      sharePdfOnly: share.guest?.options?.sharePdfOnly === true,
       allowDownload: share.guest?.options?.allowDownload === true,
       addWatermark: share.guest?.options?.addWatermark === true,
       publish: share.guest?.options?.publish === true,

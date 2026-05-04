@@ -20,9 +20,11 @@ interface FirmClientsViewProps {
     orgId?: string
     /** From server: show "+ New Client" in sandbox so restriction toast is discoverable */
     firmSandboxOnly?: boolean
+    memberCount?: number
+    auditCount?: number
 }
 
-export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = false }: FirmClientsViewProps) {
+export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = false, memberCount, auditCount }: FirmClientsViewProps) {
     const router = useRouter()
     const pathname = usePathname()
     const searchParams = useSearchParams()
@@ -141,6 +143,11 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                         >
                             <Users className="w-4 h-4 mr-2" />
                             Clients
+                            {clients.length > 0 && (
+                                <span className="ml-2 rounded-full bg-slate-900 px-1.5 py-0.5 text-xs font-medium text-white tabular-nums leading-none">
+                                    {clients.length}
+                                </span>
+                            )}
                         </TabsTrigger>
                         {canViewOrgAudit && (
                             <TabsTrigger
@@ -149,6 +156,11 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                             >
                                 <UserCog className="w-4 h-4 mr-2" />
                                 Members
+                                {memberCount !== undefined && memberCount > 0 && (
+                                    <span className="ml-2 rounded-full bg-slate-900 px-1.5 py-0.5 text-xs font-medium text-white tabular-nums leading-none">
+                                        {memberCount}
+                                    </span>
+                                )}
                             </TabsTrigger>
                         )}
                         {canViewOrgAudit && (
@@ -158,6 +170,11 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                             >
                                 <ClipboardList className="w-4 h-4 mr-2" />
                                 Audit
+                                {auditCount !== undefined && auditCount > 0 && (
+                                    <span className="ml-2 rounded-full bg-slate-900 px-1.5 py-0.5 text-xs font-medium text-white tabular-nums leading-none">
+                                        {auditCount}
+                                    </span>
+                                )}
                             </TabsTrigger>
                         )}
                         {canViewOrgSettings && (

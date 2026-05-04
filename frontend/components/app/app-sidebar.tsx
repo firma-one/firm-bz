@@ -26,7 +26,6 @@ import {
   Shield,
   ClipboardList,
   MessageCircle,
-  LifeBuoy,
 } from "lucide-react"
 import { FirmSelector, type FirmOption } from "@/components/projects/firm-selector"
 import { getUserFirms } from "@/lib/actions/firms"
@@ -651,21 +650,6 @@ export function AppSidebar({ variant = 'fixed' }: AppSidebarProps = {}) {
                       </TooltipTrigger>
                       {isCollapsed && <TooltipContent side="right">Connectors</TooltipContent>}
                     </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Link
-                          href={`${firmScopedNavBase}/support`}
-                          className={`flex items-center d-sidebar-nav rounded-lg transition-colors ${isCollapsed ? 'px-0 justify-center w-full' : 'px-3'} py-2 ${pathname.includes('/support')
-                            ? 'bg-slate-100 text-slate-900 hover:bg-slate-100/90'
-                            : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                            }`}
-                        >
-                          <LifeBuoy className={`h-4 w-4 ${isCollapsed ? 'mx-auto' : 'mr-3'} ${pathname.includes('/support') ? 'text-slate-900' : 'text-slate-500'}`} />
-                          {!isCollapsed && <span>Contact Support</span>}
-                        </Link>
-                      </TooltipTrigger>
-                      {isCollapsed && <TooltipContent side="right">Contact Support</TooltipContent>}
-                    </Tooltip>
                   </div>
                   {!isCollapsed && <SeparatorLine />}
                 </>
@@ -769,6 +753,7 @@ export function AppSidebar({ variant = 'fixed' }: AppSidebarProps = {}) {
           isCollapsed={isCollapsed}
           showBillingLink={canManageOrg}
           billingHref={buildBillingPageHref({ firmSlug: billingFirmSlug, pathname })}
+          supportHref={canManageOrg && slug ? `/d/support?firmSlug=${slug}` : undefined}
           {...(firms.length > 0 && billingFirmId
             ? { planSubtitle: profilePlanSubtitle, planSubtitleLoading: billingPlanLoading }
             : {})}

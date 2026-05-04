@@ -232,6 +232,7 @@ export function OnboardingSidebar() {
                     isCollapsed={false}
                     showBillingLink
                     billingHref={buildBillingPageHref({ firmSlug: billingFirmSlug, pathname })}
+                    supportHref={billingFirmSlug ? `/d/support?firmSlug=${billingFirmSlug}` : undefined}
                     {...(firms.length > 0 && billingFirmId
                         ? { planSubtitle: profilePlanSubtitle, planSubtitleLoading: billingPlanLoading }
                         : {})}

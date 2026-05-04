@@ -9,7 +9,7 @@ import {
   resolveProjectCapabilitiesForPersona,
 } from "@/lib/permissions/resolve"
 import { createClient } from "@/utils/supabase/server"
-import { prisma } from "@/lib/prisma"
+import { prisma, basePrisma } from "@/lib/prisma"
 import { notFound, redirect } from "next/navigation"
 import { ErrorBoundary } from "@/components/error-boundary"
 import type { ProjectPathSegments } from "@/components/projects/project-workspace"
@@ -107,6 +107,16 @@ export default async function EngagementPage({ params }: PageProps) {
     redirect(`${basePath}/files`)
   }
 
+  const [fileCount, sharesCount, commentsCount, engMemberCount, engInviteCount, auditCount] = await Promise.all([
+    (basePrisma as any).engagementDocument.count({ where: { engagementId: project.id, isFolder: false } }),
+    (basePrisma as any).engagementDocument.count({ where: { engagementId: project.id, slug: { not: null } } }),
+    (basePrisma as any).docCommentMessage.count({ where: { engagementId: project.id } }),
+    (basePrisma as any).engagementMember.count({ where: { engagementId: project.id } }),
+    (basePrisma as any).engagementInvitation.count({ where: { engagementId: project.id, status: { not: 'JOINED' } } }),
+    (basePrisma as any).platformAuditEvent.count({ where: { engagementId: project.id, scope: 'PROJECT' } }),
+  ])
+  const engagementMemberCount = engMemberCount + engInviteCount
+
   return (
     <div className="h-full flex flex-col">
       <ErrorBoundary context="ProjectWorkspace">
@@ -135,6 +145,11 @@ export default async function EngagementPage({ params }: PageProps) {
           projectPersonaDisplayName={projectPersonaDisplayName}
           engagementSlug={engagementSlug}
           firmSandboxOnly={org.sandboxOnly ?? false}
+          fileCount={fileCount}
+          sharesCount={sharesCount}
+          commentsCount={commentsCount}
+          memberCount={engagementMemberCount}
+          auditCount={auditCount}
         />
       </ErrorBoundary>
     </div>

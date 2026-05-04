@@ -6,7 +6,7 @@ import { logger } from '@/lib/logger'
 /**
  * Sync document sharing permissions for a specific project document (grant/revoke EC users).
  */
-export async function syncDocumentSharingUsers(projectDocumentId: string) {
+export async function syncDocumentSharingUsers(projectDocumentId: string, actorId?: string | null) {
   try {
     const doc = await prisma.engagementDocument.findUnique({
       where: { id: projectDocumentId },
@@ -53,6 +53,7 @@ export async function syncDocumentSharingUsers(projectDocumentId: string) {
         data: {
           sharingPermissionStatus: DocumentSharingPermissionStatus.REVOKED,
           googlePermissionId: null,
+          ...(actorId ? { updatedBy: actorId } : {}),
         },
       })
       return
@@ -93,6 +94,7 @@ export async function syncDocumentSharingUsers(projectDocumentId: string) {
               googlePermissionId: permissionId,
               sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED,
               email,
+              ...(actorId ? { updatedBy: actorId } : {}),
             },
           })
         } else {
@@ -104,6 +106,7 @@ export async function syncDocumentSharingUsers(projectDocumentId: string) {
               email,
               googlePermissionId: permissionId,
               sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED,
+              ...(actorId ? { createdBy: actorId, updatedBy: actorId } : {}),
             },
           })
         }
@@ -128,6 +131,7 @@ export async function syncDocumentSharingUsers(projectDocumentId: string) {
         data: {
           sharingPermissionStatus: DocumentSharingPermissionStatus.REVOKED,
           googlePermissionId: null,
+          ...(actorId ? { updatedBy: actorId } : {}),
         },
       })
     }

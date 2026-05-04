@@ -129,6 +129,8 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
     const [ancestorFolderIdsForEC, setAncestorFolderIdsForEC] = useState<Set<string>>(new Set())
     const [sharedExternalIdsForGuest, setSharedExternalIdsForGuest] = useState<Set<string>>(new Set())
     const [ancestorFolderIdsForGuest, setAncestorFolderIdsForGuest] = useState<Set<string>>(new Set())
+    const [sharedByMeExternalIds, setSharedByMeExternalIds] = useState<Set<string>>(new Set())
+    const [filterShared, setFilterShared] = useState<'all' | 'by_me' | 'by_others'>('all')
 
     useEffect(() => {
         sessionRef.current = session
@@ -183,12 +185,14 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                 const ancestorEC = Array.isArray(data?.ancestorFolderIdsForEC) ? data.ancestorFolderIdsForEC as string[] : []
                 const idsGuest = Array.isArray(data?.sharedExternalIdsForGuest) ? data.sharedExternalIdsForGuest as string[] : []
                 const ancestorGuest = Array.isArray(data?.ancestorFolderIdsForGuest) ? data.ancestorFolderIdsForGuest as string[] : []
+                const idsByMe = Array.isArray(data?.sharedByMeExternalIds) ? data.sharedByMeExternalIds as string[] : []
                 setSharedExternalIds(new Set(ids))
                 setAncestorFolderIds(new Set(ancestorIds))
                 setSharedExternalIdsForEC(new Set(idsEC))
                 setAncestorFolderIdsForEC(new Set(ancestorEC))
                 setSharedExternalIdsForGuest(new Set(idsGuest))
                 setAncestorFolderIdsForGuest(new Set(ancestorGuest))
+                setSharedByMeExternalIds(new Set(idsByMe))
             })
             .catch(() => {
                 setSharedExternalIds(new Set())
@@ -197,6 +201,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                 setAncestorFolderIdsForEC(new Set())
                 setSharedExternalIdsForGuest(new Set())
                 setAncestorFolderIdsForGuest(new Set())
+                setSharedByMeExternalIds(new Set())
             })
     }, [projectId])
 
@@ -1975,13 +1980,23 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
             if (typeof va === 'string' && typeof vb === 'string') return va.localeCompare(vb) * direction
             return ((Number(va) || 0) - (Number(vb) || 0)) * direction
         }
+        if (filterShared !== 'all') {
+            result = result.filter(f => {
+                if (filterShared === 'by_me') return sharedByMeExternalIds.has(f.id)
+                if (filterShared === 'by_others') {
+                    const isShared = sharedExternalIds.has(f.id) || ancestorFolderIds.has(f.id)
+                    return isShared && !sharedByMeExternalIds.has(f.id)
+                }
+                return true
+            })
+        }
         if (sortConfig.foldersFirst) {
             const folders = result.filter(f => f.mimeType === 'application/vnd.google-apps.folder').sort(cmp)
             const rest = result.filter(f => f.mimeType !== 'application/vnd.google-apps.folder').sort(cmp)
             return [...folders, ...rest]
         }
         return result.sort(cmp)
-    }, [files, sortConfig, filterTypes, filterOwner, filterModified, session?.user?.email])
+    }, [files, sortConfig, filterTypes, filterOwner, filterModified, filterShared, sharedByMeExternalIds, sharedExternalIds, ancestorFolderIds, session?.user?.email])
 
     const TableHeader = ({ label }: { label: string }) => (
         <div className="flex items-center gap-1 text-xs font-medium text-slate-500 tracking-wider select-none">
@@ -2251,10 +2266,9 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                     </DropdownMenuSub>
 
                                 </DropdownMenuContent>
+                                <div className="h-6 w-px bg-slate-200 mx-2" />
                             </DropdownMenu>
                         )}
-
-                        {!isAtProjectRoot && <div className="h-6 w-px bg-slate-200 mx-2" />}
 
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -2356,23 +2370,39 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
 
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button disabled={loading} variant="outline" size="sm" className="h-8 gap-1.5 text-xs bg-white rounded-md border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
-                                    Source
+                                <Button disabled={loading} variant="outline" size="sm" className={cn("h-8 gap-1.5 text-xs bg-white rounded-md border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors", filterShared !== 'all' && "border-slate-400 ring-1 ring-slate-300")}>
+                                    Shared
+                                    {filterShared !== 'all' && <span className="ml-0.5 bg-slate-200 text-slate-800 px-1.5 rounded-full text-[10px] font-medium">1</span>}
                                     <ChevronDown className="h-3 w-3 opacity-50" />
                                 </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="start" className="w-[180px] py-1 text-xs">
-                                <div className="flex items-center justify-between px-2 py-1.5 border-b border-slate-100">
-                                    <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 p-0 font-medium">Source</DropdownMenuLabel>
-                                    <DropdownMenuItem className="text-xs rounded-md bg-slate-900 text-white hover:bg-slate-800 focus:bg-slate-800 p-1.5 px-2 cursor-pointer">
-                                        Done
-                                    </DropdownMenuItem>
+                                <div className="px-2 py-1.5 border-b border-slate-100">
+                                    <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 p-0 font-medium">Shared</DropdownMenuLabel>
                                 </div>
-                                <DropdownMenuItem className="text-xs py-1.5">All sources</DropdownMenuItem>
-                                <DropdownMenuItem className="text-xs py-1.5">Uploaded</DropdownMenuItem>
-                                <DropdownMenuItem className="text-xs py-1.5">Shared with me</DropdownMenuItem>
+                                <DropdownMenuCheckboxItem checked={filterShared === 'by_me'} onCheckedChange={() => setFilterShared('by_me')} className="text-xs py-1.5 pl-8">
+                                    Shared By Me
+                                </DropdownMenuCheckboxItem>
+                                <DropdownMenuCheckboxItem checked={filterShared === 'by_others'} onCheckedChange={() => setFilterShared('by_others')} className="text-xs py-1.5 pl-8">
+                                    Shared By Others
+                                </DropdownMenuCheckboxItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
+                        {(filterTypes.size > 0 || filterOwner !== 'any' || filterModified !== 'any' || filterShared !== 'all') && (
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                    setFilterTypes(new Set())
+                                    setFilterOwner('any')
+                                    setFilterModified('any')
+                                    setFilterShared('all')
+                                }}
+                                className="h-8 text-xs text-slate-500 hover:text-slate-800 px-2"
+                            >
+                                Clear All Filters
+                            </Button>
+                        )}
                     </div>
 
                     {/* Right: Refresh & Search (search lives in right sidebar only) */}

@@ -411,20 +411,6 @@ export function DocumentActionMenu({
                         <span>Share</span>
                       </DropdownMenuItem>
                     )}
-                    {!showShareModal && (
-                      <DropdownMenuItem
-                        onClick={async () => {
-                          const link = document.webViewLink || `https://drive.google.com/drive/folders/${document.id}`
-                          await navigator.clipboard.writeText(link)
-                          addToast({ type: 'success', title: 'Link copied', message: 'Folder link copied to clipboard' })
-                          onShareDocument?.(document)
-                        }}
-                        className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
-                      >
-                        <Share2 className="h-4 w-4 text-purple-600" />
-                        <span>Share</span>
-                      </DropdownMenuItem>
-                    )}
                     <DropdownMenuItem
                       onClick={async () => {
                         const link = document.webViewLink || `https://drive.google.com/drive/folders/${document.id}`
@@ -649,23 +635,6 @@ export function DocumentActionMenu({
                     {showShareModal && projectId && (
                       <DropdownMenuItem
                         onClick={() => setShowShareModalOpen(true)}
-                        className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
-                      >
-                        <Share2 className="h-4 w-4 text-purple-600" />
-                        <span>Share</span>
-                      </DropdownMenuItem>
-                    )}
-                    {!showShareModal && (
-                      <DropdownMenuItem
-                        onClick={async () => {
-                          if (document.webViewLink) {
-                            navigator.clipboard.writeText(document.webViewLink)
-                            addToast({ type: 'success', title: 'Link Copied', message: 'Document link copied to clipboard' })
-                          } else {
-                            addToast({ type: 'error', title: 'Share Unavailable', message: 'No link available' })
-                          }
-                          onShareDocument?.(document)
-                        }}
                         className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
                       >
                         <Share2 className="h-4 w-4 text-purple-600" />

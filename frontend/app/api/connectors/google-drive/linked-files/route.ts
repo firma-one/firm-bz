@@ -362,10 +362,32 @@ export async function POST(request: NextRequest) {
                     if (!folderInShared && !folderUnderShared) {
                         files = files.filter((f: { id: string }) => allowSet.has(f.id))
                     }
-                    // If folder listing returned nothing but we have shared docs, fetch them so Files tab shows shared items (e.g. list was filtered by Drive permissions or folder doesn't contain ancestors)
+                    // If folder listing returned nothing, reconstruct proper hierarchy from engagement_documents
+                    // before falling back to a flat shared-file list. This ensures external viewers see the
+                    // correct folder navigation (e.g. Website_Design folder) rather than having shared files
+                    // surfaced at the wrong level, which would make the breadcrumb misleading.
                     if (files.length === 0 && sharedIds.length > 0) {
-                        const sharedMeta = await googleDriveConnector.getFilesMetadata(connector.id, sharedIds)
-                        files = sharedMeta.filter((f: { id?: string }) => f?.id) as typeof files
+                        const allowArray = Array.from(allowSet)
+                        if (allowArray.length > 0) {
+                            const directChildRows = await prisma.engagementDocument.findMany({
+                                where: {
+                                    engagementId: projectContext.projectId,
+                                    parentId: folderId,
+                                    externalId: { in: allowArray }
+                                },
+                                select: { externalId: true }
+                            })
+                            if (directChildRows.length > 0) {
+                                const childIds = directChildRows.map((r: { externalId: string }) => r.externalId)
+                                const childMeta = await googleDriveConnector.getFilesMetadata(connector.id, childIds)
+                                files = childMeta.filter((f: { id?: string }) => f?.id) as typeof files
+                            }
+                        }
+                        // Original fallback: if no indexed direct children found, show shared files directly
+                        if (files.length === 0) {
+                            const sharedMeta = await googleDriveConnector.getFilesMetadata(connector.id, sharedIds)
+                            files = sharedMeta.filter((f: { id?: string }) => f?.id) as typeof files
+                        }
                     }
                 }
             }

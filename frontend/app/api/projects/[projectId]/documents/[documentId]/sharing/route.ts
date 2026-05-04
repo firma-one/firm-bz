@@ -27,7 +27,8 @@ function toJsonSafeSharing(doc: Record<string, unknown> | null): Record<string, 
 async function ensureDocument(
   projectId: string,
   externalId: string,
-  title: string
+  title: string,
+  actorId?: string | null
 ): Promise<{ organizationId: string, externalId: string }> {
   const project = await prisma.engagement.findFirst({
     where: { id: projectId, isDeleted: false },
@@ -39,14 +40,15 @@ async function ensureDocument(
 
   await (prisma as any).$executeRawUnsafe(
     `INSERT INTO platform.engagement_documents
-       ("firmId", "clientId", "engagementId", "externalId", "fileName", "updatedAt")
-     VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, NOW())
+       ("firmId", "clientId", "engagementId", "externalId", "fileName", "createdBy", "updatedAt")
+     VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6::uuid, NOW())
      ON CONFLICT ("engagementId", "firmId", "externalId") DO NOTHING`,
     firmId,
     clientId || null,
     projectId,
     externalId,
-    title || externalId
+    title || externalId,
+    actorId || null
   )
 
   const { SearchService } = await import('@/lib/services/search-service')
@@ -104,7 +106,7 @@ export async function PUT(
     const { projectId, documentId: documentIdParam } = await params
     const ctx = await resolveProjectContext(projectId)
     if (!ctx) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
-    const canManage = await canManageProject(ctx.orgId, ctx.clientId, ctx.projectId)
+    const canManage = await canManageProject(ctx.firmId, ctx.clientId, ctx.projectId)
     if (!canManage) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     const body = await request.json().catch(() => ({}))
@@ -119,7 +121,7 @@ export async function PUT(
     } else {
       // Drive file ID — ensure document row exists, then update its sharing fields.
       try {
-        fileInfo = await ensureDocument(projectId, documentIdParam, title)
+        fileInfo = await ensureDocument(projectId, documentIdParam, title, user.id)
       } catch (err) {
         console.error('ensureDocument error', err)
         return NextResponse.json(
@@ -179,10 +181,12 @@ export async function PUT(
       share: shareUpdate,
       activity: existing ? undefined : { status: 'to_do', updatedAt: now },
       appendComment,
+      actorId: user.id,
     })
 
     if (existing) {
-      const updateData: { settings: typeof settings; updatedAt: Date; updatedBy: string; slug?: string } = { settings, updatedAt: new Date(), updatedBy: user.id }
+      const updateData: { settings: typeof settings; updatedAt: Date; updatedBy: string; createdBy?: string; slug?: string } = { settings, updatedAt: new Date(), updatedBy: user.id }
+      if (!existing.createdBy) updateData.createdBy = user.id
       if (existing.slug == null) {
         const docTitle = existing.fileName || title || documentIdParam
         updateData.slug = generateShareSlug(docTitle, existing.id.slice(0, 8))
@@ -227,7 +231,7 @@ export async function PUT(
     })
 
     if (updated) {
-      Promise.resolve().then(() => syncDocumentSharingUsers(updated.id))
+      Promise.resolve().then(() => syncDocumentSharingUsers(updated.id, user.id))
 
       const oldSettings = existing
         ? parseSettingsFromDb((existing.settings as Record<string, unknown>) || {})
@@ -305,7 +309,7 @@ export async function PUT(
 }
 
 export async function DELETE(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ projectId: string; documentId: string }> }
 ) {
   try {
@@ -316,7 +320,7 @@ export async function DELETE(
     const { projectId, documentId: documentIdParam } = await params
     const ctx = await resolveProjectContext(projectId)
     if (!ctx) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
-    const canManage = await canManageProject(ctx.orgId, ctx.clientId, ctx.projectId)
+    const canManage = await canManageProject(ctx.firmId, ctx.clientId, ctx.projectId)
     if (!canManage) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     const fileInfo = await getFileInfo(projectId, documentIdParam)
@@ -343,11 +347,12 @@ export async function DELETE(
             externalCollaborator: { enabled: false },
             guest: { enabled: false, options: {} },
           },
+          actorId: user.id,
         }),
       },
     })
 
-    await syncDocumentSharingUsers(existing.id)
+    await syncDocumentSharingUsers(existing.id, user.id)
 
     // Clean up PDF file if sharePdfOnly was enabled
     const existingSettings = parseSettingsFromDb((existing.settings as Record<string, unknown>) || {})

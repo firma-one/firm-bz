@@ -32,7 +32,7 @@ export async function GET(
     const { projectId } = await params
     const ctx = await resolveProjectContext(projectId)
     if (!ctx) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
-    const canView = await canViewProject(ctx.orgId, ctx.clientId, ctx.projectId)
+    const canView = await canViewProject(ctx.firmId, ctx.clientId, ctx.projectId)
     if (!canView) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     const shares = await prisma.engagementDocument.findMany({
@@ -67,7 +67,7 @@ export async function GET(
 
       return {
         id: share.id,
-        organizationId: ctx.orgId,
+        organizationId: ctx.firmId,
         projectId: share.engagementId,
         documentId: share.id,
         documentName: share.fileName || share.externalId || 'Unknown Document',
@@ -76,10 +76,11 @@ export async function GET(
         thumbnailLink,
         webViewLink,
         slug: share.slug ?? null,
-        createdBy: share.createdBy ?? null,
+        parentId: (indexMetadata.parents?.[0] ?? indexMetadata.parentId ?? null) as string | null,
+        createdBy: share.createdBy ?? parsed.share?.createdBy ?? null,
         createdAt: share.createdAt.toISOString(),
         updatedAt: share.updatedAt.toISOString(),
-        updatedBy: share.updatedBy ?? null,
+        updatedBy: share.updatedBy ?? parsed.share?.updatedBy ?? null,
         settings: {
           externalCollaborator: flat.externalCollaborator,
           guest: flat.guest,
@@ -101,25 +102,45 @@ export async function GET(
       (process.env.NEXT_PUBLIC_SUPABASE_URL || "http://127.0.0.1:54321"),
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     )
-    const userMap: Record<string, { email: string | null; avatarUrl: string | null }> = {}
+    const userMap: Record<string, { email: string | null; name: string | null; avatarUrl: string | null }> = {}
     await Promise.all(
       uniqueUserIds.map(async (userId) => {
         try {
           const { data: { user: dbUser } } = await supabaseAdmin.auth.admin.getUserById(userId)
+          const meta = dbUser?.user_metadata ?? {}
+          const name = (meta.full_name ?? meta.name ?? dbUser?.email?.split('@')[0] ?? null) as string | null
           userMap[userId] = {
             email: dbUser?.email ?? null,
+            name,
             avatarUrl: getAvatarUrlFromUser(dbUser),
           }
         } catch {
-          userMap[userId] = { email: null, avatarUrl: null }
+          userMap[userId] = { email: null, name: null, avatarUrl: null }
         }
       })
     )
+    // Resolve parent folder names from DB (same approach as search API)
+    const parentIds = Array.from(new Set(sharesWithDetails.map((s) => s.parentId).filter(Boolean))) as string[]
+    const parentNames: Record<string, string> = {}
+    if (parentIds.length > 0) {
+      try {
+        const rows = await (prisma as any).$queryRawUnsafe(
+          `SELECT "externalId" as id, "fileName" as name FROM platform.engagement_documents WHERE "firmId" = $1::uuid AND "externalId" = ANY($2::text[])`,
+          ctx.firmId,
+          parentIds
+        ) as { id: string; name: string }[]
+        rows.forEach((r) => { parentNames[r.id] = r.name })
+      } catch { /* non-critical, skip */ }
+    }
+
     const enriched = sharesWithDetails.map((s) => ({
       ...s,
+      parentName: (s.parentId && parentNames[s.parentId]) || null,
       createdByEmail: s.createdBy ? (userMap[s.createdBy]?.email ?? null) : null,
+      createdByName: s.createdBy ? (userMap[s.createdBy]?.name ?? null) : null,
       createdByAvatarUrl: s.createdBy ? (userMap[s.createdBy]?.avatarUrl ?? null) : null,
       updatedByEmail: s.updatedBy ? (userMap[s.updatedBy]?.email ?? null) : null,
+      updatedByName: s.updatedBy ? (userMap[s.updatedBy]?.name ?? null) : null,
       updatedByAvatarUrl: s.updatedBy ? (userMap[s.updatedBy]?.avatarUrl ?? null) : null,
     }))
 

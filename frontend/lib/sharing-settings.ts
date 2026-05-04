@@ -20,7 +20,9 @@ export interface ShareBlock {
   }
   externalCollaborator: { enabled: boolean }
   createdAt?: string
+  createdBy?: string | null
   updatedAt?: string
+  updatedBy?: string | null
   publishedVersionId?: string | null
   publishedAt?: string | null
   /** Set when Project Lead finalizes (locks) the share. */
@@ -77,7 +79,7 @@ const DEFAULT_SHARE: ShareBlock = {
       sharedPdfDriveId: null,
     },
   },
-  externalCollaborator: { enabled: true },
+  externalCollaborator: { enabled: false },
 }
 
 /** Read settings from DB: supports legacy flat and new nested shape. */
@@ -97,7 +99,7 @@ export function parseSettingsFromDb(settings: unknown): ProjectDocumentSharingSe
   const comments = Array.isArray(s.comments) ? (s.comments as SharingComment[]) : []
 
   // Legacy flat
-  const legacyEc = s.externalCollaborator !== false
+  const legacyEc = s.externalCollaborator === true
   const legacyGuest = s.guest === true
   const legacyOpts = (s.guestOptions as ShareGuestOptions) || {}
 
@@ -117,7 +119,9 @@ export function parseSettingsFromDb(settings: unknown): ProjectDocumentSharingSe
           enabled: share.externalCollaborator?.enabled ?? legacyEc,
         },
         createdAt: share.createdAt,
+        createdBy: share.createdBy ?? null,
         updatedAt: share.updatedAt,
+        updatedBy: share.updatedBy ?? null,
         publishedVersionId: share.publishedVersionId ?? (s.publishedVersionId as string | null | undefined) ?? null,
         publishedAt: share.publishedAt ?? (s.publishedAt as string | null | undefined) ?? null,
         finalizedAt: share.finalizedAt ?? null,
@@ -170,10 +174,12 @@ export function buildSettingsForDb(
     activity?: Partial<ActivityBlock>
     appendComment?: SharingComment
     finalizedAt?: string | null
+    actorId?: string | null
   }
 ): Record<string, unknown> {
   const parsed = parseSettingsFromDb(existing || {})
   const now = new Date().toISOString()
+  const isFirstShare = !parsed.share?.createdAt
 
   const share: ShareBlock = {
     ...parsed.share!,
@@ -190,7 +196,10 @@ export function buildSettingsForDb(
       ...parsed.share!.externalCollaborator,
       ...updates.share?.externalCollaborator,
     },
+    createdAt: isFirstShare ? now : parsed.share!.createdAt,
+    createdBy: isFirstShare ? (updates.actorId ?? null) : (parsed.share!.createdBy ?? null),
     updatedAt: now,
+    updatedBy: updates.actorId ?? null,
   }
   if (updates.finalizedAt !== undefined) share.finalizedAt = updates.finalizedAt
 

@@ -1,31 +1,35 @@
-'use client'
-
-import { use, useState, useEffect } from 'react'
+import { redirect } from 'next/navigation'
 import { LifeBuoy, ChevronRight, Building2, Home } from 'lucide-react'
+import { getFirmName } from '@/lib/actions/hierarchy'
+import { canManageOrganization } from '@/lib/permission-helpers'
+import { prisma, basePrisma } from '@/lib/prisma'
 import { CreateSupportRequestModal } from '@/components/support/create-support-request-modal'
 import { SupportRequestsList } from '@/components/support/support-requests-list'
 import Link from 'next/link'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 
-export default function SupportPage({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = use(params)
-  const [requestCount, setRequestCount] = useState(0)
+export default async function SupportPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ firmSlug?: string }>
+}) {
+  const { firmSlug } = await searchParams
 
-  useEffect(() => {
-    const fetchCount = async () => {
-      try {
-        const response = await fetch(`/api/support/requests?firmSlug=${slug}`)
-        if (response.ok) {
-          const data = await response.json()
-          setRequestCount(data.length)
-        }
-      } catch (error) {
-        console.error('Failed to fetch request count:', error)
-      }
-    }
-    fetchCount()
-  }, [slug])
+  // Require a firmSlug — only Firm Admins reach this page via Profile menu
+  if (!firmSlug) redirect('/d')
+
+  // Resolve firm ID then verify can_manage (ACL gate)
+  const firm = await prisma.firm.findUnique({ where: { slug: firmSlug }, select: { id: true } })
+  if (!firm) redirect('/d')
+
+  const canManage = await canManageOrganization(firm.id)
+  if (!canManage) redirect('/d')
+
+  const [firmName, ticketCount] = await Promise.all([
+    getFirmName(firmSlug),
+    (basePrisma as any).customerRequest.count({ where: { firmId: firm.id } }),
+  ])
 
   return (
     <div className="flex flex-col h-full">
@@ -36,11 +40,11 @@ export default function SupportPage({ params }: { params: Promise<{ slug: string
         </span>
         <ChevronRight className="h-4 w-4 mx-1 text-slate-300" />
         <Link
-          href={`/d/f/${slug}`}
+          href={`/d/f/${firmSlug}`}
           className="flex items-center gap-2 hover:text-slate-900 transition-colors cursor-pointer"
         >
           <Building2 className="h-4 w-4" />
-          <span className="font-medium">Organization</span>
+          <span className="font-medium">{firmName || 'Organization'}</span>
         </Link>
         <ChevronRight className="h-4 w-4 mx-1 text-slate-300" />
         <span className="flex items-center gap-2 text-slate-900">
@@ -63,11 +67,11 @@ export default function SupportPage({ params }: { params: Promise<{ slug: string
         {/* Tabs Section */}
         <div className="flex-1 min-h-0 overflow-hidden flex flex-col m-4">
           <Tabs defaultValue="requests" className="flex-1 flex flex-col min-h-0">
-            {/* Tab List with CTA */}
-            <div className="mb-6 flex items-center justify-between gap-4">
+            {/* Tab List */}
+            <div className="mb-6">
               <TabsList className="h-10 p-1 bg-slate-100 rounded-lg inline-flex justify-start flex-wrap gap-1">
                 <CreateSupportRequestModal
-                  firmSlug={slug}
+                  firmSlug={firmSlug}
                   trigger={
                     <Button
                       variant="blackCta"
@@ -85,20 +89,20 @@ export default function SupportPage({ params }: { params: Promise<{ slug: string
                 >
                   <LifeBuoy className="w-4 h-4 mr-2" />
                   Requests
+                  {ticketCount > 0 && (
+                    <span className="ml-2 rounded-full bg-slate-900 px-1.5 py-0.5 text-xs font-medium text-white tabular-nums leading-none">
+                      {ticketCount}
+                    </span>
+                  )}
                 </TabsTrigger>
               </TabsList>
-
-              {/* Request Count Badge */}
-              <span className="px-3 py-1 bg-slate-100 rounded-full text-sm font-medium text-slate-600">
-                {requestCount} {requestCount === 1 ? 'Request' : 'Requests'}
-              </span>
             </div>
 
             {/* Content */}
             <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
               <TabsContent value="requests" className="m-0 h-full">
                 <div className="py-1 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                  <SupportRequestsList firmSlug={slug} />
+                  <SupportRequestsList firmSlug={firmSlug} />
                 </div>
               </TabsContent>
             </div>

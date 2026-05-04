@@ -23,9 +23,11 @@ interface ClientProjectViewProps {
     orgId?: string // Organization ID for permission checks
     firmSandboxOnly?: boolean
     selectedClientSlug?: string // Added selectedClientSlug prop
+    contactCount?: number
+    memberCount?: number
 }
 
-export function ClientProjectView({ clients, orgSlug, orgName, orgId, firmSandboxOnly = false, selectedClientSlug }: ClientProjectViewProps) {
+export function ClientProjectView({ clients, orgSlug, orgName, orgId, firmSandboxOnly = false, selectedClientSlug, contactCount, memberCount }: ClientProjectViewProps) {
     const router = useRouter()
     const pathname = usePathname()
     const searchParams = useSearchParams()
@@ -174,6 +176,11 @@ export function ClientProjectView({ clients, orgSlug, orgName, orgId, firmSandbo
                                     >
                                         <Briefcase className="w-4 h-4 mr-2" />
                                         Engagements
+                                        {selectedClient && selectedClient.projects.length > 0 && (
+                                            <span className="ml-2 rounded-full bg-slate-900 px-1.5 py-0.5 text-xs font-medium text-white tabular-nums leading-none">
+                                                {selectedClient.projects.length}
+                                            </span>
+                                        )}
                                     </TabsTrigger>
                                     <TabsTrigger
                                         value="contacts"
@@ -181,6 +188,11 @@ export function ClientProjectView({ clients, orgSlug, orgName, orgId, firmSandbo
                                     >
                                         <Users className="w-4 h-4 mr-2" />
                                         Contacts
+                                        {contactCount !== undefined && contactCount > 0 && (
+                                            <span className="ml-2 rounded-full bg-slate-900 px-1.5 py-0.5 text-xs font-medium text-white tabular-nums leading-none">
+                                                {contactCount}
+                                            </span>
+                                        )}
                                     </TabsTrigger>
                                     {canViewClientSettings && (
                                         <TabsTrigger
@@ -189,6 +201,11 @@ export function ClientProjectView({ clients, orgSlug, orgName, orgId, firmSandbo
                                         >
                                             <UserCog className="w-4 h-4 mr-2" />
                                             Members
+                                            {memberCount !== undefined && memberCount > 0 && (
+                                                <span className="ml-2 rounded-full bg-slate-900 px-1.5 py-0.5 text-xs font-medium text-white tabular-nums leading-none">
+                                                    {memberCount}
+                                                </span>
+                                            )}
                                         </TabsTrigger>
                                     )}
                                     {canViewClientSettings && (

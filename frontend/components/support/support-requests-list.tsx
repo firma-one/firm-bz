@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { TicketType } from '@prisma/client'
-import { AlertCircle, Lightbulb, HelpCircle, MessageCircle, Copy, Check, Eye, Clock, ChevronDown, RefreshCw, Search, X } from "lucide-react"
+import { AlertCircle, Lightbulb, HelpCircle, MessageCircle, Copy, Check, Eye, Clock, ChevronDown, RefreshCw, Search, X, CircleChevronLeft } from "lucide-react"
 import { formatDistanceToNow } from 'date-fns'
 import { cn } from '@/lib/utils'
 import {
@@ -21,8 +21,9 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { SupportRequestCommentsSidebar } from './support-request-comments-sidebar'
 import { ViewSupportRequestModal } from './view-support-request-modal'
+import { SupportTicketCommentsPane } from './support-ticket-comments-pane'
+import { useRightPane } from '@/lib/right-pane-context'
 
 interface SupportRequest {
   id: string
@@ -63,11 +64,12 @@ type SortField = 'createdAt' | 'updatedAt'
 type SortDir = 'asc' | 'desc'
 
 export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
+  const rightPane = useRightPane()
   const [requests, setRequests] = useState<SupportRequest[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null)
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const [activeCommentTicketId, setActiveCommentTicketId] = useState<string | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [copiedTicketId, setCopiedTicketId] = useState<string | null>(null)
 
@@ -85,6 +87,36 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
   const [sortDir, setSortDir] = useState<SortDir>('desc')
 
   const selectedRequest = requests.find(r => r.id === selectedRequestId)
+
+  const openCommentsPane = useCallback((request: SupportRequest) => {
+    if (activeCommentTicketId === request.ticketNumber) {
+      rightPane.clearPane()
+      setActiveCommentTicketId(null)
+      return
+    }
+    setActiveCommentTicketId(request.ticketNumber)
+    rightPane.setTitle('Comments')
+    rightPane.setHeaderIcon(<MessageCircle className="h-4 w-4" />)
+    rightPane.setHeaderSubtitle('Append-only. Visible to all support members.')
+    rightPane.setContent(
+      <SupportTicketCommentsPane
+        ticketNumber={request.ticketNumber}
+        initialComments={Array.isArray(request.comments) ? request.comments : []}
+        onCommentsUpdate={(updated) => {
+          setRequests(prev => prev.map(r =>
+            r.ticketNumber === request.ticketNumber ? { ...r, comments: updated } : r
+          ))
+        }}
+      />
+    )
+  }, [activeCommentTicketId, rightPane])
+
+  // When the right pane is closed externally (X button), clear the active ticket
+  useEffect(() => {
+    if (!rightPane.content) {
+      setActiveCommentTicketId(null)
+    }
+  }, [rightPane.content])
 
   const fetchRequests = async (showRefresh = false) => {
     try {
@@ -332,17 +364,17 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
       </div>
 
       {/* Table */}
-      <div className="border border-slate-200 rounded-lg overflow-x-auto">
-        <table className="w-full min-w-[860px] text-sm">
+      <div className="border border-slate-200 rounded-lg overflow-hidden">
+        <table className="w-full table-fixed text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50">
-              <th className="px-3 py-2 text-left font-semibold text-slate-900 text-xs" style={{ width: '110px' }}>Type</th>
+              <th className="px-3 py-2 text-left font-semibold text-slate-900 text-xs" style={{ width: '160px' }}>Type</th>
               <th className="px-3 py-2 text-left font-semibold text-slate-900 text-xs" style={{ width: '130px' }}>Ticket ID</th>
               <th className="px-3 py-2 text-center font-semibold text-slate-900 text-xs" style={{ width: '70px' }}>Actions</th>
               <th className="px-3 py-2 text-left font-semibold text-slate-900 text-xs">Description</th>
-              <th className="px-3 py-2 text-left font-semibold text-slate-900 text-xs" style={{ width: '110px' }}>Status</th>
-              <th className="px-3 py-2 text-left font-semibold text-slate-900 text-xs" style={{ width: '120px' }}>Created</th>
-              <th className="px-3 py-2 text-left font-semibold text-slate-900 text-xs" style={{ width: '120px' }}>Modified</th>
+              <th className="px-3 py-2 text-left font-semibold text-slate-900 text-xs" style={{ width: '125px' }}>Status</th>
+              <th className="px-3 py-2 text-left font-semibold text-slate-900 text-xs" style={{ width: '150px' }}>Created</th>
+              <th className="px-3 py-2 text-left font-semibold text-slate-900 text-xs" style={{ width: '150px' }}>Modified</th>
               {/* Sort in header */}
               <th className="px-3 py-2 text-right" style={{ width: '80px' }}>
                 <DropdownMenu>
@@ -390,18 +422,20 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
               const commentCount = Array.isArray(request.comments) ? request.comments.length : 0
               const statusColor = STATUS_COLORS[request.status || 'NEW']
 
+              const isCommentActive = request.ticketNumber === activeCommentTicketId
+
               return (
-                <tr key={request.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                <tr key={request.id} className={cn("border-b border-slate-100 hover:bg-slate-50 transition-colors", isCommentActive && "bg-slate-50")}>
                   {/* Type */}
-                  <td className="px-3 py-2" style={{ width: '110px' }}>
-                    <div className={`flex items-center gap-1 w-fit px-2 py-1 rounded text-xs font-medium ${config.bgColor} ${config.color}`}>
-                      <Icon className="h-3.5 w-3.5" />
-                      <span className="whitespace-nowrap">{config.label}</span>
+                  <td className="px-3 py-2 overflow-hidden" style={{ width: '160px' }}>
+                    <div className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium whitespace-nowrap ${config.bgColor} ${config.color}`}>
+                      <Icon className="h-3.5 w-3.5 flex-shrink-0" />
+                      <span>{config.label}</span>
                     </div>
                   </td>
 
                   {/* Ticket ID */}
-                  <td className="px-3 py-2" style={{ width: '130px' }}>
+                  <td className="px-3 py-2 overflow-hidden" style={{ width: '130px' }}>
                     <div className="flex items-center gap-1">
                       <code className="text-xs font-mono text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded whitespace-nowrap">
                         {request.ticketNumber}
@@ -440,10 +474,16 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <button
-                              onClick={() => { setSelectedRequestId(request.id); setIsSidebarOpen(true) }}
-                              className="p-1 hover:bg-slate-200 rounded transition-colors"
+                              onClick={() => openCommentsPane(request)}
+                              className={cn(
+                                "p-1 rounded transition-colors",
+                                isCommentActive
+                                  ? "bg-slate-200 text-slate-800"
+                                  : "hover:bg-slate-200 text-slate-600"
+                              )}
+                              aria-pressed={isCommentActive}
                             >
-                              <MessageCircle className="h-4 w-4 text-slate-600" />
+                              <MessageCircle className="h-4 w-4" />
                             </button>
                           </TooltipTrigger>
                           <TooltipContent side="bottom" className="text-xs">Comments ({commentCount})</TooltipContent>
@@ -454,18 +494,23 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
 
                   {/* Description */}
                   <td className="px-3 py-2 min-w-0">
-                    <p className="text-slate-700 truncate text-xs" title={request.description}>{request.description}</p>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <p className="text-slate-700 truncate text-xs flex-1 min-w-0" title={request.description}>{request.description}</p>
+                      {isCommentActive && (
+                        <CircleChevronLeft className="h-3.5 w-3.5 shrink-0 text-slate-500 animate-pulse" aria-label="Comments open" />
+                      )}
+                    </div>
                   </td>
 
                   {/* Status */}
-                  <td className="px-3 py-2" style={{ width: '110px' }}>
+                  <td className="px-3 py-2 overflow-hidden" style={{ width: '125px' }}>
                     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border whitespace-nowrap ${statusColor}`}>
                       {(request.status || 'NEW').replace(/_/g, ' ')}
                     </span>
                   </td>
 
                   {/* Created */}
-                  <td className="px-3 py-2" style={{ width: '120px' }}>
+                  <td className="px-3 py-2 overflow-hidden" style={{ width: '150px' }}>
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger className="flex items-center gap-1 text-slate-600 hover:text-slate-900 cursor-help whitespace-nowrap text-xs">
@@ -480,7 +525,7 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
                   </td>
 
                   {/* Modified */}
-                  <td className="px-3 py-2" style={{ width: '120px' }}>
+                  <td className="px-3 py-2 overflow-hidden" style={{ width: '150px' }}>
                     {request.updatedAt ? (
                       <TooltipProvider>
                         <Tooltip>
@@ -506,20 +551,6 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
           </tbody>
         </table>
       </div>
-
-      {/* Comments Sidebar */}
-      {selectedRequest && (
-        <SupportRequestCommentsSidebar
-          request={selectedRequest}
-          isOpen={isSidebarOpen}
-          onClose={() => setIsSidebarOpen(false)}
-          onCommentsUpdate={(updatedComments) => {
-            setRequests(requests.map(r =>
-              r.id === selectedRequest.id ? { ...r, comments: updatedComments } : r
-            ))
-          }}
-        />
-      )}
 
       {/* View Details Modal */}
       {selectedRequest && (

@@ -109,24 +109,16 @@ async function buildDescendantIds(
   return Array.from(descendantIds)
 }
 
-/** EC enabled: supports legacy (settings.externalCollaborator === true) and new shape (settings.share.externalCollaborator.enabled). */
 function isECEnabled(settings: unknown): boolean {
   if (!settings || typeof settings !== 'object') return false
-  const s = settings as Record<string, unknown>
-  if (s.externalCollaborator === true) return true
-  const share = s.share as Record<string, unknown> | undefined
-  const ec = share?.externalCollaborator as { enabled?: boolean } | undefined
-  return ec?.enabled === true
+  const share = (settings as Record<string, unknown>).share as Record<string, unknown> | undefined
+  return (share?.externalCollaborator as { enabled?: boolean } | undefined)?.enabled === true
 }
 
-/** Guest enabled: supports legacy (settings.guest === true) and new shape (settings.share.guest.enabled). */
 function isGuestEnabled(settings: unknown): boolean {
   if (!settings || typeof settings !== 'object') return false
-  const s = settings as Record<string, unknown>
-  if (s.guest === true) return true
-  const share = s.share as Record<string, unknown> | undefined
-  const guest = share?.guest as { enabled?: boolean } | undefined
-  return guest?.enabled === true
+  const share = (settings as Record<string, unknown>).share as Record<string, unknown> | undefined
+  return (share?.guest as { enabled?: boolean } | undefined)?.enabled === true
 }
 
 export type GetSharedAndAncestorOptions = {

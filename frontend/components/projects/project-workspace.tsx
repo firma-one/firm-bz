@@ -57,6 +57,11 @@ interface ProjectWorkspaceProps {
     /** When set, use /e/ (engagement) routes instead of /p/ (project). */
     engagementSlug?: string
     firmSandboxOnly?: boolean
+    fileCount?: number
+    sharesCount?: number
+    commentsCount?: number
+    memberCount?: number
+    auditCount?: number
 }
 
 const projectBase = (orgSlug: string, clientSlug: string, projectSlug: string, useEngagement = false) =>
@@ -87,6 +92,11 @@ export function ProjectWorkspace({
     projectPersonaDisplayName,
     engagementSlug,
     firmSandboxOnly = false,
+    fileCount,
+    sharesCount,
+    commentsCount,
+    memberCount,
+    auditCount,
 }: ProjectWorkspaceProps) {
     const pathname = usePathname()
     const router = useRouter()
@@ -191,6 +201,11 @@ export function ProjectWorkspace({
                         >
                             <Folder className="w-4 h-4 mr-2" />
                             Files
+                            {fileCount !== undefined && fileCount > 0 && (
+                                <span className="ml-2 rounded-full bg-slate-900 px-1.5 py-0.5 text-xs font-medium text-white tabular-nums leading-none">
+                                    {fileCount}
+                                </span>
+                            )}
                         </TabsTrigger>
                         <TabsTrigger
                             value="shares"
@@ -198,6 +213,11 @@ export function ProjectWorkspace({
                         >
                             <Share2 className="w-4 h-4 mr-2" />
                             Shares
+                            {sharesCount !== undefined && sharesCount > 0 && (
+                                <span className="ml-2 rounded-full bg-slate-900 px-1.5 py-0.5 text-xs font-medium text-white tabular-nums leading-none">
+                                    {sharesCount}
+                                </span>
+                            )}
                         </TabsTrigger>
                         {canViewInternalTabs && (
                             <TabsTrigger
@@ -206,6 +226,11 @@ export function ProjectWorkspace({
                             >
                                 <MessageCircle className="w-4 h-4 mr-2" />
                                 Comments
+                                {commentsCount !== undefined && commentsCount > 0 && (
+                                    <span className="ml-2 rounded-full bg-slate-900 px-1.5 py-0.5 text-xs font-medium text-white tabular-nums leading-none">
+                                        {commentsCount}
+                                    </span>
+                                )}
                             </TabsTrigger>
                         )}
                         {canViewInternalTabs && (
@@ -216,6 +241,11 @@ export function ProjectWorkspace({
                                 >
                                     <Users className="w-4 h-4 mr-2" />
                                     Members
+                                    {memberCount !== undefined && memberCount > 0 && (
+                                        <span className="ml-2 rounded-full bg-slate-900 px-1.5 py-0.5 text-xs font-medium text-white tabular-nums leading-none">
+                                            {memberCount}
+                                        </span>
+                                    )}
                                 </TabsTrigger>
                                 <TabsTrigger
                                     value="insights"
@@ -233,6 +263,11 @@ export function ProjectWorkspace({
                             >
                                 <ClipboardList className="w-4 h-4 mr-2" />
                                 Audit
+                                {auditCount !== undefined && auditCount > 0 && (
+                                    <span className="ml-2 rounded-full bg-slate-900 px-1.5 py-0.5 text-xs font-medium text-white tabular-nums leading-none">
+                                        {auditCount}
+                                    </span>
+                                )}
                             </TabsTrigger>
                         )}
                         {canViewSettings && (
