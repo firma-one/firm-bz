@@ -11,7 +11,8 @@ import {
   Unlink,
   Link,
   Cloud,
-  Zap
+  Zap,
+  Building2,
 } from "lucide-react"
 import { GoogleDriveConnection } from "@/lib/types"
 import { useAuth } from "@/lib/auth-context"
@@ -26,6 +27,8 @@ import {
   startGoogleDriveOAuthPopup,
   googleDriveOAuthPopupFailureMessage,
 } from "@/lib/google-drive-popup-oauth"
+import { PageBreadcrumb } from "@/components/ui/page-breadcrumb"
+import { PageHeader } from "@/components/ui/page-header"
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || "http://127.0.0.1:54321",
@@ -41,6 +44,7 @@ export default function ConnectorsPage({ params }: { params: Promise<{ slug: str
   const [existingConnections, setExistingConnections] = useState<GoogleDriveConnection[]>([])
   const [loading, setLoading] = useState(false)
   const [organizationId, setOrganizationId] = useState<string | null>(null)
+  const [orgName, setOrgName] = useState<string | null>(null)
   const [testingConnection, setTestingConnection] = useState<string | null>(null)
   const [connectionTestResult, setConnectionTestResult] = useState<any>(null)
   const [isLoadingData, setIsLoadingData] = useState(false)
@@ -121,6 +125,7 @@ export default function ConnectorsPage({ params }: { params: Promise<{ slug: str
 
       if (!organization.id) throw new Error('Organization ID is missing')
       setOrganizationId(organization.id)
+      setOrgName(organization.name ?? null)
 
       const connUrl = `/api/connectors?organizationId=${organization.id}`
 
@@ -378,12 +383,18 @@ export default function ConnectorsPage({ params }: { params: Promise<{ slug: str
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Connectors</h1>
-        <p className="text-gray-500 text-sm mt-1">Manage external data sources and file access.</p>
-      </div>
+    <div className="flex flex-col h-full">
+      <PageBreadcrumb
+        items={[
+          { label: orgName ?? 'Firm', href: `/d/f/${slug}`, icon: <Building2 className="h-4 w-4" /> },
+          { label: "Connectors", icon: <Settings className="h-4 w-4" /> },
+        ]}
+      />
+      <PageHeader
+        icon={<Settings className="h-6 w-6" />}
+        title="Connectors"
+        subtitle="Manage external data sources and file access."
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-[min(220px,100%)_1fr] gap-8 items-start">
         {isLoadingData ? (
