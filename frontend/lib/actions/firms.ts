@@ -16,6 +16,7 @@ import { isWorkspaceOnboardingComplete } from '@/lib/onboarding/workspace-onboar
 import { SANDBOX_FIRM_NAME_FALLBACK } from '@/lib/services/sample-file-service'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { mergeLeanAppMetadata } from '@/lib/auth/supabase-jwt-metadata'
+import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 
 export interface FirmOption {
     id: string
@@ -278,6 +279,13 @@ export async function createFirm(data: CreateFirmData): Promise<FirmOption> {
     // Set as default
     await FirmService.setDefaultFirm(user.id, firm.id)
 
+    audit(AUDIT_EVENT.FIRM_CREATED)
+        .scope(AUDIT_SCOPE.FIRM)
+        .firm(firm.id)
+        .actor(user.id)
+        .meta({ name: firm.name, slug: firm.slug })
+        .fireAndForget()
+
     // Invalidate cache
     const { invalidateUserSettingsPlus } = await import('@/lib/actions/user-settings')
     await invalidateUserSettingsPlus(user.id)
@@ -388,6 +396,17 @@ export async function updateFirm(
     }
 
     await FirmService.updateFirm(firm.id, user.id, payload)
+
+    const eventType = data.branding !== undefined && data.name === undefined
+        ? AUDIT_EVENT.FIRM_BRANDING_CHANGED
+        : AUDIT_EVENT.FIRM_CHANGED
+    audit(eventType)
+        .scope(AUDIT_SCOPE.FIRM)
+        .firm(firm.id)
+        .actor(user.id)
+        .meta({ changedFields: Object.keys(data) })
+        .fireAndForget()
+
     revalidatePath(`/d/f/${firmSlug}`)
 }
 
@@ -404,6 +423,13 @@ export async function deleteFirm(firmSlug: string): Promise<void> {
         select: { id: true }
     })
     if (!firm) throw new Error('Firm not found')
+
+    audit(AUDIT_EVENT.FIRM_DELETED)
+        .scope(AUDIT_SCOPE.FIRM)
+        .firm(firm.id)
+        .actor(user.id)
+        .meta({ firmSlug })
+        .fireAndForget()
 
     await FirmService.deleteFirm(firm.id, user.id)
     revalidatePath('/d')

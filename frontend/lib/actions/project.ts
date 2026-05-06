@@ -9,7 +9,7 @@ import { canViewProjectSettings as checkCanViewProjectSettings } from '@/lib/per
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { logger } from '@/lib/logger'
 import { safeInngestSend } from '@/lib/inngest/client'
-import { createPlatformAuditEvent } from '@/lib/platform-audit'
+import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 
 const supabaseAdmin = createSupabaseAdmin(
     (process.env.NEXT_PUBLIC_SUPABASE_URL || "http://127.0.0.1:54321"),
@@ -228,6 +228,15 @@ export async function createEngagement(firmSlug: string, clientSlug: string, dat
         }
     }
 
+    audit(AUDIT_EVENT.ENGAGEMENT_CREATED)
+        .scope(AUDIT_SCOPE.ENGAGEMENT)
+        .firm(firm.id)
+        .client(client.id)
+        .engagement(newProject.id)
+        .actor(user.id)
+        .meta({ name: newProject.name, slug: newProject.slug })
+        .fireAndForget()
+
     revalidatePath(`/d/f/${firmSlug}/c/${clientSlug}`)
     return newProject
 }
@@ -361,27 +370,23 @@ export async function updateEngagement(
 
     const supabase = await createSupabaseClient()
     const { data: { user } } = await supabase.auth.getUser()
-    try {
-        await createPlatformAuditEvent({
-            organizationId: project.firmId,
-            clientId: project.clientId,
-            projectId,
-            eventType: 'PROJECT_UPDATED',
-            actorUserId: user?.id ?? undefined,
-            metadata: {
-                name: data.name,
-                description: data.description,
-                kickoffDate: data.kickoffDate,
-                dueDate: data.dueDate,
-                status: data.status,
-                contractType: data.contractType,
-                rateOrValue: data.rateOrValue,
-                tags: data.tags,
-            },
+    audit(AUDIT_EVENT.ENGAGEMENT_CHANGED)
+        .scope(AUDIT_SCOPE.ENGAGEMENT)
+        .firm(project.firmId)
+        .client(project.clientId)
+        .engagement(projectId)
+        .actor(user?.id)
+        .meta({
+            name: data.name,
+            description: data.description,
+            kickoffDate: data.kickoffDate,
+            dueDate: data.dueDate,
+            status: data.status,
+            contractType: data.contractType,
+            rateOrValue: data.rateOrValue,
+            tags: data.tags,
         })
-    } catch (e) {
-        logger.error('Failed to create audit event for project update', e as Error)
-    }
+        .fireAndForget()
 
     // Notifications (in-app + email for critical): emit when dueDate changes
     try {
@@ -495,18 +500,14 @@ export async function closeEngagement(projectId: string, firmSlug: string, clien
 
     const supabase = await createSupabaseClient()
     const { data: { user } } = await supabase.auth.getUser()
-    try {
-        await createPlatformAuditEvent({
-            organizationId: project.firmId,
-            clientId: project.clientId,
-            projectId,
-            eventType: 'PROJECT_CLOSED',
-            actorUserId: user?.id ?? undefined,
-            metadata: { reason: 'closed' },
-        })
-    } catch (e) {
-        logger.error('Failed to create audit event for project close', e as Error)
-    }
+    audit(AUDIT_EVENT.ENGAGEMENT_CLOSED)
+        .scope(AUDIT_SCOPE.ENGAGEMENT)
+        .firm(project.firmId)
+        .client(project.clientId)
+        .engagement(projectId)
+        .actor(user?.id)
+        .meta({ reason: 'closed' })
+        .fireAndForget()
 
     await safeInngestSend("project/archived", {
         projectId: project.id,
@@ -537,18 +538,13 @@ export async function reopenEngagement(projectId: string, firmSlug: string, clie
 
     const supabase = await createSupabaseClient()
     const { data: { user } } = await supabase.auth.getUser()
-    try {
-        await createPlatformAuditEvent({
-            organizationId: project.firmId,
-            clientId: project.clientId,
-            projectId,
-            eventType: 'PROJECT_REOPENED',
-            actorUserId: user?.id ?? undefined,
-            metadata: {},
-        })
-    } catch (e) {
-        logger.error('Failed to create audit event for project reopen', e as Error)
-    }
+    audit(AUDIT_EVENT.ENGAGEMENT_REOPENED)
+        .scope(AUDIT_SCOPE.ENGAGEMENT)
+        .firm(project.firmId)
+        .client(project.clientId)
+        .engagement(projectId)
+        .actor(user?.id)
+        .fireAndForget()
 
     revalidatePath(`/d/f/${firmSlug}/c/${clientSlug}`)
 }
@@ -567,18 +563,13 @@ export async function deleteEngagement(projectId: string, firmSlug: string, clie
 
     const supabase = await createSupabaseClient()
     const { data: { user } } = await supabase.auth.getUser()
-    try {
-        await createPlatformAuditEvent({
-            organizationId: project.firmId,
-            clientId: project.clientId,
-            projectId,
-            eventType: 'PROJECT_SOFT_DELETED',
-            actorUserId: user?.id ?? undefined,
-            metadata: {},
-        })
-    } catch (e) {
-        logger.error('Failed to create audit event for project delete', e as Error)
-    }
+    audit(AUDIT_EVENT.ENGAGEMENT_DELETED)
+        .scope(AUDIT_SCOPE.ENGAGEMENT)
+        .firm(project.firmId)
+        .client(project.clientId)
+        .engagement(projectId)
+        .actor(user?.id)
+        .fireAndForget()
 
     // 1. Fetch all members before deletion for cache invalidation
     const projectMembers = await prisma.engagementMember.findMany({

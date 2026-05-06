@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { prisma } from '@/lib/prisma'
 import { FirmService } from '@/lib/firm-service'
 import { logger } from '@/lib/logger'
+import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321',
@@ -61,6 +62,15 @@ export async function POST(request: NextRequest) {
         updatedBy: user.id,
       },
     })
+
+    const event = action === 'skip_subscribe'
+      ? AUDIT_EVENT.ONBOARDING_SUBSCRIBE_SKIPPED
+      : AUDIT_EVENT.ONBOARDING_SUBSCRIBE_COMPLETED
+    audit(event)
+      .scope(AUDIT_SCOPE.FIRM)
+      .firm(firm.id)
+      .actor(user.id)
+      .fireAndForget()
 
     return NextResponse.json({ ok: true })
   } catch (error) {

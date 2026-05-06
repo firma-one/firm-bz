@@ -8,6 +8,7 @@ import { InvitationStatus } from '@prisma/client'
 import { sendEmail } from '@/lib/email'
 import { BRAND_NAME } from '@/config/brand'
 import { canManageOrganization } from '@/lib/permission-helpers'
+import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 
 const supabaseAdmin = createSupabaseAdmin(
     process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321',
@@ -146,6 +147,14 @@ export async function inviteFirmMember(firmId: string, email: string) {
         `<p>You have been invited to join a firm on ${BRAND_NAME} as a Firm Administrator.</p>
          <p>Click here to accept: <a href="${inviteUrl}">${inviteUrl}</a></p>`
     )
+
+    audit(AUDIT_EVENT.FIRM_MEMBER_INVITED)
+        .scope(AUDIT_SCOPE.FIRM)
+        .firm(firmId)
+        .actor(user.id)
+        .meta({ invitedEmail: normalizedEmail })
+        .fireAndForget()
+
     revalidatePath('/d/f/[slug]')
 }
 

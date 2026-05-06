@@ -50,8 +50,9 @@ export async function POST(request: NextRequest) {
 
       // Google Drive OAuth scopes
       const scopes = [
-        // Full Drive: list/move all children during workspace migration. `drive.file` alone causes 403 on
-        // files the user added without opening via this app.
+        // `drive.file` is sufficient for creating/picking folders in both My Drive and Shared Drives.
+        // Limitation: migrating files the user added outside this app (not created via the app) will 403.
+        // The migration wizard's error handling already explains this to the user when it occurs.
         'https://www.googleapis.com/auth/drive.file',
         'https://www.googleapis.com/auth/drive.appdata', // Application data folder
         'https://www.googleapis.com/auth/userinfo.email',

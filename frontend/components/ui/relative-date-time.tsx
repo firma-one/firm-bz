@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react'
+import { useMemo } from 'react'
 import { Clock } from 'lucide-react'
 import { cn, formatRelativeTime } from '@/lib/utils'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -28,12 +28,14 @@ export function RelativeDateTime({
   textClassName,
   iconClassName,
   tooltipSide = 'top',
+  iconOnly = false,
 }: {
   date: Date | string
   className?: string
   textClassName?: string
   iconClassName?: string
   tooltipSide?: 'top' | 'bottom' | 'left' | 'right'
+  iconOnly?: boolean
 }) {
   const relative = useMemo(() => formatRelativeTime(date), [date])
   const full = useMemo(() => formatVerboseDateTimeWithTZ(date), [date])
@@ -54,10 +56,10 @@ export function RelativeDateTime({
           </span>
         </TooltipTrigger>
         <TooltipContent side={tooltipSide} className={LIGHT_TOOLTIP_CLASS}>
-          {full}
+          {iconOnly ? full : `${relative} · ${full}`}
         </TooltipContent>
       </Tooltip>
-      <span className={cn('tabular-nums', textClassName)}>{relative}</span>
+      {!iconOnly && <span className={cn('tabular-nums', textClassName)}>{relative}</span>}
     </span>
   )
 }

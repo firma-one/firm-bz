@@ -2,16 +2,24 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
+  Briefcase,
+  Building2,
   Check,
   ChevronDown,
+  ClipboardList,
   Download,
+  Eye,
   FileText,
   FileUp,
   FolderLock,
   Loader2,
   Lock,
+  MessageSquare,
   RefreshCw,
+  Rocket,
   Share2,
+  UserPlus,
+  Users,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { formatSmartDateTime } from '@/lib/utils'
@@ -40,15 +48,82 @@ type EventTypeOption = { value: string; label: string }
 
 const EVENT_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: '', label: 'All types' },
-  { value: 'PROJECT_DOCUMENT_ADDED', label: 'File uploaded' },
-  { value: 'PROJECT_DOCUMENT_REMOVED', label: 'File removed' },
-  { value: 'DOCUMENT_ACTIVITY_STATUS_CHANGED', label: 'Status change' },
-  { value: 'DOCUMENT_SHARED_EXTERNAL', label: 'Shared externally' },
-  { value: 'PROJECT_CREATED', label: 'Project created' },
-  { value: 'PROJECT_UPDATED', label: 'Project updated' },
-  { value: 'PROJECT_CLOSED', label: 'Project closed' },
-  { value: 'PROJECT_REOPENED', label: 'Project reopened' },
-  { value: 'PROJECT_SOFT_DELETED', label: 'Project deleted' },
+  // Firm
+  { value: 'FIRM_CREATED', label: 'Workspace created' },
+  { value: 'FIRM_CHANGED', label: 'Workspace updated' },
+  { value: 'FIRM_DELETED', label: 'Workspace deleted' },
+  { value: 'FIRM_SETTINGS_CHANGED', label: 'Workspace settings changed' },
+  { value: 'FIRM_BRANDING_CHANGED', label: 'Workspace branding changed' },
+  { value: 'FIRM_MEMBER_INVITED', label: 'Workspace member invited' },
+  { value: 'FIRM_MEMBER_ADDED', label: 'Workspace member added' },
+  { value: 'FIRM_MEMBER_REMOVED', label: 'Workspace member removed' },
+  { value: 'FIRM_MEMBER_ROLE_CHANGED', label: 'Workspace member role changed' },
+  { value: 'FIRM_CONNECTOR_ATTACHED', label: 'Drive connected' },
+  { value: 'FIRM_CONNECTOR_DETACHED', label: 'Drive disconnected' },
+  // Client
+  { value: 'CLIENT_CREATED', label: 'Client created' },
+  { value: 'CLIENT_CHANGED', label: 'Client updated' },
+  { value: 'CLIENT_DELETED', label: 'Client deleted' },
+  { value: 'CLIENT_SETTINGS_CHANGED', label: 'Client settings changed' },
+  { value: 'CLIENT_CONTACT_CREATED', label: 'Contact created' },
+  { value: 'CLIENT_CONTACT_CHANGED', label: 'Contact updated' },
+  { value: 'CLIENT_CONTACT_DELETED', label: 'Contact deleted' },
+  { value: 'CLIENT_MEMBER_ADDED', label: 'Client member added' },
+  { value: 'CLIENT_MEMBER_REMOVED', label: 'Client member removed' },
+  { value: 'CLIENT_MEMBER_ROLE_CHANGED', label: 'Client member role changed' },
+  // Engagement
+  { value: 'ENGAGEMENT_CREATED', label: 'Project created' },
+  { value: 'ENGAGEMENT_CHANGED', label: 'Project updated' },
+  { value: 'ENGAGEMENT_DELETED', label: 'Project deleted' },
+  { value: 'ENGAGEMENT_CLOSED', label: 'Project closed' },
+  { value: 'ENGAGEMENT_REOPENED', label: 'Project reopened' },
+  { value: 'ENGAGEMENT_LOCKED', label: 'Project locked' },
+  { value: 'ENGAGEMENT_SETTINGS_CHANGED', label: 'Project settings changed' },
+  { value: 'ENGAGEMENT_MEMBER_ADDED', label: 'Project member added' },
+  { value: 'ENGAGEMENT_MEMBER_REMOVED', label: 'Project member removed' },
+  { value: 'ENGAGEMENT_MEMBER_ROLE_CHANGED', label: 'Project member role changed' },
+  { value: 'ENGAGEMENT_FOLDER_ATTACHED', label: 'Project folder linked' },
+  // Document
+  { value: 'DOCUMENT_CREATED', label: 'File uploaded' },
+  { value: 'DOCUMENT_CHANGED', label: 'File updated' },
+  { value: 'DOCUMENT_DELETED', label: 'File removed' },
+  { value: 'DOCUMENT_MOVED', label: 'File moved' },
+  { value: 'DOCUMENT_VERSIONED', label: 'New version uploaded' },
+  { value: 'DOCUMENT_OPENED', label: 'Document opened' },
+  { value: 'DOCUMENT_DOWNLOADED', label: 'Document downloaded' },
+  { value: 'DOCUMENT_INDEXED', label: 'Document indexed' },
+  { value: 'DOCUMENT_FINALIZED', label: 'Document finalized' },
+  { value: 'DOCUMENT_UNLOCKED', label: 'Document unlocked' },
+  { value: 'DOCUMENT_STATUS_CHANGED', label: 'Status changed' },
+  { value: 'DOCUMENT_COMMENT_CREATED', label: 'Comment added' },
+  { value: 'DOCUMENT_COMMENT_CHANGED', label: 'Comment updated' },
+  { value: 'DOCUMENT_COMMENT_DELETED', label: 'Comment deleted' },
+  // Document sharing
+  { value: 'DOCUMENT_SHARE_CREATED', label: 'Share created' },
+  { value: 'DOCUMENT_SHARE_CHANGED', label: 'Share updated' },
+  { value: 'DOCUMENT_SHARE_DELETED', label: 'Share revoked' },
+  { value: 'DOCUMENT_SHARE_VIEWED', label: 'Share viewed' },
+  { value: 'DOCUMENT_SHARE_DOWNLOADED', label: 'Share downloaded' },
+  { value: 'DOCUMENT_SHARE_REGRANTED', label: 'Share re-granted' },
+  // Onboarding
+  { value: 'ONBOARDING_WORKSPACE_INITIALIZED', label: 'Workspace initialized' },
+  { value: 'ONBOARDING_SUBSCRIBE_COMPLETED', label: 'Subscription completed' },
+  { value: 'ONBOARDING_SUBSCRIBE_SKIPPED', label: 'Subscription skipped' },
+  { value: 'ONBOARDING_DRIVE_CONNECTED', label: 'Drive connected (onboarding)' },
+  { value: 'ONBOARDING_PROVISIONING_STARTED', label: 'Workspace provisioning started' },
+  { value: 'ONBOARDING_COMPLETED', label: 'Onboarding completed' },
+  { value: 'ONBOARDING_DOMAIN_JOINED', label: 'Joined workspace by domain' },
+  // Audit meta
+  { value: 'AUDIT_LOG_EXPORTED', label: 'Audit log exported' },
+  // Legacy (kept for historical rows)
+  { value: 'PROJECT_DOCUMENT_ADDED', label: 'File uploaded (legacy)' },
+  { value: 'PROJECT_DOCUMENT_REMOVED', label: 'File removed (legacy)' },
+  { value: 'DOCUMENT_ACTIVITY_STATUS_CHANGED', label: 'Status change (legacy)' },
+  { value: 'PROJECT_CREATED', label: 'Project created (legacy)' },
+  { value: 'PROJECT_UPDATED', label: 'Project updated (legacy)' },
+  { value: 'PROJECT_CLOSED', label: 'Project closed (legacy)' },
+  { value: 'PROJECT_REOPENED', label: 'Project reopened (legacy)' },
+  { value: 'PROJECT_SOFT_DELETED', label: 'Project deleted (legacy)' },
 ]
 
 function eventTypeLabel(eventType: string): string {
@@ -61,18 +136,45 @@ function eventDetails(ev: AuditEventRow): string {
   if (!m || typeof m !== 'object') return ''
   const fileName = m.fileName as string | undefined
   const description = m.description as string | undefined
+  const name = m.name as string | undefined
+  const action = m.action as string | undefined
+  const changedFields = Array.isArray(m.changedFields) ? (m.changedFields as string[]) : undefined
+  const contactName = m.contactName as string | undefined
+  const role = m.newRole as string | undefined
+  const invitedEmail = m.invitedEmail as string | undefined
   if (fileName) return fileName
   if (description) return description
+  if (name) return name
+  if (action) return action
+  if (contactName) return contactName
+  if (invitedEmail) return invitedEmail
+  if (role) return `→ ${role}`
+  if (changedFields?.length) return `Changed: ${changedFields.join(', ')}`
   if (m.newStatus) return `Status: ${m.oldStatus ?? '—'} → ${m.newStatus}`
   return Object.keys(m).length ? JSON.stringify(m) : ''
 }
 
 function EventIcon({ eventType }: { eventType: string }) {
+  if (eventType.startsWith('ONBOARDING_')) return <Rocket className="h-4 w-4 text-violet-500" />
+  if (eventType.startsWith('FIRM_MEMBER_')) return <UserPlus className="h-4 w-4 text-indigo-400" />
+  if (eventType.startsWith('FIRM_')) return <Building2 className="h-4 w-4 text-indigo-600" />
+  if (eventType.startsWith('CLIENT_CONTACT_')) return <MessageSquare className="h-4 w-4 text-teal-400" />
+  if (eventType.startsWith('CLIENT_MEMBER_')) return <UserPlus className="h-4 w-4 text-teal-400" />
+  if (eventType.startsWith('CLIENT_')) return <Users className="h-4 w-4 text-teal-600" />
+  if (eventType.startsWith('ENGAGEMENT_MEMBER_')) return <UserPlus className="h-4 w-4 text-blue-400" />
+  if (eventType.startsWith('ENGAGEMENT_')) return <Briefcase className="h-4 w-4 text-blue-600" />
+  if (eventType === 'DOCUMENT_OPENED') return <Eye className="h-4 w-4 text-slate-500" />
+  if (eventType === 'DOCUMENT_DOWNLOADED' || eventType === 'DOCUMENT_SHARE_DOWNLOADED') return <Download className="h-4 w-4 text-green-600" />
+  if (eventType === 'AUDIT_LOG_EXPORTED') return <ClipboardList className="h-4 w-4 text-orange-500" />
+  if (eventType.startsWith('DOCUMENT_SHARE_')) return <Share2 className="h-4 w-4 text-purple-600" />
+  if (eventType.startsWith('DOCUMENT_COMMENT_')) return <MessageSquare className="h-4 w-4 text-amber-500" />
+  if (eventType === 'DOCUMENT_FINALIZED' || eventType === 'DOCUMENT_LOCKED') return <Lock className="h-4 w-4 text-amber-600" />
+  if (eventType === 'DOCUMENT_STATUS_CHANGED' || eventType.includes('STATUS')) return <RefreshCw className="h-4 w-4 text-slate-600" />
   if (eventType.includes('SHARED') || eventType === 'SHARED_EXT') return <Share2 className="h-4 w-4 text-purple-600" />
   if (eventType.includes('LOCKED') || eventType.includes('CLOSED')) return <Lock className="h-4 w-4 text-amber-600" />
-  if (eventType.includes('UPLOAD') || eventType.includes('DOCUMENT_ADDED')) return <FileUp className="h-4 w-4 text-blue-600" />
-  if (eventType.includes('STATUS') || eventType === 'STATUS_CHANGE') return <RefreshCw className="h-4 w-4 text-slate-600" />
-  return <FileText className="h-4 w-4 text-gray-500" />
+  if (eventType.includes('UPLOAD') || eventType.includes('DOCUMENT_ADDED') || eventType === 'DOCUMENT_CREATED') return <FileUp className="h-4 w-4 text-blue-600" />
+  if (eventType.startsWith('DOCUMENT_')) return <FileText className="h-4 w-4 text-gray-500" />
+  return <FileText className="h-4 w-4 text-gray-400" />
 }
 
 function buildAuditUrl(

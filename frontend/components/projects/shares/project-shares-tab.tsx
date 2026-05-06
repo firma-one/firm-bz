@@ -16,8 +16,9 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core'
-import { Share2, User, Lock, ListTodo, Loader2, CheckCircle, GripVertical, List, FolderOpen, LayoutGrid, Clock, Copy, Check, Search, MessageCircle, Link2, X, Folder } from 'lucide-react'
+import { Share2, User, Lock, ListTodo, Loader2, CheckCircle, GripVertical, List, FolderOpen, LayoutGrid, Clock, Copy, Check, Search, MessageCircle, Link2, X } from 'lucide-react'
 import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
+import { DocumentBreadcrumb } from '@/components/ui/document-breadcrumb'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { SharedFolderIcon } from '@/components/ui/folder-shared-icon'
 import { DocumentActionMenu } from '@/components/ui/document-action-menu'
@@ -193,6 +194,7 @@ function DraggableCard({
   onOpenComments,
   extCollaboratorLabel,
   viewerLabel,
+  onParentFolderClick,
 }: {
   id: string
   share: ShareRecord
@@ -210,6 +212,7 @@ function DraggableCard({
   onOpenComments?: (share: ShareRecord) => void
   extCollaboratorLabel: string
   viewerLabel: string
+  onParentFolderClick?: (parentId: string, parentName: string) => void
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id })
   const { setNodeRef: setDropRef, isOver } = useDroppable({ id })
@@ -234,8 +237,9 @@ function DraggableCard({
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.98 }}
       transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+      whileHover={!isDragging ? { y: -3, boxShadow: '0 8px 20px -4px rgba(0,0,0,0.1)' } : undefined}
       className={cn(
-        'rounded-2xl overflow-hidden select-none border border-slate-200/80',
+        'rounded-2xl overflow-hidden select-none border border-slate-200/80 transition-shadow duration-200',
         accent.border,
         'bg-white shadow-[0_1px_3px_0_rgba(0,0,0,0.06)]',
         isDragging && 'opacity-60 shadow-[0_8px_24px_-8px_rgba(0,0,0,0.12)] z-10 scale-[1.02]',
@@ -263,20 +267,12 @@ function DraggableCard({
         onOpenComments={onOpenComments}
         extCollaboratorLabel={extCollaboratorLabel}
         viewerLabel={viewerLabel}
+        onParentFolderClick={onParentFolderClick}
       />
     </motion.div>
   )
 }
 
-function DocumentBreadcrumb({ parentName }: { parentName?: string | null }) {
-  if (!parentName) return null
-  return (
-    <div className="flex items-center gap-1 min-w-0">
-      <Folder className="h-3 w-3 shrink-0 stroke-slate-400 stroke-[1.5] fill-slate-200" aria-hidden />
-      <span className="text-[10px] text-slate-500 truncate">{parentName}</span>
-    </div>
-  )
-}
 
 function ShareCardContent({
   share,
@@ -296,6 +292,7 @@ function ShareCardContent({
   onOpenComments,
   extCollaboratorLabel,
   viewerLabel,
+  onParentFolderClick,
 }: {
   share: ShareRecord
   laneHeaderBg: string
@@ -314,6 +311,7 @@ function ShareCardContent({
   onOpenComments?: (share: ShareRecord) => void
   extCollaboratorLabel: string
   viewerLabel: string
+  onParentFolderClick?: (parentId: string, parentName: string) => void
 }) {
   const latestComment = share.comments?.[0]
   const isFinalized = !!share.finalizedAt
@@ -322,7 +320,7 @@ function ShareCardContent({
   return (
     <>
       <div className={cn('transition-colors duration-200', laneHeaderBg)}>
-        <div className="flex items-start gap-3 px-3 pt-3 pb-2">
+        <div className="flex items-center gap-3 px-3 pt-3 pb-2">
           <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-xl shadow-[0_1px_2px_rgba(0,0,0,0.06)]', iconPillBg)}>
             {share.documentMimeType?.includes('folder') ? (
               <SharedFolderIcon fillLevel={1} tooltip="shared" />
@@ -338,7 +336,11 @@ function ShareCardContent({
             >
               {share.documentName}
             </div>
-            <DocumentBreadcrumb parentName={share.parentName} />
+            <DocumentBreadcrumb
+              parentName={share.parentName}
+              parentId={share.parentId}
+              onFolderClick={onParentFolderClick}
+            />
           </div>
         </div>
       </div>
@@ -567,6 +569,7 @@ function SharesListView({
   extCollaboratorLabel,
   viewerLabel,
   onOpenComments,
+  onParentFolderClick,
 }: {
   shares: ShareRecord[]
   formatDate: (s: string) => string
@@ -579,6 +582,7 @@ function SharesListView({
   extCollaboratorLabel: string
   viewerLabel: string
   onOpenComments?: (share: ShareRecord) => void
+  onParentFolderClick?: (parentId: string, parentName: string) => void
 }) {
   const [actionMenuOpenShareId, setActionMenuOpenShareId] = useState<string | null>(null)
   return (
@@ -590,24 +594,31 @@ function SharesListView({
           <div
             key={share.id}
             className={cn(
-              'bg-white rounded-xl border border-slate-200 shadow-[0_1px_3px_0_rgba(0,0,0,0.06)] overflow-hidden transition-colors',
+              'bg-white rounded-xl border border-slate-200 border-l-2 border-l-[#eae8ff] shadow-[0_1px_3px_0_rgba(0,0,0,0.06)] overflow-hidden transition-all duration-300',
+              'hover:-translate-y-0.5 hover:shadow-[0_8px_20px_-4px_rgba(0,0,0,0.1)]',
               actionMenuOpenShareId === share.id && 'bg-slate-50'
             )}
           >
-            <div className="p-5 flex items-start justify-between gap-4">
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 w-full">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-50">
-                    {share.documentMimeType?.includes('folder') ? (
-                      <SharedFolderIcon fillLevel={1} tooltip="shared" />
-                    ) : (
-                      <DocumentIcon mimeType={share.documentMimeType ?? undefined} size={20} />
-                    )}
-                  </div>
-                  <h3 className="font-semibold text-slate-900 truncate flex-1 min-w-0" title={share.documentName}>
-                    {share.documentName}
-                  </h3>
-                  <div className="flex items-center gap-1 shrink-0 ml-auto">
+            {/* Gradient header: icon + title + actions */}
+            <div className={cn('px-5 pt-4 pb-3 bg-gradient-to-br from-[#f5f3ff] to-white', actionMenuOpenShareId === share.id && 'from-[#ede9fe]')}>
+              <div className="flex items-center gap-2 w-full">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/80 border border-slate-200/60">
+                  {share.documentMimeType?.includes('folder') ? (
+                    <SharedFolderIcon fillLevel={1} tooltip="shared" />
+                  ) : (
+                    <DocumentIcon mimeType={share.documentMimeType ?? undefined} size={18} />
+                  )}
+                </div>
+                <h3 className="font-semibold text-slate-900 truncate flex-1 min-w-0" title={share.documentName}>
+                  {share.documentName}
+                </h3>
+                <div className="flex items-center gap-1 shrink-0 ml-auto">
+                    <RelativeDateTime
+                      date={share.updatedAt}
+                      iconOnly
+                      iconClassName="text-slate-400 hover:text-slate-600"
+                      tooltipSide="top"
+                    />
                     <button
                       type="button"
                       className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors"
@@ -651,68 +662,74 @@ function SharesListView({
                       <LoadingSpinner size="sm" className="min-h-0 ml-1" />
                     )}
                   </div>
-                </div>
-                <DocumentBreadcrumb parentName={share.parentName} />
-                {(() => {
-                  const isModified = new Date(share.updatedAt).getTime() > new Date(share.createdAt).getTime()
-                  const samePerson = share.updatedBy && share.updatedBy === share.createdBy
-                  const showCreatorProfile = !isModified || (isModified && !samePerson)
-                  const showModifierProfile = isModified && share.updatedBy && !samePerson
-                  const showModifiedAtOnly = isModified && !share.updatedBy
-                  return (
-                    <div className="flex items-center justify-between mt-3">
+              </div>
+              <DocumentBreadcrumb
+                parentName={share.parentName}
+                parentId={share.parentId}
+                onFolderClick={onParentFolderClick}
+              />
+            </div>
+            {/* White content: shared-by / shared-with */}
+            <div className="px-5 pb-4 pt-3 bg-white">
+              {(() => {
+                const isModified = new Date(share.updatedAt).getTime() > new Date(share.createdAt).getTime()
+                const samePerson = share.updatedBy && share.updatedBy === share.createdBy
+                const showCreatorProfile = !isModified || (isModified && !samePerson)
+                const showModifierProfile = isModified && share.updatedBy && !samePerson
+                const showModifiedAtOnly = isModified && !share.updatedBy
+                return (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] text-slate-400 shrink-0">Shared by</span>
+                      {(showCreatorProfile || (!showCreatorProfile && samePerson && isModified)) && (
+                        <TooltipProvider>
+                          <ProfileBubbleWithPopup
+                            name={share.createdByName || share.createdByEmail || 'Team Member'}
+                            email={share.createdByEmail || ''}
+                            avatarUrl={share.createdByAvatarUrl}
+                            size="default"
+                          />
+                        </TooltipProvider>
+                      )}
+                      {showModifierProfile && share.updatedBy && (
+                        <ModifierBubble
+                          updatedBy={share.updatedBy}
+                          updatedByEmail={share.updatedByEmail}
+                          updatedByAvatarUrl={share.updatedByAvatarUrl}
+                          updatedAt={share.updatedAt}
+                          formatDate={formatDate}
+                        />
+                      )}
+                      {showModifiedAtOnly && <ModifiedAtOnlyBubble updatedAt={share.updatedAt} formatDate={formatDate} />}
+                    </div>
+                    {(ec || guest) && (
                       <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] text-slate-400 shrink-0">Shared by</span>
-                        {(showCreatorProfile || (!showCreatorProfile && samePerson && isModified)) && (
+                        <span className="text-[10px] text-slate-400 shrink-0">Shared with</span>
+                        {ec && (
                           <TooltipProvider>
-                            <ProfileBubbleWithPopup
-                              name={share.createdByName || share.createdByEmail || 'Team Member'}
-                              email={share.createdByEmail || ''}
-                              avatarUrl={share.createdByAvatarUrl}
-                              size="default"
-                            />
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="h-6 w-6 rounded-lg bg-violet-100 text-violet-800 flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EC</div>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="bg-slate-50 border border-slate-200 text-slate-700 text-xs p-2 shadow-md">{extCollaboratorLabel}</TooltipContent>
+                            </Tooltip>
                           </TooltipProvider>
                         )}
-                        {showModifierProfile && share.updatedBy && (
-                          <ModifierBubble
-                            updatedBy={share.updatedBy}
-                            updatedByEmail={share.updatedByEmail}
-                            updatedByAvatarUrl={share.updatedByAvatarUrl}
-                            updatedAt={share.updatedAt}
-                            formatDate={formatDate}
-                          />
+                        {guest && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="h-6 w-6 rounded-lg bg-sky-100 text-sky-800 flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EV</div>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="bg-slate-50 border border-slate-200 text-slate-700 text-xs p-2 shadow-md">{viewerLabel}</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         )}
-                        {showModifiedAtOnly && <ModifiedAtOnlyBubble updatedAt={share.updatedAt} formatDate={formatDate} />}
                       </div>
-                      {(ec || guest) && (
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[10px] text-slate-400 shrink-0">Shared with</span>
-                          {ec && (
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <div className="h-6 w-6 rounded-lg bg-violet-100 text-violet-800 flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EC</div>
-                                </TooltipTrigger>
-                                <TooltipContent side="top" className="bg-slate-50 border border-slate-200 text-slate-700 text-xs p-2 shadow-md">{extCollaboratorLabel}</TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          )}
-                          {guest && (
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <div className="h-6 w-6 rounded-lg bg-sky-100 text-sky-800 flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EV</div>
-                                </TooltipTrigger>
-                                <TooltipContent side="top" className="bg-slate-50 border border-slate-200 text-slate-700 text-xs p-2 shadow-md">{viewerLabel}</TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )
-                })()}
-              </div>
+                    )}
+                  </div>
+                )
+              })()}
             </div>
           </div>
         )
@@ -733,6 +750,7 @@ function SharesGridView({
   extCollaboratorLabel,
   viewerLabel,
   onOpenComments,
+  onParentFolderClick,
 }: {
   shares: ShareRecord[]
   formatDate: (s: string) => string
@@ -745,6 +763,7 @@ function SharesGridView({
   extCollaboratorLabel: string
   viewerLabel: string
   onOpenComments?: (share: ShareRecord) => void
+  onParentFolderClick?: (parentId: string, parentName: string) => void
 }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 py-2">
@@ -762,6 +781,7 @@ function SharesGridView({
           extCollaboratorLabel={extCollaboratorLabel}
           viewerLabel={viewerLabel}
           onOpenComments={onOpenComments}
+          onParentFolderClick={onParentFolderClick}
         />
       ))}
     </div>
@@ -780,6 +800,7 @@ function ShareCard({
   extCollaboratorLabel,
   viewerLabel,
   onOpenComments,
+  onParentFolderClick,
 }: {
   share: ShareRecord
   formatDate: (s: string) => string
@@ -792,6 +813,7 @@ function ShareCard({
   extCollaboratorLabel: string
   viewerLabel: string
   onOpenComments?: (share: ShareRecord) => void
+  onParentFolderClick?: (parentId: string, parentName: string) => void
 }) {
   const isFolder = share.documentMimeType?.includes('folder')
   const [linkCopied, setLinkCopied] = useState(false)
@@ -800,7 +822,7 @@ function ShareCard({
 
   // Proxy URL — avoids Google CDN 429 by routing through our backend with OAuth token
   const proxyThumbnailUrl = share.thumbnailLink
-    ? `/api/proxy/thumbnail/${encodeURIComponent(share.documentExternalId)}?organizationId=${encodeURIComponent((share as any).organizationId ?? '')}&size=400`
+    ? `/api/proxy/thumbnail/${encodeURIComponent(share.documentExternalId)}?firmId=${encodeURIComponent((share as any).organizationId ?? '')}&size=400`
     : null
 
   return (
@@ -808,7 +830,9 @@ function ShareCard({
       layout
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="group relative bg-white rounded-xl border border-slate-200/80 shadow-[0_2px_15px_-3px_rgba(0,0,0,0.07),0_4px_6px_-2px_rgba(0,0,0,0.05)] hover:shadow-[0_20px_25px_-5px_rgba(0,0,0,0.1),0_10px_10px_-5px_rgba(0,0,0,0.04)] transition-all duration-300 overflow-hidden flex flex-col h-full"
+      whileHover={{ y: -4, boxShadow: '0 20px 40px -10px rgba(0,0,0,0.12)' }}
+      transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+      className="group relative bg-white rounded-xl border border-slate-200/80 border-l-2 border-l-[#eae8ff] shadow-[0_1px_3px_0_rgba(0,0,0,0.06)] overflow-hidden flex flex-col h-full"
     >
       {/* Thumbnail / Large Icon Area */}
       <div
@@ -818,10 +842,6 @@ function ShareCard({
         )}
         onClick={handleOpenPreview}
       >
-        <div className="absolute top-4 left-4 z-10 bg-white/90 backdrop-blur rounded shadow-sm border border-slate-200/50 p-1.5 flex items-center justify-center pointer-events-none group-hover:-translate-y-1 transition-transform duration-300">
-          <DocumentIcon mimeType={share.documentMimeType ?? undefined} className="w-5 h-5" />
-        </div>
-
         {proxyThumbnailUrl ? (
           <div className="w-full h-full relative">
             <img
@@ -879,17 +899,27 @@ function ShareCard({
         )}
       </div>
 
-      {/* Content Area */}
-      <div className="p-5 flex flex-col flex-1 bg-white relative">
-        <h3
-          className="font-bold text-slate-800 text-[15px] leading-tight truncate cursor-pointer hover:text-indigo-600 transition-colors"
-          title={share.documentName}
-          onClick={handleOpenPreview}
-        >
-          {share.documentName}
-        </h3>
-        <DocumentBreadcrumb parentName={share.parentName} />
+      {/* Gradient title area */}
+      <div className="bg-gradient-to-br from-[#f5f3ff] to-white px-5 pt-4 pb-3">
+        <div className="flex items-start gap-2">
+          <DocumentIcon mimeType={share.documentMimeType ?? undefined} className="w-5 h-5 shrink-0 mt-0.5" />
+          <h3
+            className="font-bold text-slate-800 text-[15px] leading-tight truncate cursor-pointer hover:text-indigo-600 transition-colors flex-1 min-w-0"
+            title={share.documentName}
+            onClick={handleOpenPreview}
+          >
+            {share.documentName}
+          </h3>
+        </div>
+        <DocumentBreadcrumb
+          parentName={share.parentName}
+          parentId={share.parentId}
+          onFolderClick={onParentFolderClick}
+        />
+      </div>
 
+      {/* Content Area */}
+      <div className="px-5 pb-5 flex flex-col flex-1 bg-white relative">
         {/* DateTime + quick links row */}
         <div className="flex items-center justify-between mt-2">
           <div className="flex items-center gap-1.5">
@@ -992,8 +1022,6 @@ function ShareCard({
         </div>
       </div>
 
-      {/* Bottom Accent Bar */}
-      <div className="h-1 w-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
     </motion.div>
   )
 }
@@ -1133,6 +1161,20 @@ export function ProjectSharesTab({
         { id: share.documentExternalId, name: share.documentName, clickable: true },
       ]
       onOpenInFiles(share.documentExternalId, breadcrumbs)
+    },
+    [onOpenInFiles, orgName, clientName, projectName, connectorRootFolderId]
+  )
+
+  const handleOpenParentFolder = useCallback(
+    (parentId: string, parentName: string) => {
+      if (!onOpenInFiles) return
+      const breadcrumbs: FilesBreadcrumbItem[] = [
+        { id: 'org', name: orgName ?? 'Organization', clickable: false },
+        { id: 'client', name: clientName ?? 'Client', clickable: false },
+        { id: connectorRootFolderId ?? 'project', name: projectName ?? 'Project', clickable: false },
+        { id: parentId, name: parentName, clickable: true },
+      ]
+      onOpenInFiles(parentId, breadcrumbs)
     },
     [onOpenInFiles, orgName, clientName, projectName, connectorRootFolderId]
   )
@@ -1299,7 +1341,7 @@ export function ProjectSharesTab({
             )}
           >
             <List className="h-4 w-4" />
-            List
+            Compact
           </button>
           <button
             type="button"
@@ -1369,6 +1411,7 @@ export function ProjectSharesTab({
               extCollaboratorLabel={projExtCollaborator}
               viewerLabel={projViewer}
               onOpenComments={handleOpenComments}
+              onParentFolderClick={onOpenInFiles ? handleOpenParentFolder : undefined}
             />
           ) : viewMode === 'list' ? (
             <SharesListView
@@ -1383,6 +1426,7 @@ export function ProjectSharesTab({
               extCollaboratorLabel={projExtCollaborator}
               viewerLabel={projViewer}
               onOpenComments={handleOpenComments}
+              onParentFolderClick={onOpenInFiles ? handleOpenParentFolder : undefined}
             />
           ) : (
             <>
@@ -1427,6 +1471,7 @@ export function ProjectSharesTab({
                               onOpenComments={handleOpenComments}
                               extCollaboratorLabel={projExtCollaborator}
                               viewerLabel={projViewer}
+                              onParentFolderClick={onOpenInFiles ? handleOpenParentFolder : undefined}
                             />
                           ))}
                         </AnimatePresence>
@@ -1467,6 +1512,7 @@ export function ProjectSharesTab({
                           onOpenComments={handleOpenComments}
                           extCollaboratorLabel={projExtCollaborator}
                           viewerLabel={projViewer}
+                          onParentFolderClick={onOpenInFiles ? handleOpenParentFolder : undefined}
                         />
                       </motion.div>
                     )

@@ -58,8 +58,7 @@ const workspaceRootIconBtnClass = cn(
   "disabled:pointer-events-none disabled:opacity-50",
 )
 
-/** Set to `false` to re-enable the migrate-workspace wizard. */
-const WORKSPACE_MIGRATE_DISABLED = true
+const WORKSPACE_MIGRATE_DISABLED = false
 
 function ExternalDriveLink({ href, children }: { href: string; children: ReactNode }) {
   return (
@@ -406,7 +405,7 @@ export function GoogleDriveWorkspaceRoot({
             <TooltipProvider delayDuration={300}>
               <div className="flex flex-wrap items-center gap-2 pt-0.5">
                 <p className="min-w-0 flex-1 text-sm text-gray-500">
-                  No folder is set yet. Use Migrate workspace folder to continue.
+                  No workspace folder selected yet. Click the button to choose a folder in My Drive or a Shared Drive.
                 </p>
                 <Tooltip>
                   <TooltipTrigger asChild>

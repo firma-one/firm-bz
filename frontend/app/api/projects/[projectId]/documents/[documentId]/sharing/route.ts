@@ -9,6 +9,7 @@ import { safeInngestSend } from '@/lib/inngest/client'
 import { resolveProjectContext } from '@/lib/resolve-project-context'
 import { canManageProject } from '@/lib/permission-helpers'
 import { GoogleDriveConnector } from '@/lib/google-drive-connector'
+import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 
 /** ProjectDocument can contain BigInt (fileSize); JSON.stringify cannot serialize it. */
 function toJsonSafeSharing(doc: Record<string, unknown> | null): Record<string, unknown> | null {
@@ -301,6 +302,17 @@ export async function PUT(
       }
     }
 
+    if (updated) {
+      audit(existing ? AUDIT_EVENT.DOCUMENT_SHARE_CHANGED : AUDIT_EVENT.DOCUMENT_SHARE_CREATED)
+        .scope(AUDIT_SCOPE.DOCUMENT)
+        .firm(fileInfo.organizationId)
+        .engagement(projectId)
+        .document(updated.id)
+        .actor(user.id)
+        .meta({ fileName: updated.fileName })
+        .fireAndForget()
+    }
+
     return NextResponse.json({ sharing: toJsonSafeSharing(updated as Record<string, unknown> | null) })
   } catch (e) {
     console.error('PUT sharing error', e)
@@ -393,6 +405,15 @@ export async function DELETE(
       where: { id: existing.id },
       data: { settings: {}, slug: null, updatedAt: new Date() },
     })
+
+    audit(AUDIT_EVENT.DOCUMENT_SHARE_DELETED)
+      .scope(AUDIT_SCOPE.DOCUMENT)
+      .firm(fileInfo.organizationId)
+      .engagement(projectId)
+      .document(existing.id)
+      .actor(user.id)
+      .meta({ fileName: existing.fileName })
+      .fireAndForget()
 
     return NextResponse.json({ success: true })
   } catch (e) {

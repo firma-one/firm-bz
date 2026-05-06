@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { logger } from '@/lib/logger'
 import type { ClientStatus } from '@prisma/client'
+import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 
 export type LwCrmClientStatus = 'PROSPECT' | 'ACTIVE' | 'ON_HOLD' | 'PAST'
 
@@ -150,6 +151,14 @@ export async function createClient(organizationSlug: string, data: CreateClientD
         return client
     })
 
+    audit(AUDIT_EVENT.CLIENT_CREATED)
+        .scope(AUDIT_SCOPE.CLIENT)
+        .firm(firm.id)
+        .client(newClient.id)
+        .actor(user.id)
+        .meta({ name: newClient.name, slug: newClient.slug })
+        .fireAndForget()
+
     // 5. Create Drive folder structure if connected
     try {
         const connectorId = firm.connectorId
@@ -232,6 +241,14 @@ export async function updateClient(
         where: { id: client.id },
         data: updateData
     })
+
+    audit(AUDIT_EVENT.CLIENT_CHANGED)
+        .scope(AUDIT_SCOPE.CLIENT)
+        .firm(firm.id)
+        .client(client.id)
+        .actor(user.id)
+        .meta({ changedFields: Object.keys(updateData) })
+        .fireAndForget()
 
     revalidatePath(`/d/f/${organizationSlug}`)
     revalidatePath(`/d/f/${organizationSlug}/c/${clientSlug}`)
@@ -326,7 +343,7 @@ export async function createClientContact(
     const { firmId, clientId } = await assertCanManageClient(organizationSlug, clientSlug)
     if (!data.name?.trim()) throw new Error('Name is required')
 
-    await prisma.clientContact.create({
+    const contact = await prisma.clientContact.create({
         data: {
             firmId,
             clientId,
@@ -342,6 +359,14 @@ export async function createClientContact(
         }
     })
 
+    audit(AUDIT_EVENT.CLIENT_CONTACT_CREATED)
+        .scope(AUDIT_SCOPE.CLIENT)
+        .firm(firmId)
+        .client(clientId)
+        .actor(user.id)
+        .meta({ contactId: contact.id, contactName: data.name.trim() })
+        .fireAndForget()
+
     revalidatePath(`/d/f/${organizationSlug}/c/${clientSlug}`)
 }
 
@@ -354,7 +379,7 @@ export async function updateClientContact(
     const supabase = await createSupabaseClient()
     const { data: { user }, error } = await supabase.auth.getUser()
     if (error || !user) throw new Error('Unauthorized')
-    await assertCanManageClient(organizationSlug, clientSlug)
+    const { firmId: updateFirmId, clientId: updateClientId } = await assertCanManageClient(organizationSlug, clientSlug)
 
     await prisma.clientContact.update({
         where: { id: contactId },
@@ -370,11 +395,31 @@ export async function updateClientContact(
         }
     })
 
+    audit(AUDIT_EVENT.CLIENT_CONTACT_CHANGED)
+        .scope(AUDIT_SCOPE.CLIENT)
+        .firm(updateFirmId)
+        .client(updateClientId)
+        .actor(user.id)
+        .meta({ contactId, changedFields: Object.keys(data) })
+        .fireAndForget()
+
     revalidatePath(`/d/f/${organizationSlug}/c/${clientSlug}`)
 }
 
 export async function deleteClientContact(organizationSlug: string, clientSlug: string, contactId: string): Promise<void> {
-    await assertCanManageClient(organizationSlug, clientSlug)
+    const supabase = await createSupabaseClient()
+    const { data: { user }, error } = await supabase.auth.getUser()
+    if (error || !user) throw new Error('Unauthorized')
+    const { firmId: delFirmId, clientId: delClientId } = await assertCanManageClient(organizationSlug, clientSlug)
+
+    audit(AUDIT_EVENT.CLIENT_CONTACT_DELETED)
+        .scope(AUDIT_SCOPE.CLIENT)
+        .firm(delFirmId)
+        .client(delClientId)
+        .actor(user.id)
+        .meta({ contactId })
+        .fireAndForget()
+
     await prisma.clientContact.delete({ where: { id: contactId } })
     revalidatePath(`/d/f/${organizationSlug}/c/${clientSlug}`)
 }
@@ -402,6 +447,14 @@ export async function deleteClient(organizationSlug: string, clientSlug: string)
 
     const client = firm.clients[0]
     if (!client) throw new Error('Client not found')
+
+    audit(AUDIT_EVENT.CLIENT_DELETED)
+        .scope(AUDIT_SCOPE.CLIENT)
+        .firm(firm.id)
+        .client(client.id)
+        .actor(user.id)
+        .meta({ clientSlug })
+        .fireAndForget()
 
     await prisma.client.delete({
         where: { id: client.id }

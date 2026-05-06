@@ -5,6 +5,7 @@ import { getFileInfo } from '@/lib/file-utils'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { requireEngagementMember, isEngagementLeadRole } from '@/lib/engagement-access'
 import { getVersionLockFromSettings, type VersionLockDowngrade } from '@/lib/document-version-lock'
+import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 
 /**
  * PATCH /api/projects/[projectId]/documents/[documentId]/sharing/finalize
@@ -104,6 +105,16 @@ export async function PATCH(
     const updated = await prisma.engagementDocument.findUnique({
       where: { engagementId_firmId_externalId: compound },
     })
+
+    audit(AUDIT_EVENT.DOCUMENT_FINALIZED)
+      .scope(AUDIT_SCOPE.DOCUMENT)
+      .firm(fileInfo.organizationId)
+      .engagement(projectId)
+      .document(existing.id)
+      .actor(user.id)
+      .meta({ fileName: existing.fileName })
+      .fireAndForget()
+
     return NextResponse.json({ sharing: updated })
   } catch (e) {
     console.error('PATCH sharing/finalize error', e)

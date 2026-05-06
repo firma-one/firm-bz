@@ -1,3 +1,7 @@
+/**
+ * @deprecated Import from '@/lib/audit' instead.
+ * This shim preserves backward compatibility during migration.
+ */
 import { prisma } from '@/lib/prisma'
 import type { PlatformAuditEventType } from '@prisma/client'
 
@@ -12,10 +16,7 @@ export type CreatePlatformAuditEventParams = {
   eventAt?: Date
 }
 
-/**
- * Append a project-scoped platform audit event. Immutable (no UPDATE); use only for INSERT.
- * Call from project/document mutation paths (e.g. closeProject, activity PATCH, share finalize).
- */
+/** @deprecated Use audit() builder from '@/lib/audit' */
 export async function createPlatformAuditEvent(params: CreatePlatformAuditEventParams): Promise<void> {
   const {
     organizationId,

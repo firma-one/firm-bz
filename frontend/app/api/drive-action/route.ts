@@ -5,7 +5,7 @@ import { ConnectorType } from "@prisma/client"
 import { googleDriveConnector } from "@/lib/google-drive-connector"
 import { safeInngestSend } from '@/lib/inngest/client'
 import { logger } from '@/lib/logger'
-import { createPlatformAuditEvent } from '@/lib/platform-audit'
+import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { blockIfEngagementFileMutationForbidden } from '@/lib/engagement-access'
 
 const supabase = createClient(
@@ -186,15 +186,15 @@ export async function POST(request: NextRequest) {
                                 },
                                 select: { id: true },
                             })
-                            await createPlatformAuditEvent({
-                                organizationId: project.firmId,
-                                clientId: project.clientId,
-                                projectId: requestProjectId,
-                                projectDocumentId: doc?.id ?? undefined,
-                                eventType: 'PROJECT_DOCUMENT_REMOVED',
-                                actorUserId: user.id,
-                                metadata: { fileName: requestFileName ?? fileId, reason: 'moved_to_bin' },
-                            })
+                            audit(AUDIT_EVENT.DOCUMENT_DELETED)
+                                .scope(AUDIT_SCOPE.DOCUMENT)
+                                .firm(project.firmId)
+                                .client(project.clientId)
+                                .engagement(requestProjectId)
+                                .document(doc?.id)
+                                .actor(user.id)
+                                .meta({ fileName: requestFileName ?? fileId, reason: 'moved_to_bin' })
+                                .fireAndForget()
                         }
                     } catch (auditErr) {
                         logger.warn('[trash] Failed to create audit event', auditErr as Error)

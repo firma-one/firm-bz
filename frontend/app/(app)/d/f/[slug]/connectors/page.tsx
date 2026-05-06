@@ -493,7 +493,7 @@ export default function ConnectorsPage({ params }: { params: Promise<{ slug: str
                           <div className="min-w-0">
                             <h2 className="text-xl font-bold text-gray-900">Google Drive</h2>
                             <p className="text-sm text-gray-500 mt-1">
-                              Link one Google account. Your workspace uses a single Drive folder as root; you can change that folder anytime.
+                              Link one Google account. Your workspace uses a single Drive folder as root — point it to My Drive or a Shared Drive anytime.
                             </p>
                           </div>
                         </div>

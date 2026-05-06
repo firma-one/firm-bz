@@ -76,7 +76,7 @@ export async function GET(
         thumbnailLink,
         webViewLink,
         slug: share.slug ?? null,
-        parentId: (indexMetadata.parents?.[0] ?? indexMetadata.parentId ?? null) as string | null,
+        parentId: share.parentId ?? (indexMetadata.parents?.[0] ?? indexMetadata.parentId ?? null) as string | null,
         createdBy: share.createdBy ?? parsed.share?.createdBy ?? null,
         createdAt: share.createdAt.toISOString(),
         updatedAt: share.updatedAt.toISOString(),
