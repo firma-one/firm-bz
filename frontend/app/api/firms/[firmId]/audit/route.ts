@@ -4,7 +4,8 @@ import { createClient } from '@/utils/supabase/server'
 import { userSettingsPlus } from '@/lib/user-settings-plus'
 import { findFirmInPermissions } from '@/lib/permission-helpers'
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
-import { PlatformAuditEventType, type Prisma } from '@prisma/client'
+import { type Prisma } from '@prisma/client'
+import { isValidAuditEventType } from '@/lib/audit-event-types'
 
 function firmPrivileges(scopes: Record<string, string[]> | undefined): string[] {
   if (!scopes) return []
@@ -41,15 +42,15 @@ export async function GET(
     const clientIds = searchParams.getAll('clientId').filter(Boolean)
     const projectIds = searchParams.getAll('projectId').filter(Boolean)
 
-    if (eventType && !Object.values(PlatformAuditEventType).includes(eventType as PlatformAuditEventType)) {
+    if (eventType && !isValidAuditEventType(eventType)) {
       return NextResponse.json({ error: 'Invalid eventType' }, { status: 400 })
     }
 
     const where: Prisma.PlatformAuditEventWhereInput = {
       firmId,
-      scope: 'PROJECT',
     }
-    if (eventType) where.eventType = eventType as PlatformAuditEventType
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (eventType) (where as any).eventType = eventType
     if (clientIds.length === 1) where.clientId = clientIds[0]
     if (clientIds.length > 1) where.clientId = { in: clientIds }
     if (projectIds.length === 1) where.engagementId = projectIds[0]
@@ -57,12 +58,7 @@ export async function GET(
     if (fromDate || toDate) {
       where.eventAt = {}
       if (fromDate) where.eventAt.gte = new Date(fromDate)
-      if (toDate) {
-        const endOfDay = new Date(toDate)
-        endOfDay.setUTCDate(endOfDay.getUTCDate() + 1)
-        endOfDay.setUTCHours(0, 0, 0, 0)
-        where.eventAt.lt = endOfDay
-      }
+      if (toDate) where.eventAt.lte = new Date(toDate)
     }
 
     const events = await prisma.platformAuditEvent.findMany({

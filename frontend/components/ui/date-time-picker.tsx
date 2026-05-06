@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
+import { createPortal } from "react-dom"
 import { Button } from "@/components/ui/button"
 import { Calendar, Clock } from "lucide-react"
 
@@ -10,6 +11,13 @@ interface DateTimePickerProps {
   placeholder?: string
   className?: string
   disabled?: boolean
+  /**
+   * Default time when a date is picked with no time set.
+   * Pass a fixed "HH:MM" string, or omit to default to the current time of day.
+   */
+  defaultTime?: string
+  /** When true, clamps the time input to ≤ now when today is selected. */
+  disableFutureTimes?: boolean
 }
 
 export function DateTimePicker({
@@ -17,52 +25,108 @@ export function DateTimePicker({
   onChange,
   placeholder = "Select date and time",
   className = "",
-  disabled = false
+  disabled = false,
+  defaultTime,
+  disableFutureTimes = false,
 }: DateTimePickerProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [selectedDate, setSelectedDate] = useState<string>("")
   const [selectedTime, setSelectedTime] = useState<string>("")
   const [currentMonth, setCurrentMonth] = useState(new Date())
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 })
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const onChangeRef = useRef(onChange)
+  useEffect(() => { onChangeRef.current = onChange }, [onChange])
+  const lastEmittedRef = useRef<string>("")
 
-  // Initialize from value prop
+  const updatePos = useCallback(() => {
+    if (!triggerRef.current) return
+    const rect = triggerRef.current.getBoundingClientRect()
+    setDropdownPos({ top: rect.bottom + window.scrollY + 4, left: rect.left + window.scrollX })
+  }, [])
+
   useEffect(() => {
+    if (isOpen) {
+      updatePos()
+      window.addEventListener('scroll', updatePos, true)
+      window.addEventListener('resize', updatePos)
+    }
+    return () => {
+      window.removeEventListener('scroll', updatePos, true)
+      window.removeEventListener('resize', updatePos)
+    }
+  }, [isOpen, updatePos])
+
+  // Close on outside click
+  useEffect(() => {
+    if (!isOpen) return
+    const handleClick = (e: MouseEvent) => {
+      if (triggerRef.current && !triggerRef.current.contains(e.target as Node)) {
+        // Check if click is inside the portal dropdown
+        const portal = document.getElementById('date-time-picker-portal')
+        if (portal && portal.contains(e.target as Node)) return
+        setIsOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [isOpen])
+
+  // Initialize from value prop — skip if we emitted this value (prevents timezone round-trip loop)
+  useEffect(() => {
+    if (value === lastEmittedRef.current) return
     if (value) {
       const date = new Date(value)
       if (!isNaN(date.getTime())) {
-        setSelectedDate(date.toISOString().split('T')[0])
+        // Use local date and time consistently to avoid UTC/local mismatch
+        const y = date.getFullYear()
+        const m = String(date.getMonth() + 1).padStart(2, '0')
+        const d = String(date.getDate()).padStart(2, '0')
+        lastEmittedRef.current = value
+        setSelectedDate(`${y}-${m}-${d}`)
         setSelectedTime(date.toTimeString().slice(0, 5))
       }
+    } else {
+      lastEmittedRef.current = ""
+      setSelectedDate("")
+      setSelectedTime("")
     }
   }, [value])
 
-  // Update parent when date or time changes
+  // Update parent only when the value actually changed (prevents onChange reference loops)
   useEffect(() => {
     if (selectedDate && selectedTime) {
-      const dateTime = new Date(`${selectedDate}T${selectedTime}`)
-      onChange(dateTime.toISOString())
-    }
-  }, [selectedDate, selectedTime, onChange])
-
-  // Set default time if none selected
-  useEffect(() => {
-    if (selectedDate && !selectedTime) {
-      // Set default time to current time + 1 hour
-      const now = new Date()
-      const defaultTime = new Date(now.getTime() + 60 * 60 * 1000) // +1 hour
-      setSelectedTime(defaultTime.toTimeString().slice(0, 5))
+      // Construct as local datetime to stay consistent with how we parse value back
+      const [h, min] = selectedTime.split(':').map(Number)
+      const [y, mo, d] = selectedDate.split('-').map(Number)
+      const dt = new Date(y, mo - 1, d, h, min)
+      const iso = dt.toISOString()
+      if (iso !== lastEmittedRef.current) {
+        lastEmittedRef.current = iso
+        onChangeRef.current(iso)
+      }
     }
   }, [selectedDate, selectedTime])
 
+  // Apply default time when a date is picked but no time has been set yet
+  useEffect(() => {
+    if (selectedDate && !selectedTime) {
+      const resolved = defaultTime ?? new Date().toTimeString().slice(0, 5)
+      setSelectedTime(resolved)
+    }
+  }, [selectedDate, selectedTime, defaultTime])
+
   const formatDisplayValue = () => {
     if (!selectedDate) return placeholder
-    
-    const date = new Date(selectedDate)
+
+    const [y, mo, d] = selectedDate.split('-').map(Number)
+    const date = new Date(y, mo - 1, d)
     const dateStr = date.toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric'
     })
-    
+
     if (selectedTime) {
       const timeDate = new Date(`2000-01-01T${selectedTime}`)
       const timeStr = timeDate.toLocaleTimeString('en-US', {
@@ -72,7 +136,7 @@ export function DateTimePicker({
       })
       return `${dateStr} at ${timeStr}`
     }
-    
+
     return `${dateStr} (time not set)`
   }
 
@@ -80,42 +144,35 @@ export function DateTimePicker({
     const year = currentMonth.getFullYear()
     const month = currentMonth.getMonth()
     const firstDay = new Date(year, month, 1)
-    const lastDay = new Date(year, month + 1, 0)
     const startDate = new Date(firstDay)
     startDate.setDate(startDate.getDate() - firstDay.getDay())
-    
+
     const days = []
     const today = new Date()
     today.setHours(0, 0, 0, 0)
-    
+
     for (let i = 0; i < 42; i++) {
       const date = new Date(startDate)
       date.setDate(startDate.getDate() + i)
-      
+
+      // Use local date string to avoid UTC off-by-one in non-UTC timezones
+      const localDateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
       const isCurrentMonth = date.getMonth() === month
       const isToday = date.getTime() === today.getTime()
-      const isSelected = selectedDate === date.toISOString().split('T')[0]
-      const isPast = date < today
-      
+      const isSelected = selectedDate === localDateStr
+      const isFuture = date > today
+
       days.push({
         date: date.getDate(),
-        fullDate: date.toISOString().split('T')[0],
+        fullDate: localDateStr,
         isCurrentMonth,
         isToday,
         isSelected,
-        isPast
+        isFuture
       })
     }
-    
+
     return days
-  }
-
-  const handleDateSelect = (dateStr: string) => {
-    setSelectedDate(dateStr)
-  }
-
-  const handleTimeChange = (timeStr: string) => {
-    setSelectedTime(timeStr)
   }
 
   const navigateMonth = (direction: 'prev' | 'next') => {
@@ -130,10 +187,16 @@ export function DateTimePicker({
     })
   }
 
+  const nowTime = () => {
+    const now = new Date()
+    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+  }
+
   const setToday = () => {
-    const today = new Date()
-    setSelectedDate(today.toISOString().split('T')[0])
-    setSelectedTime(today.toTimeString().slice(0, 5))
+    const now = new Date()
+    const localDateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    setSelectedDate(localDateStr)
+    setSelectedTime(defaultTime ?? '23:59')
   }
 
   const clearSelection = () => {
@@ -142,169 +205,186 @@ export function DateTimePicker({
     onChange("")
   }
 
+  const dropdown = isOpen ? (
+    <div
+      id="date-time-picker-portal"
+      style={{ position: 'absolute', top: dropdownPos.top, left: dropdownPos.left, zIndex: 9999 }}
+      className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 w-72"
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-xs font-semibold text-gray-900">Select Date & Time</h3>
+        <button
+          onClick={() => setIsOpen(false)}
+          className="text-gray-400 hover:text-gray-600 text-sm leading-none"
+        >
+          ×
+        </button>
+      </div>
+
+      {/* Calendar */}
+      <div className="mb-3">
+        <div className="flex items-center justify-between mb-2">
+          <button
+            onClick={() => navigateMonth('prev')}
+            className="p-1 hover:bg-gray-100 rounded text-sm leading-none"
+          >
+            ‹
+          </button>
+          <h4 className="text-xs font-medium">
+            {currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+          </h4>
+          <button
+            onClick={() => navigateMonth('next')}
+            className="p-1 hover:bg-gray-100 rounded text-sm leading-none"
+          >
+            ›
+          </button>
+        </div>
+
+        {/* Day headers */}
+        <div className="grid grid-cols-7 gap-1 mb-1">
+          {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(day => (
+            <div key={day} className="text-xs text-gray-500 text-center p-1">
+              {day}
+            </div>
+          ))}
+        </div>
+
+        {/* Calendar days */}
+        <div className="grid grid-cols-7 gap-1">
+          {generateCalendarDays().map((day, index) => (
+            <button
+              key={index}
+              onClick={() => setSelectedDate(day.fullDate)}
+              disabled={day.isFuture}
+              className={`
+                text-xs p-2 rounded transition-colors
+                ${day.isCurrentMonth ? 'text-gray-900' : 'text-gray-400'}
+                ${day.isToday ? 'bg-gray-100 text-gray-900 font-semibold ring-2 ring-gray-300' : ''}
+                ${day.isSelected ? 'bg-gray-900 text-white hover:bg-gray-800 font-semibold' : ''}
+                ${!day.isSelected && !day.isToday ? 'hover:bg-gray-100' : ''}
+                ${day.isFuture ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}
+              `}
+            >
+              {day.date}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="border-t border-gray-100 my-2" />
+
+      {/* Time picker */}
+      <div className="mb-3">
+        <div className="flex items-center justify-between mb-1.5">
+          <label className="text-xs font-medium text-gray-700">
+            <Clock className="inline h-3 w-3 mr-1" />
+            Time
+          </label>
+        </div>
+        {(() => {
+          const HOURS = [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+          const MINUTES = Array.from({ length: 60 }, (_, i) => i)
+
+          const [selH24, selMin] = selectedTime
+            ? selectedTime.split(':').map(Number)
+            : [0, 0]
+          const selAmPm = selH24 >= 12 ? 'PM' : 'AM'
+          const selH12 = selH24 % 12 === 0 ? 12 : selH24 % 12
+
+          const applyTime = (h12: number, min: number, ampm: string) => {
+            let h24 = h12 % 12
+            if (ampm === 'PM') h24 += 12
+            const t = `${String(h24).padStart(2, '0')}:${String(min).padStart(2, '0')}`
+            const now = new Date()
+            const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+            const nowTime = now.toTimeString().slice(0, 5)
+            const isToday = disableFutureTimes && selectedDate === todayStr
+            setSelectedTime(isToday && t > nowTime ? nowTime : t)
+          }
+
+          const cellCls = (active: boolean) =>
+            `text-xs p-1.5 rounded transition-colors w-full text-center ${
+              active
+                ? 'bg-gray-100 text-gray-900 font-semibold outline outline-2 outline-gray-400'
+                : 'text-gray-700 hover:bg-gray-100 cursor-pointer'
+            }`
+
+          return (
+            <div className="flex gap-1 px-0.5">
+              {/* Hours */}
+              <div className="flex-1 flex flex-col gap-0.5">
+                <div className="text-[10px] font-medium text-gray-400 text-center pb-0.5">Hrs</div>
+                <div className="max-h-[120px] overflow-y-auto flex flex-col gap-0.5 p-0.5">
+                  {HOURS.map((h) => (
+                    <button key={h} type="button" className={cellCls(selH12 === h && !!selectedTime)} onClick={() => applyTime(h, selMin, selAmPm)}>
+                      {String(h).padStart(2, '0')}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {/* Minutes */}
+              <div className="flex-1 flex flex-col gap-0.5">
+                <div className="text-[10px] font-medium text-gray-400 text-center pb-0.5">Mins</div>
+                <div className="max-h-[120px] overflow-y-auto flex flex-col gap-0.5 p-0.5">
+                  {MINUTES.map((m) => (
+                    <button key={m} type="button" className={cellCls(selMin === m && !!selectedTime)} onClick={() => applyTime(selH12, m, selAmPm)}>
+                      {String(m).padStart(2, '0')}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {/* AM / PM */}
+              <div className="flex-1 flex flex-col gap-0.5 p-0.5">
+                <div className="text-[10px] font-medium text-gray-400 text-center pb-0.5">&nbsp;</div>
+                {(['AM', 'PM'] as const).map((p) => (
+                  <button key={p} type="button" className={cellCls(selAmPm === p && !!selectedTime)} onClick={() => applyTime(selH12, selMin, p)}>
+                    {p}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )
+        })()}
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center justify-between pt-1">
+        <div className="flex space-x-1.5">
+          <button type="button" onClick={setToday} className="px-2 h-7 text-xs bg-gray-100 hover:bg-gray-200 rounded text-gray-700 transition-colors">
+            Today
+          </button>
+          <button type="button" onClick={() => { const n = new Date(); const d = `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; setSelectedDate(d); setSelectedTime(nowTime()) }} className="px-2 h-7 text-xs bg-gray-100 hover:bg-gray-200 rounded text-gray-700 transition-colors">
+            Now
+          </button>
+        </div>
+        <div className="flex space-x-1.5">
+          <button type="button" onClick={clearSelection} className="px-2 h-7 text-xs bg-gray-100 hover:bg-gray-200 rounded text-gray-700 transition-colors">
+            Clear
+          </button>
+          <Button size="sm" onClick={() => setIsOpen(false)} disabled={!selectedDate} className="text-xs h-7 px-3 bg-gray-900 hover:bg-gray-800 text-white">
+            Done
+          </Button>
+        </div>
+      </div>
+    </div>
+  ) : null
+
   return (
     <div className={`relative ${className}`}>
       <Button
+        ref={triggerRef}
         variant="outline"
         onClick={() => setIsOpen(!isOpen)}
         disabled={disabled}
-        className="w-full justify-start text-left font-normal"
+        className="w-full justify-start text-left font-normal text-xs"
       >
-        <Calendar className="mr-2 h-4 w-4" />
+        <Calendar className="mr-1.5 h-3 w-3 shrink-0" />
         {formatDisplayValue()}
       </Button>
 
-      {isOpen && (
-        <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 p-4 w-80">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-gray-900">Select Date & Time</h3>
-            <button
-              onClick={() => setIsOpen(false)}
-              className="text-gray-400 hover:text-gray-600"
-            >
-              ×
-            </button>
-          </div>
-
-          {/* Calendar */}
-          <div className="mb-4">
-            <div className="flex items-center justify-between mb-2">
-              <button
-                onClick={() => navigateMonth('prev')}
-                className="p-1 hover:bg-gray-100 rounded"
-              >
-                ‹
-              </button>
-              <h4 className="text-sm font-medium">
-                {currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-              </h4>
-              <button
-                onClick={() => navigateMonth('next')}
-                className="p-1 hover:bg-gray-100 rounded"
-              >
-                ›
-              </button>
-            </div>
-
-            {/* Day headers */}
-            <div className="grid grid-cols-7 gap-1 mb-1">
-              {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(day => (
-                <div key={day} className="text-xs text-gray-500 text-center p-1">
-                  {day}
-                </div>
-              ))}
-            </div>
-
-            {/* Calendar days */}
-            <div className="grid grid-cols-7 gap-1">
-              {generateCalendarDays().map((day, index) => (
-                <button
-                  key={index}
-                  onClick={() => handleDateSelect(day.fullDate)}
-                  disabled={day.isPast && !day.isToday}
-                  className={`
-                    text-xs p-2 rounded transition-colors
-                    ${day.isCurrentMonth ? 'text-gray-900' : 'text-gray-400'}
-                    ${day.isToday ? 'bg-blue-100 text-blue-600 font-semibold ring-2 ring-blue-200' : ''}
-                    ${day.isSelected ? 'bg-blue-600 text-white hover:bg-blue-700 font-semibold' : ''}
-                    ${!day.isSelected && !day.isToday ? 'hover:bg-gray-100' : ''}
-                    ${day.isPast && !day.isToday ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
-                  `}
-                >
-                  {day.date}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Time picker */}
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              <Clock className="inline h-4 w-4 mr-1" />
-              Time
-            </label>
-            <div className="flex items-center space-x-2">
-              <input
-                type="time"
-                value={selectedTime}
-                onChange={(e) => handleTimeChange(e.target.value)}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                step="900" // 15-minute intervals
-              />
-              <div className="flex flex-col space-y-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const now = new Date()
-                    setSelectedTime(now.toTimeString().slice(0, 5))
-                  }}
-                  className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded text-gray-700 transition-colors"
-                >
-                  Now
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const now = new Date()
-                    const nextHour = new Date(now.getTime() + 60 * 60 * 1000)
-                    setSelectedTime(nextHour.toTimeString().slice(0, 5))
-                  }}
-                  className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded text-gray-700 transition-colors"
-                >
-                  +1h
-                </button>
-              </div>
-            </div>
-            <div className="mt-2 flex flex-wrap gap-1">
-              {['09:00', '12:00', '15:00', '18:00'].map((time) => (
-                <button
-                  key={time}
-                  type="button"
-                  onClick={() => setSelectedTime(time)}
-                  className={`px-2 py-1 text-xs rounded transition-colors ${
-                    selectedTime === time
-                      ? 'bg-blue-100 text-blue-700 border border-blue-200'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  {time}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Actions */}
-          <div className="flex items-center justify-between">
-            <div className="flex space-x-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={setToday}
-                className="text-xs"
-              >
-                Today
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={clearSelection}
-                className="text-xs"
-              >
-                Clear
-              </Button>
-            </div>
-            <Button
-              size="sm"
-              onClick={() => setIsOpen(false)}
-              disabled={!selectedDate}
-              className="text-xs"
-            >
-              Done
-            </Button>
-          </div>
-        </div>
-      )}
+      {typeof document !== 'undefined' && createPortal(dropdown, document.body)}
     </div>
   )
 }

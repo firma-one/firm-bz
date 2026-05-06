@@ -22,6 +22,27 @@ function formatVerboseDateTimeWithTZ(date: Date | string | undefined): string {
 const LIGHT_TOOLTIP_CLASS =
   'z-[9999] max-w-[340px] p-3 text-xs bg-white text-slate-900 border border-slate-200 shadow-xl break-words'
 
+/** Controls what text is rendered inline next to the clock icon. */
+export type RelativeDateTimeFormat =
+  | 'relative' // "18m ago"  (default)
+  | 'short'    // "May 06, 2026"
+  | 'iso'      // "2026-05-06 15:46:03.116 UTC"
+  | 'verbose'  // "18m ago · Wed, May 06, 2026 21:17 GMT+5:30"
+
+function formatShortDate(date: Date | string): string {
+  const d = new Date(date)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })
+}
+
+function formatISODate(date: Date | string): string {
+  const d = new Date(date)
+  if (Number.isNaN(d.getTime())) return ''
+  const iso = d.toISOString()
+  const [datePart, timePart] = iso.split('T')
+  return `${datePart} ${timePart.replace('Z', '')} UTC`
+}
+
 export function RelativeDateTime({
   date,
   className,
@@ -29,6 +50,7 @@ export function RelativeDateTime({
   iconClassName,
   tooltipSide = 'top',
   iconOnly = false,
+  displayFormat = 'relative',
 }: {
   date: Date | string
   className?: string
@@ -36,31 +58,44 @@ export function RelativeDateTime({
   iconClassName?: string
   tooltipSide?: 'top' | 'bottom' | 'left' | 'right'
   iconOnly?: boolean
+  displayFormat?: RelativeDateTimeFormat
 }) {
   const relative = useMemo(() => formatRelativeTime(date), [date])
   const full = useMemo(() => formatVerboseDateTimeWithTZ(date), [date])
 
+  const displayText = useMemo(() => {
+    if (displayFormat === 'short') return formatShortDate(date)
+    if (displayFormat === 'iso') return formatISODate(date)
+    if (displayFormat === 'verbose') return `${relative} · ${full}`
+    return relative
+  }, [displayFormat, date, relative, full])
+
+  const isMonoFormat = displayFormat === 'iso'
+
   return (
-    <span className={cn('inline-flex items-center gap-1.5', className)}>
-      <Tooltip>
-        <TooltipTrigger asChild>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className={cn('inline-flex items-center gap-1.5 cursor-default', className)}>
           <span
-            role="img"
-            aria-label="Show full date time"
+            aria-hidden
             className={cn(
-              'inline-flex h-5 w-5 items-center justify-center rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100/80 transition-colors',
+              'inline-flex h-5 w-5 items-center justify-center rounded-md text-slate-400 transition-colors',
               iconClassName
             )}
           >
             <Clock className="h-3.5 w-3.5" />
           </span>
-        </TooltipTrigger>
-        <TooltipContent side={tooltipSide} className={LIGHT_TOOLTIP_CLASS}>
-          {iconOnly ? full : `${relative} · ${full}`}
-        </TooltipContent>
-      </Tooltip>
-      {!iconOnly && <span className={cn('tabular-nums', textClassName)}>{relative}</span>}
-    </span>
+          {!iconOnly && (
+            <span className={cn('tabular-nums', isMonoFormat && 'font-mono text-xs', textClassName)}>
+              {displayText}
+            </span>
+          )}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side={tooltipSide} className={LIGHT_TOOLTIP_CLASS}>
+        {`${relative} · ${full}`}
+      </TooltipContent>
+    </Tooltip>
   )
 }
 

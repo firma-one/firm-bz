@@ -9,5 +9,6 @@ export function buildDefaultSandboxFirmName(
 ): string {
     const t = (firstName ?? '').trim()
     if (!t) return fallback
-    return `${t}'s Firm`
+    const capitalized = t.charAt(0).toUpperCase() + t.slice(1)
+    return `${capitalized}'s Firm`
 }

@@ -17,7 +17,7 @@ export default async function FirmPage({ params }: { params: Promise<{ slug: str
         const [firmMemberCount, firmInviteCount, firmAuditCount] = await Promise.all([
             (basePrisma as any).firmMember.count({ where: { firmId } }),
             (basePrisma as any).firmInvitation.count({ where: { firmId, status: { not: 'JOINED' } } }),
-            (basePrisma as any).platformAuditEvent.count({ where: { firmId, scope: 'PROJECT' } }),
+            (basePrisma as any).platformAuditEvent.count({ where: { firmId } }),
         ])
         memberCount = firmMemberCount + firmInviteCount
         auditCount = firmAuditCount

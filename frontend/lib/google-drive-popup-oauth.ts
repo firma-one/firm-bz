@@ -55,6 +55,8 @@ export type InitiateGoogleDriveOAuthPopupParams = {
   /** Post-OAuth redirect when not using popup close (server still receives `next` in state). */
   next?: string | null
   rootFolderId?: string | null
+  /** When true, the callback will skip auto-creating the default workspace folder (e.g. Shared Drive flow). */
+  skipAutoFolder?: boolean
   headers?: HeadersInit
 }
 
@@ -78,6 +80,7 @@ export async function initiateGoogleDriveOAuthPopup(
       organizationId: params.organizationId,
       next: params.next ?? null,
       rootFolderId: params.rootFolderId ?? null,
+      skipAutoFolder: params.skipAutoFolder ?? false,
       flow: 'popup',
       openerOrigin: typeof window !== 'undefined' ? window.location.origin : undefined,
     }),

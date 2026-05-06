@@ -576,7 +576,7 @@ export function GoogleDriveWorkspaceRoot({
                     <li>
                       Open{" "}
                       {isShared ? (
-                        <ExternalDriveLink href={sharedDrivesOpenUrl}>Google Drive shared drives</ExternalDriveLink>
+                        <ExternalDriveLink href={sharedDrivesOpenUrl}>Google Drive &gt; Shared drives</ExternalDriveLink>
                       ) : (
                         <ExternalDriveLink href={myDriveOpenUrl}>My Drive</ExternalDriveLink>
                       )}

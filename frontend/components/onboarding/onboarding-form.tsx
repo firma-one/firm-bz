@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label'
 import { isValidEmail, isGoogleEmail, isPotentiallyGoogleWorkspace, generateDefaultOrgName } from '@/lib/email-utils'
 import { AuthService } from '@/lib/auth-service'
 import { supabase } from '@/lib/supabase'
-import { ArrowLeft, ArrowRight, Check } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, CheckCircle2 } from 'lucide-react'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import {
     Tooltip,
@@ -25,7 +25,7 @@ import {
     type SignupStepKey,
 } from '@/components/onboarding/signup-step-progress'
 import { Turnstile } from '@marsidev/react-turnstile'
-import { sendOTPWithTurnstile } from '@/app/actions/send-otp'
+import { checkEmailExists, sendOTPWithTurnstile } from '@/app/actions/send-otp'
 import { sendEvent, ANALYTICS_EVENTS } from "@/lib/analytics"
 import { logger } from '@/lib/logger'
 import { persistCheckoutIntent } from '@/lib/marketing/checkout-intent'
@@ -105,6 +105,7 @@ export function OnboardingForm({
     onProgressIndexChange,
 }: OnboardingFormProps) {
     const searchParams = useSearchParams()
+    const router = useRouter()
     const firstNameInputRef = useRef<HTMLInputElement>(null)
     const emailInputRef = useRef<HTMLInputElement>(null)
     const isSplitLight = layout === 'split-light'
@@ -125,6 +126,10 @@ export function OnboardingForm({
     const [isReturningUser, setIsReturningUser] = useState(false) // User exists, OTP already sent
     const [existingAccountMessage, setExistingAccountMessage] = useState('')
 
+    // Success state
+    const [successNavTarget, setSuccessNavTarget] = useState('/d/onboarding')
+    const [countdown, setCountdown] = useState(5)
+
     useEffect(() => {
         onStepChange?.(step)
     }, [step, onStepChange])
@@ -141,6 +146,22 @@ export function OnboardingForm({
         }
     }, [searchParams])
 
+    // Auto-navigate after signup success
+    useEffect(() => {
+        if (step !== 'success') return
+        if (countdown <= 0) {
+            router.push(successNavTarget)
+            return
+        }
+        const t = setTimeout(() => setCountdown((c) => c - 1), 1000)
+        return () => clearTimeout(t)
+    }, [step, countdown, successNavTarget, router])
+
+    const handleSkipOnboarding = async () => {
+        await supabase.auth.signOut()
+        window.location.href = '/'
+    }
+
     // Check if user is already logged in — full navigation so `/d` RSC sees auth cookies (same as post-OTP).
     useEffect(() => {
         const checkSession = async () => {
@@ -152,16 +173,15 @@ export function OnboardingForm({
         void checkSession()
     }, [])
 
-    // Handle email check via OTP (called after Turnstile success)
+    // Handle email check (called after Turnstile success) — checks existence only, no OTP sent
     const handleEmailCheckWithOTP = async (token: string) => {
         setLoading(true)
         setError('')
         setExistingAccountMessage('')
 
         try {
-            // Send OTP with checkExistingFirst=true to detect existing users
-            const result = await sendOTPWithTurnstile(email, token, true)
-            
+            const result = await checkEmailExists(email, token)
+
             if (!result.success) {
                 setError(result.error || 'Failed to verify email')
                 setLoading(false)
@@ -279,11 +299,11 @@ export function OnboardingForm({
         })
     }
 
-    // Send OTP using a Turnstile token (used by button and by Turnstile onSuccess to avoid double-click)
+    // Send OTP using a Turnstile token — includes name so it's written to raw_user_meta_data on creation
     const sendOTPWithToken = async (token: string) => {
         setLoading(true)
         setError('')
-        const result = await sendOTPWithTurnstile(email, token)
+        const result = await sendOTPWithTurnstile(email, token, firstName.trim() || undefined, lastName.trim() || undefined)
         if (!result.success) {
             setError(result.error || 'Failed to send verification code')
             setLoading(false)
@@ -328,24 +348,6 @@ export function OnboardingForm({
             return
         }
 
-        // OTP verified successfully — persist display name so profile menu shows "First Last" (not email prefix).
-        const fn = firstName.trim()
-        const ln = lastName.trim()
-        if (fn && ln) {
-            const fullName = `${fn} ${ln}`
-            const { error: metaErr } = await supabase.auth.updateUser({
-                data: {
-                    first_name: fn,
-                    last_name: ln,
-                    full_name: fullName,
-                    name: fullName,
-                },
-            })
-            if (metaErr) {
-                logger.warn('Failed to persist name to auth metadata after signup', metaErr)
-            }
-        }
-
         // Clear onboarding data
         AuthService.clearOnboardingData()
 
@@ -365,33 +367,39 @@ export function OnboardingForm({
             method: 'email'
         })
 
+        // Resolve the post-signup destination
         const nextRel = searchParams.get('next') || searchParams.get('redirect')
         const isSafeRedirect = nextRel && nextRel.startsWith('/')
+        let navTarget = '/d/onboarding'
         if (isSafeRedirect && nextRel) {
-            const normalized =
+            navTarget =
                 nextRel === '/dash' || nextRel.startsWith('/dash/')
                     ? '/d' + (nextRel === '/dash' ? '' : nextRel.slice(5))
                     : nextRel
-            window.location.href = normalized
+        } else {
+            try {
+                const response = await fetch('/api/firms/default-slug', { cache: 'no-store' })
+                if (response.ok) {
+                    const data = await response.json()
+                    if (data.slug && data.onboardingComplete) {
+                        navTarget = `/d/f/${data.slug}`
+                    }
+                }
+            } catch {
+                /* fall through to /d/onboarding */
+            }
+        }
+
+        // Returning users go straight through; new signups see the success screen
+        if (isReturningUser) {
+            window.location.href = navTarget
             return
         }
 
-        await new Promise((resolve) => setTimeout(resolve, 150))
-
-        try {
-            const response = await fetch('/api/firms/default-slug', { cache: 'no-store' })
-            if (response.ok) {
-                const data = await response.json()
-                if (data.slug && data.onboardingComplete) {
-                    window.location.href = `/d/f/${data.slug}`
-                    return
-                }
-            }
-        } catch {
-            /* fall through to onboarding */
-        }
-
-        window.location.href = '/d/onboarding'
+        setSuccessNavTarget(navTarget)
+        setCountdown(8)
+        setStep('success')
+        setLoading(false)
     }
 
     const inputClass = isSplitLight ? inputLight : inputDark
@@ -880,6 +888,55 @@ export function OnboardingForm({
                             Continue with Google
                         </Button>
                     )}
+                </div>
+            )}
+
+            {/* Step 4: Success */}
+            {step === 'success' && (
+                <div className="animate-in fade-in slide-in-from-bottom-2 space-y-6 duration-300">
+                    {/* Icon */}
+                    <div className={isSplitLight ? 'flex justify-start' : 'flex justify-center'}>
+                        <div
+                            className={`flex h-14 w-14 items-center justify-center rounded-full ${
+                                isSplitLight ? 'bg-[#72ff70]/15' : 'bg-[#72ff70]/10'
+                            }`}
+                        >
+                            <CheckCircle2
+                                className={`h-8 w-8 ${isSplitLight ? 'text-[#006e16]' : 'text-[#72ff70]'}`}
+                                strokeWidth={1.5}
+                            />
+                        </div>
+                    </div>
+
+                    {/* Headline */}
+                    <div className={isSplitLight ? 'text-left' : 'text-center'}>
+                        <h2
+                            className={`mb-1.5 text-xl font-bold tracking-tight ${H} ${
+                                isSplitLight ? 'text-[#1b1b1d]' : 'text-white'
+                            }`}
+                        >
+                            You&apos;re in{firstName ? `, ${firstName}` : ''}!
+                        </h2>
+                        <p className={`text-sm ${isSplitLight ? 'text-[#45474c]' : 'text-slate-400'}`}>
+                            Auto redirecting to Onboarding&hellip;
+                        </p>
+                    </div>
+
+                    {/* Skip CTA — dark button with left-to-right timer fill; clicking cancels and signs out */}
+                    <button
+                        onClick={() => void handleSkipOnboarding()}
+                        className={`${H} relative w-full overflow-hidden rounded-md bg-slate-800 px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-white transition-colors hover:bg-slate-700 active:bg-slate-900`}
+                    >
+                        {/* Timer fill — slides left→right over 8s, 1s CSS transition matches the countdown interval */}
+                        <span
+                            className="pointer-events-none absolute inset-y-0 left-0 bg-white/10 transition-[width] duration-1000 ease-linear"
+                            style={{ width: `${((8 - countdown) / 8) * 100}%` }}
+                        />
+                        <span className="relative flex items-center justify-between">
+                            <span>Skip onboarding for now</span>
+                            <span className="tabular-nums font-normal opacity-50">{countdown}s</span>
+                        </span>
+                    </button>
                 </div>
             )}
 

@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json().catch(() => ({}))
     const action = body.action as string
-    if (action !== 'skip_subscribe' && action !== 'continue_to_connect') {
+    if (action !== 'skip_subscribe' && action !== 'continue_to_connect' && action !== 'confirm_drive_location') {
       return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
     }
 
@@ -43,14 +43,20 @@ export async function POST(request: NextRequest) {
     const prev = ((firm.settings as Record<string, unknown>) || {}) as Record<string, unknown>
     const prevOn = (prev.onboarding as Record<string, unknown>) || {}
 
-    const nextOnboarding = {
-      ...prevOn,
-      onboardingFlowVersion: 3,
-      stage: 'awaiting_drive',
-      resumeAtStep: 3,
-      subscribeSkipped: action === 'skip_subscribe',
-      lastUpdated: new Date().toISOString(),
-    }
+    const nextOnboarding = action === 'confirm_drive_location'
+      ? {
+          ...prevOn,
+          stage: 'drive_confirmed',
+          lastUpdated: new Date().toISOString(),
+        }
+      : {
+          ...prevOn,
+          onboardingFlowVersion: 3,
+          stage: 'awaiting_drive',
+          resumeAtStep: 3,
+          subscribeSkipped: action === 'skip_subscribe',
+          lastUpdated: new Date().toISOString(),
+        }
 
     await prisma.firm.update({
       where: { id: firm.id },
@@ -63,14 +69,13 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    const event = action === 'skip_subscribe'
-      ? AUDIT_EVENT.ONBOARDING_SUBSCRIBE_SKIPPED
-      : AUDIT_EVENT.ONBOARDING_SUBSCRIBE_COMPLETED
-    audit(event)
-      .scope(AUDIT_SCOPE.FIRM)
-      .firm(firm.id)
-      .actor(user.id)
-      .fireAndForget()
+    if (action === 'skip_subscribe') {
+      audit(AUDIT_EVENT.ONBOARDING_SUBSCRIBE_SKIPPED)
+        .scope(AUDIT_SCOPE.FIRM)
+        .firm(firm.id)
+        .actor(user.id)
+        .fireAndForget()
+    }
 
     return NextResponse.json({ ok: true })
   } catch (error) {

@@ -71,8 +71,9 @@ export async function POST(request: NextRequest) {
         userId,
         organizationId: body.organizationId,
         rootFolderId: rootFolderId || null,
-        next: body.next || null, // Will redirect to org connectors page or /d if no org found
+        next: body.next || null,
         flow,
+        skipAutoFolder: body.skipAutoFolder === true,
         ...(nonce && { nonce }),
         ...(flow === 'popup' && body.openerOrigin && { openerOrigin: body.openerOrigin })
       }
@@ -99,6 +100,19 @@ export async function POST(request: NextRequest) {
       }
       if (nonce) response.nonce = nonce
       return NextResponse.json(response)
+    }
+
+    if (action === 'ensure-my-drive-workspace') {
+      if (!connectionId) {
+        return NextResponse.json({ error: 'Connection ID required' }, { status: 400 })
+      }
+      const { prisma } = require('@/lib/prisma')
+      const connector = await prisma.connector.findUnique({ where: { id: connectionId } })
+      if (!connector) return NextResponse.json({ error: 'Connector not found' }, { status: 404 })
+      const token = await googleDriveConnector.getAccessToken(connectionId)
+      if (!token) return NextResponse.json({ error: 'Could not obtain access token' }, { status: 500 })
+      await googleDriveConnector.ensureDefaultWorkspaceRoot(connectionId, token)
+      return NextResponse.json({ ok: true })
     }
 
     if (action === 'test') {
@@ -562,6 +576,7 @@ export async function GET(request: NextRequest) {
           ? {
               id: connector.id,
               name: connector.name,
+              email: (connector.settings as any)?.accountEmail || null,
               externalAccountId: connector.externalAccountId,
               rootFolderId,
               rootFolderName,

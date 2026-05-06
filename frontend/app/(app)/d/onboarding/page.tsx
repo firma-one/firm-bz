@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, Suspense, useCallback, useRef } from "react"
+import React, { useState, useEffect, Suspense, useCallback, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useToast } from "@/components/ui/toast"
 import { useAuth } from "@/lib/auth-context"
@@ -26,6 +26,7 @@ import { getUserFirms } from '@/lib/actions/firms'
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { supabase } from "@/lib/supabase"
 import { GooglePickerButton } from "@/components/google-drive/google-picker-button"
+import { GoogleDriveMock, CALLOUTS as DRIVE_MOCK_CALLOUTS, STAGE_TO_STEP } from "@/components/google-drive/google-drive-mock"
 import {
     initiateGoogleDriveOAuthPopup,
     startGoogleDriveOAuthPopup,
@@ -295,11 +296,17 @@ const OnboardingContent = () => {
     const [connectedEmail, setConnectedEmail] = useState<string | null>(null)
     const [hasOpenedPopup, setHasOpenedPopup] = useState(false)
     const [previewDrive, setPreviewDrive] = useState<'My Drive' | 'Shared Drive' | null>(null)
+    const [myDriveCreating, setMyDriveCreating] = useState(false)
+    const [myDriveCreated, setMyDriveCreated] = useState(false)
+    const [myDriveCountdown, setMyDriveCountdown] = useState<number | null>(null)
     const [hasCopied, setHasCopied] = useState(false)
     const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false)
     const [driveLocationConfirmed, setDriveLocationConfirmed] = useState(false)
-    const [sharedDriveWizardStep, setSharedDriveWizardStep] = useState<1 | 2 | 3>(1)
+    const [sharedDriveWizardStep, setSharedDriveWizardStep] = useState<1 | 2>(1)
     const [sharedDriveFolderConfirmed, setSharedDriveFolderConfirmed] = useState(false)
+    const [mockCallout, setMockCallout] = useState(DRIVE_MOCK_CALLOUTS["shared-drives"])
+    const [mockActiveStep, setMockActiveStep] = useState(STAGE_TO_STEP["shared-drives"])
+    const [mockCompleted, setMockCompleted] = useState(false)
     const [workspaceFolderName, setWorkspaceFolderName] = useState("")
     useEffect(() => { void getWorkspaceFolderName().then(setWorkspaceFolderName) }, [])
 
@@ -406,7 +413,7 @@ const OnboardingContent = () => {
                         if (statusData.connector?.id) {
                             setConnectionDetails(prev => ({ ...prev, connectionId: statusData.connector.id }))
                         }
-                        if (statusData.connector?.name) setConnectedEmail(statusData.connector.name)
+                        if (statusData.connector?.email || statusData.connector?.name) setConnectedEmail(statusData.connector.email || statusData.connector.name)
                         if (fetchedRootId) setRootFolderId(fetchedRootId)
                         // Drive is step 3; provisioning runs via effect when root + connection exist.
                     }
@@ -492,19 +499,25 @@ const OnboardingContent = () => {
         if (ids && ids.length > 0) {
             const selectedId = ids[0]
             setRootFolderId(selectedId)
-            // Call API to update root folder
             try {
                 const token = await getAccessToken()
                 if (connectionDetails?.connectionId) {
-                    await fetch('/api/connectors/google-drive', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                        body: JSON.stringify({
-                            action: 'update-root-folder',
-                            connectionId: connectionDetails.connectionId,
-                            rootFolderId: selectedId
+                    await Promise.all([
+                        fetch('/api/connectors/google-drive', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                            body: JSON.stringify({
+                                action: 'update-root-folder',
+                                connectionId: connectionDetails.connectionId,
+                                rootFolderId: selectedId
+                            })
+                        }),
+                        fetch('/api/onboarding/ui-progress', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                            body: JSON.stringify({ action: 'confirm_drive_location' })
                         })
-                    })
+                    ])
                     setDriveLocationConfirmed(true)
                 }
             } catch (e) {
@@ -809,7 +822,7 @@ const OnboardingContent = () => {
                             setIsConnected(statusData.isConnected)
                             if (statusData.connector?.id) {
                                 setConnectionDetails({ connectionId: statusData.connector.id })
-                                if (statusData.connector.name) setConnectedEmail(statusData.connector.name)
+                                if (statusData.connector.email || statusData.connector.name) setConnectedEmail(statusData.connector.email || statusData.connector.name)
                             }
                             if (statusData.connector?.rootFolderId) {
                                 normalLoadRootId = statusData.connector.rootFolderId
@@ -884,7 +897,7 @@ const OnboardingContent = () => {
                                         if (statusData.connector?.id) {
                                             statusConnectorId = statusData.connector.id
                                             setConnectionDetails({ connectionId: statusData.connector.id })
-                                            if (statusData.connector.name) setConnectedEmail(statusData.connector.name)
+                                            if (statusData.connector.email || statusData.connector.name) setConnectedEmail(statusData.connector.email || statusData.connector.name)
                                         }
                                         connectorOnboarding = statusData.connector?.onboarding ?? null
                                         if (statusData.connector?.rootFolderId) {
@@ -987,7 +1000,8 @@ const OnboardingContent = () => {
                                     if (flowV >= 3) {
                                         if (!subscribeSkipped && stage === 'awaiting_subscribe') {
                                             setStep(2)
-                                        } else if (!driveConnected) {
+                                        } else if (!driveConnected || stage === 'awaiting_drive') {
+                                            // Stay on step 3 until folder is selected (stage advances past 'awaiting_drive' only after folder pick)
                                             setStep(3)
                                         } else if (stage === 'provisioning') {
                                             const nm = String(resolvedOrg.name || SANDBOX_FIRM_NAME_FALLBACK)
@@ -996,7 +1010,6 @@ const OnboardingContent = () => {
                                             setStep(4)
                                             driveProvisionStartedRef.current = true
                                         } else {
-                                            // Drive OAuth done; sandbox DB/Drive work runs in Stage 4 only.
                                             setStep(4)
                                         }
                                     } else {
@@ -1058,7 +1071,7 @@ const OnboardingContent = () => {
                 if (fetchedRootId && !cancelled) {
                     setRootFolderId(fetchedRootId)
                     if (data.connector?.id) setConnectionDetails(prev => ({ ...prev, connectionId: data.connector.id }))
-                    if (data.connector?.name) setConnectedEmail(data.connector.name)
+                    if (data.connector?.email || data.connector?.name) setConnectedEmail(data.connector.email || data.connector.name)
                     return
                 }
             } catch {
@@ -1185,6 +1198,14 @@ const OnboardingContent = () => {
         setStep(4)
     }, [step, isConnected, connectionDetails?.connectionId, driveLocationConfirmed])
 
+    // My Drive folder creation countdown → auto-confirm when it hits 0
+    useEffect(() => {
+        if (myDriveCountdown === null) return
+        if (myDriveCountdown <= 0) { setDriveLocationConfirmed(true); return }
+        const t = setTimeout(() => setMyDriveCountdown(c => (c ?? 1) - 1), 1000)
+        return () => clearTimeout(t)
+    }, [myDriveCountdown])
+
     // Fetch authUrl when step is 3 (Google Drive connection). Not static: button stays disabled until this completes.
     useEffect(() => {
         if (step === 3 && !isConnected && user?.id) {
@@ -1209,8 +1230,8 @@ const OnboardingContent = () => {
                                 logger.debug("Onboarding Step 3: Existing connector found, reusing", statusData.connector)
                                 setIsConnected(true)
                                 setConnectionDetails({ connectionId: statusData.connector.id })
-                                if (statusData.connector.name) {
-                                    setConnectedEmail(statusData.connector.name)
+                                if (statusData.connector.externalAccountId || statusData.connector.name) {
+                                    setConnectedEmail(statusData.connector.email || statusData.connector.name)
                                 }
                                 // Ensure org is linked to this connector
                                 if (existingOrg?.id && statusData.connector.id) {
@@ -1248,6 +1269,7 @@ const OnboardingContent = () => {
                             userId: user.id,
                             organizationId,
                             rootFolderId: rootFolderId || null,
+                            skipAutoFolder: true,
                             headers: { Authorization: `Bearer ${token}` },
                         })
                         setAuthUrl(out.authUrl)
@@ -1266,7 +1288,7 @@ const OnboardingContent = () => {
         } else {
             setIsFetchingAuthUrl(false)
         }
-    }, [step, isConnected, user?.id, existingOrg?.id, rootFolderId])
+    }, [step, isConnected, user?.id, existingOrg?.id, rootFolderId, previewDrive])
 
     // Fetch connection details on component mount (to resume from URL redirect)
     useEffect(() => {
@@ -1324,7 +1346,7 @@ const OnboardingContent = () => {
                 </div>
             ) : (
                 <div className="w-full h-full overflow-y-auto px-8 pt-6 pb-8 flex justify-center">
-                    <div className={`w-full ${step === 2 ? 'max-w-5xl' : 'max-w-2xl'}`}>
+                    <div className={`w-full ${step === 2 || step === 3 ? 'max-w-5xl' : 'max-w-2xl'}`}>
                         {/* Onboarding Already Completed — redirect guard */}
                         {step === -1 && (
                             <AlreadyCompletedScreen onGoToDashboard={() => void handleFinish()} />
@@ -1454,23 +1476,30 @@ const OnboardingContent = () => {
                                 </div>
 
                                 {isConnected ? (
-                                    <div className="space-y-4 text-left border-t border-slate-100 pt-4">
-                                        {/* Connected badge */}
-                                        <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
-                                            <div className="flex items-center gap-3">
-                                                <div className="h-10 w-10 rounded-lg bg-white border border-slate-200 flex items-center justify-center">
-                                                    <GoogleDriveIcon size={20} />
-                                                </div>
-                                                <div>
-                                                    <p className="text-sm font-semibold text-slate-900">Google Drive Connected</p>
-                                                    {connectedEmail && (
-                                                        <p className="text-xs text-slate-500">{connectedEmail}</p>
-                                                    )}
-                                                </div>
+                                    <div className="space-y-6 text-left border-t border-slate-100 pt-6">
+                                        {/* Step ① — label + card grouped tightly */}
+                                        <div className="space-y-2">
+                                            <div className="flex items-center gap-2">
+                                                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-[10px] font-bold text-white">1</span>
+                                                <p className="text-sm font-semibold text-slate-800">Google Drive Connected</p>
                                             </div>
-                                            <div className="flex items-center gap-1.5 text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded-md border border-green-100">
-                                                <CheckCircle2 className="h-3 w-3" />
-                                                Verified
+                                            {/* Connected badge */}
+                                            <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="h-10 w-10 rounded-lg bg-white border border-slate-200 flex items-center justify-center">
+                                                        <GoogleDriveIcon size={20} />
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-sm font-semibold text-slate-900">Google Drive Connected</p>
+                                                        {connectedEmail && (
+                                                            <p className="text-xs text-slate-500">{connectedEmail}</p>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-1.5 text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded-md border border-green-100">
+                                                    <CheckCircle2 className="h-3 w-3" />
+                                                    Verified
+                                                </div>
                                             </div>
                                         </div>
 
@@ -1481,7 +1510,35 @@ const OnboardingContent = () => {
                                                 <div className="grid grid-cols-2 gap-3">
                                                     <button
                                                         type="button"
-                                                        onClick={() => setPreviewDrive("My Drive")}
+                                                        onClick={async () => {
+                                                            setPreviewDrive("My Drive")
+                                                            setMyDriveCreating(true)
+                                                            setMyDriveCreated(false)
+                                                            setMyDriveCountdown(null)
+                                                            try {
+                                                                const token = await getAccessToken()
+                                                                if (token && connectionDetails?.connectionId) {
+                                                                    await Promise.all([
+                                                                        fetch('/api/connectors/google-drive', {
+                                                                            method: 'POST',
+                                                                            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                                                                            body: JSON.stringify({ action: 'ensure-my-drive-workspace', connectionId: connectionDetails.connectionId })
+                                                                        }),
+                                                                        fetch('/api/onboarding/ui-progress', {
+                                                                            method: 'POST',
+                                                                            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                                                                            body: JSON.stringify({ action: 'confirm_drive_location' })
+                                                                        })
+                                                                    ])
+                                                                }
+                                                            } catch (e) {
+                                                                logger.error('Failed to create My Drive workspace', e as Error)
+                                                            } finally {
+                                                                setMyDriveCreating(false)
+                                                                setMyDriveCreated(true)
+                                                                setMyDriveCountdown(3)
+                                                            }
+                                                        }}
                                                         className="group flex flex-col items-start gap-3 rounded-2xl border-2 border-slate-100 bg-white p-5 text-left transition-all hover:border-slate-900 hover:shadow-lg active:scale-[0.98]"
                                                     >
                                                         <div className="flex items-center gap-3">
@@ -1513,66 +1570,159 @@ const OnboardingContent = () => {
                                             </div>
                                         ) : previewDrive === "My Drive" ? (
                                             <div className="animate-in fade-in slide-in-from-top-2 duration-300 space-y-4">
-                                                <div className="flex items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50/60 px-4 py-3">
-                                                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
-                                                    <p className="text-sm text-slate-700">
-                                                        Your workspace folder has been created in <span className="font-semibold">My Drive</span>.
-                                                    </p>
-                                                </div>
-                                                <div className="flex items-center justify-between gap-3">
-                                                    <Button
-                                                        type="button"
-                                                        variant="outline"
-                                                        size="sm"
-                                                        onClick={() => setPreviewDrive(null)}
-                                                        className="border-slate-300 text-slate-600"
-                                                    >
-                                                        <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
-                                                        Change location
-                                                    </Button>
-                                                    <Button
-                                                        type="button"
-                                                        className="bg-slate-900 text-white hover:bg-slate-800 rounded-xl font-bold"
-                                                        onClick={() => setDriveLocationConfirmed(true)}
-                                                    >
-                                                        Continue
-                                                        <ArrowRight className="ml-2 h-4 w-4" />
-                                                    </Button>
-                                                </div>
+                                                {myDriveCreating ? (
+                                                    <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                                                        <svg className="h-4 w-4 shrink-0 animate-spin text-slate-500" viewBox="0 0 24 24" fill="none">
+                                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                                                        </svg>
+                                                        <p className="text-sm text-slate-600">Creating workspace folder in My Drive…</p>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50/60 px-4 py-3">
+                                                        <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+                                                        <p className="text-sm text-slate-700">
+                                                            Workspace folder created in <span className="font-semibold">My Drive</span>.
+                                                            {myDriveCountdown !== null && myDriveCountdown > 0 && (
+                                                                <span className="ml-1 text-slate-400">Continuing in {myDriveCountdown}s…</span>
+                                                            )}
+                                                        </p>
+                                                    </div>
+                                                )}
+                                                {!myDriveCreating && (
+                                                    <div className="flex items-center justify-between gap-3">
+                                                        <Button
+                                                            type="button"
+                                                            variant="outline"
+                                                            size="sm"
+                                                            onClick={() => { setPreviewDrive(null); setMyDriveCreated(false); setMyDriveCountdown(null) }}
+                                                            className="border-slate-300 text-slate-600"
+                                                        >
+                                                            <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
+                                                            Change location
+                                                        </Button>
+                                                        <Button
+                                                            type="button"
+                                                            className="bg-slate-900 text-white hover:bg-slate-800 rounded-xl font-bold"
+                                                            onClick={() => setDriveLocationConfirmed(true)}
+                                                        >
+                                                            Continue now
+                                                            <ArrowRight className="ml-2 h-4 w-4" />
+                                                        </Button>
+                                                    </div>
+                                                )}
                                             </div>
                                         ) : (
-                                            /* Shared Drive — step-by-step wizard */
+                                            /* Shared Drive — 2-step wizard */
                                             <div className="animate-in fade-in slide-in-from-top-2 duration-300 space-y-4">
-                                                {/* Progress indicator */}
-                                                <div className="flex items-center gap-2 text-xs font-semibold text-slate-400 uppercase tracking-wide">
-                                                    <span className={sharedDriveWizardStep >= 1 ? "text-slate-900" : ""}>1. Copy name</span>
-                                                    <ArrowRight className="h-3 w-3 shrink-0" />
-                                                    <span className={sharedDriveWizardStep >= 2 ? "text-slate-900" : ""}>2. Create folder</span>
-                                                    <ArrowRight className="h-3 w-3 shrink-0" />
-                                                    <span className={sharedDriveWizardStep >= 3 ? "text-slate-900" : ""}>3. Select folder</span>
-                                                </div>
-
-                                                {/* Step 1 — copy folder name */}
+                                                {/* Step 1 — guided demo + create folder */}
                                                 {sharedDriveWizardStep === 1 && (
-                                                    <div className="animate-in fade-in duration-200 space-y-3">
-                                                        <p className="text-sm text-slate-700">
-                                                            Your workspace folder must use <span className="font-semibold">this exact name</span>. Copy it before heading to Google Drive.
-                                                        </p>
-                                                        <div className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
-                                                            <code className="break-all font-mono text-sm text-slate-900">{workspaceFolderName}</code>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => {
-                                                                    void navigator.clipboard.writeText(workspaceFolderName)
-                                                                    setHasCopied(true)
-                                                                    setTimeout(() => setHasCopied(false), 2000)
-                                                                }}
-                                                                className="ml-2 shrink-0 flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 active:scale-95 transition-all"
-                                                            >
-                                                                {hasCopied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
-                                                                {hasCopied ? "Copied!" : "Copy"}
-                                                            </button>
+                                                    <div className="animate-in fade-in duration-200 space-y-8">
+
+                                                        {/* ② Copy folder name */}
+                                                        <div className="space-y-2">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-900 text-[10px] font-bold text-white">2</span>
+                                                                <p className="text-sm font-semibold text-slate-800">Copy your workspace root folder name</p>
+                                                            </div>
+                                                            <div className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                                                                <code className="break-all font-mono text-sm text-slate-900">{workspaceFolderName}</code>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        void navigator.clipboard.writeText(workspaceFolderName)
+                                                                        setHasCopied(true)
+                                                                        setTimeout(() => setHasCopied(false), 2000)
+                                                                    }}
+                                                                    className="ml-2 shrink-0 flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 active:scale-95 transition-all"
+                                                                >
+                                                                    {hasCopied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+                                                                    {hasCopied ? "Copied!" : "Copy"}
+                                                                </button>
+                                                            </div>
                                                         </div>
+
+                                                        {/* ③ Visual guide + instructions */}
+                                                        <div className="space-y-3">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-900 text-[10px] font-bold text-white">3</span>
+                                                                <p className="text-sm font-semibold text-slate-800">Follow instructions to create workspace root folder in Google Shared Drive</p>
+                                                            </div>
+
+                                                            <div className="grid grid-cols-2 gap-4 items-stretch">
+                                                                {/* Callout — spans both columns */}
+                                                                <div className={`col-span-2 flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium transition-colors duration-300 ${
+                                                                    mockCallout.done
+                                                                        ? "border-emerald-100 bg-emerald-50 text-emerald-800"
+                                                                        : "border-blue-100 bg-blue-50 text-blue-800"
+                                                                }`}>
+                                                                    <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${mockCallout.done ? "bg-emerald-500" : "animate-pulse bg-blue-500"}`} />
+                                                                    {mockCallout.text}
+                                                                </div>
+
+                                                                {/* Animated Google Drive mock */}
+                                                                <GoogleDriveMock
+                                                                    folderName={workspaceFolderName}
+                                                                    onStageChange={(_, callout, activeStep) => { setMockCallout(callout); setMockActiveStep(activeStep); if (callout.done) setMockCompleted(true) }}
+                                                                />
+
+                                                                {/* Roman numeral steps with live highlighting */}
+                                                                <div className="flex flex-col justify-center rounded-xl border border-slate-200 bg-white px-5 py-4">
+                                                                    {([
+                                                                        { n: 1, roman: "i",   text: <>Open <a href={`https://drive.google.com/drive/u/0/shared-drives?authuser=${connectedEmail ?? ""}`} target="_blank" rel="noopener noreferrer" className="font-medium text-blue-600 hover:underline">Google Drive &gt; Shared Drives</a></> },
+                                                                        { n: 2, roman: "ii",  text: <>Double-click the Shared Drive where your workspace should live.</> },
+                                                                        { n: 3, roman: "iii", text: <>Click <span className="font-semibold">+ New</span> → <span className="font-semibold">New folder</span>.</> },
+                                                                        { n: 4, roman: "iv",  text: <>Paste the folder name from above and click <span className="font-semibold">Create</span>.</> },
+                                                                        { n: 5, roman: "v",   text: <>Return here and click <span className="font-semibold">Select Folder</span>.</> },
+                                                                    ] as { n: number; roman: string; text: React.ReactNode }[]).map(({ n, roman, text }) => {
+                                                                        const completed = n < mockActiveStep
+                                                                        const active = n === mockActiveStep
+                                                                        return (
+                                                                            <div key={n} className={`flex items-start gap-2.5 py-1.5 transition-all duration-300 ${active ? "opacity-100" : completed ? "opacity-70" : "opacity-40"}`}>
+                                                                                <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold transition-all duration-300 ${
+                                                                                    completed ? "bg-emerald-100 text-emerald-600" :
+                                                                                    active    ? "bg-blue-600 text-white shadow-sm ring-2 ring-blue-200" :
+                                                                                                "bg-slate-100 text-slate-400"
+                                                                                }`}>
+                                                                                    {roman}
+                                                                                </span>
+                                                                                <span className={`flex-1 text-sm transition-colors duration-300 ${active ? "font-semibold text-slate-900" : completed ? "text-slate-500" : "text-slate-400"}`}>
+                                                                                    {text}
+                                                                                </span>
+                                                                                {completed && (
+                                                                                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500 transition-all duration-300" />
+                                                                                )}
+                                                                            </div>
+                                                                        )
+                                                                    })}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* ④ Confirmation */}
+                                                        <div className="space-y-2">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-900 text-[10px] font-bold text-white">4</span>
+                                                                <p className="text-sm font-semibold text-slate-800">Confirm folder creation</p>
+                                                            </div>
+                                                            <label className={`flex items-start gap-3 rounded-lg border p-3 transition-colors duration-300 ${
+                                                                mockCompleted
+                                                                    ? "cursor-pointer border-slate-200 bg-white"
+                                                                    : "cursor-not-allowed border-slate-100 bg-slate-50 opacity-50"
+                                                            }`}>
+                                                                <Checkbox
+                                                                    checked={sharedDriveFolderConfirmed}
+                                                                    onCheckedChange={(v) => mockCompleted && setSharedDriveFolderConfirmed(v === true)}
+                                                                    disabled={!mockCompleted}
+                                                                    className="mt-0.5"
+                                                                />
+                                                                <span className="text-sm text-slate-700">I&apos;ve created the folder with the exact name in my Shared Drive.</span>
+                                                            </label>
+                                                            {!mockCompleted && (
+                                                                <p className="text-xs text-slate-400">Watch the guide above to unlock this step.</p>
+                                                            )}
+                                                        </div>
+
                                                         <div className="flex items-center justify-between pt-1">
                                                             <Button
                                                                 type="button"
@@ -1586,91 +1736,8 @@ const OnboardingContent = () => {
                                                             <Button
                                                                 type="button"
                                                                 className="bg-slate-900 text-white hover:bg-slate-800 font-bold"
-                                                                onClick={() => setSharedDriveWizardStep(2)}
-                                                            >
-                                                                Create Folder
-                                                                <ArrowRight className="ml-2 h-4 w-4" />
-                                                            </Button>
-                                                        </div>
-                                                    </div>
-                                                )}
-
-                                                {/* Step 2 — create the folder in Google Drive */}
-                                                {sharedDriveWizardStep === 2 && (
-                                                    <div className="animate-in fade-in duration-200 space-y-3">
-                                                        <ol className="space-y-3 text-sm text-slate-700">
-                                                            <li className="flex gap-2.5">
-                                                                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-600">1</span>
-                                                                <span>
-                                                                    Open{" "}
-                                                                    <a
-                                                                        href="https://drive.google.com"
-                                                                        target="_blank"
-                                                                        rel="noopener noreferrer"
-                                                                        className="font-medium text-blue-600 hover:underline"
-                                                                    >
-                                                                        drive.google.com
-                                                                    </a>
-                                                                </span>
-                                                            </li>
-                                                            <li className="flex gap-2.5">
-                                                                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-600">2</span>
-                                                                <span>In the left sidebar, click <span className="font-semibold">Shared drives</span> to see the list of drives you have access to.</span>
-                                                            </li>
-                                                            <li className="flex gap-2.5">
-                                                                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-600">3</span>
-                                                                <span>Double-click the Shared Drive where you want your workspace folder to live.</span>
-                                                            </li>
-                                                            <li className="flex gap-2.5">
-                                                                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-600">4</span>
-                                                                <div className="flex-1 space-y-2">
-                                                                    <span>Create the folder using this exact name:</span>
-                                                                    <div className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                                                                        <code className="break-all font-mono text-sm text-slate-900">{workspaceFolderName}</code>
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={() => {
-                                                                                void navigator.clipboard.writeText(workspaceFolderName)
-                                                                                setHasCopied(true)
-                                                                                setTimeout(() => setHasCopied(false), 2000)
-                                                                            }}
-                                                                            className="ml-2 shrink-0 flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 active:scale-95 transition-all"
-                                                                        >
-                                                                            {hasCopied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
-                                                                            {hasCopied ? "Copied!" : "Copy"}
-                                                                        </button>
-                                                                    </div>
-                                                                    <ul className="space-y-1 text-slate-600">
-                                                                        <li>Click the <span className="font-semibold">+ New</span> button in the top-left corner.</li>
-                                                                        <li>Select <span className="font-semibold">New folder</span> from the dropdown.</li>
-                                                                        <li>Paste the name above and click <span className="font-semibold">Create</span>.</li>
-                                                                    </ul>
-                                                                </div>
-                                                            </li>
-                                                        </ol>
-                                                        <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 bg-white p-3">
-                                                            <Checkbox
-                                                                checked={sharedDriveFolderConfirmed}
-                                                                onCheckedChange={(v) => setSharedDriveFolderConfirmed(v === true)}
-                                                                className="mt-0.5"
-                                                            />
-                                                            <span className="text-sm text-slate-700">I&apos;ve created the folder with the exact name in my Shared Drive.</span>
-                                                        </label>
-                                                        <div className="flex items-center justify-between pt-1">
-                                                            <Button
-                                                                type="button"
-                                                                variant="outline"
-                                                                onClick={() => setSharedDriveWizardStep(1)}
-                                                                className="border-slate-300 text-slate-600"
-                                                            >
-                                                                <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
-                                                                Back
-                                                            </Button>
-                                                            <Button
-                                                                type="button"
-                                                                className="bg-slate-900 text-white hover:bg-slate-800 font-bold"
                                                                 disabled={!sharedDriveFolderConfirmed}
-                                                                onClick={() => setSharedDriveWizardStep(3)}
+                                                                onClick={() => setSharedDriveWizardStep(2)}
                                                             >
                                                                 Select Folder
                                                                 <ArrowRight className="ml-2 h-4 w-4" />
@@ -1679,8 +1746,8 @@ const OnboardingContent = () => {
                                                     </div>
                                                 )}
 
-                                                {/* Step 3 — pick the folder via Google Picker */}
-                                                {sharedDriveWizardStep === 3 && (
+                                                {/* Step 2 — pick the folder via Google Picker */}
+                                                {sharedDriveWizardStep === 2 && (
                                                     <div className="animate-in fade-in duration-200 space-y-3">
                                                         <p className="text-sm text-slate-700">
                                                             Open the folder picker below. The search is pre-filled with your folder name — select it to set it as your workspace root.
@@ -1695,9 +1762,10 @@ const OnboardingContent = () => {
                                                             >
                                                                 <Button
                                                                     type="button"
-                                                                    variant="outline"
-                                                                    className="w-full border-slate-300 py-5 text-base font-medium"
+                                                                    variant="blackCta"
+                                                                    className="w-full py-5 text-base font-medium"
                                                                 >
+                                                                    <FolderOpen className="mr-2 h-5 w-5" />
                                                                     Open folder picker
                                                                 </Button>
                                                             </GooglePickerButton>
@@ -1709,10 +1777,9 @@ const OnboardingContent = () => {
                                                         )}
                                                         <Button
                                                             type="button"
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            onClick={() => setSharedDriveWizardStep(2)}
-                                                            className="text-slate-600"
+                                                            variant="outline"
+                                                            onClick={() => setSharedDriveWizardStep(1)}
+                                                            className="border-slate-300 text-slate-600"
                                                         >
                                                             <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
                                                             Back

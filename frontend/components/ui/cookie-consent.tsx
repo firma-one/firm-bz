@@ -89,7 +89,18 @@ export function CookieConsent() {
   useEffect(() => {
     const consent = localStorage.getItem(FM_COOKIE_CONSENT_KEY)
     if (!consent) {
-      const t = setTimeout(() => setShowBanner(true), 1500)
+      // If the banner was already pending before an auth redirect, show immediately.
+      if (sessionStorage.getItem('fm_consent_due')) {
+        setShowBanner(true)
+        return
+      }
+      // Shorter delay on app routes (user is engaged); gentle delay on marketing pages.
+      const isAppRoute = window.location.pathname.startsWith('/d')
+      const delay = isAppRoute ? 0 : 500
+      const t = setTimeout(() => {
+        sessionStorage.setItem('fm_consent_due', '1')
+        setShowBanner(true)
+      }, delay)
       return () => clearTimeout(t)
     }
   }, [])
@@ -124,6 +135,7 @@ export function CookieConsent() {
 
   const persistAndClose = (consentData: Record<string, unknown>) => {
     localStorage.setItem(FM_COOKIE_CONSENT_KEY, JSON.stringify(consentData))
+    sessionStorage.removeItem('fm_consent_due')
     dispatchCookieConsentUpdated()
     triggerSavedToast()
     dismissBanner()
