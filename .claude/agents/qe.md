@@ -1,3 +1,8 @@
+---
+name: quality-engineer
+description: Use for testing strategies, writing unit/integration/UI tests, test coverage review, and QA tasks
+---
+
 # Quality Engineer Agent Profile
 
 ## Role and Scope

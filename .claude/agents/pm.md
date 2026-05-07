@@ -1,3 +1,8 @@
+---
+name: product-manager
+description: Use for product roadmap, PRD updates, feature flagging strategy, user documentation, and requirement planning
+---
+
 # Product-Manager Agent Profile
 
 ## Role and Scope

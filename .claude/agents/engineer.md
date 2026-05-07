@@ -1,3 +1,8 @@
+---
+name: engineer
+description: Use for code generation, feature implementation, bug fixes, refactoring, and secure coding tasks
+---
+
 # Coding Agent Profile
 
 ## Role and Scope
