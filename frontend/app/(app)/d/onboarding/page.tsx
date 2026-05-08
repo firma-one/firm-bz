@@ -35,7 +35,7 @@ import {
 import { BillingPageClient } from '@/components/billing/billing-page-client'
 import { clearCheckoutIntent } from '@/lib/marketing/checkout-intent'
 import { Checkbox } from "@/components/ui/checkbox"
-import { getWorkspaceFolderName } from "@/lib/actions/workspace-folder-name"
+import { generateWorkspaceFolderName } from "@/lib/generate-unique-workspace-folder-name"
 
 const ONBOARDING_CREATING_STORAGE_KEY = 'firm_onboarding_creating'
 const FINALIZE_AUTO_NAV_TOTAL_SECONDS = 5
@@ -307,8 +307,7 @@ const OnboardingContent = () => {
     const [mockCallout, setMockCallout] = useState(DRIVE_MOCK_CALLOUTS["shared-drives"])
     const [mockActiveStep, setMockActiveStep] = useState(STAGE_TO_STEP["shared-drives"])
     const [mockCompleted, setMockCompleted] = useState(false)
-    const [workspaceFolderName, setWorkspaceFolderName] = useState("")
-    useEffect(() => { void getWorkspaceFolderName().then(setWorkspaceFolderName) }, [])
+    const [workspaceFolderName] = useState(() => generateWorkspaceFolderName())
 
     // Step 1: anchor firm (silent). Step 2: subscribe (optional). Step 3: Drive (mandatory).
     const [sandboxFirmName, setSandboxFirmName] = useState(SANDBOX_FIRM_NAME_FALLBACK)

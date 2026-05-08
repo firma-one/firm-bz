@@ -5,6 +5,7 @@ import { METADATA_FOLDER_NAME } from '@/lib/connectors/types'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { userSettingsPlus } from '@/lib/user-settings-plus'
 import { safeInngestSend } from '@/lib/inngest/client'
+import { setMigrationPending } from '@/lib/firm-maintenance'
 import { logger } from '@/lib/logger'
 
 /** Parse first Drive API error body from `moveTopLevelChildrenBetweenParents` failure entries. */
@@ -354,6 +355,44 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, folderId: folder.id })
     }
 
+    if (action === 'estimate-migration') {
+      const authHeader = request.headers.get('authorization')
+      if (!authHeader?.startsWith('Bearer ')) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+      const { connectionId: estConnId } = body
+      if (!estConnId) {
+        return NextResponse.json({ error: 'Missing connectionId' }, { status: 400 })
+      }
+      const { prisma } = require('@/lib/prisma')
+      const estConnector = await (prisma as any).connector.findUnique({ where: { id: estConnId } })
+      if (!estConnector) return NextResponse.json({ error: 'Connector not found' }, { status: 404 })
+      const estSettings = (estConnector.settings as any) || {}
+      const estRootId: string = estSettings.rootFolderId || ''
+      if (!estRootId) return NextResponse.json({ itemCount: 0, estimatedMinutes: 1 })
+      const estToken = await googleDriveConnector.getAccessToken(estConnId)
+      if (!estToken) return NextResponse.json({ itemCount: 0, estimatedMinutes: 1 })
+      const params = new URLSearchParams({
+        q: `'${estRootId}' in parents and trashed = false`,
+        fields: 'files(id)',
+        pageSize: '1000',
+        supportsAllDrives: 'true',
+        includeItemsFromAllDrives: 'true',
+      })
+      let itemCount = 0
+      try {
+        const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
+          headers: { Authorization: `Bearer ${estToken}` },
+        })
+        if (res.ok) {
+          const data = await res.json()
+          itemCount = (data.files || []).length
+        }
+      } catch { /* ignore */ }
+      const estimatedMinutes = itemCount <= 50 ? 1 : itemCount <= 200 ? 3 : itemCount <= 500 ? 8 : 15
+      return NextResponse.json({ itemCount, estimatedMinutes })
+    }
+
     if (action === 'migrate-and-update-root') {
       const authHeader = request.headers.get('authorization')
       if (!authHeader?.startsWith('Bearer ')) {
@@ -370,7 +409,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
       }
 
-      const { connectionId: migConnId, newRootFolderId: migNewRoot, migrateFromRootFolderId } = body
+      const { connectionId: migConnId, newRootFolderId: migNewRoot, migrateFromRootFolderId, estimatedMinutes: bodyEstMinutes } = body
       if (!migConnId || !migNewRoot) {
         return NextResponse.json({ error: 'Missing connectionId or newRootFolderId' }, { status: 400 })
       }
@@ -385,59 +424,6 @@ export async function POST(request: NextRequest) {
       const oldRoot =
         (typeof migrateFromRootFolderId === 'string' && migrateFromRootFolderId) ||
         (typeof prev.rootFolderId === 'string' ? prev.rootFolderId : '')
-
-      let moved = 0
-      const failures: { id: string; error: string }[] = []
-
-      if (oldRoot && oldRoot !== migNewRoot) {
-        try {
-          const result = await googleDriveConnector.moveTopLevelChildrenBetweenParents(
-            migConnId,
-            oldRoot,
-            migNewRoot
-          )
-          moved = result.moved
-          failures.push(...result.failures)
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : String(e)
-          logger.error(
-            '[drive-migrate] migrate-and-update-root: move threw',
-            e instanceof Error ? e : new Error(msg),
-            'GoogleDrive',
-            {
-              event: 'drive_migrate_route_exception',
-              connectionId: migConnId,
-              userId: migUser.id,
-              oldRoot,
-              newRoot: migNewRoot,
-            },
-          )
-          return NextResponse.json({ error: msg, moved: 0, failures: [] }, { status: 500 })
-        }
-        if (failures.length > 0) {
-          logger.warn('[drive-migrate] migrate-and-update-root: returning 422', 'GoogleDrive', {
-            event: 'drive_migrate_route_422',
-            connectionId: migConnId,
-            userId: migUser.id,
-            oldRoot,
-            newRoot: migNewRoot,
-            moved,
-            failureCount: failures.length,
-            failedFileIds: failures.map((f) => f.id),
-            firstFailureSnippet: failures[0]?.error?.slice(0, 500),
-          })
-          const errorDetail = driveMoveFailureHint(failures)
-          return NextResponse.json(
-            {
-              error: 'Could not move all items into the new folder. Nothing was changed in the app.',
-              errorDetail,
-              moved,
-              failures,
-            },
-            { status: 422 }
-          )
-        }
-      }
 
       await (prisma as any).connector.update({
         where: { id: migConnId },
@@ -456,7 +442,29 @@ export async function POST(request: NextRequest) {
         // Backfilled on status if needed
       }
 
-      return NextResponse.json({ success: true, moved })
+      if (oldRoot && oldRoot !== migNewRoot) {
+        const firm = await prisma.firm.findFirst({ where: { connectorId: migConnId } })
+        if (firm) {
+          const estimatedMinutes = typeof bodyEstMinutes === 'number' ? bodyEstMinutes : 5
+          await setMigrationPending(firm.id, {
+            initiatedAt: new Date().toISOString(),
+            estimatedStartMinutes: 2,
+            initiatedBy: migUser.id,
+          })
+          await safeInngestSend('workspace.migrate.requested', {
+            connectionId: migConnId,
+            newRootFolderId: migNewRoot,
+            oldRootFolderId: oldRoot,
+            firmId: firm.id,
+            organizationId: firm.id,
+            initiatingUserId: migUser.id,
+            estimatedMinutes,
+            startedAt: new Date().toISOString(),
+          })
+        }
+      }
+
+      return NextResponse.json({ ok: true, async: true, estimatedMinutes: bodyEstMinutes ?? 5 })
     }
 
     return NextResponse.json(

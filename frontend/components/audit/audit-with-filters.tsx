@@ -516,7 +516,7 @@ export function AuditWithFilters({
             key={`from-${pickerResetKey}`}
             value={fromDate}
             defaultTime="23:59"
-            disableFutureTimes
+            allowFutureDateTimes={false}
             placeholder="From date"
             className="w-[210px]"
             onChange={(iso) => {

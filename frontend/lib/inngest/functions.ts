@@ -6,6 +6,24 @@ import { DocumentSharingPermissionStatus } from "@prisma/client";
 import { grantEngagementDriveFolderAccess } from "@/lib/grant-engagement-drive-folder-access";
 import { safeInngestSend } from "./client";
 import { provisionSandboxHierarchyForFirm } from '@/lib/onboarding/onboarding-helper'
+import {
+    setMaintenanceMode,
+    setMigrationPending,
+    setMigrationState,
+    sendMaintenanceWarningToFirmMembers,
+    forceSignOutFirmMembers,
+    getActiveMigration,
+    addMigrationFiles,
+    updateMigrationStatus,
+} from '@/lib/firm-maintenance'
+import {
+    getPlatformMaintenanceConfig,
+    setPlatformMaintenanceConfig,
+    getAllNonAdminUserEmails,
+    signOutAllNonAdminUsers,
+    sendPlatformMaintenanceEmail,
+    sendPlatformMaintenanceNotification,
+} from '@/lib/platform-maintenance'
 
 // ---------------------------------------------------------------------------
 // Search Indexing Functions
@@ -68,7 +86,13 @@ export const indexBatchForSearch = inngest.createFunction(
 export const scanAndIndexProject = inngest.createFunction(
     { id: "scan-and-index-project", triggers: [{ event: "project.index.scan.requested" }] },
     async ({ event, step }) => {
-        const { organizationId, clientId, projectId, connectorId, rootFolderIds } = event.data
+        const { organizationId, clientId, projectId, connectorId, rootFolderIds: rawRootFolderIds } = event.data
+        const rootFolderIds: string[] = Array.isArray(rawRootFolderIds) ? rawRootFolderIds : []
+
+        if (rootFolderIds.length === 0) {
+            logger.warn('scan-and-index-project: no rootFolderIds provided, skipping', 'Inngest', { organizationId, projectId })
+            return { indexed: 0, skipped: true }
+        }
 
         const allFiles = await step.run("discover-files", async () => {
             const files: { externalId: string; fileName: string; parentId: string | null }[] = []
@@ -690,3 +714,152 @@ export const grantPermissionsForNewMember = inngest.createFunction(
         return { message: "Granted permissions for new member", folderGrant, results: grantResults };
     }
 );
+
+export const migrateWorkspaceRoot = inngest.createFunction(
+    {
+        id: 'migrate-workspace-root',
+        name: 'Migrate workspace root folder',
+        retries: 2,
+        triggers: [{ event: 'workspace.migrate.requested' }],
+        onFailure: async ({ error, event }: { error: Error; event: { data: { event: { data: { firmId: string; newRootFolderId: string; oldRootFolderId: string; startedAt?: string } } } } }) => {
+            const { firmId } = event.data.event.data
+            await setMaintenanceMode(firmId, null)
+            const migration = await getActiveMigration(firmId)
+            if (migration) {
+                await updateMigrationStatus(migration.id, 'failed')
+            }
+        },
+    },
+    async ({ event, step }: { event: { data: { connectionId: string; newRootFolderId: string; oldRootFolderId: string; firmId: string; initiatingUserId: string; estimatedMinutes: number; organizationId?: string; startedAt?: string } }; step: any }) => {
+        const { connectionId, newRootFolderId, oldRootFolderId, firmId, initiatingUserId, estimatedMinutes } = event.data
+
+        await step.run('notify-members', () =>
+            sendMaintenanceWarningToFirmMembers(firmId, estimatedMinutes)
+        )
+
+        await step.sleep('grace-period', '2m')
+
+        await step.run('lock-and-sign-out', async () => {
+            await Promise.all([
+                setMaintenanceMode(firmId, {
+                    active: true,
+                    startedAt: new Date().toISOString(),
+                    expiresAt: new Date(Date.now() + Math.max(estimatedMinutes * 4, 30) * 60_000).toISOString(),
+                    estimatedMinutes,
+                    initiatedBy: initiatingUserId,
+                    reason: 'workspace_migration',
+                }),
+                setMigrationPending(firmId, null),
+            ])
+            await forceSignOutFirmMembers(firmId, initiatingUserId)
+        })
+
+        // Verify access token is obtainable before proceeding
+        await step.run('get-access-token', async () => {
+            const token = await googleDriveConnector.getAccessToken(connectionId)
+            if (!token) throw new Error('Could not obtain access token for connector ' + connectionId)
+            return token
+        })
+
+        const allFailures: { id: string; error: string }[] = []
+
+        if (oldRootFolderId) {
+            // Step: list all top-level children of the old root
+            const fileIds = await step.run('list-children', () =>
+                googleDriveConnector.listTopLevelChildren(connectionId, oldRootFolderId)
+            )
+
+            // Bulk-insert file records for tracking
+            if (fileIds.length > 0) {
+                await step.run('register-migration-files', async () => {
+                    const migration = await getActiveMigration(firmId)
+                    if (migration) {
+                        await addMigrationFiles(migration.id, fileIds.map((id: string) => ({ fileId: id })))
+                    }
+                })
+            }
+
+            // Per-batch move steps (max 50 per Drive Batch API call)
+            const BATCH_SIZE = 50
+
+            for (let i = 0; i < fileIds.length; i += BATCH_SIZE) {
+                const batch = fileIds.slice(i, i + BATCH_SIZE)
+                const batchIndex = Math.floor(i / BATCH_SIZE)
+
+                const result = await step.run(`move-batch-${batchIndex}`, () =>
+                    googleDriveConnector.moveBatch(connectionId, batch, oldRootFolderId, newRootFolderId)
+                )
+                allFailures.push(...result.failures)
+
+                if (i + BATCH_SIZE < fileIds.length) {
+                    await step.sleep(`rate-limit-pause-${batchIndex}`, '1s')
+                }
+            }
+        }
+
+        await step.run('persist-root-location', () =>
+            googleDriveConnector.persistWorkspaceRootLocation(connectionId, newRootFolderId)
+        )
+
+        // Note: project-level reindex requires rootFolderIds per project — not available
+        // here after a workspace root migration. Individual projects will be reindexed
+        // on next access or via a dedicated reindex trigger.
+
+        await step.run('unlock-workspace', async () => {
+            await setMaintenanceMode(firmId, null)
+            if (allFailures.length > 0) {
+                const firm = await prisma.firm.findUnique({ where: { id: firmId } })
+                if (firm) {
+                    const prev = (firm.settings as Record<string, unknown>) || {}
+                    await prisma.firm.update({
+                        where: { id: firmId },
+                        data: { settings: { ...prev, migrationWarnings: allFailures } },
+                    })
+                }
+            }
+        })
+
+        return { ok: true, failures: allFailures.length }
+    }
+)
+
+// ---------------------------------------------------------------------------
+// Platform Maintenance — Grace Period Activation
+// ---------------------------------------------------------------------------
+// Sleeps for the 2-minute grace window, then checks if maintenance is still
+// pending. If so, activates it fully and signs out all non-admin users.
+export const platformMaintenanceActivate = inngest.createFunction(
+    { id: 'platform-maintenance-activate', triggers: [{ event: 'platform/maintenance.grace-requested' }] },
+    async ({ event, step }) => {
+        const graceEndsAt = new Date(event.data.graceEndsAt)
+        const msRemaining = graceEndsAt.getTime() - Date.now()
+        if (msRemaining > 0) {
+            await step.sleep('grace-period', `${Math.ceil(msRemaining / 1000)}s`)
+        }
+
+        await step.run('activate-maintenance', async () => {
+            const config = await getPlatformMaintenanceConfig()
+            // Abort if admin cancelled during the grace window
+            if (!config || !config.gracePeriod || config.active) {
+                logger.info('Platform maintenance grace period cancelled — skipping activation', 'PlatformMaintenance')
+                return
+            }
+            const updated = {
+                ...config,
+                active: true,
+                gracePeriod: false,
+            }
+            await setPlatformMaintenanceConfig(updated)
+
+            const users = await getAllNonAdminUserEmails()
+            await Promise.allSettled([
+                signOutAllNonAdminUsers(),
+                sendPlatformMaintenanceEmail('on', updated, users),
+                sendPlatformMaintenanceNotification('on', updated),
+            ])
+            logger.info(`Platform maintenance activated — ${users.length} users signed out`, 'PlatformMaintenance')
+        })
+
+        return { ok: true }
+    }
+)

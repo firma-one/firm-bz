@@ -73,14 +73,12 @@ export async function GET(request: NextRequest) {
   if (!orgId) return NextResponse.json({ notifications: [] })
 
   // Retention cleanup (best-effort, no cron):
-  // - read: 30 days
-  // - unread: 180 days
-  // - hard cap: 1000 per user+org (delete oldest read first)
+  // - read: 30 days  - unread: 180 days  - hard cap: 1000 per user (across firm + platform)
+  const cleanupWhere = { userId: user.id, OR: [{ firmId: orgId }, { scope: 'PLATFORM' }] }
   try {
     await prisma.notification.deleteMany({
       where: {
-        firmId: orgId,
-        userId: user.id,
+        ...cleanupWhere,
         OR: [
           { readAt: { not: null }, createdAt: { lt: daysAgoUtc(30) } },
           { readAt: null, createdAt: { lt: daysAgoUtc(180) } },
@@ -88,20 +86,19 @@ export async function GET(request: NextRequest) {
       },
     })
 
-    const total = await prisma.notification.count({
-      where: { firmId: orgId, userId: user.id },
-    })
+    const total = await prisma.notification.count({ where: cleanupWhere })
     if (total > 1000) {
       const overflow = total - 1000
       const oldestRead = await prisma.notification.findMany({
-        where: { firmId: orgId, userId: user.id, readAt: { not: null } },
+        where: { ...cleanupWhere, readAt: { not: null } },
         orderBy: { createdAt: 'asc' },
         take: overflow,
         select: { id: true },
       })
       const ids = oldestRead.map((r) => r.id)
       if (ids.length) {
-        await prisma.notification.deleteMany({ where: { id: { in: ids }, firmId: orgId, userId: user.id } })
+        await prisma.notification.deleteMany({ where: { id: { in: ids } } }
+        )
       }
     }
   } catch {
@@ -127,13 +124,19 @@ export async function GET(request: NextRequest) {
   ]
   const canBroadcast = broadcastScopes.length > 0
 
+  const notificationWhere = {
+    userId: user.id,
+    OR: [{ firmId: orgId }, { scope: 'PLATFORM' }],
+  }
+
   const notifications = await prisma.notification.findMany({
-    where: { firmId: orgId, userId: user.id },
+    where: notificationWhere,
     orderBy: { createdAt: 'desc' },
     take: 30,
     select: {
       id: true,
       createdAt: true,
+      scope: true,
       type: true,
       priority: true,
       title: true,
@@ -148,7 +151,7 @@ export async function GET(request: NextRequest) {
   })
 
   const unreadCount = await prisma.notification.count({
-    where: { firmId: orgId, userId: user.id, readAt: null },
+    where: { ...notificationWhere, readAt: null },
   })
 
   return NextResponse.json({

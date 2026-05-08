@@ -66,6 +66,46 @@ export async function proxy(request: NextRequest) {
         return NextResponse.redirect(new URL('/d' + rest + request.nextUrl.search, request.url))
     }
 
+    // Platform-wide maintenance mode: check before any firm-level checks.
+    // Redirects all authenticated non-system-admin users to /platform-maintenance.
+    // Non-blocking — a fetch failure never prevents navigation.
+    // /system/* is admin-only and never subject to platform maintenance redirect
+    const isAppRoute = pathname.startsWith('/d')
+    const isAlreadyOnPlatformMaintenance = pathname.startsWith('/platform-maintenance')
+
+    if (user && isAppRoute && !isAlreadyOnPlatformMaintenance && !pathname.startsWith('/api/')) {
+        try {
+            const statusUrl = new URL('/api/system/platform-maintenance/status', request.url)
+            const statusRes = await fetch(statusUrl, { headers: { 'x-internal': '1' } })
+            if (statusRes.ok) {
+                const { active } = await statusRes.json() as { active: boolean }
+                if (active) {
+                    return NextResponse.redirect(new URL('/platform-maintenance', request.url))
+                }
+            }
+        } catch { /* non-blocking — never block navigation on platform maintenance check failure */ }
+    }
+
+    // Firm-level maintenance mode: check DB via an internal API fetch for authenticated users
+    // navigating to a firm workspace route (/d/f/<slug>/...).
+    // We can't import Prisma directly at the edge, so we call an internal Node.js
+    // API route (/api/firm/maintenance-by-slug) that does the DB lookup.
+    // This check is non-blocking — a fetch failure never prevents navigation.
+    const slugMatch = pathname.match(/^\/d\/f\/([^/]+)/)
+    if (user && slugMatch && !pathname.includes('/maintenance') && !pathname.startsWith('/api/')) {
+        try {
+            const slug = slugMatch[1]
+            const checkUrl = new URL(`/api/firm/maintenance-by-slug?slug=${encodeURIComponent(slug)}`, request.url)
+            const checkRes = await fetch(checkUrl, { headers: { 'x-internal': '1' } })
+            if (checkRes.ok) {
+                const { active } = await checkRes.json() as { active: boolean }
+                if (active) {
+                    return NextResponse.redirect(new URL(`/d/f/${slug}/maintenance`, request.url))
+                }
+            }
+        } catch { /* non-blocking — never block navigation on maintenance check failure */ }
+    }
+
     // Check deployment version - invalidate session if CODE changed (new deployment)
     // Note: Server restart with same code does NOT invalidate sessions
     // (cache is already lost in memory and rebuilds naturally)

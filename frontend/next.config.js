@@ -35,7 +35,7 @@ const nextConfig = {
       { source: '/solutions/:path*', destination: '/', permanent: true },
       { source: '/firma-redesign', destination: '/', permanent: true },
       { source: '/firma-redesign/:path*', destination: '/', permanent: true },
-      { source: '/resources', destination: '/resources/docs', permanent: true },
+      { source: '/resources', destination: '/resources/faq', permanent: true },
       { source: '/docs', destination: '/resources/docs', permanent: true },
       { source: '/docs/:path*', destination: '/resources/docs/:path*', permanent: true },
       { source: '/faq', destination: '/resources/faq', permanent: true },

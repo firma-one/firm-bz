@@ -1,10 +1,10 @@
--- Add new PlatformAuditScope values
+-- Add PlatformAuditScope values
 ALTER TYPE "platform"."PlatformAuditScope" ADD VALUE IF NOT EXISTS 'FIRM';
 ALTER TYPE "platform"."PlatformAuditScope" ADD VALUE IF NOT EXISTS 'CLIENT';
 ALTER TYPE "platform"."PlatformAuditScope" ADD VALUE IF NOT EXISTS 'ENGAGEMENT';
 ALTER TYPE "platform"."PlatformAuditScope" ADD VALUE IF NOT EXISTS 'DOCUMENT';
 
--- Add new PlatformAuditEventType values — Firm lifecycle
+-- Add PlatformAuditEventType values — Firm lifecycle
 ALTER TYPE "platform"."PlatformAuditEventType" ADD VALUE IF NOT EXISTS 'FIRM_CREATED';
 ALTER TYPE "platform"."PlatformAuditEventType" ADD VALUE IF NOT EXISTS 'FIRM_CHANGED';
 ALTER TYPE "platform"."PlatformAuditEventType" ADD VALUE IF NOT EXISTS 'FIRM_DELETED';
@@ -77,6 +77,10 @@ ALTER TYPE "platform"."PlatformAuditEventType" ADD VALUE IF NOT EXISTS 'ONBOARDI
 -- Audit meta
 ALTER TYPE "platform"."PlatformAuditEventType" ADD VALUE IF NOT EXISTS 'AUDIT_LOG_EXPORTED';
 
--- Add index for firm/client scoped queries (where engagementId is null)
+-- Index for firm/client scoped queries
 CREATE INDEX IF NOT EXISTS "platform_audit_events_firmId_scope_eventAt_idx"
   ON "platform"."platform_audit_events" ("firmId", "scope", "eventAt");
+
+-- Convert eventType from enum to plain text, then drop the enum
+ALTER TABLE platform.platform_audit_events ALTER COLUMN "eventType" TYPE text;
+DROP TYPE IF EXISTS platform."PlatformAuditEventType";

@@ -249,7 +249,7 @@ export default function IntegrationsPage() {
           </Button>
         </div>
         <p className="text-sm text-gray-500">
-          Last checked: {statusData?.checkedAt ? new Date(statusData.checkedAt).toLocaleTimeString() : 'never'}
+          Last checked: {statusData?.checkedAt ? new Date(statusData.checkedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false }) : 'never'}
         </p>
 
         {loading ? (

@@ -17,6 +17,13 @@ import { Textarea } from "@/components/ui/textarea"
 import { UserPlus } from "lucide-react"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { SandboxInfoBanner } from "@/components/ui/sandbox-info-banner"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 import { createClient, type LwCrmClientStatus } from '@/lib/actions/client'
 import { getFirmMembers } from '@/lib/actions/firm-members'
 import { useOrgSandbox } from '@/lib/use-org-sandbox'
@@ -166,18 +173,21 @@ export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigg
                     </div>
                     <div className="space-y-2">
                         <Label htmlFor="client-status" className={isSandboxFirm ? 'text-slate-500' : 'text-slate-900'}>Status</Label>
-                        <select
-                            id="client-status"
+                        <Select
                             value={status}
-                            onChange={(e) => setStatus(e.target.value as LwCrmClientStatus)}
+                            onValueChange={(v) => setStatus(v as LwCrmClientStatus)}
                             disabled={isSandboxFirm || isLoading}
-                            className="w-full h-10 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus-visible:border-slate-300 focus-visible:ring-1 focus-visible:ring-slate-300 disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                            <option value="PROSPECT">Prospect</option>
-                            <option value="ACTIVE">Active</option>
-                            <option value="ON_HOLD">On hold</option>
-                            <option value="PAST">Past</option>
-                        </select>
+                            <SelectTrigger id="client-status" className="border-slate-200 text-slate-900 disabled:cursor-not-allowed disabled:opacity-60">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="PROSPECT">Prospect</SelectItem>
+                                <SelectItem value="ACTIVE">Active</SelectItem>
+                                <SelectItem value="ON_HOLD">On hold</SelectItem>
+                                <SelectItem value="PAST">Past</SelectItem>
+                            </SelectContent>
+                        </Select>
                     </div>
                     <div className="space-y-2">
                         <Label htmlFor="industry" className={isSandboxFirm ? 'text-slate-500' : 'text-slate-900'}>
@@ -237,20 +247,23 @@ export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigg
                             <Label htmlFor="owner" className={isSandboxFirm ? 'text-slate-500' : 'text-slate-900'}>
                                 Owner (optional)
                             </Label>
-                            <select
-                                id="owner"
-                                value={ownerId ?? ''}
-                                onChange={(e) => setOwnerId(e.target.value || null)}
+                            <Select
+                                value={ownerId ?? '__none__'}
+                                onValueChange={(v) => setOwnerId(v === '__none__' ? null : v)}
                                 disabled={isSandboxFirm || isLoading}
-                                className="w-full h-10 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus-visible:border-slate-300 focus-visible:ring-1 focus-visible:ring-slate-300 disabled:cursor-not-allowed disabled:opacity-60"
                             >
-                                <option value="">No owner</option>
-                                {memberOptions.map((m) => (
-                                    <option key={m.userId} value={m.userId}>
-                                        {m.label}
-                                    </option>
-                                ))}
-                            </select>
+                                <SelectTrigger id="owner" className="border-slate-200 text-slate-900 disabled:cursor-not-allowed disabled:opacity-60">
+                                    <SelectValue placeholder="No owner" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="__none__">No owner</SelectItem>
+                                    {memberOptions.map((m) => (
+                                        <SelectItem key={m.userId} value={m.userId}>
+                                            {m.label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                         </div>
                     ) : null}
                     <DialogFooter>

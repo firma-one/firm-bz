@@ -7,6 +7,7 @@ import * as pockettStructure from '@/lib/connectors/pockett-structure.service'
 import { type IConnectorStorageAdapter } from '@/lib/connectors/types'
 import { getGoogleDriveOAuthServerCredentials } from '@/lib/config'
 import { SUGGESTED_WORKSPACE_FOLDER_NAME } from './suggested-workspace-folder-name'
+import { generateWorkspaceFolderName } from '@/lib/generate-unique-workspace-folder-name'
 import { logger } from '@/lib/logger'
 
 /** Max chars of Drive API error body included in structured migrate logs. */
@@ -808,9 +809,18 @@ export class GoogleDriveConnector {
    * Used during onboarding so we can skip the "Configure Workspace Home" / file picker step.
    */
   public async ensureDefaultWorkspaceRoot(connectionId: string, accessToken: string): Promise<string> {
+    const existingConnector = await prisma.connector.findUnique({ where: { id: connectionId } })
+    const existingSettings = (existingConnector?.settings as Record<string, unknown>) || {}
+    const existingRootId = typeof existingSettings.rootFolderId === 'string' ? existingSettings.rootFolderId.trim() : ''
+
+    if (existingRootId && existingRootId !== 'root') {
+      return existingRootId
+    }
+
+    const folderName = generateWorkspaceFolderName()
     const folderId = await this.findOrCreateFolder(
       accessToken,
-      DEFAULT_WORKSPACE_FOLDER_NAME,
+      folderName,
       ['root'],
       { folderColorRgb: DEFAULT_WORKSPACE_FOLDER_COLOR_RGB }
     )
@@ -822,9 +832,8 @@ export class GoogleDriveConnector {
       logger.error('Failed to create .pockett/meta.json in default workspace root', err as Error)
       // Continue — connector is still valid; structure can be fixed later
     }
-    const connector = await prisma.connector.findUnique({ where: { id: connectionId } })
-    if (connector) {
-      const current = (connector.settings as any) || {}
+    if (existingConnector) {
+      const current = (existingConnector.settings as any) || {}
       await prisma.connector.update({
         where: { id: connectionId },
         data: {
@@ -4017,6 +4026,109 @@ export class GoogleDriveConnector {
       logger.error('Failed to patch file properties', error as Error, 'GoogleDrive', { fileId })
       throw error
     }
+  }
+
+  /**
+   * List all direct (non-trashed) children of a folder by access token.
+   * Handles pagination. Returns flat array of file IDs.
+   */
+  public async listTopLevelChildren(connectionId: string, parentId: string): Promise<string[]> {
+    const connector = await prisma.connector.findUnique({ where: { id: connectionId } })
+    if (!connector) throw new Error('Connector not found')
+    const accessToken = this.getAccessTokenFromConnector(connector as ConnectorWithDecrypted)
+
+    const fileIds: string[] = []
+    let pageToken: string | undefined
+
+    do {
+      const params = new URLSearchParams({
+        q: `'${parentId}' in parents and trashed = false`,
+        fields: 'nextPageToken,files(id)',
+        pageSize: '1000',
+        supportsAllDrives: 'true',
+        includeItemsFromAllDrives: 'true',
+      })
+      if (pageToken) params.set('pageToken', pageToken)
+
+      const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      if (!res.ok) throw new Error(`Drive list failed: ${res.status}`)
+      const data = await res.json() as { files: { id: string }[]; nextPageToken?: string }
+      fileIds.push(...data.files.map(f => f.id))
+      pageToken = data.nextPageToken
+    } while (pageToken)
+
+    return fileIds
+  }
+
+  /**
+   * Move a batch of files from fromParentId to toParentId using the Drive Batch API.
+   * Max 50 files per call (Drive Batch API limit).
+   * On 429, throws so the caller (Inngest step) can retry.
+   */
+  public async moveBatch(
+    connectionId: string,
+    fileIds: string[],
+    fromParentId: string,
+    toParentId: string,
+  ): Promise<{ moved: string[]; failures: { id: string; error: string }[] }> {
+    if (fileIds.length === 0) return { moved: [], failures: [] }
+    if (fileIds.length > 50) throw new Error('moveBatch: max 50 files per call')
+
+    const connector = await prisma.connector.findUnique({ where: { id: connectionId } })
+    if (!connector) throw new Error('Connector not found')
+    const accessToken = this.getAccessTokenFromConnector(connector as ConnectorWithDecrypted)
+
+    const boundary = `batch_firma_${Date.now()}`
+
+    const parts = fileIds.map(fileId => [
+      `--${boundary}`,
+      'Content-Type: application/http',
+      '',
+      `PATCH /drive/v3/files/${fileId}?addParents=${toParentId}&removeParents=${fromParentId}&supportsAllDrives=true&fields=id`,
+      'Content-Type: application/json',
+      '',
+      '{}',
+    ].join('\r\n'))
+
+    const body = parts.join('\r\n') + `\r\n--${boundary}--`
+
+    const res = await fetch('https://www.googleapis.com/batch/drive/v3', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': `multipart/mixed; boundary=${boundary}`,
+      },
+      body,
+    })
+
+    if (res.status === 429) throw new Error('Drive batch rate limited (429) — retry')
+    if (!res.ok) throw new Error(`Drive batch failed: ${res.status}`)
+
+    const responseText = await res.text()
+    const moved: string[] = []
+    const failures: { id: string; error: string }[] = []
+
+    // Parse multipart response — each part has an HTTP status line
+    const responseParts = responseText.split(/--[^\r\n]+/).slice(1)
+    responseParts.forEach((part, i) => {
+      const fileId = fileIds[i]
+      if (!fileId) return
+      const statusMatch = part.match(/HTTP\/\d+\.\d+\s+(\d+)/)
+      const statusCode = statusMatch ? parseInt(statusMatch[1], 10) : 0
+      if (statusCode >= 200 && statusCode < 300) {
+        moved.push(fileId)
+      } else if (statusCode === 404) {
+        // gone — skip silently
+      } else if (statusCode === 429) {
+        throw new Error(`Drive rate limit in batch response for file ${fileId}`)
+      } else {
+        failures.push({ id: fileId, error: `batch status ${statusCode}` })
+      }
+    })
+
+    return { moved, failures }
   }
 }
 

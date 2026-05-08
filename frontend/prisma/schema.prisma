@@ -227,10 +227,55 @@ model Firm {
   engagementDocuments EngagementDocument[]
   docCommentMessages DocCommentMessage[]
   platformAuditEvents PlatformAuditEvent[]
+  workspaceMigrations FirmWorkspaceMigration[]
 
   @@index([billingSharesSubscriptionFromFirmId])
   @@index([anchorFirmId])
   @@map("firms")
+  @@schema("platform")
+}
+
+model FirmWorkspaceMigration {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  firmId               String    @db.Uuid
+  connectorId          String    @db.Uuid
+  status               String    // pending_grace | in_progress | completed | failed | failed_partial
+  oldRootFolderId      String?
+  newRootFolderId      String
+  initiatedBy          String    @db.Uuid
+  initiatedAt          DateTime  @default(now()) @db.Timestamptz(6)
+  graceEndsAt          DateTime? @db.Timestamptz(6)
+  maintenanceStartedAt DateTime? @db.Timestamptz(6)
+  maintenanceEndedAt   DateTime? @db.Timestamptz(6)
+  estimatedMinutes     Int?
+  inngestRunId         String?
+  createdAt            DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime  @updatedAt @db.Timestamptz(6)
+
+  firm  Firm                         @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  files FirmWorkspaceMigrationFile[]
+
+  @@index([firmId])
+  @@index([firmId, status])
+  @@map("firm_workspace_migrations")
+  @@schema("platform")
+}
+
+model FirmWorkspaceMigrationFile {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  migrationId String    @db.Uuid
+  fileId      String
+  fileName    String?
+  status      String    @default("pending") // pending | moved | failed | skipped
+  error       String?
+  attemptedAt DateTime? @db.Timestamptz(6)
+  movedAt     DateTime? @db.Timestamptz(6)
+
+  migration FirmWorkspaceMigration @relation(fields: [migrationId], references: [id], onDelete: Cascade)
+
+  @@index([migrationId])
+  @@index([migrationId, status])
+  @@map("firm_workspace_migration_files")
   @@schema("platform")
 }
 
@@ -572,12 +617,15 @@ model Notification {
   updatedAt      DateTime @updatedAt @db.Timestamptz(6)
   createdBy      String?  @db.Uuid
   updatedBy      String?  @db.Uuid
-  firmId         String   @db.Uuid
+  /// Null for PLATFORM-scoped notifications
+  firmId         String?  @db.Uuid
   clientId       String?  @db.Uuid
   engagementId   String?  @db.Uuid
   documentId     String?  @db.Uuid
 
   userId         String   @db.Uuid
+  /// PLATFORM | FIRM | CLIENT | ENGAGEMENT | DOCUMENT
+  scope          String   @default("FIRM")
   type           String
   priority       NotificationPriority @default(INFO)
   title          String
@@ -599,6 +647,7 @@ model Notification {
   @@index([clientId, engagementId, documentId])
   @@index([userId, readAt])
   @@index([userId, dismissedAt])
+  @@index([scope, userId])
   @@map("platform_notifications")
   @@schema("platform")
 }

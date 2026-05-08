@@ -26,6 +26,7 @@ type HardResetApiResponse = {
         deletedOrphanConnectors: number
         deletedUserPersonalizations: number
         deletedSystemAdmins: number
+        deletedAuthAccount: boolean
         noOp: boolean
     }
     error?: string
@@ -53,6 +54,7 @@ export default function UserDataMapPage() {
     const [copiedId, setCopiedId] = useState<string | null>(null)
     const [hardResetOpen, setHardResetOpen] = useState(false)
     const [confirmUserId, setConfirmUserId] = useState('')
+    const [deleteAuthAccount, setDeleteAuthAccount] = useState(false)
     const [hardResetLoading, setHardResetLoading] = useState(false)
     const [hardResetError, setHardResetError] = useState<string | null>(null)
 
@@ -105,6 +107,7 @@ export default function UserDataMapPage() {
                 body: JSON.stringify({
                     targetUserId: result.targetUser.id,
                     confirmUserId: confirmUserId.trim(),
+                    deleteAuthAccount,
                 }),
             })
             const body = (await response.json().catch(() => ({}))) as HardResetApiResponse
@@ -161,8 +164,8 @@ export default function UserDataMapPage() {
             </div>
 
             <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                Read-only diagnostics by default. Hard reset (below) runs the same platform deletes as the firm_admin
-                cascade SQL script; it does not remove the Supabase auth user.
+                Read-only diagnostics by default. Hard reset runs the same platform deletes as the firm_admin cascade
+                SQL script. Optionally also removes the Supabase auth account via the toggle in the confirmation dialog.
             </div>
 
             <form onSubmit={onSubmit} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
@@ -328,6 +331,7 @@ export default function UserDataMapPage() {
                     setHardResetOpen(open)
                     if (!open) {
                         setConfirmUserId('')
+                        setDeleteAuthAccount(false)
                         setHardResetError(null)
                     }
                 }}
@@ -343,12 +347,17 @@ export default function UserDataMapPage() {
                                     those firms (clients, engagements, documents, subscriptions, invitations, members,
                                     audit events, and related platform data).
                                 </p>
-                                <p>It also deletes platform notifications and customer requests tied to those firms or this
-                                    user, clears legacy firm connector pointers, removes orphaned connectors owned by this
-                                    user, clears user personalization, and removes{' '}
-                                    <span className="font-mono text-xs">system.system_admins</span> for this user.</p>
-                                <p className="font-medium text-red-800">
-                                    This does not delete the Supabase auth account. Firms where the user is only{' '}
+                                <p>
+                                    It also deletes platform notifications and customer requests tied to those firms or
+                                    this user, clears legacy firm connector pointers, removes orphaned connectors owned
+                                    by this user, clears user personalization, and removes{' '}
+                                    <span className="font-mono text-xs">system.system_admins</span> for this user.
+                                </p>
+                                <p className={cn('font-medium', deleteAuthAccount ? 'text-red-800' : 'text-gray-600')}>
+                                    {deleteAuthAccount
+                                        ? 'Auth account deletion is enabled — the Supabase auth user, sessions, tokens, MFA factors, and identities will also be permanently removed.'
+                                        : 'Auth account deletion is off — the Supabase auth account will be left intact.'}
+                                    {' '}Firms where the user is only{' '}
                                     <span className="font-mono text-xs">firm_member</span> are left unchanged.
                                 </p>
                                 {result?.summary.firmAdminMemberships === 0 ? (
@@ -366,18 +375,32 @@ export default function UserDataMapPage() {
                             </div>
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="space-y-2">
-                        <label htmlFor="hard-reset-confirm" className="text-sm font-medium text-gray-900">
-                            Type the target user UUID to confirm
+                    <div className="space-y-4">
+                        <div className="space-y-2">
+                            <label htmlFor="hard-reset-confirm" className="text-sm font-medium text-gray-900">
+                                Type the target user UUID to confirm
+                            </label>
+                            <input
+                                id="hard-reset-confirm"
+                                value={confirmUserId}
+                                onChange={(e) => setConfirmUserId(e.target.value)}
+                                placeholder="Paste full user id"
+                                autoComplete="off"
+                                className="h-10 w-full rounded-lg border border-gray-300 px-3 font-mono text-sm outline-none focus:border-red-400"
+                            />
+                        </div>
+                        <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-gray-200 px-3 py-2.5 hover:bg-gray-50">
+                            <input
+                                type="checkbox"
+                                checked={deleteAuthAccount}
+                                onChange={(e) => setDeleteAuthAccount(e.target.checked)}
+                                className="h-4 w-4 rounded border-gray-300 accent-red-600"
+                            />
+                            <span className="text-sm text-gray-700">
+                                Also delete Supabase auth account{' '}
+                                <span className="text-xs text-gray-500">(sessions, tokens, MFA, identities)</span>
+                            </span>
                         </label>
-                        <input
-                            id="hard-reset-confirm"
-                            value={confirmUserId}
-                            onChange={(e) => setConfirmUserId(e.target.value)}
-                            placeholder="Paste full user id"
-                            autoComplete="off"
-                            className="h-10 w-full rounded-lg border border-gray-300 px-3 font-mono text-sm outline-none focus:border-red-400"
-                        />
                     </div>
                     {hardResetError ? <p className="text-sm text-red-600">{hardResetError}</p> : null}
                     <DialogFooter className="gap-2 sm:gap-0">
@@ -390,7 +413,7 @@ export default function UserDataMapPage() {
                             disabled={hardResetLoading || !confirmMatchesTarget}
                             onClick={() => void runHardReset()}
                         >
-                            {hardResetLoading ? 'Deleting…' : 'Delete data'}
+                            {hardResetLoading ? 'Deleting…' : deleteAuthAccount ? 'Delete data + auth account' : 'Delete data'}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

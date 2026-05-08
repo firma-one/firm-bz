@@ -33,12 +33,6 @@ export function GooglePickerButton({
     const [openPicker] = useDrivePicker()
 
     const handleValues = useCallback((ids: string[], token: string) => {
-        if (mode === 'select-folder') {
-            if (onImport) onImport(ids)
-            setLoading(false)
-            return
-        }
-
         // Process the selected files
         setLoading(true)
         fetch('/api/connectors/google-drive/import', {
@@ -70,7 +64,7 @@ export function GooglePickerButton({
             })
             .finally(() => setLoading(false))
 
-    }, [connectionId, onImport, addToast, showSuccessToast, mode])
+    }, [connectionId, onImport, addToast, showSuccessToast])
 
     const createPicker = useCallback(async () => {
         if (!connectionId) return
@@ -183,6 +177,11 @@ export function GooglePickerButton({
                     }
                     if (data.action === 'picked') {
                         const files = data.docs
+                        if (mode === 'select-folder') {
+                            if (onImport) onImport(files.map((f: any) => ({ id: f.id, name: f.name ?? f.id })))
+                            setLoading(false)
+                            return
+                        }
                         const ids = files.map((f: any) => f.id)
                         handleValues(ids, accessToken)
                     }

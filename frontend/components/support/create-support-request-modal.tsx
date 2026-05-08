@@ -101,7 +101,7 @@ export function CreateSupportRequestModal({ firmSlug, trigger }: CreateSupportRe
       .map(f => ({
         id: `attach-${Date.now()}-${Math.random()}`,
         file: f,
-        displayName: f.name || `Screenshot at ${new Date().toLocaleTimeString()}`,
+        displayName: f.name || `Screenshot at ${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })}`,
         status: 'pending' as const,
         progress: 0,
       }))

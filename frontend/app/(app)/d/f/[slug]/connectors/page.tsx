@@ -10,7 +10,6 @@ import {
   RefreshCw,
   Unlink,
   Link,
-  Cloud,
   Zap,
   Building2,
   Plug,
@@ -31,6 +30,9 @@ import {
 import { PageBreadcrumb } from "@/components/ui/page-breadcrumb"
 import { PageHeader } from "@/components/ui/page-header"
 import { GoogleDriveIcon, GoogleDriveProductMark } from "@/components/ui/google-drive-icon"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
+import { AppShellHintStrip } from "@/components/layout/app-shell-hint-strip"
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || "http://127.0.0.1:54321",
@@ -53,6 +55,9 @@ export default function ConnectorsPage({ params }: { params: Promise<{ slug: str
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [isTestModalOpen, setIsTestModalOpen] = useState(false)
   const [activeAccountId, setActiveAccountId] = useState<string | null>(null)
+  const [migrationPending, setMigrationPending] = useState(false)
+  const [failedFileCount, setFailedFileCount] = useState(0)
+  const [latestMigrationStatus, setLatestMigrationStatus] = useState<string | null>(null)
   const hasLoadedDataRef = useRef(false)
   /** Dedupe Google OAuth return handling (e.g. React Strict Mode double effect). */
   const oauthReturnHandledKeyRef = useRef<string | null>(null)
@@ -128,6 +133,19 @@ export default function ConnectorsPage({ params }: { params: Promise<{ slug: str
       if (!organization.id) throw new Error('Organization ID is missing')
       setOrganizationId(organization.id)
       setOrgName(organization.name ?? null)
+
+      // Check DB for pending migration state and any failed files from last migration
+      fetch(`/api/firm/maintenance?firmId=${organization.id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then(r => r.ok ? r.json() : null)
+        .then(d => {
+          if (!d) return
+          if (d.migrationPending) setMigrationPending(true)
+          if (d.latestMigrationStatus) setLatestMigrationStatus(d.latestMigrationStatus)
+          if (typeof d.failedFileCount === 'number') setFailedFileCount(d.failedFileCount)
+        })
+        .catch(() => {})
 
       const connUrl = `/api/connectors?organizationId=${organization.id}`
 
@@ -211,7 +229,7 @@ export default function ConnectorsPage({ params }: { params: Promise<{ slug: str
       description: 'Connect your Microsoft OneDrive',
       disabled: true,
       comingLater: true,
-      activeIcon: <Cloud className="w-3.5 h-3.5 text-sky-600" />,
+      activeIcon: <div className="h-4 w-4 bg-sky-100 text-sky-600 rounded flex items-center justify-center text-[9px] font-bold">O</div>,
       connected: false
     },
     {
@@ -385,289 +403,254 @@ export default function ConnectorsPage({ params }: { params: Promise<{ slug: str
         subtitle="Manage external data sources and file access."
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-[min(220px,100%)_1fr] gap-8 items-start">
-        {isLoadingData ? (
-          <>
-            {/* Sidebar Skeleton */}
-            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm sticky top-24">
-              <div className="p-3 border-b border-gray-100">
-                <Skeleton className="h-3 w-16" />
-              </div>
-              <div className="p-2 space-y-2">
-                {[1, 2, 3, 4].map((i) => (
-                  <Skeleton key={i} className="h-10 w-full rounded-lg" />
-                ))}
-              </div>
+      <Tabs value={selectedConnector ?? 'google-drive'} onValueChange={setSelectedConnector}>
+        {/* Horizontal tab bar — matches project/engagement style */}
+        <div className="mb-6 min-w-0 w-full overflow-x-auto">
+          {isLoadingData ? (
+            <div className="flex gap-2">
+              {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-9 w-28 rounded-lg" />)}
             </div>
+          ) : (
+            <TabsList className="h-10 p-1 bg-slate-100 rounded-lg inline-flex justify-start flex-nowrap gap-1 shrink-0">
+              {connectors.map(connector => (
+                <TabsTrigger
+                  key={connector.id}
+                  value={connector.id}
+                  disabled={connector.disabled}
+                  className="h-full px-4 rounded-md font-medium text-slate-500 data-[state=active]:text-slate-900 data-[state=active]:shadow-sm disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  <span className="flex items-center justify-center w-4 h-4 shrink-0">
+                    {connector.icon ?? connector.activeIcon}
+                  </span>
+                  {connector.name}
+                  {connector.comingLater && (
+                    <span className="rounded-full bg-slate-200 px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-slate-500">
+                      Soon
+                    </span>
+                  )}
+                  {connector.id === 'google-drive' && existingConnections.some(c => c.status === 'ACTIVE') && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                  )}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          )}
+        </div>
 
-            {/* Main Content Skeleton */}
-            <div className="min-h-[500px] space-y-6">
-              <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm pb-6">
-                <div className="flex items-start justify-between mb-6">
-                  <div className="flex gap-4">
-                    <Skeleton className="h-14 w-14 rounded-2xl" />
-                    <div className="space-y-2">
-                      <Skeleton className="h-6 w-32" />
-                      <Skeleton className="h-4 w-64" />
-                    </div>
-                  </div>
-                  <Skeleton className="h-10 w-32 rounded-lg" />
-                </div>
-                <div className="space-y-4">
-                  <div className="flex gap-2">
-                    <Skeleton className="h-8 w-32 rounded-lg" />
-                    <Skeleton className="h-8 w-32 rounded-lg" />
-                  </div>
-                  <Skeleton className="h-32 w-full rounded-xl" />
-                </div>
+        {/* Google Drive tab — single unified card with sections */}
+        <TabsContent value="google-drive" className="mt-0">
+          {isLoadingData ? (
+            <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+              <div className="flex items-center gap-4 px-5 py-4 border-b border-gray-100">
+                <Skeleton className="h-10 w-10 rounded-xl flex-shrink-0" />
+                <div className="space-y-2 flex-1"><Skeleton className="h-4 w-32" /><Skeleton className="h-3 w-56" /></div>
               </div>
+              <div className="px-5 py-4 border-b border-gray-100 space-y-3"><Skeleton className="h-3 w-14" /><Skeleton className="h-14 w-full rounded-lg" /></div>
+              <div className="px-5 py-4 space-y-3"><Skeleton className="h-3 w-20" /><Skeleton className="h-14 w-full rounded-lg" /></div>
             </div>
-          </>
-        ) : (
-          <>
-            {/* Sidebar */}
-            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm sticky top-24">
-              <div className="p-3 bg-gray-50/50 border-b border-gray-100 text-[10px] font-bold text-gray-500 uppercase tracking-wider truncate">
-                Sources
-              </div>
-              {connectors.map(connector => {
-                const isSelected = !connector.disabled && selectedConnector === connector.id
-                return (
-                  <button
-                    key={connector.id}
-                    type="button"
-                    disabled={connector.disabled}
-                    onClick={() => {
-                      if (!connector.disabled) setSelectedConnector(connector.id)
-                    }}
-                    className={`w-full flex items-center gap-2 px-3 py-2.5 text-left transition-all border-l-2 ${connector.disabled
-                      ? 'border-transparent opacity-50 cursor-not-allowed'
-                      : isSelected
-                        ? 'bg-gray-50 border-gray-900'
-                        : 'border-transparent hover:bg-white hover:pl-4'
-                      }`}
-                  >
-                    <div className={`h-7 w-7 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors ${isSelected ? 'bg-white shadow-sm ring-1 ring-gray-100' : 'bg-gray-100'
-                      }`}>
-                      {isSelected ? connector.activeIcon : (
-                        <Cloud className="w-3.5 h-3.5 text-gray-400" />
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <span className={`text-xs font-medium block break-words ${isSelected ? 'text-gray-900' : 'text-gray-600'}`}>
-                        {connector.name}
-                      </span>
-                      {connector.comingLater ? (
-                        <span className="mt-1 inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-gray-600">
-                          Coming later
-                        </span>
-                      ) : null}
-                      {connector.id === 'google-drive' && existingConnections.some(c => c.status === 'ACTIVE') && (
-                        <div className="flex items-center gap-1 mt-0.5">
-                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
-                          <span className="text-[10px] text-gray-400 font-medium">Connected</span>
-                        </div>
-                      )}
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
+          ) : (
+            <TooltipProvider delayDuration={300}>
+              <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
+                <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
 
-            {/* Main Content */}
-            <div className="min-h-[500px] space-y-6">
-              {selectedConnector === 'google-drive' ? (
-                <TooltipProvider delayDuration={300}>
-                  <div className="animate-in fade-in slide-in-from-bottom-2 duration-500 space-y-5">
-                    <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-                      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="flex items-center gap-4 min-w-0">
-                          <div className="h-14 w-14 shrink-0 bg-white border border-gray-100 rounded-2xl flex items-center justify-center p-3 shadow-sm">
-                            <GoogleDriveProductMark width={32} height={32} />
-                          </div>
-                          <div className="min-w-0">
-                            <h2 className="text-xl font-bold text-gray-900">Google Drive</h2>
-                            <p className="text-sm text-gray-500 mt-1">
-                              Link one Google account. Your workspace uses a single Drive folder as root — point it to My Drive or a Shared Drive anytime.
-                            </p>
-                          </div>
-                        </div>
-                        {existingConnections.length === 0 && (
-                          <Button
-                            onClick={handleConnectGoogleDrive}
-                            disabled={loading}
-                            className="shrink-0 bg-gray-900 text-white hover:bg-gray-800 rounded-lg shadow-sm"
-                          >
-                            <SquarePlus className="w-4 h-4 mr-2" />
-                            {loading ? 'Connecting...' : 'Connect Google Drive'}
-                          </Button>
-                        )}
+                  {/* Header */}
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between px-5 py-4">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="h-10 w-10 shrink-0 bg-white border border-gray-100 rounded-xl flex items-center justify-center p-2 shadow-sm">
+                        <GoogleDriveProductMark width={24} height={24} />
                       </div>
+                      <div className="min-w-0">
+                        <h2 className="text-sm font-semibold text-gray-900 leading-snug">Google Drive</h2>
+                        <p className="text-xs text-gray-500 mt-0.5 leading-snug">Link a Google account and set a workspace folder as root.</p>
+                      </div>
+                    </div>
+                    {existingConnections.length === 0 && (
+                      <Button onClick={handleConnectGoogleDrive} disabled={loading} className="shrink-0 bg-gray-900 text-white hover:bg-gray-800 rounded-lg shadow-sm">
+                        <SquarePlus className="w-4 h-4 mr-2" />
+                        {loading ? 'Connecting...' : 'Connect'}
+                      </Button>
+                    )}
+                  </div>
 
-                      <div className="mt-6 space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        {existingConnections.length > 1 && (
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-xs font-medium text-gray-500 uppercase tracking-wide w-full sm:w-auto">Accounts</span>
-                            <div className="flex flex-wrap bg-gray-100/80 p-1 rounded-lg gap-1">
-                              {existingConnections.map(c => {
-                                const isActive = activeAccountId === c.id
-                                const isConnected = c.status === 'ACTIVE'
-                                return (
-                                  <button
-                                    key={c.id}
-                                    type="button"
-                                    onClick={() => setActiveAccountId(c.id)}
-                                    className={`flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-md transition-all ${isActive
-                                      ? 'bg-white shadow-sm ring-1 ring-gray-200 text-gray-900'
-                                      : 'text-gray-500 hover:text-gray-800 hover:bg-gray-200/50'
-                                      }`}
-                                  >
-                                    <span className={`w-2 h-2 rounded-full shrink-0 ${isConnected ? 'bg-emerald-500' : 'bg-red-400'}`} />
-                                    <span className="truncate max-w-[200px]">{c.email}</span>
-                                  </button>
-                                )
-                              })}
+                  {/* Multi-account switcher */}
+                  {existingConnections.length > 1 && (
+                    <div className="border-t border-gray-100 px-5 py-3 bg-gray-50/50">
+                      <div className="flex flex-wrap bg-gray-100/70 p-1 rounded-lg gap-1">
+                        {existingConnections.map(c => {
+                          const isActive = activeAccountId === c.id
+                          const isConnected = c.status === 'ACTIVE'
+                          return (
+                            <button key={c.id} type="button" onClick={() => setActiveAccountId(c.id)}
+                              className={`flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${isActive ? 'bg-white shadow-sm ring-1 ring-gray-200 text-gray-900' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-200/50'}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isConnected ? 'bg-emerald-500' : 'bg-red-400'}`} />
+                              <span className="truncate max-w-[200px]">{c.email}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {activeConnection ? (
+                    <div className="animate-in fade-in zoom-in-95 duration-200">
+
+                      {/* Account section */}
+                      <div className="border-t border-gray-100">
+                        <div className="px-5 pt-4 pb-1">
+                          <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Account</p>
+                        </div>
+                        <div className={`flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between px-5 py-3.5 ${activeConnection.status !== 'ACTIVE' ? 'bg-amber-50/30' : ''}`}>
+                          <div className="flex items-center gap-3 min-w-0">
+                            <Avatar className="h-9 w-9 rounded-lg shrink-0">
+                              <AvatarFallback className="rounded-lg bg-gray-100 text-sm font-semibold text-gray-600 uppercase select-none">
+                                {(activeConnection.name || activeConnection.email || 'G').charAt(0)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-gray-900 truncate leading-snug">
+                                {activeConnection.name || activeConnection.email || 'Google account'}
+                              </p>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${activeConnection.status === 'ACTIVE' ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                                <p className={`text-xs ${activeConnection.status === 'ACTIVE' ? 'text-gray-400' : 'text-amber-700'}`}>
+                                  {activeConnection.status === 'ACTIVE' ? (activeConnection.email || 'Connected') : 'Disconnected'}
+                                </p>
+                              </div>
                             </div>
                           </div>
-                        )}
-
-                        {activeConnection ? (
-                          <div className="space-y-5 animate-in fade-in zoom-in-95 duration-200">
-                            <div className="rounded-xl border-2 border-gray-200 bg-white p-5 sm:p-6 shadow-sm">
-                              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Connected account</p>
-                                  <p className="mt-1 text-lg font-semibold text-gray-900 truncate">
-                                    {activeConnection.name || activeConnection.email || 'Google account'}
-                                  </p>
-                                  {activeConnection.email ? (
-                                    <p className="text-sm text-gray-600 truncate">{activeConnection.email}</p>
-                                  ) : null}
-                                  <div className="mt-3 flex items-center gap-2">
-                                    <span
-                                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${activeConnection.status === 'ACTIVE'
-                                        ? 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-100'
-                                        : 'bg-amber-50 text-amber-900 ring-1 ring-amber-100'
-                                        }`}
-                                    >
-                                      <span className={`w-1.5 h-1.5 rounded-full ${activeConnection.status === 'ACTIVE' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-                                      {activeConnection.status === 'ACTIVE' ? 'Connected' : 'Disconnected — reconnect to use Drive'}
-                                    </span>
-                                  </div>
-                                </div>
-                                <div className="flex flex-col sm:flex-row flex-wrap gap-2 lg:justify-end">
-                                  {activeConnection.status === 'ACTIVE' ? (
-                                    <>
-                                      <Tooltip>
-                                        <TooltipTrigger asChild>
-                                          <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            className="border-gray-300 bg-white justify-start sm:justify-center"
-                                            onClick={() => handleTestConnection(activeConnection.id)}
-                                            disabled={testingConnection === activeConnection.id}
-                                          >
-                                            {testingConnection === activeConnection.id ? (
-                                              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                                            ) : (
-                                              <Zap className="w-4 h-4 mr-2" />
-                                            )}
-                                            Test connection
-                                          </Button>
-                                        </TooltipTrigger>
-                                        <TooltipContent side="bottom" className="max-w-xs">
-                                          Verify that Google accepts the stored tokens for this account.
-                                        </TooltipContent>
-                                      </Tooltip>
-                                      <Tooltip>
-                                        <TooltipTrigger asChild>
-                                          <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            className="border-gray-300 bg-white text-gray-900 justify-start sm:justify-center"
-                                            onClick={() => handleDisconnect(activeConnection.id)}
-                                          >
-                                            <Unlink className="w-4 h-4 mr-2" />
-                                            Disconnect
-                                          </Button>
-                                        </TooltipTrigger>
-                                        <TooltipContent side="bottom" className="max-w-xs">
-                                          Revoke the live session. You can reconnect the same account later without removing the connector row.
-                                        </TooltipContent>
-                                      </Tooltip>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Tooltip>
-                                        <TooltipTrigger asChild>
-                                          <Button
-                                            type="button"
-                                            variant="default"
-                                            size="sm"
-                                            className="bg-gray-900 text-white hover:bg-gray-800 justify-start sm:justify-center"
-                                            onClick={() => handleConnectGoogleDrive()}
-                                          >
-                                            <Link className="w-4 h-4 mr-2" />
-                                            Reconnect
-                                          </Button>
-                                        </TooltipTrigger>
-                                        <TooltipContent side="bottom" className="max-w-xs">
-                                          Open Google sign-in again to restore access for this connector.
-                                        </TooltipContent>
-                                      </Tooltip>
-                                    </>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-
+                          <div className="flex items-center gap-2 shrink-0">
                             {activeConnection.status === 'ACTIVE' ? (
-                              <GoogleDriveWorkspaceRoot
-                                connectionId={activeConnection.id}
-                                accessToken={session?.access_token}
-                                rootFolderId={driveRoot?.rootFolderId}
-                                rootFolderName={driveRoot?.rootFolderName}
-                                workspaceRootLocation={driveRoot?.workspaceRootLocation ?? null}
-                                workspaceRootSharedDriveName={driveRoot?.workspaceRootSharedDriveName ?? null}
-                                onUpdated={refreshDriveStatus}
-                              />
+                              <>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button type="button" variant="outline" size="sm"
+                                      className="h-8 px-3 text-xs border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+                                      onClick={() => handleTestConnection(activeConnection.id)}
+                                      disabled={testingConnection === activeConnection.id}>
+                                      {testingConnection === activeConnection.id
+                                        ? <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                                        : <Zap className="w-3.5 h-3.5 mr-1.5" />}
+                                      Test
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="bottom" className="max-w-xs">Verify that Google accepts the stored tokens for this account.</TooltipContent>
+                                </Tooltip>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button type="button" variant="outline" size="sm"
+                                      className="h-8 px-3 text-xs bg-gray-900 text-white border-gray-900 hover:bg-gray-800"
+                                      onClick={() => handleDisconnect(activeConnection.id)}>
+                                      <Unlink className="w-3.5 h-3.5 mr-1.5" />Disconnect
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="bottom" className="max-w-xs">Revoke the live session. You can reconnect the same account later.</TooltipContent>
+                                </Tooltip>
+                              </>
                             ) : (
-                              <div className="rounded-xl border border-dashed border-amber-200 bg-amber-50/40 px-4 py-6 text-center text-sm text-amber-950/90">
-                                <span className="font-medium">Reconnect</span> Google Drive above to view or change your workspace folder.
-                              </div>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button type="button" size="sm"
+                                    className="h-8 px-3 text-xs bg-gray-900 text-white hover:bg-gray-800"
+                                    onClick={() => handleConnectGoogleDrive()}>
+                                    <Link className="w-3.5 h-3.5 mr-1.5" />Reconnect
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="bottom" className="max-w-xs">Open Google sign-in again to restore access.</TooltipContent>
+                              </Tooltip>
                             )}
                           </div>
-                        ) : existingConnections.length === 0 ? (
-                          <div className="text-center py-14 bg-gray-50 rounded-xl border border-dashed border-gray-200 px-4">
-                            <p className="text-gray-700 text-sm font-medium">No Google account linked yet</p>
-                            <p className="text-gray-500 text-sm mt-1 max-w-md mx-auto">
-                              Use <span className="font-medium text-gray-700">Connect Google Drive</span> above to link an account and choose your workspace folder.
-                            </p>
+                        </div>
+                      </div>
+
+                      {/* Workspace section */}
+                      <div className="border-t border-gray-100">
+                        <div className="px-5 pt-4 pb-1">
+                          <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Workspace</p>
+                        </div>
+                        {activeConnection.status === 'ACTIVE' ? (
+                          <div className="px-5 pb-5">
+                            <GoogleDriveWorkspaceRoot
+                              connectionId={activeConnection.id}
+                              accessToken={session?.access_token}
+                              rootFolderId={driveRoot?.rootFolderId}
+                              rootFolderName={driveRoot?.rootFolderName}
+                              workspaceRootLocation={driveRoot?.workspaceRootLocation ?? null}
+                              workspaceRootSharedDriveName={driveRoot?.workspaceRootSharedDriveName ?? null}
+                              onUpdated={refreshDriveStatus}
+                              onMigrationStarted={() => {
+                                setMigrationPending(true)
+                                // Re-verify from DB shortly after API call persists
+                                setTimeout(() => {
+                                  if (!organizationId || !session?.access_token) return
+                                  fetch(`/api/firm/maintenance?firmId=${organizationId}`, {
+                                    headers: { Authorization: `Bearer ${session.access_token}` },
+                                  })
+                                    .then(r => r.ok ? r.json() : null)
+                                    .then(d => { if (d?.migrationPending) setMigrationPending(true) })
+                                    .catch(() => {})
+                                }, 1500)
+                              }}
+                            />
                           </div>
                         ) : (
-                          <div className="text-center py-12 bg-gray-50 rounded-xl border border-dashed border-gray-200">
-                            <p className="text-gray-500 text-sm">Select an account above to view details</p>
+                          <div className="mx-5 mb-5 rounded-lg border border-dashed border-amber-200 bg-amber-50/40 px-4 py-5 text-center text-sm text-amber-950/90">
+                            <span className="font-medium">Reconnect</span> Google Drive above to view or change your workspace folder.
                           </div>
                         )}
                       </div>
+                      {/* Failed migration files warning */}
+                      {latestMigrationStatus === 'failed_partial' && failedFileCount > 0 && (
+                        <div className="border-t border-amber-100 bg-amber-50/50 px-5 py-3 flex items-start gap-3">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-semibold text-amber-900">
+                              {failedFileCount} {failedFileCount === 1 ? 'file' : 'files'} could not be migrated
+                            </p>
+                            <p className="text-xs text-amber-700 mt-0.5">
+                              Some files failed to move during the last workspace migration.{' '}
+                              <a
+                                href="mailto:support@pockett.app?subject=Workspace%20migration%20failed%20files"
+                                className="underline underline-offset-2 font-medium hover:text-amber-900"
+                              >
+                                Contact support
+                              </a>{' '}
+                              to resolve this.
+                            </p>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                </TooltipProvider>
-              ) : (
-                <div className="flex flex-col items-center justify-center h-[400px] border border-dashed border-gray-200 rounded-xl bg-gray-50">
-                  <div className="h-12 w-12 bg-white rounded-xl shadow-sm flex items-center justify-center mb-4">
-                    <Settings className="h-6 w-6 text-gray-400" />
-                  </div>
-                  <h3 className="text-gray-900 font-medium">Coming Soon</h3>
-                  <p className="text-gray-500 text-sm mt-1">This integration is under development.</p>
+                  ) : existingConnections.length === 0 ? (
+                    <div className="border-t border-gray-100 text-center py-14 px-4">
+                      <div className="h-10 w-10 mx-auto mb-3 bg-white rounded-xl shadow-sm ring-1 ring-gray-100 flex items-center justify-center">
+                        <GoogleDriveIcon size={20} />
+                      </div>
+                      <p className="text-gray-800 text-sm font-semibold">No account linked yet</p>
+                      <p className="text-gray-500 text-sm mt-1 max-w-sm mx-auto">Connect Google Drive to link an account and set your workspace folder.</p>
+                    </div>
+                  ) : (
+                    <div className="border-t border-gray-100 text-center py-12">
+                      <p className="text-gray-500 text-sm">Select an account above to view details</p>
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
+            </TooltipProvider>
+          )}
+        </TabsContent>
+
+        {/* Coming soon tabs */}
+        {['onedrive', 'dropbox', 'box'].map(id => (
+          <TabsContent key={id} value={id} className="mt-0">
+            <div className="flex flex-col items-center justify-center h-[400px] border border-dashed border-gray-200 rounded-xl bg-gray-50/60">
+              <div className="h-12 w-12 bg-white rounded-xl shadow-sm flex items-center justify-center mb-4 ring-1 ring-gray-100">
+                <Settings className="h-6 w-6 text-gray-400" />
+              </div>
+              <h3 className="text-gray-900 font-semibold text-sm">Coming Soon</h3>
+              <p className="text-gray-500 text-sm mt-1">This integration is under development.</p>
             </div>
-          </>
-        )}
-      </div>
+          </TabsContent>
+        ))}
+      </Tabs>
 
       <ConnectionTestModal
         isOpen={isTestModalOpen}
@@ -675,6 +658,19 @@ export default function ConnectorsPage({ params }: { params: Promise<{ slug: str
         result={connectionTestResult}
         connectionName={activeConnection?.name || 'Google Drive'}
       />
+
+      {migrationPending && (
+        <AppShellHintStrip
+          accent="amber"
+          title="Workspace maintenance starting in ~2 min"
+          description="A grace period is active — save your work. The workspace will be locked while files are migrated to the new folder."
+          actions={
+            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setMigrationPending(false)}>
+              Dismiss
+            </Button>
+          }
+        />
+      )}
     </div>
   )
 }

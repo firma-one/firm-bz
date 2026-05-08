@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
+import { createAdminClient } from '@/utils/supabase/admin'
 import { cascadeDeletePlatformDataForFirmAdminUser } from '@/lib/system/cascade-delete-firm-admin-user'
 import { isSysAdminUser } from '@/lib/system/user-data-map'
 
@@ -32,9 +33,10 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
 
-    const targetUserId = typeof (body as { targetUserId?: unknown }).targetUserId === 'string' ? (body as { targetUserId: string }).targetUserId : ''
-    const confirmUserId =
-        typeof (body as { confirmUserId?: unknown }).confirmUserId === 'string' ? (body as { confirmUserId: string }).confirmUserId : ''
+    const b = body as { targetUserId?: unknown; confirmUserId?: unknown; deleteAuthAccount?: unknown }
+    const targetUserId = typeof b.targetUserId === 'string' ? b.targetUserId : ''
+    const confirmUserId = typeof b.confirmUserId === 'string' ? b.confirmUserId : ''
+    const deleteAuthAccount = b.deleteAuthAccount === true
 
     if (!UUID_RE.test(targetUserId) || !UUID_RE.test(confirmUserId)) {
         return NextResponse.json({ error: 'targetUserId and confirmUserId must be valid UUIDs' }, { status: 400 })
@@ -46,10 +48,21 @@ export async function POST(request: NextRequest) {
 
     const counts = await cascadeDeletePlatformDataForFirmAdminUser(normalizeUuid(targetUserId))
 
+    let deletedAuthAccount = false
+    if (deleteAuthAccount) {
+        const adminClient = createAdminClient()
+        const { error: authError } = await adminClient.auth.admin.deleteUser(normalizeUuid(targetUserId))
+        if (authError) {
+            return NextResponse.json({ error: `Platform data deleted but auth account removal failed: ${authError.message}` }, { status: 500 })
+        }
+        deletedAuthAccount = true
+    }
+
     return NextResponse.json(
         {
             data: {
                 ...counts,
+                deletedAuthAccount,
                 noOp: counts.firmAdminFirmIds.length === 0,
             },
         },

@@ -178,8 +178,19 @@
   },
   "active": "d227eb11c54c0bc9",
   "lastOpenFiles": [
+    "frontend/prisma/migrations/20260508190000_maintenance_migrations/migration.sql",
+    "frontend/prisma/migrations/20260508190000_maintenance_migrations",
+    "frontend/prisma/migrations/20260508180000_notification_scope/migration.sql",
+    "frontend/prisma/migrations/20260508180000_notification_scope",
+    "frontend/app/(app)/system/platform-maintenance/page.tsx",
+    "frontend/app/(app)/platform-maintenance/page.tsx",
+    "frontend/app/(app)/system/platform-maintenance",
+    "frontend/app/(app)/platform-maintenance",
+    "frontend/lib/hooks/use-platform-maintenance-status.ts",
+    "frontend/app/api/system/platform-maintenance/route.ts",
+    "frontend/app/api/system/platform-maintenance/status/route.ts",
+    "scripts/reset_db.md",
     "docs/mvp/hld.md",
-    "docs/mvp/prd.md",
-    "docs/mvp/hld.pdf"
+    "docs/mvp/prd.md"
   ]
 }

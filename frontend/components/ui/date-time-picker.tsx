@@ -5,6 +5,21 @@ import { createPortal } from "react-dom"
 import { Button } from "@/components/ui/button"
 import { Calendar, Clock } from "lucide-react"
 
+function getUtcOffsetLabel() {
+  const offset = -new Date().getTimezoneOffset()
+  const h = String(Math.floor(Math.abs(offset) / 60)).padStart(2, '0')
+  const m = String(Math.abs(offset) % 60).padStart(2, '0')
+  return `UTC${offset >= 0 ? '+' : '-'}${h}:${m}`
+}
+
+export function TimezoneOffsetBadge({ className = '' }: { className?: string }) {
+  return (
+    <span className={`text-[10px] font-semibold font-mono px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 ${className}`}>
+      {getUtcOffsetLabel()}
+    </span>
+  )
+}
+
 interface DateTimePickerProps {
   value?: string
   onChange: (dateTime: string) => void
@@ -16,8 +31,10 @@ interface DateTimePickerProps {
    * Pass a fixed "HH:MM" string, or omit to default to the current time of day.
    */
   defaultTime?: string
-  /** When true, clamps the time input to ≤ now when today is selected. */
-  disableFutureTimes?: boolean
+  /** Set false to disable future calendar days and clamp times to ≤ now. Default true. */
+  allowFutureDateTimes?: boolean
+  /** Set false to disable past calendar days. Default true. */
+  allowPastDateTimes?: boolean
 }
 
 export function DateTimePicker({
@@ -27,7 +44,8 @@ export function DateTimePicker({
   className = "",
   disabled = false,
   defaultTime,
-  disableFutureTimes = false,
+  allowFutureDateTimes = true,
+  allowPastDateTimes = true,
 }: DateTimePickerProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [selectedDate, setSelectedDate] = useState<string>("")
@@ -128,13 +146,7 @@ export function DateTimePicker({
     })
 
     if (selectedTime) {
-      const timeDate = new Date(`2000-01-01T${selectedTime}`)
-      const timeStr = timeDate.toLocaleTimeString('en-US', {
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true
-      })
-      return `${dateStr} at ${timeStr}`
+      return `${dateStr} ${selectedTime}`
     }
 
     return `${dateStr} (time not set)`
@@ -160,7 +172,8 @@ export function DateTimePicker({
       const isCurrentMonth = date.getMonth() === month
       const isToday = date.getTime() === today.getTime()
       const isSelected = selectedDate === localDateStr
-      const isFuture = date > today
+      const isFuture = !allowFutureDateTimes && date > today
+      const isPast = !allowPastDateTimes && date < today
 
       days.push({
         date: date.getDate(),
@@ -168,7 +181,7 @@ export function DateTimePicker({
         isCurrentMonth,
         isToday,
         isSelected,
-        isFuture
+        isDisabled: isFuture || isPast
       })
     }
 
@@ -214,12 +227,15 @@ export function DateTimePicker({
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-xs font-semibold text-gray-900">Select Date & Time</h3>
-        <button
-          onClick={() => setIsOpen(false)}
-          className="text-gray-400 hover:text-gray-600 text-sm leading-none"
-        >
-          ×
-        </button>
+        <div className="flex items-center gap-2">
+          <TimezoneOffsetBadge />
+          <button
+            onClick={() => setIsOpen(false)}
+            className="text-gray-400 hover:text-gray-600 text-sm leading-none"
+          >
+            ×
+          </button>
+        </div>
       </div>
 
       {/* Calendar */}
@@ -257,14 +273,14 @@ export function DateTimePicker({
             <button
               key={index}
               onClick={() => setSelectedDate(day.fullDate)}
-              disabled={day.isFuture}
+              disabled={day.isDisabled}
               className={`
                 text-xs p-2 rounded transition-colors
                 ${day.isCurrentMonth ? 'text-gray-900' : 'text-gray-400'}
                 ${day.isToday ? 'bg-gray-100 text-gray-900 font-semibold ring-2 ring-gray-300' : ''}
                 ${day.isSelected ? 'bg-gray-900 text-white hover:bg-gray-800 font-semibold' : ''}
                 ${!day.isSelected && !day.isToday ? 'hover:bg-gray-100' : ''}
-                ${day.isFuture ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}
+                ${day.isDisabled ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}
               `}
             >
               {day.date}
@@ -284,23 +300,19 @@ export function DateTimePicker({
           </label>
         </div>
         {(() => {
-          const HOURS = [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+          const HOURS = Array.from({ length: 24 }, (_, i) => i)
           const MINUTES = Array.from({ length: 60 }, (_, i) => i)
 
           const [selH24, selMin] = selectedTime
             ? selectedTime.split(':').map(Number)
             : [0, 0]
-          const selAmPm = selH24 >= 12 ? 'PM' : 'AM'
-          const selH12 = selH24 % 12 === 0 ? 12 : selH24 % 12
 
-          const applyTime = (h12: number, min: number, ampm: string) => {
-            let h24 = h12 % 12
-            if (ampm === 'PM') h24 += 12
+          const applyTime = (h24: number, min: number) => {
             const t = `${String(h24).padStart(2, '0')}:${String(min).padStart(2, '0')}`
             const now = new Date()
             const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
             const nowTime = now.toTimeString().slice(0, 5)
-            const isToday = disableFutureTimes && selectedDate === todayStr
+            const isToday = !allowFutureDateTimes && selectedDate === todayStr
             setSelectedTime(isToday && t > nowTime ? nowTime : t)
           }
 
@@ -313,12 +325,12 @@ export function DateTimePicker({
 
           return (
             <div className="flex gap-1 px-0.5">
-              {/* Hours */}
+              {/* Hours 0–23 */}
               <div className="flex-1 flex flex-col gap-0.5">
                 <div className="text-[10px] font-medium text-gray-400 text-center pb-0.5">Hrs</div>
                 <div className="max-h-[120px] overflow-y-auto flex flex-col gap-0.5 p-0.5">
                   {HOURS.map((h) => (
-                    <button key={h} type="button" className={cellCls(selH12 === h && !!selectedTime)} onClick={() => applyTime(h, selMin, selAmPm)}>
+                    <button key={h} type="button" className={cellCls(selH24 === h && !!selectedTime)} onClick={() => applyTime(h, selMin)}>
                       {String(h).padStart(2, '0')}
                     </button>
                   ))}
@@ -329,20 +341,11 @@ export function DateTimePicker({
                 <div className="text-[10px] font-medium text-gray-400 text-center pb-0.5">Mins</div>
                 <div className="max-h-[120px] overflow-y-auto flex flex-col gap-0.5 p-0.5">
                   {MINUTES.map((m) => (
-                    <button key={m} type="button" className={cellCls(selMin === m && !!selectedTime)} onClick={() => applyTime(selH12, m, selAmPm)}>
+                    <button key={m} type="button" className={cellCls(selMin === m && !!selectedTime)} onClick={() => applyTime(selH24, m)}>
                       {String(m).padStart(2, '0')}
                     </button>
                   ))}
                 </div>
-              </div>
-              {/* AM / PM */}
-              <div className="flex-1 flex flex-col gap-0.5 p-0.5">
-                <div className="text-[10px] font-medium text-gray-400 text-center pb-0.5">&nbsp;</div>
-                {(['AM', 'PM'] as const).map((p) => (
-                  <button key={p} type="button" className={cellCls(selAmPm === p && !!selectedTime)} onClick={() => applyTime(selH12, selMin, p)}>
-                    {p}
-                  </button>
-                ))}
               </div>
             </div>
           )
@@ -381,7 +384,15 @@ export function DateTimePicker({
         className="w-full justify-start text-left font-normal text-xs"
       >
         <Calendar className="mr-1.5 h-3 w-3 shrink-0" />
-        {formatDisplayValue()}
+        <span className="flex-1">{formatDisplayValue()}</span>
+        {selectedDate && (
+          <span
+            title={getUtcOffsetLabel()}
+            className="ml-2 shrink-0 text-[10px] font-semibold font-mono px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200"
+          >
+            TZ
+          </span>
+        )}
       </Button>
 
       {typeof document !== 'undefined' && createPortal(dropdown, document.body)}

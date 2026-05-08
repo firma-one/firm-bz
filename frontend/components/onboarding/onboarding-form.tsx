@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { useSearchParams, useRouter } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -105,7 +105,6 @@ export function OnboardingForm({
     onProgressIndexChange,
 }: OnboardingFormProps) {
     const searchParams = useSearchParams()
-    const router = useRouter()
     const firstNameInputRef = useRef<HTMLInputElement>(null)
     const emailInputRef = useRef<HTMLInputElement>(null)
     const isSplitLight = layout === 'split-light'
@@ -146,16 +145,16 @@ export function OnboardingForm({
         }
     }, [searchParams])
 
-    // Auto-navigate after signup success
+    // Auto-navigate after signup success — full navigation so the `/d` server layout sees auth cookies
     useEffect(() => {
         if (step !== 'success') return
         if (countdown <= 0) {
-            router.push(successNavTarget)
+            window.location.href = successNavTarget
             return
         }
         const t = setTimeout(() => setCountdown((c) => c - 1), 1000)
         return () => clearTimeout(t)
-    }, [step, countdown, successNavTarget, router])
+    }, [step, countdown, successNavTarget])
 
     const handleSkipOnboarding = async () => {
         await supabase.auth.signOut()
@@ -163,10 +162,11 @@ export function OnboardingForm({
     }
 
     // Check if user is already logged in — full navigation so `/d` RSC sees auth cookies (same as post-OTP).
+    // Use getUser() (validates against GoTrue) not getSession() (reads stale local cache).
     useEffect(() => {
         const checkSession = async () => {
-            const { data: { session } } = await supabase.auth.getSession()
-            if (session) {
+            const { data: { user } } = await supabase.auth.getUser()
+            if (user) {
                 window.location.href = '/d/onboarding'
             }
         }

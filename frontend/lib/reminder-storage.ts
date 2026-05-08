@@ -152,7 +152,7 @@ class ReminderStorageService {
       dueDate,
       isOverdue: diffTime < 0,
       daysUntilDue: diffDays,
-      formattedDate: `${formatFullDate(due)}, ${due.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`
+      formattedDate: `${formatFullDate(due)}, ${due.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })}`
     }
   }
 
