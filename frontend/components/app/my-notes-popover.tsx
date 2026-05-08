@@ -1,8 +1,9 @@
 'use client'
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { CheckCircle2, RotateCcw, Trash2, Save, Loader2, NotebookPen } from 'lucide-react'
+import { CheckCircle2, RotateCcw, Trash2, Save, Loader2, NotebookPen, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { Tip } from '@/components/ui/tip'
 
 type Line = { raw: string; checked: boolean; text: string; prefix: string }
 
@@ -132,43 +133,47 @@ export function MyNotesPopover() {
 
   return (
     <div className="relative">
+      <Tip label="My Notes" position="bottom">
       <button
         type="button"
-        className="p-2 text-slate-600/80 hover:text-slate-800 hover:bg-slate-100 rounded-full transition-colors"
+        className="p-2 text-slate-600/80 hover:text-slate-800 hover:bg-slate-100 rounded-full transition-colors relative"
         aria-label="My Notes"
         onClick={() => setOpen((v) => !v)}
       >
         <NotebookPen className="h-5 w-5 text-slate-700" />
+        {checklistOnly.length > 0 ? (
+          <span className="absolute top-0.5 right-0.5 min-w-[14px] h-3.5 px-1 bg-slate-600 text-white text-[9px] font-bold rounded-full border border-white flex items-center justify-center leading-none">
+            {checklistOnly.length}
+          </span>
+        ) : notes.trim().length > 0 ? (
+          <span className="absolute top-0.5 right-0.5 h-2 w-2 bg-slate-400 rounded-full border border-white" />
+        ) : null}
       </button>
+      </Tip>
 
       {open ? (
         <div className="absolute right-0 top-full mt-2 w-[380px] bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden">
-          <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/60">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-sm font-semibold text-slate-900">My Notes</div>
-                <div className="text-xs text-slate-600">Markdown checklist</div>
+          <div className="px-4 py-3 border-b border-slate-200 bg-slate-50">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-[13px] font-bold text-slate-900 tracking-tight">My Notes</span>
+                {checklistOnly.length > 0 ? (
+                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-700 text-white">
+                    {checklistOnly.length}
+                  </span>
+                ) : null}
               </div>
-              <div className="text-[11px] text-slate-500 flex items-center gap-2">
+              <div className="flex items-center gap-2 text-[11px] text-slate-400">
                 {saving ? (
-                  <span className="inline-flex items-center gap-1">
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    Saving
-                  </span>
+                  <span className="inline-flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" />Saving</span>
                 ) : notes === initialNotes ? (
-                  <span className="inline-flex items-center gap-1">
-                    <Save className="h-3 w-3" />
-                    Saved
-                  </span>
+                  <span className="inline-flex items-center gap-1"><Save className="h-3 w-3" />Saved</span>
                 ) : (
-                  <span className="text-slate-500">Edited</span>
+                  <span>Edited</span>
                 )}
-                <button
-                  type="button"
-                  className="text-[11px] font-semibold text-slate-700 hover:text-slate-900"
-                  onClick={() => setOpen(false)}
-                >
-                  Close
+                <button type="button" onClick={() => setOpen(false)} aria-label="Close"
+                  className="p-1 rounded-lg hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors">
+                  <X className="h-4 w-4" />
                 </button>
               </div>
             </div>

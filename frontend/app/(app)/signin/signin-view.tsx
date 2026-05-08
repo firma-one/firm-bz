@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { BRAND_NAME } from '@/config/brand'
 import { KINETIC_AUTH_HERO_IMAGE } from '@/lib/marketing/kinetic-auth-hero'
 import { KINETIC_LANDING_HERO_BADGE } from '@/lib/marketing/target-audience-nav'
-import { ArrowLeft, ArrowRight, Lock, Shield } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Lock, Shield } from 'lucide-react'
 import { KineticFloatingEmailField } from '@/components/onboarding/kinetic-floating-email-field'
 import { OTPInput } from '@/components/onboarding/otp-input'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
@@ -30,9 +30,12 @@ export function SigninView() {
     otpCode,
     setOtpCode,
     loading,
+    checkLoading,
     googleLoading,
     error,
     setError,
+    noAccountMessage,
+    emailVerified,
     turnstileToken,
     setTurnstileToken,
     showTurnstile,
@@ -43,6 +46,8 @@ export function SigninView() {
     sendOTPWithToken,
     handleEmailSubmit,
     handleVerifyOTP,
+    handleInitiateCheck,
+    handleTurnstileSuccess,
   } = useSignInFlow()
 
   return (
@@ -158,10 +163,55 @@ export function SigninView() {
                         value={email}
                         onValueChange={setEmail}
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleEmailSubmit('otp')
+                          if (e.key === 'Enter' && !emailVerified) handleInitiateCheck()
                         }}
                         autoFocus
+                        trailing={
+                          <button
+                            type="button"
+                            onClick={emailVerified ? undefined : handleInitiateCheck}
+                            disabled={checkLoading || !email.trim()}
+                            aria-label={emailVerified ? 'Email verified' : 'Check email'}
+                            className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border-0 transition-all duration-200 disabled:pointer-events-none disabled:opacity-50 ${
+                              emailVerified
+                                ? 'bg-[#d4f5d3] text-[#006e16] cursor-default'
+                                : 'bg-[#72ff70] text-[#002203] shadow-[0_1px_0_rgba(0,34,3,0.28)] hover:brightness-95 hover:-translate-y-0.5 hover:shadow-[0_10px_24px_-12px_rgba(0,34,3,0.65)] active:translate-y-0 active:scale-95'
+                            }`}
+                          >
+                            {checkLoading ? (
+                              <LoadingSpinner size="sm" />
+                            ) : emailVerified ? (
+                              <Check className="h-4 w-4" strokeWidth={2.5} />
+                            ) : (
+                              <ArrowRight className="h-4 w-4" strokeWidth={2} />
+                            )}
+                          </button>
+                        }
                       />
+                      {noAccountMessage && (
+                        <p className="mt-2 text-xs text-[#8a2b2b]">
+                          {noAccountMessage}{' '}
+                          <Link
+                            href={`/signup${email.trim() ? `?email=${encodeURIComponent(email.trim())}` : ''}`}
+                            className="font-semibold underline underline-offset-2 hover:text-[#5f1f1f]"
+                          >
+                            Sign up
+                          </Link>
+                        </p>
+                      )}
+                      {showTurnstile && (
+                        <div className="mt-3 flex justify-center">
+                          <Turnstile
+                            siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'}
+                            onSuccess={handleTurnstileSuccess}
+                            onError={() => {
+                              setError('Captcha verification failed. Please try again.')
+                              setTurnstileToken(null)
+                            }}
+                            onExpire={() => setTurnstileToken(null)}
+                          />
+                        </div>
+                      )}
                     </div>
 
                     {error && (
@@ -178,7 +228,7 @@ export function SigninView() {
                         type="button"
                         onClick={() => handleEmailSubmit('otp')}
                         disabled={
-                          loading || googleLoading || !email.trim() || (showTurnstile && !turnstileToken)
+                          !emailVerified || loading || googleLoading || (showTurnstile && !turnstileToken)
                         }
                         className={LIME_CTA}
                       >
@@ -198,24 +248,6 @@ export function SigninView() {
                           </>
                         )}
                       </button>
-
-                      {showTurnstile && (
-                        <div className="flex justify-center">
-                          <Turnstile
-                            siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'}
-                            onSuccess={(token) => {
-                              setTurnstileToken(token)
-                              setError('')
-                              sendOTPWithToken(token)
-                            }}
-                            onError={() => {
-                              setError('Captcha verification failed. Please try again.')
-                              setTurnstileToken(null)
-                            }}
-                            onExpire={() => setTurnstileToken(null)}
-                          />
-                        </div>
-                      )}
                     </div>
 
                     <div className="relative py-1">
@@ -234,7 +266,7 @@ export function SigninView() {
                     <Button
                       type="button"
                       onClick={() => handleEmailSubmit('google')}
-                      disabled={loading || googleLoading}
+                      disabled={!emailVerified || loading || googleLoading}
                       variant="outline"
                       className={`${OUTLINE_SECONDARY} h-12 rounded-md`}
                     >
@@ -345,10 +377,7 @@ export function SigninView() {
                         <div className="flex justify-center">
                           <Turnstile
                             siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'}
-                            onSuccess={(token) => {
-                              setTurnstileToken(token)
-                              sendOTPWithToken(token)
-                            }}
+                            onSuccess={handleTurnstileSuccess}
                             onError={() => {
                               setError('Captcha verification failed. Please try again.')
                               setTurnstileToken(null)

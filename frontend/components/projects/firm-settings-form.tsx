@@ -256,7 +256,6 @@ export function FirmSettingsForm({
             setLogoX(0)
             setLogoY(0)
             addToast({ type: 'success', title: 'Logo removed', message: 'Organization logo has been removed.' })
-            onSaved?.()
         } catch (e: unknown) {
             addToast({
                 type: 'error',

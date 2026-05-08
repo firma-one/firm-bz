@@ -4,7 +4,7 @@
 
 - [ ] **Insights**
 
-- [ ] **Audit** — more events need to be captured
+- [x] **Audit** — more events need to be captured
   - Event Source: Firm, Client, Engagement, Document
   - Event Type: CREATED, MODIFIED, DELETED, OPENED, DOWNLOADED, SHARE-CREATED, SHARE-MODIFIED, SHARE-DELETED
 

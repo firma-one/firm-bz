@@ -28,6 +28,7 @@ export type KineticFloatingEmailFieldProps = {
   /** Shown to the right of the field (e.g. signup submit arrow). */
   trailing?: ReactNode
   onKeyDown?: KeyboardEventHandler<HTMLInputElement>
+  onFocus?: () => void
 }
 
 export const KineticFloatingEmailField = forwardRef<HTMLInputElement, KineticFloatingEmailFieldProps>(
@@ -43,6 +44,7 @@ export const KineticFloatingEmailField = forwardRef<HTMLInputElement, KineticFlo
       label = 'Email address',
       trailing,
       onKeyDown,
+      onFocus: onFocusProp,
     },
     ref,
   ) {
@@ -97,6 +99,7 @@ export const KineticFloatingEmailField = forwardRef<HTMLInputElement, KineticFlo
             onFocus={() => {
               setFocused(true)
               syncFromDom()
+              onFocusProp?.()
             }}
             onAnimationStart={(e) => {
               if (e.animationName) syncFromDom()

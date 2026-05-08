@@ -175,3 +175,31 @@ export interface PlatformMaintenanceGraceRequestedEvent {
     enabledBy: string
   }
 }
+
+/**
+ * Fired when a reminder should trigger an email.
+ * Inngest sleeps until fireAt, then sends (unless the reminder was already marked done).
+ */
+export interface ReminderEmailScheduledEvent {
+  name: 'reminder.email.scheduled'
+  data: {
+    reminderId: string      // reminder item id — used as cancel key
+    entityKey: string       // "platform.clients.id"
+    entityValue: string     // actual entity primary key
+    entityName: string
+    action: string          // "Follow-up"
+    userId: string
+    firmId: string
+    dateKey: string         // "platform.clients.followUpDate"
+    fireAt: string          // ISO UTC
+    ctaUrl: string | null
+  }
+}
+
+/**
+ * Fired when a reminder is marked done or its date is cleared — cancels the sleeping Inngest run.
+ */
+export interface ReminderEmailCancelledEvent {
+  name: 'reminder.email.cancelled'
+  data: { reminderId: string }
+}

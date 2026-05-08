@@ -88,7 +88,7 @@ export async function sendOTPWithTurnstile(
         const { error } = await supabase.auth.signInWithOtp({
             email: normalizedEmail,
             options: {
-                shouldCreateUser: true,
+                shouldCreateUser: !!(fn && ln),
                 ...(userData ? { data: userData } : {}),
             },
         })

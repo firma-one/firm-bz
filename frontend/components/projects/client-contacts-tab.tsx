@@ -13,11 +13,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { createClientContact, deleteClientContact, listClientContacts, updateClientContact, type ClientContactRecord } from '@/lib/actions/client'
+import { createClientContact, deleteClientContact, listClientContacts, setClientContactPrimary, updateClientContact, type ClientContactRecord } from '@/lib/actions/client'
 import { SandboxInfoBanner } from '@/components/ui/sandbox-info-banner'
 import { useOrgSandbox } from '@/lib/use-org-sandbox'
 import { cn } from '@/lib/utils'
-import { UserPlus, Trash2, Pencil, X, Save } from 'lucide-react'
+import { UserPlus, Trash2, Pencil, X, Save, Star } from 'lucide-react'
 
 type Draft = { name: string; email: string; phone: string; title: string; notes: string; tags: string }
 
@@ -166,7 +166,14 @@ export function ClientContactsTab({
                 <div key={c.id} className={cn('p-5 flex flex-col gap-3', isEditing && 'bg-slate-50/60')}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="font-semibold text-slate-900 truncate">{c.name}</div>
+                      <div className="flex items-center gap-2">
+                        <div className="font-semibold text-slate-900 truncate">{c.name}</div>
+                        {c.isPrimary && (
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200 shrink-0">
+                            <Star className="h-2.5 w-2.5 fill-amber-500 text-amber-500" /> Primary
+                          </span>
+                        )}
+                      </div>
                       <div className="text-sm text-slate-500 truncate">
                         {c.title ?? '—'}
                         {c.email ? <span className="text-slate-300"> · </span> : null}
@@ -226,6 +233,27 @@ export function ClientContactsTab({
                         </>
                       ) : (
                         <>
+                          {!c.isPrimary && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="border-amber-200 text-amber-700 hover:bg-amber-50"
+                              disabled={!canManage || isPending}
+                              onClick={() => {
+                                startTransition(async () => {
+                                  try {
+                                    await setClientContactPrimary(orgSlug, clientSlug, c.id)
+                                    await refresh()
+                                  } catch (e) {
+                                    addToast({ type: 'error', title: 'Failed', message: e instanceof Error ? e.message : 'Could not set primary contact.' })
+                                  }
+                                })
+                              }}
+                              title="Set as primary contact"
+                            >
+                              <Star className="h-4 w-4" />
+                            </Button>
+                          )}
                           <Button
                             size="sm"
                             variant="outline"

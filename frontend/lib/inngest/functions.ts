@@ -863,3 +863,109 @@ export const platformMaintenanceActivate = inngest.createFunction(
         return { ok: true }
     }
 )
+
+
+// ---------------------------------------------------------------------------
+// Client Follow-Up Reminders (Daily Cron)
+// ---------------------------------------------------------------------------
+
+// Safety-net cron: fires at 00:00 UTC daily — catches any follow-ups whose
+// Inngest sleepUntil run was lost. Creates in-app notification only (no email —
+// email is handled by sendReminderEmail via sleepUntil).
+export const checkClientFollowUpReminders = inngest.createFunction(
+    { id: "check-client-follow-up-reminders", triggers: [{ cron: "0 0 * * *" }] },
+    async ({ step }) => {
+        return step.run("query-and-notify", async () => {
+            const todayStart = new Date()
+            todayStart.setUTCHours(0, 0, 0, 0)
+            const todayEnd = new Date()
+            todayEnd.setUTCHours(23, 59, 59, 999)
+            const dateStr = todayStart.toISOString().slice(0, 10)
+
+            const clients = await (prisma as any).client.findMany({
+                where: {
+                    followUpDate: { gte: todayStart, lte: todayEnd },
+                    ownerId: { not: null },
+                    status: { in: ["PROSPECT", "ACTIVE"] },
+                },
+                select: {
+                    id: true, name: true, slug: true,
+                    firmId: true, ownerId: true, followUpDate: true,
+                    firm: { select: { slug: true } },
+                },
+            })
+
+            if (!clients.length) return { notified: 0 }
+
+            const rows = clients.map((c: any) => ({
+                firmId: c.firmId,
+                clientId: c.id,
+                userId: c.ownerId,
+                scope: "CLIENT",
+                type: "CLIENT_FOLLOWUP_DUE",
+                priority: "WARNING",
+                title: `Follow up due: ${c.name}`,
+                body: `Your scheduled follow-up with ${c.name} is due today.`,
+                ctaUrl: c.firm?.slug ? `/d/f/${c.firm.slug}/c/${c.slug}` : null,
+                channels: { inApp: true, email: false },
+                dedupeKey: `client:${c.id}:followup:${dateStr}`,
+                metadata: { followUpDate: c.followUpDate?.toISOString(), clientName: c.name, internal: true },
+            }))
+
+            await (prisma as any).notification.createMany({ data: rows, skipDuplicates: true })
+            return { notified: clients.length }
+        })
+    }
+)
+
+// ---------------------------------------------------------------------------
+// Reminder Email — sleepUntil + cancelOn
+// ---------------------------------------------------------------------------
+
+export const sendReminderEmail = inngest.createFunction(
+    {
+        id: "send-reminder-email",
+        triggers: [{ event: "reminder.email.scheduled" }],
+        cancelOn: [{
+            event: "reminder.email.cancelled",
+            if: "event.data.reminderId == async.data.reminderId",
+        }],
+    },
+    async ({ event, step }: any) => {
+        await step.sleepUntil("wait-for-reminder", event.data.fireAt)
+
+        await step.run("send", async () => {
+            // Skip if reminder was marked done (node was removed from the array)
+            const personalization = await prisma.userPersonalization.findUnique({
+                where: { userId: event.data.userId },
+                select: { reminders: true },
+            })
+            const items: any[] = Array.isArray(personalization?.reminders)
+                ? (personalization!.reminders as any[])
+                : []
+            const item = items.find((r: any) => r.id === event.data.reminderId)
+            if (!item) return { skipped: 'done' }
+
+            const { createAdminClient } = await import("@/utils/supabase/admin")
+            const { sendEmail } = await import("@/lib/email")
+            const admin = createAdminClient()
+            const { data } = await admin.auth.admin.getUserById(event.data.userId)
+            const email = data?.user?.email
+            if (!email) return { skipped: 'no-email' }
+
+            const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
+            const ctaHtml = event.data.ctaUrl
+                ? `<p><a href="${appUrl}${event.data.ctaUrl}">Open client →</a></p>`
+                : ''
+
+            await sendEmail(
+                email,
+                `Follow up today: ${event.data.entityName}`,
+                `<p>Your scheduled follow-up with <strong>${event.data.entityName}</strong> is due today.</p>${ctaHtml}`
+            )
+            return { sent: true }
+        })
+
+        return { reminderId: event.data.reminderId }
+    }
+)

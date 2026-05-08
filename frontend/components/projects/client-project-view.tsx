@@ -6,7 +6,7 @@ import { getProjectMemberSummaries, type ProjectMemberSummary } from '@/lib/acti
 import { ProjectList } from './project-list'
 import { ClientSettingsForm } from './client-settings-form'
 import type { LwCrmClientStatus } from '@/lib/actions/client'
-import { SquarePlus, ChevronRight, Building2, Users, Briefcase, LayoutGrid, List, Home, Settings, UserCog } from 'lucide-react'
+import { SquarePlus, ChevronRight, Building2, Users, Briefcase, LayoutGrid, List, Home, Settings, UserCog, CalendarClock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { AddProjectModal } from './add-project-modal'
@@ -148,7 +148,32 @@ export function ClientProjectView({ clients, orgSlug, orgName, orgId, firmSandbo
                                     <Users className="h-6 w-6 text-stone-500" />
                                     {selectedClient.name}
                                 </h1>
-                                <p className="d-subtitle mt-1">Manage projects and client settings.</p>
+                                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                    <p className="d-subtitle">Manage projects and client settings.</p>
+                                    {(() => {
+                                        const fud = selectedClient.followUpDate
+                                        if (!fud) return null
+                                        const today = new Date(); today.setHours(0, 0, 0, 0)
+                                        const d = new Date(fud); d.setHours(0, 0, 0, 0)
+                                        const delta = Math.round((d.getTime() - today.getTime()) / 86400000)
+                                        if (delta > 2 || delta < -2) return null
+                                        const chips: Record<number, { label: string; cls: string }> = {
+                                            2:  { label: 'Follow up · in 2 days', cls: 'bg-indigo-50 text-indigo-600 border-indigo-200' },
+                                            1:  { label: 'Follow up · tomorrow',  cls: 'bg-indigo-50 text-indigo-600 border-indigo-200' },
+                                            0:  { label: 'Follow up today',        cls: 'bg-amber-50 text-amber-700 border-amber-200'  },
+                                            [-1]: { label: 'Follow up · 1 day late', cls: 'bg-orange-50 text-orange-700 border-orange-200' },
+                                            [-2]: { label: 'Follow up · 2 days late', cls: 'bg-red-50 text-red-700 border-red-200' },
+                                        }
+                                        const chip = chips[delta]
+                                        if (!chip) return null
+                                        return (
+                                            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${chip.cls}`}>
+                                                <CalendarClock className="h-3 w-3" />
+                                                {chip.label}
+                                            </span>
+                                        )
+                                    })()}
+                                </div>
                             </div>
                         </div>
 
@@ -296,6 +321,15 @@ export function ClientProjectView({ clients, orgSlug, orgName, orgId, firmSandbo
                                             initialDescription={selectedClient.description ?? ''}
                                             initialTags={selectedClient.tags ?? []}
                                             initialOwnerId={selectedClient.ownerId}
+                                            initialFollowUpDate={selectedClient.followUpDate instanceof Date ? selectedClient.followUpDate.toISOString() : (selectedClient.followUpDate as string | null) ?? undefined}
+                                            initialExpectedCloseDate={selectedClient.expectedCloseDate instanceof Date ? selectedClient.expectedCloseDate.toISOString() : (selectedClient.expectedCloseDate as string | null) ?? undefined}
+                                            initialLeadSource={selectedClient.leadSource ?? undefined}
+                                            initialInternalMemo={selectedClient.internalMemo ?? undefined}
+                                            initialRelationshipValue={selectedClient.relationshipValue ?? undefined}
+                                            initialClientSinceDate={selectedClient.clientSinceDate instanceof Date ? selectedClient.clientSinceDate.toISOString() : (selectedClient.clientSinceDate as string | null) ?? undefined}
+                                            initialLinkedInUrl={selectedClient.linkedInUrl ?? undefined}
+                                            initialCompanySizeBracket={selectedClient.companySizeBracket ?? undefined}
+                                            initialBillingAddress={selectedClient.billingAddress ?? undefined}
                                             firmSandboxOnly={firmSandboxOnly}
                                             onSaved={() => {
                                                 const params = new URLSearchParams(searchParams.toString())

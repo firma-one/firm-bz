@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { createPortal } from "react-dom"
 import { Button } from "@/components/ui/button"
-import { Calendar, Clock } from "lucide-react"
+import { Calendar, Clock, ChevronDown, ChevronUp } from "lucide-react"
 
 function getUtcOffsetLabel() {
   const offset = -new Date().getTimezoneOffset()
@@ -48,6 +48,7 @@ export function DateTimePicker({
   allowPastDateTimes = true,
 }: DateTimePickerProps) {
   const [isOpen, setIsOpen] = useState(false)
+  const [timeExpanded, setTimeExpanded] = useState(false)
   const [selectedDate, setSelectedDate] = useState<string>("")
   const [selectedTime, setSelectedTime] = useState<string>("")
   const [currentMonth, setCurrentMonth] = useState(new Date())
@@ -293,13 +294,24 @@ export function DateTimePicker({
 
       {/* Time picker */}
       <div className="mb-3">
-        <div className="flex items-center justify-between mb-1.5">
-          <label className="text-xs font-medium text-gray-700">
-            <Clock className="inline h-3 w-3 mr-1" />
+        <button
+          type="button"
+          onClick={() => setTimeExpanded((v) => !v)}
+          className="flex items-center justify-between w-full mb-1.5 group"
+        >
+          <span className="text-xs font-medium text-gray-700 flex items-center gap-1">
+            <Clock className="h-3 w-3" />
             Time
-          </label>
-        </div>
-        {(() => {
+            {selectedTime && (
+              <span className="ml-1 font-mono text-gray-500">{selectedTime}</span>
+            )}
+          </span>
+          {timeExpanded
+            ? <ChevronUp className="h-3.5 w-3.5 text-gray-400" />
+            : <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
+          }
+        </button>
+        {timeExpanded && (() => {
           const HOURS = Array.from({ length: 24 }, (_, i) => i)
           const MINUTES = Array.from({ length: 60 }, (_, i) => i)
 
@@ -351,6 +363,7 @@ export function DateTimePicker({
           )
         })()}
       </div>
+
 
       {/* Actions */}
       <div className="flex items-center justify-between pt-1">

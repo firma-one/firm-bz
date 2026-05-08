@@ -14,6 +14,8 @@ import {
     reconcileFolderDeletion,
     migrateWorkspaceRoot,
     platformMaintenanceActivate,
+    checkClientFollowUpReminders,
+    sendReminderEmail,
 } from "@/lib/inngest/functions";
 
 export const { GET, POST, PUT } = serve({
@@ -32,5 +34,7 @@ export const { GET, POST, PUT } = serve({
         reconcileFolderDeletion,
         migrateWorkspaceRoot,
         platformMaintenanceActivate,
+        checkClientFollowUpReminders,
+        sendReminderEmail,
     ],
 });
