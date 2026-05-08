@@ -59,7 +59,7 @@ export async function getWaitlistLeaderboard(email?: string): Promise<ActionResp
             })
 
             // Get total waitlist count
-            const totalCount = await (prisma as any).legacyWaitlist.count()
+            const totalCount = await (prisma as any).waitlist.count()
 
             // Calculate points and rank for all users
             const usersWithPoints = allUsers.map((user: any, index: number) => ({
