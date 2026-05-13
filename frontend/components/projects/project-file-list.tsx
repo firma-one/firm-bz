@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
-import { SquarePlus, Upload, FolderUp, X, Folder, File as FileIcon, ArrowUp, ArrowDown, ChevronRight, Search, List as ListIcon, LayoutGrid, Filter, ChevronDown, User, FileText, FileSpreadsheet, Presentation, ListChecks, PenTool, Map as MapIcon, LayoutTemplate, FileCode, AlertCircle, ShieldCheck, Maximize2, Minimize2, CheckCircle2, XCircle, Trash2, Layout, Code, Laptop, RefreshCw, Info, Share2, Layers, Building2, Users, Briefcase, Lock, FolderLock, Inbox, Sparkles, Link2, MessageCircle, CircleChevronLeft } from 'lucide-react'
+import { SquarePlus, Upload, FolderUp, X, Folder, File as FileIcon, ArrowUp, ArrowDown, ChevronRight, Search, List as ListIcon, LayoutGrid, Filter, ChevronDown, User, FileText, FileSpreadsheet, Presentation, ListChecks, PenTool, Map as MapIcon, LayoutTemplate, FileCode, AlertCircle, ShieldCheck, Maximize2, Minimize2, CheckCircle2, XCircle, Trash2, Layout, Code, Laptop, RefreshCw, Info, Share2, Layers, Building2, Users, Briefcase, Lock, FolderLock, Inbox, Sparkles, Link2, MessageCircle, CircleChevronLeft, Download } from 'lucide-react'
 import Fuse from 'fuse.js'
 import { config } from "@/lib/config"
 import { DocumentIcon } from '@/components/ui/document-icon'
@@ -364,6 +364,14 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
     const [copyMoveSubmittingFolderId, setCopyMoveSubmittingFolderId] = useState<string | null>(null)
     const [emptyFolderIds, setEmptyFolderIds] = useState<Set<string>>(new Set())
     const [checkingFolderId, setCheckingFolderId] = useState<string | null>(null)
+    const [crossEngagementModalOpen, setCrossEngagementModalOpen] = useState(false)
+    const [crossEngagementTarget, setCrossEngagementTarget] = useState<DriveFile | null>(null)
+    const [crossEngagementAction, setCrossEngagementAction] = useState<'copy' | 'move'>('copy')
+    const [crossEngagementEngagements, setCrossEngagementEngagements] = useState<{ id: string; name: string }[]>([])
+    const [crossEngagementLoading, setCrossEngagementLoading] = useState(false)
+    const [crossEngagementSubmitting, setCrossEngagementSubmitting] = useState(false)
+    const [crossEngagementSelectedId, setCrossEngagementSelectedId] = useState<string | null>(null)
+
     const [renameModalOpen, setRenameModalOpen] = useState(false)
     const [renameTarget, setRenameTarget] = useState<DriveFile | null>(null)
     const [renameNewName, setRenameNewName] = useState('')
@@ -371,6 +379,14 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
     const [trashConfirmTarget, setTrashConfirmTarget] = useState<DriveFile | null>(null)
     const [trashConfirming, setTrashConfirming] = useState(false)
     const trashDialogOpenTime = useRef<number>(0)
+
+    // Bulk selection state
+    const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(new Set())
+
+    // Download queue (shown in bottom-right panel like upload queue)
+    type DownloadQueueItem = { id: string; name: string; status: 'preparing' | 'done' | 'error'; error?: string }
+    const [downloadQueue, setDownloadQueue] = useState<DownloadQueueItem[]>([])
+    const [isDownloadPanelOpen, setIsDownloadPanelOpen] = useState(true)
 
     // Internal Drag & Drop State
     const [draggedItem, setDraggedItem] = useState<DriveFile | null>(null)
@@ -380,6 +396,36 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
     // Row-level processing state
     const [processingFileIds, setProcessingFileIds] = useState<Set<string>>(new Set())
 
+
+    const handleBulkDownload = useCallback(async () => {
+        if (!selectedFileIds.size) return
+        const ids = Array.from(selectedFileIds)
+        const label = ids.length === 1 ? '1 item' : `${ids.length} items`
+        const queueItem: DownloadQueueItem = { id: `dl-${Date.now()}`, name: label, status: 'preparing' }
+        setDownloadQueue(prev => [...prev, queueItem])
+        setIsDownloadPanelOpen(true)
+        setSelectedFileIds(new Set())
+        try {
+            const res = await fetch(`/api/projects/${projectId}/documents/bulk-download`, {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ externalIds: ids }),
+            })
+            if (!res.ok) throw new Error('Failed to create ZIP')
+            const blob = await res.blob()
+            const filename = res.headers.get('content-disposition')?.match(/filename="([^"]+)"/)?.[1] ?? 'download.zip'
+            const url = URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = filename
+            a.click()
+            URL.revokeObjectURL(url)
+            setDownloadQueue(prev => prev.map(i => i.id === queueItem.id ? { ...i, status: 'done', name: filename } : i))
+        } catch (e: any) {
+            setDownloadQueue(prev => prev.map(i => i.id === queueItem.id ? { ...i, status: 'error', error: e?.message || 'Failed' } : i))
+        }
+    }, [selectedFileIds, projectId])
 
     const startProcessing = useCallback((id: string) => setProcessingFileIds(prev => new Set(prev).add(id)), [])
     const stopProcessing = useCallback((id: string) => setProcessingFileIds(prev => {
@@ -1605,6 +1651,65 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
             .finally(() => setLoadingDestinations(false))
     }, [generalFolderId, confidentialFolderId, stagingFolderId, currentFolderType, projectId])
 
+    const openCrossEngagementModal = useCallback(async (doc: DriveFile, action: 'copy' | 'move') => {
+        setCrossEngagementTarget(doc)
+        setCrossEngagementAction(action)
+        setCrossEngagementSelectedId(null)
+        setCrossEngagementModalOpen(true)
+        setCrossEngagementLoading(true)
+        try {
+            const res = await fetch(`/api/projects/${projectId}/engagements`, { credentials: 'include' })
+            if (res.ok) {
+                const data = await res.json()
+                setCrossEngagementEngagements(
+                    ((data.engagements ?? []) as { id: string; name: string }[]).filter((e) => e.id !== projectId)
+                )
+            }
+        } catch {
+            setCrossEngagementEngagements([])
+        } finally {
+            setCrossEngagementLoading(false)
+        }
+    }, [projectId])
+
+    const handleCrossEngagementSubmit = useCallback(async () => {
+        if (!crossEngagementTarget || !crossEngagementSelectedId || !sessionRef.current?.access_token) return
+        setCrossEngagementSubmitting(true)
+        startProcessing(crossEngagementTarget.id)
+        try {
+            const res = await fetch('/api/connectors/google-drive/linked-files', {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                    Authorization: `Bearer ${sessionRef.current.access_token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    action: crossEngagementAction === 'copy' ? 'cross-engagement-copy' : 'cross-engagement-move',
+                    projectId,
+                    fileId: crossEngagementTarget.id,
+                    targetEngagementId: crossEngagementSelectedId,
+                }),
+            })
+            if (!res.ok) {
+                const err = await res.json()
+                throw new Error(err.error || `Failed to ${crossEngagementAction}`)
+            }
+            addToast({
+                type: 'success',
+                title: crossEngagementAction === 'copy' ? 'Copied' : 'Moved',
+                message: `${crossEngagementTarget.name} ${crossEngagementAction === 'copy' ? 'copied' : 'moved'} to the selected engagement.`,
+            })
+            setCrossEngagementModalOpen(false)
+            if (crossEngagementAction === 'move' && currentFolderId) fetchFiles(currentFolderId, true)
+        } catch (e: any) {
+            addToast({ type: 'error', title: 'Error', message: e?.message || 'Something went wrong' })
+        } finally {
+            setCrossEngagementSubmitting(false)
+            stopProcessing(crossEngagementTarget.id)
+        }
+    }, [crossEngagementTarget, crossEngagementSelectedId, crossEngagementAction, projectId, currentFolderId, fetchFiles, addToast, startProcessing, stopProcessing])
+
     const handleDuplicate = useCallback(async (doc: DriveFile) => {
         if (!sessionRef.current?.access_token) return
         startProcessing(doc.id)
@@ -2413,6 +2518,28 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                     type="button"
                                     variant="outline"
                                     size="sm"
+                                    disabled={selectedFileIds.size === 0}
+                                    onClick={handleBulkDownload}
+                                    className={cn(
+                                        "h-9 w-9 p-0 rounded-full transition-colors",
+                                        selectedFileIds.size > 0
+                                            ? "bg-slate-900 text-white border-slate-900 hover:bg-slate-700 hover:border-slate-700"
+                                            : "border-slate-200 text-slate-400 bg-white disabled:opacity-40"
+                                    )}
+                                >
+                                    <Download className="h-4 w-4" />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom" className="text-xs">
+                                {selectedFileIds.size > 0 ? `Download ${selectedFileIds.size} item${selectedFileIds.size > 1 ? 's' : ''} as ZIP` : 'Select files to download'}
+                            </TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
                                     disabled={loading || isRefreshing}
                                     onClick={handleRefresh}
                                     className="h-9 w-9 p-0 rounded-full border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900"
@@ -2532,6 +2659,56 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                     document.body
                 )}
 
+                {/* Download Progress Panel — portaled to body, stacked above upload panel */}
+                {downloadQueue.length > 0 && typeof document !== 'undefined' && document.body && createPortal(
+                    <div className={cn(
+                        "fixed right-4 bg-white rounded-lg shadow-xl border border-slate-200 z-[101] flex flex-col transition-all duration-300 w-[360px]",
+                        uploadQueue.length > 0 ? "bottom-[calc(1rem+var(--upload-panel-h,160px))]" : "bottom-4",
+                        isDownloadPanelOpen ? "h-auto max-h-[300px]" : "h-10"
+                    )}
+                    style={uploadQueue.length > 0 ? { bottom: 'calc(1rem + 160px)' } : { bottom: '1rem' }}>
+                        <div
+                            className="flex items-center justify-between px-3 py-2 bg-slate-100 border-b border-slate-200 text-slate-900 rounded-t-lg cursor-pointer"
+                            onClick={() => setIsDownloadPanelOpen(!isDownloadPanelOpen)}
+                        >
+                            <span className="text-[11px] font-medium">
+                                {downloadQueue.some(i => i.status === 'preparing')
+                                    ? 'Preparing download…'
+                                    : `Download${downloadQueue.length > 1 ? 's' : ''} complete`
+                                } {downloadQueue.filter(i => i.status === 'done').length}/{downloadQueue.length}
+                            </span>
+                            <div className="flex items-center gap-2 text-slate-500">
+                                {isDownloadPanelOpen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); setDownloadQueue([]) }}
+                                    className="hover:bg-slate-200 rounded p-0.5 transition-colors"
+                                >
+                                    <X className="h-3.5 w-3.5" />
+                                </button>
+                            </div>
+                        </div>
+                        {isDownloadPanelOpen && (
+                            <div className="flex-1 overflow-y-auto p-0">
+                                {downloadQueue.map((item) => (
+                                    <div key={item.id} className="flex items-center gap-2 px-3 py-2 border-b border-slate-100 last:border-0">
+                                        <Download className="h-3.5 w-3.5 flex-shrink-0 text-slate-400" />
+                                        <p className="text-[11px] text-slate-700 truncate flex-1">{item.name}</p>
+                                        {item.status === 'preparing' && (
+                                            <svg className="animate-spin h-3.5 w-3.5 text-slate-400 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                            </svg>
+                                        )}
+                                        {item.status === 'done' && <CheckCircle2 className="h-3.5 w-3.5 text-slate-900 flex-shrink-0" />}
+                                        {item.status === 'error' && <XCircle className="h-3.5 w-3.5 text-red-500 flex-shrink-0" />}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>,
+                    document.body
+                )}
+
                 <input
                     type="file"
                     multiple
@@ -2580,9 +2757,28 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                 }
 
                 {/* Fixed Table Header (Compact) */}
-                <div className="sticky top-0 bg-slate-50 border-b border-slate-200 pl-3 pr-2 py-2 shrink-0 z-10 font-medium text-slate-500">
+                <div className="sticky top-0 bg-slate-50 border-b border-slate-200 pl-3 pr-2 py-2 shrink-0 z-10 font-medium text-slate-500 group">
                     <div className="grid grid-cols-12 gap-4 items-center">
-                        <div className="col-span-4 flex items-center"><TableHeader label="Name" /></div>
+                        <div className="col-span-4 flex items-center gap-3">
+                            {/* Select-all checkbox — visible on hover of header or when in selection mode */}
+                            <div
+                                className={cn(
+                                    "flex-shrink-0 w-4 h-4 flex items-center justify-center cursor-pointer",
+                                    selectedFileIds.size > 0 ? "flex" : "hidden group-hover:flex"
+                                )}
+                                onClick={() => {
+                                    const allIds = files.filter(f => f.id).map(f => f.id)
+                                    const allSelected = allIds.every(id => selectedFileIds.has(id))
+                                    setSelectedFileIds(allSelected ? new Set() : new Set(allIds))
+                                }}
+                            >
+                                <Checkbox
+                                    checked={files.length > 0 && files.every(f => selectedFileIds.has(f.id))}
+                                    className="h-4 w-4 pointer-events-none"
+                                />
+                            </div>
+                            <TableHeader label="Name" />
+                        </div>
                         <div className="col-span-1 flex items-center"><TableHeader label="Quick" /></div>
                         <div className="col-span-2 flex items-center"><TableHeader label="Owner" /></div>
                         <div className="col-span-2 flex items-center"><TableHeader label="Date modified" /></div>
@@ -2694,8 +2890,9 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                         onDrop={(e) => handleItemDrop(e, file)}
                                         className={cn(
                                             "group grid grid-cols-12 gap-4 py-2 pl-3 pr-2 transition-all items-center cursor-default relative",
-                                            isFolder && "cursor-pointer",
+                                            isFolder && selectedFileIds.size === 0 && "cursor-pointer",
                                             "hover:bg-slate-50",
+                                            selectedFileIds.has(file.id) && "bg-blue-50 hover:bg-blue-50",
                                             file.id === actionMenuOpenFileId && "bg-slate-50",
                                             (file.id === activeCommentDocId || file.id === activeInfoDocId || file.id === activeActivityDocId || file.id === activeVersionDocId) && "bg-slate-50",
                                             draggedItem?.id === file.id && "opacity-40 grayscale",
@@ -2704,22 +2901,62 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                         onMouseEnter={() => {
                                             if (isDeeplinkHighlight) setHighlightedFileId(null)
                                         }}
-                                        onDoubleClick={() => handleItemClick(file)}
-                                        onClick={() => handleItemClick(file)}
+                                        onDoubleClick={() => { if (selectedFileIds.size === 0) handleItemClick(file) }}
+                                        onClick={() => {
+                                            if (selectedFileIds.size > 0) {
+                                                // In selection mode: clicking anywhere on row toggles selection
+                                                setSelectedFileIds(prev => {
+                                                    const next = new Set(prev)
+                                                    if (next.has(file.id)) next.delete(file.id)
+                                                    else next.add(file.id)
+                                                    return next
+                                                })
+                                            } else {
+                                                handleItemClick(file)
+                                            }
+                                        }}
                                     >
                                         {/* Name Column: icon and name (deeplink = skewed pastel marker on file name only) */}
                                         <div className="col-span-4 flex items-center gap-3 min-w-0">
-                                            <div className="flex-shrink-0 w-4 h-4 flex items-center justify-center">
-                                                {isFolder && showBadge ? (
-                                                    <SharedFolderIcon
-                                                        fillLevel={directShared ? 1 : 0.5}
-                                                        tooltip={directShared ? 'shared' : 'contains-shared'}
+                                            {/* OneDrive-style: checkbox on hover or in selection mode; icon otherwise */}
+                                            <div
+                                                className="flex-shrink-0 w-4 h-4 flex items-center justify-center relative"
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    setSelectedFileIds(prev => {
+                                                        const next = new Set(prev)
+                                                        if (next.has(file.id)) next.delete(file.id)
+                                                        else next.add(file.id)
+                                                        return next
+                                                    })
+                                                }}
+                                            >
+                                                {/* Checkbox: show when row hovered (group-hover) or selection active */}
+                                                <div className={cn(
+                                                    "absolute inset-0 flex items-center justify-center",
+                                                    selectedFileIds.size > 0 ? "flex" : "hidden group-hover:flex"
+                                                )}>
+                                                    <Checkbox
+                                                        checked={selectedFileIds.has(file.id)}
+                                                        className="h-4 w-4 pointer-events-none"
                                                     />
-                                                ) : isFolder ? (
-                                                    <Folder className="h-4 w-4 text-purple-600 fill-purple-200 flex-shrink-0" />
-                                                ) : (
-                                                    <DocumentIcon mimeType={file.mimeType} className="h-4 w-4" />
-                                                )}
+                                                </div>
+                                                {/* Icon: hidden when hovered/selected */}
+                                                <div className={cn(
+                                                    "absolute inset-0 flex items-center justify-center",
+                                                    selectedFileIds.size > 0 ? "hidden" : "flex group-hover:hidden"
+                                                )}>
+                                                    {isFolder && showBadge ? (
+                                                        <SharedFolderIcon
+                                                            fillLevel={directShared ? 1 : 0.5}
+                                                            tooltip={directShared ? 'shared' : 'contains-shared'}
+                                                        />
+                                                    ) : isFolder ? (
+                                                        <Folder className="h-4 w-4 text-purple-600 fill-purple-200 flex-shrink-0" />
+                                                    ) : (
+                                                        <DocumentIcon mimeType={file.mimeType} className="h-4 w-4" />
+                                                    )}
+                                                </div>
                                             </div>
                                             <div className="flex-1 min-w-0 flex items-center gap-2">
                                                 <Tooltip>
@@ -2899,6 +3136,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                     document={file}
                                                     showShareModal={isProjectLead}
                                                     isEngagementLead={isProjectLead}
+                                                    isExternalCollaborator={viewAsPersonaSlug === 'eng_ext_collaborator'}
                                                     projectId={projectId}
                                                     onShareSaved={refreshShareStateAndFiles}
                                                     canManage={canOrganizeTree}
@@ -2911,6 +3149,8 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                     onDuplicateDocument={canMutateFile ? (doc) => handleDuplicate(doc as DriveFile) : undefined}
                                                     onCopyDocument={generalFolderId && canMutateFile ? (doc) => openCopyMoveModal(doc as DriveFile, 'copy') : undefined}
                                                     onMoveDocument={generalFolderId && canMutateFile ? (doc) => openCopyMoveModal(doc as DriveFile, 'move') : undefined}
+                                                    onCrossEngagementCopy={isProjectLead && canMutateFile ? (doc) => openCrossEngagementModal(doc as DriveFile, 'copy') : undefined}
+                                                    onCrossEngagementMove={isProjectLead && canMutateFile ? (doc) => openCrossEngagementModal(doc as DriveFile, 'move') : undefined}
                                                     onDeleteDocument={canMutateFile ? (doc) => handleTrash(doc as DriveFile) : undefined}
                                                     onRestrictToConfidential={canOrganizeTree && confidentialFolderId ? (doc) => handleMoveTree(doc as DriveFile, 'confidential') : undefined}
                                                     onRestoreToGeneral={canOrganizeTree && generalFolderId ? (doc) => handleMoveTree(doc as DriveFile, 'general') : undefined}
@@ -3083,6 +3323,53 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                         </div>
                         <div className="flex justify-end">
                             <Button variant="outline" className="border-slate-200 text-slate-700 hover:bg-slate-50" onClick={() => setCopyMoveModalOpen(false)}>Cancel</Button>
+                        </div>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Cross-Engagement Copy / Move Modal */}
+                <Dialog open={crossEngagementModalOpen} onOpenChange={(open) => { setCrossEngagementModalOpen(open); if (!open) setCrossEngagementTarget(null) }}>
+                    <DialogContent className="max-w-md">
+                        <DialogHeader>
+                            <DialogTitle>{crossEngagementAction === 'copy' ? 'Copy' : 'Move'} to Engagement</DialogTitle>
+                            <DialogDescription className="text-xs text-slate-500">
+                                Select the engagement to {crossEngagementAction === 'copy' ? 'copy' : 'move'} <strong>{crossEngagementTarget?.name}</strong> to. The file will land in that engagement&apos;s General folder.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-2 max-h-64 overflow-y-auto border border-slate-200 rounded-md p-2">
+                            {crossEngagementLoading ? (
+                                <div className="flex items-center justify-center py-8">
+                                    <LoadingSpinner className="h-6 w-6 text-slate-400" />
+                                </div>
+                            ) : crossEngagementEngagements.length === 0 ? (
+                                <p className="text-sm text-slate-500 py-6 px-3 text-center">No other engagements available.</p>
+                            ) : crossEngagementEngagements.map((e) => (
+                                <button
+                                    key={e.id}
+                                    type="button"
+                                    onClick={() => setCrossEngagementSelectedId(e.id)}
+                                    className={cn(
+                                        'w-full flex items-center gap-2 text-left px-3 py-2 rounded-md text-sm transition-colors',
+                                        crossEngagementSelectedId === e.id
+                                            ? 'bg-slate-900 text-white'
+                                            : 'hover:bg-slate-100 text-slate-800'
+                                    )}
+                                >
+                                    <Briefcase className="h-4 w-4 flex-shrink-0 opacity-60" />
+                                    <span className="truncate">{e.name}</span>
+                                </button>
+                            ))}
+                        </div>
+                        <div className="flex justify-end gap-2">
+                            <Button variant="outline" onClick={() => setCrossEngagementModalOpen(false)}>Cancel</Button>
+                            <Button
+                                disabled={!crossEngagementSelectedId || crossEngagementSubmitting}
+                                onClick={handleCrossEngagementSubmit}
+                            >
+                                {crossEngagementSubmitting
+                                    ? <LoadingSpinner className="h-4 w-4" />
+                                    : crossEngagementAction === 'copy' ? 'Copy' : 'Move'}
+                            </Button>
                         </div>
                     </DialogContent>
                 </Dialog>

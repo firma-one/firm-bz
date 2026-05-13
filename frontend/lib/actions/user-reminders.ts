@@ -15,6 +15,7 @@ export type ReminderItem = {
     dateValue: string | null // ISO date | null
     hiddenAt: string | null  // null = visible
     createdAt: string        // ISO date
+    note?: string | null     // optional user note
 }
 
 // ─── Context shape returned to UI ────────────────────────────────────────────
@@ -27,6 +28,7 @@ export type ReminderWithContext = {
     dateKey: string | null
     dateValue: string | null
     hiddenAt: string | null
+    note?: string | null     // optional user note
     // resolved
     entityName: string
     entitySlug: string | null
@@ -60,6 +62,43 @@ const ENTITY_RESOLVERS: Record<string, (id: string) => Promise<EntityContext>> =
             ctaUrl: c?.firm?.slug && c?.slug ? `/d/f/${c.firm.slug}/c/${c.slug}` : null,
         }
     },
+    'platform.engagements': async (id) => {
+        const e = await (prisma as any).engagement.findUnique({
+            where: { id },
+            select: { name: true, slug: true, client: { select: { slug: true, firm: { select: { slug: true } } } } },
+        })
+        const firmSlug = e?.client?.firm?.slug ?? null
+        const clientSlug = e?.client?.slug ?? null
+        return {
+            name: e?.name ?? '',
+            slug: e?.slug ?? null,
+            firmSlug,
+            ctaUrl: firmSlug && clientSlug && e?.slug ? `/d/f/${firmSlug}/c/${clientSlug}/e/${e.slug}` : null,
+        }
+    },
+    'platform.engagement_invitations': async (id) => {
+        const inv = await (prisma as any).engagementInvitation.findUnique({
+            where: { id },
+            select: { email: true, engagement: { select: { slug: true, client: { select: { slug: true, firm: { select: { slug: true } } } } } } },
+        })
+        const firmSlug = inv?.engagement?.client?.firm?.slug ?? null
+        const clientSlug = inv?.engagement?.client?.slug ?? null
+        const engSlug = inv?.engagement?.slug ?? null
+        return {
+            name: inv?.email ?? '',
+            slug: null,
+            firmSlug,
+            ctaUrl: firmSlug && clientSlug && engSlug ? `/d/f/${firmSlug}/c/${clientSlug}/e/${engSlug}` : null,
+        }
+    },
+    'platform.connectors': async (id) => {
+        const c = await (prisma as any).connector.findUnique({
+            where: { id },
+            select: { name: true, settings: true },
+        })
+        const email = (c?.settings as any)?.accountEmail ?? c?.name ?? 'Google Drive'
+        return { name: email, slug: null, firmSlug: null, ctaUrl: '/d/onboarding' }
+    },
 }
 
 // ─── Date field clearer map ──────────────────────────────────────────────────
@@ -67,6 +106,12 @@ const ENTITY_RESOLVERS: Record<string, (id: string) => Promise<EntityContext>> =
 const DATE_FIELD_CLEARERS: Record<string, (entityValue: string) => Promise<void>> = {
     'platform.clients.followUpDate': async (id) => {
         await (prisma as any).client.update({ where: { id }, data: { followUpDate: null } })
+    },
+    'platform.clients.expectedCloseDate': async (id) => {
+        await (prisma as any).client.update({ where: { id }, data: { expectedCloseDate: null } })
+    },
+    'platform.engagements.dueDate': async (id) => {
+        await (prisma as any).engagement.update({ where: { id }, data: { dueDate: null } })
     },
 }
 
@@ -114,15 +159,14 @@ export async function getUserReminders(): Promise<ReminderWithContext[]> {
     const items = await loadItems(user.id)
 
     const today = new Date(); today.setHours(0, 0, 0, 0)
-    const windowStart = new Date(today); windowStart.setDate(today.getDate() - 2)
-    const windowEnd = new Date(today); windowEnd.setDate(today.getDate() + 2); windowEnd.setHours(23, 59, 59, 999)
+    const in30Days = new Date(today); in30Days.setDate(today.getDate() + 30); in30Days.setHours(23, 59, 59, 999)
 
     const validItems = items.filter((item) => item.entityKey && item.entityValue && item.action)
 
     const inWindow = validItems.filter((item) => {
         if (!item.dateValue) return true // date-less: always show
         const d = new Date(item.dateValue)
-        return d >= windowStart && d <= windowEnd
+        return d <= in30Days // show all overdue + upcoming within 30d
     })
 
     const resolved = await Promise.all(
@@ -154,6 +198,7 @@ export async function getUserReminders(): Promise<ReminderWithContext[]> {
                 dateKey: item.dateKey,
                 dateValue: item.dateValue,
                 hiddenAt: item.hiddenAt,
+                note: item.note ?? null,
                 entityName: ctx.name,
                 entitySlug: ctx.slug,
                 firmSlug: ctx.firmSlug,
@@ -309,4 +354,11 @@ export async function showReminder(reminderId: string): Promise<void> {
 function generateId(): string {
     // Simple ID: timestamp + random suffix
     return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+/** Mark multiple reminders done at once. */
+export async function markAllRemindersDone(reminderIds: string[]): Promise<void> {
+    for (const id of reminderIds) {
+        await markReminderDone(id)
+    }
 }

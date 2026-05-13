@@ -29,14 +29,14 @@ function clientStatusLabel(status: string | null | undefined): string {
 function clientStatusBadgeClass(status: string | null | undefined): string {
     switch (status) {
         case 'PROSPECT':
-            return 'bg-violet-100 text-violet-700'
+            return 'bg-fuchsia-50 text-fuchsia-500 ring-1 ring-fuchsia-200'
         case 'ON_HOLD':
-            return 'bg-sky-100 text-sky-700'
+            return 'bg-amber-50 text-amber-500 ring-1 ring-amber-200'
         case 'PAST':
-            return 'bg-slate-100 text-slate-500'
+            return 'bg-zinc-50 text-zinc-400 ring-1 ring-zinc-200'
         case 'ACTIVE':
         default:
-            return 'bg-emerald-100 text-emerald-700'
+            return 'bg-teal-50 text-teal-600 ring-1 ring-teal-200'
     }
 }
 

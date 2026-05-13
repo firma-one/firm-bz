@@ -85,6 +85,7 @@ export async function GET(
           externalCollaborator: flat.externalCollaborator,
           guest: flat.guest,
           guestOptions: flat.guestOptions,
+          ecOptions: flat.ecOptions,
           publishedVersionId: flat.publishedVersionId,
           publishedAt: flat.publishedAt,
         },

@@ -46,6 +46,7 @@ export function AddProjectModal({ orgSlug, clientSlug, firmSandboxOnly = false, 
     const [error, setError] = useState<string | null>(null)
     const [capBlocked, setCapBlocked] = useState(false)
     const [capMessage, setCapMessage] = useState<string | null>(null)
+    const [currencySymbol, setCurrencySymbol] = useState('')
     const router = useRouter()
     useEffect(() => {
         let mounted = true
@@ -76,6 +77,20 @@ export function AddProjectModal({ orgSlug, clientSlug, firmSandboxOnly = false, 
         return () => {
             mounted = false
         }
+    }, [orgSlug])
+
+    useEffect(() => {
+        let mounted = true
+        fetch(`/api/firm?slug=${encodeURIComponent(orgSlug)}`)
+            .then((r) => r.ok ? r.json() : null)
+            .then((d) => {
+                if (!mounted || !d) return
+                const firm = d.firm ?? d
+                const s = ((firm?.settings as Record<string, unknown>)?.currency as Record<string, string> | undefined)
+                setCurrencySymbol(s?.symbol ?? '')
+            })
+            .catch(() => {})
+        return () => { mounted = false }
     }, [orgSlug])
 
     const orgSandbox = useOrgSandbox()
@@ -312,15 +327,30 @@ export function AddProjectModal({ orgSlug, clientSlug, firmSandboxOnly = false, 
                         </DropdownMenu>
                     </div>
                     <div className="space-y-2">
-                        <Label htmlFor="rate" className={isSandboxFirm ? 'text-slate-500' : 'text-slate-900'}>Rate / value</Label>
-                        <Input
-                            id="rate"
-                            value={rateOrValue}
-                            onChange={(e) => setRateOrValue(e.target.value)}
-                            placeholder="Optional"
-                            disabled={isSandboxFirm || capBlocked || isLoading}
-                            className="border-slate-200 text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
-                        />
+                        <Label htmlFor="rate" className={isSandboxFirm ? 'text-slate-500' : 'text-slate-900'}>Contract Value</Label>
+                        <div className={`flex items-center rounded-md border border-slate-200 bg-white focus-within:ring-1 focus-within:ring-slate-400 ${isSandboxFirm || capBlocked || isLoading ? 'opacity-60 cursor-not-allowed' : ''}`}>
+                            {currencySymbol && (
+                                <span className="pl-3 pr-1 text-sm text-slate-500 shrink-0 select-none">{currencySymbol}</span>
+                            )}
+                            <input
+                                id="rate"
+                                value={rateOrValue}
+                                onChange={(e) => setRateOrValue(e.target.value)}
+                                placeholder="Total engagement value"
+                                disabled={isSandboxFirm || capBlocked || isLoading}
+                                className="flex-1 h-10 px-3 text-sm text-slate-900 bg-transparent outline-none placeholder:text-slate-400 disabled:cursor-not-allowed"
+                            />
+                        </div>
+                        {contractType && (
+                            <p className="text-xs text-slate-400">
+                                {contractType === 'Fixed Price' && 'Total project fee'}
+                                {contractType === 'Time & Material' && 'Estimated total — leave blank if unknown'}
+                                {contractType === 'Retainer' && 'Total retainer value (e.g. 5 000/mo × 12 = 60 000)'}
+                                {contractType === 'Milestone-Based' && 'Sum of all milestone values'}
+                                {contractType === 'Subscription / Recurring' && 'Total value over engagement period'}
+                                {!['Fixed Price','Time & Material','Retainer','Milestone-Based','Subscription / Recurring'].includes(contractType) && 'Total value of this engagement'}
+                            </p>
+                        )}
                     </div>
                     <div className="space-y-2">
                         <div className="flex items-center gap-2">

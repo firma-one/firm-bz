@@ -38,11 +38,17 @@ export function formatSmartDateTime(date: Date | string): string {
 }
 
 export function getFileTypeLabel(mimeType: string): string {
+  if (!mimeType) return 'File'
+  if (mimeType.includes('folder')) return 'Folder'
   if (mimeType.includes('pdf')) return 'PDF'
   if (mimeType.includes('image')) return 'Image'
-  if (mimeType.includes('folder')) return 'Folder'
+  if (mimeType.includes('video')) return 'Video'
+  if (mimeType.includes('audio')) return 'Audio'
+  if (mimeType.includes('zip') || mimeType.includes('archive') || mimeType.includes('compressed') || mimeType.includes('tar') || mimeType.includes('rar') || mimeType.includes('7z')) return 'Archive'
+  if (mimeType.includes('presentation') || mimeType.includes('powerpoint') || mimeType.includes('slides')) return 'Presentation'
   if (mimeType.includes('document') || mimeType.includes('word')) return 'Doc'
-  if (mimeType.includes('sheet') || mimeType.includes('excel')) return 'Sheet'
+  if (mimeType.includes('sheet') || mimeType.includes('excel') || mimeType.includes('csv')) return 'Sheet'
+  if (mimeType.includes('text/')) return 'Text'
   return 'File'
 }
 

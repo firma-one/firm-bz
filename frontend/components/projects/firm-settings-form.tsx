@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
-import { updateFirm, deleteFirm } from '@/lib/actions/firms'
+import { updateFirm, deleteFirm, type FirmCurrency } from '@/lib/actions/firms'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/components/ui/toast'
 import {
@@ -15,11 +15,43 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog'
-import { FileText, AlertTriangle, ImageIcon, Palette, Trash2, ImagePlus } from 'lucide-react'
+import { FileText, AlertTriangle, ImageIcon, Palette, Trash2, ImagePlus, ChevronDown, Check } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { supabase } from '@/lib/supabase'
 import { SandboxInfoBanner } from '@/components/ui/sandbox-info-banner'
 import { useOrgSandbox } from '@/lib/use-org-sandbox'
+
+const WORLD_CURRENCIES: { code: string; symbol: string; label: string }[] = [
+    { code: 'USD', symbol: '$',    label: 'USD ($)' },
+    { code: 'EUR', symbol: '€',    label: 'EUR (€)' },
+    { code: 'GBP', symbol: '£',    label: 'GBP (£)' },
+    { code: 'INR', symbol: '₹',    label: 'INR (₹)' },
+    { code: 'JPY', symbol: '¥',    label: 'JPY (¥)' },
+    { code: 'CNY', symbol: '¥',    label: 'CNY (¥)' },
+    { code: 'CAD', symbol: 'CA$',  label: 'CAD (CA$)' },
+    { code: 'AUD', symbol: 'A$',   label: 'AUD (A$)' },
+    { code: 'SGD', symbol: 'S$',   label: 'SGD (S$)' },
+    { code: 'HKD', symbol: 'HK$',  label: 'HKD (HK$)' },
+    { code: 'CHF', symbol: 'CHF',  label: 'CHF' },
+    { code: 'AED', symbol: 'د.إ',  label: 'AED (د.إ)' },
+    { code: 'NZD', symbol: 'NZ$',  label: 'NZD (NZ$)' },
+    { code: 'MXN', symbol: 'MX$',  label: 'MXN (MX$)' },
+    { code: 'BRL', symbol: 'R$',   label: 'BRL (R$)' },
+    { code: 'ZAR', symbol: 'R',    label: 'ZAR (R)' },
+    { code: 'KRW', symbol: '₩',    label: 'KRW (₩)' },
+    { code: 'NOK', symbol: 'kr',   label: 'NOK (kr)' },
+    { code: 'SEK', symbol: 'kr',   label: 'SEK (kr)' },
+    { code: 'DKK', symbol: 'kr',   label: 'DKK (kr)' },
+    { code: 'THB', symbol: '฿',    label: 'THB (฿)' },
+    { code: 'MYR', symbol: 'RM',   label: 'MYR (RM)' },
+    { code: 'IDR', symbol: 'Rp',   label: 'IDR (Rp)' },
+    { code: 'PHP', symbol: '₱',    label: 'PHP (₱)' },
+    { code: 'PKR', symbol: '₨',    label: 'PKR (₨)' },
+    { code: 'BDT', symbol: '৳',    label: 'BDT (৳)' },
+    { code: 'NGN', symbol: '₦',    label: 'NGN (₦)' },
+    { code: 'KES', symbol: 'KSh',  label: 'KES (KSh)' },
+]
 
 const MAX_LOGO_SIZE = 5 * 1024 * 1024 // 5 MB
 const ALLOWED_LOGO_TYPES = ['image/jpeg', 'image/png', 'image/svg+xml', 'image/jpg']
@@ -50,6 +82,10 @@ export function FirmSettingsForm({
     const [logoUrl, setLogoUrl] = useState('')
     const [subtext, setSubtext] = useState('')
     const [themeColor, setThemeColor] = useState('#6366f1')
+    const [currencyOpen, setCurrencyOpen] = useState(false)
+    const [currencyCode, setCurrencyCode] = useState('')
+    const [currencyIsCustom, setCurrencyIsCustom] = useState(false)
+    const [currencyCustom, setCurrencyCustom] = useState('')
     const [logoFile, setLogoFile] = useState<File | null>(null)
     const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null)
     const [logoScale, setLogoScale] = useState(1)
@@ -82,10 +118,23 @@ export function FirmSettingsForm({
                 if (!cancelled && firm?.id) setOrgIdState(firm.id)
                 const settings = (firm?.settings as Record<string, unknown>) ?? {}
                 const b = (settings.branding as Record<string, string | undefined>) ?? {}
+                const c = (settings.currency as Record<string, string | undefined>) ?? {}
                 if (!cancelled) {
                     setLogoUrl((firm?.logoUrl as string) ?? b.logoUrl ?? '')
                     setSubtext((firm?.brandingSubtext as string) ?? b.subtext ?? '')
                     setThemeColor((firm?.themeColorHex as string) ?? b.themeColor ?? b.brandColor ?? '#6366f1')
+                    const savedCode = c.code ?? ''
+                    const savedSymbol = c.symbol ?? ''
+                    const knownMatch = WORLD_CURRENCIES.find((cur) => cur.code === savedCode)
+                    if (knownMatch) {
+                        setCurrencyCode(savedCode)
+                        setCurrencyIsCustom(false)
+                        setCurrencyCustom('')
+                    } else if (savedSymbol) {
+                        setCurrencyCode('')
+                        setCurrencyIsCustom(true)
+                        setCurrencyCustom(savedSymbol)
+                    }
                 }
             } catch {
                 // ignore
@@ -220,6 +269,11 @@ export function FirmSettingsForm({
                     subtext: subtext || null,
                     themeColor: themeColor || null,
                 },
+                currency: currencyIsCustom
+                    ? { symbol: currencyCustom.trim() || null, code: null }
+                    : currencyCode
+                        ? { symbol: WORLD_CURRENCIES.find((c) => c.code === currencyCode)?.symbol ?? null, code: currencyCode }
+                        : { symbol: null, code: null },
             })
             addToast({ type: 'success', title: 'Saved', message: 'Firm details updated.' })
             onSaved?.()
@@ -470,6 +524,69 @@ export function FirmSettingsForm({
                                 className="max-w-[8rem] font-mono text-sm bg-white border-gray-200 text-gray-900 focus-visible:ring-gray-400 disabled:cursor-not-allowed disabled:opacity-60"
                             />
                         </div>
+                    </div>
+                    <div className="space-y-2">
+                        <Label className="text-gray-700 font-medium">
+                            Currency <span className="text-gray-400 font-normal">(optional)</span>
+                        </Label>
+                        <DropdownMenu open={currencyOpen} onOpenChange={setCurrencyOpen}>
+                            <DropdownMenuTrigger asChild disabled={isSandboxFirm}>
+                                <button className="w-full h-10 flex items-center justify-between rounded-md border border-gray-200 bg-white px-3 text-sm disabled:cursor-not-allowed disabled:opacity-60">
+                                    <span className={currencyCode || (currencyIsCustom && currencyCustom) ? 'text-gray-900' : 'text-gray-400'}>
+                                        {currencyCode
+                                            ? WORLD_CURRENCIES.find((c) => c.code === currencyCode)?.label ?? currencyCode
+                                            : currencyIsCustom && currencyCustom
+                                                ? `Other: ${currencyCustom}`
+                                                : 'Select currency…'}
+                                    </span>
+                                    <ChevronDown className="h-4 w-4 text-gray-500 shrink-0" />
+                                </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent
+                                className="w-[var(--radix-dropdown-menu-trigger-width)] p-1 max-h-72 overflow-y-auto"
+                                onCloseAutoFocus={(e) => e.preventDefault()}
+                            >
+                                {WORLD_CURRENCIES.map((cur) => (
+                                    <DropdownMenuItem
+                                        key={cur.code}
+                                        className="flex items-center justify-between cursor-pointer"
+                                        onSelect={() => {
+                                            setCurrencyCode(cur.code)
+                                            setCurrencyIsCustom(false)
+                                            setCurrencyCustom('')
+                                            setCurrencyOpen(false)
+                                        }}
+                                    >
+                                        {cur.label}
+                                        {currencyCode === cur.code && !currencyIsCustom && (
+                                            <Check className="h-4 w-4 text-gray-700 shrink-0" />
+                                        )}
+                                    </DropdownMenuItem>
+                                ))}
+                                <DropdownMenuSeparator />
+                                <div className="px-2 py-1.5 flex items-center gap-2">
+                                    <input
+                                        value={currencyIsCustom ? currencyCustom : ''}
+                                        onChange={(e) => {
+                                            setCurrencyCustom(e.target.value)
+                                            setCurrencyIsCustom(true)
+                                            setCurrencyCode('')
+                                        }}
+                                        onKeyDown={(e) => {
+                                            e.stopPropagation()
+                                            if (e.key === 'Enter') setCurrencyOpen(false)
+                                        }}
+                                        onClick={(e) => e.stopPropagation()}
+                                        placeholder="Other (enter symbol)…"
+                                        className="flex-1 text-sm text-gray-900 placeholder:text-gray-400 outline-none bg-transparent"
+                                    />
+                                    {currencyIsCustom && currencyCustom && (
+                                        <Check className="h-4 w-4 text-gray-700 shrink-0" />
+                                    )}
+                                </div>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                        <p className="text-xs text-gray-400">Symbol shown as prefix on all contract values.</p>
                     </div>
                     <div className="flex flex-wrap gap-3">
                         <Button

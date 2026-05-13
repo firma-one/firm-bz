@@ -13,7 +13,6 @@ import {
   ChevronDown,
   Menu,
   ChevronLeft,
-  LayoutDashboard,
   BookOpen,
   Briefcase,
   ChevronRight,
@@ -26,6 +25,8 @@ import {
   Shield,
   ClipboardList,
   MessageCircle,
+  PenTool,
+  Lock,
 } from "lucide-react"
 import { FirmSelector, type FirmOption } from "@/components/projects/firm-selector"
 import { getUserFirms } from "@/lib/actions/firms"
@@ -42,7 +43,6 @@ import { ProfileSection } from "@/components/ui/profile-section"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useViewAs, RBAC_PERSONAS } from "@/lib/view-as-context"
-import { StorageWidget } from "@/components/ui/storage-widget"
 import { useSidebarFirms } from "@/lib/sidebar-firms-context"
 
 interface AppSidebarProps {
@@ -540,62 +540,78 @@ export function AppSidebar({ variant = 'fixed' }: AppSidebarProps = {}) {
                             Shares
                           </Link>
 
+                          <Link
+                            href={`${baseUrl}/c/${clientSlug}/e/${projectSlug}/comments`}
+                            className={`flex items-center d-sidebar-nav rounded-lg py-1.5 px-2.5 transition-colors ${pathname.includes('/comments')
+                              ? 'bg-slate-100 text-slate-900 hover:bg-slate-100/90'
+                              : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}
+                          >
+                            <MessageCircle className={`h-3.5 w-3.5 mr-2.5 ${pathname.includes('/comments') ? 'text-slate-900' : 'text-slate-400'}`} />
+                            Comments
+                          </Link>
+
                           {canShowProjectInternalTabs && (
                             <Link
-                              href={`${baseUrl}/c/${clientSlug}/e/${projectSlug}/comments`}
-                              className={`flex items-center d-sidebar-nav rounded-lg py-1.5 px-2.5 transition-colors ${pathname.includes('/comments')
+                              href={`${baseUrl}/c/${clientSlug}/e/${projectSlug}/wiki`}
+                              className={`group flex items-center d-sidebar-nav rounded-lg py-1.5 px-2.5 transition-colors ${pathname.includes('/wiki')
                                 ? 'bg-slate-100 text-slate-900 hover:bg-slate-100/90'
                                 : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}
                             >
-                              <MessageCircle className={`h-3.5 w-3.5 mr-2.5 ${pathname.includes('/comments') ? 'text-slate-900' : 'text-slate-400'}`} />
-                              Comments
+                              <PenTool className={`h-3.5 w-3.5 mr-2.5 ${pathname.includes('/wiki') ? 'text-slate-900' : 'text-slate-400'}`} />
+                              Dossier
+                              <span title="Internal only" className="ml-auto shrink-0"><Lock className="w-2.5 h-2.5 text-slate-300 group-hover:text-slate-500 transition-colors" /></span>
                             </Link>
                           )}
 
                           {canShowProjectInternalTabs && (
-                            <>
-                              <Link
-                                href={`${baseUrl}/c/${clientSlug}/e/${projectSlug}/members`}
-                                className={`flex items-center d-sidebar-nav rounded-lg py-1.5 px-2.5 transition-colors ${pathname.includes('/members')
-                                  ? 'bg-slate-100 text-slate-900 hover:bg-slate-100/90'
-                                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}
-                              >
-                                <Users className={`h-3.5 w-3.5 mr-2.5 ${pathname.includes('/members') ? 'text-slate-900' : 'text-slate-400'}`} />
-                                Members
-                              </Link>
-                              <Link
-                                href={`${baseUrl}/c/${clientSlug}/e/${projectSlug}/insights`}
-                                className={`flex items-center d-sidebar-nav rounded-lg py-1.5 px-2.5 transition-colors ${pathname.includes('/insights')
-                                  ? 'bg-slate-100 text-slate-900 hover:bg-slate-100/90'
-                                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}
-                              >
-                                <BarChart3 className={`h-3.5 w-3.5 mr-2.5 ${pathname.includes('/insights') ? 'text-slate-900' : 'text-slate-400'}`} />
-                                Insights
-                              </Link>
-                            </>
+                            <Link
+                              href={`${baseUrl}/c/${clientSlug}/e/${projectSlug}/insights`}
+                              className={`group flex items-center d-sidebar-nav rounded-lg py-1.5 px-2.5 transition-colors ${pathname.includes('/insights')
+                                ? 'bg-slate-100 text-slate-900 hover:bg-slate-100/90'
+                                : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}
+                            >
+                              <BarChart3 className={`h-3.5 w-3.5 mr-2.5 ${pathname.includes('/insights') ? 'text-slate-900' : 'text-slate-400'}`} />
+                              Insights
+                              <span title="Internal only" className="ml-auto shrink-0"><Lock className="w-2.5 h-2.5 text-slate-300 group-hover:text-slate-500 transition-colors" /></span>
+                            </Link>
                           )}
 
                           {canShowProjectAuditTab && (
                             <Link
                               href={`${baseUrl}/c/${clientSlug}/e/${projectSlug}/audit`}
-                              className={`flex items-center d-sidebar-nav rounded-lg py-1.5 px-2.5 transition-colors ${pathname.includes('/audit')
+                              className={`group flex items-center d-sidebar-nav rounded-lg py-1.5 px-2.5 transition-colors ${pathname.includes('/audit')
                                 ? 'bg-slate-100 text-slate-900 hover:bg-slate-100/90'
                                 : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}
                             >
                               <ClipboardList className={`h-3.5 w-3.5 mr-2.5 ${pathname.includes('/audit') ? 'text-slate-900' : 'text-slate-400'}`} />
                               Audit
+                              <span title="Internal only" className="ml-auto shrink-0"><Lock className="w-2.5 h-2.5 text-slate-300 group-hover:text-slate-500 transition-colors" /></span>
+                            </Link>
+                          )}
+
+                          {canShowProjectInternalTabs && (
+                            <Link
+                              href={`${baseUrl}/c/${clientSlug}/e/${projectSlug}/members`}
+                              className={`group flex items-center d-sidebar-nav rounded-lg py-1.5 px-2.5 transition-colors ${pathname.includes('/members')
+                                ? 'bg-slate-100 text-slate-900 hover:bg-slate-100/90'
+                                : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}
+                            >
+                              <Users className={`h-3.5 w-3.5 mr-2.5 ${pathname.includes('/members') ? 'text-slate-900' : 'text-slate-400'}`} />
+                              Members
+                              <span title="Internal only" className="ml-auto shrink-0"><Lock className="w-2.5 h-2.5 text-slate-300 group-hover:text-slate-500 transition-colors" /></span>
                             </Link>
                           )}
 
                           {canShowProjectSettingsTab && (
                             <Link
                               href={`${baseUrl}/c/${clientSlug}/e/${projectSlug}/settings`}
-                              className={`flex items-center d-sidebar-nav rounded-lg py-1.5 px-2.5 transition-colors ${pathname.includes('/settings')
+                              className={`group flex items-center d-sidebar-nav rounded-lg py-1.5 px-2.5 transition-colors ${pathname.includes('/settings')
                                 ? 'bg-slate-100 text-slate-900 hover:bg-slate-100/90'
                                 : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}
                             >
                               <Settings className={`h-3.5 w-3.5 mr-2.5 ${pathname.includes('/settings') ? 'text-slate-900' : 'text-slate-400'}`} />
                               Settings
+                              <span title="Internal only" className="ml-auto shrink-0"><Lock className="w-2.5 h-2.5 text-slate-300 group-hover:text-slate-500 transition-colors" /></span>
                             </Link>
                           )}
                         </div>
@@ -631,58 +647,6 @@ export function AppSidebar({ variant = 'fixed' }: AppSidebarProps = {}) {
               )}
 
 
-              {/* MORE */}
-              {showMore && (
-                <>
-                  <div className={isCollapsed ? 'w-full' : ''}>
-                    {!isCollapsed ? (
-                      <div>
-                        <button
-                          onClick={() => setIsMoreOpen(!isMoreOpen)}
-                          className="d-sidebar-section flex items-center w-full px-3 py-1.5 hover:text-slate-600 transition-colors rounded-lg"
-                        >
-                          <span>More</span>
-                          <ChevronRight className={`h-3 w-3 ml-1 transition-transform duration-200 ${isMoreOpen ? 'rotate-90' : ''}`} />
-                        </button>
-
-                        {isMoreOpen && (
-                          <div className="mt-0.5 animate-in fade-in slide-in-from-top-1 duration-200">
-                            <Link
-                              href={`${firmScopedNavBase}/insights`}
-                              className={`flex items-center d-sidebar-nav rounded-lg transition-colors px-3 py-2 ${pathname.includes('/insights')
-                                ? 'bg-slate-100 text-slate-900 hover:bg-slate-100/90'
-                                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                                }`}
-                            >
-                              <LayoutDashboard className={`h-4 w-4 mr-3 ${pathname.includes('/insights') ? 'text-slate-900' : 'text-slate-500'}`} />
-                              <span>Insights</span>
-                            </Link>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="flex w-full items-center gap-0.5">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Link
-                              href={`${firmScopedNavBase}/insights`}
-                              className={`flex flex-1 items-center justify-center d-sidebar-nav rounded-lg transition-colors px-0 py-2 ${pathname.includes('/insights')
-                                ? 'bg-slate-100 text-slate-900 hover:bg-slate-100/90'
-                                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                                }`}
-                            >
-                              <LayoutDashboard className={`h-4 w-4 ${pathname.includes('/insights') ? 'text-slate-900' : 'text-slate-500'}`} />
-                            </Link>
-                          </TooltipTrigger>
-                          <TooltipContent side="right">Insights</TooltipContent>
-                        </Tooltip>
-                      </div>
-                    )}
-                  </div>
-                  {!isCollapsed && <SeparatorLine />}
-                </>
-              )}
-
               {/* SYSTEM - Administration (SYS_ADMIN only) */}
               {showSystemSection && (
                 <>
@@ -710,15 +674,6 @@ export function AppSidebar({ variant = 'fixed' }: AppSidebarProps = {}) {
 
             </nav>
 
-            {/* Storage: used vs quota for connected Drive (current org) */}
-            {!isCollapsed && (
-              <>
-                <div className="px-1">
-                  <StorageWidget orgSlug={slug ?? selectedFirmSlug} collapsed={isCollapsed} />
-                </div>
-                <SeparatorLine />
-              </>
-            )}
 
           </div>
         </div>

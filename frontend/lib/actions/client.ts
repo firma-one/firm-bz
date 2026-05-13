@@ -199,6 +199,17 @@ export async function createClient(organizationSlug: string, data: CreateClientD
         firmId: firm.id,
         ctaUrl: `/d/f/${organizationSlug}/c/${newClient.slug}`,
     }).catch(() => {})
+    upsertFollowUpReminder({
+        userId: user.id,
+        entityKey: 'platform.clients.id',
+        entityValue: newClient.id,
+        action: 'Close deal',
+        dateKey: 'platform.clients.expectedCloseDate',
+        dateValue: data.expectedCloseDate ?? null,
+        entityName: newClient.name,
+        firmId: firm.id,
+        ctaUrl: `/d/f/${organizationSlug}/c/${newClient.slug}`,
+    }).catch(() => {})
 
     revalidatePath(`/d/f/${organizationSlug}`)
     return newClient
@@ -293,17 +304,20 @@ export async function updateClient(
         .meta({ changedFields: Object.keys(updateData) })
         .fireAndForget()
 
-    // Upsert/cancel follow-up reminder if followUpDate or status changed
+    // Upsert/cancel reminders if relevant date fields or status changed
     const followUpChanged = data.followUpDate !== undefined
+    const expectedCloseChanged = data.expectedCloseDate !== undefined
     const statusChanged = data.status !== undefined
-    if (followUpChanged || statusChanged) {
+    if (followUpChanged || expectedCloseChanged || statusChanged) {
         const latest = await (prisma as any).client.findUnique({
             where: { id: client.id },
-            select: { followUpDate: true, status: true, ownerId: true, slug: true },
-        }) as { followUpDate: Date | null; status: string; ownerId: string | null; slug: string } | null
+            select: { followUpDate: true, expectedCloseDate: true, status: true, ownerId: true, slug: true },
+        }) as { followUpDate: Date | null; expectedCloseDate: Date | null; status: string; ownerId: string | null; slug: string } | null
         const activeStatuses = ['PROSPECT', 'ACTIVE']
         const isActive = activeStatuses.includes(latest?.status ?? '')
         const effectiveOwnerId = latest?.ownerId ?? null
+        const ctaUrl = `/d/f/${organizationSlug}/c/${latest?.slug ?? clientSlug}`
+        const entityName = data.name ?? client.name
         if (effectiveOwnerId) {
             upsertFollowUpReminder({
                 userId: effectiveOwnerId,
@@ -312,9 +326,20 @@ export async function updateClient(
                 action: 'Follow-up',
                 dateKey: 'platform.clients.followUpDate',
                 dateValue: isActive && latest?.followUpDate ? latest.followUpDate.toISOString() : null,
-                entityName: data.name ?? client.name,
+                entityName,
                 firmId: firm.id,
-                ctaUrl: `/d/f/${organizationSlug}/c/${latest?.slug ?? clientSlug}`,
+                ctaUrl,
+            }).catch(() => {})
+            upsertFollowUpReminder({
+                userId: effectiveOwnerId,
+                entityKey: 'platform.clients.id',
+                entityValue: client.id,
+                action: 'Close deal',
+                dateKey: 'platform.clients.expectedCloseDate',
+                dateValue: isActive && latest?.expectedCloseDate ? latest.expectedCloseDate.toISOString() : null,
+                entityName,
+                firmId: firm.id,
+                ctaUrl,
             }).catch(() => {})
         }
     }

@@ -419,7 +419,7 @@ model Engagement {
   docCommentMessages    DocCommentMessage[]
   platformAuditEvents   PlatformAuditEvent[]
   notifications         Notification[]
-  canvases              EngagementCanvas[]
+  wikiPages             EngagementWikiPage[]
   contacts              ClientContact[]
 
   @@unique([clientId, slug])
@@ -671,32 +671,35 @@ model UserPersonalization {
   createdBy  String?  @db.Uuid
   updatedBy  String?  @db.Uuid
   bookmarks  Json     @default("[]")
-  notes      String?  @db.Text
   reminders  Json     @default("[]")
 
   @@map("user_personalizations")
   @@schema("platform")
 }
 
-model EngagementCanvas {
-  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  createdBy       String?  @db.Uuid
-  updatedBy       String?  @db.Uuid
 
-  firmId          String   @db.Uuid
-  clientId        String   @db.Uuid
-  engagementId    String   @db.Uuid
+model EngagementWikiPage {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  createdBy    String?   @db.Uuid
+  updatedBy    String?   @db.Uuid
 
-  content         String   @default("") @db.Text
-  allowExternal   Boolean  @default(false)
+  engagementId String    @db.Uuid
+  firmId       String    @db.Uuid
+  title        String
+  slug         String
+  driveFileId  String?
+  order        Int       @default(0)
+  parentId     String?   @db.Uuid
 
-  engagement      Engagement  @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  engagement   Engagement           @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  parent       EngagementWikiPage?  @relation("WikiPageTree", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  children     EngagementWikiPage[] @relation("WikiPageTree")
 
-  @@unique([engagementId])
-  @@index([firmId, engagementId])
-  @@map("engagement_canvases")
+  @@unique([engagementId, slug])
+  @@index([engagementId, order])
+  @@map("engagement_wiki_pages")
   @@schema("platform")
 }
 

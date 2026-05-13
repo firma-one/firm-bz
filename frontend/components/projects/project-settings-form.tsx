@@ -10,10 +10,11 @@ import { useRouter } from 'next/navigation'
 import { useToast } from '@/components/ui/toast'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { FileText, AlertTriangle } from 'lucide-react'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { FileText, AlertTriangle, ChevronDown, Check } from 'lucide-react'
 import { SandboxInfoBanner } from '@/components/ui/sandbox-info-banner'
 import { useOrgSandbox } from '@/lib/use-org-sandbox'
-import { FormattedDateInput } from '@/components/ui/formatted-date-input'
+import { DateTimePicker } from '@/components/ui/date-time-picker'
 
 export interface ProjectSettingsFormProps {
     projectId: string
@@ -55,11 +56,16 @@ export function ProjectSettingsForm({
     const isSandboxFirm = Boolean(firmSandboxOnly || orgSandbox?.sandboxOnly)
     const [name, setName] = useState(initialName)
     const [description, setDescription] = useState(initialDescription)
-    const [kickoffDate, setKickoffDate] = useState<string>(initialKickoffDate ? initialKickoffDate.slice(0, 10) : '')
-    const [dueDate, setDueDate] = useState<string>(initialDueDate ? initialDueDate.slice(0, 10) : '')
+    const [kickoffDate, setKickoffDate] = useState<string>(initialKickoffDate ?? '')
+    const [dueDate, setDueDate] = useState<string>(initialDueDate ?? '')
     const [status, setStatus] = useState<LwCrmEngagementStatus>(initialStatus)
     const [contractType, setContractType] = useState(initialContractType)
+    const [contractTypeOpen, setContractTypeOpen] = useState(false)
+    const [contractTypeIsCustom, setContractTypeIsCustom] = useState(
+        () => initialContractType !== '' && !['Fixed Price','Retainer','Time & Material','Case Management','Milestone-Based','Strategic Advisory','Success Fee','Subscription / Recurring'].includes(initialContractType)
+    )
     const [rateOrValue, setRateOrValue] = useState(initialRateOrValue ?? '')
+    const [currencySymbol, setCurrencySymbol] = useState('')
     const [tagsInput, setTagsInput] = useState(initialTags.join(', '))
     const [saving, setSaving] = useState(false)
     const [deleting, setDeleting] = useState(false)
@@ -70,8 +76,8 @@ export function ProjectSettingsForm({
     useEffect(() => {
         setName(initialName)
         setDescription(initialDescription ?? '')
-        setKickoffDate(initialKickoffDate ? initialKickoffDate.slice(0, 10) : '')
-        setDueDate(initialDueDate ? initialDueDate.slice(0, 10) : '')
+        setKickoffDate(initialKickoffDate ?? '')
+        setDueDate(initialDueDate ?? '')
         setStatus(initialStatus ?? 'ACTIVE')
         setContractType(initialContractType ?? '')
         setRateOrValue(initialRateOrValue ?? '')
@@ -86,6 +92,20 @@ export function ProjectSettingsForm({
         initialRateOrValue,
         initialTags,
     ])
+
+    useEffect(() => {
+        let mounted = true
+        fetch(`/api/firm?slug=${encodeURIComponent(orgSlug)}`)
+            .then((r) => r.ok ? r.json() : null)
+            .then((d) => {
+                if (!mounted || !d) return
+                const firm = d.firm ?? d
+                const s = ((firm?.settings as Record<string, unknown>)?.currency as Record<string, string> | undefined)
+                setCurrencySymbol(s?.symbol ?? '')
+            })
+            .catch(() => {})
+        return () => { mounted = false }
+    }, [orgSlug])
 
     const parseTags = (raw: string) =>
         raw
@@ -102,8 +122,8 @@ export function ProjectSettingsForm({
                 {
                     name,
                     description,
-                    kickoffDate: kickoffDate ? new Date(kickoffDate).toISOString() : null,
-                    dueDate: dueDate ? new Date(dueDate).toISOString() : null,
+                    kickoffDate: kickoffDate || null,
+                    dueDate: dueDate || null,
                     status,
                     contractType: contractType.trim() || null,
                     rateOrValue: rateOrValue.trim() === '' ? null : rateOrValue.trim(),
@@ -200,25 +220,23 @@ export function ProjectSettingsForm({
                             </Select>
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="project-kickoff" className="text-gray-700 font-medium">Start date (optional)</Label>
-                            <FormattedDateInput
-                                id="project-kickoff"
+                            <Label className="text-gray-700 font-medium">Start date (optional)</Label>
+                            <DateTimePicker
                                 value={kickoffDate}
                                 onChange={setKickoffDate}
                                 placeholder="Select start date"
-                                ariaLabel="Start date"
                                 disabled={isCompleted || isSandboxFirm}
+                                defaultTime="09:00"
                             />
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="project-due" className="text-gray-700 font-medium">End date (optional)</Label>
-                            <FormattedDateInput
-                                id="project-due"
+                            <Label className="text-gray-700 font-medium">End date (optional)</Label>
+                            <DateTimePicker
                                 value={dueDate}
                                 onChange={setDueDate}
                                 placeholder="Select end date"
-                                ariaLabel="End date"
                                 disabled={isCompleted || isSandboxFirm}
+                                defaultTime="17:00"
                             />
                         </div>
                     </div>
@@ -248,25 +266,95 @@ export function ProjectSettingsForm({
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <Label htmlFor="contract-type" className="text-gray-700 font-medium">Contract type (optional)</Label>
-                            <Input
-                                id="contract-type"
-                                value={contractType}
-                                onChange={(e) => setContractType(e.target.value)}
-                                placeholder="e.g. Fixed fee, T&M"
-                                disabled={isCompleted || isSandboxFirm}
-                                className="bg-white border-gray-200 text-gray-900 placeholder:text-gray-400 focus-visible:ring-gray-400"
-                            />
+                            <DropdownMenu open={contractTypeOpen} onOpenChange={setContractTypeOpen}>
+                                <DropdownMenuTrigger asChild disabled={isCompleted || isSandboxFirm}>
+                                    <button
+                                        id="contract-type"
+                                        className="w-full h-10 flex items-center justify-between rounded-md border border-gray-200 bg-white px-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                        <span className={contractType ? 'text-gray-900' : 'text-gray-400'}>
+                                            {contractType || 'Select a contract type'}
+                                        </span>
+                                        <ChevronDown className="h-4 w-4 text-gray-500 shrink-0" />
+                                    </button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent
+                                    className="w-[var(--radix-dropdown-menu-trigger-width)] p-1"
+                                    onCloseAutoFocus={(e) => e.preventDefault()}
+                                >
+                                    {[
+                                        'Fixed Price',
+                                        'Retainer',
+                                        'Time & Material',
+                                        'Case Management',
+                                        'Milestone-Based',
+                                        'Strategic Advisory',
+                                        'Success Fee',
+                                        'Subscription / Recurring',
+                                    ].map((label) => (
+                                        <DropdownMenuItem
+                                            key={label}
+                                            className="flex items-center justify-between cursor-pointer"
+                                            onSelect={() => {
+                                                setContractType(label)
+                                                setContractTypeIsCustom(false)
+                                                setContractTypeOpen(false)
+                                            }}
+                                        >
+                                            {label}
+                                            {contractType === label && !contractTypeIsCustom && (
+                                                <Check className="h-4 w-4 text-gray-700" />
+                                            )}
+                                        </DropdownMenuItem>
+                                    ))}
+                                    <DropdownMenuSeparator />
+                                    <div className="px-2 py-1.5 flex items-center gap-2">
+                                        <input
+                                            value={contractTypeIsCustom ? contractType : ''}
+                                            onChange={(e) => {
+                                                setContractType(e.target.value)
+                                                setContractTypeIsCustom(true)
+                                            }}
+                                            onKeyDown={(e) => {
+                                                e.stopPropagation()
+                                                if (e.key === 'Enter') setContractTypeOpen(false)
+                                            }}
+                                            onClick={(e) => e.stopPropagation()}
+                                            placeholder="Other..."
+                                            className="flex-1 text-sm text-gray-900 placeholder:text-gray-400 outline-none bg-transparent"
+                                        />
+                                        {contractTypeIsCustom && contractType && (
+                                            <Check className="h-4 w-4 text-gray-700 shrink-0" />
+                                        )}
+                                    </div>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="rate-value" className="text-gray-700 font-medium">Rate / value (optional)</Label>
-                            <Input
-                                id="rate-value"
-                                value={rateOrValue}
-                                onChange={(e) => setRateOrValue(e.target.value)}
-                                placeholder="e.g. 15000 or 250/hr"
-                                disabled={isCompleted || isSandboxFirm}
-                                className="bg-white border-gray-200 text-gray-900 placeholder:text-gray-400 focus-visible:ring-gray-400"
-                            />
+                            <Label htmlFor="rate-value" className="text-gray-700 font-medium">Contract Value <span className="text-gray-400 font-normal">(optional)</span></Label>
+                            <div className={`flex items-center rounded-md border border-gray-200 bg-white focus-within:ring-1 focus-within:ring-gray-400 ${isCompleted || isSandboxFirm ? 'opacity-60 cursor-not-allowed' : ''}`}>
+                                {currencySymbol && (
+                                    <span className="pl-3 pr-1 text-sm text-gray-500 shrink-0 select-none">{currencySymbol}</span>
+                                )}
+                                <input
+                                    id="rate-value"
+                                    value={rateOrValue}
+                                    onChange={(e) => setRateOrValue(e.target.value)}
+                                    placeholder="Total engagement value"
+                                    disabled={isCompleted || isSandboxFirm}
+                                    className="flex-1 h-10 px-3 text-sm text-gray-900 bg-transparent outline-none placeholder:text-gray-400 disabled:cursor-not-allowed"
+                                />
+                            </div>
+                            {contractType && (
+                                <p className="text-xs text-gray-400">
+                                    {contractType === 'Fixed Price' && 'Total project fee'}
+                                    {contractType === 'Time & Material' && 'Estimated total — leave blank if unknown'}
+                                    {contractType === 'Retainer' && 'Total retainer value (e.g. 5 000/mo × 12 = 60 000)'}
+                                    {contractType === 'Milestone-Based' && 'Sum of all milestone values'}
+                                    {contractType === 'Subscription / Recurring' && 'Total value over engagement period'}
+                                    {!['Fixed Price','Time & Material','Retainer','Milestone-Based','Subscription / Recurring'].includes(contractType) && 'Total value of this engagement'}
+                                </p>
+                            )}
                         </div>
                     </div>
                     <div className="space-y-2">

@@ -197,7 +197,7 @@ export function ClientProjectView({ clients, orgSlug, orgName, orgId, firmSandbo
                                     />
                                     <TabsTrigger
                                         value="projects"
-                                        className="h-full px-4 rounded-md font-medium text-slate-500 data-[state=active]:text-slate-900 data-[state=active]:shadow-sm"
+                                        className="h-full px-4 rounded-md font-medium text-slate-500 hover:bg-white hover:text-slate-900 hover:shadow-sm data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all"
                                     >
                                         <Briefcase className="w-4 h-4 mr-2" />
                                         Engagements
@@ -209,7 +209,7 @@ export function ClientProjectView({ clients, orgSlug, orgName, orgId, firmSandbo
                                     </TabsTrigger>
                                     <TabsTrigger
                                         value="contacts"
-                                        className="h-full px-4 rounded-md font-medium text-slate-500 data-[state=active]:text-slate-900 data-[state=active]:shadow-sm"
+                                        className="h-full px-4 rounded-md font-medium text-slate-500 hover:bg-white hover:text-slate-900 hover:shadow-sm data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all"
                                     >
                                         <Users className="w-4 h-4 mr-2" />
                                         Contacts
@@ -222,7 +222,7 @@ export function ClientProjectView({ clients, orgSlug, orgName, orgId, firmSandbo
                                     {canViewClientSettings && (
                                         <TabsTrigger
                                             value="members"
-                                            className="h-full px-4 rounded-md font-medium text-slate-500 data-[state=active]:text-slate-900 data-[state=active]:shadow-sm"
+                                            className="h-full px-4 rounded-md font-medium text-slate-500 hover:bg-white hover:text-slate-900 hover:shadow-sm data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all"
                                         >
                                             <UserCog className="w-4 h-4 mr-2" />
                                             Members
@@ -236,7 +236,7 @@ export function ClientProjectView({ clients, orgSlug, orgName, orgId, firmSandbo
                                     {canViewClientSettings && (
                                         <TabsTrigger
                                             value="settings"
-                                            className="h-full px-4 rounded-md font-medium text-slate-500 data-[state=active]:text-slate-900 data-[state=active]:shadow-sm"
+                                            className="h-full px-4 rounded-md font-medium text-slate-500 hover:bg-white hover:text-slate-900 hover:shadow-sm data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all"
                                         >
                                             <Settings className="w-4 h-4 mr-2" />
                                             Settings
@@ -325,7 +325,6 @@ export function ClientProjectView({ clients, orgSlug, orgName, orgId, firmSandbo
                                             initialExpectedCloseDate={selectedClient.expectedCloseDate instanceof Date ? selectedClient.expectedCloseDate.toISOString() : (selectedClient.expectedCloseDate as string | null) ?? undefined}
                                             initialLeadSource={selectedClient.leadSource ?? undefined}
                                             initialInternalMemo={selectedClient.internalMemo ?? undefined}
-                                            initialRelationshipValue={selectedClient.relationshipValue ?? undefined}
                                             initialClientSinceDate={selectedClient.clientSinceDate instanceof Date ? selectedClient.clientSinceDate.toISOString() : (selectedClient.clientSinceDate as string | null) ?? undefined}
                                             initialLinkedInUrl={selectedClient.linkedInUrl ?? undefined}
                                             initialCompanySizeBracket={selectedClient.companySizeBracket ?? undefined}

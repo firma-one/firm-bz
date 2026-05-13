@@ -222,7 +222,7 @@ export function DateTimePicker({
   const dropdown = isOpen ? (
     <div
       id="date-time-picker-portal"
-      style={{ position: 'absolute', top: dropdownPos.top, left: dropdownPos.left, zIndex: 9999 }}
+      style={{ position: 'absolute', top: dropdownPos.top, left: dropdownPos.left, zIndex: 1100000 }}
       className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 w-72"
     >
       {/* Header */}

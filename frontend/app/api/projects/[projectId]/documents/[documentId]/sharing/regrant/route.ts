@@ -161,14 +161,16 @@ export async function POST(
 
                 // 3. Upload or overwrite PDF file
                 let pdfDriveId = guestOptions.sharedPdfDriveId
-                const pdfFileName = `[FIRMA_PDF] ${fileName}.pdf`
+                const pdfFileName = `${fileName}.pdf`
 
                 if (pdfDriveId) {
                     // Overwrite existing PDF
                     await drive.overwriteFileContent(connectorId, pdfDriveId, finalPdfBytes, 'application/pdf')
                 } else {
-                    // Upload new PDF
-                    pdfDriveId = await drive.uploadNewFile(connectorId, pdfFileName, finalPdfBytes, 'application/pdf')
+                    // Upload new PDF next to the original file (same parent folder)
+                    const originalMeta = await drive.getFileMetadata(connectorId, fileInfo.externalId)
+                    const parentFolderId = originalMeta?.parents?.[0] ?? undefined
+                    pdfDriveId = await drive.uploadNewFile(connectorId, pdfFileName, finalPdfBytes, 'application/pdf', parentFolderId)
 
                     // Update document settings with the PDF Drive ID
                     const updatedSettings = buildSettingsForDb(document.settings as Record<string, unknown>, {
@@ -189,9 +191,9 @@ export async function POST(
                     })
                 }
 
-                // 4. Set copyRequiresWriterPermission on PDF based on allowDownload
+                // 4. Always block Drive's native download — Firma controls download via its own action menu
                 await drive.patchFileProperties(connectorId, pdfDriveId, {
-                    copyRequiresWriterPermission: !allowDownload
+                    copyRequiresWriterPermission: true
                 })
 
                 // 5. Revoke old permission on PDF if exists
@@ -213,16 +215,26 @@ export async function POST(
                 targetFileId = fileInfo.externalId
             }
         } else {
-            // Branch B: Viewer + sharePdfOnly = false -> enforce allowDownload on original file
-            if (isViewer && !allowDownload) {
+            // Branch B: Viewer + sharePdfOnly = false -> always block Drive's native download
+            if (isViewer) {
                 try {
                     await drive.patchFileProperties(connectorId, fileInfo.externalId, {
                         copyRequiresWriterPermission: true
                     })
                 } catch (e) {
                     console.error('Failed to set copyRequiresWriterPermission:', e)
-                    // Continue anyway - this is not a blocker
                 }
+            }
+        }
+
+        // EC persona: always block Drive's native download regardless of allowDownload setting
+        if (!isViewer && isExternalEngagementRole(projectMember.role)) {
+            try {
+                await drive.patchFileProperties(connectorId, fileInfo.externalId, {
+                    copyRequiresWriterPermission: true
+                })
+            } catch (e) {
+                console.error('Failed to set copyRequiresWriterPermission for EC:', e)
             }
         }
 

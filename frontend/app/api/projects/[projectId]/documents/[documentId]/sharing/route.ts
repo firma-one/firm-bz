@@ -134,6 +134,9 @@ export async function PUT(
 
     const externalCollaborator = body.externalCollaborator !== false
     const guest = body.guest === true
+    const ecOptions = {
+      allowDownload: body.ecOptions?.allowDownload === true,
+    }
     const guestOptions = {
       sharePdfOnly: body.guestOptions?.sharePdfOnly !== false,
       allowDownload: body.guestOptions?.allowDownload === true,
@@ -166,7 +169,7 @@ export async function PUT(
     const existingSettings = (existing?.settings as Record<string, unknown>) || null
     const shareUpdate: Partial<ShareBlock> = {
       guest: { enabled: guest, options: guestOptions },
-      externalCollaborator: { enabled: externalCollaborator },
+      externalCollaborator: { enabled: externalCollaborator, options: ecOptions },
       updatedAt: now,
       publishedVersionId: existingSettings?.publishedVersionId as string | undefined,
       publishedAt: existingSettings?.publishedAt as string | undefined,
@@ -246,6 +249,31 @@ export async function PUT(
         disabledPersonas.push('externalCollaborator')
       }
 
+      // If guest was just disabled, trash the system PDF copy — it has no value without guest sharing
+      if (disabledPersonas.includes('guest')) {
+        const pdfDriveId = oldSettings?.share?.guest?.options?.sharedPdfDriveId
+        if (pdfDriveId) {
+          let resolvedConnectorId = updated.connectorId
+          if (!resolvedConnectorId) {
+            const org = await prisma.firm.findUnique({
+              where: { id: fileInfo.organizationId },
+              include: { connector: true },
+            })
+            if (org?.connector?.type === 'GOOGLE_DRIVE' && org.connector.status === 'ACTIVE') {
+              resolvedConnectorId = org.connector.id
+            }
+          }
+          if (resolvedConnectorId) {
+            try {
+              const drive = GoogleDriveConnector.getInstance()
+              await drive.trashFile(resolvedConnectorId, pdfDriveId)
+            } catch (e) {
+              console.error('Failed to trash system PDF on guest disable:', e)
+            }
+          }
+        }
+      }
+
       if (disabledPersonas.length > 0) {
         await safeInngestSend('sharing.settings.updated', {
           projectId,
@@ -273,29 +301,38 @@ export async function PUT(
 
         if (resolvedConnectorId) {
           const drive = GoogleDriveConnector.getInstance()
-          const allowDownload = guestOptions.allowDownload ?? false
           const sharePdfOnly = guestOptions.sharePdfOnly ?? false
 
+          // Always block Drive's native download — Firma controls download via its own action menu
           if (sharePdfOnly) {
-            // Enforce on the PDF copy if it already exists
             const sharedPdfDriveId = guestOptions.sharedPdfDriveId
             if (sharedPdfDriveId) {
               try {
                 await drive.patchFileProperties(resolvedConnectorId, sharedPdfDriveId, {
-                  copyRequiresWriterPermission: !allowDownload
+                  copyRequiresWriterPermission: true
                 })
               } catch (e) {
                 console.error('Failed to patch PDF file properties:', e)
               }
             }
           } else {
-            // Enforce on the original Drive file
             try {
               await drive.patchFileProperties(resolvedConnectorId, fileInfo.externalId, {
-                copyRequiresWriterPermission: !allowDownload
+                copyRequiresWriterPermission: true
               })
             } catch (e) {
               console.error('Failed to patch file properties:', e)
+            }
+          }
+
+          // Always lock Drive download for EC persona too (download only via Firma action menu)
+          if (externalCollaborator && !sharePdfOnly) {
+            try {
+              await drive.patchFileProperties(resolvedConnectorId, fileInfo.externalId, {
+                copyRequiresWriterPermission: true
+              })
+            } catch (e) {
+              console.error('Failed to patch EC file properties:', e)
             }
           }
         }
@@ -366,7 +403,7 @@ export async function DELETE(
 
     await syncDocumentSharingUsers(existing.id, user.id)
 
-    // Clean up PDF file if sharePdfOnly was enabled
+    // Trash the system PDF copy in Drive — it's a Firma-managed artifact with no value once unshared
     const existingSettings = parseSettingsFromDb((existing.settings as Record<string, unknown>) || {})
     const sharedPdfDriveId = existingSettings.share?.guest?.options?.sharedPdfDriveId
     if (sharedPdfDriveId) {
@@ -380,13 +417,9 @@ export async function DELETE(
       if (connector?.type === 'GOOGLE_DRIVE' && connector?.status === 'ACTIVE') {
         try {
           const drive = GoogleDriveConnector.getInstance()
-          // Delete all permissions from the PDF file (which will revoke access)
-          const permissions = await drive.listFilePermissions(connector.id, sharedPdfDriveId)
-          for (const perm of permissions.filter((p: any) => p.role !== 'owner')) {
-            await drive.revokePermission(connector.id, sharedPdfDriveId, perm.id)
-          }
+          await drive.trashFile(connector.id, sharedPdfDriveId)
         } catch (e) {
-          console.error('Failed to clean up PDF file permissions:', e)
+          console.error('Failed to trash system PDF file:', e)
         }
       }
     }

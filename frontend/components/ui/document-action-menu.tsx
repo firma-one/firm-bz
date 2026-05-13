@@ -54,6 +54,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useToast } from "@/components/ui/toast"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { useDownloadProgress } from "@/lib/download-progress-context"
 
 const VERSION_LOCK_TOOLTIP =
   'Lock finalizes the current version in Google Drive (collaborators become view-only on this file). Unlock restores edit access for Engagement Lead actions.'
@@ -68,6 +69,10 @@ interface DocumentActionMenuProps {
   onDuplicateDocument?: (doc: any) => void
   onCopyDocument?: (doc: any) => void
   onMoveDocument?: (doc: any) => void
+  /** Copy to a different engagement (EL only). Opens cross-engagement picker. */
+  onCrossEngagementCopy?: (doc: any) => void
+  /** Move to a different engagement (EL only). Opens cross-engagement picker. */
+  onCrossEngagementMove?: (doc: any) => void
   onVersionHistory?: (doc: any) => void
   onDeleteDocument?: (doc: any) => void
   /** When set, Share opens the custom share modal instead of OS share. Only show Share item when true (Project Lead). */
@@ -100,6 +105,8 @@ interface DocumentActionMenuProps {
   onOpenVersionPane?: (documentId: string) => void
   /** Engagement Lead only: Lock / Unlock version (files). Prefer explicit over showShareModal. */
   isEngagementLead?: boolean
+  /** External Collaborator (EC): show Accept Document option to lock via client acceptance. */
+  isExternalCollaborator?: boolean
 }
 
 export function DocumentActionMenu({
@@ -112,6 +119,8 @@ export function DocumentActionMenu({
   onDuplicateDocument,
   onCopyDocument,
   onMoveDocument,
+  onCrossEngagementCopy,
+  onCrossEngagementMove,
   onVersionHistory,
   onDeleteDocument,
   showShareModal = false,
@@ -129,6 +138,7 @@ export function DocumentActionMenu({
   onOpenActivityPane,
   onOpenVersionPane,
   isEngagementLead,
+  isExternalCollaborator,
 }: DocumentActionMenuProps) {
   const [showDueDatePicker, setShowDueDatePicker] = useState(false)
   const [showShareModalOpen, setShowShareModalOpen] = useState(false)
@@ -139,6 +149,7 @@ export function DocumentActionMenu({
   const [mounted, setMounted] = useState(false)
   const { addToast } = useToast()
   const rightPane = useRightPane()
+  const { addTask, updateTask } = useDownloadProgress()
 
   const mime = (document?.mimeType ?? '').toLowerCase()
   const canOpenWithGoogleDoc = mime.includes('document') || mime.includes('vnd.google-apps.document')
@@ -290,6 +301,45 @@ export function DocumentActionMenu({
     }
   }, [projectId, leadForVersionLock, documentIdForProjectApis, addToast, onShareSaved])
 
+  const handleAcceptDocument = useCallback(async () => {
+    if (!projectId || !isExternalCollaborator) return
+    const docId = documentIdForProjectApis
+    if (!docId) {
+      addToast({ type: 'error', title: 'Unavailable', message: 'Document must be indexed before it can be accepted.' })
+      return
+    }
+    if (finalizeLockInFlightRef.current) return
+    finalizeLockInFlightRef.current = true
+    setFinalizeLockActiveId(docId)
+    try {
+      const { getSession } = await import('@/lib/supabase')
+      const session = await getSession()
+      if (!session?.access_token) {
+        addToast({ type: 'error', title: 'Unauthorized', message: 'Please sign in again.' })
+        return
+      }
+      const res = await fetch(
+        `/api/projects/${projectId}/documents/${encodeURIComponent(docId)}/sharing/accept`,
+        { method: 'PATCH', headers: { Authorization: `Bearer ${session.access_token}` } }
+      )
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(typeof err?.error === 'string' ? err.error : 'Failed to accept')
+      }
+      addToast({ type: 'success', title: 'Document accepted', message: 'The document has been accepted and is now locked.' })
+      onShareSaved?.()
+    } catch (error) {
+      addToast({
+        type: 'error',
+        title: 'Accept failed',
+        message: error instanceof Error ? error.message : 'Could not accept document.',
+      })
+    } finally {
+      finalizeLockInFlightRef.current = false
+      setFinalizeLockActiveId(null)
+    }
+  }, [projectId, isExternalCollaborator, documentIdForProjectApis, addToast, onShareSaved])
+
   const getDisplayType = (doc: any) => {
     if (doc.mimeType?.includes('folder')) return "Folder"
     if (doc.mimeType?.includes('document')) return "Document"
@@ -311,14 +361,44 @@ export function DocumentActionMenu({
         return
       }
 
-      const downloadUrl = `/api/documents/download?fileId=${doc.id}&connectorId=${doc.connectorId}&filename=${encodeURIComponent(doc.name)}&token=${session.access_token}`
+      const filename: string = doc.name
 
-      const a = window.document.createElement('a')
-      a.href = downloadUrl
-      a.download = doc.name
-      window.document.body.appendChild(a)
-      a.click()
-      window.document.body.removeChild(a)
+      if (doc.projectId && doc.id) {
+        // Shared document: server resolves connector + PDF/original.
+        // May involve PDF generation — show progress indicator while waiting.
+        const downloadUrl = `/api/projects/${doc.projectId}/documents/${encodeURIComponent(doc.id)}/download-share`
+        const taskId = addTask(filename)
+        try {
+          const res = await fetch(downloadUrl)
+          if (!res.ok) {
+            updateTask(taskId, { status: 'error', error: res.status === 403 ? 'Download not permitted' : 'Download failed' })
+            return
+          }
+          const blob = await res.blob()
+          updateTask(taskId, { status: 'complete' })
+          const blobUrl = URL.createObjectURL(blob)
+          const a = window.document.createElement('a')
+          a.href = blobUrl
+          a.download = filename
+          window.document.body.appendChild(a)
+          a.click()
+          window.document.body.removeChild(a)
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000)
+        } catch (err) {
+          updateTask(taskId, { status: 'error', error: 'Download failed' })
+          console.error('Share download error:', err)
+        }
+      } else {
+        // Files tab: generic download with explicit connector + Drive file ID (anchor, no progress needed)
+        const fileId = doc.externalId || doc.id
+        const downloadUrl = `/api/documents/download?fileId=${fileId}&connectorId=${doc.connectorId}&filename=${encodeURIComponent(filename)}&token=${session.access_token}`
+        const a = window.document.createElement('a')
+        a.href = downloadUrl
+        a.download = filename
+        window.document.body.appendChild(a)
+        a.click()
+        window.document.body.removeChild(a)
+      }
     } catch (error) {
       console.error('Download error:', error)
     }
@@ -569,13 +649,16 @@ export function DocumentActionMenu({
                   <span>Open</span>
                 </DropdownMenuItem>
 
-                <DropdownMenuItem
-                  onClick={() => { handleDownload(document); onDownloadDocument?.(document) }}
-                  className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
-                >
-                  <Download className="h-4 w-4 text-blue-600" />
-                  <span>Download</span>
-                </DropdownMenuItem>
+                {!(document.isGuest && !document.allowDownload) &&
+                 !(document.isExternalCollaborator && !document.ecAllowDownload) && (
+                  <DropdownMenuItem
+                    onClick={() => { handleDownload(document); onDownloadDocument?.(document) }}
+                    className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                  >
+                    <Download className="h-4 w-4 text-blue-600" />
+                    <span>Download</span>
+                  </DropdownMenuItem>
+                )}
 
                 {!mime.includes('folder') && leadForVersionLock && projectId && (
                   <>
@@ -623,6 +706,17 @@ export function DocumentActionMenu({
                       </DropdownMenuItem>
                     )}
                   </>
+                )}
+
+                {!mime.includes('folder') && isExternalCollaborator && projectId && !(document as { versionLocked?: boolean }).versionLocked && (
+                  <DropdownMenuItem
+                    disabled={finalizeLockDisabled}
+                    onClick={() => void handleAcceptDocument()}
+                    className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs text-emerald-800 focus:bg-emerald-50 focus:text-emerald-900 data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                  >
+                    <Check className="h-4 w-4 text-emerald-700 shrink-0" />
+                    <span className="whitespace-nowrap">Accept document</span>
+                  </DropdownMenuItem>
                 )}
 
                 {/* Share (submenu: Share + Copy link) */}
@@ -725,6 +819,25 @@ export function DocumentActionMenu({
                         >
                           <Move className="h-4 w-4 text-gray-600" />
                           <span>Move</span>
+                        </DropdownMenuItem>
+                      )}
+                      {(onCrossEngagementCopy || onCrossEngagementMove) && <DropdownMenuSeparator />}
+                      {onCrossEngagementCopy && !mime.includes('folder') && (
+                        <DropdownMenuItem
+                          onSelect={() => onCrossEngagementCopy(document)}
+                          className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                        >
+                          <Copy className="h-4 w-4 text-blue-600" />
+                          <span className="whitespace-nowrap">Copy to engagement…</span>
+                        </DropdownMenuItem>
+                      )}
+                      {onCrossEngagementMove && !mime.includes('folder') && (
+                        <DropdownMenuItem
+                          onSelect={() => onCrossEngagementMove(document)}
+                          className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                        >
+                          <Move className="h-4 w-4 text-blue-600" />
+                          <span className="whitespace-nowrap">Move to engagement…</span>
                         </DropdownMenuItem>
                       )}
                       {(canManage && (onRestrictToConfidential || onRestoreToGeneral || onPromoteToGeneral)) && <DropdownMenuSeparator />}

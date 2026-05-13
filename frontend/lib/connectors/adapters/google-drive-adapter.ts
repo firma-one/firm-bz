@@ -10,6 +10,11 @@ const DRIVE_API = 'https://www.googleapis.com/drive/v3'
 const DRIVE_UPLOAD = 'https://www.googleapis.com/upload/drive/v3'
 const DRIVE_OPTS = 'supportsAllDrives=true&includeItemsFromAllDrives=true'
 
+/** appProperties tag that marks Firma-managed system files (meta.json, .meta folders, PDF copies, etc.) */
+export const FIRMA_MANAGED_APP_PROPS = { firma_managed: 'true' }
+/** Drive query clause to exclude Firma-managed files from user-facing listings */
+export const FIRMA_MANAGED_EXCLUDE_QUERY = "not appProperties has { key='firma_managed' and value='true' }"
+
 export type GetAccessToken = (connectionId: string) => Promise<string>
 type DriveFolderRow = { id: string; createdTime?: string }
 
@@ -106,7 +111,8 @@ export function createGoogleDriveAdapter(getAccessToken: GetAccessToken): IConne
       const metadataPart = JSON.stringify({
         name: fileName,
         mimeType: contentType,
-        parents: [parentFolderId]
+        parents: [parentFolderId],
+        appProperties: FIRMA_MANAGED_APP_PROPS,
       })
       const multipartBody =
         `${delimiter}Content-Type: application/json\r\n\r\n${metadataPart}` +
@@ -149,7 +155,8 @@ export function createGoogleDriveAdapter(getAccessToken: GetAccessToken): IConne
       const metadataPart = JSON.stringify({
         name: fileName,
         mimeType,
-        parents: [parentFolderId]
+        parents: [parentFolderId],
+        appProperties: FIRMA_MANAGED_APP_PROPS,
       })
       const part1 = `${delimiter}Content-Type: application/json\r\n\r\n${metadataPart}${delimiter}Content-Type: ${mimeType}\r\n\r\n`
       const body = Buffer.concat([
@@ -182,7 +189,8 @@ export function createGoogleDriveAdapter(getAccessToken: GetAccessToken): IConne
         body: JSON.stringify({
           name,
           mimeType: DRIVE_FOLDER_MIME,
-          parents: [parentFolderId]
+          parents: [parentFolderId],
+          appProperties: FIRMA_MANAGED_APP_PROPS,
         })
       })
       if (!res.ok) {
@@ -217,7 +225,8 @@ export function createGoogleDriveAdapter(getAccessToken: GetAccessToken): IConne
         body: JSON.stringify({
           name,
           mimeType: DRIVE_FOLDER_MIME,
-          parents: [parentFolderId]
+          parents: [parentFolderId],
+          appProperties: FIRMA_MANAGED_APP_PROPS,
         })
       })
       if (!createRes.ok) {

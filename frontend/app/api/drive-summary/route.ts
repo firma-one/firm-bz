@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { prisma } from "@/lib/prisma"
-import { ConnectorType } from "@prisma/client"
 import { googleDriveConnector } from "@/lib/google-drive-connector"
 import { logger } from '@/lib/logger'
 
@@ -64,19 +63,17 @@ export async function GET(request: NextRequest) {
         try {
             // Fetch multiple types of files to get a comprehensive sample
             // Increased limits to ensure better coverage (aiming for > 500 total)
-            const [recent, trending, shared, sharedByMe, stale, large1, large2] = await Promise.all([
+            const [recent, trending, shared, sharedByMe, stale, nonNative] = await Promise.all([
                 googleDriveConnector.getMostRecentFiles(driveConnector.id, 150, '1y', undefined, driveConnector.name ?? undefined),
                 googleDriveConnector.getMostActiveFiles(driveConnector.id, 100, '1y'),
                 googleDriveConnector.getSharedFiles(driveConnector.id, 100),
                 googleDriveConnector.getSharedByMeFiles(driveConnector.id, 100),
-                // Explicitly fetch stale files to ensure they are counted
                 googleDriveConnector.getStaleFiles(driveConnector.id, 100),
-                // Fetch large files from different size ranges
-                googleDriveConnector.getStorageFiles(driveConnector.id, 60, '5-10', 'all'),
-                googleDriveConnector.getStorageFiles(driveConnector.id, 60, '10+', 'all')
+                // Fetch non-native files (PDFs, images, videos etc.) which have real byte sizes
+                googleDriveConnector.getNonNativeFiles(driveConnector.id, 500),
             ])
 
-            const allFiles = [...recent, ...trending, ...shared, ...sharedByMe, ...stale, ...large1, ...large2]
+            const allFiles = [...recent, ...trending, ...shared, ...sharedByMe, ...stale, ...nonNative]
 
             // Deduplicate by ID
             const uniqueFilesMap = new Map()
@@ -151,12 +148,68 @@ export async function GET(request: NextRequest) {
                 f.badges?.some((b: any) => b.type === 'risk')
             ).length
 
+            // Storage type breakdown — aggregate uniqueFiles by mimeType category and sum sizes
+            const MIME_CATEGORIES: { label: string; test: (m: string) => boolean }[] = [
+                { label: 'Documents', test: (m) => m.includes('document') || m.includes('pdf') || m.includes('word') || m.includes('text') || m.includes('presentation') || m.includes('slides') },
+                { label: 'Spreadsheets', test: (m) => m.includes('spreadsheet') || m.includes('excel') || m.includes('csv') },
+                { label: 'Images', test: (m) => m.startsWith('image/') },
+                { label: 'Videos', test: (m) => m.startsWith('video/') },
+                { label: 'Audio', test: (m) => m.startsWith('audio/') },
+            ]
+
+            const typeBytes: Record<string, number> = {}
+            for (const file of uniqueFiles) {
+                if (!file.mimeType || file.mimeType === 'application/vnd.google-apps.folder') continue
+                const sizeNum = file.quotaBytesUsed
+                  ? parseInt(String(file.quotaBytesUsed), 10)
+                  : file.size
+                    ? (typeof file.size === 'string' ? parseInt(file.size, 10) : Number(file.size))
+                    : 0
+                if (!sizeNum || isNaN(sizeNum)) continue
+                const cat = MIME_CATEGORIES.find(c => c.test(file.mimeType))
+                const label = cat?.label ?? 'Other'
+                typeBytes[label] = (typeBytes[label] ?? 0) + sizeNum
+            }
+            const storageByType: { label: string; bytes: number }[] = Object.entries(typeBytes).map(([label, bytes]) => ({ label, bytes }))
+
+            // Count shared files with permissions expiring within 7 days
+            const in7Days = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString()
+            let expiringLinksCount = 0
+            try {
+                const allSharedFiles = [...shared, ...sharedByMe]
+                for (const file of allSharedFiles) {
+                    if (!file.permissions) continue
+                    const hasExpiring = (file.permissions as any[]).some((p: any) => p.expirationTime && p.expirationTime < in7Days)
+                    if (hasExpiring) expiringLinksCount++
+                }
+            } catch {}
+
+            // Fetch real quota from Drive
+            let quotaData: { limit: number; used: number; usageInDrive: number; usageInDriveTrash: number } | null = null // usageInDriveTrash mapped from usageInTrash
+            try {
+                const q = await googleDriveConnector.getStorageQuota(driveConnector.id)
+                if (q) {
+                    const totalUsed = q.usage ? parseInt(q.usage) : 0
+                    const driveUsed = q.usageInDrive ? parseInt(q.usageInDrive) : 0
+                    const driveTrash = q.usageInTrash ? parseInt(q.usageInTrash) : 0
+                    quotaData = {
+                        limit: q.limit ? parseInt(q.limit) : 0,
+                        used: totalUsed,
+                        usageInDrive: driveUsed,
+                        usageInDriveTrash: driveTrash,
+                    }
+                }
+            } catch {}
+
             return NextResponse.json({
                 stale: staleCount,
                 large: largeFilesCount,
                 sensitive: sensitiveCount,
                 risky: riskySharesCount,
-                totalSampled: uniqueFiles.length
+                totalSampled: uniqueFiles.length,
+                storageByType,
+                expiringLinksCount,
+                quota: quotaData,
             })
         } catch (err) {
             logger.error(`Failed to fetch files for connector ${driveConnector.id}:`, err as Error)

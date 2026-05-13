@@ -6,7 +6,9 @@ import { InsightTheme } from "./insight-card"
 const THEME_STYLES: Record<InsightTheme, { iconColor: string, iconBg: string }> = {
     blue: { iconColor: 'text-blue-600', iconBg: 'bg-blue-50' },
     purple: { iconColor: 'text-purple-600', iconBg: 'bg-purple-50' },
-    green: { iconColor: 'text-green-600', iconBg: 'bg-green-50' }
+    green: { iconColor: 'text-green-600', iconBg: 'bg-green-50' },
+    amber: { iconColor: 'text-amber-600', iconBg: 'bg-amber-50' },
+    red: { iconColor: 'text-red-600', iconBg: 'bg-red-50' },
 }
 
 interface SectionHeaderProps {

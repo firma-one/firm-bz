@@ -67,7 +67,8 @@ interface ShareRecord {
   settings: {
     externalCollaborator: boolean
     guest: boolean
-    guestOptions: { sharePdfOnly?: boolean; allowDownload?: boolean; addWatermark?: boolean; publish?: boolean }
+    guestOptions: { sharePdfOnly?: boolean; allowDownload?: boolean; addWatermark?: boolean; publish?: boolean; sharedPdfDriveId?: string | null }
+    ecOptions?: { allowDownload?: boolean }
     publishedVersionId: string | null
     publishedAt: string | null
   }
@@ -1149,6 +1150,11 @@ export function ProjectSharesTab({
     projectId: share.projectId,
     isGuest: share.settings?.guest ?? false,
     webViewLink: share.webViewLink,
+    sharePdfOnly: share.settings?.guestOptions?.sharePdfOnly ?? false,
+    sharedPdfDriveId: share.settings?.guestOptions?.sharedPdfDriveId ?? null,
+    allowDownload: share.settings?.guestOptions?.allowDownload ?? false,
+    isExternalCollaborator: share.settings?.externalCollaborator ?? false,
+    ecAllowDownload: share.settings?.ecOptions?.allowDownload ?? false,
   })
 
   const handleOpenInFilesForFolder = useCallback(

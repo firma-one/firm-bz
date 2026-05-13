@@ -13,12 +13,16 @@ export interface ShareGuestOptions {
   sharedPdfDriveId?: string | null
 }
 
+export interface ShareEcOptions {
+  allowDownload?: boolean
+}
+
 export interface ShareBlock {
   guest: {
     enabled: boolean
     options: ShareGuestOptions
   }
-  externalCollaborator: { enabled: boolean }
+  externalCollaborator: { enabled: boolean; options?: ShareEcOptions }
   createdAt?: string
   createdBy?: string | null
   updatedAt?: string
@@ -79,7 +83,7 @@ const DEFAULT_SHARE: ShareBlock = {
       sharedPdfDriveId: null,
     },
   },
-  externalCollaborator: { enabled: false },
+  externalCollaborator: { enabled: false, options: { allowDownload: false } },
 }
 
 /** Read settings from DB: supports legacy flat and new nested shape. */
@@ -117,6 +121,9 @@ export function parseSettingsFromDb(settings: unknown): ProjectDocumentSharingSe
         },
         externalCollaborator: {
           enabled: share.externalCollaborator?.enabled ?? legacyEc,
+          options: {
+            allowDownload: share.externalCollaborator?.options?.allowDownload ?? false,
+          },
         },
         createdAt: share.createdAt,
         createdBy: share.createdBy ?? null,
@@ -138,7 +145,7 @@ export function parseSettingsFromDb(settings: unknown): ProjectDocumentSharingSe
             sharedPdfDriveId: legacyOpts.sharedPdfDriveId ?? null,
           },
         },
-        externalCollaborator: { enabled: legacyEc },
+        externalCollaborator: { enabled: legacyEc, options: { allowDownload: false } },
         publishedVersionId: (s.publishedVersionId as string | null) ?? null,
         publishedAt: (s.publishedAt as string | null) ?? null,
       }
@@ -195,6 +202,10 @@ export function buildSettingsForDb(
     externalCollaborator: {
       ...parsed.share!.externalCollaborator,
       ...updates.share?.externalCollaborator,
+      options: {
+        ...parsed.share!.externalCollaborator?.options,
+        ...updates.share?.externalCollaborator?.options,
+      },
     },
     createdAt: isFirstShare ? now : parsed.share!.createdAt,
     createdBy: isFirstShare ? (updates.actorId ?? null) : (parsed.share!.createdBy ?? null),
@@ -230,6 +241,7 @@ export function flattenForLegacyUI(parsed: ProjectDocumentSharingSettings) {
     externalCollaborator: parsed.share?.externalCollaborator?.enabled ?? parsed.externalCollaborator ?? true,
     guest: parsed.share?.guest?.enabled ?? parsed.guest ?? false,
     guestOptions: parsed.share?.guest?.options ?? parsed.guestOptions ?? {},
+    ecOptions: parsed.share?.externalCollaborator?.options ?? {},
     publishedVersionId: parsed.share?.publishedVersionId ?? parsed.publishedVersionId ?? null,
     publishedAt: parsed.share?.publishedAt ?? parsed.publishedAt ?? null,
     activity: parsed.activity,

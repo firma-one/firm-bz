@@ -31,6 +31,9 @@ export interface DocumentShareSettings {
     addWatermark: boolean
     publish: boolean
   }
+  ecOptions: {
+    allowDownload: boolean
+  }
 }
 
 const defaultSettings: DocumentShareSettings = {
@@ -41,6 +44,9 @@ const defaultSettings: DocumentShareSettings = {
     allowDownload: false,
     addWatermark: false,
     publish: false,
+  },
+  ecOptions: {
+    allowDownload: false,
   },
 }
 
@@ -57,6 +63,9 @@ function parseSettings(settings: unknown): DocumentShareSettings {
       allowDownload: share.guest?.options?.allowDownload === true,
       addWatermark: share.guest?.options?.addWatermark === true,
       publish: share.guest?.options?.publish === true,
+    },
+    ecOptions: {
+      allowDownload: share.externalCollaborator?.options?.allowDownload === true,
     },
   }
 }
@@ -148,6 +157,7 @@ export function DocumentShareModal({
             externalCollaborator: settings.externalCollaborator,
             guest: settings.guest,
             guestOptions: settings.guestOptions,
+            ecOptions: settings.ecOptions,
             title: doc.name,
             mimeType: doc.mimeType || 'application/octet-stream',
           }),
@@ -193,22 +203,46 @@ export function DocumentShareModal({
           <div className="space-y-5 py-2">
             {isSandboxFirm && <SandboxInfoBanner />}
             {/* External Collaborator (platform.personas.eng_ext_collaborator) */}
-            <div className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 bg-slate-50/50 px-4 py-3">
-              <div className="flex items-center gap-3 min-w-0">
-                <Users className="h-5 w-5 text-slate-600 shrink-0" />
-                <div>
-                  <Label htmlFor="share-ec" className={cn("text-sm font-medium cursor-pointer", isSandboxFirm && "text-slate-500")}>
-                    {projExtCollaborator}
-                  </Label>
-                  <p className="text-xs text-slate-500">Document visible in file list for external collaborators</p>
+            <div className="rounded-lg border border-slate-200 bg-slate-50/50 overflow-hidden">
+              <div className="flex items-center justify-between gap-4 px-4 py-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <Users className="h-5 w-5 text-slate-600 shrink-0" />
+                  <div>
+                    <Label htmlFor="share-ec" className={cn("text-sm font-medium cursor-pointer", isSandboxFirm && "text-slate-500")}>
+                      {projExtCollaborator}
+                    </Label>
+                    <p className="text-xs text-slate-500">Document visible in file list for external collaborators</p>
+                  </div>
+                </div>
+                <Switch
+                  id="share-ec"
+                  checked={settings.externalCollaborator}
+                  onCheckedChange={(v) => setSettings((s) => ({ ...s, externalCollaborator: v }))}
+                  disabled={isSandboxFirm}
+                />
+              </div>
+              <div
+                className="grid transition-[grid-template-rows] duration-200 ease-out"
+                style={{ gridTemplateRows: settings.externalCollaborator ? '1fr' : '0fr' }}
+                aria-hidden={!settings.externalCollaborator}
+              >
+                <div className="min-h-0 overflow-hidden border-t border-slate-200">
+                  <div className="bg-white px-4 py-3 space-y-3">
+                    <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">{projExtCollaborator} options</p>
+                    <div className="flex items-center justify-between gap-3">
+                      <Label htmlFor="ec-download" className="text-sm text-slate-700 flex items-center gap-2 cursor-pointer">
+                        <FileDown className="h-4 w-4" /> Allow download
+                      </Label>
+                      <Switch
+                        id="ec-download"
+                        checked={settings.ecOptions.allowDownload}
+                        onCheckedChange={(v) => setSettings((s) => ({ ...s, ecOptions: { ...s.ecOptions, allowDownload: v } }))}
+                        disabled={isSandboxFirm}
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
-              <Switch
-                id="share-ec"
-                checked={settings.externalCollaborator}
-                onCheckedChange={(v) => setSettings((s) => ({ ...s, externalCollaborator: v }))}
-                disabled={isSandboxFirm}
-              />
             </div>
 
             {/* Guest (platform.personas.eng_viewer): main toggle + options enclosed in one tile */}

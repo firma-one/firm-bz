@@ -88,6 +88,9 @@ function ReminderRow({ r, isPending, acting, onDone, onUndoDone, onHide, onShow,
                     <span className={`text-[13px] font-semibold truncate leading-snug transition-colors group-hover/link:text-[#C4572B] ${hidden || isPending ? 'text-slate-400' : 'text-slate-800'} ${isPending ? 'line-through' : ''}`}>
                         {r.action}
                     </span>
+                    {r.note && (
+                        <span className="text-[11px] text-slate-400 truncate ml-1 font-normal">{r.note}</span>
+                    )}
                     <ChevronRight className="h-3 w-3 shrink-0 text-slate-300 group-hover/link:text-[#C4572B]/60 transition-colors" />
                 </a>
                 </Tip>
@@ -292,7 +295,7 @@ export function RemindersPanel({ onCountChange }: Props) {
                             <div className="text-center py-8">
                                 <BellOff className="h-7 w-7 mx-auto mb-2 text-slate-300" />
                                 <p className="text-[13px] font-semibold text-slate-700">No reminders</p>
-                                <p className="text-xs text-slate-400 mt-0.5">Follow-ups within ±2 days appear here.</p>
+                                <p className="text-xs text-slate-400 mt-0.5">Overdue and upcoming follow-ups appear here.</p>
                             </div>
                         ) : (
                             displayed.map((r) => (

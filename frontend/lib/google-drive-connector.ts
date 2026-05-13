@@ -1,8 +1,9 @@
 import { prisma, basePrisma } from './prisma'
 import { Connector, ConnectorStatus, ConnectorType, WorkspaceRootLocation } from '@prisma/client'
+import { upsertFollowUpReminder } from '@/lib/actions/user-reminders'
 import { ignoreParser } from './ignore-parser'
 import { needsReEncryption, decrypt } from './encryption'
-import { createGoogleDriveAdapter } from '@/lib/connectors/adapters/google-drive-adapter'
+import { createGoogleDriveAdapter, FIRMA_MANAGED_APP_PROPS, FIRMA_MANAGED_EXCLUDE_QUERY } from '@/lib/connectors/adapters/google-drive-adapter'
 import * as pockettStructure from '@/lib/connectors/pockett-structure.service'
 import { type IConnectorStorageAdapter } from '@/lib/connectors/types'
 import { getGoogleDriveOAuthServerCredentials } from '@/lib/config'
@@ -136,6 +137,8 @@ export interface GoogleDriveFile {
   metadata?: any
   /** Present when the file lives in a shared drive (Drive API `driveId`). */
   driveId?: string | null
+  /** Storage consumed by the file (in bytes, as a string). Present for native Google files (Docs, Sheets, Slides) that have no `size` field. */
+  quotaBytesUsed?: string
 }
 
 export class GoogleDriveConnector {
@@ -1164,8 +1167,8 @@ export class GoogleDriveConnector {
 
     const params = new URLSearchParams({
       pageSize: Math.min(limit * 5, 1000).toString(), // Fetch more to filter client-side, max 1000
-      q: "trashed = false",
-      fields: "nextPageToken, files(id, name, mimeType, modifiedTime, viewedByMeTime, size, webViewLink, owners(displayName, emailAddress, photoLink), permissions, shared, parents)",
+      q: `trashed = false and ${FIRMA_MANAGED_EXCLUDE_QUERY}`,
+      fields: "nextPageToken, files(id, name, mimeType, modifiedTime, viewedByMeTime, size, quotaBytesUsed, webViewLink, owners(displayName, emailAddress, photoLink), permissions, shared, parents)",
       orderBy: "quotaBytesUsed desc"
     })
 
@@ -1299,8 +1302,8 @@ export class GoogleDriveConnector {
 
     const params = new URLSearchParams({
       pageSize: Math.min(limit * 2, 1000).toString(),
-      q: "sharedWithMe = true and trashed = false",
-      fields: "nextPageToken, files(id, name, mimeType, modifiedTime, sharedWithMeTime, size, webViewLink, owners(displayName, emailAddress, photoLink), permissions, shared, parents)",
+      q: `sharedWithMe = true and trashed = false and ${FIRMA_MANAGED_EXCLUDE_QUERY}`,
+      fields: "nextPageToken, files(id, name, mimeType, modifiedTime, sharedWithMeTime, size, quotaBytesUsed, webViewLink, owners(displayName, emailAddress, photoLink), permissions, shared, parents)",
       orderBy: "sharedWithMeTime desc"
     })
 
@@ -1366,8 +1369,8 @@ export class GoogleDriveConnector {
 
     const params = new URLSearchParams({
       pageSize: Math.min(limit * 2, 1000).toString(),
-      q: "'me' in owners and trashed = false",
-      fields: "nextPageToken, files(id, name, mimeType, modifiedTime, size, webViewLink, owners(displayName, emailAddress, photoLink), permissions, shared, parents)",
+      q: `'me' in owners and trashed = false and ${FIRMA_MANAGED_EXCLUDE_QUERY}`,
+      fields: "nextPageToken, files(id, name, mimeType, modifiedTime, size, quotaBytesUsed, webViewLink, owners(displayName, emailAddress, photoLink), permissions, shared, parents)",
       orderBy: "modifiedTime desc"
     })
 
@@ -1488,7 +1491,7 @@ export class GoogleDriveConnector {
     const nameExclusions = ignoreParser.getPatterns().map(p => `not name = '${p.replace(/'/g, "\\'")}'`).join(' and ')
     const parentExclusions = ignoreIds.map(id => `not '${id.replace(/'/g, "\\'")}' in parents`).join(' and ')
 
-    let query = 'trashed = false'
+    let query = `trashed = false and ${FIRMA_MANAGED_EXCLUDE_QUERY}`
     if (nameExclusions) query += ` and ${nameExclusions}`
     if (parentExclusions) query += ` and ${parentExclusions}`
 
@@ -1542,10 +1545,10 @@ export class GoogleDriveConnector {
     // 1. Fetch "Viewed" Files (Files API)
     const viewedFilesPromise = (async () => {
       try {
-        const q = `viewedByMeTime > '${startTimeIso}' and trashed = false`
+        const q = `viewedByMeTime > '${startTimeIso}' and trashed = false and mimeType != 'application/vnd.google-apps.folder' and ${FIRMA_MANAGED_EXCLUDE_QUERY}`
         const params = new URLSearchParams({
           pageSize: limit.toString(), // Fetch closer to limit
-          fields: 'files(id, name, mimeType, modifiedTime, viewedByMeTime, size, webViewLink, parents, owners(displayName, emailAddress, photoLink), permissions, shared)',
+          fields: 'files(id, name, mimeType, modifiedTime, viewedByMeTime, size, quotaBytesUsed, webViewLink, parents, owners(displayName, emailAddress, photoLink), permissions, shared)',
           orderBy: 'viewedByMeTime desc',
           q: q
         })
@@ -1564,10 +1567,10 @@ export class GoogleDriveConnector {
     // 2. Fetch "Modified" Files (Files API)
     const modifiedFilesPromise = (async () => {
       try {
-        const q = `modifiedTime > '${startTimeIso}' and trashed = false`
+        const q = `modifiedTime > '${startTimeIso}' and trashed = false and mimeType != 'application/vnd.google-apps.folder' and ${FIRMA_MANAGED_EXCLUDE_QUERY}`
         const params = new URLSearchParams({
           pageSize: limit.toString(),
-          fields: 'files(id, name, mimeType, modifiedTime, viewedByMeTime, size, webViewLink, parents, owners(displayName, emailAddress, photoLink), permissions, shared)',
+          fields: 'files(id, name, mimeType, modifiedTime, viewedByMeTime, size, quotaBytesUsed, webViewLink, parents, owners(displayName, emailAddress, photoLink), permissions, shared)',
           orderBy: 'modifiedTime desc',
           q: q
         })
@@ -1754,6 +1757,17 @@ export class GoogleDriveConnector {
           data: { connectorId: existingConnector.id }
         })
       }
+      upsertFollowUpReminder({
+        userId,
+        entityKey: 'platform.connectors.id',
+        entityValue: existingConnector.id,
+        action: 'Reconnect Drive',
+        dateKey: 'platform.connectors.tokenExpiresAt',
+        dateValue: tokenExpiresAt.toISOString(),
+        entityName: accountEmail?.trim() ?? name ?? 'Google Drive',
+        firmId: organizationId ?? '',
+        ctaUrl: '/d/onboarding',
+      }).catch(() => {})
       return updated
     }
 
@@ -1784,6 +1798,18 @@ export class GoogleDriveConnector {
         data: { connectorId: newConnector.id }
       })
     }
+
+    upsertFollowUpReminder({
+      userId,
+      entityKey: 'platform.connectors.id',
+      entityValue: newConnector.id,
+      action: 'Reconnect Drive',
+      dateKey: 'platform.connectors.tokenExpiresAt',
+      dateValue: tokenExpiresAt.toISOString(),
+      entityName: accountEmail?.trim() ?? name ?? 'Google Drive',
+      firmId: organizationId ?? '',
+      ctaUrl: '/d/onboarding',
+    }).catch(() => {})
 
     return newConnector
   }
@@ -2308,7 +2334,7 @@ export class GoogleDriveConnector {
         const fetchSize = Math.max(limit * 2, 50).toString()
         const params = new URLSearchParams({
           pageSize: fetchSize,
-          fields: 'files(id, name, mimeType, modifiedTime, viewedByMeTime, size, webViewLink, iconLink)',
+          fields: 'files(id, name, mimeType, modifiedTime, viewedByMeTime, size, quotaBytesUsed, webViewLink, iconLink)',
           orderBy: 'viewedByMeTime desc',
           q: q
         })
@@ -2371,7 +2397,7 @@ export class GoogleDriveConnector {
       for (let i = 0; i < Math.min(neededMetadataIds.length, 5); i++) {
         const id = neededMetadataIds[i]
         try {
-          const res = await fetch(`https://www.googleapis.com/drive/v3/files/${id}?fields=id,name,mimeType,modifiedTime,viewedByMeTime,size,webViewLink,iconLink`, {
+          const res = await fetch(`https://www.googleapis.com/drive/v3/files/${id}?fields=id,name,mimeType,modifiedTime,viewedByMeTime,size,quotaBytesUsed,webViewLink,iconLink`, {
             headers: { 'Authorization': `Bearer ${accessToken}` }
           })
           if (res.ok) {
@@ -2416,6 +2442,27 @@ export class GoogleDriveConnector {
       .map((f: any) => ({ ...f, connectorId: connectionId }))
   }
 
+
+  async getNonNativeFiles(connectionId: string, limit: number = 200): Promise<GoogleDriveFile[]> {
+    const connector = await prisma.connector.findUnique({ where: { id: connectionId } })
+    if (!connector) throw new Error('Connection not found')
+    let accessToken = this.getAccessTokenFromConnector(connector as ConnectorWithDecrypted)
+    if (connector.tokenExpiresAt && connector.tokenExpiresAt < new Date()) {
+      accessToken = await this.refreshAccessToken(connectionId)
+    }
+    const params = new URLSearchParams({
+      pageSize: Math.min(limit, 1000).toString(),
+      q: `mimeType != 'application/vnd.google-apps.folder' and not mimeType contains 'application/vnd.google-apps' and trashed = false`,
+      fields: 'files(id, name, mimeType, size, quotaBytesUsed, modifiedTime)',
+      orderBy: 'quotaBytesUsed desc',
+    })
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
+      headers: { 'Authorization': `Bearer ${accessToken}` },
+    })
+    if (!res.ok) return []
+    const data = await res.json()
+    return (data.files || []).map((f: any) => ({ ...f, connectorId: connectionId }))
+  }
 
   async getStorageQuota(connectionId: string): Promise<{ limit: string, usage: string, usageInDrive: string, usageInTrash: string } | null> {
     try {
@@ -2867,7 +2914,7 @@ export class GoogleDriveConnector {
         pageSize: '500',
         fields: fields,
         orderBy: 'modifiedTime desc', // Check recent files first
-        q: "trashed = false and mimeType != 'application/vnd.google-apps.folder'"
+        q: `trashed = false and mimeType != 'application/vnd.google-apps.folder' and name != 'meta.json' and name != '.meta' and ${FIRMA_MANAGED_EXCLUDE_QUERY}`
       })
 
       const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
@@ -2904,6 +2951,7 @@ export class GoogleDriveConnector {
           modifiedTime: f.modifiedTime,
           webViewLink: f.webViewLink,
           iconLink: f.iconLink,
+          parents: f.parents,
           badges: this.calculateBadges(f)
         })
       })
@@ -3872,25 +3920,85 @@ export class GoogleDriveConnector {
    * @returns PDF file content as Buffer
    */
   async exportFileToPdf(connectorId: string, fileId: string): Promise<Buffer> {
+    // Map native Office MIME types to their Google Workspace equivalents.
+    // Drive's export endpoint only works on Google Workspace files, so we copy-convert first.
+    const OFFICE_TO_GOOGLE_MIME: Record<string, string> = {
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'application/vnd.google-apps.document',
+      'application/msword': 'application/vnd.google-apps.document',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'application/vnd.google-apps.spreadsheet',
+      'application/vnd.ms-excel': 'application/vnd.google-apps.spreadsheet',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'application/vnd.google-apps.presentation',
+      'application/vnd.ms-powerpoint': 'application/vnd.google-apps.presentation',
+    }
+
     try {
       const accessToken = await this.getAccessToken(connectorId)
       if (!accessToken) throw new Error('Could not get access token')
 
-      const res = await fetch(
-        `https://www.googleapis.com/drive/v3/files/${fileId}/export?mimeType=application/pdf&supportsAllDrives=true`,
-        {
-          headers: { 'Authorization': `Bearer ${accessToken}` }
-        }
+      // 1. Get the file's MIME type
+      const metaRes = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${fileId}?fields=mimeType&supportsAllDrives=true`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
       )
+      if (!metaRes.ok) throw new Error(`Failed to get file metadata: ${metaRes.status}`)
+      const { mimeType } = await metaRes.json() as { mimeType: string }
 
-      if (!res.ok) {
-        const errorText = await res.text()
-        logger.error('Failed to export file to PDF', new Error(`Status: ${res.status} - ${errorText}`), 'GoogleDrive', { fileId })
-        throw new Error(`Failed to export PDF: ${res.status}`)
+      // 2. Already a PDF — download directly
+      if (mimeType === 'application/pdf') {
+        const dlRes = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        )
+        if (!dlRes.ok) throw new Error(`Failed to download PDF: ${dlRes.status}`)
+        return Buffer.from(await dlRes.arrayBuffer())
       }
 
-      const arrayBuffer = await res.arrayBuffer()
-      return Buffer.from(arrayBuffer)
+      // 3. For native Office files, copy-convert to Google Workspace format first
+      let exportFileId = fileId
+      let tempFileId: string | null = null
+
+      if (!mimeType.startsWith('application/vnd.google-apps.')) {
+        const googleMime = OFFICE_TO_GOOGLE_MIME[mimeType]
+        if (!googleMime) throw new Error(`Cannot convert MIME type "${mimeType}" to PDF`)
+
+        const copyRes = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${fileId}/copy?supportsAllDrives=true`,
+          {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mimeType: googleMime, name: `[FIRMA_TEMP] ${fileId}` }),
+          }
+        )
+        if (!copyRes.ok) {
+          const errText = await copyRes.text()
+          throw new Error(`Failed to convert file for PDF export: ${copyRes.status} - ${errText}`)
+        }
+        const copyData = await copyRes.json() as { id: string }
+        tempFileId = copyData.id
+        exportFileId = tempFileId
+      }
+
+      // 4. Export the Google Workspace file as PDF
+      try {
+        const exportRes = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${exportFileId}/export?mimeType=application/pdf&supportsAllDrives=true`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        )
+        if (!exportRes.ok) {
+          const errorText = await exportRes.text()
+          logger.error('Failed to export file to PDF', new Error(`Status: ${exportRes.status} - ${errorText}`), 'GoogleDrive', { fileId, exportFileId })
+          throw new Error(`Failed to export PDF: ${exportRes.status}`)
+        }
+        return Buffer.from(await exportRes.arrayBuffer())
+      } finally {
+        // Clean up the temporary Google Workspace copy (fire-and-forget)
+        if (tempFileId) {
+          fetch(
+            `https://www.googleapis.com/drive/v3/files/${tempFileId}?supportsAllDrives=true`,
+            { method: 'DELETE', headers: { Authorization: `Bearer ${accessToken}` } }
+          ).catch((e) => logger.error('Failed to delete temp PDF conversion file', e as Error, 'GoogleDrive', { tempFileId }))
+        }
+      }
     } catch (error) {
       logger.error('Failed to export file to PDF', error as Error, 'GoogleDrive', { fileId })
       throw error
@@ -3920,7 +4028,8 @@ export class GoogleDriveConnector {
       const metadata = {
         name: fileName,
         mimeType: mimeType,
-        ...(parentFolderId && { parents: [parentFolderId] })
+        ...(parentFolderId && { parents: [parentFolderId] }),
+        appProperties: FIRMA_MANAGED_APP_PROPS,
       }
 
       const form = new FormData()

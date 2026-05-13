@@ -695,6 +695,97 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ success: true, id: result.id })
         }
 
+        // Cross-engagement copy or move: copies/moves file to the target engagement's General folder.
+        // For move: also re-stamps engagementId + clientId on the engagement_document record.
+        if (action === 'cross-engagement-copy' || action === 'cross-engagement-move') {
+            const { fileId, targetEngagementId } = body
+            if (
+                typeof bodyProjectId !== 'string' || !bodyProjectId ||
+                typeof fileId !== 'string' || !fileId ||
+                typeof targetEngagementId !== 'string' || !targetEngagementId
+            ) {
+                return NextResponse.json({ error: 'Missing projectId, fileId, or targetEngagementId' }, { status: 400 })
+            }
+
+            const denied = await blockIfEngagementFileMutationForbidden(user.id, bodyProjectId)
+            if (denied) return denied
+
+            // Also verify caller is a member of the target engagement
+            const targetDenied = await blockIfEngagementFileMutationForbidden(user.id, targetEngagementId)
+            if (targetDenied) return NextResponse.json({ error: 'No access to target engagement' }, { status: 403 })
+
+            const [sourceProject, targetProject] = await Promise.all([
+                prisma.engagement.findFirst({
+                    where: { id: bodyProjectId, isDeleted: false },
+                    include: { client: { include: { firm: { include: { connector: true } } } } },
+                }),
+                prisma.engagement.findFirst({
+                    where: { id: targetEngagementId, isDeleted: false },
+                    include: { client: { include: { firm: { include: { connector: true } } } } },
+                }),
+            ])
+            if (!sourceProject || !targetProject)
+                return NextResponse.json({ error: 'Engagement not found' }, { status: 404 })
+
+            const connector = sourceProject.client.firm.connector
+            if (!connector) return NextResponse.json({ error: 'No connector found' }, { status: 404 })
+
+            const { googleDriveConnector } = await import('@/lib/google-drive-connector')
+            const targetFolderIds = await googleDriveConnector.getProjectFolderIds(connector.id, targetProject.slug, {
+                projectName: targetProject.name,
+                clientSlug: targetProject.client.slug,
+                clientName: targetProject.client.name,
+            })
+            const destFolderId = targetFolderIds.generalFolderId
+            if (!destFolderId) return NextResponse.json({ error: 'Target engagement has no General folder' }, { status: 400 })
+
+            const fileMeta = await googleDriveConnector.getFileMetadata(connector.id, fileId)
+            const fileName = fileMeta?.name ?? fileId
+
+            if (action === 'cross-engagement-copy') {
+                const result = await googleDriveConnector.copyFile(connector.id, fileId, destFolderId, fileName)
+                if (!result) return NextResponse.json({ error: 'Failed to copy file' }, { status: 500 })
+
+                await safeInngestSend('file.index.requested', {
+                    organizationId: targetProject.client.firmId,
+                    clientId: targetProject.clientId,
+                    projectId: targetEngagementId,
+                    externalId: result.id,
+                    fileName,
+                })
+                return NextResponse.json({ success: true, id: result.id })
+            }
+
+            // Move: update Drive + re-stamp the engagement_document record
+            const result = await googleDriveConnector.moveFile(connector.id, fileId, destFolderId)
+            if (!result) return NextResponse.json({ error: 'Failed to move file' }, { status: 500 })
+
+            // Re-stamp engagement on the DB record
+            await prisma.engagementDocument.updateMany({
+                where: {
+                    externalId: fileId,
+                    engagementId: bodyProjectId,
+                    firmId: sourceProject.client.firmId,
+                },
+                data: {
+                    engagementId: targetEngagementId,
+                    clientId: targetProject.clientId,
+                    parentId: destFolderId,
+                    updatedAt: new Date(),
+                },
+            })
+
+            await safeInngestSend('file.index.requested', {
+                organizationId: targetProject.client.firmId,
+                clientId: targetProject.clientId,
+                projectId: targetEngagementId,
+                externalId: fileId,
+                fileName,
+                parentId: destFolderId,
+            })
+            return NextResponse.json({ success: true, id: result.id })
+        }
+
         if (action === 'rename') {
             const { fileId, name: newName } = body
             if (typeof bodyProjectId !== 'string' || !bodyProjectId || typeof fileId !== 'string' || !fileId || typeof newName !== 'string' || !newName.trim()) {

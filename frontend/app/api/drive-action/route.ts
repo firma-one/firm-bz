@@ -216,8 +216,13 @@ export async function POST(request: NextRequest) {
                 })
 
                 const duplicateResults = await Promise.all(duplicatePromises)
-                // Flatten: File[][] -> File[] (groups)
-                const duplicates = duplicateResults.flat()
+                // Flatten and deduplicate by signature (same file can appear across connectors)
+                const seen = new Set<string>()
+                const duplicates = duplicateResults.flat().filter(g => {
+                    if (seen.has(g.signature)) return false
+                    seen.add(g.signature)
+                    return true
+                })
                 result = { duplicates }
                 break
 
@@ -269,6 +274,25 @@ export async function POST(request: NextRequest) {
                 }
                 result = { success: true }
                 break
+
+            case 'folder_names': {
+                const { folderIds } = body
+                if (!Array.isArray(folderIds) || folderIds.length === 0) {
+                    result = { names: {} }
+                    break
+                }
+                const folderConnector = connectors[0]
+                const folderMetas = await Promise.allSettled(
+                    (folderIds as string[]).map(id => googleDriveConnector.getFileMetadata(folderConnector.id, id))
+                )
+                const folderNameMap: Record<string, string> = {}
+                ;(folderIds as string[]).forEach((id, i) => {
+                    const r = folderMetas[i]
+                    if (r.status === 'fulfilled' && r.value?.name) folderNameMap[id] = r.value.name
+                })
+                result = { names: folderNameMap }
+                break
+            }
 
             default:
                 return NextResponse.json({ error: 'Invalid action' }, { status: 400 })

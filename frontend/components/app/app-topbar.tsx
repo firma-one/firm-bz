@@ -8,7 +8,6 @@ import { useAuth } from "@/lib/auth-context"
 import { supabase } from "@/lib/supabase"
 import { Bell, Bookmark, ChevronDown, ChevronUp, Info, Megaphone, Send, Trash2, X } from "lucide-react"
 import { Tip } from "@/components/ui/tip"
-import { MyNotesPopover } from "@/components/app/my-notes-popover"
 import { RemindersPanel } from "@/components/app/reminders-panel"
 
 // Cache firm branding by slug (in-memory for session)
@@ -354,7 +353,6 @@ export function AppTopbar() {
 
       {/* Right: Bookmarks + Alerts */}
       <div className="flex items-center gap-1.5">
-        <MyNotesPopover />
         <RemindersPanel />
         <div className="relative bookmarks-container">
           <Tip label="Bookmarks" position="bottom">

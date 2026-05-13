@@ -46,6 +46,68 @@ export const indexFileForSearch = inngest.createFunction(
                 parentId: event.data.parentId ?? undefined,
             })
         })
+
+        // Notify engagement leads when a file lands in the Staging folder
+        await step.run("notify-staging-intake", async () => {
+            const { projectId, parentId, organizationId, clientId, fileName, externalId } = event.data
+            if (!projectId || !parentId || !organizationId) return
+            if (event.data.isFolder) return
+
+            try {
+                const engagement = await prisma.engagement.findUnique({
+                    where: { id: projectId },
+                    select: { slug: true, firmId: true, clientId: true },
+                })
+                if (!engagement) return
+
+                const connectorId = (await prisma.firm.findUnique({
+                    where: { id: organizationId },
+                    select: { connectorId: true },
+                }))?.connectorId
+                if (!connectorId) return
+
+                const connector = await (prisma as any).connector.findUnique({
+                    where: { id: connectorId },
+                    select: { settings: true },
+                })
+                const stagingFolderId = (connector?.settings as any)
+                    ?.projectFolderSettings?.[engagement.slug]?.stagingFolderId as string | undefined
+
+                if (!stagingFolderId || parentId !== stagingFolderId) return
+
+                const leads = await prisma.engagementMember.findMany({
+                    where: { engagementId: projectId, role: 'eng_admin' },
+                    select: { userId: true },
+                })
+                if (!leads.length) return
+
+                // Look up document record for the id (may already exist from indexFile above)
+                const doc = await prisma.engagementDocument.findFirst({
+                    where: { engagementId: projectId, firmId: organizationId, externalId },
+                    select: { id: true },
+                })
+
+                const rows = leads.map((l: { userId: string }) => ({
+                    organizationId,
+                    clientId: clientId ?? engagement.clientId,
+                    projectId,
+                    documentId: doc?.id ?? null,
+                    userId: l.userId,
+                    type: 'DOCUMENT_STAGING_INTAKE',
+                    priority: 'INFO',
+                    title: 'New file in Staging',
+                    body: `"${fileName}" was uploaded to Staging and is awaiting review.`,
+                    ctaUrl: null,
+                    metadata: { externalId, fileName, stagingFolderId },
+                    channels: { inApp: true, email: false },
+                    dedupeKey: `staging-intake:${projectId}:${externalId}`,
+                }))
+                await (prisma as any).notification.createMany({ data: rows, skipDuplicates: true })
+            } catch (e) {
+                logger.warn('staging intake notification failed', e as Error)
+            }
+        })
+
         return { externalId: event.data.externalId, fileName: event.data.fileName }
     }
 )

@@ -37,7 +37,6 @@ export interface ClientSettingsFormProps {
     initialExpectedCloseDate?: string
     initialLeadSource?: string
     initialInternalMemo?: string
-    initialRelationshipValue?: string
     initialClientSinceDate?: string
     initialLinkedInUrl?: string
     initialCompanySizeBracket?: string
@@ -61,7 +60,6 @@ export function ClientSettingsForm({
     initialExpectedCloseDate = '',
     initialLeadSource = '',
     initialInternalMemo = '',
-    initialRelationshipValue = '',
     initialClientSinceDate = '',
     initialLinkedInUrl = '',
     initialCompanySizeBracket = '',
@@ -84,7 +82,6 @@ export function ClientSettingsForm({
     const [expectedCloseDate, setExpectedCloseDate] = useState(initialExpectedCloseDate)
     const [leadSource, setLeadSource] = useState(initialLeadSource)
     const [internalMemo, setInternalMemo] = useState(initialInternalMemo)
-    const [relationshipValue, setRelationshipValue] = useState(initialRelationshipValue)
     const [clientSinceDate, setClientSinceDate] = useState(initialClientSinceDate)
     const [linkedInUrl, setLinkedInUrl] = useState(initialLinkedInUrl)
     const [companySizeBracket, setCompanySizeBracket] = useState(initialCompanySizeBracket)
@@ -106,12 +103,11 @@ export function ClientSettingsForm({
         setExpectedCloseDate(initialExpectedCloseDate ?? '')
         setLeadSource(initialLeadSource ?? '')
         setInternalMemo(initialInternalMemo ?? '')
-        setRelationshipValue(initialRelationshipValue ?? '')
         setClientSinceDate(initialClientSinceDate ?? '')
         setLinkedInUrl(initialLinkedInUrl ?? '')
         setCompanySizeBracket(initialCompanySizeBracket ?? '')
         setBillingAddress(initialBillingAddress ?? '')
-    }, [initialName, initialIndustry, initialStatus, initialWebsite, initialDescription, initialTags, initialOwnerId, initialFollowUpDate, initialExpectedCloseDate, initialLeadSource, initialInternalMemo, initialRelationshipValue, initialClientSinceDate, initialLinkedInUrl, initialCompanySizeBracket, initialBillingAddress])
+    }, [initialName, initialIndustry, initialStatus, initialWebsite, initialDescription, initialTags, initialOwnerId, initialFollowUpDate, initialExpectedCloseDate, initialLeadSource, initialInternalMemo, initialClientSinceDate, initialLinkedInUrl, initialCompanySizeBracket, initialBillingAddress])
 
     useEffect(() => {
         if (!firmId) return
@@ -149,7 +145,6 @@ export function ClientSettingsForm({
                 expectedCloseDate: expectedCloseDate || null,
                 leadSource: leadSource || null,
                 internalMemo: internalMemo.trim() || null,
-                relationshipValue: relationshipValue.trim() || null,
                 clientSinceDate: clientSinceDate || null,
                 linkedInUrl: linkedInUrl.trim() || null,
                 companySizeBracket: companySizeBracket || null,
@@ -284,22 +279,6 @@ export function ClientSettingsForm({
                             disabled={isSandboxFirm}
                             className="bg-white border-gray-200 text-gray-900 placeholder:text-gray-400 focus-visible:ring-gray-400 disabled:cursor-not-allowed disabled:opacity-60"
                         />
-                    </div>
-
-                    <div className="space-y-2">
-                        <Label htmlFor="client-relationship-value" className="text-gray-700 font-medium">Relationship value (optional)</Label>
-                        <Input
-                            id="client-relationship-value"
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={relationshipValue}
-                            onChange={(e) => setRelationshipValue(e.target.value)}
-                            placeholder="e.g. 120000"
-                            disabled={isSandboxFirm}
-                            className="bg-white border-gray-200 text-gray-900 placeholder:text-gray-400 focus-visible:ring-gray-400 disabled:cursor-not-allowed disabled:opacity-60"
-                        />
-                        <p className="text-xs text-gray-400">Estimated annual value of this client relationship.</p>
                     </div>
 
                     {status === 'PROSPECT' && (

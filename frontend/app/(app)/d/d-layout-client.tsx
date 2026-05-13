@@ -13,6 +13,8 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { SidebarFirmsProvider, useSidebarFirms } from '@/lib/sidebar-firms-context'
 import { OnboardingProvider } from '@/lib/onboarding-context'
 import { OnboardingSidebar } from '@/components/onboarding/onboarding-sidebar'
+import { DownloadProgressProvider } from '@/lib/download-progress-context'
+import { DownloadProgressPanel } from '@/components/ui/download-progress-panel'
 import { DebugFloatingTrigger } from '@/components/debug/debug-floating-trigger'
 import { StandardCheckoutIntentBanner } from '@/components/billing/standard-checkout-intent-banner'
 import { OnboardingExitGuardBanner } from '@/components/onboarding/onboarding-exit-guard-banner'
@@ -223,11 +225,14 @@ export function DLayoutClient({
                 <SidebarProvider>
                     <ViewAsProvider>
                         <RightPaneProvider>
-                            <TooltipProvider delayDuration={400}>
-                                <AppLayoutContent>
-                                    {children}
-                                </AppLayoutContent>
-                            </TooltipProvider>
+                            <DownloadProgressProvider>
+                                <TooltipProvider delayDuration={400}>
+                                    <AppLayoutContent>
+                                        {children}
+                                    </AppLayoutContent>
+                                    <DownloadProgressPanel />
+                                </TooltipProvider>
+                            </DownloadProgressProvider>
                         </RightPaneProvider>
                     </ViewAsProvider>
                 </SidebarProvider>

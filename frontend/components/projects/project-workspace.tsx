@@ -1,12 +1,12 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import { useEffect, useCallback } from 'react'
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ProjectInsightsDashboard } from './project-insights-dashboard'
 import { ProjectFileList } from './project-file-list'
 import { setSavedFolderState, type BreadcrumbItem } from '@/lib/files-folder-session'
 import { ProjectSettingsForm } from './project-settings-form'
-import { Folder, BarChart3, Radio, Building2, ChevronRight, Users, Briefcase, Share2, Settings, Home, ClipboardList, MessageCircle } from 'lucide-react'
+import { Folder, BarChart3, Building2, PenTool, ChevronRight, Users, Briefcase, Share2, Settings, Home, ClipboardList, MessageCircle, Lock } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { ProjectMembersTab } from './members/project-members-tab'
@@ -16,14 +16,13 @@ import { ProjectSearchProvider } from './project-search-context'
 import { useViewAs } from '@/lib/view-as-context'
 import { ProjectAuditPane } from './project-audit-pane'
 import { ProjectCommentsTab } from './project-comments-tab'
-import { ProjectCanvasPopover } from './project-canvas-popover'
+import { ProjectWikiTab } from './wiki/project-wiki-tab'
 import type { LwCrmEngagementStatus } from '@/lib/actions/project'
-
-const VALID_TABS = new Set(['files', 'shares', 'comments', 'members', 'insights', 'audit', 'settings'])
 
 export interface ProjectPathSegments {
     tab: string
     viewMode: 'list' | 'board' | 'grid'
+    wikiPageSlug?: string | null
 }
 
 interface ProjectWorkspaceProps {
@@ -62,6 +61,7 @@ interface ProjectWorkspaceProps {
     commentsCount?: number
     memberCount?: number
     auditCount?: number
+    wikiPageCount?: number
 }
 
 const projectBase = (orgSlug: string, clientSlug: string, projectSlug: string, useEngagement = false) =>
@@ -97,6 +97,7 @@ export function ProjectWorkspace({
     commentsCount,
     memberCount,
     auditCount,
+    wikiPageCount,
 }: ProjectWorkspaceProps) {
     const pathname = usePathname()
     const router = useRouter()
@@ -177,7 +178,14 @@ export function ProjectWorkspace({
                             <span className="truncate">{projectName || 'Engagement Workspace'}</span>
                         </h1>
                         <div className="shrink-0 flex items-center gap-2">
-                            <ProjectCanvasPopover projectId={projectId} canManage={canManage} />
+                            {engagementDueDate && (() => {
+                                const today = new Date(); today.setHours(0, 0, 0, 0)
+                                const due = new Date(engagementDueDate); due.setHours(0, 0, 0, 0)
+                                const days = Math.round((due.getTime() - today.getTime()) / 86400000)
+                                const label = days < 0 ? `${Math.abs(days)}d overdue` : days === 0 ? 'Due today' : days === 1 ? 'Due tomorrow' : `Due in ${days}d`
+                                const color = days < 0 ? 'bg-red-50 text-red-700 border-red-200' : days <= 7 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-slate-100 text-slate-600 border-slate-200'
+                                return <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium border ${color}`}>{label}</span>
+                            })()}
                             {projectPersonaDisplayName && (
                                 <span
                                     className="shrink-0 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700 border border-slate-200"
@@ -197,7 +205,7 @@ export function ProjectWorkspace({
                     <TabsList className="h-10 p-1 bg-slate-100 rounded-lg inline-flex justify-start flex-nowrap gap-1 shrink-0">
                         <TabsTrigger
                             value="files"
-                            className="h-full px-4 rounded-md font-medium text-slate-500 data-[state=active]:text-slate-900 data-[state=active]:shadow-sm"
+                            className="h-full px-4 rounded-md font-medium text-slate-500 hover:bg-white hover:text-slate-900 hover:shadow-sm data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all"
                         >
                             <Folder className="w-4 h-4 mr-2" />
                             Files
@@ -209,7 +217,7 @@ export function ProjectWorkspace({
                         </TabsTrigger>
                         <TabsTrigger
                             value="shares"
-                            className="h-full px-4 rounded-md font-medium text-slate-500 data-[state=active]:text-slate-900 data-[state=active]:shadow-sm"
+                            className="h-full px-4 rounded-md font-medium text-slate-500 hover:bg-white hover:text-slate-900 hover:shadow-sm data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all"
                         >
                             <Share2 className="w-4 h-4 mr-2" />
                             Shares
@@ -219,50 +227,52 @@ export function ProjectWorkspace({
                                 </span>
                             )}
                         </TabsTrigger>
+                        <TabsTrigger
+                            value="comments"
+                            className="h-full px-4 rounded-md font-medium text-slate-500 hover:bg-white hover:text-slate-900 hover:shadow-sm data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all"
+                        >
+                            <MessageCircle className="w-4 h-4 mr-2" />
+                            Comments
+                            {commentsCount !== undefined && commentsCount > 0 && (
+                                <span className="ml-2 rounded-full bg-slate-900 px-1.5 py-0.5 text-xs font-medium text-white tabular-nums leading-none">
+                                    {commentsCount}
+                                </span>
+                            )}
+                        </TabsTrigger>
                         {canViewInternalTabs && (
                             <TabsTrigger
-                                value="comments"
-                                className="h-full px-4 rounded-md font-medium text-slate-500 data-[state=active]:text-slate-900 data-[state=active]:shadow-sm"
+                                value="wiki"
+                                className="group/lock h-full px-4 rounded-md font-medium text-slate-500 hover:bg-white hover:text-slate-900 hover:shadow-sm data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all"
                             >
-                                <MessageCircle className="w-4 h-4 mr-2" />
-                                Comments
-                                {commentsCount !== undefined && commentsCount > 0 && (
-                                    <span className="ml-2 rounded-full bg-slate-900 px-1.5 py-0.5 text-xs font-medium text-white tabular-nums leading-none">
-                                        {commentsCount}
+                                <PenTool className="w-4 h-4 mr-2" />
+                                Dossier
+                                <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-slate-400 group-hover/lock:text-slate-600 transition-colors shrink-0" /></span>
+                                <span className="ml-2 rounded px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-violet-100 text-violet-600 leading-none">Beta</span>
+                                {wikiPageCount !== undefined && wikiPageCount > 0 && (
+                                    <span className="ml-1 rounded-full bg-slate-900 px-1.5 py-0.5 text-xs font-medium text-white tabular-nums leading-none">
+                                        {wikiPageCount}
                                     </span>
                                 )}
                             </TabsTrigger>
                         )}
                         {canViewInternalTabs && (
-                            <>
-                                <TabsTrigger
-                                    value="members"
-                                    className="h-full px-4 rounded-md font-medium text-slate-500 data-[state=active]:text-slate-900 data-[state=active]:shadow-sm"
-                                >
-                                    <Users className="w-4 h-4 mr-2" />
-                                    Members
-                                    {memberCount !== undefined && memberCount > 0 && (
-                                        <span className="ml-2 rounded-full bg-slate-900 px-1.5 py-0.5 text-xs font-medium text-white tabular-nums leading-none">
-                                            {memberCount}
-                                        </span>
-                                    )}
-                                </TabsTrigger>
-                                <TabsTrigger
-                                    value="insights"
-                                    className="h-full px-4 rounded-md font-medium text-slate-500 data-[state=active]:text-slate-900 data-[state=active]:shadow-sm"
-                                >
-                                    <BarChart3 className="w-4 h-4 mr-2" />
-                                    Insights
-                                </TabsTrigger>
-                            </>
+                            <TabsTrigger
+                                value="insights"
+                                className="group/lock h-full px-4 rounded-md font-medium text-slate-500 hover:bg-white hover:text-slate-900 hover:shadow-sm data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all"
+                            >
+                                <BarChart3 className="w-4 h-4 mr-2" />
+                                Insights
+                                <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-slate-400 group-hover/lock:text-slate-600 transition-colors shrink-0" /></span>
+                            </TabsTrigger>
                         )}
                         {canManage && (
                             <TabsTrigger
                                 value="audit"
-                                className="h-full px-4 rounded-md font-medium text-slate-500 data-[state=active]:text-slate-900 data-[state=active]:shadow-sm"
+                                className="group/lock h-full px-4 rounded-md font-medium text-slate-500 hover:bg-white hover:text-slate-900 hover:shadow-sm data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all"
                             >
                                 <ClipboardList className="w-4 h-4 mr-2" />
                                 Audit
+                                <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-slate-400 group-hover/lock:text-slate-600 transition-colors shrink-0" /></span>
                                 {auditCount !== undefined && auditCount > 0 && (
                                     <span className="ml-2 rounded-full bg-slate-900 px-1.5 py-0.5 text-xs font-medium text-white tabular-nums leading-none">
                                         {auditCount}
@@ -270,13 +280,29 @@ export function ProjectWorkspace({
                                 )}
                             </TabsTrigger>
                         )}
+                        {canViewInternalTabs && (
+                            <TabsTrigger
+                                value="members"
+                                className="group/lock h-full px-4 rounded-md font-medium text-slate-500 hover:bg-white hover:text-slate-900 hover:shadow-sm data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all"
+                            >
+                                <Users className="w-4 h-4 mr-2" />
+                                Members
+                                <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-slate-400 group-hover/lock:text-slate-600 transition-colors shrink-0" /></span>
+                                {memberCount !== undefined && memberCount > 0 && (
+                                    <span className="ml-2 rounded-full bg-slate-900 px-1.5 py-0.5 text-xs font-medium text-white tabular-nums leading-none">
+                                        {memberCount}
+                                    </span>
+                                )}
+                            </TabsTrigger>
+                        )}
                         {canViewSettings && (
                             <TabsTrigger
                                 value="settings"
-                                className="h-full px-4 rounded-md font-medium text-slate-500 data-[state=active]:text-slate-900 data-[state=active]:shadow-sm"
+                                className="group/lock h-full px-4 rounded-md font-medium text-slate-500 hover:bg-white hover:text-slate-900 hover:shadow-sm data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all"
                             >
                                 <Settings className="w-4 h-4 mr-2" />
                                 Settings
+                                <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-slate-400 group-hover/lock:text-slate-600 transition-colors shrink-0" /></span>
                             </TabsTrigger>
                         )}
                     </TabsList>
@@ -322,7 +348,7 @@ export function ProjectWorkspace({
                             </ErrorBoundary>
                         </div>
                     )}
-                    {canViewInternalTabs && currentTab === 'comments' && (
+                    {currentTab === 'comments' && (
                         <div className="py-1 h-full">
                             <ErrorBoundary context="ProjectComments">
                                 <ProjectCommentsTab projectId={projectId} />
@@ -339,7 +365,12 @@ export function ProjectWorkspace({
                     {canViewInternalTabs && currentTab === 'insights' && (
                         <div className="py-1">
                             <ErrorBoundary context="ProjectInsights">
-                                <ProjectInsightsDashboard projectId={projectId} />
+                                <ProjectInsightsDashboard
+                                    projectId={projectId}
+                                    orgSlug={orgSlug}
+                                    clientSlug={clientSlug}
+                                    engagementSlug={engagementSlug}
+                                />
                             </ErrorBoundary>
                         </div>
                     )}
@@ -347,6 +378,19 @@ export function ProjectWorkspace({
                         <div className="py-1 h-full">
                             <ErrorBoundary context="ProjectAudit">
                                 <ProjectAuditPane projectId={projectId} projectName={projectName} />
+                            </ErrorBoundary>
+                        </div>
+                    )}
+                    {currentTab === 'wiki' && canViewInternalTabs && (
+                        <div className="h-full">
+                            <ErrorBoundary context="ProjectDossier">
+                                <ProjectWikiTab
+                                    engagementId={projectId}
+                                    firmId={firmId ?? ''}
+                                    canEdit={canEdit}
+                                    initialPageSlug={pathSegments?.wikiPageSlug ?? null}
+                                    base={base}
+                                />
                             </ErrorBoundary>
                         </div>
                     )}

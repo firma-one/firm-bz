@@ -3,6 +3,7 @@
 import { prisma } from '@/lib/prisma'
 import { Prisma, type EngagementStatus } from '@prisma/client'
 import { createClient as createSupabaseClient } from '@/utils/supabase/server'
+import { upsertFollowUpReminder } from '@/lib/actions/user-reminders'
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
 import { canViewProjectSettings as checkCanViewProjectSettings } from '@/lib/permission-helpers'
@@ -237,6 +238,18 @@ export async function createEngagement(firmSlug: string, clientSlug: string, dat
         .meta({ name: newProject.name, slug: newProject.slug })
         .fireAndForget()
 
+    upsertFollowUpReminder({
+        userId: user.id,
+        entityKey: 'platform.engagements.id',
+        entityValue: newProject.id,
+        action: 'Engagement due',
+        dateKey: 'platform.engagements.dueDate',
+        dateValue: due?.toISOString() ?? null,
+        entityName: newProject.name,
+        firmId: firm.id,
+        ctaUrl: `/d/f/${firmSlug}/c/${clientSlug}/e/${newProject.slug}`,
+    }).catch(() => {})
+
     revalidatePath(`/d/f/${firmSlug}/c/${clientSlug}`)
     return newProject
 }
@@ -442,6 +455,24 @@ export async function updateEngagement(
         }
     } catch (e) {
         logger.warn('Failed to create due date notifications', e as Error)
+    }
+
+    if (parsedDue !== undefined && user) {
+        const engDetails = await prisma.engagement.findFirst({
+            where: { id: projectId },
+            select: { name: true, slug: true },
+        })
+        upsertFollowUpReminder({
+            userId: user.id,
+            entityKey: 'platform.engagements.id',
+            entityValue: projectId,
+            action: 'Engagement due',
+            dateKey: 'platform.engagements.dueDate',
+            dateValue: parsedDue?.toISOString() ?? null,
+            entityName: engDetails?.name ?? '',
+            firmId: project.firmId,
+            ctaUrl: `/d/f/${firmSlug}/c/${clientSlug}/e/${engDetails?.slug ?? ''}`,
+        }).catch(() => {})
     }
 
     revalidatePath(`/d/f/${firmSlug}/c/${clientSlug}`)

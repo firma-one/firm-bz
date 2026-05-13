@@ -1826,6 +1826,22 @@ const OnboardingContent = () => {
                                             </div>
                                         )}
 
+                                        {/* Google Workspace tip */}
+                                        <div className="flex gap-2.5 rounded-lg border border-blue-100 bg-blue-50 px-3.5 py-3 text-xs text-blue-800">
+                                            <Info className="h-3.5 w-3.5 shrink-0 mt-0.5 text-blue-500" />
+                                            <p className="leading-relaxed">
+                                                <span className="font-semibold">Google Workspace?</span> Connect with a dedicated account not tied to any individual user, so access isn&apos;t disrupted if someone leaves.{' '}
+                                                <a
+                                                    href="https://support.google.com/a/answer/7378726"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="underline underline-offset-2 hover:text-blue-900 transition-colors"
+                                                >
+                                                    How to create a service account →
+                                                </a>
+                                            </p>
+                                        </div>
+
                                         <div className="space-y-3">
                                             <Button
                                                 type="button"
