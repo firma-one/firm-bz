@@ -13,6 +13,7 @@ import { prisma, basePrisma } from "@/lib/prisma"
 import { notFound, redirect } from "next/navigation"
 import { ErrorBoundary } from "@/components/error-boundary"
 import type { ProjectPathSegments } from "@/components/projects/project-workspace"
+import { getAccessibleFileCountForPersona } from "@/lib/project-sharing-ids"
 
 const VALID_TABS = new Set(['files', 'shares', 'comments', 'members', 'insights', 'sources', 'audit', 'settings', 'wiki'])
 
@@ -110,8 +111,12 @@ export default async function EngagementPage({ params }: PageProps) {
     redirect(`${basePath}/files`)
   }
 
+  const ecGuestPersona = (projectRole === 'eng_ext_collaborator' || projectRole === 'eng_viewer') ? projectRole : null
+
   const [fileCount, sharesCount, commentsCount, engMemberCount, engInviteCount, auditCount, wikiPageCount] = await Promise.all([
-    (basePrisma as any).engagementDocument.count({ where: { engagementId: project.id, isFolder: false } }),
+    ecGuestPersona
+      ? getAccessibleFileCountForPersona(project.id, ecGuestPersona)
+      : (basePrisma as any).engagementDocument.count({ where: { engagementId: project.id, isFolder: false } }),
     (basePrisma as any).engagementDocument.count({ where: { engagementId: project.id, slug: { not: null } } }),
     (basePrisma as any).docCommentMessage.count({ where: { engagementId: project.id } }),
     (basePrisma as any).engagementMember.count({ where: { engagementId: project.id } }),

@@ -133,7 +133,7 @@ export class SearchService {
       "embedding" = EXCLUDED."embedding",
       "clientId" = EXCLUDED."clientId",
       "connectorId" = EXCLUDED."connectorId",
-      "parentId" = EXCLUDED."parentId",
+      "parentId" = COALESCE(EXCLUDED."parentId", "parentId"),
       "metadata" = EXCLUDED."metadata",
       "updatedAt" = NOW()
   `,

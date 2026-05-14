@@ -56,7 +56,7 @@ import { useViewAs } from '@/lib/view-as-context'
 import { useRightPane } from '@/lib/right-pane-context'
 import { useProjectSearch, ProjectSearchProvider } from '@/components/projects/project-search-context'
 import { ProjectSearchPanel, type ProjectSearchPanelActionMenuProps } from '@/components/projects/project-search-panel'
-import { getSavedFolderState, setSavedFolderState, type BreadcrumbItem } from '@/lib/files-folder-session'
+import { getSavedFolderState, setSavedFolderState, consumeDeeplinkHighlight, type BreadcrumbItem } from '@/lib/files-folder-session'
 import { useSecureOpenDocument } from '@/lib/use-secure-open-document'
 import { SecureAccessModal } from '@/components/projects/shares/secure-access-modal'
 
@@ -114,6 +114,21 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
     const [activeActivityDocId, setActiveActivityDocId] = useState<string | null>(null)
     const [activeVersionDocId, setActiveVersionDocId] = useState<string | null>(null)
     const lastHandledDeeplinkHashRef = useRef<string>('')
+    // Cache resolve-deeplink/file-info results per hash to avoid re-fetching on every effect re-run.
+    const deeplinkResolvedCacheRef = useRef<Record<string, {
+        externalId: string | null
+        fileName: string | null
+        status?: number
+        path?: { id: string; name: string }[]
+        projectRootFolderId?: string | null
+    }>>({})
+
+    // True from mount until the deeplink hash is resolved — suppresses the file list so the root folder never flashes.
+    const [deeplinkResolving, setDeeplinkResolving] = useState(() => {
+        if (typeof window === 'undefined') return false
+        const hash = window.location.hash.replace(/^#/, '')
+        return hash.startsWith('doc-file:') || hash.startsWith('doc-comment:')
+    })
     const { handleSecureOpen, secureModalOpen, secureModalData, setSecureModalOpen, isRegrantingId } = useSecureOpenDocument({
         projectId,
         firmId,
@@ -265,24 +280,31 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                     ]
                     : []
 
-                const saved = getSavedFolderState(projectId)
-                if (saved.folderId && saved.breadcrumbs.length >= 4) {
-                    setCurrentFolderId(saved.folderId)
-                    setBreadcrumbs(saved.breadcrumbs)
-                    // Sync folder type based on ID
-                    if (saved.folderId === generalId) setCurrentFolderType('general')
-                    else if (saved.folderId === confidentialId) setCurrentFolderType('confidential')
-                    else if (saved.folderId === stagingId) setCurrentFolderType('staging')
-                    else {
-                        const rootName = saved.breadcrumbs[3]?.name
-                        if (rootName === 'confidential') setCurrentFolderType('confidential')
-                        else if (rootName === 'staging') setCurrentFolderType('staging')
-                        else setCurrentFolderType('general')
+                // When a deeplink hash is present the deeplink handler owns navigation entirely.
+                // Skip restoring saved/default folder so the file list never flashes General first.
+                const hasDeeplinkHash = typeof window !== 'undefined'
+                    && (window.location.hash.startsWith('#doc-file:') || window.location.hash.startsWith('#doc-comment:'))
+
+                if (!hasDeeplinkHash) {
+                    const saved = getSavedFolderState(projectId)
+                    if (!restrictToSharedOnly && saved.folderId && saved.breadcrumbs.length >= 4) {
+                        setCurrentFolderId(saved.folderId)
+                        setBreadcrumbs(saved.breadcrumbs)
+                        // Sync folder type based on ID
+                        if (saved.folderId === generalId) setCurrentFolderType('general')
+                        else if (saved.folderId === confidentialId) setCurrentFolderType('confidential')
+                        else if (saved.folderId === stagingId) setCurrentFolderType('staging')
+                        else {
+                            const rootName = saved.breadcrumbs[3]?.name
+                            if (rootName === 'confidential') setCurrentFolderType('confidential')
+                            else if (rootName === 'staging') setCurrentFolderType('staging')
+                            else setCurrentFolderType('general')
+                        }
+                    } else if (defaultFolderId) {
+                        setCurrentFolderId(defaultFolderId)
+                        setBreadcrumbs(defaultBreadcrumbs)
+                        setCurrentFolderType(defaultFolderType)
                     }
-                } else if (defaultFolderId) {
-                    setCurrentFolderId(defaultFolderId)
-                    setBreadcrumbs(defaultBreadcrumbs)
-                    setCurrentFolderType(defaultFolderType)
                 }
             } catch (error) {
                 logger.error('Failed to load project folder IDs', error instanceof Error ? error : new Error(String(error)))
@@ -555,60 +577,104 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
 
             if (kind !== 'doc-comment' && kind !== 'doc-file') return
 
-            // Resolve internal project document id -> Drive externalId (and name) with access control.
-            let externalId: string | null = null
-            let fileName: string | null = null
-            let fileInfoStatus: number | undefined
-            try {
-                const viewAs = viewAsPersonaSlug ? `?viewAsPersonaSlug=${encodeURIComponent(viewAsPersonaSlug)}` : ''
-                const res = await fetch(`/api/projects/${projectId}/documents/${documentIdParam}/file-info${viewAs}`, {
-                    credentials: 'include',
-                })
-                fileInfoStatus = res.status
-                if (res.ok) {
-                    const json = await res.json() as { externalId?: string; fileName?: string | null }
-                    externalId = typeof json.externalId === 'string' ? json.externalId : null
-                    fileName = typeof json.fileName === 'string' ? json.fileName : null
+            if (!session?.access_token) return
+
+            // Single combined API call — auth once, returns externalId + path in one round-trip.
+            // Cached per hash so re-runs (from files/loading/isLoadingFolders changes) don't re-fetch.
+            const cached = deeplinkResolvedCacheRef.current[hash]
+            let externalId: string | null = cached?.externalId ?? null
+            let fileName: string | null = cached?.fileName ?? null
+            let resolveStatus: number | undefined = cached?.status
+            let resolvedPath: { id: string; name: string }[] | undefined = cached?.path
+            let projectRootFolderId: string | null | undefined = cached?.projectRootFolderId
+
+            if (!cached) {
+                try {
+                    const viewAs = viewAsPersonaSlug ? `?viewAsPersonaSlug=${encodeURIComponent(viewAsPersonaSlug)}` : ''
+                    const endpoint = kind === 'doc-file'
+                        ? `/api/projects/${projectId}/documents/${documentIdParam}/resolve-deeplink${viewAs}`
+                        : `/api/projects/${projectId}/documents/${documentIdParam}/file-info${viewAs}`
+                    const res = await fetch(endpoint, { credentials: 'include' })
+                    resolveStatus = res.status
+                    if (res.ok) {
+                        const json = await res.json() as {
+                            externalId?: string; fileName?: string | null
+                            path?: { id: string; name: string }[]; projectRootFolderId?: string | null
+                        }
+                        externalId = typeof json.externalId === 'string' ? json.externalId : null
+                        fileName = typeof json.fileName === 'string' ? json.fileName : null
+                        resolvedPath = Array.isArray(json.path) ? json.path : undefined
+                        projectRootFolderId = json.projectRootFolderId ?? null
+                    }
+                } catch {
+                    // network error — will retry on next re-run
                 }
-            } catch {
-                // ignore and fall back below
+
+                // Fallback: match already-loaded file list (covers older hash formats)
+                if (!externalId) {
+                    const maybe = files.find((f) => f.projectDocumentId === documentIdParam || f.id === documentIdParam)
+                    if (maybe) { externalId = maybe.id; fileName = maybe.name ?? null }
+                }
+
+                deeplinkResolvedCacheRef.current[hash] = { externalId, fileName, status: resolveStatus, path: resolvedPath, projectRootFolderId }
             }
 
-            // Fallback: match loaded list by internal projectDocumentId or Drive id (older hashes).
             if (!externalId) {
-                const maybe = files.find(
-                    (f) => f.projectDocumentId === documentIdParam || f.id === documentIdParam
-                )
-                if (maybe) {
-                    externalId = maybe.id
-                    fileName = maybe.name ?? null
-                }
-            }
-
-            if (!externalId) {
-                const transient =
-                    !session?.access_token ||
-                    loading ||
-                    isLoadingFolders ||
-                    fileInfoStatus === 401
+                const transient = loading || isLoadingFolders || resolveStatus === 401
                 if (transient) return
+                setDeeplinkResolving(false)
                 addToast({ type: 'error', title: 'Link unavailable', message: 'You do not have access to this item.' })
                 lastHandledDeeplinkHashRef.current = hash
                 return
             }
 
             if (kind === 'doc-file') {
-                await navigateToItem({
-                    id: externalId,
-                    name: fileName ?? 'Document',
-                    mimeType: 'application/octet-stream',
-                    webViewLink: '',
-                    iconLink: '',
-                    modifiedTime: new Date().toISOString(),
-                } as DriveFile)
+                // Wait for folder IDs — needed to classify breadcrumb roots.
+                if (isLoadingFolders) return
+
+                // Navigate directly using the path from resolve-deeplink (no second API call).
+                if (resolvedPath && resolvedPath.length > 0) {
+                    const rootIds = [generalFolderId, confidentialFolderId, stagingFolderId].filter(Boolean) as string[]
+                    const rootId = projectRootFolderId && rootIds.includes(projectRootFolderId)
+                        ? projectRootFolderId
+                        : resolvedPath.find((p) => rootIds.includes(p.id))?.id ?? null
+                    const rootIndex = rootId ? resolvedPath.findIndex((p) => p.id === rootId) : -1
+                    const rootItem = rootIndex >= 0
+                        ? resolvedPath[rootIndex]
+                        : (rootId
+                            ? { id: rootId, name: rootId === generalFolderId ? 'General' : rootId === confidentialFolderId ? 'Confidential' : 'Staging' }
+                            : resolvedPath[resolvedPath.length - 1])
+                    const type: 'general' | 'confidential' | 'staging' =
+                        rootItem.id === generalFolderId ? 'general'
+                            : rootItem.id === confidentialFolderId ? 'confidential'
+                                : rootItem.id === stagingFolderId ? 'staging'
+                                    : 'general'
+                    const breadcrumbPath = rootIndex >= 0 ? resolvedPath.slice(rootIndex) : (rootId ? [rootItem, ...resolvedPath] : resolvedPath)
+                    const prefixCrumbs: BreadcrumbItem[] = [
+                        { id: 'org', name: orgName || 'Organization', clickable: false },
+                        { id: 'client', name: clientName || 'Client', clickable: false },
+                        { id: connectorRootFolderId || 'project', name: projectName || rootFolderName, clickable: false },
+                    ]
+                    setCurrentFolderType(type)
+                    setBreadcrumbs([
+                        ...prefixCrumbs,
+                        ...breadcrumbPath.map((p) => ({ id: p.id, name: p.name, clickable: true })),
+                    ])
+                    setCurrentFolderId(resolvedPath[resolvedPath.length - 1].id)
+                } else {
+                    // Path unavailable — fall back to navigateToItem which will try resolve-path separately
+                    await navigateToItem({
+                        id: externalId, name: fileName ?? 'Document',
+                        mimeType: 'application/octet-stream', webViewLink: '', iconLink: '',
+                        modifiedTime: new Date().toISOString(),
+                    } as DriveFile)
+                }
+                setHighlightedFileId(externalId)
+                // deeplinkResolving cleared by effect once loading settles
                 lastHandledDeeplinkHashRef.current = hash
                 return
             }
+            setDeeplinkResolving(false)
 
             setActiveCommentDocId(externalId)
             rightPane.setTitle('Comments')
@@ -640,6 +706,14 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
         session?.access_token,
         loading,
         isLoadingFolders,
+        generalFolderId,
+        confidentialFolderId,
+        stagingFolderId,
+        orgName,
+        clientName,
+        projectName,
+        connectorRootFolderId,
+        rootFolderName,
     ])
 
     const searchPanelActionMenuRef = useRef<ProjectSearchPanelActionMenuProps | null>(null)
@@ -783,6 +857,25 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
             fetchFiles(currentFolderId)
         }
     }, [currentFolderId, fetchFiles, session?.access_token])
+
+    // After navigating to a new folder, pick up any pending deeplink highlight (set by Shares "Open" action).
+    useEffect(() => {
+        if (!currentFolderId || !projectId) return
+        const pendingId = consumeDeeplinkHighlight(projectId)
+        if (pendingId) setHighlightedFileId(pendingId)
+    }, [currentFolderId, projectId])
+
+    // Clear the deeplink skeleton once the destination folder has finished loading and the target is highlighted.
+    // Clearing earlier (right after navigateToItem) causes a stale-files flash because fetchFiles hasn't run yet.
+    // Also require currentFolderId — if navigation set highlightedFileId but fetchFiles hasn't batched loading=true yet,
+    // this prevents a brief flash of the "no folders configured" empty state.
+    useEffect(() => {
+        if (!deeplinkResolving) return
+        if (!highlightedFileId) return
+        if (!currentFolderId) return
+        if (loading || isLoadingFolders) return
+        setDeeplinkResolving(false)
+    }, [deeplinkResolving, highlightedFileId, currentFolderId, loading, isLoadingFolders])
 
     // When View As persona changes, refetch files so backend can filter by shared-only when EC/Guest (cookie is sent)
     useEffect(() => {
@@ -2512,6 +2605,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
 
                     {/* Right: Refresh & Search (search lives in right sidebar only) */}
                     <div className="flex items-center gap-2">
+                        {!restrictToSharedOnly && (
                         <Tooltip>
                             <TooltipTrigger asChild>
                                 <Button
@@ -2534,6 +2628,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                 {selectedFileIds.size > 0 ? `Download ${selectedFileIds.size} item${selectedFileIds.size > 1 ? 's' : ''} as ZIP` : 'Select files to download'}
                             </TooltipContent>
                         </Tooltip>
+                        )}
                         <Tooltip>
                             <TooltipTrigger asChild>
                                 <Button
@@ -2831,7 +2926,23 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
 
                 {/* File List */}
                 <div className="flex-1 overflow-y-auto custom-scrollbar relative">
-                    {loading || isLoadingFolders ? (
+                    {deeplinkResolving ? (
+                        <div className="divide-y divide-slate-100 animate-pulse">
+                            {Array.from({ length: 7 }).map((_, i) => (
+                                <div key={i} className="grid items-center px-4 py-2.5" style={{ gridTemplateColumns: '1fr 80px 120px 160px 80px 36px' }}>
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                        <div className="h-4 w-4 rounded bg-slate-200 flex-shrink-0" />
+                                        <div className={`h-3 rounded bg-slate-200`} style={{ width: `${40 + (i * 17) % 45}%` }} />
+                                    </div>
+                                    <div className="h-3 w-8 rounded bg-slate-100" />
+                                    <div className="h-3 w-16 rounded bg-slate-100" />
+                                    <div className="h-3 w-20 rounded bg-slate-100" />
+                                    <div className="h-3 w-8 rounded bg-slate-100" />
+                                    <div className="h-3 w-4 rounded bg-slate-100" />
+                                </div>
+                            ))}
+                        </div>
+                    ) : loading || isLoadingFolders ? (
                         <div className="flex h-64 items-center justify-center">
                             <LoadingSpinner size="md" />
                         </div>
@@ -2841,7 +2952,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                             <p className="text-sm text-slate-600">{error}</p>
                             <Button variant="link" onClick={() => window.location.reload()} className="h-auto p-0 mt-2 text-slate-700 hover:text-slate-900 text-xs">Try Refreshing</Button>
                         </div>
-                    ) : !currentFolderId ? (
+                    ) : !currentFolderId && !deeplinkResolving ? (
                         <div className="flex flex-col items-center justify-center h-64 text-center px-3">
                             <div className="h-16 w-16 bg-slate-50 rounded-full flex items-center justify-center mb-4">
                                 <Folder className="h-8 w-8 text-slate-300" />
@@ -3034,40 +3145,38 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
 
                                         {/* Quick actions */}
                                         <div className="col-span-1 flex items-center">
-                                            {isFolder ? (
-                                                <span className="text-xs text-slate-300">—</span>
-                                            ) : (
-                                                <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                                                    <Tooltip>
-                                                        <TooltipTrigger asChild>
-                                                            <button
-                                                                type="button"
-                                                                className={cn(
-                                                                    'h-7 w-7 rounded-md inline-flex items-center justify-center disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-500',
-                                                                    file.id === highlightedFileId
-                                                                        ? 'text-slate-700 bg-slate-100'
-                                                                        : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
-                                                                )}
-                                                                aria-label="Copy link"
-                                                                aria-pressed={file.id === highlightedFileId}
-                                                                disabled={!file.projectDocumentId}
-                                                                onClick={async () => {
-                                                                    if (!file.projectDocumentId) return
-                                                                    const base = typeof window !== 'undefined' ? window.location.href.replace(/#.*$/, '') : ''
-                                                                    const url = base ? `${base}#doc-file:${file.projectDocumentId}` : ''
-                                                                    if (!url) return
-                                                                    await navigator.clipboard.writeText(url)
-                                                                    addToast({ type: 'success', title: 'Link copied', message: 'Document link copied to clipboard.' })
-                                                                }}
-                                                            >
-                                                                <Link2 className="h-4 w-4" />
-                                                            </button>
-                                                        </TooltipTrigger>
-                                                        <TooltipContent side="top" className="text-xs">
-                                                            {file.projectDocumentId ? 'Copy link' : 'Unavailable until indexed'}
-                                                        </TooltipContent>
-                                                    </Tooltip>
+                                            <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <button
+                                                            type="button"
+                                                            className={cn(
+                                                                'h-7 w-7 rounded-md inline-flex items-center justify-center disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-500',
+                                                                file.id === highlightedFileId
+                                                                    ? 'text-slate-700 bg-slate-100'
+                                                                    : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
+                                                            )}
+                                                            aria-label="Copy link"
+                                                            aria-pressed={file.id === highlightedFileId}
+                                                            disabled={!file.projectDocumentId}
+                                                            onClick={async () => {
+                                                                if (!file.projectDocumentId) return
+                                                                const base = typeof window !== 'undefined' ? window.location.href.replace(/#.*$/, '') : ''
+                                                                const url = base ? `${base}#doc-file:${file.projectDocumentId}` : ''
+                                                                if (!url) return
+                                                                await navigator.clipboard.writeText(url)
+                                                                addToast({ type: 'success', title: 'Link copied', message: 'Document link copied to clipboard.' })
+                                                            }}
+                                                        >
+                                                            <Link2 className="h-4 w-4" />
+                                                        </button>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent side="top" className="text-xs">
+                                                        {file.projectDocumentId ? 'Copy link' : 'Unavailable until indexed'}
+                                                    </TooltipContent>
+                                                </Tooltip>
 
+                                                {!isFolder && (
                                                     <Tooltip>
                                                         <TooltipTrigger asChild>
                                                             <button
@@ -3080,18 +3189,18 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                                 )}
                                                                 aria-label="Open comments"
                                                                 aria-pressed={file.id === activeCommentDocId}
-                                                                disabled={!file.projectDocumentId}
+                                                                disabled={!isFolder && !file.projectDocumentId}
                                                                 onClick={() => openCommentsForFile(file)}
                                                             >
                                                                 <MessageCircle className="h-4 w-4" />
                                                             </button>
                                                         </TooltipTrigger>
                                                         <TooltipContent side="top" className="text-xs">
-                                                            {file.projectDocumentId ? 'Comments' : 'Unavailable until indexed'}
+                                                            {!isFolder && !file.projectDocumentId ? 'Unavailable until indexed' : 'Comments'}
                                                         </TooltipContent>
                                                     </Tooltip>
-                                                </div>
-                                            )}
+                                                )}
+                                            </div>
                                         </div>
 
                                         {/* Owner Column */}
@@ -3134,6 +3243,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                     return (
                                                         <DocumentActionMenu
                                                     document={file}
+                                                    deeplinkBase={typeof window !== 'undefined' ? window.location.href.replace(/#.*$/, '') : ''}
                                                     showShareModal={isProjectLead}
                                                     isEngagementLead={isProjectLead}
                                                     isExternalCollaborator={viewAsPersonaSlug === 'eng_ext_collaborator'}

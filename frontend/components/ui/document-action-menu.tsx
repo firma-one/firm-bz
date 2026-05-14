@@ -107,6 +107,8 @@ interface DocumentActionMenuProps {
   isEngagementLead?: boolean
   /** External Collaborator (EC): show Accept Document option to lock via client acceptance. */
   isExternalCollaborator?: boolean
+  /** Base URL for deeplink (e.g. ".../files"). Appended with #doc-file:{projectDocumentId}. Falls back to Drive URL if absent. */
+  deeplinkBase?: string
 }
 
 export function DocumentActionMenu({
@@ -139,6 +141,7 @@ export function DocumentActionMenu({
   onOpenVersionPane,
   isEngagementLead,
   isExternalCollaborator,
+  deeplinkBase,
 }: DocumentActionMenuProps) {
   const [showDueDatePicker, setShowDueDatePicker] = useState(false)
   const [showShareModalOpen, setShowShareModalOpen] = useState(false)
@@ -493,9 +496,13 @@ export function DocumentActionMenu({
                     )}
                     <DropdownMenuItem
                       onClick={async () => {
-                        const link = document.webViewLink || `https://drive.google.com/drive/folders/${document.id}`
-                        await navigator.clipboard.writeText(link)
-                        addToast({ type: 'success', title: 'Link copied', message: 'Folder link copied to clipboard' })
+                        const docId = (document as any).projectDocumentId
+                        if (!deeplinkBase || !docId) {
+                          addToast({ type: 'error', title: 'Link unavailable', message: 'This item has not been indexed yet.' })
+                          return
+                        }
+                        await navigator.clipboard.writeText(`${deeplinkBase}#doc-file:${docId}`)
+                        addToast({ type: 'success', title: 'Link copied', message: 'Link copied to clipboard' })
                       }}
                       className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
                     >
@@ -593,7 +600,7 @@ export function DocumentActionMenu({
                     </DropdownMenuSubContent>
                   </DropdownMenuSub>
                 )}
-                <DropdownMenuSeparator />
+                {(!isExternalCollaborator || onDeleteDocument) && <DropdownMenuSeparator />}
                 {onDeleteDocument && (
                   <TooltipProvider>
                     <Tooltip>
@@ -612,25 +619,29 @@ export function DocumentActionMenu({
                     </Tooltip>
                   </TooltipProvider>
                 )}
-                <DropdownMenuSeparator />
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
-                    <ExternalLink className="h-4 w-4 text-gray-600" />
-                    <span>Drive Actions</span>
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="w-56">
-                    <DropdownMenuItem
-                      onClick={() => {
-                        const googleDriveUrl = `https://drive.google.com/drive/folders/${document.id}`
-                        if (typeof window !== 'undefined') window.open(googleDriveUrl, '_blank')
-                      }}
-                      className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
-                    >
-                      <ExternalLink className="h-4 w-4 text-blue-600" />
-                      <span>Open in Google Drive</span>
-                    </DropdownMenuItem>
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
+                {!isExternalCollaborator && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
+                      <ExternalLink className="h-4 w-4 text-gray-600" />
+                      <span>Drive Actions</span>
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent className="w-56">
+                      <DropdownMenuItem
+                        onClick={() => {
+                          const googleDriveUrl = `https://drive.google.com/drive/folders/${document.id}`
+                          if (typeof window !== 'undefined') window.open(googleDriveUrl, '_blank')
+                        }}
+                        className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                      >
+                        <ExternalLink className="h-4 w-4 text-blue-600" />
+                        <span>Open in Google Drive</span>
+                      </DropdownMenuItem>
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+                </>
+                )}
               </>
             ) : (
               <>
@@ -737,9 +748,13 @@ export function DocumentActionMenu({
                     )}
                     <DropdownMenuItem
                       onClick={async () => {
-                        const link = document.webViewLink || getDocumentEditUrl(document)
-                        await navigator.clipboard.writeText(link)
-                        addToast({ type: 'success', title: 'Link copied', message: 'Document link copied to clipboard' })
+                        const docId = (document as any).projectDocumentId
+                        if (!deeplinkBase || !docId) {
+                          addToast({ type: 'error', title: 'Link unavailable', message: 'This item has not been indexed yet.' })
+                          return
+                        }
+                        await navigator.clipboard.writeText(`${deeplinkBase}#doc-file:${docId}`)
+                        addToast({ type: 'success', title: 'Link copied', message: 'Link copied to clipboard' })
                       }}
                       className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
                     >
@@ -1084,7 +1099,7 @@ export function DocumentActionMenu({
                   <span>Set Due Date</span>
                 </DropdownMenuItem>
 
-                <DropdownMenuSeparator />
+                {(!isExternalCollaborator || onDeleteDocument) && <DropdownMenuSeparator />}
 
                 {onDeleteDocument && (
 
@@ -1105,28 +1120,32 @@ export function DocumentActionMenu({
                     </Tooltip>
                   </TooltipProvider>
                 )}
-                <DropdownMenuSeparator />
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
-                    <ExternalLink className="h-4 w-4 text-gray-600" />
-                    <span>Drive Actions</span>
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="w-56">
-                    <DropdownMenuItem
-                      onClick={() => {
-                        const parentId = document.parents?.[0]
-                        const url = parentId
-                          ? `https://drive.google.com/drive/folders/${parentId}`
-                          : `https://drive.google.com/drive/my-drive`
-                        window.open(url, '_blank')
-                      }}
-                      className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
-                    >
-                      <ExternalLink className="h-4 w-4 text-blue-600" />
-                      <span>Open containing Folder in Google Drive</span>
-                    </DropdownMenuItem>
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
+                {!isExternalCollaborator && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
+                      <ExternalLink className="h-4 w-4 text-gray-600" />
+                      <span>Drive Actions</span>
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent className="w-56">
+                      <DropdownMenuItem
+                        onClick={() => {
+                          const parentId = document.parents?.[0]
+                          const url = parentId
+                            ? `https://drive.google.com/drive/folders/${parentId}`
+                            : `https://drive.google.com/drive/my-drive`
+                          window.open(url, '_blank')
+                        }}
+                        className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                      >
+                        <ExternalLink className="h-4 w-4 text-blue-600" />
+                        <span>Open containing Folder in Google Drive</span>
+                      </DropdownMenuItem>
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+                </>
+                )}
               </>
             )}
           </div>

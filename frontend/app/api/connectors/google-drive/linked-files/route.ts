@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { getViewAsPersonaFromCookie } from '@/lib/view-as-server'
 import { canAccessRbacAdmin } from '@/lib/permission-helpers'
-import { getSharedAndAncestorIdsForPersona, isFolderUnderSharedFolder } from '@/lib/project-sharing-ids'
+import { getSharedAndAncestorIdsForPersona, isFolderUnderSharedFolderDB } from '@/lib/project-sharing-ids'
 import { safeInngestSend } from '@/lib/inngest/client'
 import { logger } from '@/lib/logger'
 import { GoogleDriveAuthError } from '@/lib/google-drive-connector'
@@ -128,8 +128,6 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Invalid or empty JSON body' }, { status: 400 })
         }
         const { action, folderId, projectId: bodyProjectId, viewAsPersonaSlug: bodyViewAs, pageSize: bodyPageSize } = body
-
-        console.log(`[API] linked-files POST action=${action} folderId=${folderId} projectId=${bodyProjectId ?? '(none)'}`)
 
         if (action === 'list') {
             if (typeof folderId !== 'string' || !folderId) {
@@ -306,88 +304,89 @@ export async function POST(request: NextRequest) {
 
             const userEmail = user.email || undefined
             const listLimit = typeof bodyPageSize === 'number' && bodyPageSize > 0 ? Math.min(500, bodyPageSize) : 100
-            logger.debug('[API] linked-files: Calling listFiles', {
-                connectorId: connector.id,
-                folderId,
-                listLimit,
-                hasProjectContext: !!projectContext
-            })
-            let files = await googleDriveConnector.listFiles(
-                connector.id,
-                folderId,
-                listLimit,
-                userEmail,
-                projectContext
-            )
-            logger.debug('[API] linked-files: listFiles returned', { count: files.length })
 
-            // Attach internal projectDocument UUIDs for UI deeplinks (never expose Drive id in URL).
-            // Only available when projectId is provided.
-            if (bodyProjectId && files.length > 0) {
-                const driveIds = Array.from(new Set(files.map((f: { id: string }) => f.id).filter(Boolean)))
-                if (driveIds.length > 0) {
-                    const rows = await prisma.engagementDocument.findMany({
-                        where: { engagementId: bodyProjectId, externalId: { in: driveIds } },
-                        select: { id: true, externalId: true, settings: true },
-                    })
-                    const internalByExternal = new Map<string, string>(rows.map((r: { id: string; externalId: string }) => [r.externalId, r.id]))
-                    const lockedByExternal = new Map<string, boolean>(
-                        rows.map((r: { externalId: string; settings: unknown }) => [r.externalId, isDocumentVersionLocked(r.settings)])
-                    )
-                    files = files.map((f: any) => ({
-                        ...f,
-                        projectDocumentId: internalByExternal.get(f.id) ?? undefined,
-                        versionLocked: lockedByExternal.get(f.id) ?? false,
-                    }))
+            // Detect EC/Guest persona. Fast path: genuine member role requires no extra DB/cookie calls.
+            // Slow path: view-as impersonation (RBAC admins only) — check body first, then cookie.
+            let personaSlugToFilter: 'eng_ext_collaborator' | 'eng_viewer' | null = null
+            if (bodyProjectId) {
+                if (projectContext?.personaSlug === 'eng_ext_collaborator' || projectContext?.personaSlug === 'eng_viewer') {
+                    personaSlugToFilter = projectContext.personaSlug as 'eng_ext_collaborator' | 'eng_viewer'
+                } else {
+                    const bodyViewAsIsEC = bodyViewAs === 'eng_ext_collaborator' || bodyViewAs === 'eng_viewer'
+                    const cookieViewAs = await getViewAsPersonaFromCookie()
+                    if (bodyViewAsIsEC || cookieViewAs) {
+                        const canUseViewAs = await canAccessRbacAdmin(user.id)
+                        if (canUseViewAs) {
+                            const viewAsSlug = bodyViewAsIsEC ? bodyViewAs : cookieViewAs
+                            if (viewAsSlug === 'eng_ext_collaborator' || viewAsSlug === 'eng_viewer') {
+                                personaSlugToFilter = viewAsSlug as 'eng_ext_collaborator' | 'eng_viewer'
+                            }
+                        }
+                    }
                 }
             }
 
-            // When projectId is set, filter to shared-only when viewing as or actually being EC/Guest.
-            // Prefer body viewAsPersonaSlug (from frontend View As) when user has RBAC admin, so filtering works even if cookie isn't sent/read.
-            if (bodyProjectId) {
-                const cookieViewAs = await getViewAsPersonaFromCookie()
-                const canUseViewAs = await canAccessRbacAdmin(user.id)
-                const viewAsSlug = (canUseViewAs && (bodyViewAs === 'eng_ext_collaborator' || bodyViewAs === 'eng_viewer') ? bodyViewAs : null) ?? (canUseViewAs && cookieViewAs ? cookieViewAs : null)
-                const personaSlugToFilter =
-                    viewAsSlug === 'eng_ext_collaborator' || viewAsSlug === 'eng_viewer'
-                        ? viewAsSlug
-                        : (projectContext?.personaSlug === 'eng_ext_collaborator' || projectContext?.personaSlug === 'eng_viewer')
-                            ? projectContext.personaSlug
-                            : null
-                if (personaSlugToFilter && projectContext) {
-                    const { sharedIds, ancestorIds } = await getSharedAndAncestorIdsForPersona(projectContext.projectId, personaSlugToFilter, { skipDescendants: true })
-                    const allowSet = new Set([...sharedIds, ...ancestorIds])
-                    const folderInShared = sharedIds.includes(folderId)
-                    const folderUnderShared = !folderInShared && sharedIds.length > 0 && await isFolderUnderSharedFolder(folderId, sharedIds, connector.id, googleDriveConnector)
-                    if (!folderInShared && !folderUnderShared) {
-                        files = files.filter((f: { id: string }) => allowSet.has(f.id))
-                    }
-                    // If folder listing returned nothing, reconstruct proper hierarchy from engagement_documents
-                    // before falling back to a flat shared-file list. This ensures external viewers see the
-                    // correct folder navigation (e.g. Website_Design folder) rather than having shared files
-                    // surfaced at the wrong level, which would make the breadcrumb misleading.
-                    if (files.length === 0 && sharedIds.length > 0) {
-                        const allowArray = Array.from(allowSet)
-                        if (allowArray.length > 0) {
-                            const directChildRows = await prisma.engagementDocument.findMany({
-                                where: {
-                                    engagementId: projectContext.projectId,
-                                    parentId: folderId,
-                                    externalId: { in: allowArray }
-                                },
-                                select: { externalId: true }
-                            })
-                            if (directChildRows.length > 0) {
-                                const childIds = directChildRows.map((r: { externalId: string }) => r.externalId)
-                                const childMeta = await googleDriveConnector.getFilesMetadata(connector.id, childIds)
-                                files = childMeta.filter((f: { id?: string }) => f?.id) as typeof files
-                            }
-                        }
-                        // Original fallback: if no indexed direct children found, show shared files directly
-                        if (files.length === 0) {
-                            const sharedMeta = await googleDriveConnector.getFilesMetadata(connector.id, sharedIds)
-                            files = sharedMeta.filter((f: { id?: string }) => f?.id) as typeof files
-                        }
+            let files: any[] = []
+
+            if (personaSlugToFilter && projectContext) {
+                // EC/Guest: fully DB-driven listing — no Drive API call for listing.
+                // sharedIds/ancestorIds computed from engagement_documents (Drive authoritative for parents).
+                const { sharedIds, ancestorIds, parentMap } = await getSharedAndAncestorIdsForPersona(
+                    projectContext.projectId, personaSlugToFilter, { skipDescendants: true }
+                )
+                const allowSet = new Set([...sharedIds, ...ancestorIds])
+                const folderInShared = sharedIds.includes(folderId)
+                const folderUnderShared = !folderInShared && isFolderUnderSharedFolderDB(folderId, sharedIds, parentMap)
+
+                // When folderId is a shared folder or its descendant, show all direct children.
+                // Otherwise restrict to only children that appear in allowSet.
+                const dbRows = await prisma.engagementDocument.findMany({
+                    where: {
+                        engagementId: projectContext.projectId,
+                        parentId: folderId,
+                        ...(folderInShared || folderUnderShared ? {} : { externalId: { in: Array.from(allowSet) } }),
+                    },
+                    select: { id: true, externalId: true, fileName: true, mimeType: true, fileSize: true, isFolder: true, metadata: true, settings: true },
+                })
+                files = dbRows.map((row: any) => ({
+                    id: row.externalId,
+                    name: row.fileName,
+                    mimeType: row.mimeType ?? null,
+                    size: row.fileSize != null ? String(row.fileSize) : null,
+                    modifiedTime: (row.metadata as any)?.modifiedTime ?? null,
+                    webViewLink: (row.metadata as any)?.webViewLink ?? null,
+                    isFolder: row.isFolder,
+                    connectorId: connector.id,
+                    projectDocumentId: row.id,
+                    versionLocked: isDocumentVersionLocked(row.settings),
+                }))
+            } else {
+                // Internal personas: Drive-based listing — completely unchanged.
+                files = await googleDriveConnector.listFiles(
+                    connector.id,
+                    folderId,
+                    listLimit,
+                    userEmail,
+                    projectContext
+                )
+
+                // Attach internal projectDocument UUIDs for UI deeplinks (never expose Drive id in URL).
+                if (bodyProjectId && files.length > 0) {
+                    const driveIds = Array.from(new Set(files.map((f: { id: string }) => f.id).filter(Boolean)))
+                    if (driveIds.length > 0) {
+                        const rows = await prisma.engagementDocument.findMany({
+                            where: { engagementId: bodyProjectId, externalId: { in: driveIds } },
+                            select: { id: true, externalId: true, settings: true },
+                        })
+                        const internalByExternal = new Map<string, string>(rows.map((r: { id: string; externalId: string }) => [r.externalId, r.id]))
+                        const lockedByExternal = new Map<string, boolean>(
+                            rows.map((r: { externalId: string; settings: unknown }) => [r.externalId, isDocumentVersionLocked(r.settings)])
+                        )
+                        files = files.map((f: any) => ({
+                            ...f,
+                            projectDocumentId: internalByExternal.get(f.id) ?? undefined,
+                            versionLocked: lockedByExternal.get(f.id) ?? false,
+                        }))
                     }
                 }
             }

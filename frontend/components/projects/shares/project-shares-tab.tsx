@@ -91,14 +91,18 @@ export type FilesBreadcrumbItem = { id: string; name: string; clickable?: boolea
 interface ProjectSharesTabProps {
   projectId: string
   canManage?: boolean
+  /** True for external personas (EC, EV) — hides internal-only UI like Drive Actions. */
+  restrictToSharedOnly?: boolean
   connectorRootFolderId?: string
   orgName?: string
   clientName?: string
   projectName?: string
-  onOpenInFiles?: (folderId: string, breadcrumbs: FilesBreadcrumbItem[]) => void
+  onOpenInFiles?: (folderId: string, breadcrumbs: FilesBreadcrumbItem[], hash?: string) => void
   /** When set, view mode is driven by URL; changes navigate */
   sharesBasePath?: string
   pathViewMode?: 'list' | 'board' | 'grid'
+  /** Base URL for deeplinks (e.g. ".../files"). Used for Copy Link buttons. */
+  deeplinkBase?: string
 }
 
 const LANES: {
@@ -196,6 +200,8 @@ function DraggableCard({
   extCollaboratorLabel,
   viewerLabel,
   onParentFolderClick,
+  isExternalPersona,
+  deeplinkBase,
 }: {
   id: string
   share: ShareRecord
@@ -214,6 +220,8 @@ function DraggableCard({
   extCollaboratorLabel: string
   viewerLabel: string
   onParentFolderClick?: (parentId: string, parentName: string) => void
+  isExternalPersona?: boolean
+  deeplinkBase?: string
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id })
   const { setNodeRef: setDropRef, isOver } = useDroppable({ id })
@@ -269,6 +277,8 @@ function DraggableCard({
         extCollaboratorLabel={extCollaboratorLabel}
         viewerLabel={viewerLabel}
         onParentFolderClick={onParentFolderClick}
+        isExternalPersona={isExternalPersona}
+        deeplinkBase={deeplinkBase}
       />
     </motion.div>
   )
@@ -294,6 +304,8 @@ function ShareCardContent({
   extCollaboratorLabel,
   viewerLabel,
   onParentFolderClick,
+  isExternalPersona,
+  deeplinkBase,
 }: {
   share: ShareRecord
   laneHeaderBg: string
@@ -313,6 +325,8 @@ function ShareCardContent({
   extCollaboratorLabel: string
   viewerLabel: string
   onParentFolderClick?: (parentId: string, parentName: string) => void
+  isExternalPersona?: boolean
+  deeplinkBase?: string
 }) {
   const latestComment = share.comments?.[0]
   const isFinalized = !!share.finalizedAt
@@ -363,17 +377,17 @@ function ShareCardContent({
                     className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors"
                     onClick={(e) => {
                       e.stopPropagation()
-                      if (!share.webViewLink) return
-                      navigator.clipboard.writeText(share.webViewLink)
+                      if (!deeplinkBase || !share.documentId) return
+                      navigator.clipboard.writeText(`${deeplinkBase}#doc-file:${share.documentId}`)
                       setLinkCopied(true)
                       setTimeout(() => setLinkCopied(false), 1500)
                     }}
-                    disabled={!share.webViewLink}
+                    disabled={!deeplinkBase || !share.documentId}
                   >
                     {linkCopied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Link2 className="h-3.5 w-3.5" />}
                   </button>
                 </TooltipTrigger>
-                <TooltipContent side="top" className="text-xs">{share.webViewLink ? 'Copy link' : 'No link available'}</TooltipContent>
+                <TooltipContent side="top" className="text-xs">{deeplinkBase && share.documentId ? 'Copy link' : 'No link available'}</TooltipContent>
               </Tooltip>
             </TooltipProvider>
             <TooltipProvider>
@@ -396,6 +410,7 @@ function ShareCardContent({
               projectId={share.projectId}
               onShareSaved={onShareSaved}
               onOpenDocument={() => handleSecureOpen(share)}
+              isExternalCollaborator={isExternalPersona}
             />
             {isRegrantingId === share.id && <LoadingSpinner size="sm" className="min-h-0 ml-0.5" />}
           </div>
@@ -571,6 +586,8 @@ function SharesListView({
   viewerLabel,
   onOpenComments,
   onParentFolderClick,
+  isExternalPersona,
+  deeplinkBase,
 }: {
   shares: ShareRecord[]
   formatDate: (s: string) => string
@@ -584,6 +601,8 @@ function SharesListView({
   viewerLabel: string
   onOpenComments?: (share: ShareRecord) => void
   onParentFolderClick?: (parentId: string, parentName: string) => void
+  isExternalPersona?: boolean
+  deeplinkBase?: string
 }) {
   const [actionMenuOpenShareId, setActionMenuOpenShareId] = useState<string | null>(null)
   return (
@@ -633,11 +652,11 @@ function SharesListView({
                       className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors"
                       onClick={(e) => {
                         e.stopPropagation()
-                        if (!share.webViewLink) return
-                        navigator.clipboard.writeText(share.webViewLink)
+                        if (!deeplinkBase || !share.documentId) return
+                        navigator.clipboard.writeText(`${deeplinkBase}#doc-file:${share.documentId}`)
                       }}
-                      title={share.webViewLink ? 'Copy link' : 'No link available'}
-                      disabled={!share.webViewLink}
+                      title={deeplinkBase && share.documentId ? 'Copy link' : 'No link available'}
+                      disabled={!deeplinkBase || !share.documentId}
                     >
                       <Link2 className="h-4 w-4" />
                     </button>
@@ -658,6 +677,7 @@ function SharesListView({
                       onShareSaved={onShareSaved}
                       onOpenChange={(open) => setActionMenuOpenShareId(open ? share.id : null)}
                       onOpenDocument={() => handleSecureOpen(share)}
+                      isExternalCollaborator={isExternalPersona}
                     />
                     {isRegrantingId === share.id && (
                       <LoadingSpinner size="sm" className="min-h-0 ml-1" />
@@ -752,6 +772,8 @@ function SharesGridView({
   viewerLabel,
   onOpenComments,
   onParentFolderClick,
+  isExternalPersona,
+  deeplinkBase,
 }: {
   shares: ShareRecord[]
   formatDate: (s: string) => string
@@ -765,6 +787,8 @@ function SharesGridView({
   viewerLabel: string
   onOpenComments?: (share: ShareRecord) => void
   onParentFolderClick?: (parentId: string, parentName: string) => void
+  isExternalPersona?: boolean
+  deeplinkBase?: string
 }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 py-2">
@@ -783,6 +807,8 @@ function SharesGridView({
           viewerLabel={viewerLabel}
           onOpenComments={onOpenComments}
           onParentFolderClick={onParentFolderClick}
+          isExternalPersona={isExternalPersona}
+          deeplinkBase={deeplinkBase}
         />
       ))}
     </div>
@@ -802,6 +828,8 @@ function ShareCard({
   viewerLabel,
   onOpenComments,
   onParentFolderClick,
+  isExternalPersona,
+  deeplinkBase,
 }: {
   share: ShareRecord
   formatDate: (s: string) => string
@@ -815,6 +843,8 @@ function ShareCard({
   viewerLabel: string
   onOpenComments?: (share: ShareRecord) => void
   onParentFolderClick?: (parentId: string, parentName: string) => void
+  isExternalPersona?: boolean
+  deeplinkBase?: string
 }) {
   const isFolder = share.documentMimeType?.includes('folder')
   const [linkCopied, setLinkCopied] = useState(false)
@@ -940,17 +970,17 @@ function ShareCard({
                     className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors"
                     onClick={(e) => {
                       e.stopPropagation()
-                      if (!share.webViewLink) return
-                      navigator.clipboard.writeText(share.webViewLink)
+                      if (!deeplinkBase || !share.documentId) return
+                      navigator.clipboard.writeText(`${deeplinkBase}#doc-file:${share.documentId}`)
                       setLinkCopied(true)
                       setTimeout(() => setLinkCopied(false), 1500)
                     }}
-                    disabled={!share.webViewLink}
+                    disabled={!deeplinkBase || !share.documentId}
                   >
                     {linkCopied ? <Check className="h-4 w-4 text-emerald-600" /> : <Link2 className="h-4 w-4" />}
                   </button>
                 </TooltipTrigger>
-                <TooltipContent side="top" className="text-xs">{share.webViewLink ? 'Copy link' : 'No link available'}</TooltipContent>
+                <TooltipContent side="top" className="text-xs">{deeplinkBase && share.documentId ? 'Copy link' : 'No link available'}</TooltipContent>
               </Tooltip>
             </TooltipProvider>
             <TooltipProvider>
@@ -973,6 +1003,7 @@ function ShareCard({
               projectId={share.projectId}
               onShareSaved={onShareSaved}
               onOpenDocument={() => handleSecureOpen(share)}
+              isExternalCollaborator={isExternalPersona}
             />
             {isRegrantingId === share.id && (
               <LoadingSpinner size="sm" className="min-h-0 ml-1" />
@@ -1032,6 +1063,7 @@ type SharesViewMode = 'grid' | 'list' | 'board'
 export function ProjectSharesTab({
   projectId,
   canManage = false,
+  restrictToSharedOnly = false,
   connectorRootFolderId,
   orgName,
   clientName,
@@ -1039,6 +1071,7 @@ export function ProjectSharesTab({
   onOpenInFiles,
   sharesBasePath,
   pathViewMode,
+  deeplinkBase,
 }: ProjectSharesTabProps) {
   const router = useRouter()
   const rightPane = useRightPane()
@@ -1160,13 +1193,17 @@ export function ProjectSharesTab({
   const handleOpenInFilesForFolder = useCallback(
     (share: ShareRecord) => {
       if (!onOpenInFiles || !share.documentMimeType?.includes('folder')) return
+      // Navigate to the folder's PARENT and highlight the folder itself so the user sees it in context.
+      // Fall back to navigating into the folder if parent info is unavailable.
+      const targetId = share.parentId ?? share.documentExternalId
+      const targetName = share.parentName ?? share.documentName
       const breadcrumbs: FilesBreadcrumbItem[] = [
         { id: 'org', name: orgName ?? 'Organization', clickable: false },
         { id: 'client', name: clientName ?? 'Client', clickable: false },
         { id: connectorRootFolderId ?? 'project', name: projectName ?? 'Project', clickable: false },
-        { id: share.documentExternalId, name: share.documentName, clickable: true },
+        { id: targetId, name: targetName, clickable: true },
       ]
-      onOpenInFiles(share.documentExternalId, breadcrumbs)
+      onOpenInFiles(targetId, breadcrumbs, `doc-file:${share.documentId}`)
     },
     [onOpenInFiles, orgName, clientName, projectName, connectorRootFolderId]
   )
@@ -1187,6 +1224,10 @@ export function ProjectSharesTab({
 
   const handleSecureOpenShare = useCallback(
     (share: ShareRecord) => {
+      if (share.documentMimeType?.includes('folder')) {
+        handleOpenInFilesForFolder(share)
+        return
+      }
       handleSecureOpen(
         {
           documentId: share.documentId,
@@ -1198,7 +1239,7 @@ export function ProjectSharesTab({
         share.id
       )
     },
-    [handleSecureOpen]
+    [handleSecureOpen, handleOpenInFilesForFolder]
   )
 
   const byLane = React.useMemo(() => {
@@ -1418,6 +1459,8 @@ export function ProjectSharesTab({
               viewerLabel={projViewer}
               onOpenComments={handleOpenComments}
               onParentFolderClick={onOpenInFiles ? handleOpenParentFolder : undefined}
+              isExternalPersona={restrictToSharedOnly}
+              deeplinkBase={deeplinkBase}
             />
           ) : viewMode === 'list' ? (
             <SharesListView
@@ -1433,6 +1476,8 @@ export function ProjectSharesTab({
               viewerLabel={projViewer}
               onOpenComments={handleOpenComments}
               onParentFolderClick={onOpenInFiles ? handleOpenParentFolder : undefined}
+              isExternalPersona={restrictToSharedOnly}
+              deeplinkBase={deeplinkBase}
             />
           ) : (
             <>
@@ -1478,6 +1523,8 @@ export function ProjectSharesTab({
                               extCollaboratorLabel={projExtCollaborator}
                               viewerLabel={projViewer}
                               onParentFolderClick={onOpenInFiles ? handleOpenParentFolder : undefined}
+                              isExternalPersona={restrictToSharedOnly}
+                              deeplinkBase={deeplinkBase}
                             />
                           ))}
                         </AnimatePresence>

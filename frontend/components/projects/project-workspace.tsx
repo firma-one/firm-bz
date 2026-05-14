@@ -129,9 +129,9 @@ export function ProjectWorkspace({
         router.push(`${base}/${value}${suffix}`)
     }, [base, router])
 
-    const handleOpenInFiles = useCallback((folderId: string, breadcrumbs: BreadcrumbItem[]) => {
+    const handleOpenInFiles = useCallback((folderId: string, breadcrumbs: BreadcrumbItem[], hash?: string) => {
         setSavedFolderState(projectId, folderId, breadcrumbs)
-        router.push(`${base}/files`)
+        router.push(`${base}/files${hash ? '#' + hash : ''}`)
     }, [projectId, base, router])
 
     return (
@@ -337,6 +337,7 @@ export function ProjectWorkspace({
                                 <ProjectSharesTab
                                     projectId={projectId}
                                     canManage={canManage}
+                                    restrictToSharedOnly={restrictToSharedOnly}
                                     connectorRootFolderId={connectorRootFolderId ?? undefined}
                                     orgName={orgName}
                                     clientName={clientName}
@@ -344,6 +345,7 @@ export function ProjectWorkspace({
                                     onOpenInFiles={handleOpenInFiles}
                                     sharesBasePath={`${projectBase(orgSlug, clientSlug, projectSlug, useEngagement)}/shares`}
                                     pathViewMode={pathSegments?.viewMode}
+                                    deeplinkBase={typeof window !== 'undefined' ? `${window.location.origin}${projectBase(orgSlug, clientSlug, projectSlug, useEngagement)}/files` : undefined}
                                 />
                             </ErrorBoundary>
                         </div>
