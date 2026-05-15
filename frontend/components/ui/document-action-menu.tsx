@@ -42,6 +42,7 @@ import {
   Folder,
   CheckCircle2,
   XCircle,
+  Building2,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -85,8 +86,6 @@ interface DocumentActionMenuProps {
   onMoveDocument?: (doc: any) => void
   /** Copy to a different engagement (EL only). Opens cross-engagement picker. */
   onCrossEngagementCopy?: (doc: any) => void
-  /** Move to a different engagement (EL only). Opens cross-engagement picker. */
-  onCrossEngagementMove?: (doc: any) => void
   onVersionHistory?: (doc: any) => void
   onDeleteDocument?: (doc: any) => void
   /** When set, Share opens the custom share modal instead of OS share. Only show Share item when true (Project Lead). */
@@ -142,7 +141,6 @@ export function DocumentActionMenu({
   onCopyDocument,
   onMoveDocument,
   onCrossEngagementCopy,
-  onCrossEngagementMove,
   onVersionHistory,
   onDeleteDocument,
   showShareModal = false,
@@ -921,23 +919,14 @@ export function DocumentActionMenu({
                           <span>Move</span>
                         </DropdownMenuItem>
                       )}
-                      {(onCrossEngagementCopy || onCrossEngagementMove) && <DropdownMenuSeparator />}
-                      {onCrossEngagementCopy && !mime.includes('folder') && (
+                      {onCrossEngagementCopy && <DropdownMenuSeparator />}
+                      {onCrossEngagementCopy && (
                         <DropdownMenuItem
                           onSelect={() => onCrossEngagementCopy(document)}
                           className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
                         >
-                          <Copy className="h-4 w-4 text-blue-600" />
-                          <span className="whitespace-nowrap">Copy to engagement…</span>
-                        </DropdownMenuItem>
-                      )}
-                      {onCrossEngagementMove && !mime.includes('folder') && (
-                        <DropdownMenuItem
-                          onSelect={() => onCrossEngagementMove(document)}
-                          className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
-                        >
-                          <Move className="h-4 w-4 text-blue-600" />
-                          <span className="whitespace-nowrap">Move to engagement…</span>
+                          <Building2 className="h-4 w-4 flex-shrink-0 text-blue-600" />
+                          <span className="whitespace-nowrap">Copy to another engagement…</span>
                         </DropdownMenuItem>
                       )}
                       {(canManage && (onRestrictToConfidential || onRestoreToGeneral || onPromoteToGeneral)) && <DropdownMenuSeparator />}

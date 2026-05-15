@@ -26,7 +26,10 @@ export async function GET(
 
     const source = await prisma.engagement.findUnique({
       where: { id: projectId },
-      select: { firmId: true },
+      select: {
+        firmId: true,
+        client: { select: { firm: { select: { name: true } } } },
+      },
     })
     if (!source) return NextResponse.json({ error: 'Engagement not found' }, { status: 404 })
 
@@ -35,7 +38,14 @@ export async function GET(
       where: { userId: user.id, role: 'eng_admin' },
       select: {
         engagement: {
-          select: { id: true, name: true, firmId: true, status: true, isDeleted: true },
+          select: {
+            id: true,
+            name: true,
+            firmId: true,
+            status: true,
+            isDeleted: true,
+            client: { select: { id: true, name: true } },
+          },
         },
       },
     })
@@ -43,9 +53,9 @@ export async function GET(
     const engagements = memberships
       .map((m) => m.engagement)
       .filter((e) => e.firmId === source.firmId && e.id !== projectId && !e.isDeleted && e.status !== 'COMPLETED')
-      .map((e) => ({ id: e.id, name: e.name }))
+      .map((e) => ({ id: e.id, name: e.name, clientId: e.client.id, clientName: e.client.name }))
 
-    return NextResponse.json({ engagements })
+    return NextResponse.json({ firmName: source.client.firm.name, engagements })
   } catch (e) {
     console.error('GET /engagements error', e)
     return NextResponse.json({ error: 'Failed to fetch engagements' }, { status: 500 })

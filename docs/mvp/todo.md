@@ -10,19 +10,19 @@
 
 - [ ] **Connectors** — restore the functionality of setting up the Workspace on Google Shared Drive in addition to My Drive
 
-- [ ] **Finalize Document** — [plan](/.claude/plans/update-docs-mvp-todo-md-we-need-structured-hinton.md)
+- [x] **Finalize Document** — [plan](/.claude/plans/update-docs-mvp-todo-md-we-need-structured-hinton.md)
   - Client accepts the document → status set to `Finalized`; document becomes read-only
   - Engagement Lead can unlock it (revert to `Draft`) if revisions are needed
   - Finalization notifies internal team and locks sharing permissions
 
-- [ ] **Document Intake** — [plan](.claude/plans/update-docs-mvp-todo-md-we-need-structured-hinton.md)
+- [x] **Document Intake** — [plan](.claude/plans/update-docs-mvp-todo-md-we-need-structured-hinton.md)
   - External personas (EC, EV) upload → land in per-engagement `Staging` folder, isolated from other clients
   - Reminder triggered for Engagement Lead to review and move approved files to `General`
   - On EL move: Staging copy removed, audit event `DOCUMENT_MOVED` recorded
 
-- [ ] **File/Folder operations** — [plan](/.claude/plans/update-docs-mvp-todo-md-we-need-structured-hinton.md)
-  - Copy/Move b/w Engagements
-  - Bulk select & download files or select folder & download.
+- [x] **File/Folder operations**
+  - [x] Copy to another Engagement — files/folders land in target's General folder; Firm › Client › Engagement picker with tree UI; Move intentionally deferred (non-atomic Drive + DB op)
+  - [x] Bulk select & download files or select folder & download
 
 - [ ] **Confidential folder** — implement via `settings.locked = private`, Google Drive permissions, or both; currently the folder exists on Drive but has no enforced access control in the app
 

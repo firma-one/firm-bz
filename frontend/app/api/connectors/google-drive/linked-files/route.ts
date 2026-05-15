@@ -8,6 +8,7 @@ import { safeInngestSend } from '@/lib/inngest/client'
 import { logger } from '@/lib/logger'
 import { GoogleDriveAuthError } from '@/lib/google-drive-connector'
 import { blockIfEngagementFileMutationForbidden } from '@/lib/engagement-access'
+import { IndexingInterceptor } from '@/lib/services/indexing-interceptor'
 import { isDocumentVersionLocked } from '@/lib/document-version-lock'
 import { getLock } from '@/lib/sharing-settings'
 // GET: List linked files for a connector
@@ -883,6 +884,24 @@ export async function POST(request: NextRequest) {
             const fileName = fileMeta?.name ?? fileId
 
             if (action === 'cross-engagement-copy') {
+                const isFolder = fileMeta?.mimeType === 'application/vnd.google-apps.folder'
+
+                if (isFolder) {
+                    const accessToken = await googleDriveConnector.getAccessToken(connector.id)
+                    if (!accessToken) return NextResponse.json({ error: 'Could not obtain Drive access token' }, { status: 500 })
+
+                    const copiedItems = await googleDriveConnector.recursiveCopy(fileId, destFolderId, accessToken)
+                    if (!copiedItems.length) return NextResponse.json({ error: 'Failed to copy folder' }, { status: 500 })
+
+                    await IndexingInterceptor.indexBatch(request, {
+                        organizationId: targetProject.client.firmId,
+                        clientId: targetProject.clientId,
+                        projectId: targetEngagementId,
+                        files: copiedItems.map((item) => ({ externalId: item.id, fileName: item.name })),
+                    })
+                    return NextResponse.json({ success: true, count: copiedItems.length })
+                }
+
                 const result = await googleDriveConnector.copyFile(connector.id, fileId, destFolderId, fileName)
                 if (!result) return NextResponse.json({ error: 'Failed to copy file' }, { status: 500 })
 
@@ -892,6 +911,7 @@ export async function POST(request: NextRequest) {
                     projectId: targetEngagementId,
                     externalId: result.id,
                     fileName,
+                    parentId: destFolderId,
                 })
                 return NextResponse.json({ success: true, id: result.id })
             }

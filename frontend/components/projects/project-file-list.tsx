@@ -404,8 +404,8 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
     const [checkingFolderId, setCheckingFolderId] = useState<string | null>(null)
     const [crossEngagementModalOpen, setCrossEngagementModalOpen] = useState(false)
     const [crossEngagementTarget, setCrossEngagementTarget] = useState<DriveFile | null>(null)
-    const [crossEngagementAction, setCrossEngagementAction] = useState<'copy' | 'move'>('copy')
-    const [crossEngagementEngagements, setCrossEngagementEngagements] = useState<{ id: string; name: string }[]>([])
+    const [crossEngagementFirmName, setCrossEngagementFirmName] = useState<string | null>(null)
+    const [crossEngagementEngagements, setCrossEngagementEngagements] = useState<{ id: string; name: string; clientId: string; clientName: string }[]>([])
     const [crossEngagementLoading, setCrossEngagementLoading] = useState(false)
     const [crossEngagementSubmitting, setCrossEngagementSubmitting] = useState(false)
     const [crossEngagementSelectedId, setCrossEngagementSelectedId] = useState<string | null>(null)
@@ -1789,18 +1789,19 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
             .finally(() => setLoadingDestinations(false))
     }, [generalFolderId, confidentialFolderId, stagingFolderId, currentFolderType, projectId])
 
-    const openCrossEngagementModal = useCallback(async (doc: DriveFile, action: 'copy' | 'move') => {
+    const openCrossEngagementModal = useCallback(async (doc: DriveFile) => {
         setCrossEngagementTarget(doc)
-        setCrossEngagementAction(action)
         setCrossEngagementSelectedId(null)
+        setCrossEngagementFirmName(null)
         setCrossEngagementModalOpen(true)
         setCrossEngagementLoading(true)
         try {
             const res = await fetch(`/api/projects/${projectId}/engagements`, { credentials: 'include' })
             if (res.ok) {
                 const data = await res.json()
+                setCrossEngagementFirmName(data.firmName ?? null)
                 setCrossEngagementEngagements(
-                    ((data.engagements ?? []) as { id: string; name: string }[]).filter((e) => e.id !== projectId)
+                    ((data.engagements ?? []) as { id: string; name: string; clientId: string; clientName: string }[]).filter((e) => e.id !== projectId)
                 )
             }
         } catch {
@@ -1823,7 +1824,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    action: crossEngagementAction === 'copy' ? 'cross-engagement-copy' : 'cross-engagement-move',
+                    action: 'cross-engagement-copy',
                     projectId,
                     fileId: crossEngagementTarget.id,
                     targetEngagementId: crossEngagementSelectedId,
@@ -1831,22 +1832,21 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
             })
             if (!res.ok) {
                 const err = await res.json()
-                throw new Error(err.error || `Failed to ${crossEngagementAction}`)
+                throw new Error(err.error || 'Failed to copy')
             }
             addToast({
                 type: 'success',
-                title: crossEngagementAction === 'copy' ? 'Copied' : 'Moved',
-                message: `${crossEngagementTarget.name} ${crossEngagementAction === 'copy' ? 'copied' : 'moved'} to the selected engagement.`,
+                title: 'Copied',
+                message: `${crossEngagementTarget.name} copied to the selected engagement.`,
             })
             setCrossEngagementModalOpen(false)
-            if (crossEngagementAction === 'move' && currentFolderId) fetchFiles(currentFolderId, true)
         } catch (e: any) {
             addToast({ type: 'error', title: 'Error', message: e?.message || 'Something went wrong' })
         } finally {
             setCrossEngagementSubmitting(false)
             stopProcessing(crossEngagementTarget.id)
         }
-    }, [crossEngagementTarget, crossEngagementSelectedId, crossEngagementAction, projectId, currentFolderId, fetchFiles, addToast, startProcessing, stopProcessing])
+    }, [crossEngagementTarget, crossEngagementSelectedId, projectId, addToast, startProcessing, stopProcessing])
 
     const handleDuplicate = useCallback(async (doc: DriveFile) => {
         if (!sessionRef.current?.access_token) return
@@ -3451,8 +3451,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                             onDuplicateDocument={canMutateFile ? (doc) => handleDuplicate(doc as DriveFile) : undefined}
                                                             onCopyDocument={generalFolderId && canMutateFile ? (doc) => openCopyMoveModal(doc as DriveFile, 'copy') : undefined}
                                                             onMoveDocument={generalFolderId && canMutateFile ? (doc) => openCopyMoveModal(doc as DriveFile, 'move') : undefined}
-                                                            onCrossEngagementCopy={isProjectLead && canMutateFile ? (doc) => openCrossEngagementModal(doc as DriveFile, 'copy') : undefined}
-                                                            onCrossEngagementMove={isProjectLead && canMutateFile ? (doc) => openCrossEngagementModal(doc as DriveFile, 'move') : undefined}
+                                                            onCrossEngagementCopy={isProjectLead && canMutateFile ? (doc) => openCrossEngagementModal(doc as DriveFile) : undefined}
                                                             onDeleteDocument={canMutateFile ? (doc) => handleTrash(doc as DriveFile) : undefined}
                                                             onRestrictToConfidential={canOrganizeTree && confidentialFolderId ? (doc) => handleMoveTree(doc as DriveFile, 'confidential') : undefined}
                                                             onRestoreToGeneral={canOrganizeTree && generalFolderId ? (doc) => handleMoveTree(doc as DriveFile, 'general') : undefined}
@@ -3632,48 +3631,88 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                     </DialogContent>
                 </Dialog>
 
-                {/* Cross-Engagement Copy / Move Modal */}
-                <Dialog open={crossEngagementModalOpen} onOpenChange={(open) => { setCrossEngagementModalOpen(open); if (!open) setCrossEngagementTarget(null) }}>
+                {/* Cross-Engagement Copy Modal */}
+                <Dialog open={crossEngagementModalOpen} onOpenChange={(open) => { setCrossEngagementModalOpen(open); if (!open) { setCrossEngagementTarget(null); setCrossEngagementFirmName(null) } }}>
                     <DialogContent className="max-w-md">
                         <DialogHeader>
-                            <DialogTitle>{crossEngagementAction === 'copy' ? 'Copy' : 'Move'} to Engagement</DialogTitle>
+                            <DialogTitle>Copy to another engagement</DialogTitle>
                             <DialogDescription className="text-xs text-slate-500">
-                                Select the engagement to {crossEngagementAction === 'copy' ? 'copy' : 'move'} <strong>{crossEngagementTarget?.name}</strong> to. The file will land in that engagement&apos;s General folder.
+                                Select the engagement to copy <strong>{crossEngagementTarget?.name}</strong> to. It will land in that engagement&apos;s General folder.
                             </DialogDescription>
                         </DialogHeader>
-                        <div className="space-y-2 max-h-64 overflow-y-auto border border-slate-200 rounded-md p-2">
+                        <div className="max-h-64 overflow-y-auto border border-slate-200 rounded-md p-2">
                             {crossEngagementLoading ? (
                                 <div className="flex items-center justify-center py-8">
                                     <LoadingSpinner className="h-6 w-6 text-slate-400" />
                                 </div>
                             ) : crossEngagementEngagements.length === 0 ? (
                                 <p className="text-sm text-slate-500 py-6 px-3 text-center">No other engagements available.</p>
-                            ) : crossEngagementEngagements.map((e) => (
-                                <button
-                                    key={e.id}
-                                    type="button"
-                                    onClick={() => setCrossEngagementSelectedId(e.id)}
-                                    className={cn(
-                                        'w-full flex items-center gap-2 text-left px-3 py-2 rounded-md text-sm transition-colors',
-                                        crossEngagementSelectedId === e.id
-                                            ? 'bg-slate-900 text-white'
-                                            : 'hover:bg-slate-100 text-slate-800'
-                                    )}
-                                >
-                                    <Briefcase className="h-4 w-4 flex-shrink-0 opacity-60" />
-                                    <span className="truncate">{e.name}</span>
-                                </button>
-                            ))}
+                            ) : (() => {
+                                const groups = crossEngagementEngagements.reduce<Record<string, { clientName: string; engagements: typeof crossEngagementEngagements }>>((acc, e) => {
+                                    if (!acc[e.clientId]) acc[e.clientId] = { clientName: e.clientName, engagements: [] }
+                                    acc[e.clientId].engagements.push(e)
+                                    return acc
+                                }, {})
+                                const sortedGroups = Object.entries(groups).sort(([, a], [, b]) => a.clientName.localeCompare(b.clientName))
+                                return (
+                                    <div className="py-1">
+                                        {/* Firm level */}
+                                        {crossEngagementFirmName && (
+                                            <div className="flex items-center gap-1.5 px-2 pb-1">
+                                                <Building2 className="h-3.5 w-3.5 flex-shrink-0 text-slate-400" />
+                                                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{crossEngagementFirmName}</span>
+                                            </div>
+                                        )}
+                                        {/* Client + Engagement tree */}
+                                        <div className="ml-3.5 border-l border-slate-200">
+                                            {sortedGroups.map(([clientId, group], gi) => {
+                                                const isLastClient = gi === sortedGroups.length - 1
+                                                const sortedEngagements = group.engagements.sort((a, b) => a.name.localeCompare(b.name))
+                                                return (
+                                                    <div key={clientId} className={isLastClient ? 'pb-0' : 'pb-1'}>
+                                                        {/* Client row */}
+                                                        <div className="flex items-center gap-1.5 relative pl-4 py-1">
+                                                            <span className="absolute left-0 top-1/2 w-3 border-t border-slate-200" />
+                                                            <Users className="h-3.5 w-3.5 flex-shrink-0 text-slate-400" />
+                                                            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">{group.clientName}</span>
+                                                        </div>
+                                                        {/* Engagement rows */}
+                                                        <div className="ml-4 border-l border-slate-100">
+                                                            {sortedEngagements.map((e, ei) => (
+                                                                <div key={e.id} className="relative">
+                                                                    <span className="absolute left-0 top-1/2 w-3 border-t border-slate-100" />
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => setCrossEngagementSelectedId(e.id)}
+                                                                        className={cn(
+                                                                            'w-full flex items-center gap-2 text-left pl-4 pr-3 py-1.5 rounded-md text-sm transition-colors',
+                                                                            crossEngagementSelectedId === e.id
+                                                                                ? 'bg-slate-100 text-slate-900 font-medium'
+                                                                                : 'hover:bg-slate-50 text-slate-700'
+                                                                        )}
+                                                                    >
+                                                                        <Briefcase className="h-3.5 w-3.5 flex-shrink-0 text-slate-400" />
+                                                                        <span className="truncate">{e.name}</span>
+                                                                    </button>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+                                    </div>
+                                )
+                            })()}
                         </div>
                         <div className="flex justify-end gap-2">
                             <Button variant="outline" onClick={() => setCrossEngagementModalOpen(false)}>Cancel</Button>
                             <Button
+                                className="bg-slate-900 hover:bg-slate-800 text-white"
                                 disabled={!crossEngagementSelectedId || crossEngagementSubmitting}
                                 onClick={handleCrossEngagementSubmit}
                             >
-                                {crossEngagementSubmitting
-                                    ? <LoadingSpinner className="h-4 w-4" />
-                                    : crossEngagementAction === 'copy' ? 'Copy' : 'Move'}
+                                {crossEngagementSubmitting ? <LoadingSpinner className="h-4 w-4" /> : 'Copy'}
                             </Button>
                         </div>
                     </DialogContent>
