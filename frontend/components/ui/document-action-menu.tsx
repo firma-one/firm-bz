@@ -40,6 +40,8 @@ import {
   Unlock,
   ChevronRight,
   Folder,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -61,6 +63,18 @@ const VERSION_LOCK_TOOLTIP =
 
 interface DocumentActionMenuProps {
   document: any
+  /** Intake pending: EL can approve (clears lock, file becomes normal). */
+  onApproveIntake?: (doc: any) => void
+  /** Intake pending: EL can reject (deletes record + trashes Drive file). */
+  onRejectIntake?: (doc: any) => void
+  /** Intake pending: EC/EV can withdraw their own upload. */
+  onWithdrawIntake?: (doc: any) => void
+  /** EL only: approve all intake files in a folder at once */
+  onApproveFolder?: (doc: any) => void
+  /** EL only: reject all intake files in a folder at once */
+  onRejectFolder?: (doc: any) => void
+  /** EC/EV only: withdraw all their uploaded files in a folder at once */
+  onWithdrawFolder?: (doc: any) => void
   onOpenDocument?: (doc: any) => void
   onDownloadDocument?: (doc: any) => void
   onShareDocument?: (doc: any) => void
@@ -113,6 +127,12 @@ interface DocumentActionMenuProps {
 
 export function DocumentActionMenu({
   document,
+  onApproveIntake,
+  onRejectIntake,
+  onWithdrawIntake,
+  onApproveFolder,
+  onRejectFolder,
+  onWithdrawFolder,
   onOpenDocument,
   onDownloadDocument,
   onShareDocument,
@@ -477,6 +497,71 @@ export function DocumentActionMenu({
           </div>
 
           <div className="p-2">
+            {/* Intake pending actions — shown at the top when applicable */}
+            {(onApproveIntake || onRejectIntake || onWithdrawIntake) && (
+              <>
+                {onApproveIntake && (
+                  <DropdownMenuItem
+                    onSelect={() => onApproveIntake(document)}
+                    className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs text-emerald-700 focus:text-emerald-700 focus:bg-emerald-50"
+                  >
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                    <span>Approve</span>
+                  </DropdownMenuItem>
+                )}
+                {onRejectIntake && (
+                  <DropdownMenuItem
+                    onSelect={() => onRejectIntake(document)}
+                    className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs text-red-600 focus:text-red-600 focus:bg-red-50"
+                  >
+                    <XCircle className="h-4 w-4 text-red-500" />
+                    <span>Reject</span>
+                  </DropdownMenuItem>
+                )}
+                {onWithdrawIntake && (
+                  <DropdownMenuItem
+                    onSelect={() => onWithdrawIntake(document)}
+                    className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                  >
+                    <X className="h-4 w-4 text-slate-500" />
+                    <span>Withdraw upload</span>
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
+              </>
+            )}
+            {(onApproveFolder || onRejectFolder || onWithdrawFolder) && (
+              <>
+                {onApproveFolder && (
+                  <DropdownMenuItem
+                    onSelect={() => onApproveFolder(document)}
+                    className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs text-emerald-700 focus:text-emerald-700 focus:bg-emerald-50"
+                  >
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                    <span>Approve folder</span>
+                  </DropdownMenuItem>
+                )}
+                {onRejectFolder && (
+                  <DropdownMenuItem
+                    onSelect={() => onRejectFolder(document)}
+                    className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs text-red-600 focus:text-red-600 focus:bg-red-50"
+                  >
+                    <XCircle className="h-4 w-4 text-red-500" />
+                    <span>Reject folder</span>
+                  </DropdownMenuItem>
+                )}
+                {onWithdrawFolder && (
+                  <DropdownMenuItem
+                    onSelect={() => onWithdrawFolder(document)}
+                    className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs text-orange-700 focus:text-orange-700 focus:bg-orange-50"
+                  >
+                    <FolderUp className="h-4 w-4 text-orange-600" />
+                    <span>Withdraw folder</span>
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
+              </>
+            )}
             {document.mimeType?.includes('folder') ? (
               <>
                 <DropdownMenuSub>

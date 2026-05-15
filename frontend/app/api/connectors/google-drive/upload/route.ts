@@ -56,8 +56,8 @@ export async function POST(request: NextRequest) {
             connector = project.client.firm.connector ?? undefined
             if (!connector) return NextResponse.json({ error: 'No active Google Drive connection found' }, { status: 404 })
 
-            // EC/EV uploads must go to generalFolderId regardless of client-supplied parentId
-            if (isExternalEngagementRole(member.role)) {
+            // EC/EV uploads: use generalFolderId only when no specific parentId was provided
+            if (isExternalEngagementRole(member.role) && !clientParentId) {
                 const folderIds = await googleDriveConnector.getProjectFolderIds(connector.id, project.slug, {
                     projectName: project.name,
                     clientSlug: project.client.slug,

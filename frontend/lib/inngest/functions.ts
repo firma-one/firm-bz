@@ -113,7 +113,6 @@ export const indexFileForSearch = inngest.createFunction(
             const { projectId, organizationId, clientId, fileName, externalId, uploadedBy } = event.data
             if (!event.data.isIntakeUpload) return
             if (!projectId || !organizationId || !uploadedBy) return
-            if (event.data.isFolder) return
 
             try {
                 const engagement = await prisma.engagement.findUnique({
@@ -140,14 +139,19 @@ export const indexFileForSearch = inngest.createFunction(
                     userId: l.userId,
                     type: 'DOCUMENT_STAGING_INTAKE',
                     priority: 'INFO',
-                    title: 'New file pending review',
-                    body: `"${fileName}" was uploaded and is awaiting your approval.`,
+                    title: event.data.isFolder ? 'New folder pending review' : 'New file pending review',
+                    body: event.data.isFolder
+                        ? `Folder "${fileName}" was uploaded and is awaiting your approval.`
+                        : `"${fileName}" was uploaded and is awaiting your approval.`,
                     ctaUrl: null,
                     metadata: { externalId, fileName, uploadedBy },
                     channels: { inApp: true, email: false },
                     dedupeKey: `intake-pending:${projectId}:${externalId}`,
                 }))
                 await (prisma as any).notification.createMany({ data: rows, skipDuplicates: true })
+
+                // Reminders are created synchronously in the API routes (create-folder, index-file-intake)
+                // to guarantee immediate visibility. Nothing to do here.
             } catch (e) {
                 logger.warn('general intake notification failed', e as Error)
             }
@@ -374,36 +378,46 @@ export const reconcileFileDeletion = inngest.createFunction(
             await SearchService.removeFile(organizationId, externalId)
         })
 
-        if (googlePermissionId) {
-            await step.run("revoke-google-permission", async () => {
-                const firm = await prisma.firm.findUnique({
-                    where: { id: organizationId },
-                    select: { connectorId: true }
-                })
-                const connectorId = firm?.connectorId
-                if (connectorId) {
-                    await googleDriveConnector.revokePermission(connectorId, externalId, googlePermissionId)
-                }
-            })
-        }
-
         await step.run("cleanup-sharing-records", async () => {
             const docs = await prisma.engagementDocument.findMany({
                 where: { firmId: organizationId, externalId },
-                select: { id: true },
+                select: { id: true, settings: true, connectorId: true, firmId: true },
             })
+            if (docs.length === 0) return
+
+            const connectorId = docs[0].connectorId ?? (await prisma.firm.findUnique({
+                where: { id: organizationId },
+                select: { connectorId: true },
+            }))?.connectorId
+
             const docIds = docs.map((d) => d.id)
-            if (docIds.length === 0) return
-            await prisma.engagementDocumentSharingUser.updateMany({
-                where: {
-                    projectDocumentId: { in: docIds },
-                    ...(googlePermissionId ? { googlePermissionId } : {}),
-                },
-                data: {
-                    sharingPermissionStatus: DocumentSharingPermissionStatus.REVOKED,
-                    googlePermissionId: null,
-                },
+
+            // Revoke all outstanding GDrive permissions for these docs
+            if (connectorId) {
+                const sharingUsers = await prisma.engagementDocumentSharingUser.findMany({
+                    where: {
+                        projectDocumentId: { in: docIds },
+                        sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED,
+                        googlePermissionId: { not: null },
+                    },
+                    select: { googlePermissionId: true },
+                })
+                await Promise.allSettled(
+                    sharingUsers
+                        .filter((s) => s.googlePermissionId)
+                        .map((s) => googleDriveConnector.revokePermission(connectorId, externalId, s.googlePermissionId!))
+                )
+            }
+
+            // Delete sharing user records (must happen before document delete to avoid FK violation)
+            await prisma.engagementDocumentSharingUser.deleteMany({
+                where: { projectDocumentId: { in: docIds } },
             })
+
+            // Delete the engagement document records — file is gone from Drive
+            await prisma.engagementDocument.deleteMany({
+                where: { id: { in: docIds } },
+            }).catch(() => {})
         })
 
         return { externalId, status: "reconciled" }
@@ -421,6 +435,46 @@ export const reconcileFolderDeletion = inngest.createFunction(
         await step.run("remove-folder-from-search-index", async () => {
             const { SearchService } = await import("@/lib/services/search-service")
             await SearchService.removeFile(organizationId, externalId)
+        })
+
+        await step.run("cleanup-folder-sharing-records", async () => {
+            const doc = await prisma.engagementDocument.findFirst({
+                where: { firmId: organizationId, externalId },
+                select: { id: true, settings: true, connectorId: true },
+            })
+            if (!doc) return
+
+            const connectorId = doc.connectorId ?? (await prisma.firm.findUnique({
+                where: { id: organizationId },
+                select: { connectorId: true },
+            }))?.connectorId
+
+            // Revoke all outstanding GDrive permissions
+            if (connectorId) {
+                const sharingUsers = await prisma.engagementDocumentSharingUser.findMany({
+                    where: {
+                        projectDocumentId: doc.id,
+                        sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED,
+                        googlePermissionId: { not: null },
+                    },
+                    select: { googlePermissionId: true },
+                })
+                await Promise.allSettled(
+                    sharingUsers
+                        .filter((s) => s.googlePermissionId)
+                        .map((s) => googleDriveConnector.revokePermission(connectorId, externalId, s.googlePermissionId!))
+                )
+            }
+
+            // Delete sharing user records (must happen before document delete to avoid FK violation)
+            await prisma.engagementDocumentSharingUser.deleteMany({
+                where: { projectDocumentId: doc.id },
+            })
+
+            // Delete the engagement document record — folder is gone from Drive
+            await prisma.engagementDocument.delete({
+                where: { id: doc.id },
+            }).catch(() => {})
         })
 
         return { externalId, status: "reconciled" }

@@ -23,3 +23,7 @@
 - [ ] **File/Folder operations** — [plan](/.claude/plans/update-docs-mvp-todo-md-we-need-structured-hinton.md)
   - Copy/Move b/w Engagements
   - Bulk select & download files or select folder & download.
+
+- [ ] **Confidential folder** — implement via `settings.locked = private`, Google Drive permissions, or both; currently the folder exists on Drive but has no enforced access control in the app
+
+- [ ] **Cleanup: remove Staging & Confidential folder creation from onboarding** — these folders are no longer surfaced in the UI; remove the Drive-side provisioning code that creates them during workspace setup

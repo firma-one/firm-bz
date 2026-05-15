@@ -16,7 +16,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core'
-import { Share2, User, Lock, ListTodo, Loader2, CheckCircle, GripVertical, List, FolderOpen, LayoutGrid, Clock, Copy, Check, Search, MessageCircle, Link2, X } from 'lucide-react'
+import { Share2, User, Lock, ListTodo, Loader2, CheckCircle, GripVertical, List, FolderOpen, LayoutGrid, Clock, Copy, Check, Search, MessageCircle, Link2, X, RefreshCw } from 'lucide-react'
 import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
 import { DocumentBreadcrumb } from '@/components/ui/document-breadcrumb'
 import { DocumentIcon } from '@/components/ui/document-icon'
@@ -1404,7 +1404,15 @@ export function ProjectSharesTab({
             Board
           </button>
           </nav>
-          <div className="ml-auto pb-1">
+          <div className="ml-auto pb-1 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={refreshData}
+              className="h-8 w-8 flex items-center justify-center rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+              title="Refresh"
+            >
+              <RefreshCw className="h-4 w-4" />
+            </button>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
               <Input

@@ -350,12 +350,11 @@ export async function POST(request: NextRequest) {
                         },
                         select: { id: true, externalId: true, fileName: true, mimeType: true, fileSize: true, isFolder: true, metadata: true, settings: true },
                     }),
-                    // Also surface the EC/EV's own PENDING intake files in this folder
+                    // Also surface the EC/EV's own PENDING intake files/folders in this folder
                     prisma.engagementDocument.findMany({
                         where: {
                             engagementId: projectContext.projectId,
                             parentId: folderId,
-                            isFolder: false,
                             settings: { path: ['lock', 'uploadedBy'], equals: user.id } as any,
                         },
                         select: { id: true, externalId: true, fileName: true, mimeType: true, fileSize: true, isFolder: true, metadata: true, settings: true },
@@ -406,12 +405,11 @@ export async function POST(request: NextRequest) {
                                 select: { id: true, externalId: true, settings: true },
                             })
                             : [],
-                        // All PENDING intake docs in this folder (shadow rows for EL/internal)
+                        // All PENDING intake docs/folders in this folder (shadow rows for EL/internal)
                         prisma.engagementDocument.findMany({
                             where: {
                                 engagementId: bodyProjectId,
                                 parentId: folderId,
-                                isFolder: false,
                                 settings: { path: ['lock', 'type'], equals: 'intake' } as any,
                             },
                             select: { id: true, externalId: true, fileName: true, mimeType: true, fileSize: true, isFolder: true, metadata: true, settings: true },
@@ -440,7 +438,7 @@ export async function POST(request: NextRequest) {
                                 size: row.fileSize != null ? String(row.fileSize) : null,
                                 modifiedTime: (row.metadata as any)?.modifiedTime ?? null,
                                 webViewLink: (row.metadata as any)?.webViewLink ?? null,
-                                isFolder: false,
+                                isFolder: row.isFolder ?? false,
                                 connectorId: connector.id,
                                 projectDocumentId: row.id,
                                 versionLocked: false,
@@ -526,6 +524,89 @@ export async function POST(request: NextRequest) {
                         externalId: newFile.id as string,
                         fileName: name,
                     })
+                }
+
+                // If EC/EV user created this folder, immediately write DB record with intake lock
+                // so the folder is visible in their DB-driven file list
+                if (bodyProjectId) {
+                    const projectForRole = await prisma.engagement.findUnique({
+                        where: { id: bodyProjectId as string },
+                        select: { members: { where: { userId: user.id }, select: { role: true } } }
+                    })
+                    const userRole = projectForRole?.members?.[0]?.role
+                    if (userRole === 'eng_ext_collaborator' || userRole === 'eng_viewer') {
+                        const now = new Date().toISOString()
+                        const folderOrgId = orgId ?? membership?.firmId
+                        const folderClientId = project?.clientId
+                        if (folderOrgId && folderClientId) {
+                            await prisma.engagementDocument.upsert({
+                                where: {
+                                    engagementId_firmId_externalId: {
+                                        engagementId: bodyProjectId as string,
+                                        firmId: folderOrgId,
+                                        externalId: newFile.id as string,
+                                    }
+                                },
+                                update: {
+                                    settings: { lock: { type: 'intake', uploadedBy: user.id, uploadedAt: now } } as object,
+                                },
+                                create: {
+                                    engagementId: bodyProjectId as string,
+                                    firmId: folderOrgId,
+                                    clientId: folderClientId,
+                                    externalId: newFile.id as string,
+                                    connectorId: connector.id,
+                                    parentId: typeof folderId === 'string' ? folderId : null,
+                                    fileName: name,
+                                    mimeType: 'application/vnd.google-apps.folder',
+                                    isFolder: true,
+                                    settings: { lock: { type: 'intake', uploadedBy: user.id, uploadedAt: now } } as object,
+                                    metadata: { modifiedTime: now } as object,
+                                }
+                            })
+                            // Notify ELs about the pending folder upload (notification via Inngest)
+                            await safeInngestSend('file.index.requested', {
+                                organizationId: folderOrgId,
+                                clientId: folderClientId,
+                                projectId: bodyProjectId as string,
+                                externalId: newFile.id as string,
+                                fileName: name,
+                                uploadedBy: user.id,
+                                isIntakeUpload: true,
+                                isFolder: true,
+                            })
+
+                            // Create intake reminders synchronously for all ELs
+                            const reminderId = `intake-${bodyProjectId as string}-${newFile.id as string}`
+                            const leads = await prisma.engagementMember.findMany({
+                                where: { engagementId: bodyProjectId as string, role: { in: ['eng_admin', 'eng_member'] } },
+                                select: { userId: true },
+                            })
+                            const reminderItem = {
+                                id: reminderId,
+                                entityKey: 'platform.engagements',
+                                entityValue: bodyProjectId as string,
+                                action: `Review folder: "${name}"`,
+                                dateKey: null,
+                                dateValue: null,
+                                hiddenAt: null,
+                                createdAt: new Date().toISOString(),
+                            }
+                            await Promise.all(leads.map(async (lead) => {
+                                const p = await prisma.userPersonalization.findUnique({
+                                    where: { userId: lead.userId },
+                                    select: { reminders: true },
+                                })
+                                const existing: any[] = Array.isArray(p?.reminders) ? p!.reminders as any[] : []
+                                if (existing.find((r: any) => r.id === reminderId)) return
+                                await prisma.userPersonalization.upsert({
+                                    where: { userId: lead.userId },
+                                    create: { userId: lead.userId, reminders: [reminderItem] as any },
+                                    update: { reminders: [...existing, reminderItem] as any },
+                                })
+                            }))
+                        }
+                    }
                 }
             }
 
