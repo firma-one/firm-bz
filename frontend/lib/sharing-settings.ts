@@ -235,6 +235,41 @@ export function buildSettingsForDb(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Document Lock (intake pending / finalize)
+// ---------------------------------------------------------------------------
+
+export interface LockBlock {
+  type: 'intake' | 'finalize'
+  uploadedBy?: string
+  uploadedAt?: string
+  finalizedBy?: string
+  finalizedAt?: string
+}
+
+export function getLock(settings: unknown): LockBlock | null {
+  if (!settings || typeof settings !== 'object') return null
+  const lock = (settings as Record<string, unknown>).lock
+  if (!lock || typeof lock !== 'object') return null
+  const l = lock as Record<string, unknown>
+  if (l.type !== 'intake' && l.type !== 'finalize') return null
+  return {
+    type: l.type as 'intake' | 'finalize',
+    uploadedBy: typeof l.uploadedBy === 'string' ? l.uploadedBy : undefined,
+    uploadedAt: typeof l.uploadedAt === 'string' ? l.uploadedAt : undefined,
+    finalizedBy: typeof l.finalizedBy === 'string' ? l.finalizedBy : undefined,
+    finalizedAt: typeof l.finalizedAt === 'string' ? l.finalizedAt : undefined,
+  }
+}
+
+export function isIntakePending(settings: unknown): boolean {
+  return getLock(settings)?.type === 'intake'
+}
+
+export function isDocumentFinalized(settings: unknown): boolean {
+  return getLock(settings)?.type === 'finalize'
+}
+
 /** Flatten for UI that still expects legacy keys (e.g. Shares list response). */
 export function flattenForLegacyUI(parsed: ProjectDocumentSharingSettings) {
   return {

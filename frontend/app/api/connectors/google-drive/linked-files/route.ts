@@ -9,6 +9,7 @@ import { logger } from '@/lib/logger'
 import { GoogleDriveAuthError } from '@/lib/google-drive-connector'
 import { blockIfEngagementFileMutationForbidden } from '@/lib/engagement-access'
 import { isDocumentVersionLocked } from '@/lib/document-version-lock'
+import { getLock } from '@/lib/sharing-settings'
 // GET: List linked files for a connector
 export async function GET(request: NextRequest) {
     try {
@@ -340,15 +341,29 @@ export async function POST(request: NextRequest) {
 
                 // When folderId is a shared folder or its descendant, show all direct children.
                 // Otherwise restrict to only children that appear in allowSet.
-                const dbRows = await prisma.engagementDocument.findMany({
-                    where: {
-                        engagementId: projectContext.projectId,
-                        parentId: folderId,
-                        ...(folderInShared || folderUnderShared ? {} : { externalId: { in: Array.from(allowSet) } }),
-                    },
-                    select: { id: true, externalId: true, fileName: true, mimeType: true, fileSize: true, isFolder: true, metadata: true, settings: true },
-                })
-                files = dbRows.map((row: any) => ({
+                const [dbRows, intakeRows] = await Promise.all([
+                    prisma.engagementDocument.findMany({
+                        where: {
+                            engagementId: projectContext.projectId,
+                            parentId: folderId,
+                            ...(folderInShared || folderUnderShared ? {} : { externalId: { in: Array.from(allowSet) } }),
+                        },
+                        select: { id: true, externalId: true, fileName: true, mimeType: true, fileSize: true, isFolder: true, metadata: true, settings: true },
+                    }),
+                    // Also surface the EC/EV's own PENDING intake files in this folder
+                    prisma.engagementDocument.findMany({
+                        where: {
+                            engagementId: projectContext.projectId,
+                            parentId: folderId,
+                            isFolder: false,
+                            settings: { path: ['lock', 'uploadedBy'], equals: user.id } as any,
+                        },
+                        select: { id: true, externalId: true, fileName: true, mimeType: true, fileSize: true, isFolder: true, metadata: true, settings: true },
+                    }),
+                ])
+
+                const seenIds = new Set<string>()
+                const mapRow = (row: any) => ({
                     id: row.externalId,
                     name: row.fileName,
                     mimeType: row.mimeType ?? null,
@@ -359,7 +374,14 @@ export async function POST(request: NextRequest) {
                     connectorId: connector.id,
                     projectDocumentId: row.id,
                     versionLocked: isDocumentVersionLocked(row.settings),
-                }))
+                    lock: getLock(row.settings),
+                })
+                for (const row of [...dbRows, ...intakeRows]) {
+                    if (!seenIds.has(row.externalId)) {
+                        seenIds.add(row.externalId)
+                        files.push(mapRow(row))
+                    }
+                }
             } else {
                 // Internal personas: Drive-based listing — completely unchanged.
                 files = await googleDriveConnector.listFiles(
@@ -371,22 +393,60 @@ export async function POST(request: NextRequest) {
                 )
 
                 // Attach internal projectDocument UUIDs for UI deeplinks (never expose Drive id in URL).
-                if (bodyProjectId && files.length > 0) {
-                    const driveIds = Array.from(new Set(files.map((f: { id: string }) => f.id).filter(Boolean)))
-                    if (driveIds.length > 0) {
-                        const rows = await prisma.engagementDocument.findMany({
-                            where: { engagementId: bodyProjectId, externalId: { in: driveIds } },
-                            select: { id: true, externalId: true, settings: true },
-                        })
-                        const internalByExternal = new Map<string, string>(rows.map((r: { id: string; externalId: string }) => [r.externalId, r.id]))
-                        const lockedByExternal = new Map<string, boolean>(
-                            rows.map((r: { externalId: string; settings: unknown }) => [r.externalId, isDocumentVersionLocked(r.settings)])
-                        )
-                        files = files.map((f: any) => ({
-                            ...f,
-                            projectDocumentId: internalByExternal.get(f.id) ?? undefined,
-                            versionLocked: lockedByExternal.get(f.id) ?? false,
-                        }))
+                // Also surface PENDING intake shadow rows not yet in the Drive listing.
+                if (bodyProjectId) {
+                    const driveIds = files.length > 0
+                        ? Array.from(new Set(files.map((f: { id: string }) => f.id).filter(Boolean)))
+                        : []
+
+                    const [enrichRows, intakePendingRows] = await Promise.all([
+                        driveIds.length > 0
+                            ? prisma.engagementDocument.findMany({
+                                where: { engagementId: bodyProjectId, externalId: { in: driveIds } },
+                                select: { id: true, externalId: true, settings: true },
+                            })
+                            : [],
+                        // All PENDING intake docs in this folder (shadow rows for EL/internal)
+                        prisma.engagementDocument.findMany({
+                            where: {
+                                engagementId: bodyProjectId,
+                                parentId: folderId,
+                                isFolder: false,
+                                settings: { path: ['lock', 'type'], equals: 'intake' } as any,
+                            },
+                            select: { id: true, externalId: true, fileName: true, mimeType: true, fileSize: true, isFolder: true, metadata: true, settings: true },
+                        }),
+                    ])
+
+                    const internalByExternal = new Map<string, string>(enrichRows.map((r: any) => [r.externalId, r.id]))
+                    const lockByExternal = new Map<string, any>(enrichRows.map((r: any) => [r.externalId, getLock(r.settings)]))
+                    const lockedByExternal = new Map<string, boolean>(enrichRows.map((r: any) => [r.externalId, isDocumentVersionLocked(r.settings)]))
+
+                    files = files.map((f: any) => ({
+                        ...f,
+                        projectDocumentId: internalByExternal.get(f.id) ?? undefined,
+                        versionLocked: lockedByExternal.get(f.id) ?? false,
+                        lock: lockByExternal.get(f.id) ?? null,
+                    }))
+
+                    // Merge PENDING intake rows that aren't already in Drive listing
+                    const driveIdSet = new Set(files.map((f: any) => f.id))
+                    for (const row of intakePendingRows) {
+                        if (!driveIdSet.has(row.externalId)) {
+                            files.push({
+                                id: row.externalId,
+                                name: row.fileName,
+                                mimeType: row.mimeType ?? null,
+                                size: row.fileSize != null ? String(row.fileSize) : null,
+                                modifiedTime: (row.metadata as any)?.modifiedTime ?? null,
+                                webViewLink: (row.metadata as any)?.webViewLink ?? null,
+                                isFolder: false,
+                                connectorId: connector.id,
+                                projectDocumentId: row.id,
+                                versionLocked: false,
+                                lock: getLock(row.settings),
+                            })
+                        }
                     }
                 }
             }

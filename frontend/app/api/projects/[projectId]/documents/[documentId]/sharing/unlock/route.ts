@@ -87,10 +87,6 @@ export async function PATCH(
       data: { settings: nextSettings as object, updatedAt: new Date() },
     })
 
-    const updated = await prisma.engagementDocument.findUnique({
-      where: { engagementId_firmId_externalId: compound },
-    })
-
     audit(AUDIT_EVENT.DOCUMENT_UNLOCKED)
       .scope(AUDIT_SCOPE.DOCUMENT)
       .firm(fileInfo.organizationId)
@@ -100,7 +96,7 @@ export async function PATCH(
       .meta({ fileName: existing.fileName })
       .fireAndForget()
 
-    return NextResponse.json({ sharing: updated })
+    return NextResponse.json({ ok: true })
   } catch (e) {
     console.error('PATCH sharing/unlock error', e)
     return NextResponse.json({ error: 'Failed to unlock' }, { status: 500 })

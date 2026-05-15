@@ -108,6 +108,51 @@ export const indexFileForSearch = inngest.createFunction(
             }
         })
 
+        // Notify engagement leads when an EC/EV uploads a file for intake review
+        await step.run("notify-general-intake", async () => {
+            const { projectId, organizationId, clientId, fileName, externalId, uploadedBy } = event.data
+            if (!event.data.isIntakeUpload) return
+            if (!projectId || !organizationId || !uploadedBy) return
+            if (event.data.isFolder) return
+
+            try {
+                const engagement = await prisma.engagement.findUnique({
+                    where: { id: projectId },
+                    select: { clientId: true },
+                })
+
+                const doc = await prisma.engagementDocument.findFirst({
+                    where: { engagementId: projectId, firmId: organizationId, externalId },
+                    select: { id: true },
+                })
+
+                const leads = await prisma.engagementMember.findMany({
+                    where: { engagementId: projectId, role: { in: ['eng_admin', 'eng_member'] } },
+                    select: { userId: true },
+                })
+                if (!leads.length) return
+
+                const rows = leads.map((l: { userId: string }) => ({
+                    organizationId,
+                    clientId: clientId ?? engagement?.clientId ?? null,
+                    projectId,
+                    documentId: doc?.id ?? null,
+                    userId: l.userId,
+                    type: 'DOCUMENT_STAGING_INTAKE',
+                    priority: 'INFO',
+                    title: 'New file pending review',
+                    body: `"${fileName}" was uploaded and is awaiting your approval.`,
+                    ctaUrl: null,
+                    metadata: { externalId, fileName, uploadedBy },
+                    channels: { inApp: true, email: false },
+                    dedupeKey: `intake-pending:${projectId}:${externalId}`,
+                }))
+                await (prisma as any).notification.createMany({ data: rows, skipDuplicates: true })
+            } catch (e) {
+                logger.warn('general intake notification failed', e as Error)
+            }
+        })
+
         return { externalId: event.data.externalId, fileName: event.data.fileName }
     }
 )
@@ -1031,3 +1076,4 @@ export const sendReminderEmail = inngest.createFunction(
         return { reminderId: event.data.reminderId }
     }
 )
+

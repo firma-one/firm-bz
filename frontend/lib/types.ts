@@ -195,6 +195,7 @@ export interface DriveFile {
   lastModifyingUser?: {
     displayName: string
     photoLink?: string
+    emailAddress?: string
   }
   owners?: {
     displayName: string
@@ -236,6 +237,8 @@ export interface DriveFile {
   }
   /** True when engagement lead locked the document version (Drive + settings). */
   versionLocked?: boolean
+  /** Intake or finalize lock state from settings.lock */
+  lock?: { type: 'intake' | 'finalize'; uploadedBy?: string; finalizedBy?: string } | null
 }
 
 export interface DriveRevision {

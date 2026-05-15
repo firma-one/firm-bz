@@ -153,7 +153,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
     const [sharedExternalIdsForGuest, setSharedExternalIdsForGuest] = useState<Set<string>>(new Set())
     const [ancestorFolderIdsForGuest, setAncestorFolderIdsForGuest] = useState<Set<string>>(new Set())
     const [sharedByMeExternalIds, setSharedByMeExternalIds] = useState<Set<string>>(new Set())
-    const [filterShared, setFilterShared] = useState<'all' | 'by_me' | 'by_others'>('all')
+    const [filterShared, setFilterShared] = useState<'all' | 'by_me' | 'by_others' | 'pending_intake'>('all')
 
     useEffect(() => {
         sessionRef.current = session
@@ -356,6 +356,9 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
     const [isUploading, setIsUploading] = useState(false)
     const [uploadProgress, setUploadProgress] = useState(0)
 
+    // Intake action state
+    const [intakeActionInProgress, setIntakeActionInProgress] = useState<string | null>(null)
+
     // Actions State
     const [isCreateItemOpen, setIsCreateItemOpen] = useState(false)
     const [createItemType, setCreateItemType] = useState<CreateItemType>('folder')
@@ -381,8 +384,13 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
     const [actionMenuOpenFileId, setActionMenuOpenFileId] = useState<string | null>(null)
     const [isRefreshing, setIsRefreshing] = useState(false)
     const [isFolderUploadModalOpen, setIsFolderUploadModalOpen] = useState(false)
-    const [fromComputerExpanded, setFromComputerExpanded] = useState(false)
-    const [fromDriveExpanded, setFromDriveExpanded] = useState(false)
+    const [expandedAddSection, setExpandedAddSection] = useState<'computer' | 'drive' | 'newFile' | null>('computer')
+    const fromComputerExpanded = expandedAddSection === 'computer'
+    const fromDriveExpanded = expandedAddSection === 'drive'
+    const newFileExpanded = expandedAddSection === 'newFile'
+    const setFromComputerExpanded = (v: boolean) => setExpandedAddSection(v ? 'computer' : null)
+    const setFromDriveExpanded = (v: boolean) => setExpandedAddSection(v ? 'drive' : null)
+    const setNewFileExpanded = (v: boolean) => setExpandedAddSection(v ? 'newFile' : null)
     const [copyMoveModalOpen, setCopyMoveModalOpen] = useState(false)
     const [copyMoveTarget, setCopyMoveTarget] = useState<DriveFile | null>(null)
     const [copyMoveAction, setCopyMoveAction] = useState<'copy' | 'move'>('copy')
@@ -950,6 +958,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
             }
 
             // 2. Get Resumable Upload URL from our API
+            const isExternalPersona = viewAsPersonaSlug === 'eng_ext_collaborator' || viewAsPersonaSlug === 'eng_viewer'
             const res = await fetch('/api/connectors/google-drive/upload', {
                 method: 'POST',
                 headers: {
@@ -960,7 +969,9 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                     name: fileName,
                     mimeType: file.type || 'application/octet-stream',
                     parentId: parentFolderId ?? currentFolderId ?? 'root',
-                    fileId: fileIdToOverwrite
+                    fileId: fileIdToOverwrite,
+                    // EC/EV uploads: pass projectId so server can override parentId to generalFolderId
+                    ...(isExternalPersona && projectId ? { projectId } : {}),
                 })
             })
 
@@ -1011,6 +1022,18 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                         fileName: finalFile.name
                                     })
                                 }).catch(e => logger.error('Failed to trigger indexing', e))
+                            }
+
+                            // For EC/EV uploads: call index-file-intake to set PENDING lock and notify ELs
+                            if (isExternalPersona && projectId) {
+                                fetch(`/api/projects/${projectId}/documents/${finalFile.id}/index-file-intake`, {
+                                    method: 'POST',
+                                    headers: {
+                                        'Authorization': `Bearer ${token}`,
+                                        'Content-Type': 'application/json',
+                                    },
+                                    credentials: 'include',
+                                }).catch(e => logger.error('Failed to trigger intake indexing', e))
                             }
 
                             resolve({ success: true, finalFile })
@@ -1905,6 +1928,34 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
         }
     }, [trashConfirmTarget, trashConfirming, currentFolderId, fetchFiles, addToast, startProcessing, stopProcessing, projectId])
 
+    const handleIntakeAction = useCallback(async (file: DriveFile, action: 'approve' | 'reject' | 'withdraw') => {
+        const docId = file.projectDocumentId ?? file.id
+        if (!docId || !sessionRef.current?.access_token) return
+        setIntakeActionInProgress(file.id)
+        try {
+            const res = await fetch(`/api/projects/${projectId}/documents/${docId}/intake`, {
+                method: 'PATCH',
+                headers: {
+                    Authorization: `Bearer ${sessionRef.current.access_token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ action }),
+                credentials: 'include',
+            })
+            if (res.ok) {
+                addToast({ type: 'success', title: action === 'approve' ? 'File approved' : action === 'reject' ? 'File rejected' : 'Upload withdrawn', message: `"${file.name}" ${action === 'approve' ? 'is now available to all.' : 'has been removed.'}` })
+                if (currentFolderId) fetchFiles(currentFolderId, true)
+            } else {
+                const d = await res.json().catch(() => ({}))
+                addToast({ type: 'error', title: 'Action failed', message: d.error || 'Something went wrong.' })
+            }
+        } catch (e) {
+            addToast({ type: 'error', title: 'Action failed', message: 'Network error.' })
+        } finally {
+            setIntakeActionInProgress(null)
+        }
+    }, [projectId, currentFolderId, fetchFiles, addToast])
+
     const fetchFolderChildrenResult = useCallback(async (folderId: string): Promise<DriveFile[]> => {
         if (!sessionRef.current?.access_token) return []
         const r = await fetch('/api/connectors/google-drive/linked-files', {
@@ -2197,6 +2248,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                     const isShared = sharedExternalIds.has(f.id) || ancestorFolderIds.has(f.id)
                     return isShared && !sharedByMeExternalIds.has(f.id)
                 }
+                if (filterShared === 'pending_intake') return f.lock?.type === 'intake'
                 return true
             })
         }
@@ -2343,8 +2395,8 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                 <div className="flex items-center justify-between gap-4">
                     {/* Left: Filters */}
                     <div className="flex items-center gap-2">
-                        {/* Hide Add button when at project root level or if user can't edit */}
-                        {!isAtProjectRoot && canEdit && (
+                        {/* Show Add button for editors and for external viewers (EC/EV) in General folder */}
+                        {!isAtProjectRoot && (canEdit || (restrictToSharedOnly && currentFolderType === 'general')) && (
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                     <Button disabled={loading || isLoadingFolders} className="h-8 gap-2 bg-slate-100 text-slate-900 hover:bg-slate-200 border-slate-200 border rounded-md shadow-sm">
@@ -2393,87 +2445,102 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                         </>
                                     )}
 
-                                    <DropdownMenuSeparator />
-
-                                    {/* Import from Google Drive (expandable) */}
-                                    <div
-                                        role="button"
-                                        tabIndex={0}
-                                        onClick={() => setFromDriveExpanded(!fromDriveExpanded)}
-                                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setFromDriveExpanded(!fromDriveExpanded) } }}
-                                        className="flex items-center justify-between px-2 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-sm cursor-pointer select-none"
-                                    >
-                                        <span className="flex items-center gap-2">
-                                            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24">
-                                                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                                                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                                                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-                                                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-                                            </svg>
-                                            Import from Google Drive
-                                        </span>
-                                        <ChevronDown className={cn("h-3.5 w-3.5 text-slate-400 transition-transform", fromDriveExpanded && "rotate-180")} />
-                                    </div>
-                                    {fromDriveExpanded && (
+                                    {!restrictToSharedOnly && (
                                         <>
-                                            <DropdownMenuItem onClick={handleGoogleDrivePicker} className="text-xs py-1.5 pl-8">
-                                                <Upload className="mr-2 h-3.5 w-3.5 text-slate-500" />
-                                                Upload files
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem disabled className="text-xs py-1.5 pl-8 text-slate-400">
-                                                <FolderUp className="mr-2 h-3.5 w-3.5 text-slate-400" />
-                                                Upload folder
-                                                <span className="ml-1 text-[10px]">(coming later)</span>
-                                            </DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+
+                                        {/* Import from Google Drive (expandable) — internal users only */}
+                                        <div
+                                            role="button"
+                                            tabIndex={0}
+                                            onClick={() => setFromDriveExpanded(!fromDriveExpanded)}
+                                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setFromDriveExpanded(!fromDriveExpanded) } }}
+                                            className="flex items-center justify-between px-2 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-sm cursor-pointer select-none"
+                                        >
+                                            <span className="flex items-center gap-2">
+                                                <svg className="h-3.5 w-3.5" viewBox="0 0 24 24">
+                                                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                                                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                                                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                                                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                                                </svg>
+                                                Import from Google Drive
+                                            </span>
+                                            <ChevronDown className={cn("h-3.5 w-3.5 text-slate-400 transition-transform", fromDriveExpanded && "rotate-180")} />
+                                        </div>
+                                        {fromDriveExpanded && (
+                                            <>
+                                                <DropdownMenuItem onClick={handleGoogleDrivePicker} className="text-xs py-1.5 pl-8">
+                                                    <Upload className="mr-2 h-3.5 w-3.5 text-slate-500" />
+                                                    Upload files
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem disabled className="text-xs py-1.5 pl-8 text-slate-400">
+                                                    <FolderUp className="mr-2 h-3.5 w-3.5 text-slate-400" />
+                                                    Upload folder
+                                                    <span className="ml-1 text-[10px]">(coming later)</span>
+                                                </DropdownMenuItem>
+                                            </>
+                                        )}
+
+                                        <DropdownMenuSeparator />
                                         </>
                                     )}
 
-                                    <DropdownMenuSeparator />
-
-                                    {/* New File Section Header */}
-                                    <div className="px-2 py-1 bg-slate-50 border-b border-slate-50 flex items-center gap-2 text-xs font-semibold text-slate-500 select-none">
-                                        <SquarePlus className="h-3.5 w-3.5" />
-                                        New file
+                                    {/* New File Section Header (expandable) */}
+                                    <div
+                                        role="button"
+                                        tabIndex={0}
+                                        onClick={() => setNewFileExpanded(!newFileExpanded)}
+                                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setNewFileExpanded(!newFileExpanded) } }}
+                                        className="flex items-center justify-between px-2 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-sm cursor-pointer select-none"
+                                    >
+                                        <span className="flex items-center gap-2">
+                                            <SquarePlus className="h-3.5 w-3.5 text-slate-500" />
+                                            New file
+                                        </span>
+                                        <ChevronDown className={cn("h-3.5 w-3.5 text-slate-400 transition-transform", newFileExpanded && "rotate-180")} />
                                     </div>
-
-                                    <DropdownMenuItem onClick={() => openCreateDialog('doc')} className="text-xs py-1.5">
-                                        <FileText className="mr-2 h-3.5 w-3.5 text-blue-500" />
-                                        Google Doc
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => openCreateDialog('sheet')} className="text-xs py-1.5">
-                                        <FileSpreadsheet className="mr-2 h-3.5 w-3.5 text-green-500" />
-                                        Google Sheet
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => openCreateDialog('slide')} className="text-xs py-1.5">
-                                        <Presentation className="mr-2 h-3.5 w-3.5 text-yellow-500" />
-                                        Google Slide
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => openCreateDialog('form')} className="text-xs py-1.5">
-                                        <ListChecks className="mr-2 h-3.5 w-3.5 text-purple-600" />
-                                        Google Form
-                                    </DropdownMenuItem>
-
-                                    <DropdownMenuSub>
-                                        <DropdownMenuSubTrigger className="text-xs py-1.5">More</DropdownMenuSubTrigger>
-                                        <DropdownMenuSubContent className="w-[200px] py-1">
-                                            <DropdownMenuItem onClick={() => openCreateDialog('drawing')} className="text-xs py-1.5">
-                                                <PenTool className="mr-2 h-3.5 w-3.5 text-red-500" />
-                                                Google Drawing
+                                    {newFileExpanded && (
+                                        <>
+                                            <DropdownMenuItem onClick={() => openCreateDialog('doc')} className="text-xs py-1.5 pl-8">
+                                                <FileText className="mr-2 h-3.5 w-3.5 text-blue-500" />
+                                                Google Doc
                                             </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => openCreateDialog('map')} className="text-xs py-1.5">
-                                                <MapIcon className="mr-2 h-3.5 w-3.5 text-orange-500" />
-                                                Google My Map
+                                            <DropdownMenuItem onClick={() => openCreateDialog('sheet')} className="text-xs py-1.5 pl-8">
+                                                <FileSpreadsheet className="mr-2 h-3.5 w-3.5 text-green-500" />
+                                                Google Sheet
                                             </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => openCreateDialog('site')} className="text-xs py-1.5">
-                                                <Layout className="mr-2 h-3.5 w-3.5 text-blue-600" />
-                                                Google Site
+                                            <DropdownMenuItem onClick={() => openCreateDialog('slide')} className="text-xs py-1.5 pl-8">
+                                                <Presentation className="mr-2 h-3.5 w-3.5 text-yellow-500" />
+                                                Google Slide
                                             </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => openCreateDialog('script')} className="text-xs py-1.5">
-                                                <Code className="mr-2 h-3.5 w-3.5 text-slate-600" />
-                                                Google Apps Script
+                                            <DropdownMenuItem onClick={() => openCreateDialog('form')} className="text-xs py-1.5 pl-8">
+                                                <ListChecks className="mr-2 h-3.5 w-3.5 text-purple-600" />
+                                                Google Form
                                             </DropdownMenuItem>
-                                        </DropdownMenuSubContent>
-                                    </DropdownMenuSub>
+                                            <DropdownMenuSub>
+                                                <DropdownMenuSubTrigger className="text-xs py-1.5 pl-8">More</DropdownMenuSubTrigger>
+                                                <DropdownMenuSubContent className="w-[200px] py-1">
+                                                    <DropdownMenuItem onClick={() => openCreateDialog('drawing')} className="text-xs py-1.5">
+                                                        <PenTool className="mr-2 h-3.5 w-3.5 text-red-500" />
+                                                        Google Drawing
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem onClick={() => openCreateDialog('map')} className="text-xs py-1.5">
+                                                        <MapIcon className="mr-2 h-3.5 w-3.5 text-orange-500" />
+                                                        Google My Map
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem onClick={() => openCreateDialog('site')} className="text-xs py-1.5">
+                                                        <Layout className="mr-2 h-3.5 w-3.5 text-blue-600" />
+                                                        Google Site
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem onClick={() => openCreateDialog('script')} className="text-xs py-1.5">
+                                                        <Code className="mr-2 h-3.5 w-3.5 text-slate-600" />
+                                                        Google Apps Script
+                                                    </DropdownMenuItem>
+                                                </DropdownMenuSubContent>
+                                            </DropdownMenuSub>
+                                        </>
+                                    )}
 
                                 </DropdownMenuContent>
                                 <div className="h-6 w-px bg-slate-200 mx-2" />
@@ -2590,11 +2657,15 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                 <div className="px-2 py-1.5 border-b border-slate-100">
                                     <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 p-0 font-medium">Shared</DropdownMenuLabel>
                                 </div>
-                                <DropdownMenuCheckboxItem checked={filterShared === 'by_me'} onCheckedChange={() => setFilterShared('by_me')} className="text-xs py-1.5 pl-8">
+                                <DropdownMenuCheckboxItem checked={filterShared === 'by_me'} onCheckedChange={() => setFilterShared(filterShared === 'by_me' ? 'all' : 'by_me')} className="text-xs py-1.5 pl-8">
                                     Shared By Me
                                 </DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem checked={filterShared === 'by_others'} onCheckedChange={() => setFilterShared('by_others')} className="text-xs py-1.5 pl-8">
+                                <DropdownMenuCheckboxItem checked={filterShared === 'by_others'} onCheckedChange={() => setFilterShared(filterShared === 'by_others' ? 'all' : 'by_others')} className="text-xs py-1.5 pl-8">
                                     Shared By Others
+                                </DropdownMenuCheckboxItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuCheckboxItem checked={filterShared === 'pending_intake'} onCheckedChange={() => setFilterShared(filterShared === 'pending_intake' ? 'all' : 'pending_intake')} className="text-xs py-1.5 pl-8">
+                                    Pending Review
                                 </DropdownMenuCheckboxItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
@@ -2989,6 +3060,9 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                             {sortedFiles.map((file) => {
                                 const isDeeplinkHighlight = file.id === highlightedFileId
                                 const isFolder = (file.mimeType ?? (file as { type?: string }).type) === 'application/vnd.google-apps.folder'
+                                const intakeLock = file.lock?.type === 'intake' ? file.lock : null
+                                const isIntakeRow = !!intakeLock
+                                const isOwnIntake = intakeLock?.uploadedBy === sessionRef.current?.user?.id
                                 // Same condition as the Shared badge: used to show folder_shared icon for folders and badge for files
                                 const isEC = viewAsPersonaSlug === 'eng_ext_collaborator'
                                 const isGuest = viewAsPersonaSlug === 'eng_viewer'
@@ -3014,10 +3088,10 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                         className={cn(
                                             "group grid grid-cols-12 gap-4 py-2 pl-3 pr-2 transition-all items-center cursor-default relative",
                                             isFolder && selectedFileIds.size === 0 && "cursor-pointer",
-                                            "hover:bg-slate-50",
-                                            selectedFileIds.has(file.id) && "bg-blue-50 hover:bg-blue-50",
-                                            file.id === actionMenuOpenFileId && "bg-slate-50",
-                                            (file.id === activeCommentDocId || file.id === activeInfoDocId || file.id === activeActivityDocId || file.id === activeVersionDocId) && "bg-slate-50",
+                                            isIntakeRow ? "bg-amber-50 hover:bg-amber-100 opacity-80" : file.versionLocked ? "hover:bg-slate-50 opacity-60" : "hover:bg-slate-50",
+                                            !isIntakeRow && selectedFileIds.has(file.id) && "bg-blue-50 hover:bg-blue-50",
+                                            !isIntakeRow && file.id === actionMenuOpenFileId && "bg-slate-50",
+                                            !isIntakeRow && (file.id === activeCommentDocId || file.id === activeInfoDocId || file.id === activeActivityDocId || file.id === activeVersionDocId) && "bg-slate-50",
                                             draggedItem?.id === file.id && "opacity-40 grayscale",
                                             dragOverFolderId === file.id && "bg-slate-100 ring-2 ring-inset ring-slate-300/60 shadow-sm z-[1]"
                                         )}
@@ -3152,6 +3226,32 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                         </TooltipContent>
                                                     </Tooltip>
                                                 ) : null}
+                                                {isIntakeRow && !isFolder ? (
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <span className="inline-flex items-center gap-1 shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700 border border-amber-200">
+                                                                <Inbox className="h-3 w-3" />
+                                                                Pending Review
+                                                            </span>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent side="top">
+                                                            Uploaded by external collaborator — awaiting approval
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                ) : null}
+                                                {file.versionLocked && !isFolder ? (
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <span className="inline-flex items-center gap-1 shrink-0 px-1.5 py-0.5 rounded text-[10px] font-normal bg-slate-50 text-slate-400 border border-slate-200">
+                                                                <Lock className="h-3 w-3" />
+                                                                Locked
+                                                            </span>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent side="top">
+                                                            Version locked by Engagement Lead — read-only
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                ) : null}
                                             </div>
                                         </div>
 
@@ -3248,54 +3348,105 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                         {/* Action Column - always visible, aligned with Sort header */}
                                         <div className="col-span-1 flex justify-end">
                                             <div onClick={(e) => e.stopPropagation()}>
-                                                {(() => {
-                                                    const locked = !!file.versionLocked
-                                                    const canMutateFile = canEdit && !locked
-                                                    const canOrganizeTree = canManage && !locked
-                                                    return (
-                                                        <DocumentActionMenu
-                                                    document={file}
-                                                    deeplinkBase={typeof window !== 'undefined' ? window.location.href.replace(/#.*$/, '') : ''}
-                                                    showShareModal={isProjectLead}
-                                                    isEngagementLead={isProjectLead}
-                                                    isExternalCollaborator={viewAsPersonaSlug === 'eng_ext_collaborator'}
-                                                    projectId={projectId}
-                                                    onShareSaved={refreshShareStateAndFiles}
-                                                    canManage={canOrganizeTree}
-                                                    currentFolderType={currentFolderType}
-                                                    onOpenCommentPane={(docId) => setActiveCommentDocId(docId)}
-                                                    onOpenInfoPane={(docId) => setActiveInfoDocId(docId)}
-                                                    onOpenActivityPane={(docId) => setActiveActivityDocId(docId)}
-                                                    onOpenVersionPane={(docId) => setActiveVersionDocId(docId)}
-                                                    onRenameDocument={canMutateFile ? (doc) => openRenameModal(doc as DriveFile) : undefined}
-                                                    onDuplicateDocument={canMutateFile ? (doc) => handleDuplicate(doc as DriveFile) : undefined}
-                                                    onCopyDocument={generalFolderId && canMutateFile ? (doc) => openCopyMoveModal(doc as DriveFile, 'copy') : undefined}
-                                                    onMoveDocument={generalFolderId && canMutateFile ? (doc) => openCopyMoveModal(doc as DriveFile, 'move') : undefined}
-                                                    onCrossEngagementCopy={isProjectLead && canMutateFile ? (doc) => openCrossEngagementModal(doc as DriveFile, 'copy') : undefined}
-                                                    onCrossEngagementMove={isProjectLead && canMutateFile ? (doc) => openCrossEngagementModal(doc as DriveFile, 'move') : undefined}
-                                                    onDeleteDocument={canMutateFile ? (doc) => handleTrash(doc as DriveFile) : undefined}
-                                                    onRestrictToConfidential={canOrganizeTree && confidentialFolderId ? (doc) => handleMoveTree(doc as DriveFile, 'confidential') : undefined}
-                                                    onRestoreToGeneral={canOrganizeTree && generalFolderId ? (doc) => handleMoveTree(doc as DriveFile, 'general') : undefined}
-                                                    onPromoteToGeneral={canOrganizeTree && generalFolderId ? (doc) => handleMoveTree(doc as DriveFile, 'general') : undefined}
-                                                    onOpenChange={(open) => setActionMenuOpenFileId(open ? file.id : null)}
-                                                    onOpenDocument={(doc) => {
-                                                        const d = doc as DriveFile
-                                                        const docId = d.id ?? file.id
-                                                        handleSecureOpen(
-                                                            {
-                                                                documentId: docId,
-                                                                fileName: d.name ?? '',
-                                                                mimeType: d.mimeType,
-                                                                externalId: docId,
-                                                                firmId,
-                                                                webViewLink: d.webViewLink || `https://drive.google.com/file/d/${docId}/view`,
-                                                            },
-                                                            docId
+                                                {isIntakeRow ? (
+                                                    // Intake pending: show approve/reject (EL) or withdraw (own EC/EV)
+                                                    <div className="flex items-center gap-1">
+                                                        {isProjectLead && (
+                                                            <>
+                                                                <Tooltip>
+                                                                    <TooltipTrigger asChild>
+                                                                        <button
+                                                                            type="button"
+                                                                            disabled={intakeActionInProgress === file.id}
+                                                                            onClick={() => handleIntakeAction(file, 'approve')}
+                                                                            className="h-7 w-7 rounded-md inline-flex items-center justify-center text-emerald-600 hover:bg-emerald-50 disabled:opacity-40"
+                                                                        >
+                                                                            <CheckCircle2 className="h-4 w-4" />
+                                                                        </button>
+                                                                    </TooltipTrigger>
+                                                                    <TooltipContent side="top" className="text-xs">Approve</TooltipContent>
+                                                                </Tooltip>
+                                                                <Tooltip>
+                                                                    <TooltipTrigger asChild>
+                                                                        <button
+                                                                            type="button"
+                                                                            disabled={intakeActionInProgress === file.id}
+                                                                            onClick={() => handleIntakeAction(file, 'reject')}
+                                                                            className="h-7 w-7 rounded-md inline-flex items-center justify-center text-red-500 hover:bg-red-50 disabled:opacity-40"
+                                                                        >
+                                                                            <XCircle className="h-4 w-4" />
+                                                                        </button>
+                                                                    </TooltipTrigger>
+                                                                    <TooltipContent side="top" className="text-xs">Reject</TooltipContent>
+                                                                </Tooltip>
+                                                            </>
+                                                        )}
+                                                        {(isEC || isGuest) && isOwnIntake && (
+                                                            <Tooltip>
+                                                                <TooltipTrigger asChild>
+                                                                    <button
+                                                                        type="button"
+                                                                        disabled={intakeActionInProgress === file.id}
+                                                                        onClick={() => handleIntakeAction(file, 'withdraw')}
+                                                                        className="h-7 w-7 rounded-md inline-flex items-center justify-center text-slate-500 hover:bg-slate-100 disabled:opacity-40"
+                                                                    >
+                                                                        <X className="h-4 w-4" />
+                                                                    </button>
+                                                                </TooltipTrigger>
+                                                                <TooltipContent side="top" className="text-xs">Withdraw upload</TooltipContent>
+                                                            </Tooltip>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    (() => {
+                                                        const locked = !!file.versionLocked
+                                                        const canMutateFile = canEdit && !locked
+                                                        const canOrganizeTree = canManage && !locked
+                                                        return (
+                                                            <DocumentActionMenu
+                                                        document={file}
+                                                        deeplinkBase={typeof window !== 'undefined' ? window.location.href.replace(/#.*$/, '') : ''}
+                                                        showShareModal={isProjectLead}
+                                                        isEngagementLead={isProjectLead}
+                                                        isExternalCollaborator={viewAsPersonaSlug === 'eng_ext_collaborator'}
+                                                        projectId={projectId}
+                                                        onShareSaved={refreshShareStateAndFiles}
+                                                        canManage={canOrganizeTree}
+                                                        currentFolderType={currentFolderType}
+                                                        onOpenCommentPane={(docId) => setActiveCommentDocId(docId)}
+                                                        onOpenInfoPane={(docId) => setActiveInfoDocId(docId)}
+                                                        onOpenActivityPane={(docId) => setActiveActivityDocId(docId)}
+                                                        onOpenVersionPane={(docId) => setActiveVersionDocId(docId)}
+                                                        onRenameDocument={canMutateFile ? (doc) => openRenameModal(doc as DriveFile) : undefined}
+                                                        onDuplicateDocument={canMutateFile ? (doc) => handleDuplicate(doc as DriveFile) : undefined}
+                                                        onCopyDocument={generalFolderId && canMutateFile ? (doc) => openCopyMoveModal(doc as DriveFile, 'copy') : undefined}
+                                                        onMoveDocument={generalFolderId && canMutateFile ? (doc) => openCopyMoveModal(doc as DriveFile, 'move') : undefined}
+                                                        onCrossEngagementCopy={isProjectLead && canMutateFile ? (doc) => openCrossEngagementModal(doc as DriveFile, 'copy') : undefined}
+                                                        onCrossEngagementMove={isProjectLead && canMutateFile ? (doc) => openCrossEngagementModal(doc as DriveFile, 'move') : undefined}
+                                                        onDeleteDocument={canMutateFile ? (doc) => handleTrash(doc as DriveFile) : undefined}
+                                                        onRestrictToConfidential={canOrganizeTree && confidentialFolderId ? (doc) => handleMoveTree(doc as DriveFile, 'confidential') : undefined}
+                                                        onRestoreToGeneral={canOrganizeTree && generalFolderId ? (doc) => handleMoveTree(doc as DriveFile, 'general') : undefined}
+                                                        onPromoteToGeneral={canOrganizeTree && generalFolderId ? (doc) => handleMoveTree(doc as DriveFile, 'general') : undefined}
+                                                        onOpenChange={(open) => setActionMenuOpenFileId(open ? file.id : null)}
+                                                        onOpenDocument={(doc) => {
+                                                            const d = doc as DriveFile
+                                                            const docId = d.id ?? file.id
+                                                            handleSecureOpen(
+                                                                {
+                                                                    documentId: docId,
+                                                                    fileName: d.name ?? '',
+                                                                    mimeType: d.mimeType,
+                                                                    externalId: docId,
+                                                                    firmId,
+                                                                    webViewLink: d.webViewLink || `https://drive.google.com/file/d/${docId}/view`,
+                                                                },
+                                                                docId
+                                                            )
+                                                        }}
+                                                            />
                                                         )
-                                                    }}
-                                                        />
-                                                    )
-                                                })()}
+                                                    })()
+                                                )}
                                             </div>
                                         </div>
                                         {(processingFileIds.has(file.id) || isRegrantingId === file.id) && (
