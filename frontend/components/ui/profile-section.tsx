@@ -60,6 +60,7 @@ export function ProfileSection({
   const getUserEmail = () => user?.email || 'user@example.com'
 
   const secondaryLine = () => {
+    if (!showBillingLink) return getUserEmail()
     if (planSubtitleLoading) return 'Loading…'
     if (planSubtitle !== undefined) return planSubtitle || '—'
     return getUserEmail()
@@ -187,7 +188,7 @@ export function ProfileSection({
               name={getUserDisplayName()}
               email={getUserEmail()}
               menuPlanLine={
-                planSubtitle !== undefined
+                showBillingLink && planSubtitle !== undefined
                   ? planSubtitleLoading
                     ? 'Loading…'
                     : planSubtitle || '—'

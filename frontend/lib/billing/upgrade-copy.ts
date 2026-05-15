@@ -68,11 +68,11 @@ export const upgradeCopy = {
     checkoutHintStripTitle: 'Finish Standard checkout',
     /** Verbose subtitle under headline (mirrors profile plan / email line). */
     checkoutHintStripBodyIntent:
-        'Standard from pricing: use Profile (sidebar foot) → Billing, or Continue.',
+        'Standard from pricing: use Profile (sidebar footer) → Billing, or Continue.',
     /** Appended to `checkoutHintStripBodyIntent` only while the Show me control is visible. */
     checkoutHintStripBodyIntentShowMeSuffix: 'Show me points at Profile.',
     checkoutHintStripBodyUpgrade:
-        'Free plan: Profile (sidebar foot) → Billing to upgrade, or Continue.',
+        'Free plan: Profile (sidebar footer) → Billing to upgrade, or Continue.',
     checkoutHintShowMe: 'Show me',
     checkoutHintJoyrideTitle: 'Profile menu',
     checkoutHintJoyrideBody:

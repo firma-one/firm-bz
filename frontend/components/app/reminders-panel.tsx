@@ -264,7 +264,7 @@ export function RemindersPanel({ onCountChange }: Props) {
                             ) : null}
                             {urgentCount > 0 ? (
                                 <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full border" style={{ background: '#FDF0EA', color: '#7A2414', borderColor: '#D9937A' }}>
-                                    {urgentCount} due
+                                    {urgentCount} overdue
                                 </span>
                             ) : null}
                         </div>

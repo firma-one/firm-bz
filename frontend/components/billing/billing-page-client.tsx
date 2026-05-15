@@ -1,9 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { ArrowLeft, Building2, CreditCard, Loader2, Lock, Receipt } from 'lucide-react'
+import { Building2, CreditCard, Loader2, Lock, Receipt } from 'lucide-react'
 import { getUserFirms } from '@/lib/actions/firms'
 import { validateCheckoutReturnTo } from '@/lib/billing/checkout-return-path'
 import { upgradeCopy } from '@/lib/billing/upgrade-copy'
@@ -11,6 +10,7 @@ import { CurrentPlanSummary } from '@/components/billing/current-plan-summary'
 import { PolarPlansPicker, type BillingCurrentPlanState } from '@/components/billing/polar-plans-picker'
 import { fetchBillingCurrentPlan } from '@/lib/billing/fetch-billing-current-plan'
 import { shouldShowSandboxUpgradeMarketing } from '@/lib/billing/subscription-display'
+import { PageBreadcrumb } from '@/components/ui/page-breadcrumb'
 import { cn } from '@/lib/utils'
 
 const trustItems = [
@@ -272,17 +272,18 @@ export function BillingPageClient({
     }
 
     return (
-        <div className="relative mx-auto max-w-5xl space-y-10 pb-10 px-4 sm:px-5 md:px-6">
-            {!isOnboardingSubscribe ? (
-                <Link
-                    href={returnPath}
-                    className="group inline-flex items-center gap-2 text-sm font-medium text-slate-700 transition-colors hover:text-slate-900"
-                >
-                    <span className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm transition duration-300 group-hover:-translate-x-0.5 group-hover:border-slate-300">
-                        <ArrowLeft className="h-4 w-4" aria-hidden />
-                    </span>
-                    Back to workspace
-                </Link>
+        <div className="relative space-y-10 pb-10">
+            {!isOnboardingSubscribe && selectedFirm ? (
+                <PageBreadcrumb
+                    items={[
+                        {
+                            label: selectedFirm.name,
+                            href: selectedFirm.slug ? `/d/f/${selectedFirm.slug}` : returnPath,
+                            icon: <Building2 className="h-4 w-4" />,
+                        },
+                        { label: 'Billing & plans', icon: <CreditCard className="h-4 w-4" /> },
+                    ]}
+                />
             ) : null}
 
             <header className="space-y-4">

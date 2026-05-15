@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { SquarePlus, Upload, FolderUp, X, Folder, File as FileIcon, ArrowUp, ArrowDown, ChevronRight, Search, List as ListIcon, LayoutGrid, Filter, ChevronDown, User, FileText, FileSpreadsheet, Presentation, ListChecks, PenTool, Map as MapIcon, LayoutTemplate, FileCode, AlertCircle, ShieldCheck, Maximize2, Minimize2, CheckCircle2, XCircle, Trash2, Layout, Code, Laptop, RefreshCw, Info, Share2, Layers, Building2, Users, Briefcase, Lock, FolderLock, Inbox, Sparkles, Link2, MessageCircle, CircleChevronLeft, Download } from 'lucide-react'
@@ -123,12 +123,20 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
         projectRootFolderId?: string | null
     }>>({})
 
+    // Prevents concurrent resolve-deeplink fetches when multiple effect deps fire at once.
+    const deeplinkFetchInProgressRef = useRef(false)
+
     // True from mount until the deeplink hash is resolved — suppresses the file list so the root folder never flashes.
-    const [deeplinkResolving, setDeeplinkResolving] = useState(() => {
-        if (typeof window === 'undefined') return false
+    // Always start false (SSR-safe). useLayoutEffect sets it to true synchronously on the client
+    // before first paint when a deeplink hash is present — avoids the hydration mismatch that
+    // caused the "No engagement folders configured" flash on page load / browser refresh.
+    const [deeplinkResolving, setDeeplinkResolving] = useState(false)
+    useLayoutEffect(() => {
         const hash = window.location.hash.replace(/^#/, '')
-        return hash.startsWith('doc-file:') || hash.startsWith('doc-comment:')
-    })
+        if (hash.startsWith('doc-file:') || hash.startsWith('doc-comment:')) {
+            setDeeplinkResolving(true)
+        }
+    }, [])
     const { handleSecureOpen, secureModalOpen, secureModalData, setSecureModalOpen, isRegrantingId } = useSecureOpenDocument({
         projectId,
         firmId,
@@ -589,6 +597,10 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
             let projectRootFolderId: string | null | undefined = cached?.projectRootFolderId
 
             if (!cached) {
+                // Guard against concurrent fetches — when multiple deps fire simultaneously, only
+                // one fetch should run. Others return and re-run once the cache is populated.
+                if (deeplinkFetchInProgressRef.current) return
+                deeplinkFetchInProgressRef.current = true
                 try {
                     const viewAs = viewAsPersonaSlug ? `?viewAsPersonaSlug=${encodeURIComponent(viewAsPersonaSlug)}` : ''
                     const endpoint = kind === 'doc-file'
@@ -608,6 +620,8 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                     }
                 } catch {
                     // network error — will retry on next re-run
+                } finally {
+                    deeplinkFetchInProgressRef.current = false
                 }
 
                 // Fallback: match already-loaded file list (covers older hash formats)
@@ -699,21 +713,15 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
     }, [
         projectId,
         rightPane.hasRightPane,
-        files,
+        session?.access_token,
+        isLoadingFolders,
+        // navigateToItem / files / loading included only as fallback triggers — cache + in-progress
+        // guard ensure the fetch only fires once even if these change concurrently.
         navigateToItem,
+        loading,
+        files,
         addToast,
         viewAsPersonaSlug,
-        session?.access_token,
-        loading,
-        isLoadingFolders,
-        generalFolderId,
-        confidentialFolderId,
-        stagingFolderId,
-        orgName,
-        clientName,
-        projectName,
-        connectorRootFolderId,
-        rootFolderName,
     ])
 
     const searchPanelActionMenuRef = useRef<ProjectSearchPanelActionMenuProps | null>(null)
@@ -869,12 +877,14 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
     // Clearing earlier (right after navigateToItem) causes a stale-files flash because fetchFiles hasn't run yet.
     // Also require currentFolderId — if navigation set highlightedFileId but fetchFiles hasn't batched loading=true yet,
     // this prevents a brief flash of the "no folders configured" empty state.
+    // Once resolved, strip the hash from the URL so a later refresh doesn't re-trigger deeplink navigation.
     useEffect(() => {
         if (!deeplinkResolving) return
         if (!highlightedFileId) return
         if (!currentFolderId) return
         if (loading || isLoadingFolders) return
         setDeeplinkResolving(false)
+        window.history.replaceState(null, '', window.location.pathname + window.location.search)
     }, [deeplinkResolving, highlightedFileId, currentFolderId, loading, isLoadingFolders])
 
     // When View As persona changes, refetch files so backend can filter by shared-only when EC/Guest (cookie is sent)
@@ -883,12 +893,14 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
         fetchFiles(currentFolderId, true)
     }, [viewAsPersonaSlug])
 
-    // When folder load completes with no folder (e.g. reimport without doc subfolders), stop spinner
+    // When folder load completes with no folder (e.g. reimport without doc subfolders), stop spinner.
+    // Skip when a deeplink hash is present — openFromHash will set currentFolderId shortly after,
+    // and clearing loading here would flash the "no folders configured" empty state.
     useEffect(() => {
-        if (!isLoadingFolders && !currentFolderId) {
+        if (!isLoadingFolders && !currentFolderId && !deeplinkResolving) {
             setLoading(false)
         }
-    }, [isLoadingFolders, currentFolderId])
+    }, [isLoadingFolders, currentFolderId, deeplinkResolving])
 
     // Scroll the highlighted row into view once the list is on screen (not during folder refetch spinner).
     // Highlight stays until the user navigates to another folder (see handleFolderClick / breadcrumb / root tabs).
