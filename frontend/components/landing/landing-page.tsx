@@ -63,21 +63,13 @@ import {
   useCaseBlocks,
   type UseCaseBlock,
 } from "@/lib/marketing/target-audience-nav"
-import { TrustArchitectureSection } from "@/components/landing/trust-architecture-section"
 import { FirmTransformationSection } from "@/components/landing/firm-transformation-section"
-import { RealityCheckSection } from "@/components/landing/reality-check-section"
 import { landingTheme, type LandingSkin } from "@/components/landing/landing-theme"
 import { KineticBentoSection } from "@/components/kinetic/KineticBentoSection"
 import { KineticHeroSection } from "@/components/kinetic/KineticHeroSection"
 import { KineticMarketingBadge, KineticSectionIntro } from "@/components/kinetic/kinetic-section-intro"
 import { LegacyHeroScreenMock } from "@/components/landing/LegacyHeroScreenMock"
 import { LandingHeroPrimaryCtas } from "@/components/marketing/landing-hero-primary-ctas"
-import {
-  LANDING_REALITY_MODAL_VIEWED_EVENT,
-  LANDING_TRUST_ARCH_MODAL_VIEWED_EVENT,
-  readHideRealityCheckSectionAfterModal,
-  readHideTrustArchitectureSectionAfterModal,
-} from "@/lib/marketing/landing-section-dismissals"
 
 function TargetAudienceUseCaseCard({ block }: { block: UseCaseBlock }) {
   const shell = cn(targetAudienceScrollMarginClass, "w-full min-w-0 break-words", block.cardShellClass)
@@ -292,35 +284,6 @@ export function LandingPage({
   const [currentSlide, setCurrentSlide] = useState(0)
   const [currentTaglineIndex, setCurrentTaglineIndex] = useState(0)
 
-  const hideTrustSectionAfterModal = useSyncExternalStore(
-    (onStoreChange) => {
-      if (typeof window === "undefined") return () => {}
-      const notify = () => onStoreChange()
-      window.addEventListener(LANDING_TRUST_ARCH_MODAL_VIEWED_EVENT, notify)
-      window.addEventListener("storage", notify)
-      return () => {
-        window.removeEventListener(LANDING_TRUST_ARCH_MODAL_VIEWED_EVENT, notify)
-        window.removeEventListener("storage", notify)
-      }
-    },
-    readHideTrustArchitectureSectionAfterModal,
-    () => false,
-  )
-
-  const hideRealitySectionAfterModal = useSyncExternalStore(
-    (onStoreChange) => {
-      if (typeof window === "undefined") return () => {}
-      const notify = () => onStoreChange()
-      window.addEventListener(LANDING_REALITY_MODAL_VIEWED_EVENT, notify)
-      window.addEventListener("storage", notify)
-      return () => {
-        window.removeEventListener(LANDING_REALITY_MODAL_VIEWED_EVENT, notify)
-        window.removeEventListener("storage", notify)
-      }
-    },
-    readHideRealityCheckSectionAfterModal,
-    () => false,
-  )
 
   const editorialStitchSlides = [
     {
@@ -892,14 +855,6 @@ export function LandingPage({
           </div>
         </div>
       </section>
-
-      {!hideTrustSectionAfterModal ? (
-        <FadeIn>
-          <TrustArchitectureSection skin={skin} variant="page" />
-        </FadeIn>
-      ) : null}
-
-      {!hideRealitySectionAfterModal ? <RealityCheckSection fillViewportBelowHeader /> : null}
 
     </>
   )

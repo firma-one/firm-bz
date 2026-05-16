@@ -7,9 +7,9 @@ export const SIGNUP_PROGRESS_STEPS = 4
 
 const STEPS = SIGNUP_PROGRESS_STEPS
 
-export type SignupStepKey = 'info' | 'auth-method' | 'otp-verify'
+export type SignupStepKey = 'info' | 'auth-method' | 'otp-verify' | 'success'
 
-const STEP_ORDER: SignupStepKey[] = ['info', 'auth-method', 'otp-verify']
+const STEP_ORDER: SignupStepKey[] = ['info', 'auth-method', 'otp-verify', 'success']
 
 export function signupStepIndex(step: SignupStepKey): number {
   return STEP_ORDER.indexOf(step)
@@ -26,6 +26,7 @@ export function computeSignupProgressIndex(
   step: SignupStepKey,
   emailVerifiedNewUser: boolean,
 ): number {
+  if (step === 'success') return STEPS  // sentinel: all bars filled
   if (step === 'otp-verify') return 3
   if (step === 'auth-method') return 2
   if (step === 'info' && emailVerifiedNewUser) return 1
@@ -58,6 +59,7 @@ export function SignupStepProgress({
     activeIndexProp !== undefined
       ? activeIndexProp
       : computeSignupProgressIndex(step, emailVerifiedNewUser)
+  const isComplete = active >= STEPS
   const safe = Math.min(Math.max(active, 0), STEPS - 1)
   const isLight = variant === 'light'
 
@@ -66,12 +68,12 @@ export function SignupStepProgress({
       role="progressbar"
       aria-valuemin={1}
       aria-valuemax={STEPS}
-      aria-valuenow={safe + 1}
+      aria-valuenow={isComplete ? STEPS : safe + 1}
       aria-label={ariaLabel}
       className={cn('flex items-center gap-1.5 justify-center sm:gap-2', className)}
     >
       {Array.from({ length: STEPS }).map((_, i) => {
-        const on = i === safe
+        const on = isComplete || i === safe
         return (
           <span
             key={i}

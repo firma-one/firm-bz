@@ -8,6 +8,8 @@ import { getFileInfo } from '@/lib/file-utils'
 import { safeInngestSend } from '@/lib/inngest/client'
 import { resolveProjectContext } from '@/lib/resolve-project-context'
 import { canManageProject } from '@/lib/permission-helpers'
+import { GoogleDriveConnector } from '@/lib/google-drive-connector'
+import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 
 /** ProjectDocument can contain BigInt (fileSize); JSON.stringify cannot serialize it. */
 function toJsonSafeSharing(doc: Record<string, unknown> | null): Record<string, unknown> | null {
@@ -26,7 +28,8 @@ function toJsonSafeSharing(doc: Record<string, unknown> | null): Record<string, 
 async function ensureDocument(
   projectId: string,
   externalId: string,
-  title: string
+  title: string,
+  actorId?: string | null
 ): Promise<{ organizationId: string, externalId: string }> {
   const project = await prisma.engagement.findFirst({
     where: { id: projectId, isDeleted: false },
@@ -38,14 +41,15 @@ async function ensureDocument(
 
   await (prisma as any).$executeRawUnsafe(
     `INSERT INTO platform.engagement_documents
-       ("firmId", "clientId", "engagementId", "externalId", "fileName", "updatedAt")
-     VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, NOW())
+       ("firmId", "clientId", "engagementId", "externalId", "fileName", "createdBy", "updatedAt")
+     VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6::uuid, NOW())
      ON CONFLICT ("engagementId", "firmId", "externalId") DO NOTHING`,
     firmId,
     clientId || null,
     projectId,
     externalId,
-    title || externalId
+    title || externalId,
+    actorId || null
   )
 
   const { SearchService } = await import('@/lib/services/search-service')
@@ -103,7 +107,7 @@ export async function PUT(
     const { projectId, documentId: documentIdParam } = await params
     const ctx = await resolveProjectContext(projectId)
     if (!ctx) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
-    const canManage = await canManageProject(ctx.orgId, ctx.clientId, ctx.projectId)
+    const canManage = await canManageProject(ctx.firmId, ctx.clientId, ctx.projectId)
     if (!canManage) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     const body = await request.json().catch(() => ({}))
@@ -118,7 +122,7 @@ export async function PUT(
     } else {
       // Drive file ID — ensure document row exists, then update its sharing fields.
       try {
-        fileInfo = await ensureDocument(projectId, documentIdParam, title)
+        fileInfo = await ensureDocument(projectId, documentIdParam, title, user.id)
       } catch (err) {
         console.error('ensureDocument error', err)
         return NextResponse.json(
@@ -130,11 +134,15 @@ export async function PUT(
 
     const externalCollaborator = body.externalCollaborator !== false
     const guest = body.guest === true
+    const ecOptions = {
+      allowDownload: body.ecOptions?.allowDownload === true,
+    }
     const guestOptions = {
       sharePdfOnly: body.guestOptions?.sharePdfOnly !== false,
       allowDownload: body.guestOptions?.allowDownload === true,
       addWatermark: body.guestOptions?.addWatermark === true,
       publish: body.guestOptions?.publish === true,
+      sharedPdfDriveId: body.guestOptions?.sharedPdfDriveId ?? null,
     }
 
     const existing = await prisma.engagementDocument.findUnique({
@@ -149,10 +157,41 @@ export async function PUT(
 
     if (!externalCollaborator && !guest) {
       if (existing) {
+        const oldSettings = parseSettingsFromDb((existing.settings as Record<string, unknown>) || {})
+        const disabledPersonas: Array<'guest' | 'externalCollaborator'> = []
+        if (oldSettings?.share?.guest?.enabled) disabledPersonas.push('guest')
+        if (oldSettings?.share?.externalCollaborator?.enabled) disabledPersonas.push('externalCollaborator')
+
+        // Trash the system PDF copy if guest sharing was active
+        const sharedPdfDriveId = oldSettings?.share?.guest?.options?.sharedPdfDriveId
+        if (sharedPdfDriveId) {
+          let resolvedConnectorId = existing.connectorId
+          if (!resolvedConnectorId) {
+            const org = await prisma.firm.findUnique({ where: { id: fileInfo.organizationId }, include: { connector: true } })
+            if (org?.connector?.type === 'GOOGLE_DRIVE' && org.connector.status === 'ACTIVE') resolvedConnectorId = org.connector.id
+          }
+          if (resolvedConnectorId) {
+            try { await GoogleDriveConnector.getInstance().trashFile(resolvedConnectorId, sharedPdfDriveId) } catch {}
+          }
+        }
+
         await prisma.engagementDocument.update({
           where: { id: existing.id },
           data: { settings: {}, slug: null, updatedAt: new Date() },
         })
+
+        // Revoke Drive permissions granted via regrant for any previously enabled personas
+        if (disabledPersonas.length > 0) {
+          await safeInngestSend('sharing.settings.updated', {
+            projectId,
+            organizationId: fileInfo.organizationId,
+            documentId: fileInfo.externalId,
+            sharingId: existing.id,
+            disabledPersonas,
+            timestamp: new Date().toISOString(),
+            userId: user.id,
+          })
+        }
       }
       return NextResponse.json({ sharing: null })
     }
@@ -161,7 +200,7 @@ export async function PUT(
     const existingSettings = (existing?.settings as Record<string, unknown>) || null
     const shareUpdate: Partial<ShareBlock> = {
       guest: { enabled: guest, options: guestOptions },
-      externalCollaborator: { enabled: externalCollaborator },
+      externalCollaborator: { enabled: externalCollaborator, options: ecOptions },
       updatedAt: now,
       publishedVersionId: existingSettings?.publishedVersionId as string | undefined,
       publishedAt: existingSettings?.publishedAt as string | undefined,
@@ -177,10 +216,12 @@ export async function PUT(
       share: shareUpdate,
       activity: existing ? undefined : { status: 'to_do', updatedAt: now },
       appendComment,
+      actorId: user.id,
     })
 
     if (existing) {
-      const updateData: { settings: typeof settings; updatedAt: Date; updatedBy: string; slug?: string } = { settings, updatedAt: new Date(), updatedBy: user.id }
+      const updateData: { settings: typeof settings; updatedAt: Date; updatedBy: string; createdBy?: string; slug?: string } = { settings, updatedAt: new Date(), updatedBy: user.id }
+      if (!existing.createdBy) updateData.createdBy = user.id
       if (existing.slug == null) {
         const docTitle = existing.fileName || title || documentIdParam
         updateData.slug = generateShareSlug(docTitle, existing.id.slice(0, 8))
@@ -225,7 +266,7 @@ export async function PUT(
     })
 
     if (updated) {
-      Promise.resolve().then(() => syncDocumentSharingUsers(updated.id))
+      Promise.resolve().then(() => syncDocumentSharingUsers(updated.id, user.id))
 
       const oldSettings = existing
         ? parseSettingsFromDb((existing.settings as Record<string, unknown>) || {})
@@ -239,6 +280,31 @@ export async function PUT(
         disabledPersonas.push('externalCollaborator')
       }
 
+      // If guest was just disabled, trash the system PDF copy — it has no value without guest sharing
+      if (disabledPersonas.includes('guest')) {
+        const pdfDriveId = oldSettings?.share?.guest?.options?.sharedPdfDriveId
+        if (pdfDriveId) {
+          let resolvedConnectorId = updated.connectorId
+          if (!resolvedConnectorId) {
+            const org = await prisma.firm.findUnique({
+              where: { id: fileInfo.organizationId },
+              include: { connector: true },
+            })
+            if (org?.connector?.type === 'GOOGLE_DRIVE' && org.connector.status === 'ACTIVE') {
+              resolvedConnectorId = org.connector.id
+            }
+          }
+          if (resolvedConnectorId) {
+            try {
+              const drive = GoogleDriveConnector.getInstance()
+              await drive.trashFile(resolvedConnectorId, pdfDriveId)
+            } catch (e) {
+              console.error('Failed to trash system PDF on guest disable:', e)
+            }
+          }
+        }
+      }
+
       if (disabledPersonas.length > 0) {
         await safeInngestSend('sharing.settings.updated', {
           projectId,
@@ -250,6 +316,69 @@ export async function PUT(
           userId: user.id,
         })
       }
+
+      // Enforce allowDownload on Drive files whenever guest sharing is active
+      if (guest) {
+        let resolvedConnectorId = updated.connectorId
+        if (!resolvedConnectorId) {
+          const org = await prisma.firm.findUnique({
+            where: { id: fileInfo.organizationId },
+            include: { connector: true },
+          })
+          if (org?.connector?.type === 'GOOGLE_DRIVE' && org.connector.status === 'ACTIVE') {
+            resolvedConnectorId = org.connector.id
+          }
+        }
+
+        if (resolvedConnectorId) {
+          const drive = GoogleDriveConnector.getInstance()
+          const sharePdfOnly = guestOptions.sharePdfOnly ?? false
+
+          // Always block Drive's native download — Firma controls download via its own action menu
+          if (sharePdfOnly) {
+            const sharedPdfDriveId = guestOptions.sharedPdfDriveId
+            if (sharedPdfDriveId) {
+              try {
+                await drive.patchFileProperties(resolvedConnectorId, sharedPdfDriveId, {
+                  copyRequiresWriterPermission: true
+                })
+              } catch (e) {
+                console.error('Failed to patch PDF file properties:', e)
+              }
+            }
+          } else {
+            try {
+              await drive.patchFileProperties(resolvedConnectorId, fileInfo.externalId, {
+                copyRequiresWriterPermission: true
+              })
+            } catch (e) {
+              console.error('Failed to patch file properties:', e)
+            }
+          }
+
+          // Always lock Drive download for EC persona too (download only via Firma action menu)
+          if (externalCollaborator && !sharePdfOnly) {
+            try {
+              await drive.patchFileProperties(resolvedConnectorId, fileInfo.externalId, {
+                copyRequiresWriterPermission: true
+              })
+            } catch (e) {
+              console.error('Failed to patch EC file properties:', e)
+            }
+          }
+        }
+      }
+    }
+
+    if (updated) {
+      audit(existing ? AUDIT_EVENT.DOCUMENT_SHARE_CHANGED : AUDIT_EVENT.DOCUMENT_SHARE_CREATED)
+        .scope(AUDIT_SCOPE.DOCUMENT)
+        .firm(fileInfo.organizationId)
+        .engagement(projectId)
+        .document(updated.id)
+        .actor(user.id)
+        .meta({ fileName: updated.fileName })
+        .fireAndForget()
     }
 
     return NextResponse.json({ sharing: toJsonSafeSharing(updated as Record<string, unknown> | null) })
@@ -260,7 +389,7 @@ export async function PUT(
 }
 
 export async function DELETE(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ projectId: string; documentId: string }> }
 ) {
   try {
@@ -271,7 +400,7 @@ export async function DELETE(
     const { projectId, documentId: documentIdParam } = await params
     const ctx = await resolveProjectContext(projectId)
     if (!ctx) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
-    const canManage = await canManageProject(ctx.orgId, ctx.clientId, ctx.projectId)
+    const canManage = await canManageProject(ctx.firmId, ctx.clientId, ctx.projectId)
     if (!canManage) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     const fileInfo = await getFileInfo(projectId, documentIdParam)
@@ -298,11 +427,33 @@ export async function DELETE(
             externalCollaborator: { enabled: false },
             guest: { enabled: false, options: {} },
           },
+          actorId: user.id,
         }),
       },
     })
 
-    await syncDocumentSharingUsers(existing.id)
+    await syncDocumentSharingUsers(existing.id, user.id)
+
+    // Trash the system PDF copy in Drive — it's a Firma-managed artifact with no value once unshared
+    const existingSettings = parseSettingsFromDb((existing.settings as Record<string, unknown>) || {})
+    const sharedPdfDriveId = existingSettings.share?.guest?.options?.sharedPdfDriveId
+    if (sharedPdfDriveId) {
+      const connector = existing.connectorId
+        ? await prisma.connector.findUnique({ where: { id: existing.connectorId } })
+        : await prisma.firm.findUnique({
+            where: { id: fileInfo.organizationId },
+            include: { connector: true },
+          }).then(org => org?.connector || null)
+
+      if (connector?.type === 'GOOGLE_DRIVE' && connector?.status === 'ACTIVE') {
+        try {
+          const drive = GoogleDriveConnector.getInstance()
+          await drive.trashFile(connector.id, sharedPdfDriveId)
+        } catch (e) {
+          console.error('Failed to trash system PDF file:', e)
+        }
+      }
+    }
 
     await safeInngestSend('sharing.settings.updated', {
       projectId,
@@ -318,6 +469,15 @@ export async function DELETE(
       where: { id: existing.id },
       data: { settings: {}, slug: null, updatedAt: new Date() },
     })
+
+    audit(AUDIT_EVENT.DOCUMENT_SHARE_DELETED)
+      .scope(AUDIT_SCOPE.DOCUMENT)
+      .firm(fileInfo.organizationId)
+      .engagement(projectId)
+      .document(existing.id)
+      .actor(user.id)
+      .meta({ fileName: existing.fileName })
+      .fireAndForget()
 
     return NextResponse.json({ success: true })
   } catch (e) {

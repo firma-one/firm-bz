@@ -22,6 +22,8 @@ const nextConfig = {
   images: {
     unoptimized: true
   },
+  // Allow Tailscale dev origins for HMR (hot module reloading)
+  allowedDevOrigins: ['macbook-air.tail48717e.ts.net'],
   // Configure `pageExtensions` to include MDX files
   pageExtensions: ['js', 'jsx', 'mdx', 'ts', 'tsx'],
 
@@ -33,7 +35,7 @@ const nextConfig = {
       { source: '/solutions/:path*', destination: '/', permanent: true },
       { source: '/firma-redesign', destination: '/', permanent: true },
       { source: '/firma-redesign/:path*', destination: '/', permanent: true },
-      { source: '/resources', destination: '/resources/docs', permanent: true },
+      { source: '/resources', destination: '/resources/faq', permanent: true },
       { source: '/docs', destination: '/resources/docs', permanent: true },
       { source: '/docs/:path*', destination: '/resources/docs/:path*', permanent: true },
       { source: '/faq', destination: '/resources/faq', permanent: true },

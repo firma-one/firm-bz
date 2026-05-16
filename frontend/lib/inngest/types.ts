@@ -145,3 +145,61 @@ export type IndexingEvent =
   | FileIndexRequestedEvent
   | FileBatchIndexRequestedEvent
   | ProjectIndexScanRequestedEvent
+
+/**
+ * Fired to kick off an async background migration of top-level Drive children
+ * from oldRootFolderId to newRootFolderId.
+ */
+export interface WorkspaceMigrateRequestedEvent {
+  name: 'workspace.migrate.requested'
+  data: {
+    connectionId: string
+    newRootFolderId: string
+    oldRootFolderId: string
+    firmId: string
+    organizationId?: string
+    initiatingUserId: string
+    estimatedMinutes: number
+    startedAt?: string
+  }
+}
+
+/**
+ * Fired when platform maintenance is enabled — triggers the 2-minute grace period
+ * before sessions are killed and maintenance becomes fully active.
+ */
+export interface PlatformMaintenanceGraceRequestedEvent {
+  name: 'platform/maintenance.grace-requested'
+  data: {
+    graceEndsAt: string // ISO timestamp when grace period expires
+    enabledBy: string
+  }
+}
+
+/**
+ * Fired when a reminder should trigger an email.
+ * Inngest sleeps until fireAt, then sends (unless the reminder was already marked done).
+ */
+export interface ReminderEmailScheduledEvent {
+  name: 'reminder.email.scheduled'
+  data: {
+    reminderId: string      // reminder item id — used as cancel key
+    entityKey: string       // "platform.clients.id"
+    entityValue: string     // actual entity primary key
+    entityName: string
+    action: string          // "Follow-up"
+    userId: string
+    firmId: string
+    dateKey: string         // "platform.clients.followUpDate"
+    fireAt: string          // ISO UTC
+    ctaUrl: string | null
+  }
+}
+
+/**
+ * Fired when a reminder is marked done or its date is cleared — cancels the sleeping Inngest run.
+ */
+export interface ReminderEmailCancelledEvent {
+  name: 'reminder.email.cancelled'
+  data: { reminderId: string }
+}

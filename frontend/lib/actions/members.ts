@@ -8,6 +8,7 @@ import { InvitationStatus } from '@prisma/client'
 import { logger } from '@/lib/logger'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { safeInngestSend } from '@/lib/inngest/client'
+import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 
 // Admin Client for fetching user details
 const supabaseAdmin = createSupabaseAdmin(
@@ -181,6 +182,14 @@ export async function removeMember(memberId: string) {
 
         await prisma.engagementMember.delete({ where: { id: memberId } })
 
+        audit(AUDIT_EVENT.ENGAGEMENT_MEMBER_REMOVED)
+            .scope(AUDIT_SCOPE.ENGAGEMENT)
+            .firm(member.engagement.client.firmId)
+            .engagement(member.engagementId)
+            .actor(user.id)
+            .meta({ removedUserId: member.userId })
+            .fireAndForget()
+
         const { invalidateUserSettingsPlus } = await import('@/lib/actions/user-settings')
         await invalidateUserSettingsPlus(member.userId)
 
@@ -258,6 +267,14 @@ export async function updateMemberPersona(memberId: string, personaId: string) {
                 })
             }
         }
+
+        audit(AUDIT_EVENT.ENGAGEMENT_MEMBER_ROLE_CHANGED)
+            .scope(AUDIT_SCOPE.ENGAGEMENT)
+            .firm(member.engagement.client.firmId)
+            .engagement(member.engagementId)
+            .actor(user.id)
+            .meta({ memberId, userId: member.userId, oldRole: oldPersonaSlug, newRole: newPersonaSlug })
+            .fireAndForget()
 
         const { invalidateUserSettingsPlus } = await import('@/lib/actions/user-settings')
         await invalidateUserSettingsPlus(member.userId)

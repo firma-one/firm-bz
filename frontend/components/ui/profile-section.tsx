@@ -3,7 +3,7 @@
 import { useState, useRef, useLayoutEffect, useEffect } from "react"
 import { createPortal } from "react-dom"
 import Link from "next/link"
-import { LogOut, ChevronDown, ChevronUp, Building2, CreditCard, UserCircle } from "lucide-react"
+import { LogOut, ChevronDown, ChevronUp, Building2, CreditCard, UserCircle, LifeBuoy, Plug } from "lucide-react"
 import { ProfileBubble, ProfileBubblePopupContent } from "@/components/ui/profile-bubble-popup"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
@@ -29,6 +29,10 @@ interface ProfileSectionProps {
    */
   planSubtitle?: string | null
   planSubtitleLoading?: boolean
+  /** Link to Connectors page (firm-scoped). Only shown for Firm Administrators (canManageFirm). */
+  connectorsHref?: string
+  /** Link to the Support page (firm-scoped). When provided, shows a Support item in the menu. */
+  supportHref?: string
 }
 
 export function ProfileSection({
@@ -37,8 +41,10 @@ export function ProfileSection({
   isCollapsed = false,
   showBillingLink = false,
   billingHref = '/d/billing?returnTo=%2Fd%2Fprofile',
+  connectorsHref,
   planSubtitle,
   planSubtitleLoading = false,
+  supportHref,
 }: ProfileSectionProps) {
   const [isProfileOpen, setIsProfileOpen] = useState(false)
   const profileRef = useRef<HTMLDivElement>(null)
@@ -54,6 +60,7 @@ export function ProfileSection({
   const getUserEmail = () => user?.email || 'user@example.com'
 
   const secondaryLine = () => {
+    if (!showBillingLink) return getUserEmail()
     if (planSubtitleLoading) return 'Loading…'
     if (planSubtitle !== undefined) return planSubtitle || '—'
     return getUserEmail()
@@ -181,7 +188,7 @@ export function ProfileSection({
               name={getUserDisplayName()}
               email={getUserEmail()}
               menuPlanLine={
-                planSubtitle !== undefined
+                showBillingLink && planSubtitle !== undefined
                   ? planSubtitleLoading
                     ? 'Loading…'
                     : planSubtitle || '—'
@@ -199,6 +206,16 @@ export function ProfileSection({
                     <UserCircle className="h-4 w-4 shrink-0" />
                     Profile
                   </Link>
+                  {connectorsHref && (
+                    <Link
+                      href={connectorsHref}
+                      onClick={() => setIsProfileOpen(false)}
+                      className="d-sidebar-nav flex w-full items-center gap-2 rounded-lg px-3 py-2 text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
+                    >
+                      <Plug className="h-4 w-4 shrink-0" />
+                      Connectors
+                    </Link>
+                  )}
                   {showBillingLink && (
                     <Link
                       href={billingHref}
@@ -209,8 +226,18 @@ export function ProfileSection({
                       Billing
                     </Link>
                   )}
+                  {supportHref && (
+                    <Link
+                      href={supportHref}
+                      onClick={() => setIsProfileOpen(false)}
+                      className="d-sidebar-nav flex w-full items-center gap-2 rounded-lg px-3 py-2 text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
+                    >
+                      <LifeBuoy className="h-4 w-4 shrink-0" />
+                      Support
+                    </Link>
+                  )}
                   <Link
-                    href="/d"
+                    href="/d/onboarding"
                     onClick={() => setIsProfileOpen(false)}
                     className="d-sidebar-nav flex w-full items-center gap-2 rounded-lg px-3 py-2 text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
                   >

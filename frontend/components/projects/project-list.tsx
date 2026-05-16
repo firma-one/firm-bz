@@ -1,12 +1,12 @@
 'use client'
 
 import React from 'react'
-import { Briefcase, Clock } from 'lucide-react'
+import { Briefcase, Clock, Copy, Check } from 'lucide-react'
 import { HierarchyClient } from '@/lib/actions/hierarchy'
 import { type ProjectMemberSummary } from '@/lib/actions/members'
 import Link from 'next/link'
 import { formatDistanceToNow } from 'date-fns'
-import { TooltipProvider } from '@/components/ui/tooltip'
+import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import {
     ProfileBubbleWithPopup,
     ProfileBubble,
@@ -20,6 +20,36 @@ interface ProjectListProps {
     viewMode?: 'grid' | 'list'
     isOrgInternal?: boolean
     memberSummaries?: Record<string, ProjectMemberSummary>
+}
+
+function engagementStatusLabel(status: string | null | undefined): string {
+    switch (status) {
+        case 'PLANNED':
+            return 'Planned'
+        case 'ACTIVE':
+            return 'Active'
+        case 'COMPLETED':
+            return 'Completed'
+        case 'PAUSED':
+            return 'Paused'
+        default:
+            return 'Active'
+    }
+}
+
+function engagementStatusBadgeClass(status: string | null | undefined): string {
+    switch (status) {
+        case 'PLANNED':
+            return 'bg-blue-100 text-blue-800'
+        case 'ACTIVE':
+            return 'bg-black/80 text-white/90'
+        case 'COMPLETED':
+            return 'bg-emerald-100 text-emerald-800'
+        case 'PAUSED':
+            return 'bg-amber-100 text-amber-800'
+        default:
+            return 'bg-black/80 text-white/90'
+    }
 }
 
 function MemberBubbleStack({
@@ -55,6 +85,76 @@ function MemberBubbleStack({
     )
 }
 
+function LeadAvatar({ user }: { user: ProfileBubblePopupUser }) {
+    const [copied, setCopied] = React.useState(false)
+    const initials = user.name
+        .split(' ')
+        .map((n) => n[0])
+        .join('')
+        .slice(0, 2)
+        .toUpperCase()
+
+    const handleCopy = (e: React.MouseEvent) => {
+        e.preventDefault()
+        e.stopPropagation()
+        navigator.clipboard.writeText(user.email)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+    }
+
+    return (
+        <Tooltip delayDuration={200}>
+            <TooltipTrigger asChild>
+                <div className="h-5 w-5 rounded-lg border border-slate-200/80 bg-slate-50 flex-shrink-0 overflow-hidden flex items-center justify-center font-bold text-slate-600 cursor-default text-[9px]">
+                    {user.avatarUrl ? (
+                        <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
+                    ) : (
+                        initials
+                    )}
+                </div>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="bg-white border border-slate-200 text-slate-700 text-xs p-3 shadow-lg max-w-[320px]">
+                <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                        <div className="h-8 w-8 rounded-lg border border-slate-200/80 bg-slate-50 flex items-center justify-center font-bold text-slate-600 flex-shrink-0 overflow-hidden">
+                            {user.avatarUrl ? (
+                                <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
+                            ) : (
+                                initials
+                            )}
+                        </div>
+                        <span className="font-medium text-slate-900">{user.name}</span>
+                    </div>
+                    {user.email && (
+                        <div className="flex items-center gap-2">
+                            <span className="truncate max-w-[240px] text-slate-600">{user.email}</span>
+                            <button
+                                type="button"
+                                onClick={handleCopy}
+                                className="shrink-0 p-1 rounded hover:bg-slate-100 text-slate-500 hover:text-slate-700"
+                                title="Copy email"
+                            >
+                                {copied ? (
+                                    <Check className="h-3.5 w-3.5 text-green-600" />
+                                ) : (
+                                    <Copy className="h-3.5 w-3.5" />
+                                )}
+                            </button>
+                        </div>
+                    )}
+                    {user.personaName && (
+                        <div className="flex items-center gap-2">
+                            <span className="inline-block px-2 py-1 rounded bg-slate-100 text-slate-700 text-[11px] font-medium">
+                                {user.personaName}
+                            </span>
+                        </div>
+                    )}
+                </div>
+            </TooltipContent>
+        </Tooltip>
+    )
+}
+
 export function ProjectList({ projects, orgSlug, clientSlug, viewMode = 'grid', isOrgInternal, memberSummaries = {} }: ProjectListProps) {
     if (projects.length === 0) {
         return (
@@ -81,6 +181,7 @@ export function ProjectList({ projects, orgSlug, clientSlug, viewMode = 'grid', 
                         <thead>
                             <tr className="bg-slate-50 border-b border-slate-200">
                                 <th className="px-4 py-3 font-medium text-slate-500">Project</th>
+                                <th className="px-4 py-3 font-medium text-slate-500">Status</th>
                                 <th className="px-4 py-3 font-medium text-slate-500">Description</th>
                                 <th className="px-4 py-3 font-medium text-slate-500">Collaborators</th>
                                 <th className="px-4 py-3 font-medium text-slate-500 text-right">Last Updated</th>
@@ -102,6 +203,11 @@ export function ProjectList({ projects, orgSlug, clientSlug, viewMode = 'grid', 
                                                 </div>
                                                 <span className="font-medium text-slate-900 group-hover:text-black transition-colors">{project.name}</span>
                                             </Link>
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${engagementStatusBadgeClass(project.status)}`}>
+                                                {engagementStatusLabel(project.status)}
+                                            </span>
                                         </td>
                                         <td className="px-4 py-3 text-slate-500 max-w-xs truncate">
                                             {project.description || "-"}
@@ -182,13 +288,18 @@ export function ProjectList({ projects, orgSlug, clientSlug, viewMode = 'grid', 
                                 <div className="h-10 w-10 bg-slate-100 text-slate-700 rounded-lg flex items-center justify-center group-hover:scale-105 transition-transform shrink-0">
                                     <Briefcase className="h-5 w-5" />
                                 </div>
-                                {showBubbles && hasLeads && (
-                                    <MemberBubbleStack
-                                        users={summary!.projectLeads}
-                                        onClickLink={(e) => e.preventDefault()}
-                                        size="lg"
-                                    />
-                                )}
+                                <div className="flex items-center gap-2 shrink-0">
+                                    {showBubbles && hasLeads && (
+                                        <div className="flex gap-1">
+                                            {summary!.projectLeads.slice(0, 2).map((lead, idx) => (
+                                                <LeadAvatar key={idx} user={lead} />
+                                            ))}
+                                        </div>
+                                    )}
+                                    <span className={`shrink-0 px-2 py-0.5 rounded-full text-xs font-medium ${engagementStatusBadgeClass(project.status)}`}>
+                                        {engagementStatusLabel(project.status)}
+                                    </span>
+                                </div>
                             </div>
 
                             <h3 className="text-sm font-semibold text-slate-900 mb-1 line-clamp-1 group-hover:text-black transition-colors">

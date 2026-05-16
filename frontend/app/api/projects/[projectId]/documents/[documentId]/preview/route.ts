@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { googleDriveConnector } from "@/lib/google-drive-connector"
 import { getFileInfo } from '@/lib/file-utils'
 import { logger } from '@/lib/logger'
+import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 
 function unsupportedPreviewHtml(mimeType: string): NextResponse {
     const html = `<!DOCTYPE html>
@@ -187,6 +188,14 @@ export async function GET(
         headers.set('Content-Type', contentType)
         headers.set('Content-Disposition', 'inline')
         headers.set('Cache-Control', 'private, max-age=3600')
+
+        audit(AUDIT_EVENT.DOCUMENT_OPENED)
+            .scope(AUDIT_SCOPE.DOCUMENT)
+            .firm(fileInfo.organizationId)
+            .engagement(projectId)
+            .actor(user.id)
+            .meta({ externalId: fileInfo.externalId, mimeType: contentType })
+            .fireAndForget()
 
         return new NextResponse(contentRes.body, { status: 200, headers })
 

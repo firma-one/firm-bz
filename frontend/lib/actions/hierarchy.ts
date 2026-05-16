@@ -20,6 +20,15 @@ export type HierarchyClient = {
     description: string | null
     tags: string[]
     ownerId: string | null
+    followUpDate: Date | null
+    expectedCloseDate: Date | null
+    leadSource: string | null
+    internalMemo: string | null
+    relationshipValue: string | null
+    clientSinceDate: Date | null
+    linkedInUrl: string | null
+    companySizeBracket: string | null
+    billingAddress: string | null
     createdAt: Date
     updatedAt: Date
     projects: {
@@ -131,6 +140,15 @@ export async function getFirmHierarchy(firmSlug: string): Promise<HierarchyClien
         description: c.description ?? null,
         tags: tagsFromJson(c.tags),
         ownerId: c.ownerId ?? null,
+        followUpDate: c.followUpDate ?? null,
+        expectedCloseDate: c.expectedCloseDate ?? null,
+        leadSource: c.leadSource ?? null,
+        internalMemo: c.internalMemo ?? null,
+        relationshipValue: c.relationshipValue != null ? String(c.relationshipValue) : null,
+        clientSinceDate: c.clientSinceDate ?? null,
+        linkedInUrl: c.linkedInUrl ?? null,
+        companySizeBracket: c.companySizeBracket ?? null,
+        billingAddress: c.billingAddress ?? null,
         createdAt: c.createdAt,
         updatedAt: c.updatedAt,
         projects: c.engagements.map((p: any) => {

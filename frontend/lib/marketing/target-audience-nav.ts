@@ -20,6 +20,16 @@ export const USE_CASES_SECTION_ID = "use-cases"
 
 export const USE_CASES_HREF = `/#${USE_CASES_SECTION_ID}` as const
 
+/** Reality check anchor — unfiltered view of how high-touch work runs today. */
+export const REALITY_CHECK_SECTION_ID = "reality-check"
+
+export const REALITY_CHECK_HREF = `/#${REALITY_CHECK_SECTION_ID}` as const
+
+/** Trust Architecture modal anchor on the landing page (`/`). */
+export const TRUST_ARCHITECTURE_SECTION_ID = "trust-architecture"
+
+export const TRUST_ARCHITECTURE_HREF = `/#${TRUST_ARCHITECTURE_SECTION_ID}` as const
+
 /** Canonical marketing URLs (blog + trust live under `/resources/…`). */
 export const BLOG_BASE_PATH = "/resources/blog" as const
 
@@ -62,6 +72,13 @@ export const platformMegaMenuItems = [
     href: WHY_THIS_EXISTS_HREF,
   },
   {
+    id: "what-breaks-today",
+    title: "What breaks today",
+    description:
+      "Scattered files, version chaos, and clients left waiting — the patterns that quietly drain high-touch teams every week.",
+    href: REALITY_CHECK_HREF,
+  },
+  {
     id: "who-its-for",
     title: "Who it's for",
     description:
@@ -76,11 +93,11 @@ export const platformMegaMenuItems = [
     href: USE_CASES_HREF,
   },
   {
-    id: "trust-center",
-    title: "Trust Center",
+    id: "trust-architecture",
+    title: "Trust Architecture",
     description:
       "Non-custodial architecture, how data flows, and how Firma earns trust without holding your files.",
-    href: TRUST_CENTER_PATH,
+    href: TRUST_ARCHITECTURE_HREF,
   },
 ] as const
 

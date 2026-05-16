@@ -3,12 +3,13 @@ import { prisma } from '@/lib/prisma'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { getViewAsPersonaFromCookie } from '@/lib/view-as-server'
 import { canAccessRbacAdmin } from '@/lib/permission-helpers'
-import { getSharedAndAncestorIdsForPersona, isFolderUnderSharedFolder } from '@/lib/project-sharing-ids'
+import { getSharedAndAncestorIdsForPersona, isFolderUnderSharedFolderDB } from '@/lib/project-sharing-ids'
 import { safeInngestSend } from '@/lib/inngest/client'
 import { logger } from '@/lib/logger'
 import { GoogleDriveAuthError } from '@/lib/google-drive-connector'
 import { blockIfEngagementFileMutationForbidden } from '@/lib/engagement-access'
-import { isDocumentVersionLocked } from '@/lib/document-version-lock'
+import { IndexingInterceptor } from '@/lib/services/indexing-interceptor'
+import { getLock, isDocumentPrivate } from '@/lib/sharing-settings'
 // GET: List linked files for a connector
 export async function GET(request: NextRequest) {
     try {
@@ -128,8 +129,6 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Invalid or empty JSON body' }, { status: 400 })
         }
         const { action, folderId, projectId: bodyProjectId, viewAsPersonaSlug: bodyViewAs, pageSize: bodyPageSize } = body
-
-        console.log(`[API] linked-files POST action=${action} folderId=${folderId} projectId=${bodyProjectId ?? '(none)'}`)
 
         if (action === 'list') {
             if (typeof folderId !== 'string' || !folderId) {
@@ -306,66 +305,233 @@ export async function POST(request: NextRequest) {
 
             const userEmail = user.email || undefined
             const listLimit = typeof bodyPageSize === 'number' && bodyPageSize > 0 ? Math.min(500, bodyPageSize) : 100
-            logger.debug('[API] linked-files: Calling listFiles', {
-                connectorId: connector.id,
-                folderId,
-                listLimit,
-                hasProjectContext: !!projectContext
-            })
-            let files = await googleDriveConnector.listFiles(
-                connector.id,
-                folderId,
-                listLimit,
-                userEmail,
-                projectContext
-            )
-            logger.debug('[API] linked-files: listFiles returned', { count: files.length })
 
-            // Attach internal projectDocument UUIDs for UI deeplinks (never expose Drive id in URL).
-            // Only available when projectId is provided.
-            if (bodyProjectId && files.length > 0) {
-                const driveIds = Array.from(new Set(files.map((f: { id: string }) => f.id).filter(Boolean)))
-                if (driveIds.length > 0) {
-                    const rows = await prisma.engagementDocument.findMany({
-                        where: { engagementId: bodyProjectId, externalId: { in: driveIds } },
-                        select: { id: true, externalId: true, settings: true },
-                    })
-                    const internalByExternal = new Map<string, string>(rows.map((r: { id: string; externalId: string }) => [r.externalId, r.id]))
-                    const lockedByExternal = new Map<string, boolean>(
-                        rows.map((r: { externalId: string; settings: unknown }) => [r.externalId, isDocumentVersionLocked(r.settings)])
-                    )
-                    files = files.map((f: any) => ({
-                        ...f,
-                        projectDocumentId: internalByExternal.get(f.id) ?? undefined,
-                        versionLocked: lockedByExternal.get(f.id) ?? false,
-                    }))
+            // Detect EC/Guest persona. Fast path: genuine member role requires no extra DB/cookie calls.
+            // Slow path: view-as impersonation (RBAC admins only) — check body first, then cookie.
+            let personaSlugToFilter: 'eng_ext_collaborator' | 'eng_viewer' | null = null
+            if (bodyProjectId) {
+                if (projectContext?.personaSlug === 'eng_ext_collaborator' || projectContext?.personaSlug === 'eng_viewer') {
+                    personaSlugToFilter = projectContext.personaSlug as 'eng_ext_collaborator' | 'eng_viewer'
+                } else {
+                    const bodyViewAsIsEC = bodyViewAs === 'eng_ext_collaborator' || bodyViewAs === 'eng_viewer'
+                    const cookieViewAs = await getViewAsPersonaFromCookie()
+                    if (bodyViewAsIsEC || cookieViewAs) {
+                        const canUseViewAs = await canAccessRbacAdmin(user.id)
+                        if (canUseViewAs) {
+                            const viewAsSlug = bodyViewAsIsEC ? bodyViewAs : cookieViewAs
+                            if (viewAsSlug === 'eng_ext_collaborator' || viewAsSlug === 'eng_viewer') {
+                                personaSlugToFilter = viewAsSlug as 'eng_ext_collaborator' | 'eng_viewer'
+                            }
+                        }
+                    }
                 }
             }
 
-            // When projectId is set, filter to shared-only when viewing as or actually being EC/Guest.
-            // Prefer body viewAsPersonaSlug (from frontend View As) when user has RBAC admin, so filtering works even if cookie isn't sent/read.
-            if (bodyProjectId) {
-                const cookieViewAs = await getViewAsPersonaFromCookie()
-                const canUseViewAs = await canAccessRbacAdmin(user.id)
-                const viewAsSlug = (canUseViewAs && (bodyViewAs === 'eng_ext_collaborator' || bodyViewAs === 'eng_viewer') ? bodyViewAs : null) ?? (canUseViewAs && cookieViewAs ? cookieViewAs : null)
-                const personaSlugToFilter =
-                    viewAsSlug === 'eng_ext_collaborator' || viewAsSlug === 'eng_viewer'
-                        ? viewAsSlug
-                        : (projectContext?.personaSlug === 'eng_ext_collaborator' || projectContext?.personaSlug === 'eng_viewer')
-                            ? projectContext.personaSlug
-                            : null
-                if (personaSlugToFilter && projectContext) {
-                    const { sharedIds, ancestorIds } = await getSharedAndAncestorIdsForPersona(projectContext.projectId, personaSlugToFilter, { skipDescendants: true })
-                    const allowSet = new Set([...sharedIds, ...ancestorIds])
-                    const folderInShared = sharedIds.includes(folderId)
-                    const folderUnderShared = !folderInShared && sharedIds.length > 0 && await isFolderUnderSharedFolder(folderId, sharedIds, connector.id, googleDriveConnector)
-                    if (!folderInShared && !folderUnderShared) {
-                        files = files.filter((f: { id: string }) => allowSet.has(f.id))
+            let files: any[] = []
+
+            if (personaSlugToFilter && projectContext) {
+                // EC/Guest: fully DB-driven listing — no Drive API call for listing.
+                // sharedIds/ancestorIds computed from engagement_documents (Drive authoritative for parents).
+                const { sharedIds, ancestorIds, parentMap } = await getSharedAndAncestorIdsForPersona(
+                    projectContext.projectId, personaSlugToFilter, { skipDescendants: true }
+                )
+                const allowSet = new Set([...sharedIds, ...ancestorIds])
+                const folderInShared = sharedIds.includes(folderId)
+                const folderUnderShared = !folderInShared && isFolderUnderSharedFolderDB(folderId, sharedIds, parentMap)
+
+                // When folderId is a shared folder or its descendant, show all direct children.
+                // Otherwise restrict to only children that appear in allowSet.
+                const [dbRows, intakeRows] = await Promise.all([
+                    prisma.engagementDocument.findMany({
+                        where: {
+                            engagementId: projectContext.projectId,
+                            parentId: folderId,
+                            ...(folderInShared || folderUnderShared ? {} : { externalId: { in: Array.from(allowSet) } }),
+                        },
+                        select: { id: true, externalId: true, fileName: true, mimeType: true, fileSize: true, isFolder: true, metadata: true, settings: true, createdBy: true },
+                    }),
+                    // Also surface the EC/EV's own PENDING intake files/folders in this folder
+                    prisma.engagementDocument.findMany({
+                        where: {
+                            engagementId: projectContext.projectId,
+                            parentId: folderId,
+                            settings: { path: ['lock', 'uploadedBy'], equals: user.id } as any,
+                        },
+                        select: { id: true, externalId: true, fileName: true, mimeType: true, fileSize: true, isFolder: true, metadata: true, settings: true, createdBy: true },
+                    }),
+                ])
+
+                const visibleDbRows = dbRows.filter((row) => !isDocumentPrivate(row.settings))
+
+                // Batch-resolve all relevant userIds → emails, and build email → engagement role map
+                const allRows = [...visibleDbRows, ...intakeRows]
+                const creatorIds = Array.from(new Set(allRows.map((r: any) => r.createdBy).filter(Boolean)))
+                const projectMembers = await prisma.engagementMember.findMany({
+                    where: { engagementId: projectContext.projectId },
+                    select: { userId: true, role: true },
+                })
+                const memberRoleById = new Map<string, string>(projectMembers.map((m: any) => [m.userId, m.role]))
+                const allRelevantIds = Array.from(new Set([...creatorIds, ...projectMembers.map((m: any) => m.userId)]))
+                const creatorEmailMap = new Map<string, string>()
+                const roleByEmail = new Map<string, string>()
+                {
+                    const { createAdminClient } = await import('@/utils/supabase/admin')
+                    const admin = createAdminClient()
+                    await Promise.all(allRelevantIds.map(async (uid: string) => {
+                        const { data: { user: u } } = await admin.auth.admin.getUserById(uid)
+                        if (u?.email) {
+                            creatorEmailMap.set(uid, u.email)
+                            const role = memberRoleById.get(uid)
+                            if (role) roleByEmail.set(u.email, role)
+                        }
+                    }))
+                }
+
+                // For rows missing owners or modifiedTime in metadata, fetch from Drive and write back (one-time backfill)
+                type FreshMeta = { owners: any; lastModifyingUser: any; modifiedTime: string | null }
+                const rowsMissingMeta = allRows.filter((r: any) => !(r.metadata as any)?.owners || !(r.metadata as any)?.modifiedTime)
+                const freshMetaMap = new Map<string, FreshMeta>()
+                if (rowsMissingMeta.length > 0) {
+                    const fetched = await Promise.all(
+                        rowsMissingMeta.map(async (r: any) => {
+                            try {
+                                const meta = await googleDriveConnector.getFileMetadata(connector.id, r.externalId)
+                                return meta ? { externalId: r.externalId, id: r.id, owners: meta.owners ?? null, lastModifyingUser: meta.lastModifyingUser ?? null, modifiedTime: meta.modifiedTime ?? null } : null
+                            } catch { return null }
+                        })
+                    )
+                    for (const item of fetched) {
+                        if (!item) continue
+                        freshMetaMap.set(item.externalId, { owners: item.owners, lastModifyingUser: item.lastModifyingUser, modifiedTime: item.modifiedTime })
+                        // Write-back: merge fresh fields into existing metadata so subsequent requests skip Drive
+                        const existingMeta = allRows.find((r: any) => r.id === item.id)?.metadata as object ?? {}
+                        prisma.engagementDocument.updateMany({
+                            where: { id: item.id },
+                            data: { metadata: { ...existingMeta, owners: item.owners, lastModifyingUser: item.lastModifyingUser, modifiedTime: item.modifiedTime } as any },
+                        }).catch(() => { /* best-effort */ })
                     }
-                    // If folder listing returned nothing but we have shared docs, fetch them so Files tab shows shared items (e.g. list was filtered by Drive permissions or folder doesn't contain ancestors)
-                    if (files.length === 0 && sharedIds.length > 0) {
-                        const sharedMeta = await googleDriveConnector.getFilesMetadata(connector.id, sharedIds)
-                        files = sharedMeta.filter((f: { id?: string }) => f?.id) as typeof files
+                }
+
+                const seenIds = new Set<string>()
+                const mapRow = (row: any) => {
+                    const fresh = freshMetaMap.get(row.externalId)
+                    return ({
+                    id: row.externalId,
+                    name: row.fileName,
+                    mimeType: row.mimeType ?? null,
+                    size: row.fileSize != null ? String(row.fileSize) : null,
+                    modifiedTime: fresh?.modifiedTime ?? (row.metadata as any)?.modifiedTime ?? null,
+                    webViewLink: (row.metadata as any)?.webViewLink ?? null,
+                    owners: fresh?.owners ?? (row.metadata as any)?.owners ?? null,
+                    lastModifyingUser: fresh?.lastModifyingUser ?? (row.metadata as any)?.lastModifyingUser ?? null,
+                    actorEmail: row.createdBy ? (creatorEmailMap.get(row.createdBy) ?? null) : null,
+                    ownerRole: (() => {
+                        const ownerEmail = row.createdBy ? creatorEmailMap.get(row.createdBy)
+                            : fresh?.owners?.[0]?.emailAddress ?? (row.metadata as any)?.owners?.[0]?.emailAddress ?? null
+                        return ownerEmail ? (roleByEmail.get(ownerEmail) ?? null) : null
+                    })(),
+                    isFolder: row.isFolder,
+                    connectorId: connector.id,
+                    projectDocumentId: row.id,
+                    lock: getLock(row.settings),
+                })}
+                for (const row of allRows) {
+                    if (!seenIds.has(row.externalId)) {
+                        seenIds.add(row.externalId)
+                        files.push(mapRow(row))
+                    }
+                }
+            } else {
+                // Internal personas: Drive-based listing — completely unchanged.
+                files = await googleDriveConnector.listFiles(
+                    connector.id,
+                    folderId,
+                    listLimit,
+                    userEmail,
+                    projectContext
+                )
+
+                // Attach internal projectDocument UUIDs for UI deeplinks (never expose Drive id in URL).
+                // Also surface PENDING intake shadow rows not yet in the Drive listing.
+                if (bodyProjectId) {
+                    const driveIds = files.length > 0
+                        ? Array.from(new Set(files.map((f: { id: string }) => f.id).filter(Boolean)))
+                        : []
+
+                    const [enrichRows, intakePendingRows] = await Promise.all([
+                        driveIds.length > 0
+                            ? prisma.engagementDocument.findMany({
+                                where: { engagementId: bodyProjectId, externalId: { in: driveIds } },
+                                select: { id: true, externalId: true, settings: true },
+                            })
+                            : [],
+                        // All PENDING intake docs/folders in this folder (shadow rows for EL/internal)
+                        prisma.engagementDocument.findMany({
+                            where: {
+                                engagementId: bodyProjectId,
+                                parentId: folderId,
+                                settings: { path: ['lock', 'type'], equals: 'intake' } as any,
+                            },
+                            select: { id: true, externalId: true, fileName: true, mimeType: true, fileSize: true, isFolder: true, metadata: true, settings: true },
+                        }),
+                    ])
+
+                    const internalByExternal = new Map<string, string>(enrichRows.map((r: any) => [r.externalId, r.id]))
+                    const lockByExternal = new Map<string, any>(enrichRows.map((r: any) => [r.externalId, getLock(r.settings)]))
+const privateByExternal = new Map<string, boolean>(enrichRows.map((r: any) => [r.externalId, isDocumentPrivate(r.settings)]))
+                    const sharedExternalByExternal = new Map<string, boolean>(enrichRows.map((r: any) => {
+                        const s = (r.settings as Record<string, any>) || {}
+                        const share = s.share
+                        const ecEnabled = share?.externalCollaborator?.enabled === true || s.externalCollaborator === true
+                        const guestEnabled = share?.guest?.enabled === true || s.guest === true
+                        return [r.externalId, ecEnabled || guestEnabled]
+                    }))
+
+                    // Build email → engagement role map for owner role display
+                    const elMembers = await prisma.engagementMember.findMany({
+                        where: { engagementId: bodyProjectId as string },
+                        select: { userId: true, role: true },
+                    })
+                    const elRoleById = new Map<string, string>(elMembers.map((m: any) => [m.userId, m.role]))
+                    const elRoleByEmail = new Map<string, string>()
+                    if (elMembers.length > 0) {
+                        const { createAdminClient } = await import('@/utils/supabase/admin')
+                        const admin = createAdminClient()
+                        await Promise.all(elMembers.map(async (m: any) => {
+                            const { data: { user: u } } = await admin.auth.admin.getUserById(m.userId)
+                            if (u?.email) elRoleByEmail.set(u.email, m.role)
+                        }))
+                    }
+
+                    files = files.map((f: any) => ({
+                        ...f,
+                        projectDocumentId: internalByExternal.get(f.id) ?? undefined,
+                        lock: lockByExternal.get(f.id) ?? null,
+                        isPrivate: privateByExternal.get(f.id) ?? false,
+                        isSharedWithExternal: sharedExternalByExternal.get(f.id) ?? false,
+                        ownerRole: (() => {
+                            const ownerEmail = f.owners?.[0]?.emailAddress ?? f.actorEmail ?? null
+                            return ownerEmail ? (elRoleByEmail.get(ownerEmail) ?? null) : null
+                        })(),
+                    }))
+
+                    // Merge PENDING intake rows that aren't already in Drive listing
+                    const driveIdSet = new Set(files.map((f: any) => f.id))
+                    for (const row of intakePendingRows) {
+                        if (!driveIdSet.has(row.externalId)) {
+                            files.push({
+                                id: row.externalId,
+                                name: row.fileName,
+                                mimeType: row.mimeType ?? null,
+                                size: row.fileSize != null ? String(row.fileSize) : null,
+                                modifiedTime: (row.metadata as any)?.modifiedTime ?? null,
+                                webViewLink: (row.metadata as any)?.webViewLink ?? null,
+                                isFolder: row.isFolder ?? false,
+                                connectorId: connector.id,
+                                projectDocumentId: row.id,
+                                lock: getLock(row.settings),
+                            })
+                        }
                     }
                 }
             }
@@ -445,6 +611,89 @@ export async function POST(request: NextRequest) {
                         externalId: newFile.id as string,
                         fileName: name,
                     })
+                }
+
+                // If EC/EV user created this folder, immediately write DB record with intake lock
+                // so the folder is visible in their DB-driven file list
+                if (bodyProjectId) {
+                    const projectForRole = await prisma.engagement.findUnique({
+                        where: { id: bodyProjectId as string },
+                        select: { members: { where: { userId: user.id }, select: { role: true } } }
+                    })
+                    const userRole = projectForRole?.members?.[0]?.role
+                    if (userRole === 'eng_ext_collaborator' || userRole === 'eng_viewer') {
+                        const now = new Date().toISOString()
+                        const folderOrgId = orgId ?? membership?.firmId
+                        const folderClientId = project?.clientId
+                        if (folderOrgId && folderClientId) {
+                            await prisma.engagementDocument.upsert({
+                                where: {
+                                    engagementId_firmId_externalId: {
+                                        engagementId: bodyProjectId as string,
+                                        firmId: folderOrgId,
+                                        externalId: newFile.id as string,
+                                    }
+                                },
+                                update: {
+                                    settings: { lock: { type: 'intake', uploadedBy: user.id, uploadedAt: now } } as object,
+                                },
+                                create: {
+                                    engagementId: bodyProjectId as string,
+                                    firmId: folderOrgId,
+                                    clientId: folderClientId,
+                                    externalId: newFile.id as string,
+                                    connectorId: connector.id,
+                                    parentId: typeof folderId === 'string' ? folderId : null,
+                                    fileName: name,
+                                    mimeType: 'application/vnd.google-apps.folder',
+                                    isFolder: true,
+                                    settings: { lock: { type: 'intake', uploadedBy: user.id, uploadedAt: now } } as object,
+                                    metadata: { modifiedTime: now } as object,
+                                }
+                            })
+                            // Notify ELs about the pending folder upload (notification via Inngest)
+                            await safeInngestSend('file.index.requested', {
+                                organizationId: folderOrgId,
+                                clientId: folderClientId,
+                                projectId: bodyProjectId as string,
+                                externalId: newFile.id as string,
+                                fileName: name,
+                                uploadedBy: user.id,
+                                isIntakeUpload: true,
+                                isFolder: true,
+                            })
+
+                            // Create intake reminders synchronously for all ELs
+                            const reminderId = `intake-${bodyProjectId as string}-${newFile.id as string}`
+                            const leads = await prisma.engagementMember.findMany({
+                                where: { engagementId: bodyProjectId as string, role: { in: ['eng_admin', 'eng_member'] } },
+                                select: { userId: true },
+                            })
+                            const reminderItem = {
+                                id: reminderId,
+                                entityKey: 'platform.engagements',
+                                entityValue: bodyProjectId as string,
+                                action: `Review folder: "${name}"`,
+                                dateKey: null,
+                                dateValue: null,
+                                hiddenAt: null,
+                                createdAt: new Date().toISOString(),
+                            }
+                            await Promise.all(leads.map(async (lead) => {
+                                const p = await prisma.userPersonalization.findUnique({
+                                    where: { userId: lead.userId },
+                                    select: { reminders: true },
+                                })
+                                const existing: any[] = Array.isArray(p?.reminders) ? p!.reminders as any[] : []
+                                if (existing.find((r: any) => r.id === reminderId)) return
+                                await prisma.userPersonalization.upsert({
+                                    where: { userId: lead.userId },
+                                    create: { userId: lead.userId, reminders: [reminderItem] as any },
+                                    update: { reminders: [...existing, reminderItem] as any },
+                                })
+                            }))
+                        }
+                    }
                 }
             }
 
@@ -670,6 +919,116 @@ export async function POST(request: NextRequest) {
                 parentId: destFolderId,
             })
 
+            return NextResponse.json({ success: true, id: result.id })
+        }
+
+        // Cross-engagement copy or move: copies/moves file to the target engagement's General folder.
+        // For move: also re-stamps engagementId + clientId on the engagement_document record.
+        if (action === 'cross-engagement-copy' || action === 'cross-engagement-move') {
+            const { fileId, targetEngagementId } = body
+            if (
+                typeof bodyProjectId !== 'string' || !bodyProjectId ||
+                typeof fileId !== 'string' || !fileId ||
+                typeof targetEngagementId !== 'string' || !targetEngagementId
+            ) {
+                return NextResponse.json({ error: 'Missing projectId, fileId, or targetEngagementId' }, { status: 400 })
+            }
+
+            const denied = await blockIfEngagementFileMutationForbidden(user.id, bodyProjectId)
+            if (denied) return denied
+
+            // Also verify caller is a member of the target engagement
+            const targetDenied = await blockIfEngagementFileMutationForbidden(user.id, targetEngagementId)
+            if (targetDenied) return NextResponse.json({ error: 'No access to target engagement' }, { status: 403 })
+
+            const [sourceProject, targetProject] = await Promise.all([
+                prisma.engagement.findFirst({
+                    where: { id: bodyProjectId, isDeleted: false },
+                    include: { client: { include: { firm: { include: { connector: true } } } } },
+                }),
+                prisma.engagement.findFirst({
+                    where: { id: targetEngagementId, isDeleted: false },
+                    include: { client: { include: { firm: { include: { connector: true } } } } },
+                }),
+            ])
+            if (!sourceProject || !targetProject)
+                return NextResponse.json({ error: 'Engagement not found' }, { status: 404 })
+
+            const connector = sourceProject.client.firm.connector
+            if (!connector) return NextResponse.json({ error: 'No connector found' }, { status: 404 })
+
+            const { googleDriveConnector } = await import('@/lib/google-drive-connector')
+            const targetFolderIds = await googleDriveConnector.getProjectFolderIds(connector.id, targetProject.slug, {
+                projectName: targetProject.name,
+                clientSlug: targetProject.client.slug,
+                clientName: targetProject.client.name,
+            })
+            const destFolderId = targetFolderIds.generalFolderId
+            if (!destFolderId) return NextResponse.json({ error: 'Target engagement has no General folder' }, { status: 400 })
+
+            const fileMeta = await googleDriveConnector.getFileMetadata(connector.id, fileId)
+            const fileName = fileMeta?.name ?? fileId
+
+            if (action === 'cross-engagement-copy') {
+                const isFolder = fileMeta?.mimeType === 'application/vnd.google-apps.folder'
+
+                if (isFolder) {
+                    const accessToken = await googleDriveConnector.getAccessToken(connector.id)
+                    if (!accessToken) return NextResponse.json({ error: 'Could not obtain Drive access token' }, { status: 500 })
+
+                    const copiedItems = await googleDriveConnector.recursiveCopy(fileId, destFolderId, accessToken)
+                    if (!copiedItems.length) return NextResponse.json({ error: 'Failed to copy folder' }, { status: 500 })
+
+                    await IndexingInterceptor.indexBatch(request, {
+                        organizationId: targetProject.client.firmId,
+                        clientId: targetProject.clientId,
+                        projectId: targetEngagementId,
+                        files: copiedItems.map((item) => ({ externalId: item.id, fileName: item.name })),
+                    })
+                    return NextResponse.json({ success: true, count: copiedItems.length })
+                }
+
+                const result = await googleDriveConnector.copyFile(connector.id, fileId, destFolderId, fileName)
+                if (!result) return NextResponse.json({ error: 'Failed to copy file' }, { status: 500 })
+
+                await safeInngestSend('file.index.requested', {
+                    organizationId: targetProject.client.firmId,
+                    clientId: targetProject.clientId,
+                    projectId: targetEngagementId,
+                    externalId: result.id,
+                    fileName,
+                    parentId: destFolderId,
+                })
+                return NextResponse.json({ success: true, id: result.id })
+            }
+
+            // Move: update Drive + re-stamp the engagement_document record
+            const result = await googleDriveConnector.moveFile(connector.id, fileId, destFolderId)
+            if (!result) return NextResponse.json({ error: 'Failed to move file' }, { status: 500 })
+
+            // Re-stamp engagement on the DB record
+            await prisma.engagementDocument.updateMany({
+                where: {
+                    externalId: fileId,
+                    engagementId: bodyProjectId,
+                    firmId: sourceProject.client.firmId,
+                },
+                data: {
+                    engagementId: targetEngagementId,
+                    clientId: targetProject.clientId,
+                    parentId: destFolderId,
+                    updatedAt: new Date(),
+                },
+            })
+
+            await safeInngestSend('file.index.requested', {
+                organizationId: targetProject.client.firmId,
+                clientId: targetProject.clientId,
+                projectId: targetEngagementId,
+                externalId: fileId,
+                fileName,
+                parentId: destFolderId,
+            })
             return NextResponse.json({ success: true, id: result.id })
         }
 

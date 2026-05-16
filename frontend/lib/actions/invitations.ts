@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma"
 import { createClient } from "@/utils/supabase/server"
+import { upsertFollowUpReminder } from '@/lib/actions/user-reminders'
 import { sendEmail } from '@/lib/email'
 import { logger } from '@/lib/logger'
 import { BRAND_NAME } from '@/config/brand'
@@ -23,10 +24,16 @@ export async function inviteMember(projectId: string, email: string, personaId: 
     // Sandbox restriction: disallow invites for sandbox orgs
     const projectOrg = await prisma.engagement.findFirst({
         where: { id: projectId, isDeleted: false },
-        select: { client: { select: { firm: { select: { sandboxOnly: true } } } } },
+        select: { slug: true, client: { select: { slug: true, firm: { select: { id: true, slug: true, sandboxOnly: true } } } } },
     })
     if (projectOrg?.client?.firm?.sandboxOnly) {
         throw new Error('Inviting members is restricted for Sandbox Organizations. Upgrade to invite teammates.')
+    }
+    const invReminderCtx = {
+        firmId: projectOrg?.client?.firm?.id ?? '',
+        ctaUrl: projectOrg?.client?.firm?.slug && projectOrg?.client?.slug && projectOrg?.slug
+            ? `/d/f/${projectOrg.client.firm.slug}/c/${projectOrg.client.slug}/e/${projectOrg.slug}`
+            : null,
     }
 
     // 1. Check if invitation exists (V2)
@@ -57,10 +64,22 @@ export async function inviteMember(projectId: string, email: string, personaId: 
         const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invite/${token}`
         await sendEmail(
             email,
-            `You've been invited to join an engagement on ${BRAND_NAME}`,
-            `<p>You have been invited to join an engagement on ${BRAND_NAME}.</p>
+            `Action required: Engagement access on ${BRAND_NAME}`,
+            `<p>You have been granted access to an engagement on ${BRAND_NAME}.</p>
              <p>Click here to accept: <a href="${inviteUrl}">${inviteUrl}</a></p>`
         )
+
+        upsertFollowUpReminder({
+            userId: user.id,
+            entityKey: 'platform.engagement_invitations.id',
+            entityValue: existing.id,
+            action: 'Invitation expiring',
+            dateKey: 'platform.engagement_invitations.expireAt',
+            dateValue: expireAt.toISOString(),
+            entityName: email,
+            firmId: invReminderCtx.firmId,
+            ctaUrl: invReminderCtx.ctaUrl,
+        }).catch(() => {})
 
         return existing
     }
@@ -80,10 +99,22 @@ export async function inviteMember(projectId: string, email: string, personaId: 
     const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invite/${token}`
     await sendEmail(
         email,
-        `You've been invited to join an engagement on ${BRAND_NAME}`,
-        `<p>You have been invited to join an engagement on ${BRAND_NAME}.</p>
+        `Action required: Engagement access on ${BRAND_NAME}`,
+        `<p>You have been granted access to an engagement on ${BRAND_NAME}.</p>
          <p>Click here to accept: <a href="${inviteUrl}">${inviteUrl}</a></p>`
     )
+
+    upsertFollowUpReminder({
+        userId: user.id,
+        entityKey: 'platform.engagement_invitations.id',
+        entityValue: invite.id,
+        action: 'Invitation expiring',
+        dateKey: 'platform.engagement_invitations.expireAt',
+        dateValue: expireAt.toISOString(),
+        entityName: email,
+        firmId: invReminderCtx.firmId,
+        ctaUrl: invReminderCtx.ctaUrl,
+    }).catch(() => {})
 
     return invite
 }
@@ -92,6 +123,10 @@ export async function inviteMember(projectId: string, email: string, personaId: 
  * Resend invitation (V2)
  */
 export async function resendInvitation(invitationId: string) {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error("Unauthorized")
+
     const invite = await prisma.engagementInvitation.findUnique({ where: { id: invitationId } })
     if (!invite) throw new Error("Invitation not found")
     if (invite.status === InvitationStatus.JOINED) throw new Error("User has already joined")
@@ -108,10 +143,28 @@ export async function resendInvitation(invitationId: string) {
     const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invite/${token}`
     await sendEmail(
         invite.email,
-        `You've been invited to join an engagement on ${BRAND_NAME}`,
-        `<p>You have been invited to join an engagement on ${BRAND_NAME}.</p>
+        `Action required: Engagement access on ${BRAND_NAME}`,
+        `<p>You have been granted access to an engagement on ${BRAND_NAME}.</p>
          <p>Click here to accept: <a href="${inviteUrl}">${inviteUrl}</a></p>`
     )
+
+    const engDetails = await prisma.engagement.findFirst({
+        where: { id: invite.engagementId },
+        select: { slug: true, client: { select: { slug: true, firm: { select: { id: true, slug: true } } } } },
+    })
+    upsertFollowUpReminder({
+        userId: user.id,
+        entityKey: 'platform.engagement_invitations.id',
+        entityValue: invitationId,
+        action: 'Invitation expiring',
+        dateKey: 'platform.engagement_invitations.expireAt',
+        dateValue: expireAt.toISOString(),
+        entityName: invite.email,
+        firmId: engDetails?.client?.firm?.id ?? '',
+        ctaUrl: engDetails?.client?.firm?.slug && engDetails?.client?.slug && engDetails?.slug
+            ? `/d/f/${engDetails.client.firm.slug}/c/${engDetails.client.slug}/e/${engDetails.slug}`
+            : null,
+    }).catch(() => {})
 
     return updated
 }

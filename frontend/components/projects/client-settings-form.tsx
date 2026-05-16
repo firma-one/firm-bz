@@ -16,7 +16,9 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog'
-import { FileText, AlertTriangle, Tag } from 'lucide-react'
+import { FileText, AlertTriangle, Tag, Lock, Linkedin, Users2, MapPin, CalendarDays } from 'lucide-react'
+import { SelectWithCustomEntry } from '@/components/ui/select-with-custom-entry'
+import { DateTimePicker } from '@/components/ui/date-time-picker'
 import { SandboxInfoBanner } from '@/components/ui/sandbox-info-banner'
 import { useOrgSandbox } from '@/lib/use-org-sandbox'
 
@@ -31,6 +33,14 @@ export interface ClientSettingsFormProps {
     initialDescription?: string
     initialTags?: string[]
     initialOwnerId?: string | null
+    initialFollowUpDate?: string
+    initialExpectedCloseDate?: string
+    initialLeadSource?: string
+    initialInternalMemo?: string
+    initialClientSinceDate?: string
+    initialLinkedInUrl?: string
+    initialCompanySizeBracket?: string
+    initialBillingAddress?: string
     firmSandboxOnly?: boolean
     onSaved?: () => void
 }
@@ -46,6 +56,14 @@ export function ClientSettingsForm({
     initialDescription = '',
     initialTags = [],
     initialOwnerId = null,
+    initialFollowUpDate = '',
+    initialExpectedCloseDate = '',
+    initialLeadSource = '',
+    initialInternalMemo = '',
+    initialClientSinceDate = '',
+    initialLinkedInUrl = '',
+    initialCompanySizeBracket = '',
+    initialBillingAddress = '',
     firmSandboxOnly = false,
     onSaved,
 }: ClientSettingsFormProps) {
@@ -60,6 +78,14 @@ export function ClientSettingsForm({
     const [description, setDescription] = useState(initialDescription)
     const [tagsInput, setTagsInput] = useState(initialTags.join(', '))
     const [ownerId, setOwnerId] = useState<string | null>(initialOwnerId ?? null)
+    const [followUpDate, setFollowUpDate] = useState(initialFollowUpDate)
+    const [expectedCloseDate, setExpectedCloseDate] = useState(initialExpectedCloseDate)
+    const [leadSource, setLeadSource] = useState(initialLeadSource)
+    const [internalMemo, setInternalMemo] = useState(initialInternalMemo)
+    const [clientSinceDate, setClientSinceDate] = useState(initialClientSinceDate)
+    const [linkedInUrl, setLinkedInUrl] = useState(initialLinkedInUrl)
+    const [companySizeBracket, setCompanySizeBracket] = useState(initialCompanySizeBracket)
+    const [billingAddress, setBillingAddress] = useState(initialBillingAddress)
     const [memberOptions, setMemberOptions] = useState<{ userId: string; label: string }[]>([])
     const [saving, setSaving] = useState(false)
     const [deleting, setDeleting] = useState(false)
@@ -73,7 +99,15 @@ export function ClientSettingsForm({
         setDescription(initialDescription ?? '')
         setTagsInput(initialTags.join(', '))
         setOwnerId(initialOwnerId ?? null)
-    }, [initialName, initialIndustry, initialStatus, initialWebsite, initialDescription, initialTags, initialOwnerId])
+        setFollowUpDate(initialFollowUpDate ?? '')
+        setExpectedCloseDate(initialExpectedCloseDate ?? '')
+        setLeadSource(initialLeadSource ?? '')
+        setInternalMemo(initialInternalMemo ?? '')
+        setClientSinceDate(initialClientSinceDate ?? '')
+        setLinkedInUrl(initialLinkedInUrl ?? '')
+        setCompanySizeBracket(initialCompanySizeBracket ?? '')
+        setBillingAddress(initialBillingAddress ?? '')
+    }, [initialName, initialIndustry, initialStatus, initialWebsite, initialDescription, initialTags, initialOwnerId, initialFollowUpDate, initialExpectedCloseDate, initialLeadSource, initialInternalMemo, initialClientSinceDate, initialLinkedInUrl, initialCompanySizeBracket, initialBillingAddress])
 
     useEffect(() => {
         if (!firmId) return
@@ -107,8 +141,17 @@ export function ClientSettingsForm({
                 description: description.trim() || null,
                 tags: parseTags(tagsInput),
                 ownerId,
+                followUpDate: followUpDate || null,
+                expectedCloseDate: expectedCloseDate || null,
+                leadSource: leadSource || null,
+                internalMemo: internalMemo.trim() || null,
+                clientSinceDate: clientSinceDate || null,
+                linkedInUrl: linkedInUrl.trim() || null,
+                companySizeBracket: companySizeBracket || null,
+                billingAddress: billingAddress.trim() || null,
             })
             addToast({ type: 'success', title: 'Saved', message: 'Client details updated.' })
+            window.dispatchEvent(new CustomEvent('firma-reminders-updated'))
             onSaved?.()
         } catch (e: unknown) {
             addToast({
@@ -237,25 +280,121 @@ export function ClientSettingsForm({
                             className="bg-white border-gray-200 text-gray-900 placeholder:text-gray-400 focus-visible:ring-gray-400 disabled:cursor-not-allowed disabled:opacity-60"
                         />
                     </div>
-                    {firmId ? (
-                        <div className="space-y-2">
-                            <Label htmlFor="client-owner" className="text-gray-700 font-medium">Owner (optional)</Label>
-                            <select
-                                id="client-owner"
-                                value={ownerId ?? ''}
-                                onChange={(e) => setOwnerId(e.target.value || null)}
-                                disabled={isSandboxFirm}
-                                className="w-full h-10 rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-400 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                                <option value="">No owner</option>
-                                {memberOptions.map((m) => (
-                                    <option key={m.userId} value={m.userId}>
-                                        {m.label}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                    ) : null}
+
+                    {status === 'PROSPECT' && (
+                        <>
+                            <div className="space-y-2">
+                                <Label htmlFor="client-lead-source" className="text-gray-700 font-medium">Lead source (optional)</Label>
+                                <SelectWithCustomEntry
+                                    id="client-lead-source"
+                                    value={leadSource}
+                                    onChange={setLeadSource}
+                                    options={['Referral', 'Inbound', 'Outbound', 'Conference', 'Existing Network']}
+                                    placeholder="Select source…"
+                                    customEntryHint="Other…"
+                                    disabled={isSandboxFirm}
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label className="text-gray-700 font-medium">Follow-up date (optional)</Label>
+                                <DateTimePicker
+                                    value={followUpDate}
+                                    onChange={setFollowUpDate}
+                                    placeholder="Select date"
+                                    disabled={isSandboxFirm}
+                                    defaultTime="09:00"
+                                />
+                                <p className="text-xs text-gray-400">When should you next follow up with this prospect?</p>
+                            </div>
+                            <div className="space-y-2">
+                                <Label className="text-gray-700 font-medium">Expected close date (optional)</Label>
+                                <DateTimePicker
+                                    value={expectedCloseDate}
+                                    onChange={setExpectedCloseDate}
+                                    placeholder="Select date"
+                                    disabled={isSandboxFirm}
+                                    defaultTime="17:00"
+                                />
+                                <p className="text-xs text-gray-400">When do you expect to convert this prospect?</p>
+                            </div>
+                        </>
+                    )}
+
+                    <div className="space-y-2">
+                        <Label htmlFor="client-internal-memo" className="text-gray-700 font-medium flex items-center gap-1.5">
+                            Internal memo
+                            <span className="inline-flex items-center gap-1 text-xs font-normal text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">
+                                <Lock className="h-2.5 w-2.5" /> Internal only
+                            </span>
+                        </Label>
+                        <textarea
+                            id="client-internal-memo"
+                            value={internalMemo}
+                            onChange={(e) => setInternalMemo(e.target.value)}
+                            placeholder="Private notes, call summaries, relationship context…"
+                            rows={3}
+                            disabled={isSandboxFirm}
+                            className="flex w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400 disabled:cursor-not-allowed disabled:opacity-60"
+                        />
+                        <p className="text-xs text-gray-400">Not visible to client portal users.</p>
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label htmlFor="client-since-date" className="text-gray-700 font-medium">Client since (optional)</Label>
+                        <DateTimePicker
+                            value={clientSinceDate}
+                            onChange={setClientSinceDate}
+                            placeholder="Select date"
+                            disabled={isSandboxFirm}
+                            defaultTime="00:00"
+                        />
+                        <p className="text-xs text-gray-400">When did this relationship begin?</p>
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label htmlFor="client-linkedin" className="text-gray-700 font-medium flex items-center gap-1.5">
+                            <Linkedin className="h-3.5 w-3.5" /> Company LinkedIn (optional)
+                        </Label>
+                        <Input
+                            id="client-linkedin"
+                            value={linkedInUrl}
+                            onChange={(e) => setLinkedInUrl(e.target.value)}
+                            placeholder="https://linkedin.com/company/…"
+                            disabled={isSandboxFirm}
+                            className="bg-white border-gray-200 text-gray-900 placeholder:text-gray-400 focus-visible:ring-gray-400 disabled:cursor-not-allowed disabled:opacity-60"
+                        />
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label htmlFor="client-company-size" className="text-gray-700 font-medium flex items-center gap-1.5">
+                            <Users2 className="h-3.5 w-3.5" /> Company size (optional)
+                        </Label>
+                        <SelectWithCustomEntry
+                            id="client-company-size"
+                            value={companySizeBracket}
+                            onChange={setCompanySizeBracket}
+                            options={['<10', '11–50', '51–200', '201–1000', '1000+']}
+                            placeholder="Select size bracket…"
+                            customEntryHint="Custom…"
+                            disabled={isSandboxFirm}
+                        />
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label htmlFor="client-billing-address" className="text-gray-700 font-medium flex items-center gap-1.5">
+                            <MapPin className="h-3.5 w-3.5" /> Billing address (optional)
+                        </Label>
+                        <textarea
+                            id="client-billing-address"
+                            value={billingAddress}
+                            onChange={(e) => setBillingAddress(e.target.value)}
+                            placeholder={"123 Main St\nCity, State ZIP\nCountry"}
+                            rows={3}
+                            disabled={isSandboxFirm}
+                            className="flex w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400 disabled:cursor-not-allowed disabled:opacity-60"
+                        />
+                    </div>
+
                     <div className="flex flex-wrap gap-3">
                         <Button
                             type="button"
@@ -270,7 +409,7 @@ export function ClientSettingsForm({
                             disabled={isSandboxFirm || saving}
                             className={`${buttonClass} bg-gray-900 text-white hover:bg-black`}
                         >
-                            {saving ? 'Saving...' : 'Save changes'}
+                            {saving ? 'Saving...' : 'Save'}
                         </Button>
                     </div>
                 </div>

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Modal } from '@/components/ui/modal'
-import { Trash2, FileText, Check, AlertTriangle, Minimize2 } from 'lucide-react'
+import { FileText, Check } from 'lucide-react'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { formatDistanceToNow } from 'date-fns'
 import { DriveFile } from '@/lib/types'
@@ -18,6 +18,7 @@ interface DuplicateReviewModalProps {
     onClose: () => void
     groups: DuplicateGroup[]
     onTrash: (fileIds: string[]) => Promise<void>
+    token?: string
 }
 
 export function DuplicateReviewModal({
@@ -25,15 +26,30 @@ export function DuplicateReviewModal({
     onClose,
     groups,
     onTrash,
+    token,
 }: DuplicateReviewModalProps) {
     const [processingGroups, setProcessingGroups] = useState<Set<string>>(new Set())
     const [localGroups, setLocalGroups] = useState<DuplicateGroup[]>([])
+    const [folderNames, setFolderNames] = useState<Record<string, string>>({})
 
     useEffect(() => {
         if (isOpen) {
             setLocalGroups(groups)
         }
     }, [isOpen, groups])
+
+    useEffect(() => {
+        if (!isOpen || localGroups.length === 0 || !token) return
+        const uniqueIds = Array.from(new Set(
+            localGroups.flatMap(g => g.files.flatMap(f => f.parents?.[0] ? [f.parents[0]] : []))
+        ))
+        if (uniqueIds.length === 0) return
+        fetch('/api/drive-action', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'folder_names', folderIds: uniqueIds })
+        }).then(r => r.json()).then(d => { if (d.names) setFolderNames(d.names) }).catch(() => {})
+    }, [isOpen, localGroups, token])
 
     const handleSmartMerge = async (groupIndex: number, keep: 'oldest' | 'newest') => {
         const group = localGroups[groupIndex]
@@ -94,7 +110,7 @@ export function DuplicateReviewModal({
                         </div>
                     ) : (
                         localGroups.map((group, idx) => (
-                            <div key={group.signature} className="border border-gray-200 rounded-lg overflow-hidden bg-white hover:border-blue-200 transition-colors">
+                            <div key={`${group.signature}-${idx}`} className="border border-gray-200 rounded-lg overflow-hidden bg-white hover:border-blue-200 transition-colors">
                                 <div className="bg-gray-50 px-4 py-3 flex items-center justify-between">
                                     <div className="flex items-center gap-2">
                                         <div className="p-1.5 bg-white rounded border border-gray-200 shadow-sm">
@@ -141,16 +157,30 @@ export function DuplicateReviewModal({
                                 <div className="divide-y divide-gray-100">
                                     {group.files.map((file) => (
                                         <div key={file.id} className="px-4 py-2 flex items-center justify-between text-xs hover:bg-gray-50">
-                                            <div className="flex items-center gap-2 text-gray-600">
-                                                <span>{formatSize(typeof file.size === 'number' ? file.size : parseInt(file.size || '0'))}</span>
-                                                <span className="text-gray-300">|</span>
-                                                <span>Modified {file.modifiedTime && formatDistanceToNow(new Date(file.modifiedTime), { addSuffix: true })}</span>
+                                            <div className="flex flex-col gap-0.5 text-gray-600">
+                                                <div className="flex items-center gap-2">
+                                                    <span>{formatSize(typeof file.size === 'number' ? file.size : parseInt(file.size || '0'))}</span>
+                                                    <span className="text-gray-300">|</span>
+                                                    <span>Modified {file.modifiedTime && formatDistanceToNow(new Date(file.modifiedTime), { addSuffix: true })}</span>
+                                                </div>
+                                                {file.parents?.[0] && (
+                                                    <a
+                                                        href={file.webViewLink}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="text-gray-400 hover:text-gray-700 flex items-center gap-1"
+                                                    >
+                                                        <span>{folderNames[file.parents[0]] ?? '…'}</span>
+                                                        <span className="text-gray-300">/</span>
+                                                        <span>{file.name}</span>
+                                                    </a>
+                                                )}
                                             </div>
                                             <a
                                                 href={file.webViewLink}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
-                                                className="text-blue-600 hover:underline"
+                                                className="text-blue-600 hover:underline shrink-0"
                                             >
                                                 View
                                             </a>

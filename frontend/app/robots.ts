@@ -17,6 +17,7 @@ export default function robots(): MetadataRoute.Robots {
           '/signin',
           '/signup',
           '/auth/',
+          '/waitlist',
         ],
       },
       {
@@ -30,6 +31,7 @@ export default function robots(): MetadataRoute.Robots {
           '/signin',
           '/signup',
           '/auth/',
+          '/waitlist',
         ],
       },
     ],

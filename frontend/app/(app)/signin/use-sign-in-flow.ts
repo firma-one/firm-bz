@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { AuthService } from '@/lib/auth-service'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth-context'
-import { sendOTPWithTurnstile } from '@/app/actions/send-otp'
+import { checkEmailExists, sendOTPWithTurnstile } from '@/app/actions/send-otp'
 import { sendEvent, ANALYTICS_EVENTS } from '@/lib/analytics'
 
 export const SIGNIN_EMAIL_KEY = 'fm_signin_email'
@@ -28,11 +28,15 @@ export function useSignInFlow() {
   const [email, setEmail] = useState('')
   const [otpCode, setOtpCode] = useState('')
   const [loading, setLoading] = useState(false)
+  const [checkLoading, setCheckLoading] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
   const [error, setError] = useState('')
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
   const [showTurnstile, setShowTurnstile] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [noAccountMessage, setNoAccountMessage] = useState('')
+  const [emailVerified, setEmailVerified] = useState(false)
+  const [turnstileAction, setTurnstileAction] = useState<'check' | 'send'>('check')
   const [stepTransition, setStepTransition] = useState<'idle' | 'exiting' | 'entering'>('idle')
 
   useEffect(() => {
@@ -89,6 +93,8 @@ export function useSignInFlow() {
 
   useEffect(() => {
     if (!email) return
+    setNoAccountMessage('')
+    setEmailVerified(false)
     try {
       sessionStorage.setItem(SIGNIN_EMAIL_KEY, email)
     } catch {
@@ -104,6 +110,34 @@ export function useSignInFlow() {
       setTimeout(() => setStepTransition('idle'), 300)
     }, 200)
   }, [])
+
+  const handleEmailCheckWithToken = useCallback(
+    async (token: string) => {
+      setCheckLoading(true)
+      setError('')
+      setNoAccountMessage('')
+      const existsResult = await checkEmailExists(email, token)
+      if (!existsResult.success) {
+        setError(existsResult.error || 'Failed to verify email')
+        setCheckLoading(false)
+        setTurnstileToken(null)
+        setShowTurnstile(false)
+        return
+      }
+      if (!existsResult.data?.userExists) {
+        setNoAccountMessage('No account found for this email.')
+        setCheckLoading(false)
+        setTurnstileToken(null)
+        setShowTurnstile(false)
+        return
+      }
+      setEmailVerified(true)
+      setCheckLoading(false)
+      setTurnstileToken(null)
+      setShowTurnstile(false)
+    },
+    [email],
+  )
 
   const sendOTPWithToken = useCallback(
     async (token: string) => {
@@ -124,6 +158,25 @@ export function useSignInFlow() {
     },
     [email, animateToStep],
   )
+
+  const handleTurnstileSuccess = useCallback(
+    (token: string) => {
+      setTurnstileToken(token)
+      setError('')
+      if (turnstileAction === 'check') {
+        handleEmailCheckWithToken(token)
+      } else {
+        sendOTPWithToken(token)
+      }
+    },
+    [turnstileAction, handleEmailCheckWithToken, sendOTPWithToken],
+  )
+
+  const handleInitiateCheck = useCallback(() => {
+    if (!email.trim()) return
+    setTurnstileAction('check')
+    setShowTurnstile(true)
+  }, [email])
 
   const handleEmailSubmit = useCallback(
     async (method: 'google' | 'otp') => {
@@ -152,6 +205,7 @@ export function useSignInFlow() {
         })
       } else {
         if (!turnstileToken) {
+          setTurnstileAction('send')
           setShowTurnstile(true)
           return
         }
@@ -242,9 +296,12 @@ export function useSignInFlow() {
     otpCode,
     setOtpCode,
     loading,
+    checkLoading,
     googleLoading,
     error,
     setError,
+    noAccountMessage,
+    emailVerified,
     turnstileToken,
     setTurnstileToken,
     showTurnstile,
@@ -255,5 +312,7 @@ export function useSignInFlow() {
     sendOTPWithToken,
     handleEmailSubmit,
     handleVerifyOTP,
+    handleInitiateCheck,
+    handleTurnstileSuccess,
   }
 }

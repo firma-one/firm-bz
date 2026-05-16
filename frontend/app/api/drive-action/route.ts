@@ -5,7 +5,7 @@ import { ConnectorType } from "@prisma/client"
 import { googleDriveConnector } from "@/lib/google-drive-connector"
 import { safeInngestSend } from '@/lib/inngest/client'
 import { logger } from '@/lib/logger'
-import { createPlatformAuditEvent } from '@/lib/platform-audit'
+import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { blockIfEngagementFileMutationForbidden } from '@/lib/engagement-access'
 
 const supabase = createClient(
@@ -186,15 +186,15 @@ export async function POST(request: NextRequest) {
                                 },
                                 select: { id: true },
                             })
-                            await createPlatformAuditEvent({
-                                organizationId: project.firmId,
-                                clientId: project.clientId,
-                                projectId: requestProjectId,
-                                projectDocumentId: doc?.id ?? undefined,
-                                eventType: 'PROJECT_DOCUMENT_REMOVED',
-                                actorUserId: user.id,
-                                metadata: { fileName: requestFileName ?? fileId, reason: 'moved_to_bin' },
-                            })
+                            audit(AUDIT_EVENT.DOCUMENT_DELETED)
+                                .scope(AUDIT_SCOPE.DOCUMENT)
+                                .firm(project.firmId)
+                                .client(project.clientId)
+                                .engagement(requestProjectId)
+                                .document(doc?.id)
+                                .actor(user.id)
+                                .meta({ fileName: requestFileName ?? fileId, reason: 'moved_to_bin' })
+                                .fireAndForget()
                         }
                     } catch (auditErr) {
                         logger.warn('[trash] Failed to create audit event', auditErr as Error)
@@ -216,8 +216,13 @@ export async function POST(request: NextRequest) {
                 })
 
                 const duplicateResults = await Promise.all(duplicatePromises)
-                // Flatten: File[][] -> File[] (groups)
-                const duplicates = duplicateResults.flat()
+                // Flatten and deduplicate by signature (same file can appear across connectors)
+                const seen = new Set<string>()
+                const duplicates = duplicateResults.flat().filter(g => {
+                    if (seen.has(g.signature)) return false
+                    seen.add(g.signature)
+                    return true
+                })
                 result = { duplicates }
                 break
 
@@ -269,6 +274,25 @@ export async function POST(request: NextRequest) {
                 }
                 result = { success: true }
                 break
+
+            case 'folder_names': {
+                const { folderIds } = body
+                if (!Array.isArray(folderIds) || folderIds.length === 0) {
+                    result = { names: {} }
+                    break
+                }
+                const folderConnector = connectors[0]
+                const folderMetas = await Promise.allSettled(
+                    (folderIds as string[]).map(id => googleDriveConnector.getFileMetadata(folderConnector.id, id))
+                )
+                const folderNameMap: Record<string, string> = {}
+                ;(folderIds as string[]).forEach((id, i) => {
+                    const r = folderMetas[i]
+                    if (r.status === 'fulfilled' && r.value?.name) folderNameMap[id] = r.value.name
+                })
+                result = { names: folderNameMap }
+                break
+            }
 
             default:
                 return NextResponse.json({ error: 'Invalid action' }, { status: 400 })

@@ -38,6 +38,7 @@ export function StandardCheckoutIntentBanner() {
     const pathname = usePathname() ?? ''
     const firms = useSidebarFirms()
     const [gate, setGate] = useState<'unknown' | 'show' | 'hide'>('unknown')
+    const [isFirmAdmin, setIsFirmAdmin] = useState<boolean | null>(null)
     const [intent, setIntent] = useState<CheckoutIntent | null>(null)
     const [upgradeNudge, setUpgradeNudge] = useState(false)
     const [mounted, setMounted] = useState(false)
@@ -78,8 +79,13 @@ export function StandardCheckoutIntentBanner() {
         let cancelled = false
         fetch('/api/billing/upgrade-nudge-status')
             .then((res) => (res.ok ? res.json() : { shouldShow: false }))
-            .then((payload: { shouldShow?: boolean }) => {
+            .then((payload: { shouldShow?: boolean; hasPaid?: boolean; isFirmAdmin?: boolean }) => {
                 if (cancelled) return
+                if (payload.hasPaid) {
+                    clearCheckoutIntent()
+                    setIntent(null)
+                }
+                setIsFirmAdmin(payload.isFirmAdmin === true)
                 setUpgradeNudge(payload.shouldShow === true)
             })
             .catch(() => {
@@ -162,6 +168,7 @@ export function StandardCheckoutIntentBanner() {
 
     const showHintLogic =
         gate === 'show' &&
+        isFirmAdmin === true &&
         (isStandardPaidCheckoutIntent(intent) || upgradeNudge) &&
         !HIDE_ONBOARDING_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))
 

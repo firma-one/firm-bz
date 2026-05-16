@@ -16,10 +16,13 @@
 --   - `system.system_admins` for the user
 --   - `platform.connectors` rows that are no longer referenced by any firm
 --     after the deletes (same `userId` is often the Drive connector owner)
+--   - (optional) all Supabase `auth.*` rows for the user when
+--     `v_delete_auth_user` is set to `true`
 --
--- What this does NOT do
--- ---------------------
---   - Does not delete the Supabase Auth user (`auth.users`) or sessions.
+-- What this does NOT do (by default)
+-- ------------------------------------
+--   - Does not delete the Supabase Auth user (`auth.users`) or sessions
+--     unless v_delete_auth_user = true.
 --   - Does not remove the user from firms where they are only `firm_member`
 --     (those firms are left intact).
 --   - Does not delete `system.contact_submissions`, `system.waitlist`, etc.
@@ -29,7 +32,7 @@
 --   psql "$DIRECT_URL" -v target_user="'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'"
 --        -f frontend/scripts/sql/cascade-delete-platform-data-for-firm-admin.sql
 --
--- Or edit the UUID inside the DO block below and run from any SQL client.
+-- Or edit the UUIDs/flags inside the DO block below and run from any SQL client.
 --
 -- Always run inside a transaction first and verify counts:
 --   BEGIN;
@@ -44,6 +47,9 @@ DO $$
 DECLARE
   -- Set this UUID to the user to purge (firm_admin workspaces only).
   v_user uuid := '00000000-0000-0000-0000-000000000000'::uuid;
+
+  -- Set to true to also delete all Supabase auth rows for this user.
+  v_delete_auth_user boolean := false;
 
   v_firm_ids uuid[];
   v_firm_count int;
@@ -119,6 +125,44 @@ BEGIN
 
   GET DIAGNOSTICS v_deleted = ROW_COUNT;
   RAISE NOTICE 'Deleted system_admins rows: %', v_deleted;
+
+  -- Optional: delete all Supabase auth rows for this user.
+  -- Child tables first to avoid FK violations.
+  IF v_delete_auth_user THEN
+    DELETE FROM auth.mfa_amr_claims
+    WHERE session_id IN (SELECT id FROM auth.sessions WHERE user_id = v_user);
+    GET DIAGNOSTICS v_deleted = ROW_COUNT;
+    RAISE NOTICE 'Deleted auth.mfa_amr_claims rows: %', v_deleted;
+
+    DELETE FROM auth.mfa_challenges
+    WHERE factor_id IN (SELECT id FROM auth.mfa_factors WHERE user_id = v_user);
+    GET DIAGNOSTICS v_deleted = ROW_COUNT;
+    RAISE NOTICE 'Deleted auth.mfa_challenges rows: %', v_deleted;
+
+    DELETE FROM auth.mfa_factors WHERE user_id = v_user;
+    GET DIAGNOSTICS v_deleted = ROW_COUNT;
+    RAISE NOTICE 'Deleted auth.mfa_factors rows: %', v_deleted;
+
+    DELETE FROM auth.sessions WHERE user_id = v_user;
+    GET DIAGNOSTICS v_deleted = ROW_COUNT;
+    RAISE NOTICE 'Deleted auth.sessions rows: %', v_deleted;
+
+    DELETE FROM auth.refresh_tokens WHERE user_id = v_user;
+    GET DIAGNOSTICS v_deleted = ROW_COUNT;
+    RAISE NOTICE 'Deleted auth.refresh_tokens rows: %', v_deleted;
+
+    DELETE FROM auth.identities WHERE user_id = v_user;
+    GET DIAGNOSTICS v_deleted = ROW_COUNT;
+    RAISE NOTICE 'Deleted auth.identities rows: %', v_deleted;
+
+    DELETE FROM auth.one_time_tokens WHERE user_id = v_user;
+    GET DIAGNOSTICS v_deleted = ROW_COUNT;
+    RAISE NOTICE 'Deleted auth.one_time_tokens rows: %', v_deleted;
+
+    DELETE FROM auth.users WHERE id = v_user;
+    GET DIAGNOSTICS v_deleted = ROW_COUNT;
+    RAISE NOTICE 'Deleted auth.users rows: %', v_deleted;
+  END IF;
 
   RAISE NOTICE 'Done.';
 END $$;

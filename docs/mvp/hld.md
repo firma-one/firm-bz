@@ -4,7 +4,7 @@
 
 **Audience:** Technical and non-technical stakeholders, implementation partners, and client delivery teams.
 
-**Related documents:** [PRD](prd.md) (requirements and features), [Roadmap](roadmap.md) (milestones and releases). **Subscriptions (Polar + plans):** [prd-subscriptions.md](prd-subscriptions.md), [hld-subscription.md](hld-subscription.md).
+**Related documents:** [PRD](prd.md) (requirements and features), [Roadmap](roadmap.md) (milestones and releases). **Subscriptions (Polar + plans):** [prd-subscriptions.md](prd-subscriptions.md), [hld-subscription.md](hld-subscription.md). **Operations:** [hld-admin-operations.md](hld-admin-operations.md) (integration monitoring and onboarding recovery), [hld-inngest-jobs.md](hld-inngest-jobs.md) (background tasks).
 
 ---
 
@@ -1231,6 +1231,7 @@ Using this mapping, an implementer can produce LLD documents (e.g. one per epic 
 - [PRD](prd.md) – Product requirements and feature list
 - [PRD — Subscriptions](prd-subscriptions.md) – Polar contract, checkout, webhooks, `platform.subscriptions`, tier matrix, roadmap
 - [HLD — Subscriptions](hld-subscription.md) – Billing component map
+- [HLD — Inngest Jobs](hld-inngest-jobs.md) – Event-driven job architecture, all background tasks (indexing, permissions, onboarding)
 - [Roadmap](roadmap.md) – Milestones and schedule
 - [LLD](lld.md) – Low-level implementation details (permission framework, API contracts, component specs)
 - [AGENTS.md](../../AGENTS.md) – Database migrations, Vercel, Git workflow

@@ -11,6 +11,7 @@ export type BreadcrumbItem = {
 
 const FILES_LAST_FOLDER_KEY = (projectId: string) => `fm_files_last_folder_${projectId}`
 const FILES_BREADCRUMBS_KEY = (projectId: string) => `fm_files_breadcrumbs_${projectId}`
+const FILES_DEEPLINK_HIGHLIGHT_KEY = (projectId: string) => `fm_files_deeplink_highlight_${projectId}`
 
 export function getSavedFolderState(projectId: string): { folderId: string | null; breadcrumbs: BreadcrumbItem[] } {
   if (typeof window === 'undefined') return { folderId: null, breadcrumbs: [] }
@@ -36,5 +37,25 @@ export function setSavedFolderState(projectId: string, folderId: string | null, 
     }
   } catch {
     // ignore
+  }
+}
+
+/** Store a file/folder external ID to highlight once the Files tab loads at the target folder. Consumed once on read. */
+export function setDeeplinkHighlight(projectId: string, externalId: string) {
+  if (typeof window === 'undefined') return
+  try {
+    sessionStorage.setItem(FILES_DEEPLINK_HIGHLIGHT_KEY(projectId), externalId)
+  } catch { /* ignore */ }
+}
+
+/** Read and immediately clear the pending deeplink highlight. Returns null if none. */
+export function consumeDeeplinkHighlight(projectId: string): string | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const val = sessionStorage.getItem(FILES_DEEPLINK_HIGHLIGHT_KEY(projectId))
+    if (val) sessionStorage.removeItem(FILES_DEEPLINK_HIGHLIGHT_KEY(projectId))
+    return val
+  } catch {
+    return null
   }
 }

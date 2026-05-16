@@ -227,10 +227,55 @@ model Firm {
   engagementDocuments EngagementDocument[]
   docCommentMessages DocCommentMessage[]
   platformAuditEvents PlatformAuditEvent[]
+  workspaceMigrations FirmWorkspaceMigration[]
 
   @@index([billingSharesSubscriptionFromFirmId])
   @@index([anchorFirmId])
   @@map("firms")
+  @@schema("platform")
+}
+
+model FirmWorkspaceMigration {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  firmId               String    @db.Uuid
+  connectorId          String    @db.Uuid
+  status               String    // pending_grace | in_progress | completed | failed | failed_partial
+  oldRootFolderId      String?
+  newRootFolderId      String
+  initiatedBy          String    @db.Uuid
+  initiatedAt          DateTime  @default(now()) @db.Timestamptz(6)
+  graceEndsAt          DateTime? @db.Timestamptz(6)
+  maintenanceStartedAt DateTime? @db.Timestamptz(6)
+  maintenanceEndedAt   DateTime? @db.Timestamptz(6)
+  estimatedMinutes     Int?
+  inngestRunId         String?
+  createdAt            DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime  @updatedAt @db.Timestamptz(6)
+
+  firm  Firm                         @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  files FirmWorkspaceMigrationFile[]
+
+  @@index([firmId])
+  @@index([firmId, status])
+  @@map("firm_workspace_migrations")
+  @@schema("platform")
+}
+
+model FirmWorkspaceMigrationFile {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  migrationId String    @db.Uuid
+  fileId      String
+  fileName    String?
+  status      String    @default("pending") // pending | moved | failed | skipped
+  error       String?
+  attemptedAt DateTime? @db.Timestamptz(6)
+  movedAt     DateTime? @db.Timestamptz(6)
+
+  migration FirmWorkspaceMigration @relation(fields: [migrationId], references: [id], onDelete: Cascade)
+
+  @@index([migrationId])
+  @@index([migrationId, status])
+  @@map("firm_workspace_migration_files")
   @@schema("platform")
 }
 
@@ -288,6 +333,17 @@ model Client {
   sandboxOnly    Boolean  @default(false)
   driveFolderId  String?
 
+  followUpDate      DateTime?
+  expectedCloseDate DateTime?
+  leadSource        String?
+  internalMemo      String?  @db.Text
+  relationshipValue Decimal? @db.Decimal(12, 2)
+
+  clientSinceDate    DateTime?
+  linkedInUrl        String?
+  companySizeBracket String?
+  billingAddress     String?  @db.Text
+
   firm                Firm                @relation(fields: [firmId], references: [id], onDelete: Cascade)
   engagements         Engagement[]
   members             ClientMember[]
@@ -317,6 +373,7 @@ model ClientContact {
   title          String?
   notes          String?
   tags           Json      @default("[]")
+  isPrimary      Boolean   @default(false)
 
   client         Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
   engagement     Engagement? @relation(fields: [engagementId], references: [id], onDelete: SetNull)
@@ -362,7 +419,7 @@ model Engagement {
   docCommentMessages    DocCommentMessage[]
   platformAuditEvents   PlatformAuditEvent[]
   notifications         Notification[]
-  canvases              EngagementCanvas[]
+  wikiPages             EngagementWikiPage[]
   contacts              ClientContact[]
 
   @@unique([clientId, slug])
@@ -572,12 +629,15 @@ model Notification {
   updatedAt      DateTime @updatedAt @db.Timestamptz(6)
   createdBy      String?  @db.Uuid
   updatedBy      String?  @db.Uuid
-  firmId         String   @db.Uuid
+  /// Null for PLATFORM-scoped notifications
+  firmId         String?  @db.Uuid
   clientId       String?  @db.Uuid
   engagementId   String?  @db.Uuid
   documentId     String?  @db.Uuid
 
   userId         String   @db.Uuid
+  /// PLATFORM | FIRM | CLIENT | ENGAGEMENT | DOCUMENT
+  scope          String   @default("FIRM")
   type           String
   priority       NotificationPriority @default(INFO)
   title          String
@@ -599,6 +659,7 @@ model Notification {
   @@index([clientId, engagementId, documentId])
   @@index([userId, readAt])
   @@index([userId, dismissedAt])
+  @@index([scope, userId])
   @@map("platform_notifications")
   @@schema("platform")
 }
@@ -610,31 +671,35 @@ model UserPersonalization {
   createdBy  String?  @db.Uuid
   updatedBy  String?  @db.Uuid
   bookmarks  Json     @default("[]")
-  notes      String?  @db.Text
+  reminders  Json     @default("[]")
 
   @@map("user_personalizations")
   @@schema("platform")
 }
 
-model EngagementCanvas {
-  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  createdBy       String?  @db.Uuid
-  updatedBy       String?  @db.Uuid
 
-  firmId          String   @db.Uuid
-  clientId        String   @db.Uuid
-  engagementId    String   @db.Uuid
+model EngagementWikiPage {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  createdBy    String?   @db.Uuid
+  updatedBy    String?   @db.Uuid
 
-  content         String   @default("") @db.Text
-  allowExternal   Boolean  @default(false)
+  engagementId String    @db.Uuid
+  firmId       String    @db.Uuid
+  title        String
+  slug         String
+  driveFileId  String?
+  order        Int       @default(0)
+  parentId     String?   @db.Uuid
 
-  engagement      Engagement  @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  engagement   Engagement           @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  parent       EngagementWikiPage?  @relation("WikiPageTree", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  children     EngagementWikiPage[] @relation("WikiPageTree")
 
-  @@unique([engagementId])
-  @@index([firmId, engagementId])
-  @@map("engagement_canvases")
+  @@unique([engagementId, slug])
+  @@index([engagementId, order])
+  @@map("engagement_wiki_pages")
   @@schema("platform")
 }
 
@@ -687,44 +752,11 @@ model DocCommentMessage {
 }
 
 enum PlatformAuditScope {
-  PROJECT
-
-  @@schema("platform")
-}
-
-enum PlatformAuditEventType {
-  // Project lifecycle
-  PROJECT_CREATED
-  PROJECT_UPDATED
-  PROJECT_CLOSED
-  PROJECT_REOPENED
-  PROJECT_SOFT_DELETED
-  // Membership
-  PROJECT_MEMBER_ADDED
-  PROJECT_MEMBER_REMOVED
-  PROJECT_MEMBER_ROLE_CHANGED
-  // Document lifecycle within project
-  PROJECT_DOCUMENT_ADDED
-  PROJECT_DOCUMENT_REMOVED
-  PROJECT_DOCUMENT_RENAMED
-  // Document sharing & workflow (legacy aliases kept for compatibility)
-  FILE_UPLOADED
-  STATUS_CHANGE
-  SHARED_EXT
-  PROJECT_LOCKED
-  DOCUMENT_ACTIVITY_STATUS_CHANGED
-  DOCUMENT_SHARED_INTERNAL
-  DOCUMENT_SHARED_EXTERNAL
-  DOCUMENT_SHARE_FINALIZED
-  DOCUMENT_SHARE_REGRANTED
-  // Indexing
-  PROJECT_INDEX_REQUESTED
-  DOCUMENT_INDEX_REQUESTED
-  DOCUMENT_INDEX_COMPLETED
-  // Config
-  PROJECT_CONNECTOR_FOLDER_ATTACHED
-  PROJECT_SETTINGS_CHANGED
-  DOCUMENT_ACCESS_LOG_ENTRY
+  PROJECT     // legacy — kept for existing rows
+  FIRM
+  CLIENT
+  ENGAGEMENT
+  DOCUMENT
 
   @@schema("platform")
 }
@@ -739,7 +771,7 @@ model PlatformAuditEvent {
   projectDocumentId String?                @db.Uuid
 
   scope             PlatformAuditScope
-  eventType         PlatformAuditEventType
+  eventType         String
   eventAt           DateTime               @default(now())
 
   actorUserId       String?                @db.Uuid
@@ -753,6 +785,7 @@ model PlatformAuditEvent {
 
   @@index([engagementId, eventAt])
   @@index([engagementId, projectDocumentId, eventAt])
+  @@index([firmId, scope, eventAt])
   @@map("platform_audit_events")
   @@schema("platform")
 }
@@ -827,11 +860,14 @@ model Waitlist {
 
 model CustomerRequest {
   id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticketNumber   String   @unique
   type           TicketType
   status         TicketStatus @default(NEW)
   description    String
   errorDetails   Json?
   metadata       Json?
+  comments       Json     @default("[]")
+  attachments    Json     @default("[]")
   firmId         String?  @db.Uuid
   clientId       String?  @db.Uuid
   engagementId   String?  @db.Uuid

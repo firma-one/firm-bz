@@ -21,7 +21,7 @@ export function RefreshControl() {
     return (
         <div className="flex items-center gap-2 text-xs text-gray-500">
             <span>
-                Updated {lastRefreshed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                Updated {lastRefreshed.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })}
             </span>
             <Button
                 variant="ghost"

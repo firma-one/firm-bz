@@ -76,9 +76,8 @@ export interface ProjectSearchPanelActionMenuProps {
   onMoveDocument?: (doc: DriveFile) => void
   onDeleteDocument?: (doc: DriveFile) => void
   onRenameDocument?: (doc: DriveFile) => void
-  onRestrictToConfidential?: (doc: DriveFile) => void
-  onRestoreToGeneral?: (doc: DriveFile) => void
-  onPromoteToGeneral?: (doc: DriveFile) => void
+  onMakePrivate?: (doc: DriveFile) => void
+  onMakePublic?: (doc: DriveFile) => void
   onShareSaved?: () => void
 }
 
@@ -380,9 +379,8 @@ export function ProjectSearchPanel({
                 onCopyDocument={actionMenuProps.onCopyDocument}
                 onMoveDocument={actionMenuProps.onMoveDocument}
                 onDeleteDocument={actionMenuProps.onDeleteDocument}
-                onRestrictToConfidential={actionMenuProps.onRestrictToConfidential}
-                onRestoreToGeneral={actionMenuProps.onRestoreToGeneral}
-                onPromoteToGeneral={actionMenuProps.onPromoteToGeneral}
+                onMakePrivate={actionMenuProps.onMakePrivate}
+                onMakePublic={actionMenuProps.onMakePublic}
                 onOpenDocument={(doc) => actionMenuProps.onOpenDocument(doc as DriveFile)}
                 triggerIcon={<MoreVertical className="h-4 w-4" />}
               />

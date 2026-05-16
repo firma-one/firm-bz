@@ -7,7 +7,8 @@ import { usePathname } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { supabase } from "@/lib/supabase"
 import { Bell, Bookmark, ChevronDown, ChevronUp, Info, Megaphone, Send, Trash2, X } from "lucide-react"
-import { MyNotesPopover } from "@/components/app/my-notes-popover"
+import { Tip } from "@/components/ui/tip"
+import { RemindersPanel } from "@/components/app/reminders-panel"
 
 // Cache firm branding by slug (in-memory for session)
 const brandingCache = new Map<string, { branding: OrganizationBranding | null; firmId?: string }>()
@@ -352,11 +353,12 @@ export function AppTopbar() {
 
       {/* Right: Bookmarks + Alerts */}
       <div className="flex items-center gap-1.5">
-        <MyNotesPopover />
+        <RemindersPanel />
         <div className="relative bookmarks-container">
+          <Tip label="Bookmarks" position="bottom">
           <button
             type="button"
-            className="p-2 text-indigo-600/80 hover:text-indigo-700 hover:bg-indigo-50 rounded-full transition-colors"
+            className="p-2 text-indigo-600/80 hover:text-indigo-700 hover:bg-indigo-50 rounded-full transition-colors relative"
             aria-label="Bookmarks"
             onClick={() => {
               setShowBookmarksDropdown((v) => !v)
@@ -365,16 +367,27 @@ export function AppTopbar() {
             }}
           >
             <Bookmark className="h-5 w-5" />
+            {bookmarks.length > 0 ? (
+              <span className="absolute top-0.5 right-0.5 min-w-[14px] h-3.5 px-1 bg-indigo-500 text-white text-[9px] font-bold rounded-full border border-white flex items-center justify-center leading-none">
+                {bookmarks.length}
+              </span>
+            ) : null}
           </button>
+          </Tip>
           {showBookmarksDropdown ? (
             <div className="absolute right-0 top-full mt-2 w-[360px] bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden">
-              <div className="px-4 py-3 border-b border-slate-200 bg-white">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-semibold text-slate-900">Bookmarks</div>
-                    <div className="text-xs text-slate-600">Your saved links</div>
+              <div className="px-4 py-3 border-b border-slate-200 bg-slate-50">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[13px] font-bold text-slate-900 tracking-tight">Bookmarks</span>
+                    {bookmarks.length > 0 ? (
+                      <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-600 text-white">{bookmarks.length}</span>
+                    ) : null}
                   </div>
-                  <div className="text-[11px] text-slate-500 font-medium">{bookmarks.length} total</div>
+                  <button type="button" onClick={() => setShowBookmarksDropdown(false)} aria-label="Close"
+                    className="p-1 rounded-lg hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors">
+                    <X className="h-4 w-4" />
+                  </button>
                 </div>
                 <div className="mt-2">
                   <input
@@ -476,6 +489,7 @@ export function AppTopbar() {
         </div>
 
         <div className="relative notifications-container">
+          <Tip label="Notifications" position="bottom-right">
           <button
             type="button"
             className="p-2 text-rose-600/80 hover:text-rose-700 hover:bg-rose-50 rounded-full transition-colors relative"
@@ -484,24 +498,32 @@ export function AppTopbar() {
           >
             <Bell className="h-5 w-5" />
             {unreadCount > 0 ? (
-              <span className="absolute top-1.5 right-1.5 min-w-[16px] h-4 px-1 bg-red-500 text-white text-[10px] font-semibold rounded-full border-2 border-white flex items-center justify-center">
+              <span className="absolute top-0.5 right-0.5 min-w-[14px] h-3.5 px-1 bg-rose-600 text-white text-[9px] font-bold rounded-full border border-white flex items-center justify-center leading-none">
                 {unreadCount}
               </span>
             ) : (
-              <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-slate-300 rounded-full border-2 border-white" />
+              <span className="absolute top-0.5 right-0.5 h-2 w-2 bg-slate-300 rounded-full border border-white" />
             )}
           </button>
+          </Tip>
           {showNotificationsDropdown ? (
             <div className="absolute right-0 top-full mt-2 w-[360px] bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden">
-              <div className="px-4 py-3 border-b border-slate-200 bg-white">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-semibold text-slate-900">Notifications</div>
-                    <div className="text-xs text-slate-600">Recent alerts</div>
+              <div className="px-4 py-3 border-b border-slate-200 bg-slate-50">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[13px] font-bold text-slate-900 tracking-tight">Notifications</span>
+                    {unreadCount > 0 ? (
+                      <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-rose-600 text-white">{unreadCount}</span>
+                    ) : null}
                   </div>
-                  <div className="text-[11px] text-slate-500 font-medium">{unreadCount} unread</div>
+                  <div className="flex items-center gap-1">
+                    <button type="button" onClick={() => setShowNotificationsDropdown(false)} aria-label="Close"
+                      className="p-1 rounded-lg hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors">
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
-                <div className="mt-3 grid grid-cols-2 gap-2">
+                <div className="mt-2 grid grid-cols-2 gap-2">
                   <button
                     type="button"
                     className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-800 hover:border-rose-300 hover:bg-white whitespace-nowrap"

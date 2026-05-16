@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { getFirmMembers, resendFirmInvitation, revokeFirmInvitation } from '@/lib/actions/firm-members'
 import { FirmInviteModal } from './firm-invite-modal'
 import { Button } from '@/components/ui/button'
@@ -56,7 +56,10 @@ export function FirmMembersTab({ firmId, orgSlug, canManage = false }: FirmMembe
         setIsLoading(true)
         try {
             const data = await getFirmMembers(firmId)
-            setMembers(data.members)
+            setMembers([...data.members].sort((a, b) => {
+                if (a.role === b.role) return 0
+                return a.role === 'firm_admin' ? -1 : 1
+            }))
             setInvitations(data.invitations)
         } catch (error) {
             logger.error('Failed to fetch firm members', error instanceof Error ? error : new Error(String(error)), 'FirmMembersTab', { firmId })
@@ -146,25 +149,31 @@ export function FirmMembersTab({ firmId, orgSlug, canManage = false }: FirmMembe
                     </div>
                 ) : (
                     <div className="rounded-lg border border-slate-200/80 bg-white overflow-hidden">
-                        <div className="px-3 py-2.5 border-b border-slate-100 bg-slate-50/80">
-                            <h3 className="text-[13px] font-medium text-slate-700">Firm Administrator</h3>
-                        </div>
                         <div className="divide-y divide-slate-100">
-                            {members.map((member) => (
-                                <div key={member.id} className="flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50/80">
-                                    <Avatar className="h-8 w-8 shrink-0 border border-slate-200/80">
-                                        <AvatarImage src={member.user?.avatarUrl} />
-                                        <AvatarFallback className="bg-slate-100 text-xs font-medium text-slate-600">
-                                            {getInitials(member.user?.name)}
-                                        </AvatarFallback>
-                                    </Avatar>
-                                    <div className="flex-1 min-w-0">
-                                        <p className="text-[13px] font-medium text-slate-900 truncate">{member.user?.name}</p>
-                                        <p className="text-[11px] text-slate-500 truncate">{member.user?.email}</p>
+                            {members.map((member) => {
+                                const roleLabel = member.role === 'firm_admin' ? 'Firm Administrator' : 'Firm Member'
+                                const roleBadgeClass = member.role === 'firm_admin'
+                                    ? 'bg-violet-50 text-violet-700 ring-1 ring-inset ring-violet-200'
+                                    : 'bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200'
+                                return (
+                                    <div key={member.id} className="flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50/80">
+                                        <Avatar className="h-8 w-8 shrink-0 border border-slate-200/80">
+                                            <AvatarImage src={member.user?.avatarUrl} />
+                                            <AvatarFallback className="bg-slate-100 text-xs font-medium text-slate-600">
+                                                {getInitials(member.user?.name)}
+                                            </AvatarFallback>
+                                        </Avatar>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-[13px] font-medium text-slate-900 truncate">{member.user?.name}</p>
+                                            <p className="text-[11px] text-slate-500 truncate">{member.user?.email}</p>
+                                        </div>
+                                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium shrink-0 ${roleBadgeClass}`}>
+                                            {roleLabel}
+                                        </span>
+                                        <span className="text-[11px] text-slate-400 tabular-nums shrink-0">{formatDate(member.createdAt)}</span>
                                     </div>
-                                    <span className="text-[11px] text-slate-400 tabular-nums shrink-0">{formatDate(member.createdAt)}</span>
-                                </div>
-                            ))}
+                                )
+                            })}
                             {invitations.map((inv) => (
                                 <div key={inv.id} className="flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50/80">
                                     <div className="h-8 w-8 shrink-0 rounded-full bg-slate-100 flex items-center justify-center">
@@ -177,6 +186,9 @@ export function FirmMembersTab({ firmId, orgSlug, canManage = false }: FirmMembe
                                             Pending
                                         </p>
                                     </div>
+                                    <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium shrink-0 bg-violet-50 text-violet-700 ring-1 ring-inset ring-violet-200">
+                                        Firm Administrator
+                                    </span>
                                     {canManage && (
                                         <DropdownMenu>
                                             <DropdownMenuTrigger asChild>

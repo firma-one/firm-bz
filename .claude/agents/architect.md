@@ -1,3 +1,8 @@
+---
+name: architect
+description: Use for system design, architecture decisions, HLD/LLD documentation, data models, API design, and service boundaries
+---
+
 # Architecture Agent Profile
 
 ## Role and Scope

@@ -11,7 +11,7 @@ import {
     LayoutDashboard,
     ChevronDown,
     Wrench,
-    ExternalLink
+    ExternalLink,
 } from "lucide-react"
 import { useSidebar } from "@/lib/sidebar-context"
 
@@ -71,7 +71,9 @@ export function SystemSidebar() {
                         const Icon = item.icon
                         let isCurrent = false
                         if (item.href === '/system') {
-                            isCurrent = pathname.startsWith('/system')
+                            isCurrent = pathname === '/system'
+                        } else if (item.href.startsWith('/system/')) {
+                            isCurrent = pathname.startsWith(item.href)
                         }
 
                         return (

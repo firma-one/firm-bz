@@ -6,7 +6,10 @@ const workspaceEnv = (
   ''
 ).trim()
 
-/** Default workspace folder name in Drive (matches onboarding / ensureDefaultWorkspaceRoot). */
+/**
+ * Default workspace folder name in Drive (matches onboarding / ensureDefaultWorkspaceRoot).
+ * @deprecated Use generateWorkspaceFolderName() from @/lib/generate-unique-workspace-folder-name instead.
+ */
 export const SUGGESTED_WORKSPACE_FOLDER_NAME = workspaceEnv
   ? `_${BRAND_NAME}_workspace_${workspaceEnv}_`
   : `_${BRAND_NAME}_workspace_`

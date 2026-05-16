@@ -328,7 +328,7 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
                 feature: "Firm → Client → Engagement hierarchy",
                 tooltip: "Clean structure: Firm → Client → Engagement. Maps to folders in your Drive. Clients see a clear place for their engagement and document handoffs.",
                 tooltipLayout: "hierarchy-sample",
-                values: { Sandbox: false, Standard: true, Pro: true, Business: true, Enterprise: true },
+                values: { Sandbox: true, Standard: true, Pro: true, Business: true, Enterprise: true },
             },
             {
                 feature: "Persona-based access (4 engagement roles)",

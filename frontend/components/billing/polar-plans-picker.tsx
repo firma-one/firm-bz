@@ -12,7 +12,7 @@ import { buildPolarCheckoutHref } from '@/lib/billing/polar-checkout-href'
 import { upgradeCopy } from '@/lib/billing/upgrade-copy'
 import { BRAND_NAME } from '@/config/brand'
 import { getPricingComparisonBulletsForPlan, type PricingPlanColumnId } from '@/config/pricing'
-import { BillingCheckoutFootnote, BillingPolarExplainInline } from '@/components/billing/billing-polar-inline'
+import { BillingCheckoutFootnote, BillingPolarExplainInline, BillingRefundPolicyNote } from '@/components/billing/billing-polar-inline'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { EmailInline } from '@/components/ui/email-inline'
@@ -1114,6 +1114,20 @@ export function PolarPlansPicker({
                 {showPortalButton && portalError ? (
                     <p className="mt-3 text-sm text-red-600">{portalError}</p>
                 ) : null}
+                <div
+                    className={cn(
+                        'mt-4 border-t pt-4',
+                        compact && 'mt-3 pt-3',
+                        blueAccentTrial
+                            ? compact
+                                ? 'border-[#ECC0AA]/30'
+                                : 'border-[#ECC0AA]/35'
+                            : compact
+                              ? 'border-slate-200/50'
+                              : 'border-slate-200/60'
+                    )}
+                />
+                <BillingRefundPolicyNote compact={compact} />
             </div>
             <ul className="grid grid-cols-1 gap-5 pt-2 lg:grid-cols-2 lg:items-stretch lg:gap-6">
                 {visiblePlanRows?.map((row) => {

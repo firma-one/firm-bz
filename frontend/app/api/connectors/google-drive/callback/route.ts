@@ -217,6 +217,7 @@ export async function GET(request: NextRequest) {
     let nextPath: string | null = null
     let organizationId = ''
     let rootFolderId: string | undefined = undefined
+    let skipAutoFolder = false
 
     try {
       if (state) {
@@ -225,6 +226,7 @@ export async function GET(request: NextRequest) {
         organizationId = decodedState.organizationId
         nextPath = decodedState.next || null
         rootFolderId = decodedState.rootFolderId || undefined
+        skipAutoFolder = decodedState.skipAutoFolder === true
       } else {
         throw new Error('No state provided')
       }
@@ -319,15 +321,15 @@ export async function GET(request: NextRequest) {
       )
 
       // Simplified onboarding: if no root folder was provided (e.g. from picker), create default
-      // Default workspace folder at My Drive root (_Pockett_Workspace_ or _Pockett_Workspace_<WORKSPACE_ENV>_ when set) and set as rootFolderId to skip Configure Workspace Home.
-      if (!rootFolderId) {
+      // Skip for Shared Drive flow — the user will manually create and pick the folder.
+      if (!rootFolderId && !skipAutoFolder) {
         try {
           await googleDriveConnector.ensureDefaultWorkspaceRoot(connector.id, tokens.access_token)
         } catch (workspaceErr) {
           logger.error('Failed to create default workspace folder', workspaceErr instanceof Error ? workspaceErr : new Error(String(workspaceErr)))
           // Onboarding will still show Configure Workspace Home as fallback
         }
-      } else {
+      } else if (rootFolderId) {
         try {
           await googleDriveConnector.persistWorkspaceRootLocation(connector.id, rootFolderId)
         } catch (locErr) {

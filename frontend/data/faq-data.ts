@@ -74,4 +74,22 @@ export const FAQ_DATA: FAQItem[] = [
     displayAnswer: `Yes. Create a separate <strong>Engagement</strong> for each client, map the right Drive folders, and manage permissions per relationship. The <strong>Audit Log</strong> shows which external domains touched which files—ideal for agencies and fractional leaders running parallel accounts.`,
     category: "Marketing",
   },
+  {
+    question: "What is your refund policy?",
+    answer: "Valid subscription orders cannot be refunded per Firma's billing policy. However, if you experience any billing issues—such as accidental duplicate charges or payment errors—please contact our support team and we'll investigate and process a refund promptly.",
+    displayAnswer: "Valid subscription orders cannot be refunded per Firma's billing policy. However, if you experience any billing issues—such as accidental duplicate charges or payment errors—please contact our support team and we'll investigate and process a refund promptly.",
+    category: "Billing",
+  },
+  {
+    question: "What if I experience a billing issue or duplicate charge?",
+    answer: "Contact our support team at support@firma.io and describe the issue. We'll verify the charge and process a refund if a genuine billing error occurred. Our team reviews all billing disputes within 48 hours.",
+    displayAnswer: "Contact our support team at <strong>support@firma.io</strong> and describe the issue. We'll verify the charge and process a refund if a genuine billing error occurred. Our team reviews all billing disputes within <strong>48 hours</strong>.",
+    category: "Billing",
+  },
+  {
+    question: "Can I pause or downgrade my subscription instead of canceling?",
+    answer: "You can downgrade to a lower-tier plan at any time through the Polar billing portal. Downgrades take effect at your next billing date. If you need to temporarily pause your account, contact our support team to discuss options.",
+    displayAnswer: "You can downgrade to a lower-tier plan at any time through the <strong>Polar billing portal</strong>. Downgrades take effect at your next billing date. If you need to temporarily pause your account, contact our support team to discuss options.",
+    category: "Billing",
+  },
 ]

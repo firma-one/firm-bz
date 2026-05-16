@@ -4,6 +4,7 @@ import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { redirect } from 'next/navigation'
 import { logger } from '@/lib/logger'
+import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 
 export interface DomainOrgOption {
     id: string
@@ -125,6 +126,13 @@ export async function joinOrganizationByDomain(
 
     const { invalidateUserSettingsPlus } = await import('@/lib/actions/user-settings')
     await invalidateUserSettingsPlus(userId)
+
+    audit(AUDIT_EVENT.ONBOARDING_DOMAIN_JOINED)
+      .scope(AUDIT_SCOPE.FIRM)
+      .firm(org.id)
+      .actor(userId)
+      .meta({ domain: emailDomain(user.email!) })
+      .fireAndForget()
 
     return { ok: true, slug: org.slug }
 }

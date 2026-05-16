@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { prisma } from "@/lib/prisma"
 import { googleDriveConnector } from "@/lib/google-drive-connector"
+import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 
 // Create Supabase client
 const supabase = createClient(
@@ -113,6 +114,10 @@ export async function GET(request: NextRequest) {
                         }
                     }
                 }
+            },
+            select: {
+                id: true,
+                firms: { select: { id: true }, take: 1 }
             }
         })
 
@@ -138,6 +143,16 @@ export async function GET(request: NextRequest) {
             headers.set('Content-Disposition', `attachment; filename="${finalFilename.replace(/"/g, '')}"; filename*=UTF-8''${encodedFilename}`)
             if (size && size !== '0') {
                 headers.set('Content-Length', size)
+            }
+
+            const firmId = connector.firms[0]?.id
+            if (firmId) {
+                audit(AUDIT_EVENT.DOCUMENT_DOWNLOADED)
+                    .scope(AUDIT_SCOPE.DOCUMENT)
+                    .firm(firmId)
+                    .actor(userId)
+                    .meta({ fileId, filename: finalFilename, connectorId })
+                    .fireAndForget()
             }
 
             return new NextResponse(stream, {

@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label'
 import { inviteFirmMember } from '@/lib/actions/firm-members'
 import { SandboxInfoBanner } from '@/components/ui/sandbox-info-banner'
 import { useOrgSandbox } from '@/lib/use-org-sandbox'
+import { ShieldCheck } from 'lucide-react'
 
 interface FirmInviteModalProps {
     firmId: string
@@ -53,9 +54,15 @@ export function FirmInviteModal({ firmId, open, onOpenChange, onSuccess }: FirmI
                 </DialogHeader>
                 <form onSubmit={handleSubmit} className="space-y-6 pt-4">
                     {isSandboxFirm && <SandboxInfoBanner />}
-                    <p className="text-sm text-slate-500">
-                        Invite someone to join this firm as a Firm Administrator. They will be able to manage firm settings and members.
-                    </p>
+                    <div className="flex gap-3 rounded-lg border border-violet-200 bg-violet-50 px-4 py-3">
+                        <ShieldCheck className="h-5 w-5 shrink-0 text-violet-600 mt-0.5" />
+                        <div>
+                            <p className="text-sm font-medium text-violet-900">Firm Administrator access</p>
+                            <p className="text-xs text-violet-700 mt-0.5">
+                                This person will have full access to manage firm settings, members, and all client workspaces.
+                            </p>
+                        </div>
+                    </div>
                     <div className="space-y-2">
                         <Label htmlFor="firm-invite-email" className={isSandboxFirm ? 'text-slate-500' : undefined}>
                             Email Address
@@ -78,7 +85,7 @@ export function FirmInviteModal({ firmId, open, onOpenChange, onSuccess }: FirmI
                         <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
                             Cancel
                         </Button>
-                        <Button type="submit" disabled={isSandboxFirm || isSubmitting || !email.trim()}>
+                        <Button type="submit" variant="blackCta" disabled={isSandboxFirm || isSubmitting || !email.trim()}>
                             {isSubmitting ? 'Sending...' : 'Send Invitation'}
                         </Button>
                     </div>

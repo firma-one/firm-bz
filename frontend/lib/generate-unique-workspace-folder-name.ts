@@ -1,6 +1,4 @@
-import { SUGGESTED_WORKSPACE_FOLDER_NAME } from '@/lib/suggested-workspace-folder-name'
-
-export type WorkspaceUniqueFolderLocation = 'my-drive' | 'shared-drive'
+import { BRAND_NAME } from '@/config/brand'
 
 function randomSuffixId(): string {
   return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
@@ -9,17 +7,22 @@ function randomSuffixId(): string {
 }
 
 /**
- * Unique workspace folder name: same base convention as onboarding (incl. WORKSPACE_ENV suffix)
- * plus a location-specific slug so picker search does not collide with the default onboarding folder.
+ * Generate a unique workspace folder name.
+ * Output: `_<BRAND_NAME>_workspace_<randomSuffixId>_`
  */
-export function generateUniqueWorkspaceFolderName(location: WorkspaceUniqueFolderLocation): string {
-  const trimmed = SUGGESTED_WORKSPACE_FOLDER_NAME.replace(/_+$/g, '')
-  const id = randomSuffixId()
-  const tag = location === 'shared-drive' ? 'shared' : 'my'
-  return `${trimmed}_${tag}_${id}_`
+export function generateWorkspaceFolderName(): string {
+  return `_${BRAND_NAME}_workspace_${randomSuffixId()}_`
 }
 
-/** @deprecated Use generateUniqueWorkspaceFolderName('shared-drive') */
+/** @deprecated Use generateWorkspaceFolderName() instead. */
+export type WorkspaceUniqueFolderLocation = 'my-drive' | 'shared-drive'
+
+/** @deprecated Use generateWorkspaceFolderName() instead. */
+export function generateUniqueWorkspaceFolderName(_location?: WorkspaceUniqueFolderLocation): string {
+  return generateWorkspaceFolderName()
+}
+
+/** @deprecated Use generateWorkspaceFolderName() instead. */
 export function generateUniqueSharedWorkspaceFolderName(): string {
-  return generateUniqueWorkspaceFolderName('shared-drive')
+  return generateWorkspaceFolderName()
 }

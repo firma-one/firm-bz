@@ -1,13 +1,6 @@
 import { FirmRole, Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 
-/**
- * Mirrors `scripts/sql/cascade-delete-platform-data-for-firm-admin.sql`:
- * deletes all firms where the user is `firm_admin` (CASCADE handles most children),
- * then notifications, customer_requests, connectorId nulling, orphan connectors,
- * user_personalizations, and system.system_admins for that user.
- * Does not delete the Supabase auth user.
- */
 export type FirmAdminCascadeDeleteCounts = {
     firmAdminFirmIds: string[]
     deletedNotifications: number
@@ -16,6 +9,7 @@ export type FirmAdminCascadeDeleteCounts = {
     deletedOrphanConnectors: number
     deletedUserPersonalizations: number
     deletedSystemAdmins: number
+    deletedAuthAccount: boolean
 }
 
 export async function cascadeDeletePlatformDataForFirmAdminUser(targetUserId: string): Promise<FirmAdminCascadeDeleteCounts> {
@@ -36,6 +30,7 @@ export async function cascadeDeletePlatformDataForFirmAdminUser(targetUserId: st
                 deletedOrphanConnectors: 0,
                 deletedUserPersonalizations: 0,
                 deletedSystemAdmins: 0,
+                deletedAuthAccount: false,
             }
         }
 
@@ -72,6 +67,7 @@ export async function cascadeDeletePlatformDataForFirmAdminUser(targetUserId: st
             deletedOrphanConnectors: typeof orphanConnectorRes === 'bigint' ? Number(orphanConnectorRes) : orphanConnectorRes,
             deletedUserPersonalizations: upRes.count,
             deletedSystemAdmins: saRes.count,
+            deletedAuthAccount: false,
         }
     }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted })
 }

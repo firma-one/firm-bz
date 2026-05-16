@@ -1,18 +1,28 @@
 import { getFirmHierarchy } from "@/lib/actions/hierarchy"
-import { prisma } from "@/lib/prisma"
+import { prisma, basePrisma } from "@/lib/prisma"
 import { FirmClientsView } from "@/components/projects/firm-clients-view"
 
 export default async function FirmPage({ params }: { params: Promise<{ slug: string }> }) {
-    // Await params as required in Next.js 15+
     const { slug } = await params
-    
-    // Fetch clients and organization
-    const clients = await getFirmHierarchy(slug)
-    const organization = await prisma.firm.findUnique({
-        where: { slug },
-        select: { id: true, sandboxOnly: true }
-    })
-    
+
+    const [clients, organization] = await Promise.all([
+        getFirmHierarchy(slug),
+        prisma.firm.findUnique({ where: { slug }, select: { id: true, sandboxOnly: true } }),
+    ])
+
+    let memberCount = 0
+    let auditCount = 0
+    if (organization?.id) {
+        const firmId = organization.id
+        const [firmMemberCount, firmInviteCount, firmAuditCount] = await Promise.all([
+            (basePrisma as any).firmMember.count({ where: { firmId } }),
+            (basePrisma as any).firmInvitation.count({ where: { firmId, status: { not: 'JOINED' } } }),
+            (basePrisma as any).platformAuditEvent.count({ where: { firmId } }),
+        ])
+        memberCount = firmMemberCount + firmInviteCount
+        auditCount = firmAuditCount
+    }
+
     return (
         <div className="h-full flex flex-col">
             <FirmClientsView
@@ -20,6 +30,8 @@ export default async function FirmPage({ params }: { params: Promise<{ slug: str
                 orgSlug={slug}
                 orgId={organization?.id}
                 firmSandboxOnly={organization?.sandboxOnly ?? false}
+                memberCount={memberCount}
+                auditCount={auditCount}
             />
         </div>
     )

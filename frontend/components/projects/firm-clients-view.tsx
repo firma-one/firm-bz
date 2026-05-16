@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { HierarchyClient, getFirmName } from '@/lib/actions/hierarchy'
-import { UserPlus, Building2, LayoutGrid, List, Home, ChevronRight, Settings, Users, ClipboardList, UserCog } from 'lucide-react'
+import { UserPlus, Building2, LayoutGrid, List, Home, ChevronRight, Settings, Users, ClipboardList, UserCog, LayoutDashboard } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ClientList } from './client-list'
 import { AddClientModal } from './add-client-modal'
@@ -13,6 +13,9 @@ import Link from 'next/link'
 import { useSearchParams, usePathname, useRouter } from 'next/navigation'
 import { ProjectAuditPane } from './project-audit-pane'
 import { ErrorBoundary } from '@/components/error-boundary'
+import { FirmBusinessInsights } from '@/components/dashboard/firm-business-insights'
+import { DriveInsightsSection } from '@/components/dashboard/drive-insights-section'
+import { FirmActionCenter } from '@/components/dashboard/firm-action-center'
 
 interface FirmClientsViewProps {
     clients: HierarchyClient[]
@@ -20,9 +23,11 @@ interface FirmClientsViewProps {
     orgId?: string
     /** From server: show "+ New Client" in sandbox so restriction toast is discoverable */
     firmSandboxOnly?: boolean
+    memberCount?: number
+    auditCount?: number
 }
 
-export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = false }: FirmClientsViewProps) {
+export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = false, memberCount, auditCount }: FirmClientsViewProps) {
     const router = useRouter()
     const pathname = usePathname()
     const searchParams = useSearchParams()
@@ -40,7 +45,9 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                 ? 'audit'
                 : tabParam === 'members' && canViewOrgAudit
                     ? 'members'
-                    : 'clients'
+                    : tabParam === 'insights' && canViewOrgAudit
+                        ? 'insights'
+                        : 'clients'
 
     const handleTabChange = (value: string) => {
         const params = new URLSearchParams(searchParams.toString())
@@ -137,33 +144,57 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                         )}
                         <TabsTrigger
                             value="clients"
-                            className="h-full px-4 rounded-md font-medium text-slate-500 data-[state=active]:text-slate-900 data-[state=active]:shadow-sm"
+                            className="h-full px-4 rounded-md font-medium text-slate-500 hover:bg-white hover:text-slate-900 hover:shadow-sm data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all"
                         >
                             <Users className="w-4 h-4 mr-2" />
                             Clients
+                            {clients.length > 0 && (
+                                <span className="ml-2 rounded-full bg-slate-900 px-1.5 py-0.5 text-xs font-medium text-white tabular-nums leading-none">
+                                    {clients.length}
+                                </span>
+                            )}
                         </TabsTrigger>
                         {canViewOrgAudit && (
                             <TabsTrigger
                                 value="members"
-                                className="h-full px-4 rounded-md font-medium text-slate-500 data-[state=active]:text-slate-900 data-[state=active]:shadow-sm"
+                                className="h-full px-4 rounded-md font-medium text-slate-500 hover:bg-white hover:text-slate-900 hover:shadow-sm data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all"
                             >
                                 <UserCog className="w-4 h-4 mr-2" />
                                 Members
+                                {memberCount !== undefined && memberCount > 0 && (
+                                    <span className="ml-2 rounded-full bg-slate-900 px-1.5 py-0.5 text-xs font-medium text-white tabular-nums leading-none">
+                                        {memberCount}
+                                    </span>
+                                )}
                             </TabsTrigger>
                         )}
                         {canViewOrgAudit && (
                             <TabsTrigger
                                 value="audit"
-                                className="h-full px-4 rounded-md font-medium text-slate-500 data-[state=active]:text-slate-900 data-[state=active]:shadow-sm"
+                                className="h-full px-4 rounded-md font-medium text-slate-500 hover:bg-white hover:text-slate-900 hover:shadow-sm data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all"
                             >
                                 <ClipboardList className="w-4 h-4 mr-2" />
                                 Audit
+                                {auditCount !== undefined && auditCount > 0 && (
+                                    <span className="ml-2 rounded-full bg-slate-900 px-1.5 py-0.5 text-xs font-medium text-white tabular-nums leading-none">
+                                        {auditCount}
+                                    </span>
+                                )}
+                            </TabsTrigger>
+                        )}
+                        {canViewOrgAudit && (
+                            <TabsTrigger
+                                value="insights"
+                                className="h-full px-4 rounded-md font-medium text-slate-500 hover:bg-white hover:text-slate-900 hover:shadow-sm data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all"
+                            >
+                                <LayoutDashboard className="w-4 h-4 mr-2" />
+                                Insights
                             </TabsTrigger>
                         )}
                         {canViewOrgSettings && (
                             <TabsTrigger
                                 value="settings"
-                                className="h-full px-4 rounded-md font-medium text-slate-500 data-[state=active]:text-slate-900 data-[state=active]:shadow-sm"
+                                className="h-full px-4 rounded-md font-medium text-slate-500 hover:bg-white hover:text-slate-900 hover:shadow-sm data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all"
                             >
                                 <Settings className="w-4 h-4 mr-2" />
                                 Settings
@@ -227,6 +258,26 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                                         exportTitle={orgName ?? 'firm'}
                                     />
                                 </ErrorBoundary>
+                            </div>
+                        </TabsContent>
+                    )}
+
+                    {canViewOrgAudit && (orgId ?? (clients[0]?.firmId ?? clients[0]?.organizationId)) && (
+                        <TabsContent value="insights" className="m-0">
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 22rem', gap: '1.5rem', paddingTop: '0.5rem', paddingBottom: '1.5rem' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', minWidth: 0 }}>
+                                    <ErrorBoundary context="FirmInsightsTab">
+                                        <FirmBusinessInsights
+                                            firmId={orgId ?? clients[0]?.firmId ?? clients[0]?.organizationId ?? ''}
+                                            firmSlug={orgSlug}
+                                        />
+                                    </ErrorBoundary>
+                                    <DriveInsightsSection />
+                                </div>
+                                <FirmActionCenter
+                                    firmId={orgId ?? clients[0]?.firmId ?? clients[0]?.organizationId ?? ''}
+                                    firmSlug={orgSlug}
+                                />
                             </div>
                         </TabsContent>
                     )}

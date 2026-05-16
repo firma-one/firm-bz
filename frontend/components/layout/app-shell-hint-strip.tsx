@@ -1,12 +1,13 @@
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
-export type AppShellHintStripAccent = 'emerald' | 'slate' | 'amber'
+export type AppShellHintStripAccent = 'emerald' | 'slate' | 'amber' | 'red'
 
 const accentBorder: Record<AppShellHintStripAccent, string> = {
     emerald: 'border-[#006e16]/40',
     slate: 'border-slate-200',
     amber: 'border-amber-300/80',
+    red: 'border-red-400/70',
 }
 
 /**
@@ -29,6 +30,8 @@ export type AppShellHintStripProps = {
      * `profileRail` — same border + vertical rhythm as sidebar `ProfileSection` (expanded or collapsed foot).
      */
     density?: AppShellHintStripDensity
+    /** Suppress the default upward drop-shadow so the border-t aligns flush with adjacent panel borders. */
+    noShadow?: boolean
     /** Optional native tooltip on the strip root. */
     nativeTitle?: string
     'aria-label'?: string
@@ -47,6 +50,7 @@ export function AppShellHintStrip({
     actions,
     accent = 'emerald',
     density = 'default',
+    noShadow = false,
     nativeTitle,
     'aria-label': ariaLabel,
     className,
@@ -61,7 +65,8 @@ export function AppShellHintStrip({
                 isRail
                     ? cn(APP_SHELL_PROFILE_RAIL_FOOT_CLASS, 'shadow-none')
                     : cn(
-                          'border-t bg-white/95 shadow-[0_-4px_24px_-4px_rgba(15,23,42,0.08)] backdrop-blur-sm',
+                          'border-t bg-white/95 backdrop-blur-sm',
+                          !noShadow && 'shadow-[0_-4px_24px_-4px_rgba(15,23,42,0.08)]',
                           accentBorder[accent],
                           'pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2.5 sm:pt-3'
                       ),

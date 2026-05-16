@@ -10,7 +10,7 @@ import { Persona } from '@prisma/client'
 import { inviteMember } from '@/lib/actions/invitations'
 import { Badge } from '@/components/ui/badge'
 import { SandboxInfoBanner } from '@/components/ui/sandbox-info-banner'
-import { Users, Shield, Briefcase, Eye } from 'lucide-react'
+import { Users, Shield, Briefcase, Eye, CheckCircle2 } from 'lucide-react'
 import { ROLES } from '@/lib/roles'
 import { useOrgSandbox } from '@/lib/use-org-sandbox'
 
@@ -34,23 +34,38 @@ interface InviteMemberModalProps {
 
 export function InviteMemberModal({ projectId, open, onOpenChange, personas, preselectedPersonaId, onSuccess }: InviteMemberModalProps) {
     const [email, setEmail] = useState('')
+    const [emailError, setEmailError] = useState('')
     const [selectedPersonaId, setSelectedPersonaId] = useState('')
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [error, setError] = useState('')
     const orgSandbox = useOrgSandbox()
     const isSandboxFirm = Boolean(orgSandbox?.sandboxOnly)
 
+    const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+
     // Set preselected persona when modal opens
     useEffect(() => {
         if (open && preselectedPersonaId) {
             setSelectedPersonaId(preselectedPersonaId)
         } else if (!open) {
-            // Reset when modal closes
             setSelectedPersonaId('')
             setEmail('')
             setError('')
+            setEmailError('')
         }
     }, [open, preselectedPersonaId])
+
+    // Debounced email validation
+    useEffect(() => {
+        if (!email) {
+            setEmailError('')
+            return
+        }
+        const timer = setTimeout(() => {
+            setEmailError(isValidEmail(email) ? '' : 'Please enter a valid email address')
+        }, 400)
+        return () => clearTimeout(timer)
+    }, [email])
 
     const selectedPersona = personas.find(p => p.id === selectedPersonaId)
 
@@ -58,7 +73,10 @@ export function InviteMemberModal({ projectId, open, onOpenChange, personas, pre
         e.preventDefault()
         setError('')
 
-        if (isSandboxFirm) {
+        if (isSandboxFirm) return
+
+        if (!isValidEmail(email)) {
+            setEmailError('Please enter a valid email address')
             return
         }
 
@@ -94,16 +112,23 @@ export function InviteMemberModal({ projectId, open, onOpenChange, personas, pre
                     {/* Email Input */}
                     <div className="space-y-2">
                         <Label htmlFor="email" className={isSandboxFirm ? 'text-slate-500' : undefined}>Email Address</Label>
-                        <Input
-                            id="email"
-                            type="email"
-                            placeholder="colleague@example.com"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            required={!isSandboxFirm}
-                            disabled={isSandboxFirm}
-                            className="disabled:cursor-not-allowed disabled:opacity-60"
-                        />
+                        <div className="relative">
+                            <Input
+                                id="email"
+                                type="text"
+                                placeholder="colleague@example.com"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                disabled={isSandboxFirm}
+                                className={`disabled:cursor-not-allowed disabled:opacity-60 ${emailError ? 'border-red-400 focus-visible:ring-red-400' : ''} ${email && !emailError ? 'pr-9' : ''}`}
+                            />
+                            {email && !emailError && (
+                                <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-green-500 pointer-events-none" />
+                            )}
+                        </div>
+                        {emailError && (
+                            <p className="text-xs text-red-500">{emailError}</p>
+                        )}
                     </div>
 
                     {/* Persona Selection */}
@@ -151,7 +176,7 @@ export function InviteMemberModal({ projectId, open, onOpenChange, personas, pre
                         <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                             Cancel
                         </Button>
-                        <Button type="submit" disabled={isSandboxFirm || isSubmitting || !selectedPersonaId || !email}>
+                        <Button type="submit" variant="blackCta" disabled={isSandboxFirm || isSubmitting || !selectedPersonaId || !email || !!emailError}>
                             {isSubmitting ? 'Sending...' : 'Send Invitation'}
                         </Button>
                     </div>

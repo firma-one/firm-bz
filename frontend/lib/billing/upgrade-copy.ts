@@ -68,11 +68,11 @@ export const upgradeCopy = {
     checkoutHintStripTitle: 'Finish Standard checkout',
     /** Verbose subtitle under headline (mirrors profile plan / email line). */
     checkoutHintStripBodyIntent:
-        'Standard from pricing: use Profile (sidebar foot) → Billing, or Continue.',
+        'Standard from pricing: use Profile (sidebar footer) → Billing, or Continue.',
     /** Appended to `checkoutHintStripBodyIntent` only while the Show me control is visible. */
     checkoutHintStripBodyIntentShowMeSuffix: 'Show me points at Profile.',
     checkoutHintStripBodyUpgrade:
-        'Free plan: Profile (sidebar foot) → Billing to upgrade, or Continue.',
+        'Free plan: Profile (sidebar footer) → Billing to upgrade, or Continue.',
     checkoutHintShowMe: 'Show me',
     checkoutHintJoyrideTitle: 'Profile menu',
     checkoutHintJoyrideBody:
@@ -109,4 +109,7 @@ export const upgradeCopy = {
     checkoutSuccessPolarFootnoteSuffix: `. Payments run on Stripe-backed infrastructure—${BRAND_NAME} never collects or stores your full card number.`,
     checkoutSuccessReceiptLine:
         'A receipt is also emailed to the address you used at checkout. Use Download invoice below if you need a PDF right away.',
+    /** Refund policy note shown on billing page */
+    billingRefundPolicyNote:
+        'If you experience any billing issues or accidental duplicate charges, contact us and we\'ll process a refund promptly. Note: valid subscription orders cannot be refunded per Firma\'s billing policy.',
 } as const

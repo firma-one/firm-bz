@@ -3,13 +3,14 @@
 import { prisma } from '@/lib/prisma'
 import { Prisma, type EngagementStatus } from '@prisma/client'
 import { createClient as createSupabaseClient } from '@/utils/supabase/server'
+import { upsertFollowUpReminder } from '@/lib/actions/user-reminders'
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
 import { canViewProjectSettings as checkCanViewProjectSettings } from '@/lib/permission-helpers'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { logger } from '@/lib/logger'
 import { safeInngestSend } from '@/lib/inngest/client'
-import { createPlatformAuditEvent } from '@/lib/platform-audit'
+import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 
 const supabaseAdmin = createSupabaseAdmin(
     (process.env.NEXT_PUBLIC_SUPABASE_URL || "http://127.0.0.1:54321"),
@@ -228,6 +229,27 @@ export async function createEngagement(firmSlug: string, clientSlug: string, dat
         }
     }
 
+    audit(AUDIT_EVENT.ENGAGEMENT_CREATED)
+        .scope(AUDIT_SCOPE.ENGAGEMENT)
+        .firm(firm.id)
+        .client(client.id)
+        .engagement(newProject.id)
+        .actor(user.id)
+        .meta({ name: newProject.name, slug: newProject.slug })
+        .fireAndForget()
+
+    upsertFollowUpReminder({
+        userId: user.id,
+        entityKey: 'platform.engagements.id',
+        entityValue: newProject.id,
+        action: 'Engagement due',
+        dateKey: 'platform.engagements.dueDate',
+        dateValue: due?.toISOString() ?? null,
+        entityName: newProject.name,
+        firmId: firm.id,
+        ctaUrl: `/d/f/${firmSlug}/c/${clientSlug}/e/${newProject.slug}`,
+    }).catch(() => {})
+
     revalidatePath(`/d/f/${firmSlug}/c/${clientSlug}`)
     return newProject
 }
@@ -330,9 +352,14 @@ export async function updateEngagement(
 
     const project = await prisma.engagement.findFirst({
         where: { id: projectId, isDeleted: false },
-        select: { firmId: true, clientId: true, dueDate: true, kickoffDate: true }
+        select: { firmId: true, clientId: true, dueDate: true, kickoffDate: true, status: true }
     })
     if (!project) throw new Error('Project not found')
+
+    // Only allow status changes on completed engagements (for reopening); block all other updates
+    if (project.status === 'COMPLETED' && (!data.status || data.status === 'COMPLETED')) {
+        throw new Error('Cannot update a completed engagement.')
+    }
 
     const parsedKickoff = data.kickoffDate === undefined ? undefined : (data.kickoffDate ? new Date(data.kickoffDate) : null)
     const parsedDue = data.dueDate === undefined ? undefined : (data.dueDate ? new Date(data.dueDate) : null)
@@ -356,27 +383,23 @@ export async function updateEngagement(
 
     const supabase = await createSupabaseClient()
     const { data: { user } } = await supabase.auth.getUser()
-    try {
-        await createPlatformAuditEvent({
-            organizationId: project.firmId,
-            clientId: project.clientId,
-            projectId,
-            eventType: 'PROJECT_UPDATED',
-            actorUserId: user?.id ?? undefined,
-            metadata: {
-                name: data.name,
-                description: data.description,
-                kickoffDate: data.kickoffDate,
-                dueDate: data.dueDate,
-                status: data.status,
-                contractType: data.contractType,
-                rateOrValue: data.rateOrValue,
-                tags: data.tags,
-            },
+    audit(AUDIT_EVENT.ENGAGEMENT_CHANGED)
+        .scope(AUDIT_SCOPE.ENGAGEMENT)
+        .firm(project.firmId)
+        .client(project.clientId)
+        .engagement(projectId)
+        .actor(user?.id)
+        .meta({
+            name: data.name,
+            description: data.description,
+            kickoffDate: data.kickoffDate,
+            dueDate: data.dueDate,
+            status: data.status,
+            contractType: data.contractType,
+            rateOrValue: data.rateOrValue,
+            tags: data.tags,
         })
-    } catch (e) {
-        logger.error('Failed to create audit event for project update', e as Error)
-    }
+        .fireAndForget()
 
     // Notifications (in-app + email for critical): emit when dueDate changes
     try {
@@ -434,6 +457,24 @@ export async function updateEngagement(
         logger.warn('Failed to create due date notifications', e as Error)
     }
 
+    if (parsedDue !== undefined && user) {
+        const engDetails = await prisma.engagement.findFirst({
+            where: { id: projectId },
+            select: { name: true, slug: true },
+        })
+        upsertFollowUpReminder({
+            userId: user.id,
+            entityKey: 'platform.engagements.id',
+            entityValue: projectId,
+            action: 'Engagement due',
+            dateKey: 'platform.engagements.dueDate',
+            dateValue: parsedDue?.toISOString() ?? null,
+            entityName: engDetails?.name ?? '',
+            firmId: project.firmId,
+            ctaUrl: `/d/f/${firmSlug}/c/${clientSlug}/e/${engDetails?.slug ?? ''}`,
+        }).catch(() => {})
+    }
+
     revalidatePath(`/d/f/${firmSlug}/c/${clientSlug}`)
 }
 
@@ -471,6 +512,14 @@ export async function closeEngagement(projectId: string, firmSlug: string, clien
                 role: { in: ['eng_ext_collaborator', 'eng_viewer'] },
             },
         })
+        // Revoke pending external invitations
+        await tx.engagementInvitation.deleteMany({
+            where: {
+                engagementId: projectId,
+                persona: { slug: { in: ['eng_ext_collaborator', 'eng_viewer'] } },
+                acceptedAt: null,
+            },
+        })
     })
 
     const { invalidateUserSettingsPlus } = await import('@/lib/actions/user-settings')
@@ -482,18 +531,14 @@ export async function closeEngagement(projectId: string, firmSlug: string, clien
 
     const supabase = await createSupabaseClient()
     const { data: { user } } = await supabase.auth.getUser()
-    try {
-        await createPlatformAuditEvent({
-            organizationId: project.firmId,
-            clientId: project.clientId,
-            projectId,
-            eventType: 'PROJECT_CLOSED',
-            actorUserId: user?.id ?? undefined,
-            metadata: { reason: 'closed' },
-        })
-    } catch (e) {
-        logger.error('Failed to create audit event for project close', e as Error)
-    }
+    audit(AUDIT_EVENT.ENGAGEMENT_CLOSED)
+        .scope(AUDIT_SCOPE.ENGAGEMENT)
+        .firm(project.firmId)
+        .client(project.clientId)
+        .engagement(projectId)
+        .actor(user?.id)
+        .meta({ reason: 'closed' })
+        .fireAndForget()
 
     await safeInngestSend("project/archived", {
         projectId: project.id,
@@ -524,18 +569,13 @@ export async function reopenEngagement(projectId: string, firmSlug: string, clie
 
     const supabase = await createSupabaseClient()
     const { data: { user } } = await supabase.auth.getUser()
-    try {
-        await createPlatformAuditEvent({
-            organizationId: project.firmId,
-            clientId: project.clientId,
-            projectId,
-            eventType: 'PROJECT_REOPENED',
-            actorUserId: user?.id ?? undefined,
-            metadata: {},
-        })
-    } catch (e) {
-        logger.error('Failed to create audit event for project reopen', e as Error)
-    }
+    audit(AUDIT_EVENT.ENGAGEMENT_REOPENED)
+        .scope(AUDIT_SCOPE.ENGAGEMENT)
+        .firm(project.firmId)
+        .client(project.clientId)
+        .engagement(projectId)
+        .actor(user?.id)
+        .fireAndForget()
 
     revalidatePath(`/d/f/${firmSlug}/c/${clientSlug}`)
 }
@@ -554,18 +594,13 @@ export async function deleteEngagement(projectId: string, firmSlug: string, clie
 
     const supabase = await createSupabaseClient()
     const { data: { user } } = await supabase.auth.getUser()
-    try {
-        await createPlatformAuditEvent({
-            organizationId: project.firmId,
-            clientId: project.clientId,
-            projectId,
-            eventType: 'PROJECT_SOFT_DELETED',
-            actorUserId: user?.id ?? undefined,
-            metadata: {},
-        })
-    } catch (e) {
-        logger.error('Failed to create audit event for project delete', e as Error)
-    }
+    audit(AUDIT_EVENT.ENGAGEMENT_DELETED)
+        .scope(AUDIT_SCOPE.ENGAGEMENT)
+        .firm(project.firmId)
+        .client(project.clientId)
+        .engagement(projectId)
+        .actor(user?.id)
+        .fireAndForget()
 
     // 1. Fetch all members before deletion for cache invalidation
     const projectMembers = await prisma.engagementMember.findMany({

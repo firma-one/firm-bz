@@ -6,8 +6,7 @@ import {
     getActiveSubscriptionForFirm,
     subscriptionAccessStatusLabel,
 } from '@/lib/billing/active-billing-subscription'
-
-const SYS_ADMIN_ROLE = 'SYS_ADMIN'
+import { isSystemAdminEmail } from '@/lib/system/admin-check'
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 export type DataMapSeverity = 'critical' | 'warning' | 'info'
@@ -96,8 +95,7 @@ export async function isSysAdminUser(userId: string): Promise<boolean> {
     const admin = createAdminClient()
     const { data, error } = await admin.auth.admin.getUserById(userId)
     if (error || !data?.user) return false
-    const role = (data.user.app_metadata?.role as string | undefined) ?? null
-    return role === SYS_ADMIN_ROLE
+    return isSystemAdminEmail(data.user.email)
 }
 
 async function resolveTargetUser(identifier: string): Promise<ResolvedAuthUser | null> {

@@ -3,7 +3,7 @@ import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { buildSettingsForDb, parseSettingsFromDb, type ActivityStatus } from '@/lib/sharing-settings'
 import { getFileInfo } from '@/lib/file-utils'
-import { createPlatformAuditEvent } from '@/lib/platform-audit'
+import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 
 const VALID_STATUSES: ActivityStatus[] = ['to_do', 'in_progress', 'done']
 
@@ -67,29 +67,14 @@ export async function PATCH(
       data: { settings, updatedAt: new Date() },
     })
 
-    try {
-      const project = await prisma.engagement.findUnique({
-        where: { id: projectId },
-        select: { firmId: true, clientId: true },
-      })
-      if (project) {
-        await createPlatformAuditEvent({
-          organizationId: project.firmId,
-          clientId: project.clientId,
-          projectId,
-          projectDocumentId: existing.id,
-          eventType: 'DOCUMENT_ACTIVITY_STATUS_CHANGED',
-          actorUserId: user.id,
-          metadata: {
-            fileName: existing.fileName,
-            oldStatus: oldStatus ?? null,
-            newStatus: status,
-          },
-        })
-      }
-    } catch (auditErr) {
-      console.warn('Audit event create failed', auditErr)
-    }
+    audit(AUDIT_EVENT.DOCUMENT_STATUS_CHANGED)
+      .scope(AUDIT_SCOPE.DOCUMENT)
+      .firm(fileInfo.organizationId)
+      .engagement(projectId)
+      .document(existing.id)
+      .actor(user.id)
+      .meta({ fileName: existing.fileName, oldStatus: oldStatus ?? null, newStatus: status })
+      .fireAndForget()
 
     const updated = await prisma.engagementDocument.findUnique({
       where: {

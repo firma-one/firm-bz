@@ -75,10 +75,10 @@ export async function GET(request: NextRequest) {
         // 3. Fetch from the Google Drive connection
         let files: any[] = []
         try {
-            // If sort=accessed, fetch most ACTIVE files (based on Activity API)
-            // Otherwise fetch most recent files
             if (sizeRangeParam) {
                 files = await googleDriveConnector.getStorageFiles(driveConnector.id, safeLimit, sizeRange, timeRange)
+            } else if (sortParam === 'storage') {
+                files = await googleDriveConnector.getNonNativeFiles(driveConnector.id, safeLimit)
             } else if (sortParam === 'accessed') {
                 files = await googleDriveConnector.getMostActiveFiles(driveConnector.id, safeLimit, validRange as any)
             } else if (sortParam === 'shared') {
@@ -124,7 +124,7 @@ export async function GET(request: NextRequest) {
         // 4. Fetch Storage Quota from Google Drive connection
         let totalLimit = 0
         let totalUsed = 0
-        const accounts: { id: string, email: string, limit: number, used: number }[] = []
+        const accounts: { id: string, email: string, limit: number, used: number, usageInDrive?: number, usageInDriveTrash?: number }[] = []
 
         try {
             const quota = await googleDriveConnector.getStorageQuota(driveConnector.id)
@@ -137,9 +137,11 @@ export async function GET(request: NextRequest) {
 
                 accounts.push({
                     id: driveConnector.id,
-                    email: driveConnector.name ?? driveConnector.id,
+                    email: (driveConnector.settings as any)?.accountEmail || driveConnector.name || driveConnector.id,
                     limit: accLimit,
-                    used: accUsed
+                    used: accUsed,
+                    usageInDrive: quota.usageInDrive ? parseInt(quota.usageInDrive) : 0,
+                    usageInDriveTrash: quota.usageInTrash ? parseInt(quota.usageInTrash) : 0,
                 })
             }
         } catch (error) {
@@ -149,7 +151,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({
             isConnected: true,
             data: sortedFiles,
-            connectorEmail: driveConnector.name ?? driveConnector.id,
+            connectorEmail: (driveConnector.settings as any)?.accountEmail || driveConnector.name || driveConnector.id,
             storageUsage: {
                 limit: totalLimit,
                 used: totalUsed,

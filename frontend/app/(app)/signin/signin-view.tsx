@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { BRAND_NAME } from '@/config/brand'
 import { KINETIC_AUTH_HERO_IMAGE } from '@/lib/marketing/kinetic-auth-hero'
 import { KINETIC_LANDING_HERO_BADGE } from '@/lib/marketing/target-audience-nav'
-import { ArrowLeft, ArrowRight, Lock, Shield } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Lock, Shield } from 'lucide-react'
 import { KineticFloatingEmailField } from '@/components/onboarding/kinetic-floating-email-field'
 import { OTPInput } from '@/components/onboarding/otp-input'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
@@ -30,9 +30,12 @@ export function SigninView() {
     otpCode,
     setOtpCode,
     loading,
+    checkLoading,
     googleLoading,
     error,
     setError,
+    noAccountMessage,
+    emailVerified,
     turnstileToken,
     setTurnstileToken,
     showTurnstile,
@@ -43,6 +46,8 @@ export function SigninView() {
     sendOTPWithToken,
     handleEmailSubmit,
     handleVerifyOTP,
+    handleInitiateCheck,
+    handleTurnstileSuccess,
   } = useSignInFlow()
 
   return (
@@ -158,10 +163,55 @@ export function SigninView() {
                         value={email}
                         onValueChange={setEmail}
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleEmailSubmit('otp')
+                          if (e.key === 'Enter' && !emailVerified) handleInitiateCheck()
                         }}
                         autoFocus
+                        trailing={
+                          <button
+                            type="button"
+                            onClick={emailVerified ? undefined : handleInitiateCheck}
+                            disabled={checkLoading || !email.trim()}
+                            aria-label={emailVerified ? 'Email verified' : 'Check email'}
+                            className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border-0 transition-all duration-200 disabled:pointer-events-none disabled:opacity-50 ${
+                              emailVerified
+                                ? 'bg-[#d4f5d3] text-[#006e16] cursor-default'
+                                : 'bg-[#72ff70] text-[#002203] shadow-[0_1px_0_rgba(0,34,3,0.28)] hover:brightness-95 hover:-translate-y-0.5 hover:shadow-[0_10px_24px_-12px_rgba(0,34,3,0.65)] active:translate-y-0 active:scale-95'
+                            }`}
+                          >
+                            {checkLoading ? (
+                              <LoadingSpinner size="sm" />
+                            ) : emailVerified ? (
+                              <Check className="h-4 w-4" strokeWidth={2.5} />
+                            ) : (
+                              <ArrowRight className="h-4 w-4" strokeWidth={2} />
+                            )}
+                          </button>
+                        }
                       />
+                      {noAccountMessage && (
+                        <p className="mt-2 text-xs text-[#8a2b2b]">
+                          {noAccountMessage}{' '}
+                          <Link
+                            href={`/signup${email.trim() ? `?email=${encodeURIComponent(email.trim())}` : ''}`}
+                            className="font-semibold underline underline-offset-2 hover:text-[#5f1f1f]"
+                          >
+                            Sign up
+                          </Link>
+                        </p>
+                      )}
+                      {showTurnstile && (
+                        <div className="mt-3 flex justify-center">
+                          <Turnstile
+                            siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'}
+                            onSuccess={handleTurnstileSuccess}
+                            onError={() => {
+                              setError('Captcha verification failed. Please try again.')
+                              setTurnstileToken(null)
+                            }}
+                            onExpire={() => setTurnstileToken(null)}
+                          />
+                        </div>
+                      )}
                     </div>
 
                     {error && (
@@ -173,101 +223,91 @@ export function SigninView() {
                       </div>
                     )}
 
-                    <div className="space-y-4">
-                      <button
-                        type="button"
-                        onClick={() => handleEmailSubmit('otp')}
-                        disabled={
-                          loading || googleLoading || !email.trim() || (showTurnstile && !turnstileToken)
-                        }
-                        className={LIME_CTA}
-                      >
-                        {loading ? (
-                          <>
-                            <LoadingSpinner size="sm" />
-                            <span>Sending code…</span>
-                          </>
-                        ) : (
-                          <>
-                            <span>Send Email Code</span>
-                            <ArrowRight
-                              className="h-4 w-4 shrink-0 transition-transform duration-200 group-hover:translate-x-0.5"
-                              strokeWidth={2}
-                              aria-hidden
-                            />
-                          </>
-                        )}
-                      </button>
-
-                      {showTurnstile && (
-                        <div className="flex justify-center">
-                          <Turnstile
-                            siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'}
-                            onSuccess={(token) => {
-                              setTurnstileToken(token)
-                              setError('')
-                              sendOTPWithToken(token)
-                            }}
-                            onError={() => {
-                              setError('Captcha verification failed. Please try again.')
-                              setTurnstileToken(null)
-                            }}
-                            onExpire={() => setTurnstileToken(null)}
-                          />
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="relative py-1">
-                      <div className="absolute inset-0 flex items-center">
-                        <div className="w-full border-t border-[#e4e2e3]" />
-                      </div>
-                      <div className="relative flex justify-center">
-                        <span
-                          className={`bg-white px-3 text-[10px] font-bold uppercase tracking-[0.2em] text-[#76777d] ${H}`}
+                    {!noAccountMessage && (
+                      <div className="space-y-4">
+                        <button
+                          type="button"
+                          onClick={() => handleEmailSubmit('otp')}
+                          disabled={
+                            !emailVerified || loading || googleLoading || (showTurnstile && !turnstileToken)
+                          }
+                          className={LIME_CTA}
                         >
-                          or
-                        </span>
+                          {loading ? (
+                            <>
+                              <LoadingSpinner size="sm" />
+                              <span>Sending code…</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>Send Email Code</span>
+                              <ArrowRight
+                                className="h-4 w-4 shrink-0 transition-transform duration-200 group-hover:translate-x-0.5"
+                                strokeWidth={2}
+                                aria-hidden
+                              />
+                            </>
+                          )}
+                        </button>
                       </div>
-                    </div>
+                    )}
 
-                    <Button
-                      type="button"
-                      onClick={() => handleEmailSubmit('google')}
-                      disabled={loading || googleLoading}
-                      variant="outline"
-                      className={`${OUTLINE_SECONDARY} h-12 rounded-md`}
-                    >
-                      <svg className="mr-2.5 h-5 w-5 shrink-0" viewBox="0 0 24 24" aria-hidden>
-                        <path
-                          fill="#4285F4"
-                          d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                        />
-                        <path
-                          fill="#34A853"
-                          d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                        />
-                        <path
-                          fill="#FBBC05"
-                          d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                        />
-                        <path
-                          fill="#EA4335"
-                          d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                        />
-                      </svg>
-                      {googleLoading ? 'Signing in…' : 'Continue with Google'}
-                    </Button>
+                    {!noAccountMessage && (
+                      <div className="relative py-1">
+                        <div className="absolute inset-0 flex items-center">
+                          <div className="w-full border-t border-[#e4e2e3]" />
+                        </div>
+                        <div className="relative flex justify-center">
+                          <span
+                            className={`bg-white px-3 text-[10px] font-bold uppercase tracking-[0.2em] text-[#76777d] ${H}`}
+                          >
+                            or
+                          </span>
+                        </div>
+                      </div>
+                    )}
 
-                    <p className="pt-1 text-center text-sm text-[#45474c]">
-                      Don&apos;t have an account?{' '}
-                      <Link
-                        href="/signup"
-                        className={`font-bold text-[#1b1b1d] underline-offset-4 transition-colors hover:text-[#006e16] hover:underline ${H}`}
+                    {!noAccountMessage && (
+                      <Button
+                        type="button"
+                        onClick={() => handleEmailSubmit('google')}
+                        disabled={!emailVerified || loading || googleLoading}
+                        variant="outline"
+                        className={`${OUTLINE_SECONDARY} h-12 rounded-md`}
                       >
-                        Sign up
-                      </Link>
-                    </p>
+                        <svg className="mr-2.5 h-5 w-5 shrink-0" viewBox="0 0 24 24" aria-hidden>
+                          <path
+                            fill="#4285F4"
+                            d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                          />
+                          <path
+                            fill="#34A853"
+                            d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                          />
+                          <path
+                            fill="#FBBC05"
+                            d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                          />
+                          <path
+                            fill="#EA4335"
+                            d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                          />
+                        </svg>
+                        {googleLoading ? 'Signing in…' : 'Continue with Google'}
+                      </Button>
+                    )}
+
+                    {!noAccountMessage && (
+                      <p className="pt-1 text-center text-sm text-[#45474c]">
+                        Don&apos;t have an account?{' '}
+                        <Link
+                          href="/signup"
+                          className={`font-bold text-[#1b1b1d] underline-offset-4 transition-colors hover:text-[#006e16] hover:underline ${H}`}
+                        >
+                          Sign up
+                        </Link>
+                      </p>
+                    )}
                   </div>
                 )}
 
@@ -345,10 +385,7 @@ export function SigninView() {
                         <div className="flex justify-center">
                           <Turnstile
                             siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'}
-                            onSuccess={(token) => {
-                              setTurnstileToken(token)
-                              sendOTPWithToken(token)
-                            }}
+                            onSuccess={handleTurnstileSuccess}
                             onError={() => {
                               setError('Captcha verification failed. Please try again.')
                               setTurnstileToken(null)

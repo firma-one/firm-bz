@@ -6,8 +6,11 @@ import { revalidatePath } from 'next/cache'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { logger } from '@/lib/logger'
 import type { ClientStatus } from '@prisma/client'
+import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
+import { upsertFollowUpReminder } from '@/lib/actions/user-reminders'
 
 export type LwCrmClientStatus = 'PROSPECT' | 'ACTIVE' | 'ON_HOLD' | 'PAST'
+
 
 export interface CreateClientData {
     name: string
@@ -17,7 +20,15 @@ export interface CreateClientData {
     website?: string
     description?: string
     tags?: string[]
-    ownerId?: string | null
+    followUpDate?: string | null
+    expectedCloseDate?: string | null
+    leadSource?: string | null
+    internalMemo?: string | null
+    relationshipValue?: string | null
+    clientSinceDate?: string | null
+    linkedInUrl?: string | null
+    companySizeBracket?: string | null
+    billingAddress?: string | null
 }
 
 /**
@@ -49,13 +60,6 @@ export async function createClient(organizationSlug: string, data: CreateClientD
     const membership = firm.members[0]
     if (!membership) {
         throw new Error('Unauthorized')
-    }
-
-    if (data.ownerId) {
-        const ownerMember = await prisma.firmMember.findFirst({
-            where: { firmId: firm.id, userId: data.ownerId },
-        })
-        if (!ownerMember) throw new Error('Owner must be a member of this firm')
     }
 
     // 2. Check for duplicate name
@@ -112,7 +116,16 @@ export async function createClient(organizationSlug: string, data: CreateClientD
                 website: data.website?.trim() || null,
                 description: data.description?.trim() || null,
                 tags: Array.isArray(data.tags) ? data.tags.filter((t) => typeof t === 'string' && t.trim()) : [],
-                ownerId: data.ownerId ?? null,
+                ownerId: user.id,
+                followUpDate: data.followUpDate ? new Date(data.followUpDate) : null,
+                expectedCloseDate: data.expectedCloseDate ? new Date(data.expectedCloseDate) : null,
+                leadSource: data.leadSource ?? null,
+                internalMemo: data.internalMemo?.trim() || null,
+                relationshipValue: data.relationshipValue ? parseFloat(data.relationshipValue) : null,
+                clientSinceDate: data.clientSinceDate ? new Date(data.clientSinceDate) : null,
+                linkedInUrl: data.linkedInUrl?.trim() || null,
+                companySizeBracket: data.companySizeBracket ?? null,
+                billingAddress: data.billingAddress?.trim() || null,
             }
         })
 
@@ -150,6 +163,14 @@ export async function createClient(organizationSlug: string, data: CreateClientD
         return client
     })
 
+    audit(AUDIT_EVENT.CLIENT_CREATED)
+        .scope(AUDIT_SCOPE.CLIENT)
+        .firm(firm.id)
+        .client(newClient.id)
+        .actor(user.id)
+        .meta({ name: newClient.name, slug: newClient.slug })
+        .fireAndForget()
+
     // 5. Create Drive folder structure if connected
     try {
         const connectorId = firm.connectorId
@@ -166,6 +187,30 @@ export async function createClient(organizationSlug: string, data: CreateClientD
         logger.error("Failed to create Google Drive folder for client", e as Error)
     }
 
+    // Upsert follow-up reminder if followUpDate was set
+    upsertFollowUpReminder({
+        userId: user.id,
+        entityKey: 'platform.clients.id',
+        entityValue: newClient.id,
+        action: 'Follow-up',
+        dateKey: 'platform.clients.followUpDate',
+        dateValue: data.followUpDate ?? null,
+        entityName: newClient.name,
+        firmId: firm.id,
+        ctaUrl: `/d/f/${organizationSlug}/c/${newClient.slug}`,
+    }).catch(() => {})
+    upsertFollowUpReminder({
+        userId: user.id,
+        entityKey: 'platform.clients.id',
+        entityValue: newClient.id,
+        action: 'Close deal',
+        dateKey: 'platform.clients.expectedCloseDate',
+        dateValue: data.expectedCloseDate ?? null,
+        entityName: newClient.name,
+        firmId: firm.id,
+        ctaUrl: `/d/f/${organizationSlug}/c/${newClient.slug}`,
+    }).catch(() => {})
+
     revalidatePath(`/d/f/${organizationSlug}`)
     return newClient
 }
@@ -179,6 +224,15 @@ export interface UpdateClientData {
     description?: string | null
     tags?: string[]
     ownerId?: string | null
+    followUpDate?: string | null
+    expectedCloseDate?: string | null
+    leadSource?: string | null
+    internalMemo?: string | null
+    relationshipValue?: string | null
+    clientSinceDate?: string | null
+    linkedInUrl?: string | null
+    companySizeBracket?: string | null
+    billingAddress?: string | null
 }
 
 /**
@@ -226,12 +280,69 @@ export async function updateClient(
         updateData.tags = Array.isArray(data.tags) ? data.tags.filter((t) => typeof t === 'string' && t.trim()) : []
     }
     if (data.ownerId !== undefined) updateData.ownerId = data.ownerId
+    if (data.followUpDate !== undefined) updateData.followUpDate = data.followUpDate ? new Date(data.followUpDate) : null
+    if (data.expectedCloseDate !== undefined) updateData.expectedCloseDate = data.expectedCloseDate ? new Date(data.expectedCloseDate) : null
+    if (data.leadSource !== undefined) updateData.leadSource = data.leadSource ?? null
+    if (data.internalMemo !== undefined) updateData.internalMemo = data.internalMemo?.trim() || null
+    if (data.relationshipValue !== undefined) updateData.relationshipValue = data.relationshipValue ? parseFloat(data.relationshipValue) : null
+    if (data.clientSinceDate !== undefined) updateData.clientSinceDate = data.clientSinceDate ? new Date(data.clientSinceDate) : null
+    if (data.linkedInUrl !== undefined) updateData.linkedInUrl = data.linkedInUrl?.trim() || null
+    if (data.companySizeBracket !== undefined) updateData.companySizeBracket = data.companySizeBracket ?? null
+    if (data.billingAddress !== undefined) updateData.billingAddress = data.billingAddress?.trim() || null
     if (Object.keys(updateData).length === 0) return
 
     await prisma.client.update({
         where: { id: client.id },
         data: updateData
     })
+
+    audit(AUDIT_EVENT.CLIENT_CHANGED)
+        .scope(AUDIT_SCOPE.CLIENT)
+        .firm(firm.id)
+        .client(client.id)
+        .actor(user.id)
+        .meta({ changedFields: Object.keys(updateData) })
+        .fireAndForget()
+
+    // Upsert/cancel reminders if relevant date fields or status changed
+    const followUpChanged = data.followUpDate !== undefined
+    const expectedCloseChanged = data.expectedCloseDate !== undefined
+    const statusChanged = data.status !== undefined
+    if (followUpChanged || expectedCloseChanged || statusChanged) {
+        const latest = await (prisma as any).client.findUnique({
+            where: { id: client.id },
+            select: { followUpDate: true, expectedCloseDate: true, status: true, ownerId: true, slug: true },
+        }) as { followUpDate: Date | null; expectedCloseDate: Date | null; status: string; ownerId: string | null; slug: string } | null
+        const activeStatuses = ['PROSPECT', 'ACTIVE']
+        const isActive = activeStatuses.includes(latest?.status ?? '')
+        const effectiveOwnerId = latest?.ownerId ?? null
+        const ctaUrl = `/d/f/${organizationSlug}/c/${latest?.slug ?? clientSlug}`
+        const entityName = data.name ?? client.name
+        if (effectiveOwnerId) {
+            upsertFollowUpReminder({
+                userId: effectiveOwnerId,
+                entityKey: 'platform.clients.id',
+                entityValue: client.id,
+                action: 'Follow-up',
+                dateKey: 'platform.clients.followUpDate',
+                dateValue: isActive && latest?.followUpDate ? latest.followUpDate.toISOString() : null,
+                entityName,
+                firmId: firm.id,
+                ctaUrl,
+            }).catch(() => {})
+            upsertFollowUpReminder({
+                userId: effectiveOwnerId,
+                entityKey: 'platform.clients.id',
+                entityValue: client.id,
+                action: 'Close deal',
+                dateKey: 'platform.clients.expectedCloseDate',
+                dateValue: isActive && latest?.expectedCloseDate ? latest.expectedCloseDate.toISOString() : null,
+                entityName,
+                firmId: firm.id,
+                ctaUrl,
+            }).catch(() => {})
+        }
+    }
 
     revalidatePath(`/d/f/${organizationSlug}`)
     revalidatePath(`/d/f/${organizationSlug}/c/${clientSlug}`)
@@ -245,6 +356,7 @@ export type ClientContactRecord = {
     title: string | null
     notes: string | null
     tags: string[]
+    isPrimary: boolean
     projectId: string | null
     projectName?: string | null
     createdAt: string
@@ -292,9 +404,9 @@ export async function listClientContacts(organizationSlug: string, clientSlug: s
 
     const rows = await prisma.clientContact.findMany({
         where: { firmId: firm.id, clientId: client.id },
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ isPrimary: 'desc' }, { createdAt: 'desc' }],
         select: {
-            id: true, name: true, email: true, phone: true, title: true, notes: true, tags: true, engagementId: true,
+            id: true, name: true, email: true, phone: true, title: true, notes: true, tags: true, isPrimary: true, engagementId: true,
             createdAt: true, updatedAt: true,
             engagement: { select: { name: true } }
         },
@@ -308,6 +420,7 @@ export async function listClientContacts(organizationSlug: string, clientSlug: s
         title: r.title,
         notes: r.notes,
         tags: Array.isArray(r.tags) ? (r.tags as string[]) : [],
+        isPrimary: r.isPrimary,
         projectId: r.engagementId,
         projectName: r.engagement?.name ?? null,
         createdAt: r.createdAt.toISOString(),
@@ -326,7 +439,7 @@ export async function createClientContact(
     const { firmId, clientId } = await assertCanManageClient(organizationSlug, clientSlug)
     if (!data.name?.trim()) throw new Error('Name is required')
 
-    await prisma.clientContact.create({
+    const contact = await prisma.clientContact.create({
         data: {
             firmId,
             clientId,
@@ -342,6 +455,14 @@ export async function createClientContact(
         }
     })
 
+    audit(AUDIT_EVENT.CLIENT_CONTACT_CREATED)
+        .scope(AUDIT_SCOPE.CLIENT)
+        .firm(firmId)
+        .client(clientId)
+        .actor(user.id)
+        .meta({ contactId: contact.id, contactName: data.name.trim() })
+        .fireAndForget()
+
     revalidatePath(`/d/f/${organizationSlug}/c/${clientSlug}`)
 }
 
@@ -354,7 +475,7 @@ export async function updateClientContact(
     const supabase = await createSupabaseClient()
     const { data: { user }, error } = await supabase.auth.getUser()
     if (error || !user) throw new Error('Unauthorized')
-    await assertCanManageClient(organizationSlug, clientSlug)
+    const { firmId: updateFirmId, clientId: updateClientId } = await assertCanManageClient(organizationSlug, clientSlug)
 
     await prisma.clientContact.update({
         where: { id: contactId },
@@ -370,12 +491,46 @@ export async function updateClientContact(
         }
     })
 
+    audit(AUDIT_EVENT.CLIENT_CONTACT_CHANGED)
+        .scope(AUDIT_SCOPE.CLIENT)
+        .firm(updateFirmId)
+        .client(updateClientId)
+        .actor(user.id)
+        .meta({ contactId, changedFields: Object.keys(data) })
+        .fireAndForget()
+
     revalidatePath(`/d/f/${organizationSlug}/c/${clientSlug}`)
 }
 
 export async function deleteClientContact(organizationSlug: string, clientSlug: string, contactId: string): Promise<void> {
-    await assertCanManageClient(organizationSlug, clientSlug)
+    const supabase = await createSupabaseClient()
+    const { data: { user }, error } = await supabase.auth.getUser()
+    if (error || !user) throw new Error('Unauthorized')
+    const { firmId: delFirmId, clientId: delClientId } = await assertCanManageClient(organizationSlug, clientSlug)
+
+    audit(AUDIT_EVENT.CLIENT_CONTACT_DELETED)
+        .scope(AUDIT_SCOPE.CLIENT)
+        .firm(delFirmId)
+        .client(delClientId)
+        .actor(user.id)
+        .meta({ contactId })
+        .fireAndForget()
+
     await prisma.clientContact.delete({ where: { id: contactId } })
+    revalidatePath(`/d/f/${organizationSlug}/c/${clientSlug}`)
+}
+
+export async function setClientContactPrimary(organizationSlug: string, clientSlug: string, contactId: string): Promise<void> {
+    const supabase = await createSupabaseClient()
+    const { data: { user }, error } = await supabase.auth.getUser()
+    if (error || !user) throw new Error('Unauthorized')
+    const { clientId } = await assertCanManageClient(organizationSlug, clientSlug)
+
+    await prisma.$transaction([
+        prisma.clientContact.updateMany({ where: { clientId }, data: { isPrimary: false } }),
+        prisma.clientContact.update({ where: { id: contactId }, data: { isPrimary: true } }),
+    ])
+
     revalidatePath(`/d/f/${organizationSlug}/c/${clientSlug}`)
 }
 
@@ -402,6 +557,14 @@ export async function deleteClient(organizationSlug: string, clientSlug: string)
 
     const client = firm.clients[0]
     if (!client) throw new Error('Client not found')
+
+    audit(AUDIT_EVENT.CLIENT_DELETED)
+        .scope(AUDIT_SCOPE.CLIENT)
+        .firm(firm.id)
+        .client(client.id)
+        .actor(user.id)
+        .meta({ clientSlug })
+        .fireAndForget()
 
     await prisma.client.delete({
         where: { id: client.id }

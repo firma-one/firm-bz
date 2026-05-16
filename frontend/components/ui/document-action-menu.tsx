@@ -5,10 +5,12 @@ import { createPortal } from "react-dom"
 import { Button } from "@/components/ui/button"
 import { DateTimePicker } from "@/components/ui/date-time-picker"
 import { DocumentIcon } from "@/components/ui/document-icon"
+import { UserAvatarWithTooltip } from "@/components/ui/user-avatar-with-tooltip"
 import { formatFileSize, formatSmartDateTime } from "@/lib/utils"
 import { DocumentEditPanelContent, DocumentPreviewPanelContent, getDocumentEditUrl } from "@/components/files/document-edit-sheet"
 import { useRightPane } from "@/lib/right-pane-context"
-import { VersionHistorySheet } from "@/components/files/version-history-sheet"
+import { DocumentActivityPane } from "@/components/files/document-activity-pane"
+import { DocumentHistoryPane } from "@/components/files/document-history-pane"
 import { DocumentShareModal } from "@/components/files/document-share-modal"
 import { DocumentDocCommentsPane } from "@/components/projects/document-doc-comments-pane"
 import {
@@ -26,6 +28,7 @@ import {
   Trash2,
   Calendar,
   Check,
+  BadgeCheck,
   Info,
   Eye,
   X,
@@ -36,6 +39,11 @@ import {
   Link2,
   Lock,
   Unlock,
+  ChevronRight,
+  Folder,
+  CheckCircle2,
+  XCircle,
+  Building2,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -50,12 +58,25 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useToast } from "@/components/ui/toast"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { useDownloadProgress } from "@/lib/download-progress-context"
 
 const VERSION_LOCK_TOOLTIP =
-  'Lock finalizes the current version in Google Drive (collaborators become view-only on this file). Unlock restores edit access for Engagement Lead actions.'
+  'Finalize locks the document — all collaborators become view-only. Return to Draft restores each collaborator\'s prior access level based on their role and sharing settings.'
 
 interface DocumentActionMenuProps {
   document: any
+  /** Intake pending: EL can approve (clears lock, file becomes normal). */
+  onApproveIntake?: (doc: any) => void
+  /** Intake pending: EL can reject (deletes record + trashes Drive file). */
+  onRejectIntake?: (doc: any) => void
+  /** Intake pending: EC/EV can withdraw their own upload. */
+  onWithdrawIntake?: (doc: any) => void
+  /** EL only: approve all intake files in a folder at once */
+  onApproveFolder?: (doc: any) => void
+  /** EL only: reject all intake files in a folder at once */
+  onRejectFolder?: (doc: any) => void
+  /** EC/EV only: withdraw all their uploaded files in a folder at once */
+  onWithdrawFolder?: (doc: any) => void
   onOpenDocument?: (doc: any) => void
   onDownloadDocument?: (doc: any) => void
   onShareDocument?: (doc: any) => void
@@ -64,6 +85,8 @@ interface DocumentActionMenuProps {
   onDuplicateDocument?: (doc: any) => void
   onCopyDocument?: (doc: any) => void
   onMoveDocument?: (doc: any) => void
+  /** Copy to a different engagement (EL only). Opens cross-engagement picker. */
+  onCrossEngagementCopy?: (doc: any) => void
   onVersionHistory?: (doc: any) => void
   onDeleteDocument?: (doc: any) => void
   /** When set, Share opens the custom share modal instead of OS share. Only show Share item when true (Project Lead). */
@@ -76,24 +99,40 @@ interface DocumentActionMenuProps {
   canManage?: boolean
   /** Current root folder type for persona options (Restrict / Restore / Promote). */
   currentFolderType?: 'general' | 'confidential' | 'staging'
-  /** Move document tree to Confidential (only when currentFolderType === 'general'). */
-  onRestrictToConfidential?: (doc: any) => void
-  /** Move document tree to General (only when currentFolderType === 'confidential'). */
-  onRestoreToGeneral?: (doc: any) => void
-  /** Move document tree to General (only when currentFolderType === 'staging'). */
-  onPromoteToGeneral?: (doc: any) => void
+  /** Mark document as Private (hidden from EC/EV users). EL only. */
+  onMakePrivate?: (doc: any) => void
+  /** Make document visible to all members again. EL only. */
+  onMakePublic?: (doc: any) => void
   /** Called when the action menu opens or closes (e.g. to highlight the row/card). */
   onOpenChange?: (open: boolean) => void
   /** Optional custom icon for the trigger (e.g. MoreVertical for compact layouts). */
   triggerIcon?: React.ReactNode
   /** Optional: notify parent when comment pane is opened (e.g. to highlight row). */
   onOpenCommentPane?: (documentId: string) => void
+  /** Optional: notify parent when info pane is opened (e.g. to highlight row). */
+  onOpenInfoPane?: (documentId: string) => void
+  /** Optional: notify parent when activity pane is opened (e.g. to highlight row). */
+  onOpenActivityPane?: (documentId: string) => void
+  /** Optional: notify parent when version pane is opened (e.g. to highlight row). */
+  onOpenVersionPane?: (documentId: string) => void
   /** Engagement Lead only: Lock / Unlock version (files). Prefer explicit over showShareModal. */
   isEngagementLead?: boolean
+  /** External user (EC or EV): hides Drive Actions and separator for all external users. */
+  isExternalUser?: boolean
+  /** External Viewer (EV only): shows Accept Document option. */
+  isExternalViewer?: boolean
+  /** Base URL for deeplink (e.g. ".../files"). Appended with #doc-file:{projectDocumentId}. Falls back to Drive URL if absent. */
+  deeplinkBase?: string
 }
 
 export function DocumentActionMenu({
   document,
+  onApproveIntake,
+  onRejectIntake,
+  onWithdrawIntake,
+  onApproveFolder,
+  onRejectFolder,
+  onWithdrawFolder,
   onOpenDocument,
   onDownloadDocument,
   onShareDocument,
@@ -102,6 +141,7 @@ export function DocumentActionMenu({
   onDuplicateDocument,
   onCopyDocument,
   onMoveDocument,
+  onCrossEngagementCopy,
   onVersionHistory,
   onDeleteDocument,
   showShareModal = false,
@@ -109,25 +149,30 @@ export function DocumentActionMenu({
   onShareSaved,
   canManage = false,
   currentFolderType,
-  onRestrictToConfidential,
-  onRestoreToGeneral,
-  onPromoteToGeneral,
+  onMakePrivate,
+  onMakePublic,
   onOpenChange,
   triggerIcon,
   onOpenCommentPane,
+  onOpenInfoPane,
+  onOpenActivityPane,
+  onOpenVersionPane,
   isEngagementLead,
+  isExternalUser,
+  isExternalViewer,
+  deeplinkBase,
 }: DocumentActionMenuProps) {
   const [showDueDatePicker, setShowDueDatePicker] = useState(false)
-  const [showVersionHistory, setShowVersionHistory] = useState(false)
   const [showShareModalOpen, setShowShareModalOpen] = useState(false)
   /** Drive id or project document UUID — disables Finalize row while request in flight */
   const [finalizeLockActiveId, setFinalizeLockActiveId] = useState<string | null>(null)
-  const [showFileInfo, setShowFileInfo] = useState(false)
   const [selectedDueDate, setSelectedDueDate] = useState<string>("")
   const [hasCopiedName, setHasCopiedName] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [privateInfoOpen, setPrivateInfoOpen] = useState(false)
   const { addToast } = useToast()
   const rightPane = useRightPane()
+  const { addTask, updateTask } = useDownloadProgress()
 
   const mime = (document?.mimeType ?? '').toLowerCase()
   const canOpenWithGoogleDoc = mime.includes('document') || mime.includes('vnd.google-apps.document')
@@ -279,6 +324,45 @@ export function DocumentActionMenu({
     }
   }, [projectId, leadForVersionLock, documentIdForProjectApis, addToast, onShareSaved])
 
+  const handleAcceptDocument = useCallback(async () => {
+    if (!projectId || !isExternalViewer) return
+    const docId = documentIdForProjectApis
+    if (!docId) {
+      addToast({ type: 'error', title: 'Unavailable', message: 'Document must be indexed before it can be accepted.' })
+      return
+    }
+    if (finalizeLockInFlightRef.current) return
+    finalizeLockInFlightRef.current = true
+    setFinalizeLockActiveId(docId)
+    try {
+      const { getSession } = await import('@/lib/supabase')
+      const session = await getSession()
+      if (!session?.access_token) {
+        addToast({ type: 'error', title: 'Unauthorized', message: 'Please sign in again.' })
+        return
+      }
+      const res = await fetch(
+        `/api/projects/${projectId}/documents/${encodeURIComponent(docId)}/sharing/accept`,
+        { method: 'PATCH', headers: { Authorization: `Bearer ${session.access_token}` } }
+      )
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(typeof err?.error === 'string' ? err.error : 'Failed to accept')
+      }
+      addToast({ type: 'success', title: 'Document accepted', message: 'The document has been accepted and is now locked.' })
+      onShareSaved?.()
+    } catch (error) {
+      addToast({
+        type: 'error',
+        title: 'Accept failed',
+        message: error instanceof Error ? error.message : 'Could not accept document.',
+      })
+    } finally {
+      finalizeLockInFlightRef.current = false
+      setFinalizeLockActiveId(null)
+    }
+  }, [projectId, isExternalViewer, documentIdForProjectApis, addToast, onShareSaved])
+
   const getDisplayType = (doc: any) => {
     if (doc.mimeType?.includes('folder')) return "Folder"
     if (doc.mimeType?.includes('document')) return "Document"
@@ -300,14 +384,44 @@ export function DocumentActionMenu({
         return
       }
 
-      const downloadUrl = `/api/documents/download?fileId=${doc.id}&connectorId=${doc.connectorId}&filename=${encodeURIComponent(doc.name)}&token=${session.access_token}`
+      const filename: string = doc.name
 
-      const a = window.document.createElement('a')
-      a.href = downloadUrl
-      a.download = doc.name
-      window.document.body.appendChild(a)
-      a.click()
-      window.document.body.removeChild(a)
+      if (doc.projectId && doc.id) {
+        // Shared document: server resolves connector + PDF/original.
+        // May involve PDF generation — show progress indicator while waiting.
+        const downloadUrl = `/api/projects/${doc.projectId}/documents/${encodeURIComponent(doc.id)}/download-share`
+        const taskId = addTask(filename)
+        try {
+          const res = await fetch(downloadUrl)
+          if (!res.ok) {
+            updateTask(taskId, { status: 'error', error: res.status === 403 ? 'Download not permitted' : 'Download failed' })
+            return
+          }
+          const blob = await res.blob()
+          updateTask(taskId, { status: 'complete' })
+          const blobUrl = URL.createObjectURL(blob)
+          const a = window.document.createElement('a')
+          a.href = blobUrl
+          a.download = filename
+          window.document.body.appendChild(a)
+          a.click()
+          window.document.body.removeChild(a)
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000)
+        } catch (err) {
+          updateTask(taskId, { status: 'error', error: 'Download failed' })
+          console.error('Share download error:', err)
+        }
+      } else {
+        // Files tab: generic download with explicit connector + Drive file ID (anchor, no progress needed)
+        const fileId = doc.externalId || doc.id
+        const downloadUrl = `/api/documents/download?fileId=${fileId}&connectorId=${doc.connectorId}&filename=${encodeURIComponent(filename)}&token=${session.access_token}`
+        const a = window.document.createElement('a')
+        a.href = downloadUrl
+        a.download = filename
+        window.document.body.appendChild(a)
+        a.click()
+        window.document.body.removeChild(a)
+      }
     } catch (error) {
       console.error('Download error:', error)
     }
@@ -383,6 +497,71 @@ export function DocumentActionMenu({
           </div>
 
           <div className="p-2">
+            {/* Intake pending actions — shown at the top when applicable */}
+            {(onApproveIntake || onRejectIntake || onWithdrawIntake) && (
+              <>
+                {onApproveIntake && (
+                  <DropdownMenuItem
+                    onSelect={() => onApproveIntake(document)}
+                    className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs text-emerald-700 focus:text-emerald-700 focus:bg-emerald-50"
+                  >
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                    <span>Approve</span>
+                  </DropdownMenuItem>
+                )}
+                {onRejectIntake && (
+                  <DropdownMenuItem
+                    onSelect={() => onRejectIntake(document)}
+                    className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs text-red-600 focus:text-red-600 focus:bg-red-50"
+                  >
+                    <XCircle className="h-4 w-4 text-red-500" />
+                    <span>Reject</span>
+                  </DropdownMenuItem>
+                )}
+                {onWithdrawIntake && (
+                  <DropdownMenuItem
+                    onSelect={() => onWithdrawIntake(document)}
+                    className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                  >
+                    <X className="h-4 w-4 text-slate-500" />
+                    <span>Withdraw upload</span>
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
+              </>
+            )}
+            {(onApproveFolder || onRejectFolder || onWithdrawFolder) && (
+              <>
+                {onApproveFolder && (
+                  <DropdownMenuItem
+                    onSelect={() => onApproveFolder(document)}
+                    className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs text-emerald-700 focus:text-emerald-700 focus:bg-emerald-50"
+                  >
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                    <span>Approve folder upload</span>
+                  </DropdownMenuItem>
+                )}
+                {onRejectFolder && (
+                  <DropdownMenuItem
+                    onSelect={() => onRejectFolder(document)}
+                    className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs text-red-600 focus:text-red-600 focus:bg-red-50"
+                  >
+                    <XCircle className="h-4 w-4 text-red-500" />
+                    <span>Reject folder</span>
+                  </DropdownMenuItem>
+                )}
+                {onWithdrawFolder && (
+                  <DropdownMenuItem
+                    onSelect={() => onWithdrawFolder(document)}
+                    className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs text-orange-700 focus:text-orange-700 focus:bg-orange-50"
+                  >
+                    <FolderUp className="h-4 w-4 text-orange-600" />
+                    <span>Withdraw folder</span>
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
+              </>
+            )}
             {document.mimeType?.includes('folder') ? (
               <>
                 <DropdownMenuSub>
@@ -400,25 +579,15 @@ export function DocumentActionMenu({
                         <span>Share</span>
                       </DropdownMenuItem>
                     )}
-                    {!showShareModal && (
-                      <DropdownMenuItem
-                        onClick={async () => {
-                          const link = document.webViewLink || `https://drive.google.com/drive/folders/${document.id}`
-                          await navigator.clipboard.writeText(link)
-                          addToast({ type: 'success', title: 'Link copied', message: 'Folder link copied to clipboard' })
-                          onShareDocument?.(document)
-                        }}
-                        className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
-                      >
-                        <Share2 className="h-4 w-4 text-purple-600" />
-                        <span>Share</span>
-                      </DropdownMenuItem>
-                    )}
                     <DropdownMenuItem
                       onClick={async () => {
-                        const link = document.webViewLink || `https://drive.google.com/drive/folders/${document.id}`
-                        await navigator.clipboard.writeText(link)
-                        addToast({ type: 'success', title: 'Link copied', message: 'Folder link copied to clipboard' })
+                        const docId = (document as any).projectDocumentId
+                        if (!deeplinkBase || !docId) {
+                          addToast({ type: 'error', title: 'Link unavailable', message: 'This item has not been indexed yet.' })
+                          return
+                        }
+                        await navigator.clipboard.writeText(`${deeplinkBase}#doc-file:${docId}`)
+                        addToast({ type: 'success', title: 'Link copied', message: 'Link copied to clipboard' })
                       }}
                       className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
                     >
@@ -458,65 +627,43 @@ export function DocumentActionMenu({
                           <span>Move</span>
                         </DropdownMenuItem>
                       )}
-                      {(canManage && (onRestrictToConfidential || onRestoreToGeneral || onPromoteToGeneral)) && <DropdownMenuSeparator />}
-                      {canManage && currentFolderType === 'general' && onRestrictToConfidential && (
-                        <DropdownMenuItem onClick={() => onRestrictToConfidential(document)} className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
-                          <FolderLock className="h-4 w-4 text-[#B91C1C]" />
-                          <span className="whitespace-nowrap">Move to <strong>Confidential</strong></span>
+                      {(canManage && (onMakePrivate || onMakePublic)) && <DropdownMenuSeparator />}
+                      {canManage && !document.isPrivate && onMakePrivate && (
+                        document.isSharedWithExternal ? (
                           <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild onClick={(e) => e.stopPropagation()}>
-                                <span className="inline-flex text-gray-400 hover:text-gray-600 shrink-0">
-                                  <Info className="h-3.5 w-3.5" />
-                                </span>
+                            <Tooltip open={privateInfoOpen} onOpenChange={setPrivateInfoOpen}>
+                              <TooltipTrigger asChild>
+                                <div
+                                  onClick={(e) => { e.stopPropagation(); setPrivateInfoOpen((v) => !v) }}
+                                  className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground cursor-pointer opacity-50 hover:bg-accent rounded-sm"
+                                >
+                                  <FolderLock className="h-4 w-4 text-orange-500" />
+                                  <span>Make Private</span>
+                                  <Info className="h-3.5 w-3.5 ml-auto text-slate-400" />
+                                </div>
                               </TooltipTrigger>
-                              <TooltipContent side="left" className="bg-slate-50 text-slate-800 border-slate-200 max-w-[220px]">
-                                Confidential is only accessible to Project Leads, Client Partners & Org Owners.
+                              <TooltipContent side="left" className="text-xs max-w-[220px]">
+                                A shared document cannot be made Private. Turn off sharing first.
                               </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
-                        </DropdownMenuItem>
+                        ) : (
+                          <DropdownMenuItem onClick={() => onMakePrivate(document)} className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
+                            <FolderLock className="h-4 w-4 text-orange-500" />
+                            <span>Make Private</span>
+                          </DropdownMenuItem>
+                        )
                       )}
-                      {canManage && currentFolderType === 'confidential' && onRestoreToGeneral && (
-                        <DropdownMenuItem onClick={() => onRestoreToGeneral(document)} className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
-                          <FolderUp className="h-4 w-4 text-green-600" />
-                          <span className="whitespace-nowrap">Release to <strong>General</strong></span>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild onClick={(e) => e.stopPropagation()}>
-                                <span className="inline-flex text-gray-400 hover:text-gray-600 shrink-0">
-                                  <Info className="h-3.5 w-3.5" />
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent side="left" className="bg-slate-50 text-slate-800 border-slate-200 max-w-[220px]">
-                                General is visible to all project members.
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        </DropdownMenuItem>
-                      )}
-                      {canManage && currentFolderType === 'staging' && onPromoteToGeneral && (
-                        <DropdownMenuItem onClick={() => onPromoteToGeneral(document)} className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
-                          <FolderUp className="h-4 w-4 text-amber-600" />
-                          <span className="whitespace-nowrap">Promote to <strong>General</strong></span>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild onClick={(e) => e.stopPropagation()}>
-                                <span className="inline-flex text-gray-400 hover:text-gray-600 shrink-0">
-                                  <Info className="h-3.5 w-3.5" />
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent side="left" className="bg-slate-50 text-slate-800 border-slate-200 max-w-[220px]">
-                                Promote from Staging to General to make the file visible to all project members.
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
+                      {canManage && document.isPrivate && onMakePublic && (
+                        <DropdownMenuItem onClick={() => onMakePublic(document)} className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
+                          <FolderUp className="h-4 w-4 text-slate-500" />
+                          <span>Make Public</span>
                         </DropdownMenuItem>
                       )}
                     </DropdownMenuSubContent>
                   </DropdownMenuSub>
                 )}
-                <DropdownMenuSeparator />
+                {(!isExternalUser || onDeleteDocument) && <DropdownMenuSeparator />}
                 {onDeleteDocument && (
                   <TooltipProvider>
                     <Tooltip>
@@ -535,25 +682,29 @@ export function DocumentActionMenu({
                     </Tooltip>
                   </TooltipProvider>
                 )}
-                <DropdownMenuSeparator />
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
-                    <ExternalLink className="h-4 w-4 text-gray-600" />
-                    <span>Drive Actions</span>
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="w-56">
-                    <DropdownMenuItem
-                      onClick={() => {
-                        const googleDriveUrl = `https://drive.google.com/drive/folders/${document.id}`
-                        if (typeof window !== 'undefined') window.open(googleDriveUrl, '_blank')
-                      }}
-                      className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
-                    >
-                      <ExternalLink className="h-4 w-4 text-blue-600" />
-                      <span>Open in Google Drive</span>
-                    </DropdownMenuItem>
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
+                {!isExternalUser && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
+                      <ExternalLink className="h-4 w-4 text-gray-600" />
+                      <span>Drive Actions</span>
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent className="w-56">
+                      <DropdownMenuItem
+                        onClick={() => {
+                          const googleDriveUrl = `https://drive.google.com/drive/folders/${document.id}`
+                          if (typeof window !== 'undefined') window.open(googleDriveUrl, '_blank')
+                        }}
+                        className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                      >
+                        <ExternalLink className="h-4 w-4 text-blue-600" />
+                        <span>Open in Google Drive</span>
+                      </DropdownMenuItem>
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+                </>
+                )}
               </>
             ) : (
               <>
@@ -572,60 +723,15 @@ export function DocumentActionMenu({
                   <span>Open</span>
                 </DropdownMenuItem>
 
-                <DropdownMenuItem
-                  onClick={() => { handleDownload(document); onDownloadDocument?.(document) }}
-                  className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
-                >
-                  <Download className="h-4 w-4 text-blue-600" />
-                  <span>Download</span>
-                </DropdownMenuItem>
-
-                {!mime.includes('folder') && leadForVersionLock && projectId && (
-                  <>
-                    {(document as { versionLocked?: boolean }).versionLocked ? (
-                      <DropdownMenuItem
-                        disabled={finalizeLockDisabled}
-                        onClick={() => void handleUnlockVersion()}
-                        className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
-                      >
-                        <Unlock className="h-4 w-4 text-emerald-700 shrink-0" />
-                        <span>Unlock version</span>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild onClick={(ev) => ev.stopPropagation()}>
-                              <span className="inline-flex text-gray-400 hover:text-gray-600 shrink-0">
-                                <Info className="h-3.5 w-3.5" />
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent side="left" className="bg-slate-50 text-slate-800 border-slate-200 max-w-[260px]">
-                              {VERSION_LOCK_TOOLTIP}
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      </DropdownMenuItem>
-                    ) : (
-                      <DropdownMenuItem
-                        disabled={finalizeLockDisabled}
-                        onClick={() => void handleFinalizeAndLock()}
-                        className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs text-amber-800 focus:bg-amber-50 focus:text-amber-900 data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
-                      >
-                        <Lock className="h-4 w-4 text-amber-700 shrink-0" />
-                        <span className="whitespace-nowrap">Lock version</span>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild onClick={(ev) => ev.stopPropagation()}>
-                              <span className="inline-flex text-gray-400 hover:text-gray-600 shrink-0">
-                                <Info className="h-3.5 w-3.5" />
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent side="left" className="bg-slate-50 text-slate-800 border-slate-200 max-w-[260px]">
-                              {VERSION_LOCK_TOOLTIP}
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      </DropdownMenuItem>
-                    )}
-                  </>
+                {!(document.isGuest && !document.allowDownload) &&
+                 !(document.isExternalCollaborator && !document.ecAllowDownload) && (
+                  <DropdownMenuItem
+                    onClick={() => { handleDownload(document); onDownloadDocument?.(document) }}
+                    className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                  >
+                    <Download className="h-4 w-4 text-blue-600" />
+                    <span>Download</span>
+                  </DropdownMenuItem>
                 )}
 
                 {/* Share (submenu: Share + Copy link) */}
@@ -644,28 +750,15 @@ export function DocumentActionMenu({
                         <span>Share</span>
                       </DropdownMenuItem>
                     )}
-                    {!showShareModal && (
-                      <DropdownMenuItem
-                        onClick={async () => {
-                          if (document.webViewLink) {
-                            navigator.clipboard.writeText(document.webViewLink)
-                            addToast({ type: 'success', title: 'Link Copied', message: 'Document link copied to clipboard' })
-                          } else {
-                            addToast({ type: 'error', title: 'Share Unavailable', message: 'No link available' })
-                          }
-                          onShareDocument?.(document)
-                        }}
-                        className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
-                      >
-                        <Share2 className="h-4 w-4 text-purple-600" />
-                        <span>Share</span>
-                      </DropdownMenuItem>
-                    )}
                     <DropdownMenuItem
                       onClick={async () => {
-                        const link = document.webViewLink || getDocumentEditUrl(document)
-                        await navigator.clipboard.writeText(link)
-                        addToast({ type: 'success', title: 'Link copied', message: 'Document link copied to clipboard' })
+                        const docId = (document as any).projectDocumentId
+                        if (!deeplinkBase || !docId) {
+                          addToast({ type: 'error', title: 'Link unavailable', message: 'This item has not been indexed yet.' })
+                          return
+                        }
+                        await navigator.clipboard.writeText(`${deeplinkBase}#doc-file:${docId}`)
+                        addToast({ type: 'success', title: 'Link copied', message: 'Link copied to clipboard' })
                       }}
                       className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
                     >
@@ -684,7 +777,7 @@ export function DocumentActionMenu({
                         const docIdForComments = (document as any)?.projectDocumentId || document.id
                         rightPane.setTitle('Comments')
                         rightPane.setHeaderActions(null)
-                        rightPane.setHeaderIcon(<MessageCircle className="h-4 w-4" />)
+                        rightPane.setHeaderIcon(<DocumentIcon mimeType={document.mimeType} className="h-4 w-4" />)
                         rightPane.setHeaderSubtitle('Append-only. Visible to all project members.')
                         rightPane.setContent(
                           <DocumentDocCommentsPane
@@ -747,68 +840,53 @@ export function DocumentActionMenu({
                           <span>Move</span>
                         </DropdownMenuItem>
                       )}
-                      {(canManage && (onRestrictToConfidential || onRestoreToGeneral || onPromoteToGeneral)) && <DropdownMenuSeparator />}
-                      {canManage && currentFolderType === 'general' && onRestrictToConfidential && (
+                      {onCrossEngagementCopy && <DropdownMenuSeparator />}
+                      {onCrossEngagementCopy && (
                         <DropdownMenuItem
-                          onClick={() => onRestrictToConfidential(document)}
+                          onSelect={() => onCrossEngagementCopy(document)}
                           className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
                         >
-                          <FolderLock className="h-4 w-4 text-[#B91C1C]" />
-                          <span className="whitespace-nowrap">Move to <strong>Confidential</strong></span>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild onClick={(e) => e.stopPropagation()}>
-                                <span className="inline-flex text-gray-400 hover:text-gray-600 shrink-0">
-                                  <Info className="h-3.5 w-3.5" />
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent side="left" className="bg-slate-50 text-slate-800 border-slate-200 max-w-[220px]">
-                                Confidential is only accessible to Project Leads, Client Partners & Org Owners.
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
+                          <Building2 className="h-4 w-4 flex-shrink-0 text-blue-600" />
+                          <span className="whitespace-nowrap">Copy to another engagement…</span>
                         </DropdownMenuItem>
                       )}
-                      {canManage && currentFolderType === 'confidential' && onRestoreToGeneral && (
-                        <DropdownMenuItem
-                          onClick={() => onRestoreToGeneral(document)}
-                          className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
-                        >
-                          <FolderUp className="h-4 w-4 text-green-600" />
-                          <span className="whitespace-nowrap">Release to <strong>General</strong></span>
+                      {(canManage && (onMakePrivate || onMakePublic)) && <DropdownMenuSeparator />}
+                      {canManage && !document.isPrivate && onMakePrivate && (
+                        document.isSharedWithExternal ? (
                           <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild onClick={(e) => e.stopPropagation()}>
-                                <span className="inline-flex text-gray-400 hover:text-gray-600 shrink-0">
-                                  <Info className="h-3.5 w-3.5" />
-                                </span>
+                            <Tooltip open={privateInfoOpen} onOpenChange={setPrivateInfoOpen}>
+                              <TooltipTrigger asChild>
+                                <div
+                                  onClick={(e) => { e.stopPropagation(); setPrivateInfoOpen((v) => !v) }}
+                                  className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground cursor-pointer opacity-50 hover:bg-accent rounded-sm"
+                                >
+                                  <FolderLock className="h-4 w-4 text-orange-500" />
+                                  <span>Make Private</span>
+                                  <Info className="h-3.5 w-3.5 ml-auto text-slate-400" />
+                                </div>
                               </TooltipTrigger>
-                              <TooltipContent side="left" className="bg-slate-50 text-slate-800 border-slate-200 max-w-[220px]">
-                                General is visible to all project members.
+                              <TooltipContent side="left" className="text-xs max-w-[220px]">
+                                A shared document cannot be made Private. Turn off sharing first.
                               </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
-                        </DropdownMenuItem>
+                        ) : (
+                          <DropdownMenuItem
+                            onClick={() => onMakePrivate(document)}
+                            className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                          >
+                            <FolderLock className="h-4 w-4 text-orange-500" />
+                            <span>Make Private</span>
+                          </DropdownMenuItem>
+                        )
                       )}
-                      {canManage && currentFolderType === 'staging' && onPromoteToGeneral && (
+                      {canManage && document.isPrivate && onMakePublic && (
                         <DropdownMenuItem
-                          onClick={() => onPromoteToGeneral(document)}
+                          onClick={() => onMakePublic(document)}
                           className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
                         >
-                          <FolderUp className="h-4 w-4 text-amber-600" />
-                          <span className="whitespace-nowrap">Promote to <strong>General</strong></span>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild onClick={(e) => e.stopPropagation()}>
-                                <span className="inline-flex text-gray-400 hover:text-gray-600 shrink-0">
-                                  <Info className="h-3.5 w-3.5" />
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent side="left" className="bg-slate-50 text-slate-800 border-slate-200 max-w-[220px]">
-                                Promote from Staging to General to make the file visible to all project members.
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
+                          <FolderUp className="h-4 w-4 text-slate-500" />
+                          <span>Make Public</span>
                         </DropdownMenuItem>
                       )}
                     </DropdownMenuSubContent>
@@ -823,18 +901,111 @@ export function DocumentActionMenu({
                   </DropdownMenuSubTrigger>
                   <DropdownMenuSubContent className="w-56">
                     <DropdownMenuItem
-                      onClick={() => setShowFileInfo(true)}
+                      onClick={() => {
+                        onOpenInfoPane?.(document.id)
+                        rightPane.setTitle('File information')
+                        rightPane.setHeaderIcon(<DocumentIcon mimeType={document.mimeType} className="h-4 w-4" />)
+                        rightPane.setHeaderSubtitle('')
+                        rightPane.setHeaderActions(null)
+                        rightPane.setContent(
+                          <div className="flex flex-col h-full min-h-0 p-4 min-w-0">
+                            {document.parentName && (
+                              <div className="flex items-center gap-1 text-[11px] text-slate-400 mb-2">
+                                <Folder className="h-3 w-3" />
+                                <span>{document.parentName}</span>
+                                <ChevronRight className="h-3 w-3" />
+                                <span className="text-slate-600 font-medium truncate max-w-[180px]">{document.name}</span>
+                              </div>
+                            )}
+                            <div className="inline-flex max-w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 mb-4">
+                              <span className="truncate text-xs font-medium text-slate-700" title={document.name}>{document.name}</span>
+                            </div>
+                            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 space-y-3">
+                              <div className="flex justify-between items-center">
+                                <span className="text-xs text-slate-500">File type</span>
+                                <span className="text-xs">{getDisplayType(document)}</span>
+                              </div>
+                              {(document.mimeType ?? '').trim() !== '' && (
+                                <div className="flex justify-between items-center">
+                                  <span className="text-xs text-slate-500">Mime type</span>
+                                  <span className="font-mono text-[10px] truncate max-w-[240px] text-right" title={document.mimeType ?? ''}>{document.mimeType}</span>
+                                </div>
+                              )}
+                              {document.size != null && typeof document.size === 'number' && (
+                                <div className="flex justify-between items-center">
+                                  <span className="text-xs text-slate-500">Size</span>
+                                  <span className="text-xs">{formatFileSize(document.size)}</span>
+                                </div>
+                              )}
+                              {document.modifiedTime && !Number.isNaN(new Date(document.modifiedTime).getTime()) && (
+                                <div className="flex justify-between items-center">
+                                  <span className="text-xs text-slate-500">Modified</span>
+                                  <span className="text-xs">{formatSmartDateTime(document.modifiedTime)}</span>
+                                </div>
+                              )}
+                              {document.createdTime && !Number.isNaN(new Date(document.createdTime).getTime()) && (
+                                <div className="flex justify-between items-center">
+                                  <span className="text-xs text-slate-500">Created</span>
+                                  <span className="text-xs">{formatSmartDateTime(document.createdTime)}</span>
+                                </div>
+                              )}
+                              {(document.owners?.[0]?.displayName || document.lastModifyingUser?.displayName) && (
+                                <div className="flex justify-between items-center">
+                                  <span className="text-xs text-slate-500">Owner</span>
+                                  {document.owners?.[0] ? (
+                                    <UserAvatarWithTooltip
+                                      displayName={document.owners[0].displayName}
+                                      photoLink={document.owners[0].photoLink}
+                                      email={document.owners[0].emailAddress}
+                                      avatarSize="md"
+                                      showEmail={true}
+                                      showRole={false}
+                                    />
+                                  ) : (
+                                    <span className="text-xs">{document.lastModifyingUser?.displayName || '—'}</span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )
+                        rightPane.setExpanded?.(false)
+                      }}
                       className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
                     >
                       <Info className="h-4 w-4 text-gray-600" />
                       <span>File information</span>
                     </DropdownMenuItem>
                     <DropdownMenuItem
-                      onClick={() => { setShowVersionHistory(true); onVersionHistory?.(document) }}
+                      onClick={() => {
+                        onOpenActivityPane?.(document.id)
+                        rightPane.setTitle('Activity Stream')
+                        rightPane.setHeaderIcon(<DocumentIcon mimeType={document.mimeType} className="h-4 w-4" />)
+                        rightPane.setHeaderSubtitle('Last 30 days')
+                        rightPane.setHeaderActions(null)
+                        rightPane.setContent(<DocumentActivityPane document={document} />)
+                        rightPane.setExpanded?.(false)
+                      }}
                       className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
                     >
                       <Clock className="h-4 w-4 text-gray-600" />
-                      <span>Version history</span>
+                      <span>Activity Stream</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => {
+                        onOpenVersionPane?.(document.id)
+                        rightPane.setTitle('Version History')
+                        rightPane.setHeaderIcon(<DocumentIcon mimeType={document.mimeType} className="h-4 w-4" />)
+                        rightPane.setHeaderSubtitle('Full history')
+                        rightPane.setHeaderActions(null)
+                        rightPane.setContent(<DocumentHistoryPane document={document} />)
+                        rightPane.setExpanded?.(false)
+                        onVersionHistory?.(document)
+                      }}
+                      className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                    >
+                      <Clock className="h-4 w-4 text-gray-600" />
+                      <span>Version History</span>
                     </DropdownMenuItem>
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
@@ -897,8 +1068,75 @@ export function DocumentActionMenu({
                   <Calendar className="h-4 w-4 text-orange-600" />
                   <span>Set Due Date</span>
                 </DropdownMenuItem>
+                {!mime.includes('folder') && leadForVersionLock && projectId && (
+                  <>
+                    {(document as { lock?: { type?: string } | null }).lock?.type === 'finalize' ? (
+                      <DropdownMenuItem
+                        disabled={finalizeLockDisabled}
+                        onClick={() => void handleUnlockVersion()}
+                        className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                      >
+                        <Unlock className="h-4 w-4 text-emerald-700 shrink-0" />
+                        <span>Return to Draft</span>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild onClick={(ev) => ev.stopPropagation()}>
+                              <span className="inline-flex text-gray-400 hover:text-gray-600 shrink-0">
+                                <Info className="h-3.5 w-3.5" />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="left" className="bg-slate-50 text-slate-800 border-slate-200 max-w-[260px]">
+                              {VERSION_LOCK_TOOLTIP}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </DropdownMenuItem>
+                    ) : (
+                      <DropdownMenuItem
+                        disabled={finalizeLockDisabled}
+                        onClick={() => void handleFinalizeAndLock()}
+                        className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs text-amber-800 focus:bg-amber-50 focus:text-amber-900 data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                      >
+                        <Lock className="h-4 w-4 text-amber-700 shrink-0" />
+                        <span className="whitespace-nowrap">Finalize</span>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild onClick={(ev) => ev.stopPropagation()}>
+                              <span className="inline-flex text-gray-400 hover:text-gray-600 shrink-0">
+                                <Info className="h-3.5 w-3.5" />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="left" className="bg-slate-50 text-slate-800 border-slate-200 max-w-[260px]">
+                              {VERSION_LOCK_TOOLTIP}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </DropdownMenuItem>
+                    )}
+                  </>
+                )}
+                {!mime.includes('folder') && isExternalViewer && projectId && (() => {
+                  const doc = document as { lock?: { type?: string } | null }
+                  const isAlreadyLocked = doc.lock?.type === 'finalize'
+                  if (isAlreadyLocked) return (
+                    <DropdownMenuItem disabled className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground opacity-50 cursor-not-allowed data-[disabled]:pointer-events-none">
+                      <BadgeCheck className="h-4 w-4 shrink-0" />
+                      <span className="whitespace-nowrap">Accepted</span>
+                    </DropdownMenuItem>
+                  )
+                  return (
+                    <DropdownMenuItem
+                      disabled={finalizeLockDisabled}
+                      onClick={() => void handleAcceptDocument()}
+                      className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs text-emerald-800 focus:bg-emerald-50 focus:text-emerald-900 data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                    >
+                      <BadgeCheck className="h-4 w-4 text-emerald-700 shrink-0" />
+                      <span className="whitespace-nowrap">Accept</span>
+                    </DropdownMenuItem>
+                  )
+                })()}
 
-                <DropdownMenuSeparator />
+                {(!isExternalUser || onDeleteDocument) && <DropdownMenuSeparator />}
 
                 {onDeleteDocument && (
 
@@ -919,87 +1157,38 @@ export function DocumentActionMenu({
                     </Tooltip>
                   </TooltipProvider>
                 )}
-                <DropdownMenuSeparator />
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
-                    <ExternalLink className="h-4 w-4 text-gray-600" />
-                    <span>Drive Actions</span>
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="w-56">
-                    <DropdownMenuItem
-                      onClick={() => {
-                        const parentId = document.parents?.[0]
-                        const url = parentId
-                          ? `https://drive.google.com/drive/folders/${parentId}`
-                          : `https://drive.google.com/drive/my-drive`
-                        window.open(url, '_blank')
-                      }}
-                      className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
-                    >
-                      <ExternalLink className="h-4 w-4 text-blue-600" />
-                      <span>Open containing Folder in Google Drive</span>
-                    </DropdownMenuItem>
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
+                {!isExternalUser && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
+                      <ExternalLink className="h-4 w-4 text-gray-600" />
+                      <span>Drive Actions</span>
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent className="w-56">
+                      <DropdownMenuItem
+                        onClick={() => {
+                          const parentId = document.parents?.[0]
+                          const url = parentId
+                            ? `https://drive.google.com/drive/folders/${parentId}`
+                            : `https://drive.google.com/drive/my-drive`
+                          window.open(url, '_blank')
+                        }}
+                        className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                      >
+                        <ExternalLink className="h-4 w-4 text-blue-600" />
+                        <span>Open containing Folder in Google Drive</span>
+                      </DropdownMenuItem>
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+                </>
+                )}
               </>
             )}
           </div>
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <VersionHistorySheet
-        isOpen={showVersionHistory}
-        onClose={() => setShowVersionHistory(false)}
-        document={document}
-      />
-
-      <Dialog open={showFileInfo} onOpenChange={setShowFileInfo}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>File information</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-3 py-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-gray-500">Name</span>
-              <span className="font-medium truncate max-w-[240px]" title={document.name}>{document.name}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">Type</span>
-              <span>{getDisplayType(document)}</span>
-            </div>
-            {(document.mimeType ?? '').trim() !== '' && (
-              <div className="flex justify-between">
-                <span className="text-gray-500">Mime type</span>
-                <span className="font-mono text-xs truncate max-w-[240px]" title={document.mimeType ?? ''}>{document.mimeType}</span>
-              </div>
-            )}
-            {document.size != null && typeof document.size === 'number' && (
-              <div className="flex justify-between">
-                <span className="text-gray-500">Size</span>
-                <span>{formatFileSize(document.size)} ({document.size.toLocaleString()} B)</span>
-              </div>
-            )}
-            {document.modifiedTime && !Number.isNaN(new Date(document.modifiedTime).getTime()) && (
-              <div className="flex justify-between">
-                <span className="text-gray-500">Modified</span>
-                <span>{formatSmartDateTime(document.modifiedTime)}</span>
-              </div>
-            )}
-            {document.createdTime && !Number.isNaN(new Date(document.createdTime).getTime()) && (
-              <div className="flex justify-between">
-                <span className="text-gray-500">Created</span>
-                <span>{formatSmartDateTime(document.createdTime)}</span>
-              </div>
-            )}
-            {(document.owners?.[0]?.displayName || document.lastModifyingUser?.displayName) && (
-              <div className="flex justify-between">
-                <span className="text-gray-500">Owner</span>
-                <span>{document.owners?.[0]?.displayName || document.lastModifyingUser?.displayName || '—'}</span>
-              </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {showShareModal && projectId && (
         <DocumentShareModal

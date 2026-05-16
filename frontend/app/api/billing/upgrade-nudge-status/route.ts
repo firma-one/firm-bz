@@ -14,9 +14,10 @@ export async function GET() {
 
     const membership = await prisma.firmMember.findFirst({
         where: { userId: user.id, isDefault: true, firm: { deletedAt: null } },
-        select: { firmId: true },
+        select: { firmId: true, role: true },
     })
     if (!membership?.firmId) return NextResponse.json({ shouldShow: false })
+    if (membership.role !== 'firm_admin') return NextResponse.json({ shouldShow: false, isFirmAdmin: false })
 
     const anchorFirmId = await resolveBillingAnchorFirmId(membership.firmId)
     const anchor = await prisma.firm.findUnique({
@@ -37,6 +38,7 @@ export async function GET() {
 
     return NextResponse.json({
         shouldShow: paidPlan === 'skipped' && !hasPaid,
+        isFirmAdmin: true,
         paidPlan,
         hasPaid,
     })

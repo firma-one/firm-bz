@@ -4,7 +4,8 @@ import { prisma } from '@/lib/prisma'
 import { getFileInfo } from '@/lib/file-utils'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { requireEngagementMember, isEngagementLeadRole } from '@/lib/engagement-access'
-import { getVersionLockFromSettings, type VersionLockDowngrade } from '@/lib/document-version-lock'
+import { isDocumentFinalized } from '@/lib/sharing-settings'
+import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 
 /**
  * PATCH /api/projects/[projectId]/documents/[documentId]/sharing/finalize
@@ -46,7 +47,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Version lock applies to files only' }, { status: 400 })
     }
 
-    if (getVersionLockFromSettings(existing.settings)) {
+    if (isDocumentFinalized(existing.settings)) {
       return NextResponse.json({ error: 'Document is already locked' }, { status: 409 })
     }
 
@@ -62,7 +63,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'No active Google Drive connection' }, { status: 500 })
     }
 
-    const downgraded: VersionLockDowngrade[] = []
+    const downgraded: Array<{ permissionId: string; previousRole: string }> = []
     const perms = await googleDriveConnector.listFilePermissions(connectorId, fileInfo.externalId)
     const elevRoles = new Set(['writer', 'fileOrganizer', 'organizer', 'commenter'])
 
@@ -89,11 +90,9 @@ export async function PATCH(
     const share = (prevSettings.share as Record<string, unknown> | undefined) || {}
     const nextSettings: Record<string, unknown> = {
       ...prevSettings,
+      // Unified lock model — cleared by /sharing/unlock
+      lock: { type: 'finalize', finalizedBy: user.id, finalizedAt: now, downgraded },
       share: { ...share, finalizedAt: now },
-      versionLock: {
-        lockedAt: now,
-        downgraded,
-      },
     }
 
     await prisma.engagementDocument.update({
@@ -101,10 +100,16 @@ export async function PATCH(
       data: { settings: nextSettings as object, updatedAt: new Date() },
     })
 
-    const updated = await prisma.engagementDocument.findUnique({
-      where: { engagementId_firmId_externalId: compound },
-    })
-    return NextResponse.json({ sharing: updated })
+    audit(AUDIT_EVENT.DOCUMENT_FINALIZED)
+      .scope(AUDIT_SCOPE.DOCUMENT)
+      .firm(fileInfo.organizationId)
+      .engagement(projectId)
+      .document(existing.id)
+      .actor(user.id)
+      .meta({ fileName: existing.fileName })
+      .fireAndForget()
+
+    return NextResponse.json({ ok: true })
   } catch (e) {
     console.error('PATCH sharing/finalize error', e)
     return NextResponse.json({ error: 'Failed to finalize' }, { status: 500 })

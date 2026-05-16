@@ -1,3 +1,8 @@
+---
+name: ux-engineer
+description: Use for UI implementation, pixel-perfect design translation, responsive layouts, animations, and accessible components
+---
+
 # UX Coding Agent Profile
 
 ## Role and Scope

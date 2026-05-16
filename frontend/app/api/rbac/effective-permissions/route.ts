@@ -1,12 +1,13 @@
 /**
  * GET /api/rbac/effective-permissions?persona=<slug>
  * Returns effective org-level permission flags for a persona (for "View As").
- * Protected: JWT SYS_ADMIN or org_admin of current org (canAccessRbacAdmin).
+ * Protected: system admin (SYSTEM_ADMIN_EMAILS) or org_admin of current org (canAccessRbacAdmin).
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { canAccessRbacAdmin } from '@/lib/permission-helpers'
+import { isSystemAdminEmail } from '@/lib/system/admin-check'
 
 export async function GET(request: NextRequest) {
   try {
@@ -17,7 +18,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const isSystemAdmin = (user.app_metadata?.role as string) === 'SYS_ADMIN'
+    const isSystemAdmin = isSystemAdminEmail(user.email)
     const canRbac = isSystemAdmin || (await canAccessRbacAdmin(user.id))
 
     if (!canRbac) {

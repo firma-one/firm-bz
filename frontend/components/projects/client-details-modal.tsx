@@ -2,8 +2,8 @@
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { HierarchyClient } from '@/lib/actions/hierarchy'
-import { Users, Building, Calendar, Clock, Tag } from 'lucide-react'
-import { formatDistanceToNow } from 'date-fns'
+import { Users, Building, Calendar, Clock, Tag, TrendingUp, GitBranch, CalendarClock, Lock, Linkedin, Users2, MapPin } from 'lucide-react'
+import { formatDistanceToNow, format } from 'date-fns'
 import { formatFullDate } from '@/lib/utils'
 import { Globe, Link2 } from 'lucide-react'
 
@@ -131,6 +131,140 @@ export function ClientDetailsModal({ client, open, onOpenChange }: ClientDetails
                             <div className="flex-1">
                                 <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Sector</div>
                                 <div className="text-sm font-medium text-slate-900">{client.sector}</div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Relationship Value */}
+                    {client.relationshipValue && (
+                        <div className="flex items-start gap-3">
+                            <div className="h-9 w-9 bg-slate-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                                <TrendingUp className="h-4 w-4 text-slate-600" />
+                            </div>
+                            <div className="flex-1">
+                                <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Relationship Value</div>
+                                <div className="text-sm font-medium text-slate-900">
+                                    ${Number(client.relationshipValue).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Lead Source (PROSPECT only) */}
+                    {client.status === 'PROSPECT' && client.leadSource && (
+                        <div className="flex items-start gap-3">
+                            <div className="h-9 w-9 bg-slate-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                                <GitBranch className="h-4 w-4 text-slate-600" />
+                            </div>
+                            <div className="flex-1">
+                                <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Lead Source</div>
+                                <div className="text-sm font-medium text-slate-900">{client.leadSource}</div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Follow-up / Expected Close (PROSPECT only) */}
+                    {client.status === 'PROSPECT' && client.followUpDate && (
+                        <div className="flex items-start gap-3">
+                            <div className="h-9 w-9 bg-amber-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                                <CalendarClock className="h-4 w-4 text-amber-600" />
+                            </div>
+                            <div className="flex-1">
+                                <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Follow-up Date</div>
+                                <div className="text-sm font-medium text-slate-900">
+                                    {format(new Date(client.followUpDate), 'd MMM yyyy')}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {client.status === 'PROSPECT' && client.expectedCloseDate && (
+                        <div className="flex items-start gap-3">
+                            <div className="h-9 w-9 bg-slate-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                                <Calendar className="h-4 w-4 text-slate-600" />
+                            </div>
+                            <div className="flex-1">
+                                <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Expected Close</div>
+                                <div className="text-sm font-medium text-slate-900">
+                                    {format(new Date(client.expectedCloseDate), 'd MMM yyyy')}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Internal Memo */}
+                    {client.internalMemo && (
+                        <div className="flex items-start gap-3">
+                            <div className="h-9 w-9 bg-slate-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                                <Lock className="h-4 w-4 text-slate-600" />
+                            </div>
+                            <div className="flex-1">
+                                <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1 flex items-center gap-1">
+                                    Internal Memo
+                                    <span className="text-[10px] font-normal bg-slate-100 text-slate-400 px-1 rounded">internal only</span>
+                                </div>
+                                <div className="text-sm text-slate-700 whitespace-pre-wrap">{client.internalMemo}</div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Client Since */}
+                    {client.clientSinceDate && (
+                        <div className="flex items-start gap-3">
+                            <div className="h-9 w-9 bg-slate-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                                <Calendar className="h-4 w-4 text-slate-600" />
+                            </div>
+                            <div className="flex-1">
+                                <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Client Since</div>
+                                <div className="text-sm font-medium text-slate-900">
+                                    {format(new Date(client.clientSinceDate), 'd MMM yyyy')}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* LinkedIn */}
+                    {client.linkedInUrl && (
+                        <div className="flex items-start gap-3">
+                            <div className="h-9 w-9 bg-slate-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                                <Linkedin className="h-4 w-4 text-slate-600" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Company LinkedIn</div>
+                                <a
+                                    href={client.linkedInUrl.startsWith('http') ? client.linkedInUrl : `https://${client.linkedInUrl}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-sm font-medium text-blue-600 hover:underline break-all"
+                                >
+                                    {client.linkedInUrl}
+                                </a>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Company Size */}
+                    {client.companySizeBracket && (
+                        <div className="flex items-start gap-3">
+                            <div className="h-9 w-9 bg-slate-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                                <Users2 className="h-4 w-4 text-slate-600" />
+                            </div>
+                            <div className="flex-1">
+                                <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Company Size</div>
+                                <div className="text-sm font-medium text-slate-900">{client.companySizeBracket}</div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Billing Address */}
+                    {client.billingAddress && (
+                        <div className="flex items-start gap-3">
+                            <div className="h-9 w-9 bg-slate-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                                <MapPin className="h-4 w-4 text-slate-600" />
+                            </div>
+                            <div className="flex-1">
+                                <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Billing Address</div>
+                                <div className="text-sm text-slate-700 whitespace-pre-wrap">{client.billingAddress}</div>
                             </div>
                         </div>
                     )}

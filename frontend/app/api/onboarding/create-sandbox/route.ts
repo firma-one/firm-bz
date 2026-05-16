@@ -10,6 +10,7 @@ import { invalidateUserSettingsPlus } from '@/lib/actions/user-settings'
 import { safeInngestSend } from '@/lib/inngest/client'
 import { ensurePolarFreePlanForSandboxFirm } from '@/lib/billing/polar-free-plan'
 import { mergeLeanAppMetadata } from '@/lib/auth/supabase-jwt-metadata'
+import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 
 /**
  * POST /api/onboarding/create-sandbox
@@ -274,6 +275,13 @@ export async function POST(request: NextRequest) {
       await markSandboxShellAwaitingDrive(firm)
       await syncSandboxStage1UserFacingState(user, firm)
 
+      audit(AUDIT_EVENT.ONBOARDING_WORKSPACE_INITIALIZED)
+        .scope(AUDIT_SCOPE.FIRM)
+        .firm(firm.id)
+        .actor(user.id)
+        .meta({ firmName: firm.name })
+        .fireAndForget()
+
       return NextResponse.json({
         success: true,
         shellOnly: true,
@@ -317,6 +325,13 @@ export async function POST(request: NextRequest) {
     await markSandboxProvisioningQueuedOnFirm(firm)
     await syncSandboxStage1UserFacingState(user, firm)
 
+    audit(AUDIT_EVENT.ONBOARDING_DRIVE_CONNECTED)
+      .scope(AUDIT_SCOPE.FIRM)
+      .firm(firm.id)
+      .actor(user.id)
+      .meta({ connectionId })
+      .fireAndForget()
+
     await enqueueSandboxAsyncProvisioning({
       firmId: firm.id,
       userId: user.id,
@@ -331,6 +346,13 @@ export async function POST(request: NextRequest) {
       firmId: firm.id,
       firmSlug: firm.slug,
     })
+
+    audit(AUDIT_EVENT.ONBOARDING_PROVISIONING_STARTED)
+      .scope(AUDIT_SCOPE.FIRM)
+      .firm(firm.id)
+      .actor(user.id)
+      .meta({ firmName: firm.name })
+      .fireAndForget()
 
     return NextResponse.json({
       success: true,

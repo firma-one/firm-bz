@@ -35,18 +35,13 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
         }
 
-        const connector = await (prisma as any).connector.findFirst({
-            where: {
-                id: connectorId,
-                organizations: {
-                    some: {
-                        members: {
-                            some: { userId: user.id }
-                        }
-                    }
-                }
-            }
+        const connector = await prisma.connector.findUnique({
+            where: { id: connectorId }
         })
+
+        if (connector && connector.userId !== user.id) {
+            return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+        }
         if (!connector) {
             return NextResponse.json({ error: 'Connector not found or access denied' }, { status: 403 })
         }

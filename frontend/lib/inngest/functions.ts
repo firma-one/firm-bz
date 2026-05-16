@@ -1,11 +1,30 @@
 import { inngest } from "./client";
 import { prisma } from "@/lib/prisma";
 import { googleDriveConnector } from "@/lib/google-drive-connector";
+import { parseSettingsFromDb } from "@/lib/sharing-settings";
 import { logger } from "@/lib/logger";
 import { DocumentSharingPermissionStatus } from "@prisma/client";
 import { grantEngagementDriveFolderAccess } from "@/lib/grant-engagement-drive-folder-access";
 import { safeInngestSend } from "./client";
 import { provisionSandboxHierarchyForFirm } from '@/lib/onboarding/onboarding-helper'
+import {
+    setMaintenanceMode,
+    setMigrationPending,
+    setMigrationState,
+    sendMaintenanceWarningToFirmMembers,
+    forceSignOutFirmMembers,
+    getActiveMigration,
+    addMigrationFiles,
+    updateMigrationStatus,
+} from '@/lib/firm-maintenance'
+import {
+    getPlatformMaintenanceConfig,
+    setPlatformMaintenanceConfig,
+    getAllNonAdminUserEmails,
+    signOutAllNonAdminUsers,
+    sendPlatformMaintenanceEmail,
+    sendPlatformMaintenanceNotification,
+} from '@/lib/platform-maintenance'
 
 // ---------------------------------------------------------------------------
 // Search Indexing Functions
@@ -28,6 +47,117 @@ export const indexFileForSearch = inngest.createFunction(
                 parentId: event.data.parentId ?? undefined,
             })
         })
+
+        // Notify engagement leads when a file lands in the Staging folder
+        await step.run("notify-staging-intake", async () => {
+            const { projectId, parentId, organizationId, clientId, fileName, externalId } = event.data
+            if (!projectId || !parentId || !organizationId) return
+            if (event.data.isFolder) return
+
+            try {
+                const engagement = await prisma.engagement.findUnique({
+                    where: { id: projectId },
+                    select: { slug: true, firmId: true, clientId: true },
+                })
+                if (!engagement) return
+
+                const connectorId = (await prisma.firm.findUnique({
+                    where: { id: organizationId },
+                    select: { connectorId: true },
+                }))?.connectorId
+                if (!connectorId) return
+
+                const connector = await (prisma as any).connector.findUnique({
+                    where: { id: connectorId },
+                    select: { settings: true },
+                })
+                const stagingFolderId = (connector?.settings as any)
+                    ?.projectFolderSettings?.[engagement.slug]?.stagingFolderId as string | undefined
+
+                if (!stagingFolderId || parentId !== stagingFolderId) return
+
+                const leads = await prisma.engagementMember.findMany({
+                    where: { engagementId: projectId, role: 'eng_admin' },
+                    select: { userId: true },
+                })
+                if (!leads.length) return
+
+                // Look up document record for the id (may already exist from indexFile above)
+                const doc = await prisma.engagementDocument.findFirst({
+                    where: { engagementId: projectId, firmId: organizationId, externalId },
+                    select: { id: true },
+                })
+
+                const rows = leads.map((l: { userId: string }) => ({
+                    organizationId,
+                    clientId: clientId ?? engagement.clientId,
+                    projectId,
+                    documentId: doc?.id ?? null,
+                    userId: l.userId,
+                    type: 'DOCUMENT_STAGING_INTAKE',
+                    priority: 'INFO',
+                    title: 'New file in Staging',
+                    body: `"${fileName}" was uploaded to Staging and is awaiting review.`,
+                    ctaUrl: null,
+                    metadata: { externalId, fileName, stagingFolderId },
+                    channels: { inApp: true, email: false },
+                    dedupeKey: `staging-intake:${projectId}:${externalId}`,
+                }))
+                await (prisma as any).notification.createMany({ data: rows, skipDuplicates: true })
+            } catch (e) {
+                logger.warn('staging intake notification failed', e as Error)
+            }
+        })
+
+        // Notify engagement leads when an EC/EV uploads a file for intake review
+        await step.run("notify-general-intake", async () => {
+            const { projectId, organizationId, clientId, fileName, externalId, uploadedBy } = event.data
+            if (!event.data.isIntakeUpload) return
+            if (!projectId || !organizationId || !uploadedBy) return
+
+            try {
+                const engagement = await prisma.engagement.findUnique({
+                    where: { id: projectId },
+                    select: { clientId: true },
+                })
+
+                const doc = await prisma.engagementDocument.findFirst({
+                    where: { engagementId: projectId, firmId: organizationId, externalId },
+                    select: { id: true },
+                })
+
+                const leads = await prisma.engagementMember.findMany({
+                    where: { engagementId: projectId, role: { in: ['eng_admin', 'eng_member'] } },
+                    select: { userId: true },
+                })
+                if (!leads.length) return
+
+                const rows = leads.map((l: { userId: string }) => ({
+                    organizationId,
+                    clientId: clientId ?? engagement?.clientId ?? null,
+                    projectId,
+                    documentId: doc?.id ?? null,
+                    userId: l.userId,
+                    type: 'DOCUMENT_STAGING_INTAKE',
+                    priority: 'INFO',
+                    title: event.data.isFolder ? 'New folder pending review' : 'New file pending review',
+                    body: event.data.isFolder
+                        ? `Folder "${fileName}" was uploaded and is awaiting your approval.`
+                        : `"${fileName}" was uploaded and is awaiting your approval.`,
+                    ctaUrl: null,
+                    metadata: { externalId, fileName, uploadedBy },
+                    channels: { inApp: true, email: false },
+                    dedupeKey: `intake-pending:${projectId}:${externalId}`,
+                }))
+                await (prisma as any).notification.createMany({ data: rows, skipDuplicates: true })
+
+                // Reminders are created synchronously in the API routes (create-folder, index-file-intake)
+                // to guarantee immediate visibility. Nothing to do here.
+            } catch (e) {
+                logger.warn('general intake notification failed', e as Error)
+            }
+        })
+
         return { externalId: event.data.externalId, fileName: event.data.fileName }
     }
 )
@@ -68,7 +198,13 @@ export const indexBatchForSearch = inngest.createFunction(
 export const scanAndIndexProject = inngest.createFunction(
     { id: "scan-and-index-project", triggers: [{ event: "project.index.scan.requested" }] },
     async ({ event, step }) => {
-        const { organizationId, clientId, projectId, connectorId, rootFolderIds } = event.data
+        const { organizationId, clientId, projectId, connectorId, rootFolderIds: rawRootFolderIds } = event.data
+        const rootFolderIds: string[] = Array.isArray(rawRootFolderIds) ? rawRootFolderIds : []
+
+        if (rootFolderIds.length === 0) {
+            logger.warn('scan-and-index-project: no rootFolderIds provided, skipping', 'Inngest', { organizationId, projectId })
+            return { indexed: 0, skipped: true }
+        }
 
         const allFiles = await step.run("discover-files", async () => {
             const files: { externalId: string; fileName: string; parentId: string | null }[] = []
@@ -120,6 +256,10 @@ export const scanAndIndexProject = inngest.createFunction(
             await step.run(`index-batch-${i}`, async () => {
                 const { SearchService } = await import("@/lib/services/search-service")
                 for (const file of batch) {
+                    // Skip FIRMA_PDF files (internal shared PDF copies that shouldn't be visible)
+                    if (file.fileName.startsWith('[FIRMA_PDF]')) {
+                        continue
+                    }
                     await SearchService.indexFile({
                         organizationId,
                         clientId: clientId ?? undefined,
@@ -239,36 +379,54 @@ export const reconcileFileDeletion = inngest.createFunction(
             await SearchService.removeFile(organizationId, externalId)
         })
 
-        if (googlePermissionId) {
-            await step.run("revoke-google-permission", async () => {
-                const firm = await prisma.firm.findUnique({
-                    where: { id: organizationId },
-                    select: { connectorId: true }
-                })
-                const connectorId = firm?.connectorId
-                if (connectorId) {
-                    await googleDriveConnector.revokePermission(connectorId, externalId, googlePermissionId)
-                }
-            })
-        }
-
         await step.run("cleanup-sharing-records", async () => {
             const docs = await prisma.engagementDocument.findMany({
                 where: { firmId: organizationId, externalId },
-                select: { id: true },
+                select: { id: true, settings: true, connectorId: true, firmId: true },
             })
+            if (docs.length === 0) return
+
+            const connectorId = docs[0].connectorId ?? (await prisma.firm.findUnique({
+                where: { id: organizationId },
+                select: { connectorId: true },
+            }))?.connectorId
+
             const docIds = docs.map((d) => d.id)
-            if (docIds.length === 0) return
-            await prisma.engagementDocumentSharingUser.updateMany({
-                where: {
-                    projectDocumentId: { in: docIds },
-                    ...(googlePermissionId ? { googlePermissionId } : {}),
-                },
-                data: {
-                    sharingPermissionStatus: DocumentSharingPermissionStatus.REVOKED,
-                    googlePermissionId: null,
-                },
+
+            // Revoke all outstanding GDrive permissions for these docs
+            if (connectorId) {
+                const sharingUsers = await prisma.engagementDocumentSharingUser.findMany({
+                    where: {
+                        projectDocumentId: { in: docIds },
+                        sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED,
+                        googlePermissionId: { not: null },
+                    },
+                    select: { googlePermissionId: true },
+                })
+                await Promise.allSettled(
+                    sharingUsers
+                        .filter((s) => s.googlePermissionId)
+                        .map((s) => googleDriveConnector.revokePermission(connectorId, externalId, s.googlePermissionId!))
+                )
+
+                // Trash system PDF copies (guest sharePdfOnly) — one per doc, if present
+                await Promise.allSettled(
+                    docs
+                        .map((d) => parseSettingsFromDb(d.settings)?.share?.guest?.options?.sharedPdfDriveId)
+                        .filter((pdfId): pdfId is string => !!pdfId)
+                        .map((pdfId) => googleDriveConnector.trashFile(connectorId, pdfId))
+                )
+            }
+
+            // Delete sharing user records (must happen before document delete to avoid FK violation)
+            await prisma.engagementDocumentSharingUser.deleteMany({
+                where: { projectDocumentId: { in: docIds } },
             })
+
+            // Delete the engagement document records — file is gone from Drive
+            await prisma.engagementDocument.deleteMany({
+                where: { id: { in: docIds } },
+            }).catch(() => {})
         })
 
         return { externalId, status: "reconciled" }
@@ -286,6 +444,46 @@ export const reconcileFolderDeletion = inngest.createFunction(
         await step.run("remove-folder-from-search-index", async () => {
             const { SearchService } = await import("@/lib/services/search-service")
             await SearchService.removeFile(organizationId, externalId)
+        })
+
+        await step.run("cleanup-folder-sharing-records", async () => {
+            const doc = await prisma.engagementDocument.findFirst({
+                where: { firmId: organizationId, externalId },
+                select: { id: true, settings: true, connectorId: true },
+            })
+            if (!doc) return
+
+            const connectorId = doc.connectorId ?? (await prisma.firm.findUnique({
+                where: { id: organizationId },
+                select: { connectorId: true },
+            }))?.connectorId
+
+            // Revoke all outstanding GDrive permissions
+            if (connectorId) {
+                const sharingUsers = await prisma.engagementDocumentSharingUser.findMany({
+                    where: {
+                        projectDocumentId: doc.id,
+                        sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED,
+                        googlePermissionId: { not: null },
+                    },
+                    select: { googlePermissionId: true },
+                })
+                await Promise.allSettled(
+                    sharingUsers
+                        .filter((s) => s.googlePermissionId)
+                        .map((s) => googleDriveConnector.revokePermission(connectorId, externalId, s.googlePermissionId!))
+                )
+            }
+
+            // Delete sharing user records (must happen before document delete to avoid FK violation)
+            await prisma.engagementDocumentSharingUser.deleteMany({
+                where: { projectDocumentId: doc.id },
+            })
+
+            // Delete the engagement document record — folder is gone from Drive
+            await prisma.engagementDocument.delete({
+                where: { id: doc.id },
+            }).catch(() => {})
         })
 
         return { externalId, status: "reconciled" }
@@ -363,7 +561,7 @@ export const revokeProjectSharing = inngest.createFunction(
             });
         });
 
-        await step.run("downgrade-eng-member-folder-access", async () => {
+        await step.run("downgrade-internal-member-folder-access", async () => {
             const engagement = await prisma.engagement.findFirst({
                 where: { id: projectId, isDeleted: false },
                 select: {
@@ -377,7 +575,7 @@ export const revokeProjectSharing = inngest.createFunction(
             if (!cid || !engagement?.connectorRootFolderId) return { downgraded: 0 };
 
             const members = await prisma.engagementMember.findMany({
-                where: { engagementId: projectId, role: "eng_member" },
+                where: { engagementId: projectId, role: { in: ["eng_member", "eng_admin"] } },
                 select: { userId: true },
             });
             if (members.length === 0) return { downgraded: 0 };
@@ -403,6 +601,38 @@ export const revokeProjectSharing = inngest.createFunction(
                 }
             }
             return { downgraded: n };
+        });
+
+        await step.run("clear-share-configs", async () => {
+            const documents = await prisma.engagementDocument.findMany({
+                where: { engagementId: projectId, slug: { not: null } },
+                select: { id: true, settings: true },
+            });
+
+            if (documents.length === 0) return { cleared: 0 };
+
+            const updatePromises = documents.map((doc) => {
+                const settings = (doc.settings as Record<string, any>) || {};
+                const clearedSettings = {
+                    ...settings,
+                    share: {
+                        ...settings.share,
+                        externalCollaborator: { enabled: false },
+                        guest: { enabled: false },
+                    },
+                };
+
+                return prisma.engagementDocument.update({
+                    where: { id: doc.id },
+                    data: {
+                        slug: null,
+                        settings: clearedSettings,
+                    },
+                });
+            });
+
+            await Promise.all(updatePromises);
+            return { cleared: documents.length };
         });
 
         return { message: "Revoked project permissions", results: revokeResults, projectId };
@@ -654,3 +884,259 @@ export const grantPermissionsForNewMember = inngest.createFunction(
         return { message: "Granted permissions for new member", folderGrant, results: grantResults };
     }
 );
+
+export const migrateWorkspaceRoot = inngest.createFunction(
+    {
+        id: 'migrate-workspace-root',
+        name: 'Migrate workspace root folder',
+        retries: 2,
+        triggers: [{ event: 'workspace.migrate.requested' }],
+        onFailure: async ({ error, event }: { error: Error; event: { data: { event: { data: { firmId: string; newRootFolderId: string; oldRootFolderId: string; startedAt?: string } } } } }) => {
+            const { firmId } = event.data.event.data
+            await setMaintenanceMode(firmId, null)
+            const migration = await getActiveMigration(firmId)
+            if (migration) {
+                await updateMigrationStatus(migration.id, 'failed')
+            }
+        },
+    },
+    async ({ event, step }: { event: { data: { connectionId: string; newRootFolderId: string; oldRootFolderId: string; firmId: string; initiatingUserId: string; estimatedMinutes: number; organizationId?: string; startedAt?: string } }; step: any }) => {
+        const { connectionId, newRootFolderId, oldRootFolderId, firmId, initiatingUserId, estimatedMinutes } = event.data
+
+        await step.run('notify-members', () =>
+            sendMaintenanceWarningToFirmMembers(firmId, estimatedMinutes)
+        )
+
+        await step.sleep('grace-period', '2m')
+
+        await step.run('lock-and-sign-out', async () => {
+            await Promise.all([
+                setMaintenanceMode(firmId, {
+                    active: true,
+                    startedAt: new Date().toISOString(),
+                    expiresAt: new Date(Date.now() + Math.max(estimatedMinutes * 4, 30) * 60_000).toISOString(),
+                    estimatedMinutes,
+                    initiatedBy: initiatingUserId,
+                    reason: 'workspace_migration',
+                }),
+                setMigrationPending(firmId, null),
+            ])
+            await forceSignOutFirmMembers(firmId, initiatingUserId)
+        })
+
+        // Verify access token is obtainable before proceeding
+        await step.run('get-access-token', async () => {
+            const token = await googleDriveConnector.getAccessToken(connectionId)
+            if (!token) throw new Error('Could not obtain access token for connector ' + connectionId)
+            return token
+        })
+
+        const allFailures: { id: string; error: string }[] = []
+
+        if (oldRootFolderId) {
+            // Step: list all top-level children of the old root
+            const fileIds = await step.run('list-children', () =>
+                googleDriveConnector.listTopLevelChildren(connectionId, oldRootFolderId)
+            )
+
+            // Bulk-insert file records for tracking
+            if (fileIds.length > 0) {
+                await step.run('register-migration-files', async () => {
+                    const migration = await getActiveMigration(firmId)
+                    if (migration) {
+                        await addMigrationFiles(migration.id, fileIds.map((id: string) => ({ fileId: id })))
+                    }
+                })
+            }
+
+            // Per-batch move steps (max 50 per Drive Batch API call)
+            const BATCH_SIZE = 50
+
+            for (let i = 0; i < fileIds.length; i += BATCH_SIZE) {
+                const batch = fileIds.slice(i, i + BATCH_SIZE)
+                const batchIndex = Math.floor(i / BATCH_SIZE)
+
+                const result = await step.run(`move-batch-${batchIndex}`, () =>
+                    googleDriveConnector.moveBatch(connectionId, batch, oldRootFolderId, newRootFolderId)
+                )
+                allFailures.push(...result.failures)
+
+                if (i + BATCH_SIZE < fileIds.length) {
+                    await step.sleep(`rate-limit-pause-${batchIndex}`, '1s')
+                }
+            }
+        }
+
+        await step.run('persist-root-location', () =>
+            googleDriveConnector.persistWorkspaceRootLocation(connectionId, newRootFolderId)
+        )
+
+        // Note: project-level reindex requires rootFolderIds per project — not available
+        // here after a workspace root migration. Individual projects will be reindexed
+        // on next access or via a dedicated reindex trigger.
+
+        await step.run('unlock-workspace', async () => {
+            await setMaintenanceMode(firmId, null)
+            if (allFailures.length > 0) {
+                const firm = await prisma.firm.findUnique({ where: { id: firmId } })
+                if (firm) {
+                    const prev = (firm.settings as Record<string, unknown>) || {}
+                    await prisma.firm.update({
+                        where: { id: firmId },
+                        data: { settings: { ...prev, migrationWarnings: allFailures } },
+                    })
+                }
+            }
+        })
+
+        return { ok: true, failures: allFailures.length }
+    }
+)
+
+// ---------------------------------------------------------------------------
+// Platform Maintenance — Grace Period Activation
+// ---------------------------------------------------------------------------
+// Sleeps for the 2-minute grace window, then checks if maintenance is still
+// pending. If so, activates it fully and signs out all non-admin users.
+export const platformMaintenanceActivate = inngest.createFunction(
+    { id: 'platform-maintenance-activate', triggers: [{ event: 'platform/maintenance.grace-requested' }] },
+    async ({ event, step }) => {
+        const graceEndsAt = new Date(event.data.graceEndsAt)
+        const msRemaining = graceEndsAt.getTime() - Date.now()
+        if (msRemaining > 0) {
+            await step.sleep('grace-period', `${Math.ceil(msRemaining / 1000)}s`)
+        }
+
+        await step.run('activate-maintenance', async () => {
+            const config = await getPlatformMaintenanceConfig()
+            // Abort if admin cancelled during the grace window
+            if (!config || !config.gracePeriod || config.active) {
+                logger.info('Platform maintenance grace period cancelled — skipping activation', 'PlatformMaintenance')
+                return
+            }
+            const updated = {
+                ...config,
+                active: true,
+                gracePeriod: false,
+            }
+            await setPlatformMaintenanceConfig(updated)
+
+            const users = await getAllNonAdminUserEmails()
+            await Promise.allSettled([
+                signOutAllNonAdminUsers(),
+                sendPlatformMaintenanceEmail('on', updated, users),
+                sendPlatformMaintenanceNotification('on', updated),
+            ])
+            logger.info(`Platform maintenance activated — ${users.length} users signed out`, 'PlatformMaintenance')
+        })
+
+        return { ok: true }
+    }
+)
+
+
+// ---------------------------------------------------------------------------
+// Client Follow-Up Reminders (Daily Cron)
+// ---------------------------------------------------------------------------
+
+// Safety-net cron: fires at 00:00 UTC daily — catches any follow-ups whose
+// Inngest sleepUntil run was lost. Creates in-app notification only (no email —
+// email is handled by sendReminderEmail via sleepUntil).
+export const checkClientFollowUpReminders = inngest.createFunction(
+    { id: "check-client-follow-up-reminders", triggers: [{ cron: "0 0 * * *" }] },
+    async ({ step }) => {
+        return step.run("query-and-notify", async () => {
+            const todayStart = new Date()
+            todayStart.setUTCHours(0, 0, 0, 0)
+            const todayEnd = new Date()
+            todayEnd.setUTCHours(23, 59, 59, 999)
+            const dateStr = todayStart.toISOString().slice(0, 10)
+
+            const clients = await (prisma as any).client.findMany({
+                where: {
+                    followUpDate: { gte: todayStart, lte: todayEnd },
+                    ownerId: { not: null },
+                    status: { in: ["PROSPECT", "ACTIVE"] },
+                },
+                select: {
+                    id: true, name: true, slug: true,
+                    firmId: true, ownerId: true, followUpDate: true,
+                    firm: { select: { slug: true } },
+                },
+            })
+
+            if (!clients.length) return { notified: 0 }
+
+            const rows = clients.map((c: any) => ({
+                firmId: c.firmId,
+                clientId: c.id,
+                userId: c.ownerId,
+                scope: "CLIENT",
+                type: "CLIENT_FOLLOWUP_DUE",
+                priority: "WARNING",
+                title: `Follow up due: ${c.name}`,
+                body: `Your scheduled follow-up with ${c.name} is due today.`,
+                ctaUrl: c.firm?.slug ? `/d/f/${c.firm.slug}/c/${c.slug}` : null,
+                channels: { inApp: true, email: false },
+                dedupeKey: `client:${c.id}:followup:${dateStr}`,
+                metadata: { followUpDate: c.followUpDate?.toISOString(), clientName: c.name, internal: true },
+            }))
+
+            await (prisma as any).notification.createMany({ data: rows, skipDuplicates: true })
+            return { notified: clients.length }
+        })
+    }
+)
+
+// ---------------------------------------------------------------------------
+// Reminder Email — sleepUntil + cancelOn
+// ---------------------------------------------------------------------------
+
+export const sendReminderEmail = inngest.createFunction(
+    {
+        id: "send-reminder-email",
+        triggers: [{ event: "reminder.email.scheduled" }],
+        cancelOn: [{
+            event: "reminder.email.cancelled",
+            if: "event.data.reminderId == async.data.reminderId",
+        }],
+    },
+    async ({ event, step }: any) => {
+        await step.sleepUntil("wait-for-reminder", event.data.fireAt)
+
+        await step.run("send", async () => {
+            // Skip if reminder was marked done (node was removed from the array)
+            const personalization = await prisma.userPersonalization.findUnique({
+                where: { userId: event.data.userId },
+                select: { reminders: true },
+            })
+            const items: any[] = Array.isArray(personalization?.reminders)
+                ? (personalization!.reminders as any[])
+                : []
+            const item = items.find((r: any) => r.id === event.data.reminderId)
+            if (!item) return { skipped: 'done' }
+
+            const { createAdminClient } = await import("@/utils/supabase/admin")
+            const { sendEmail } = await import("@/lib/email")
+            const admin = createAdminClient()
+            const { data } = await admin.auth.admin.getUserById(event.data.userId)
+            const email = data?.user?.email
+            if (!email) return { skipped: 'no-email' }
+
+            const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
+            const ctaHtml = event.data.ctaUrl
+                ? `<p><a href="${appUrl}${event.data.ctaUrl}">Open client →</a></p>`
+                : ''
+
+            await sendEmail(
+                email,
+                `Follow up today: ${event.data.entityName}`,
+                `<p>Your scheduled follow-up with <strong>${event.data.entityName}</strong> is due today.</p>${ctaHtml}`
+            )
+            return { sent: true }
+        })
+
+        return { reminderId: event.data.reminderId }
+    }
+)
+

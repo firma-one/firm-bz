@@ -3,7 +3,8 @@ import { prisma } from '@/lib/prisma'
 import { resolveProjectContext } from '@/lib/resolve-project-context'
 import { canViewProject } from '@/lib/permission-helpers'
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
-import { Prisma, PlatformAuditEventType } from '@prisma/client'
+import { Prisma } from '@prisma/client'
+import { isValidAuditEventType } from '@/lib/audit-event-types'
 
 /**
  * GET /api/projects/[projectId]/audit
@@ -41,11 +42,11 @@ export async function GET(
       scope: 'PROJECT',
     }
     if (documentId) where.projectDocumentId = documentId
-    const validEventTypes = eventTypes.filter((t) =>
-      (Object.values(PlatformAuditEventType) as string[]).includes(t)
-    ) as PlatformAuditEventType[]
-    if (validEventTypes.length === 1) where.eventType = validEventTypes[0]
-    if (validEventTypes.length > 1) where.eventType = { in: validEventTypes }
+    const validEventTypes = eventTypes.filter(isValidAuditEventType)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const whereAny = where as any
+    if (validEventTypes.length === 1) whereAny.eventType = validEventTypes[0]
+    if (validEventTypes.length > 1) whereAny.eventType = { in: validEventTypes }
     if (clientKeyword) where.client = { is: { name: { contains: clientKeyword, mode: 'insensitive' } } }
     if (projectKeyword) where.engagement = { is: { name: { contains: projectKeyword, mode: 'insensitive' } } }
     if (fromDate || toDate) {

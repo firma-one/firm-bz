@@ -12,7 +12,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import { Share2, Users, UserCircle, FileDown, Droplets } from 'lucide-react'
+import { Share2, Users, UserCircle, FileDown, Droplets, Info } from 'lucide-react'
 import { useToast } from '@/components/ui/toast'
 import { SandboxInfoBanner } from '@/components/ui/sandbox-info-banner'
 import { useOrgSandbox } from '@/lib/use-org-sandbox'
@@ -20,6 +20,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { parseSettingsFromDb } from '@/lib/sharing-settings'
 import { useProjectPersonaLabels } from '@/lib/hooks/use-project-persona-labels'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
 export interface DocumentShareSettings {
   externalCollaborator: boolean
@@ -29,6 +30,9 @@ export interface DocumentShareSettings {
     allowDownload: boolean
     addWatermark: boolean
     publish: boolean
+  }
+  ecOptions: {
+    allowDownload: boolean
   }
 }
 
@@ -41,6 +45,9 @@ const defaultSettings: DocumentShareSettings = {
     addWatermark: false,
     publish: false,
   },
+  ecOptions: {
+    allowDownload: false,
+  },
 }
 
 function parseSettings(settings: unknown): DocumentShareSettings {
@@ -49,13 +56,16 @@ function parseSettings(settings: unknown): DocumentShareSettings {
   const share = parsed.share
   if (!share) return defaultSettings
   return {
-    externalCollaborator: share.externalCollaborator?.enabled !== false,
+    externalCollaborator: share.externalCollaborator?.enabled === true,
     guest: share.guest?.enabled === true,
     guestOptions: {
-      sharePdfOnly: share.guest?.options?.sharePdfOnly !== false,
+      sharePdfOnly: share.guest?.options?.sharePdfOnly === true,
       allowDownload: share.guest?.options?.allowDownload === true,
       addWatermark: share.guest?.options?.addWatermark === true,
       publish: share.guest?.options?.publish === true,
+    },
+    ecOptions: {
+      allowDownload: share.externalCollaborator?.options?.allowDownload === true,
     },
   }
 }
@@ -147,6 +157,7 @@ export function DocumentShareModal({
             externalCollaborator: settings.externalCollaborator,
             guest: settings.guest,
             guestOptions: settings.guestOptions,
+            ecOptions: settings.ecOptions,
             title: doc.name,
             mimeType: doc.mimeType || 'application/octet-stream',
           }),
@@ -192,22 +203,46 @@ export function DocumentShareModal({
           <div className="space-y-5 py-2">
             {isSandboxFirm && <SandboxInfoBanner />}
             {/* External Collaborator (platform.personas.eng_ext_collaborator) */}
-            <div className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 bg-slate-50/50 px-4 py-3">
-              <div className="flex items-center gap-3 min-w-0">
-                <Users className="h-5 w-5 text-slate-600 shrink-0" />
-                <div>
-                  <Label htmlFor="share-ec" className={cn("text-sm font-medium cursor-pointer", isSandboxFirm && "text-slate-500")}>
-                    {projExtCollaborator}
-                  </Label>
-                  <p className="text-xs text-slate-500">Document visible in file list for external collaborators</p>
+            <div className="rounded-lg border border-slate-200 bg-slate-50/50 overflow-hidden">
+              <div className="flex items-center justify-between gap-4 px-4 py-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <Users className="h-5 w-5 text-slate-600 shrink-0" />
+                  <div>
+                    <Label htmlFor="share-ec" className={cn("text-sm font-medium cursor-pointer", isSandboxFirm && "text-slate-500")}>
+                      {projExtCollaborator}
+                    </Label>
+                    <p className="text-xs text-slate-500">Document visible in file list for external collaborators</p>
+                  </div>
+                </div>
+                <Switch
+                  id="share-ec"
+                  checked={settings.externalCollaborator}
+                  onCheckedChange={(v) => setSettings((s) => ({ ...s, externalCollaborator: v }))}
+                  disabled={isSandboxFirm}
+                />
+              </div>
+              <div
+                className="grid transition-[grid-template-rows] duration-200 ease-out"
+                style={{ gridTemplateRows: settings.externalCollaborator ? '1fr' : '0fr' }}
+                aria-hidden={!settings.externalCollaborator}
+              >
+                <div className="min-h-0 overflow-hidden border-t border-slate-200">
+                  <div className="bg-white px-4 py-3 space-y-3">
+                    <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">{projExtCollaborator} options</p>
+                    <div className="flex items-center justify-between gap-3">
+                      <Label htmlFor="ec-download" className="text-sm text-slate-700 flex items-center gap-2 cursor-pointer">
+                        <FileDown className="h-4 w-4" /> Allow download
+                      </Label>
+                      <Switch
+                        id="ec-download"
+                        checked={settings.ecOptions.allowDownload}
+                        onCheckedChange={(v) => setSettings((s) => ({ ...s, ecOptions: { ...s.ecOptions, allowDownload: v } }))}
+                        disabled={isSandboxFirm}
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
-              <Switch
-                id="share-ec"
-                checked={settings.externalCollaborator}
-                onCheckedChange={(v) => setSettings((s) => ({ ...s, externalCollaborator: v }))}
-                disabled={isSandboxFirm}
-              />
             </div>
 
             {/* Guest (platform.personas.eng_viewer): main toggle + options enclosed in one tile */}
@@ -247,9 +282,44 @@ export function DocumentShareModal({
                           onCheckedChange={(v) =>
                             setSettings((s) => ({
                               ...s,
-                              guestOptions: { ...s.guestOptions, sharePdfOnly: v },
+                              guestOptions: {
+                                ...s.guestOptions,
+                                sharePdfOnly: v,
+                                // reset watermark when PDF-only is turned off
+                                addWatermark: v ? s.guestOptions.addWatermark : false,
+                              },
                             }))
                           }
+                        />
+                      </div>
+                      <div className={cn("flex items-center justify-between gap-3", !settings.guestOptions.sharePdfOnly && "opacity-40")}>
+                        <Label
+                          htmlFor="guest-watermark"
+                          className={cn("text-sm text-slate-700 flex items-center gap-2", settings.guestOptions.sharePdfOnly ? "cursor-pointer" : "cursor-not-allowed")}
+                        >
+                          <Droplets className="h-4 w-4" />
+                          Add watermark
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="h-3.5 w-3.5 text-slate-400 cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-[200px] text-center">
+                                Your firm name will be applied as a diagonal watermark on each page. Requires &ldquo;Share PDF version only&rdquo;.
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </Label>
+                        <Switch
+                          id="guest-watermark"
+                          checked={settings.guestOptions.addWatermark}
+                          onCheckedChange={(v) =>
+                            setSettings((s) => ({
+                              ...s,
+                              guestOptions: { ...s.guestOptions, addWatermark: v },
+                            }))
+                          }
+                          disabled={isSandboxFirm || !settings.guestOptions.sharePdfOnly}
                         />
                       </div>
                       <div className="flex items-center justify-between gap-3">
@@ -263,22 +333,6 @@ export function DocumentShareModal({
                             setSettings((s) => ({
                               ...s,
                               guestOptions: { ...s.guestOptions, allowDownload: v },
-                            }))
-                          }
-                          disabled={isSandboxFirm}
-                        />
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <Label htmlFor="guest-watermark" className="text-sm text-slate-700 flex items-center gap-2 cursor-pointer">
-                          <Droplets className="h-4 w-4" /> Add watermark (organization name)
-                        </Label>
-                        <Switch
-                          id="guest-watermark"
-                          checked={settings.guestOptions.addWatermark}
-                          onCheckedChange={(v) =>
-                            setSettings((s) => ({
-                              ...s,
-                              guestOptions: { ...s.guestOptions, addWatermark: v },
                             }))
                           }
                           disabled={isSandboxFirm}

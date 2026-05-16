@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { Users, Clock } from 'lucide-react'
+import { Users, Clock, CalendarClock } from 'lucide-react'
 import { HierarchyClient } from '@/lib/actions/hierarchy'
 import Link from 'next/link'
 import { formatDistanceToNow } from 'date-fns'
@@ -29,14 +29,30 @@ function clientStatusLabel(status: string | null | undefined): string {
 function clientStatusBadgeClass(status: string | null | undefined): string {
     switch (status) {
         case 'PROSPECT':
-            return 'bg-amber-100 text-amber-800'
+            return 'bg-fuchsia-50 text-fuchsia-500 ring-1 ring-fuchsia-200'
         case 'ON_HOLD':
-            return 'bg-slate-100 text-slate-700'
+            return 'bg-amber-50 text-amber-500 ring-1 ring-amber-200'
         case 'PAST':
-            return 'bg-gray-200 text-gray-700'
+            return 'bg-zinc-50 text-zinc-400 ring-1 ring-zinc-200'
         case 'ACTIVE':
         default:
-            return 'bg-black/80 text-white/90'
+            return 'bg-teal-50 text-teal-600 ring-1 ring-teal-200'
+    }
+}
+
+function getFollowUpChip(followUpDate: Date | null): { label: string; cls: string } | null {
+    if (!followUpDate) return null
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    const fud = new Date(followUpDate); fud.setHours(0, 0, 0, 0)
+    const delta = Math.round((fud.getTime() - today.getTime()) / 86400000)
+    if (delta > 2 || delta < -2) return null
+    switch (delta) {
+        case 2:
+        case 1:  return { label: delta === 1 ? 'Follow up · tomorrow' : 'Follow up · in 2 days', cls: 'bg-blue-50 text-blue-600 border-blue-200' }
+        case 0:  return { label: 'Follow up today', cls: 'bg-amber-50 text-amber-600 border-amber-200' }
+        case -1: return { label: 'Follow up · 1 day late', cls: 'bg-orange-50 text-orange-600 border-orange-200' }
+        case -2: return { label: 'Follow up · 2 days late', cls: 'bg-rose-50 text-rose-600 border-rose-200' }
+        default: return null
     }
 }
 
@@ -75,7 +91,15 @@ export function ClientList({ clients, orgSlug, viewMode = 'grid' }: ClientListPr
                                         <div className="h-8 w-8 bg-slate-100 text-slate-700 rounded-lg flex items-center justify-center">
                                             <Users className="h-4 w-4" />
                                         </div>
-                                        <span className="font-medium text-slate-900 group-hover:text-black transition-colors">{client.name}</span>
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="font-medium text-slate-900 group-hover:text-black transition-colors">{client.name}</span>
+                                            {(() => { const chip = getFollowUpChip(client.followUpDate ?? null); return chip ? (
+                                                <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${chip.cls}`}>
+                                                    <CalendarClock className="h-3 w-3" />
+                                                    {chip.label}
+                                                </span>
+                                            ) : null })()}
+                                        </div>
                                     </Link>
                                 </td>
                                 <td className="px-4 py-3">
@@ -85,7 +109,7 @@ export function ClientList({ clients, orgSlug, viewMode = 'grid' }: ClientListPr
                                 </td>
                                 <td className="px-4 py-3 text-slate-500">
                                     <span className="px-2 py-1 bg-slate-100 rounded-full text-xs font-medium">
-                                        {client.projects.length} {client.projects.length === 1 ? 'Project' : 'Projects'}
+                                        {client.projects.length} {client.projects.length === 1 ? 'Engagement' : 'Engagements'}
                                     </span>
                                 </td>
                                 <td className="px-4 py-3 text-right text-slate-400">
@@ -119,18 +143,24 @@ export function ClientList({ clients, orgSlug, viewMode = 'grid' }: ClientListPr
                         </span>
                     </div>
 
-                    <h3 className="text-sm font-semibold text-slate-900 mb-1 line-clamp-1 group-hover:text-black transition-colors">
+                    <h3 className="text-sm font-semibold text-slate-900 mb-auto line-clamp-1 group-hover:text-black transition-colors">
                         {client.name}
                     </h3>
-                    <p className="text-xs text-slate-500 line-clamp-2 mb-auto">
-                        {client.projects.length} {client.projects.length === 1 ? 'Project' : 'Projects'}
-                    </p>
+                    {(() => { const chip = getFollowUpChip(client.followUpDate ?? null); return chip ? (
+                        <span className={`inline-flex items-center gap-1 mt-2 rounded-full border px-2 py-0.5 text-[11px] font-medium w-fit ${chip.cls}`}>
+                            <CalendarClock className="h-3 w-3" />
+                            {chip.label}
+                        </span>
+                    ) : null })()}
 
-                    <div className="mt-auto pt-3 border-t border-slate-50 flex items-center justify-between text-[11px] text-slate-400">
+                    <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
                         <div className="flex items-center gap-1.5" title="Last updated">
                             <Clock className="h-3 w-3" />
                             <span>{formatDistanceToNow(new Date(client.updatedAt), { addSuffix: true })}</span>
                         </div>
+                        <span className="font-medium text-slate-500">
+                            {client.projects.length} {client.projects.length === 1 ? 'engagement' : 'engagements'}
+                        </span>
                     </div>
                 </Link>
             ))}

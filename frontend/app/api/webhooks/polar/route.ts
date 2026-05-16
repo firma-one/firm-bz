@@ -16,6 +16,7 @@ function getWebhookSecret(): string | null {
 function buildHandler() {
     const webhookSecret = getWebhookSecret()
     if (!webhookSecret) {
+        logger.warn('Polar webhook: POLAR_WEBHOOK_SECRET not configured, returning 503')
         return async () =>
             NextResponse.json(
                 { error: 'Polar webhook secret is not configured (POLAR_WEBHOOK_SECRET).' },
@@ -70,6 +71,30 @@ function buildHandler() {
 }
 
 export async function POST(request: NextRequest) {
+    const webhookSecretConfigured = !!getWebhookSecret()
+    logger.warn('Polar webhook: incoming request', {
+        method: request.method,
+        url: request.url,
+        webhookSecretConfigured,
+        headers: {
+            webhookId: request.headers.get('webhook-id'),
+            webhookSignature: request.headers.get('webhook-signature')?.substring(0, 20) + '...',
+            webhookTimestamp: request.headers.get('webhook-timestamp'),
+        },
+    })
+
     const handler = buildHandler()
-    return handler(request)
+
+    try {
+        return await handler(request)
+    } catch (error) {
+        const errorObj = error instanceof Error ? error : new Error(String(error))
+        logger.error('Polar webhook: handler threw error', errorObj, undefined, {
+            errorStack: errorObj.stack,
+        })
+        return NextResponse.json(
+            { error: 'Webhook processing failed' },
+            { status: 500 }
+        )
+    }
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import {
     Dialog,
@@ -14,12 +14,20 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { UserPlus } from "lucide-react"
+import { UserPlus, X, CornerDownLeft, Linkedin, Users2, MapPin } from "lucide-react"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { SandboxInfoBanner } from "@/components/ui/sandbox-info-banner"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
+import { SelectWithCustomEntry } from "@/components/ui/select-with-custom-entry"
 import { createClient, type LwCrmClientStatus } from '@/lib/actions/client'
-import { getFirmMembers } from '@/lib/actions/firm-members'
 import { useOrgSandbox } from '@/lib/use-org-sandbox'
+import { DateTimePicker } from '@/components/ui/date-time-picker'
 
 interface AddClientModalProps {
     orgSlug: string
@@ -37,29 +45,54 @@ export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigg
     const [status, setStatus] = useState<LwCrmClientStatus>('ACTIVE')
     const [website, setWebsite] = useState('')
     const [description, setDescription] = useState('')
-    const [tagsInput, setTagsInput] = useState('')
-    const [ownerId, setOwnerId] = useState<string | null>(null)
-    const [memberOptions, setMemberOptions] = useState<{ userId: string; label: string }[]>([])
-
+    const [tags, setTags] = useState<string[]>([])
+    const [tagInput, setTagInput] = useState('')
+    const tagInputRef = useRef<HTMLInputElement>(null)
+    const [leadSource, setLeadSource] = useState('')
+    const [followUpDate, setFollowUpDate] = useState('')
+    const [clientSinceDate, setClientSinceDate] = useState('')
+    const [linkedInUrl, setLinkedInUrl] = useState('')
+    const [companySizeBracket, setCompanySizeBracket] = useState('')
+    const [billingAddress, setBillingAddress] = useState('')
     const [error, setError] = useState<string | null>(null)
 
     const router = useRouter()
     const orgSandbox = useOrgSandbox()
     const isSandboxFirm = Boolean(firmSandboxOnly || orgSandbox?.sandboxOnly)
 
-    useEffect(() => {
-        if (!open || !firmId) return
-        getFirmMembers(firmId)
-            .then((res) => {
-                setMemberOptions(
-                    res.members.map((m) => ({
-                        userId: m.userId,
-                        label: m.user?.name || m.user?.email || m.userId,
-                    }))
-                )
-            })
-            .catch(() => setMemberOptions([]))
-    }, [open, firmId])
+    const commitTag = (raw: string) => {
+        const value = raw.trim().toLowerCase().replace(/\s+/g, '-')
+        if (value && !tags.includes(value)) {
+            setTags((prev) => [...prev, value])
+        }
+        setTagInput('')
+    }
+
+    const handleTagKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') {
+            e.preventDefault()
+            commitTag(tagInput)
+        } else if (e.key === ',') {
+            e.preventDefault()
+            commitTag(tagInput)
+        } else if (e.key === 'Backspace' && tagInput === '' && tags.length > 0) {
+            setTags((prev) => prev.slice(0, -1))
+        }
+    }
+
+    const handleTagChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const val = e.target.value
+        if (val.endsWith(',')) {
+            commitTag(val.slice(0, -1))
+        } else {
+            setTagInput(val)
+        }
+    }
+
+    const removeTag = (tag: string) => {
+        setTags((prev) => prev.filter((t) => t !== tag))
+        tagInputRef.current?.focus()
+    }
 
     const wrapTrigger = (node: React.ReactNode): React.ReactNode => {
         if (!React.isValidElement(node)) return node
@@ -73,18 +106,17 @@ export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigg
         })
     }
 
-    const parseTags = (raw: string) =>
-        raw
-            .split(',')
-            .map((t) => t.trim())
-            .filter(Boolean)
-
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
 
         if (isSandboxFirm) {
             return
         }
+
+        // Commit any partially typed tag on submit
+        const finalTags = tagInput.trim()
+            ? Array.from(new Set([...tags, tagInput.trim().toLowerCase().replace(/\s+/g, '-')]))
+            : tags
 
         setIsLoading(true)
         setError(null)
@@ -96,8 +128,13 @@ export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigg
                 status,
                 website: website.trim() || undefined,
                 description: description.trim() || undefined,
-                tags: parseTags(tagsInput),
-                ownerId,
+                tags: finalTags,
+                leadSource: leadSource || null,
+                followUpDate: followUpDate || null,
+                clientSinceDate: clientSinceDate || null,
+                linkedInUrl: linkedInUrl.trim() || null,
+                companySizeBracket: companySizeBracket || null,
+                billingAddress: billingAddress.trim() || null,
             })
             setOpen(false)
             setName('')
@@ -105,10 +142,17 @@ export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigg
             setStatus('ACTIVE')
             setWebsite('')
             setDescription('')
-            setTagsInput('')
-            setOwnerId(null)
+            setTags([])
+            setTagInput('')
+            setLeadSource('')
+            setFollowUpDate('')
+            setClientSinceDate('')
+            setLinkedInUrl('')
+            setCompanySizeBracket('')
+            setBillingAddress('')
             setError(null)
 
+            window.dispatchEvent(new CustomEvent('firma-reminders-updated'))
             // Keep user on the Clients list view after creation.
             router.push(`/d/f/${orgSlug}?tab=clients`, { scroll: false })
             router.refresh()
@@ -166,18 +210,21 @@ export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigg
                     </div>
                     <div className="space-y-2">
                         <Label htmlFor="client-status" className={isSandboxFirm ? 'text-slate-500' : 'text-slate-900'}>Status</Label>
-                        <select
-                            id="client-status"
+                        <Select
                             value={status}
-                            onChange={(e) => setStatus(e.target.value as LwCrmClientStatus)}
+                            onValueChange={(v) => setStatus(v as LwCrmClientStatus)}
                             disabled={isSandboxFirm || isLoading}
-                            className="w-full h-10 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus-visible:border-slate-300 focus-visible:ring-1 focus-visible:ring-slate-300 disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                            <option value="PROSPECT">Prospect</option>
-                            <option value="ACTIVE">Active</option>
-                            <option value="ON_HOLD">On hold</option>
-                            <option value="PAST">Past</option>
-                        </select>
+                            <SelectTrigger id="client-status" className="border-slate-200 text-slate-900 disabled:cursor-not-allowed disabled:opacity-60">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="PROSPECT">Prospect</SelectItem>
+                                <SelectItem value="ACTIVE">Active</SelectItem>
+                                <SelectItem value="ON_HOLD">On hold</SelectItem>
+                                <SelectItem value="PAST">Past</SelectItem>
+                            </SelectContent>
+                        </Select>
                     </div>
                     <div className="space-y-2">
                         <Label htmlFor="industry" className={isSandboxFirm ? 'text-slate-500' : 'text-slate-900'}>
@@ -220,39 +267,132 @@ export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigg
                         />
                     </div>
                     <div className="space-y-2">
-                        <Label htmlFor="tags" className={isSandboxFirm ? 'text-slate-500' : 'text-slate-900'}>
-                            Tags (optional)
+                        <Label htmlFor="linkedin-url" className={isSandboxFirm ? 'text-slate-500' : 'text-slate-900'}>
+                            <span className="inline-flex items-center gap-1"><Linkedin className="h-3.5 w-3.5" /> Company LinkedIn (optional)</span>
                         </Label>
                         <Input
-                            id="tags"
-                            value={tagsInput}
-                            onChange={(e) => setTagsInput(e.target.value)}
-                            placeholder="Comma-separated"
+                            id="linkedin-url"
+                            value={linkedInUrl}
+                            onChange={(e) => setLinkedInUrl(e.target.value)}
+                            placeholder="https://linkedin.com/company/…"
                             disabled={isSandboxFirm || isLoading}
                             className="border-slate-200 text-slate-900 placeholder:text-slate-400 disabled:cursor-not-allowed disabled:opacity-60"
                         />
                     </div>
-                    {firmId ? (
-                        <div className="space-y-2">
-                            <Label htmlFor="owner" className={isSandboxFirm ? 'text-slate-500' : 'text-slate-900'}>
-                                Owner (optional)
-                            </Label>
-                            <select
-                                id="owner"
-                                value={ownerId ?? ''}
-                                onChange={(e) => setOwnerId(e.target.value || null)}
+                    <div className="space-y-2">
+                        <Label htmlFor="company-size" className={isSandboxFirm ? 'text-slate-500' : 'text-slate-900'}>
+                            <span className="inline-flex items-center gap-1"><Users2 className="h-3.5 w-3.5" /> Company size (optional)</span>
+                        </Label>
+                        <SelectWithCustomEntry
+                            id="company-size"
+                            value={companySizeBracket}
+                            onChange={setCompanySizeBracket}
+                            options={['<10', '11–50', '51–200', '201–1000', '1000+']}
+                            placeholder="Select size bracket…"
+                            customEntryHint="Custom…"
+                            disabled={isSandboxFirm || isLoading}
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="billing-address" className={isSandboxFirm ? 'text-slate-500' : 'text-slate-900'}>
+                            <span className="inline-flex items-center gap-1"><MapPin className="h-3.5 w-3.5" /> Billing address (optional)</span>
+                        </Label>
+                        <Textarea
+                            id="billing-address"
+                            value={billingAddress}
+                            onChange={(e) => setBillingAddress(e.target.value)}
+                            placeholder={"123 Main St\nCity, State ZIP\nCountry"}
+                            rows={2}
+                            disabled={isSandboxFirm || isLoading}
+                            className="min-h-[52px] border-slate-200 text-slate-900 placeholder:text-slate-400 disabled:cursor-not-allowed disabled:opacity-60"
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="tags" className={isSandboxFirm ? 'text-slate-500' : 'text-slate-900'}>
+                            Tags (optional)
+                        </Label>
+                        <div
+                            className={`flex flex-wrap gap-1.5 min-h-[38px] w-full rounded-md border px-3 py-2 text-sm transition-colors
+                                ${isSandboxFirm || isLoading
+                                    ? 'border-slate-200 bg-slate-50 opacity-60 cursor-not-allowed'
+                                    : 'border-slate-200 bg-white focus-within:ring-2 focus-within:ring-slate-900 focus-within:ring-offset-0 focus-within:border-slate-900'
+                                }`}
+                            onClick={() => tagInputRef.current?.focus()}
+                        >
+                            {tags.map((tag) => (
+                                <span
+                                    key={tag}
+                                    className="inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700"
+                                >
+                                    {tag}
+                                    {!isSandboxFirm && !isLoading && (
+                                        <button
+                                            type="button"
+                                            onClick={(e) => { e.stopPropagation(); removeTag(tag) }}
+                                            className="text-slate-400 hover:text-slate-700 transition-colors"
+                                            aria-label={`Remove ${tag}`}
+                                        >
+                                            <X className="h-3 w-3" />
+                                        </button>
+                                    )}
+                                </span>
+                            ))}
+                            <input
+                                ref={tagInputRef}
+                                id="tags"
+                                value={tagInput}
+                                onChange={handleTagChange}
+                                onKeyDown={handleTagKeyDown}
+                                onBlur={() => { if (tagInput.trim()) commitTag(tagInput) }}
+                                placeholder={tags.length === 0 ? 'Type a tag, press Enter or comma' : ''}
                                 disabled={isSandboxFirm || isLoading}
-                                className="w-full h-10 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus-visible:border-slate-300 focus-visible:ring-1 focus-visible:ring-slate-300 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                                <option value="">No owner</option>
-                                {memberOptions.map((m) => (
-                                    <option key={m.userId} value={m.userId}>
-                                        {m.label}
-                                    </option>
-                                ))}
-                            </select>
+                                className="flex-1 min-w-[120px] bg-transparent outline-none placeholder:text-slate-400 text-slate-900 disabled:cursor-not-allowed"
+                            />
+                            <CornerDownLeft className="h-3.5 w-3.5 text-emerald-500 shrink-0 self-center ml-1" />
                         </div>
-                    ) : null}
+                    </div>
+                    <div className="space-y-2">
+                        <Label className={isSandboxFirm ? 'text-slate-500' : 'text-slate-900'}>
+                            Client since (optional)
+                        </Label>
+                        <DateTimePicker
+                            value={clientSinceDate}
+                            onChange={setClientSinceDate}
+                            placeholder="Select date"
+                            disabled={isSandboxFirm || isLoading}
+                            defaultTime="00:00"
+                        />
+                    </div>
+                    {status === 'PROSPECT' && (
+                        <>
+                            <div className="space-y-2">
+                                <Label htmlFor="lead-source" className={isSandboxFirm ? 'text-slate-500' : 'text-slate-900'}>
+                                    Lead source (optional)
+                                </Label>
+                                <SelectWithCustomEntry
+                                    id="lead-source"
+                                    value={leadSource}
+                                    onChange={setLeadSource}
+                                    options={['Referral', 'Inbound', 'Outbound', 'Conference', 'Existing Network']}
+                                    placeholder="Select source…"
+                                    customEntryHint="Other…"
+                                    disabled={isSandboxFirm || isLoading}
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label className={isSandboxFirm ? 'text-slate-500' : 'text-slate-900'}>
+                                    Follow-up date (optional)
+                                </Label>
+                                <DateTimePicker
+                                    value={followUpDate}
+                                    onChange={setFollowUpDate}
+                                    placeholder="Select date"
+                                    disabled={isSandboxFirm || isLoading}
+                                    defaultTime="09:00"
+                                />
+                            </div>
+                        </>
+                    )}
                     <DialogFooter>
                         <Button type="button" variant="outline" className="border-slate-200 text-slate-700 hover:bg-slate-50" onClick={() => setOpen(false)} disabled={isLoading}>
                             Cancel

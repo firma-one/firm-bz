@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { IndexingInterceptor } from '@/lib/services/indexing-interceptor'
 import { logger } from '@/lib/logger'
 import { requireProjectManage } from '@/lib/api/project-auth'
-import { createPlatformAuditEvent } from '@/lib/platform-audit'
+import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 
 export async function POST(
     request: NextRequest,
@@ -40,18 +40,14 @@ export async function POST(
             // Audit: one event per file added (e.g. upload or import)
             const userId = authResult.user?.id
             for (const f of files as { externalId: string; fileName: string }[]) {
-                try {
-                    await createPlatformAuditEvent({
-                        organizationId: orgId,
-                        clientId: cliId ?? undefined,
-                        projectId,
-                        eventType: 'PROJECT_DOCUMENT_ADDED',
-                        actorUserId: userId ?? undefined,
-                        metadata: { fileName: f.fileName, externalId: f.externalId },
-                    })
-                } catch (e) {
-                    logger.warn('Index-file: failed to create audit event', e as Error)
-                }
+                audit(AUDIT_EVENT.DOCUMENT_CREATED)
+                    .scope(AUDIT_SCOPE.DOCUMENT)
+                    .firm(orgId)
+                    .client(cliId)
+                    .engagement(projectId)
+                    .actor(userId)
+                    .meta({ fileName: f.fileName, externalId: f.externalId })
+                    .fireAndForget()
             }
         } else {
             // Single Index
@@ -63,18 +59,14 @@ export async function POST(
                 fileName: fileName as string
             })
             // Audit: file added (upload or import)
-            try {
-                await createPlatformAuditEvent({
-                    organizationId: orgId,
-                    clientId: cliId ?? undefined,
-                    projectId,
-                    eventType: 'PROJECT_DOCUMENT_ADDED',
-                    actorUserId: authResult.user?.id ?? undefined,
-                    metadata: { fileName: fileName as string, externalId: externalId as string },
-                })
-            } catch (e) {
-                logger.warn('Index-file: failed to create audit event', e as Error)
-            }
+            audit(AUDIT_EVENT.DOCUMENT_CREATED)
+                .scope(AUDIT_SCOPE.DOCUMENT)
+                .firm(orgId)
+                .client(cliId)
+                .engagement(projectId)
+                .actor(authResult.user?.id)
+                .meta({ fileName: fileName as string, externalId: externalId as string })
+                .fireAndForget()
         }
 
         return NextResponse.json({ success: true, message: 'Indexing triggered' })

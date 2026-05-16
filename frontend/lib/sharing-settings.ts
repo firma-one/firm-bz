@@ -10,6 +10,11 @@ export interface ShareGuestOptions {
   addWatermark?: boolean
   sharePdfOnly?: boolean
   allowDownload?: boolean
+  sharedPdfDriveId?: string | null
+}
+
+export interface ShareEcOptions {
+  allowDownload?: boolean
 }
 
 export interface ShareBlock {
@@ -17,9 +22,11 @@ export interface ShareBlock {
     enabled: boolean
     options: ShareGuestOptions
   }
-  externalCollaborator: { enabled: boolean }
+  externalCollaborator: { enabled: boolean; options?: ShareEcOptions }
   createdAt?: string
+  createdBy?: string | null
   updatedAt?: string
+  updatedBy?: string | null
   publishedVersionId?: string | null
   publishedAt?: string | null
   /** Set when Project Lead finalizes (locks) the share. */
@@ -73,9 +80,10 @@ const DEFAULT_SHARE: ShareBlock = {
       addWatermark: false,
       sharePdfOnly: false,
       allowDownload: false,
+      sharedPdfDriveId: null,
     },
   },
-  externalCollaborator: { enabled: true },
+  externalCollaborator: { enabled: false, options: { allowDownload: false } },
 }
 
 /** Read settings from DB: supports legacy flat and new nested shape. */
@@ -95,7 +103,7 @@ export function parseSettingsFromDb(settings: unknown): ProjectDocumentSharingSe
   const comments = Array.isArray(s.comments) ? (s.comments as SharingComment[]) : []
 
   // Legacy flat
-  const legacyEc = s.externalCollaborator !== false
+  const legacyEc = s.externalCollaborator === true
   const legacyGuest = s.guest === true
   const legacyOpts = (s.guestOptions as ShareGuestOptions) || {}
 
@@ -108,13 +116,19 @@ export function parseSettingsFromDb(settings: unknown): ProjectDocumentSharingSe
             addWatermark: share.guest?.options?.addWatermark ?? legacyOpts.addWatermark ?? false,
             sharePdfOnly: share.guest?.options?.sharePdfOnly ?? legacyOpts.sharePdfOnly ?? false,
             allowDownload: share.guest?.options?.allowDownload ?? legacyOpts.allowDownload ?? false,
+            sharedPdfDriveId: share.guest?.options?.sharedPdfDriveId ?? legacyOpts.sharedPdfDriveId ?? null,
           },
         },
         externalCollaborator: {
           enabled: share.externalCollaborator?.enabled ?? legacyEc,
+          options: {
+            allowDownload: share.externalCollaborator?.options?.allowDownload ?? false,
+          },
         },
         createdAt: share.createdAt,
+        createdBy: share.createdBy ?? null,
         updatedAt: share.updatedAt,
+        updatedBy: share.updatedBy ?? null,
         publishedVersionId: share.publishedVersionId ?? (s.publishedVersionId as string | null | undefined) ?? null,
         publishedAt: share.publishedAt ?? (s.publishedAt as string | null | undefined) ?? null,
         finalizedAt: share.finalizedAt ?? null,
@@ -128,9 +142,10 @@ export function parseSettingsFromDb(settings: unknown): ProjectDocumentSharingSe
             addWatermark: legacyOpts.addWatermark ?? false,
             sharePdfOnly: legacyOpts.sharePdfOnly ?? false,
             allowDownload: legacyOpts.allowDownload ?? false,
+            sharedPdfDriveId: legacyOpts.sharedPdfDriveId ?? null,
           },
         },
-        externalCollaborator: { enabled: legacyEc },
+        externalCollaborator: { enabled: legacyEc, options: { allowDownload: false } },
         publishedVersionId: (s.publishedVersionId as string | null) ?? null,
         publishedAt: (s.publishedAt as string | null) ?? null,
       }
@@ -166,10 +181,12 @@ export function buildSettingsForDb(
     activity?: Partial<ActivityBlock>
     appendComment?: SharingComment
     finalizedAt?: string | null
+    actorId?: string | null
   }
 ): Record<string, unknown> {
   const parsed = parseSettingsFromDb(existing || {})
   const now = new Date().toISOString()
+  const isFirstShare = !parsed.share?.createdAt
 
   const share: ShareBlock = {
     ...parsed.share!,
@@ -185,8 +202,15 @@ export function buildSettingsForDb(
     externalCollaborator: {
       ...parsed.share!.externalCollaborator,
       ...updates.share?.externalCollaborator,
+      options: {
+        ...parsed.share!.externalCollaborator?.options,
+        ...updates.share?.externalCollaborator?.options,
+      },
     },
+    createdAt: isFirstShare ? now : parsed.share!.createdAt,
+    createdBy: isFirstShare ? (updates.actorId ?? null) : (parsed.share!.createdBy ?? null),
     updatedAt: now,
+    updatedBy: updates.actorId ?? null,
   }
   if (updates.finalizedAt !== undefined) share.finalizedAt = updates.finalizedAt
 
@@ -211,12 +235,69 @@ export function buildSettingsForDb(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Document Lock (intake pending / finalize)
+// ---------------------------------------------------------------------------
+
+export interface LockBlock {
+  type: 'intake' | 'finalize'
+  uploadedBy?: string
+  uploadedAt?: string
+  finalizedBy?: string
+  finalizedAt?: string
+  acceptedBy?: string
+  acceptedAt?: string
+  downgraded?: Array<{ permissionId: string; previousRole: string }>
+}
+
+export function getLock(settings: unknown): LockBlock | null {
+  if (!settings || typeof settings !== 'object') return null
+  const lock = (settings as Record<string, unknown>).lock
+  if (!lock || typeof lock !== 'object') return null
+  const l = lock as Record<string, unknown>
+  if (l.type !== 'intake' && l.type !== 'finalize') return null
+  const downgraded = Array.isArray(l.downgraded)
+    ? (l.downgraded as unknown[]).filter(
+        (x): x is { permissionId: string; previousRole: string } =>
+          !!x &&
+          typeof x === 'object' &&
+          typeof (x as any).permissionId === 'string' &&
+          typeof (x as any).previousRole === 'string'
+      )
+    : undefined
+  return {
+    type: l.type as 'intake' | 'finalize',
+    uploadedBy: typeof l.uploadedBy === 'string' ? l.uploadedBy : undefined,
+    uploadedAt: typeof l.uploadedAt === 'string' ? l.uploadedAt : undefined,
+    finalizedBy: typeof l.finalizedBy === 'string' ? l.finalizedBy : undefined,
+    finalizedAt: typeof l.finalizedAt === 'string' ? l.finalizedAt : undefined,
+    acceptedBy: typeof l.acceptedBy === 'string' ? l.acceptedBy : undefined,
+    acceptedAt: typeof l.acceptedAt === 'string' ? l.acceptedAt : undefined,
+    downgraded,
+  }
+}
+
+export function isIntakePending(settings: unknown): boolean {
+  return getLock(settings)?.type === 'intake'
+}
+
+export function isDocumentFinalized(settings: unknown): boolean {
+  return getLock(settings)?.type === 'finalize'
+}
+
+/** Returns true when the document has been marked private (hidden from EC/EV users). */
+export function isDocumentPrivate(settings: unknown): boolean {
+  if (!settings || typeof settings !== 'object') return false
+  return (settings as Record<string, unknown>).locked === 'private'
+}
+
 /** Flatten for UI that still expects legacy keys (e.g. Shares list response). */
 export function flattenForLegacyUI(parsed: ProjectDocumentSharingSettings) {
   return {
     externalCollaborator: parsed.share?.externalCollaborator?.enabled ?? parsed.externalCollaborator ?? true,
     guest: parsed.share?.guest?.enabled ?? parsed.guest ?? false,
     guestOptions: parsed.share?.guest?.options ?? parsed.guestOptions ?? {},
+    ecOptions: parsed.share?.externalCollaborator?.options ?? {},
     publishedVersionId: parsed.share?.publishedVersionId ?? parsed.publishedVersionId ?? null,
     publishedAt: parsed.share?.publishedAt ?? parsed.publishedAt ?? null,
     activity: parsed.activity,

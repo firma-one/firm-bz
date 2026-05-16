@@ -4,7 +4,8 @@ import { prisma } from '@/lib/prisma'
 import { getFileInfo } from '@/lib/file-utils'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { requireEngagementMember, isEngagementLeadRole } from '@/lib/engagement-access'
-import { getVersionLockFromSettings } from '@/lib/document-version-lock'
+import { getLock } from '@/lib/sharing-settings'
+import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 
 /**
  * PATCH /api/projects/[projectId]/documents/[documentId]/sharing/unlock
@@ -42,8 +43,8 @@ export async function PATCH(
     if (!existing)
       return NextResponse.json({ error: 'Share record not found' }, { status: 404 })
 
-    const lock = getVersionLockFromSettings(existing.settings)
-    if (!lock) {
+    const lockData = getLock(existing.settings)
+    if (!lockData) {
       return NextResponse.json({ error: 'Document is not locked' }, { status: 409 })
     }
 
@@ -59,7 +60,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'No active Google Drive connection' }, { status: 500 })
     }
 
-    for (const row of lock.downgraded) {
+    for (const row of (lockData.downgraded ?? [])) {
       const role = row.previousRole as 'reader' | 'writer' | 'commenter' | 'fileOrganizer' | 'organizer'
       if (['writer', 'reader', 'commenter', 'fileOrganizer', 'organizer'].includes(row.previousRole)) {
         await googleDriveConnector.patchFilePermissionRole(
@@ -79,17 +80,23 @@ export async function PATCH(
       ...prevSettings,
       share: { ...share, finalizedAt: null },
     }
-    delete nextSettings.versionLock
+    delete nextSettings.lock
 
     await prisma.engagementDocument.update({
       where: { id: existing.id },
       data: { settings: nextSettings as object, updatedAt: new Date() },
     })
 
-    const updated = await prisma.engagementDocument.findUnique({
-      where: { engagementId_firmId_externalId: compound },
-    })
-    return NextResponse.json({ sharing: updated })
+    audit(AUDIT_EVENT.DOCUMENT_UNLOCKED)
+      .scope(AUDIT_SCOPE.DOCUMENT)
+      .firm(fileInfo.organizationId)
+      .engagement(projectId)
+      .document(existing.id)
+      .actor(user.id)
+      .meta({ fileName: existing.fileName })
+      .fireAndForget()
+
+    return NextResponse.json({ ok: true })
   } catch (e) {
     console.error('PATCH sharing/unlock error', e)
     return NextResponse.json({ error: 'Failed to unlock' }, { status: 500 })

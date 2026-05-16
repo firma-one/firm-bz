@@ -21,34 +21,81 @@ type DriveConnector = {
 
 export type SharedOnlyPersonaSlug = 'eng_ext_collaborator' | 'eng_viewer'
 
-async function buildAncestorFolders(
-  fileIds: string[],
-  connectorId: string,
-  googleDriveConnector: DriveConnector
-): Promise<string[]> {
-  const ancestorFolderIds = new Set<string>()
-  for (const fileId of fileIds) {
+/**
+ * Build ancestor folder IDs by walking the parentId chain stored in engagement_documents.
+ * Drive is authoritative for shared items' immediate parents (one batched getFilesMetadata call)
+ * to override stale DB values. Returns both ancestorIds and the parentMap so callers can do
+ * further DB-based folder ancestry checks without re-querying.
+ */
+async function buildAncestorFoldersFromDB(
+  sharedIds: string[],
+  allRows: { externalId: string; parentId: string | null }[],
+  driveFallback?: { connectorId: string; googleDriveConnector: DriveConnector }
+): Promise<{ ancestorIds: string[]; parentMap: Map<string, string> }> {
+  const parentMap = new Map<string, string>()
+  for (const row of allRows) {
+    if (row.parentId) parentMap.set(row.externalId, row.parentId)
+  }
+
+  // Drive is authoritative for shared items' immediate parents: always fetch to override stale DB values.
+  // Batch is O(sharedIds.length) — one HTTP call — so cost is minimal.
+  if (driveFallback && sharedIds.length > 0) {
+    try {
+      const metas = await driveFallback.googleDriveConnector.getFilesMetadata(driveFallback.connectorId, sharedIds)
+      for (const m of metas) {
+        if (m.id && (m as any).parents?.[0]) parentMap.set(m.id, (m as any).parents[0])
+      }
+    } catch {
+      // non-critical: fall back to DB parentIds already in map
+    }
+  }
+
+  const ancestorIdsSet = new Set<string>()
+  for (const fileId of sharedIds) {
     let currentId: string | null = fileId
     let depth = 0
     const seen = new Set<string>()
     while (currentId && depth < MAX_ANCESTOR_DEPTH) {
       if (seen.has(currentId)) break
       seen.add(currentId)
-      const meta = await googleDriveConnector.getFileMetadata(connectorId, currentId)
-      if (!meta?.parents?.length) break
-      const parentId = meta.parents[0]
-      ancestorFolderIds.add(parentId)
-      currentId = parentId
+      const resolvedParent: string | undefined = parentMap.get(currentId)
+      if (!resolvedParent) break
+      ancestorIdsSet.add(resolvedParent)
+      currentId = resolvedParent
       depth++
     }
   }
-  return Array.from(ancestorFolderIds)
+  return { ancestorIds: Array.from(ancestorIdsSet), parentMap }
 }
 
 /**
- * Returns true if folderId is the same as or a descendant of any folder in sharedIds (i.e. "under" a shared folder).
- * Used for lazy descendant loading: when listing this folder, show all children without filtering.
- * Walks up from folderId via getFileMetadata (max MAX_ANCESTOR_DEPTH steps).
+ * DB-based check: returns true if folderId is the same as or a descendant of any folder in sharedIds.
+ * Uses the parentMap built from engagement_documents rows — no Drive API calls.
+ * Used by the EC/Guest DB-driven listing path to decide whether to show all children.
+ */
+export function isFolderUnderSharedFolderDB(
+  folderId: string,
+  sharedIds: string[],
+  parentMap: Map<string, string>
+): boolean {
+  const sharedSet = new Set(sharedIds)
+  if (sharedSet.has(folderId)) return true
+  let currentId: string | null = folderId
+  const seen = new Set<string>()
+  while (currentId) {
+    if (seen.has(currentId)) break
+    seen.add(currentId)
+    const parentId = parentMap.get(currentId)
+    if (!parentId) break
+    if (sharedSet.has(parentId)) return true
+    currentId = parentId
+  }
+  return false
+}
+
+/**
+ * Drive-based check (used by non-DB listing paths): returns true if folderId is the same as or a
+ * descendant of any folder in sharedIds. Walks up via getFileMetadata (max MAX_ANCESTOR_DEPTH steps).
  */
 export async function isFolderUnderSharedFolder(
   folderId: string,
@@ -101,7 +148,6 @@ async function buildDescendantIds(
           }
         }
       } catch (e) {
-        // Folder may be inaccessible or deleted; skip and continue
         console.warn(`[project-sharing-ids] listFiles for folder ${folderId} failed`, e)
       }
     }
@@ -109,24 +155,16 @@ async function buildDescendantIds(
   return Array.from(descendantIds)
 }
 
-/** EC enabled: supports legacy (settings.externalCollaborator === true) and new shape (settings.share.externalCollaborator.enabled). */
 function isECEnabled(settings: unknown): boolean {
   if (!settings || typeof settings !== 'object') return false
-  const s = settings as Record<string, unknown>
-  if (s.externalCollaborator === true) return true
-  const share = s.share as Record<string, unknown> | undefined
-  const ec = share?.externalCollaborator as { enabled?: boolean } | undefined
-  return ec?.enabled === true
+  const share = (settings as Record<string, unknown>).share as Record<string, unknown> | undefined
+  return (share?.externalCollaborator as { enabled?: boolean } | undefined)?.enabled === true
 }
 
-/** Guest enabled: supports legacy (settings.guest === true) and new shape (settings.share.guest.enabled). */
 function isGuestEnabled(settings: unknown): boolean {
   if (!settings || typeof settings !== 'object') return false
-  const s = settings as Record<string, unknown>
-  if (s.guest === true) return true
-  const share = s.share as Record<string, unknown> | undefined
-  const guest = share?.guest as { enabled?: boolean } | undefined
-  return guest?.enabled === true
+  const share = (settings as Record<string, unknown>).share as Record<string, unknown> | undefined
+  return (share?.guest as { enabled?: boolean } | undefined)?.enabled === true
 }
 
 export type GetSharedAndAncestorOptions = {
@@ -135,27 +173,30 @@ export type GetSharedAndAncestorOptions = {
 }
 
 /**
- * Returns shared external ids, ancestor folder ids, and optionally descendant ids for the given project and persona.
- * - personaSlug 'eng_ext_collaborator' => items shared with External Collaborator (and their ancestors; descendants only if !skipDescendants)
- * - personaSlug 'eng_viewer' => items shared with Guest (and their ancestors; descendants only if !skipDescendants)
- * - personaSlug null => union of both (for backward compat / restrictToSharedOnly without persona)
+ * Returns shared external ids, ancestor folder ids, optionally descendant ids, and the parentMap
+ * for the given project and persona.
+ * parentMap is the Drive-authoritative id→parentId map, exposed for DB-based folder checks.
  */
 export async function getSharedAndAncestorIdsForPersona(
   projectId: string,
   personaSlug: SharedOnlyPersonaSlug | null,
   options?: GetSharedAndAncestorOptions
-): Promise<{ sharedIds: string[]; ancestorIds: string[]; descendantIds: string[] }> {
+): Promise<{ sharedIds: string[]; ancestorIds: string[]; descendantIds: string[]; parentMap: Map<string, string> }> {
   const { skipDescendants = false } = options ?? {}
   const allRows = await prisma.engagementDocument.findMany({
     where: { engagementId: projectId },
     select: {
       externalId: true,
+      parentId: true,
+      isFolder: true,
       settings: true,
     },
   })
 
   const settingsRows = allRows.filter((r) => r.externalId) as {
     externalId: string
+    parentId: string | null
+    isFolder: boolean
     settings: unknown
   }[]
 
@@ -173,42 +214,107 @@ export async function getSharedAndAncestorIdsForPersona(
     )
   }
 
-  let ancestorIds: string[] = []
-  let descendantIds: string[] = []
-  if (sharedIds.length > 0) {
+  const sharedFolderIds = settingsRows
+    .filter((r) => sharedIds.includes(r.externalId) && r.isFolder)
+    .map((r) => r.externalId)
+  const needsConnector = sharedIds.length > 0 || (!skipDescendants && sharedFolderIds.length > 0)
+
+  let connectorId: string | undefined
+  let googleDriveConnector: DriveConnector | undefined
+  if (needsConnector) {
     const project = await prisma.engagement.findFirst({
       where: { id: projectId, isDeleted: false },
       select: {
         client: {
           select: {
             firm: {
-              select: {
-                connector: {
-                  select: { id: true },
-                },
-              },
+              select: { connector: { select: { id: true } } },
             },
           },
         },
       },
     })
-    const connectorId = project?.client?.firm?.connector?.id
+    connectorId = project?.client?.firm?.connector?.id
     if (connectorId) {
-      const { googleDriveConnector } = await import('@/lib/google-drive-connector')
-      const [ancestors, sharedFolderIds] = await Promise.all([
-        buildAncestorFolders(sharedIds, connectorId, googleDriveConnector),
-        googleDriveConnector.getFilesMetadata(connectorId, sharedIds).then((metas) =>
-          metas.filter((m) => m.mimeType === FOLDER_MIME).map((m) => m.id)
-        ),
-      ])
-      ancestorIds = ancestors
-      if (!skipDescendants && sharedFolderIds.length > 0) {
-        descendantIds = await buildDescendantIds(sharedFolderIds, connectorId, googleDriveConnector)
+      ;({ googleDriveConnector } = await import('@/lib/google-drive-connector'))
+    }
+  }
+
+  const driveFallback = connectorId && googleDriveConnector
+    ? { connectorId, googleDriveConnector }
+    : undefined
+
+  const { ancestorIds, parentMap } = sharedIds.length > 0
+    ? await buildAncestorFoldersFromDB(sharedIds, settingsRows, driveFallback)
+    : { ancestorIds: [], parentMap: new Map<string, string>() }
+
+  let descendantIds: string[] = []
+  if (!skipDescendants && sharedFolderIds.length > 0 && connectorId && googleDriveConnector) {
+    descendantIds = await buildDescendantIds(sharedFolderIds, connectorId, googleDriveConnector)
+  }
+
+  return { sharedIds, ancestorIds, descendantIds, parentMap }
+}
+
+/**
+ * Count of non-folder files accessible to the given persona for a project.
+ * Pure DB computation: one query + in-memory traversal via parentMap. No Drive API calls.
+ * Counts directly shared files plus all non-folder descendants of shared folders.
+ */
+export async function getAccessibleFileCountForPersona(
+  projectId: string,
+  personaSlug: SharedOnlyPersonaSlug
+): Promise<number> {
+  const allRows = await prisma.engagementDocument.findMany({
+    where: { engagementId: projectId },
+    select: { externalId: true, parentId: true, isFolder: true, settings: true },
+  })
+
+  const rows = allRows.filter((r) => r.externalId) as {
+    externalId: string
+    parentId: string | null
+    isFolder: boolean
+    settings: unknown
+  }[]
+
+  const isEnabled = personaSlug === 'eng_ext_collaborator' ? isECEnabled : isGuestEnabled
+  const sharedIdSet = new Set(rows.filter((r) => isEnabled(r.settings)).map((r) => r.externalId))
+
+  // Build children map for forward traversal
+  const childrenMap = new Map<string, { externalId: string; isFolder: boolean }[]>()
+  for (const row of rows) {
+    if (!row.parentId) continue
+    if (!childrenMap.has(row.parentId)) childrenMap.set(row.parentId, [])
+    childrenMap.get(row.parentId)!.push({ externalId: row.externalId, isFolder: row.isFolder })
+  }
+
+  let count = 0
+
+  // Directly shared non-folder items
+  for (const row of rows) {
+    if (sharedIdSet.has(row.externalId) && !row.isFolder) count++
+  }
+
+  // Descendants of shared folders (BFS via childrenMap)
+  const visited = new Set<string>()
+  const queue = rows
+    .filter((r) => sharedIdSet.has(r.externalId) && r.isFolder)
+    .map((r) => r.externalId)
+
+  while (queue.length > 0) {
+    const folderId = queue.shift()!
+    if (visited.has(folderId)) continue
+    visited.add(folderId)
+    for (const child of childrenMap.get(folderId) ?? []) {
+      if (!child.isFolder) {
+        count++
+      } else {
+        queue.push(child.externalId)
       }
     }
   }
 
-  return { sharedIds, ancestorIds, descendantIds }
+  return count
 }
 
 export type SharedIdsForAllPersonas = {
@@ -230,59 +336,25 @@ export async function getSharedAndAncestorIdsForAllPersonas(
     where: { engagementId: projectId },
     select: {
       externalId: true,
+      parentId: true,
       settings: true,
     },
   })
 
   const settingsRows = allRows.filter((r) => r.externalId) as {
     externalId: string
+    parentId: string | null
     settings: unknown
   }[]
 
   const sharedIdsForEC = settingsRows.filter((r) => isECEnabled(r.settings)).map((r) => r.externalId)
   const sharedIdsForGuest = settingsRows.filter((r) => isGuestEnabled(r.settings)).map((r) => r.externalId)
-  const sharedIdsUnion = Array.from(
-    new Set([...sharedIdsForEC, ...sharedIdsForGuest])
-  )
+  const sharedIdsUnion = Array.from(new Set([...sharedIdsForEC, ...sharedIdsForGuest]))
 
-  let ancestorIds: string[] = []
-  let descendantIds: string[] = []
-  if (sharedIdsUnion.length > 0) {
-    const project = await prisma.engagement.findFirst({
-      where: { id: projectId, isDeleted: false },
-      select: {
-        client: {
-          select: {
-            firm: {
-              select: {
-                connector: {
-                  select: { id: true },
-                },
-              },
-            },
-          },
-        },
-      },
-    })
-    const connectorId = project?.client?.firm?.connector?.id
-    if (connectorId) {
-      const { googleDriveConnector } = await import('@/lib/google-drive-connector')
-      const [ancestors, sharedFolderIds] = await Promise.all([
-        buildAncestorFolders(sharedIdsUnion, connectorId, googleDriveConnector),
-        googleDriveConnector.getFilesMetadata(connectorId, sharedIdsUnion).then((metas) =>
-          metas.filter((m) => m.mimeType === FOLDER_MIME).map((m) => m.id)
-        ),
-      ])
-      ancestorIds = ancestors
-      // Skip buildDescendantIds: sharing/ids client only needs sharedIds + ancestorIds for badges. Saves cost.
-    }
-  }
+  const { ancestorIds } = sharedIdsUnion.length > 0
+    ? await buildAncestorFoldersFromDB(sharedIdsUnion, settingsRows)
+    : { ancestorIds: [] }
+  const descendantIds: string[] = []
 
-  return {
-    sharedIdsForEC,
-    sharedIdsForGuest,
-    sharedIdsUnion,
-    ancestorIds,
-    descendantIds,
-  }
+  return { sharedIdsForEC, sharedIdsForGuest, sharedIdsUnion, ancestorIds, descendantIds }
 }

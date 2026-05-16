@@ -43,10 +43,6 @@ import {
   targetAudienceScrollMarginClass,
 } from "@/lib/marketing/target-audience-nav"
 import { cn } from "@/lib/utils"
-import {
-  markRealityCheckViewedFromTransformationModal,
-  markTrustArchitectureViewedFromTransformationModal,
-} from "@/lib/marketing/landing-section-dismissals"
 
 function WhatsAppCarrierIcon({ className }: { className?: string }) {
   return (
@@ -1217,21 +1213,36 @@ export function FirmTransformationSection({ skin = "kinetic" as LandingSkin }: {
 
   const onRealityModalOpenChange = useCallback((open: boolean) => {
     setRealityModalOpen(open)
+    // Clear hash when closing the modal so it can be navigated to again
+    if (!open && window.location.hash === "#reality-check") {
+      window.history.replaceState(null, "", window.location.pathname)
+    }
   }, [])
 
   const onTrustModalOpenChange = useCallback((open: boolean) => {
     setTrustArchitectureModalOpen(open)
+    // Clear hash when closing the modal so it can be navigated to again
+    if (!open && window.location.hash === "#trust-architecture") {
+      window.history.replaceState(null, "", window.location.pathname)
+    }
   }, [])
 
-  // Controlled Radix Dialog does not call onOpenChange when the parent sets `open` (e.g. CTA clicks).
-  // Mark dismissals here so the landing page can hide duplicate sections below the fold.
-  useLayoutEffect(() => {
-    if (realityModalOpen) markRealityCheckViewedFromTransformationModal()
-  }, [realityModalOpen])
 
-  useLayoutEffect(() => {
-    if (trustArchitectureModalOpen) markTrustArchitectureViewedFromTransformationModal()
-  }, [trustArchitectureModalOpen])
+  // Open modals when navigating to their respective hash anchors
+  useEffect(() => {
+    const checkHash = () => {
+      const hash = window.location.hash
+      if (hash === "#reality-check") setRealityModalOpen(true)
+      if (hash === "#trust-architecture") setTrustArchitectureModalOpen(true)
+    }
+
+    // Check on mount
+    checkHash()
+
+    // Poll for hash changes since hashchange event may not fire reliably
+    const interval = setInterval(checkHash, 100)
+    return () => clearInterval(interval)
+  }, [])
 
   return (
     <section

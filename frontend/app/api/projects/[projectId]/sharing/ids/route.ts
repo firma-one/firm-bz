@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { getSharedAndAncestorIdsForAllPersonas } from '@/lib/project-sharing-ids'
+import { prisma } from '@/lib/prisma'
 
 /**
  * GET /api/projects/[projectId]/sharing/ids
@@ -19,7 +20,22 @@ export async function GET(
 
     const { projectId } = await params
 
-    const result = await getSharedAndAncestorIdsForAllPersonas(projectId)
+    const [result, sharedByMeRows] = await Promise.all([
+      getSharedAndAncestorIdsForAllPersonas(projectId),
+      prisma.engagementDocument.findMany({
+        where: {
+          engagementId: projectId,
+          slug: { not: null },
+          OR: [
+            { createdBy: user.id },
+            { settings: { path: ['share', 'createdBy'], equals: user.id } },
+          ],
+        },
+        select: { externalId: true },
+      }),
+    ])
+
+    const sharedByMeExternalIds = sharedByMeRows.filter(r => r.externalId).map(r => r.externalId!)
 
     return NextResponse.json({
       sharedExternalIds: result.sharedIdsUnion,
@@ -28,6 +44,7 @@ export async function GET(
       ancestorFolderIdsForEC: result.ancestorIds,
       sharedExternalIdsForGuest: result.sharedIdsForGuest,
       ancestorFolderIdsForGuest: result.ancestorIds,
+      sharedByMeExternalIds,
     })
   } catch (e) {
     console.error('GET sharing ids error', e)

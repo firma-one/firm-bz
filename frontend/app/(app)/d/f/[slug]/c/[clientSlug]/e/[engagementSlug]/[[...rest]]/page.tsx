@@ -9,20 +9,24 @@ import {
   resolveProjectCapabilitiesForPersona,
 } from "@/lib/permissions/resolve"
 import { createClient } from "@/utils/supabase/server"
-import { prisma } from "@/lib/prisma"
+import { prisma, basePrisma } from "@/lib/prisma"
 import { notFound, redirect } from "next/navigation"
 import { ErrorBoundary } from "@/components/error-boundary"
 import type { ProjectPathSegments } from "@/components/projects/project-workspace"
+import { getAccessibleFileCountForPersona } from "@/lib/project-sharing-ids"
 
-const VALID_TABS = new Set(['files', 'shares', 'comments', 'members', 'insights', 'sources', 'audit', 'settings'])
+const VALID_TABS = new Set(['files', 'shares', 'comments', 'members', 'insights', 'sources', 'audit', 'settings', 'wiki'])
 
 function parseRest(rest: string[] | undefined): ProjectPathSegments {
   const tab = rest?.[0] && VALID_TABS.has(rest[0]) ? rest[0] : 'files'
-  if (tab !== 'shares') {
-    return { tab, viewMode: 'list' }
+  if (tab === 'shares') {
+    const viewMode = (rest?.[1] === 'board' ? 'board' : (rest?.[1] === 'list' ? 'list' : 'grid')) as 'list' | 'board' | 'grid'
+    return { tab, viewMode, wikiPageSlug: null }
   }
-  const viewMode = (rest?.[1] === 'board' ? 'board' : (rest?.[1] === 'list' ? 'list' : 'grid')) as 'list' | 'board' | 'grid'
-  return { tab, viewMode }
+  if (tab === 'wiki') {
+    return { tab, viewMode: 'list', wikiPageSlug: rest?.[1] ?? null }
+  }
+  return { tab, viewMode: 'list', wikiPageSlug: null }
 }
 
 interface PageProps {
@@ -103,9 +107,24 @@ export default async function EngagementPage({ params }: PageProps) {
   if (pathSegments.tab === 'audit' && !canManage) {
     redirect(`${basePath}/files`)
   }
-  if (['members', 'insights', 'sources'].includes(pathSegments.tab) && !canViewInternalTabs) {
+  if (['members', 'insights', 'sources', 'wiki'].includes(pathSegments.tab) && !canViewInternalTabs) {
     redirect(`${basePath}/files`)
   }
+
+  const ecGuestPersona = (projectRole === 'eng_ext_collaborator' || projectRole === 'eng_viewer') ? projectRole : null
+
+  const [fileCount, sharesCount, commentsCount, engMemberCount, engInviteCount, auditCount, wikiPageCount] = await Promise.all([
+    ecGuestPersona
+      ? getAccessibleFileCountForPersona(project.id, ecGuestPersona)
+      : (basePrisma as any).engagementDocument.count({ where: { engagementId: project.id, isFolder: false } }),
+    (basePrisma as any).engagementDocument.count({ where: { engagementId: project.id, slug: { not: null } } }),
+    (basePrisma as any).docCommentMessage.count({ where: { engagementId: project.id } }),
+    (basePrisma as any).engagementMember.count({ where: { engagementId: project.id } }),
+    (basePrisma as any).engagementInvitation.count({ where: { engagementId: project.id, status: { not: 'JOINED' } } }),
+    (basePrisma as any).platformAuditEvent.count({ where: { engagementId: project.id, scope: 'PROJECT' } }),
+    (prisma as any).engagementWikiPage.count({ where: { engagementId: project.id } }),
+  ])
+  const engagementMemberCount = engMemberCount + engInviteCount
 
   return (
     <div className="h-full flex flex-col">
@@ -124,6 +143,7 @@ export default async function EngagementPage({ params }: PageProps) {
           canEdit={canEdit}
           canManage={canManage}
           restrictToSharedOnly={restrictToSharedOnly}
+          isExternalViewer={projectRole === 'eng_viewer'}
           projectDescription={project.description ?? undefined}
           engagementKickoffDate={project.kickoffDate}
           engagementDueDate={project.dueDate}
@@ -135,6 +155,12 @@ export default async function EngagementPage({ params }: PageProps) {
           projectPersonaDisplayName={projectPersonaDisplayName}
           engagementSlug={engagementSlug}
           firmSandboxOnly={org.sandboxOnly ?? false}
+          fileCount={fileCount}
+          sharesCount={sharesCount}
+          commentsCount={commentsCount}
+          memberCount={engagementMemberCount}
+          auditCount={auditCount}
+          wikiPageCount={wikiPageCount}
         />
       </ErrorBoundary>
     </div>
