@@ -245,6 +245,9 @@ export interface LockBlock {
   uploadedAt?: string
   finalizedBy?: string
   finalizedAt?: string
+  acceptedBy?: string
+  acceptedAt?: string
+  downgraded?: Array<{ permissionId: string; previousRole: string }>
 }
 
 export function getLock(settings: unknown): LockBlock | null {
@@ -253,12 +256,24 @@ export function getLock(settings: unknown): LockBlock | null {
   if (!lock || typeof lock !== 'object') return null
   const l = lock as Record<string, unknown>
   if (l.type !== 'intake' && l.type !== 'finalize') return null
+  const downgraded = Array.isArray(l.downgraded)
+    ? (l.downgraded as unknown[]).filter(
+        (x): x is { permissionId: string; previousRole: string } =>
+          !!x &&
+          typeof x === 'object' &&
+          typeof (x as any).permissionId === 'string' &&
+          typeof (x as any).previousRole === 'string'
+      )
+    : undefined
   return {
     type: l.type as 'intake' | 'finalize',
     uploadedBy: typeof l.uploadedBy === 'string' ? l.uploadedBy : undefined,
     uploadedAt: typeof l.uploadedAt === 'string' ? l.uploadedAt : undefined,
     finalizedBy: typeof l.finalizedBy === 'string' ? l.finalizedBy : undefined,
     finalizedAt: typeof l.finalizedAt === 'string' ? l.finalizedAt : undefined,
+    acceptedBy: typeof l.acceptedBy === 'string' ? l.acceptedBy : undefined,
+    acceptedAt: typeof l.acceptedAt === 'string' ? l.acceptedAt : undefined,
+    downgraded,
   }
 }
 
@@ -268,6 +283,12 @@ export function isIntakePending(settings: unknown): boolean {
 
 export function isDocumentFinalized(settings: unknown): boolean {
   return getLock(settings)?.type === 'finalize'
+}
+
+/** Returns true when the document has been marked private (hidden from EC/EV users). */
+export function isDocumentPrivate(settings: unknown): boolean {
+  if (!settings || typeof settings !== 'object') return false
+  return (settings as Record<string, unknown>).locked === 'private'
 }
 
 /** Flatten for UI that still expects legacy keys (e.g. Shares list response). */

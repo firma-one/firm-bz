@@ -195,7 +195,6 @@ export interface DriveFile {
   lastModifyingUser?: {
     displayName: string
     photoLink?: string
-    emailAddress?: string
   }
   owners?: {
     displayName: string
@@ -235,10 +234,12 @@ export interface DriveFile {
     summary?: string
     [key: string]: any
   }
-  /** True when engagement lead locked the document version (Drive + settings). */
-  versionLocked?: boolean
-  /** Intake or finalize lock state from settings.lock */
-  lock?: { type: 'intake' | 'finalize'; uploadedBy?: string; finalizedBy?: string } | null
+  /** Intake or finalize lock — present when file is pending intake or finalized. */
+  lock?: { type: 'intake' | 'finalize'; uploadedBy?: string; uploadedAt?: string; finalizedBy?: string; finalizedAt?: string } | null
+  /** True when the document has been marked private (hidden from EC/EV users). */
+  isPrivate?: boolean
+  /** True when the document is shared with EC or EV (disables "Make Private"). */
+  isSharedWithExternal?: boolean
 }
 
 export interface DriveRevision {

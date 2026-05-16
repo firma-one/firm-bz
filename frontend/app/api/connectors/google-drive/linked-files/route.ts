@@ -9,8 +9,7 @@ import { logger } from '@/lib/logger'
 import { GoogleDriveAuthError } from '@/lib/google-drive-connector'
 import { blockIfEngagementFileMutationForbidden } from '@/lib/engagement-access'
 import { IndexingInterceptor } from '@/lib/services/indexing-interceptor'
-import { isDocumentVersionLocked } from '@/lib/document-version-lock'
-import { getLock } from '@/lib/sharing-settings'
+import { getLock, isDocumentPrivate } from '@/lib/sharing-settings'
 // GET: List linked files for a connector
 export async function GET(request: NextRequest) {
     try {
@@ -362,6 +361,7 @@ export async function POST(request: NextRequest) {
                     }),
                 ])
 
+                const visibleDbRows = dbRows.filter((row) => !isDocumentPrivate(row.settings))
                 const seenIds = new Set<string>()
                 const mapRow = (row: any) => ({
                     id: row.externalId,
@@ -373,10 +373,9 @@ export async function POST(request: NextRequest) {
                     isFolder: row.isFolder,
                     connectorId: connector.id,
                     projectDocumentId: row.id,
-                    versionLocked: isDocumentVersionLocked(row.settings),
                     lock: getLock(row.settings),
                 })
-                for (const row of [...dbRows, ...intakeRows]) {
+                for (const row of [...visibleDbRows, ...intakeRows]) {
                     if (!seenIds.has(row.externalId)) {
                         seenIds.add(row.externalId)
                         files.push(mapRow(row))
@@ -419,13 +418,21 @@ export async function POST(request: NextRequest) {
 
                     const internalByExternal = new Map<string, string>(enrichRows.map((r: any) => [r.externalId, r.id]))
                     const lockByExternal = new Map<string, any>(enrichRows.map((r: any) => [r.externalId, getLock(r.settings)]))
-                    const lockedByExternal = new Map<string, boolean>(enrichRows.map((r: any) => [r.externalId, isDocumentVersionLocked(r.settings)]))
+const privateByExternal = new Map<string, boolean>(enrichRows.map((r: any) => [r.externalId, isDocumentPrivate(r.settings)]))
+                    const sharedExternalByExternal = new Map<string, boolean>(enrichRows.map((r: any) => {
+                        const s = (r.settings as Record<string, any>) || {}
+                        const share = s.share
+                        const ecEnabled = share?.externalCollaborator?.enabled === true || s.externalCollaborator === true
+                        const guestEnabled = share?.guest?.enabled === true || s.guest === true
+                        return [r.externalId, ecEnabled || guestEnabled]
+                    }))
 
                     files = files.map((f: any) => ({
                         ...f,
                         projectDocumentId: internalByExternal.get(f.id) ?? undefined,
-                        versionLocked: lockedByExternal.get(f.id) ?? false,
                         lock: lockByExternal.get(f.id) ?? null,
+                        isPrivate: privateByExternal.get(f.id) ?? false,
+                        isSharedWithExternal: sharedExternalByExternal.get(f.id) ?? false,
                     }))
 
                     // Merge PENDING intake rows that aren't already in Drive listing
@@ -442,7 +449,6 @@ export async function POST(request: NextRequest) {
                                 isFolder: row.isFolder ?? false,
                                 connectorId: connector.id,
                                 projectDocumentId: row.id,
-                                versionLocked: false,
                                 lock: getLock(row.settings),
                             })
                         }

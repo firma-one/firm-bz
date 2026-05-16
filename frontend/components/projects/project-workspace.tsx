@@ -42,6 +42,8 @@ interface ProjectWorkspaceProps {
     canManage?: boolean
     /** When true (eng_ext_collaborator/eng_viewer), only show shared docs in file list */
     restrictToSharedOnly?: boolean
+    /** When true (eng_viewer only), shows Accept Document option in document action menu */
+    isExternalViewer?: boolean
     projectDescription?: string
     engagementKickoffDate?: string | null
     engagementDueDate?: string | null
@@ -81,6 +83,7 @@ export function ProjectWorkspace({
     canEdit = false,
     canManage = false,
     restrictToSharedOnly = false,
+    isExternalViewer = false,
     projectDescription,
     engagementKickoffDate = null,
     engagementDueDate = null,
@@ -338,6 +341,7 @@ export function ProjectWorkspace({
                                     projectId={projectId}
                                     canManage={canManage}
                                     restrictToSharedOnly={restrictToSharedOnly}
+                                    isExternalViewer={isExternalViewer}
                                     connectorRootFolderId={connectorRootFolderId ?? undefined}
                                     orgName={orgName}
                                     clientName={clientName}

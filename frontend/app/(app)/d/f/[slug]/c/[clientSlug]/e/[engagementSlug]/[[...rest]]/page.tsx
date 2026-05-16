@@ -143,6 +143,7 @@ export default async function EngagementPage({ params }: PageProps) {
           canEdit={canEdit}
           canManage={canManage}
           restrictToSharedOnly={restrictToSharedOnly}
+          isExternalViewer={projectRole === 'eng_viewer'}
           projectDescription={project.description ?? undefined}
           engagementKickoffDate={project.kickoffDate}
           engagementDueDate={project.dueDate}

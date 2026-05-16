@@ -10,8 +10,7 @@ import {
   isExternalEngagementRole,
   requireEngagementMember,
 } from '@/lib/engagement-access'
-import { isDocumentVersionLocked } from '@/lib/document-version-lock'
-import { parseSettingsFromDb, buildSettingsForDb } from '@/lib/sharing-settings'
+import { isDocumentFinalized, parseSettingsFromDb, buildSettingsForDb } from '@/lib/sharing-settings'
 import { applyDiagonalWatermark } from '@/lib/watermark-pdf'
 
 export async function POST(
@@ -118,7 +117,7 @@ export async function POST(
             })
         }
 
-        const versionLocked = isDocumentVersionLocked(document.settings)
+        const versionLocked = isDocumentFinalized(document.settings)
 
         let role: 'writer' | 'reader' = projectMember.role === 'eng_viewer' ? 'reader' : 'writer'
         if (engagementStatus && isEngagementMemberReadOnlyWhenCompleted(engagementStatus, projectMember.role)) {

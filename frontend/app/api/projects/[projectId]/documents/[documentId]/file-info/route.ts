@@ -8,6 +8,7 @@ import { canAccessRbacAdmin } from '@/lib/permission-helpers'
 import { getViewAsPersonaFromCookie } from '@/lib/view-as-server'
 import { getSharedAndAncestorIdsForPersona } from '@/lib/project-sharing-ids'
 import { requireEngagementMember, getEngagementStatus, isExternalEngagementRole } from '@/lib/engagement-access'
+import { isDocumentFinalized } from '@/lib/sharing-settings'
 
 function notFound() {
   return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -64,13 +65,11 @@ export async function GET(
       },
       select: { settings: true },
     })
-    const { isDocumentVersionLocked } = await import('@/lib/document-version-lock')
-
     return NextResponse.json({
       externalId: fileInfo.externalId,
       fileName: fileInfo.fileName ?? null,
       engagementStatus,
-      versionLocked: docRow ? isDocumentVersionLocked(docRow.settings) : false,
+      versionLocked: docRow ? isDocumentFinalized(docRow.settings) : false,
     })
   } catch (e) {
     return NextResponse.json({ error: 'Failed to resolve file info' }, { status: 500 })

@@ -4,12 +4,15 @@ import { prisma } from '@/lib/prisma'
 import { getFileInfo } from '@/lib/file-utils'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { requireEngagementMember, externalMemberCanAccessDocument } from '@/lib/engagement-access'
-import { getVersionLockFromSettings, type VersionLockDowngrade } from '@/lib/document-version-lock'
+import { isDocumentFinalized } from '@/lib/sharing-settings'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
+
+const EXTERNAL_ROLES = new Set(['eng_ext_collaborator', 'eng_viewer'])
 
 /**
  * PATCH /api/projects/[projectId]/documents/[documentId]/sharing/accept
- * Client acceptance: EC marks the document as accepted, which locks it (version-finalized).
+ * Client acceptance: EC or EV marks the document as accepted, which locks it (version-finalized).
+ * Uses the same settings.lock = { type: 'finalize' } model as the EL finalize route.
  * Engagement Lead can still unlock it afterwards via /sharing/unlock.
  */
 export async function PATCH(
@@ -24,8 +27,8 @@ export async function PATCH(
     const { projectId, documentId: documentIdParam } = await params
 
     const member = await requireEngagementMember(projectId, user.id)
-    if (!member || member.role !== 'eng_ext_collaborator') {
-      return NextResponse.json({ error: 'Forbidden: only external collaborators can accept documents' }, { status: 403 })
+    if (!member || !EXTERNAL_ROLES.has(member.role)) {
+      return NextResponse.json({ error: 'Forbidden: only external members can accept documents' }, { status: 403 })
     }
 
     const fileInfo = await getFileInfo(projectId, documentIdParam)
@@ -51,7 +54,7 @@ export async function PATCH(
     if (existing.isFolder)
       return NextResponse.json({ error: 'Acceptance applies to files only' }, { status: 400 })
 
-    if (getVersionLockFromSettings(existing.settings))
+    if (isDocumentFinalized(existing.settings))
       return NextResponse.json({ error: 'Document is already finalized' }, { status: 409 })
 
     let connectorId = existing.connectorId
@@ -66,7 +69,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'No active Google Drive connection' }, { status: 500 })
 
     // Downgrade elevated Drive permissions to reader (same as finalize route)
-    const downgraded: VersionLockDowngrade[] = []
+    const downgraded: Array<{ permissionId: string; previousRole: string }> = []
     const perms = await googleDriveConnector.listFilePermissions(connectorId, fileInfo.externalId)
     const elevRoles = new Set(['writer', 'fileOrganizer', 'organizer', 'commenter'])
 
@@ -92,8 +95,9 @@ export async function PATCH(
     const share = (prevSettings.share as Record<string, unknown> | undefined) || {}
     const nextSettings: Record<string, unknown> = {
       ...prevSettings,
+      // Unified lock model — same as finalize route; unlocked via /sharing/unlock
+      lock: { type: 'finalize', finalizedBy: user.id, finalizedAt: now, acceptedBy: user.id, acceptedAt: now, downgraded },
       share: { ...share, finalizedAt: now, acceptedAt: now, acceptedBy: user.id },
-      versionLock: { lockedAt: now, downgraded },
     }
 
     await prisma.engagementDocument.update({
@@ -138,11 +142,7 @@ export async function PATCH(
       .meta({ fileName: existing.fileName, acceptedByClient: true })
       .fireAndForget()
 
-    const updated = await prisma.engagementDocument.findUnique({
-      where: { engagementId_firmId_externalId: compound },
-    })
-
-    return NextResponse.json({ sharing: updated })
+    return NextResponse.json({ ok: true })
   } catch (e) {
     console.error('PATCH sharing/accept error', e)
     return NextResponse.json({ error: 'Failed to accept document' }, { status: 500 })

@@ -93,6 +93,8 @@ interface ProjectSharesTabProps {
   canManage?: boolean
   /** True for external personas (EC, EV) — hides internal-only UI like Drive Actions. */
   restrictToSharedOnly?: boolean
+  /** True only for External Viewer (eng_viewer) — shows Accept Document option. */
+  isExternalViewer?: boolean
   connectorRootFolderId?: string
   orgName?: string
   clientName?: string
@@ -201,6 +203,7 @@ function DraggableCard({
   viewerLabel,
   onParentFolderClick,
   isExternalPersona,
+  isExternalViewer,
   deeplinkBase,
 }: {
   id: string
@@ -221,6 +224,7 @@ function DraggableCard({
   viewerLabel: string
   onParentFolderClick?: (parentId: string, parentName: string) => void
   isExternalPersona?: boolean
+  isExternalViewer?: boolean
   deeplinkBase?: string
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id })
@@ -278,6 +282,7 @@ function DraggableCard({
         viewerLabel={viewerLabel}
         onParentFolderClick={onParentFolderClick}
         isExternalPersona={isExternalPersona}
+        isExternalViewer={isExternalViewer}
         deeplinkBase={deeplinkBase}
       />
     </motion.div>
@@ -305,6 +310,7 @@ function ShareCardContent({
   viewerLabel,
   onParentFolderClick,
   isExternalPersona,
+  isExternalViewer,
   deeplinkBase,
 }: {
   share: ShareRecord
@@ -326,6 +332,7 @@ function ShareCardContent({
   viewerLabel: string
   onParentFolderClick?: (parentId: string, parentName: string) => void
   isExternalPersona?: boolean
+  isExternalViewer?: boolean
   deeplinkBase?: string
 }) {
   const latestComment = share.comments?.[0]
@@ -410,7 +417,8 @@ function ShareCardContent({
               projectId={share.projectId}
               onShareSaved={onShareSaved}
               onOpenDocument={() => handleSecureOpen(share)}
-              isExternalCollaborator={isExternalPersona}
+              isExternalUser={isExternalPersona}
+              isExternalViewer={isExternalViewer}
             />
             {isRegrantingId === share.id && <LoadingSpinner size="sm" className="min-h-0 ml-0.5" />}
           </div>
@@ -587,6 +595,7 @@ function SharesListView({
   onOpenComments,
   onParentFolderClick,
   isExternalPersona,
+  isExternalViewer,
   deeplinkBase,
 }: {
   shares: ShareRecord[]
@@ -602,6 +611,7 @@ function SharesListView({
   onOpenComments?: (share: ShareRecord) => void
   onParentFolderClick?: (parentId: string, parentName: string) => void
   isExternalPersona?: boolean
+  isExternalViewer?: boolean
   deeplinkBase?: string
 }) {
   const [actionMenuOpenShareId, setActionMenuOpenShareId] = useState<string | null>(null)
@@ -677,7 +687,8 @@ function SharesListView({
                       onShareSaved={onShareSaved}
                       onOpenChange={(open) => setActionMenuOpenShareId(open ? share.id : null)}
                       onOpenDocument={() => handleSecureOpen(share)}
-                      isExternalCollaborator={isExternalPersona}
+                      isExternalUser={isExternalPersona}
+                      isExternalViewer={isExternalViewer}
                     />
                     {isRegrantingId === share.id && (
                       <LoadingSpinner size="sm" className="min-h-0 ml-1" />
@@ -773,6 +784,7 @@ function SharesGridView({
   onOpenComments,
   onParentFolderClick,
   isExternalPersona,
+  isExternalViewer,
   deeplinkBase,
 }: {
   shares: ShareRecord[]
@@ -788,6 +800,7 @@ function SharesGridView({
   onOpenComments?: (share: ShareRecord) => void
   onParentFolderClick?: (parentId: string, parentName: string) => void
   isExternalPersona?: boolean
+  isExternalViewer?: boolean
   deeplinkBase?: string
 }) {
   return (
@@ -808,6 +821,7 @@ function SharesGridView({
           onOpenComments={onOpenComments}
           onParentFolderClick={onParentFolderClick}
           isExternalPersona={isExternalPersona}
+          isExternalViewer={isExternalViewer}
           deeplinkBase={deeplinkBase}
         />
       ))}
@@ -829,6 +843,7 @@ function ShareCard({
   onOpenComments,
   onParentFolderClick,
   isExternalPersona,
+  isExternalViewer,
   deeplinkBase,
 }: {
   share: ShareRecord
@@ -844,6 +859,7 @@ function ShareCard({
   onOpenComments?: (share: ShareRecord) => void
   onParentFolderClick?: (parentId: string, parentName: string) => void
   isExternalPersona?: boolean
+  isExternalViewer?: boolean
   deeplinkBase?: string
 }) {
   const isFolder = share.documentMimeType?.includes('folder')
@@ -1003,7 +1019,8 @@ function ShareCard({
               projectId={share.projectId}
               onShareSaved={onShareSaved}
               onOpenDocument={() => handleSecureOpen(share)}
-              isExternalCollaborator={isExternalPersona}
+              isExternalUser={isExternalPersona}
+              isExternalViewer={isExternalViewer}
             />
             {isRegrantingId === share.id && (
               <LoadingSpinner size="sm" className="min-h-0 ml-1" />
@@ -1064,6 +1081,7 @@ export function ProjectSharesTab({
   projectId,
   canManage = false,
   restrictToSharedOnly = false,
+  isExternalViewer = false,
   connectorRootFolderId,
   orgName,
   clientName,
@@ -1468,6 +1486,7 @@ export function ProjectSharesTab({
               onOpenComments={handleOpenComments}
               onParentFolderClick={onOpenInFiles ? handleOpenParentFolder : undefined}
               isExternalPersona={restrictToSharedOnly}
+              isExternalViewer={isExternalViewer}
               deeplinkBase={deeplinkBase}
             />
           ) : viewMode === 'list' ? (
@@ -1485,6 +1504,7 @@ export function ProjectSharesTab({
               onOpenComments={handleOpenComments}
               onParentFolderClick={onOpenInFiles ? handleOpenParentFolder : undefined}
               isExternalPersona={restrictToSharedOnly}
+              isExternalViewer={isExternalViewer}
               deeplinkBase={deeplinkBase}
             />
           ) : (
@@ -1532,6 +1552,7 @@ export function ProjectSharesTab({
                               viewerLabel={projViewer}
                               onParentFolderClick={onOpenInFiles ? handleOpenParentFolder : undefined}
                               isExternalPersona={restrictToSharedOnly}
+                              isExternalViewer={isExternalViewer}
                               deeplinkBase={deeplinkBase}
                             />
                           ))}

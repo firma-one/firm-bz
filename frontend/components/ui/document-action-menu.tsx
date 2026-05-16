@@ -28,6 +28,7 @@ import {
   Trash2,
   Calendar,
   Check,
+  BadgeCheck,
   Info,
   Eye,
   X,
@@ -98,12 +99,10 @@ interface DocumentActionMenuProps {
   canManage?: boolean
   /** Current root folder type for persona options (Restrict / Restore / Promote). */
   currentFolderType?: 'general' | 'confidential' | 'staging'
-  /** Move document tree to Confidential (only when currentFolderType === 'general'). */
-  onRestrictToConfidential?: (doc: any) => void
-  /** Move document tree to General (only when currentFolderType === 'confidential'). */
-  onRestoreToGeneral?: (doc: any) => void
-  /** Move document tree to General (only when currentFolderType === 'staging'). */
-  onPromoteToGeneral?: (doc: any) => void
+  /** Mark document as Private (hidden from EC/EV users). EL only. */
+  onMakePrivate?: (doc: any) => void
+  /** Make document visible to all members again. EL only. */
+  onMakePublic?: (doc: any) => void
   /** Called when the action menu opens or closes (e.g. to highlight the row/card). */
   onOpenChange?: (open: boolean) => void
   /** Optional custom icon for the trigger (e.g. MoreVertical for compact layouts). */
@@ -118,8 +117,10 @@ interface DocumentActionMenuProps {
   onOpenVersionPane?: (documentId: string) => void
   /** Engagement Lead only: Lock / Unlock version (files). Prefer explicit over showShareModal. */
   isEngagementLead?: boolean
-  /** External Collaborator (EC): show Accept Document option to lock via client acceptance. */
-  isExternalCollaborator?: boolean
+  /** External user (EC or EV): hides Drive Actions and separator for all external users. */
+  isExternalUser?: boolean
+  /** External Viewer (EV only): shows Accept Document option. */
+  isExternalViewer?: boolean
   /** Base URL for deeplink (e.g. ".../files"). Appended with #doc-file:{projectDocumentId}. Falls back to Drive URL if absent. */
   deeplinkBase?: string
 }
@@ -148,9 +149,8 @@ export function DocumentActionMenu({
   onShareSaved,
   canManage = false,
   currentFolderType,
-  onRestrictToConfidential,
-  onRestoreToGeneral,
-  onPromoteToGeneral,
+  onMakePrivate,
+  onMakePublic,
   onOpenChange,
   triggerIcon,
   onOpenCommentPane,
@@ -158,7 +158,8 @@ export function DocumentActionMenu({
   onOpenActivityPane,
   onOpenVersionPane,
   isEngagementLead,
-  isExternalCollaborator,
+  isExternalUser,
+  isExternalViewer,
   deeplinkBase,
 }: DocumentActionMenuProps) {
   const [showDueDatePicker, setShowDueDatePicker] = useState(false)
@@ -168,6 +169,7 @@ export function DocumentActionMenu({
   const [selectedDueDate, setSelectedDueDate] = useState<string>("")
   const [hasCopiedName, setHasCopiedName] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [privateInfoOpen, setPrivateInfoOpen] = useState(false)
   const { addToast } = useToast()
   const rightPane = useRightPane()
   const { addTask, updateTask } = useDownloadProgress()
@@ -323,7 +325,7 @@ export function DocumentActionMenu({
   }, [projectId, leadForVersionLock, documentIdForProjectApis, addToast, onShareSaved])
 
   const handleAcceptDocument = useCallback(async () => {
-    if (!projectId || !isExternalCollaborator) return
+    if (!projectId || !isExternalViewer) return
     const docId = documentIdForProjectApis
     if (!docId) {
       addToast({ type: 'error', title: 'Unavailable', message: 'Document must be indexed before it can be accepted.' })
@@ -359,7 +361,7 @@ export function DocumentActionMenu({
       finalizeLockInFlightRef.current = false
       setFinalizeLockActiveId(null)
     }
-  }, [projectId, isExternalCollaborator, documentIdForProjectApis, addToast, onShareSaved])
+  }, [projectId, isExternalViewer, documentIdForProjectApis, addToast, onShareSaved])
 
   const getDisplayType = (doc: any) => {
     if (doc.mimeType?.includes('folder')) return "Folder"
@@ -625,65 +627,43 @@ export function DocumentActionMenu({
                           <span>Move</span>
                         </DropdownMenuItem>
                       )}
-                      {(canManage && (onRestrictToConfidential || onRestoreToGeneral || onPromoteToGeneral)) && <DropdownMenuSeparator />}
-                      {canManage && currentFolderType === 'general' && onRestrictToConfidential && (
-                        <DropdownMenuItem onClick={() => onRestrictToConfidential(document)} className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
-                          <FolderLock className="h-4 w-4 text-[#B91C1C]" />
-                          <span className="whitespace-nowrap">Move to <strong>Confidential</strong></span>
+                      {(canManage && (onMakePrivate || onMakePublic)) && <DropdownMenuSeparator />}
+                      {canManage && !document.isPrivate && onMakePrivate && (
+                        document.isSharedWithExternal ? (
                           <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild onClick={(e) => e.stopPropagation()}>
-                                <span className="inline-flex text-gray-400 hover:text-gray-600 shrink-0">
-                                  <Info className="h-3.5 w-3.5" />
-                                </span>
+                            <Tooltip open={privateInfoOpen} onOpenChange={setPrivateInfoOpen}>
+                              <TooltipTrigger asChild>
+                                <div
+                                  onClick={(e) => { e.stopPropagation(); setPrivateInfoOpen((v) => !v) }}
+                                  className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground cursor-pointer opacity-50 hover:bg-accent rounded-sm"
+                                >
+                                  <FolderLock className="h-4 w-4 text-orange-500" />
+                                  <span>Make Private</span>
+                                  <Info className="h-3.5 w-3.5 ml-auto text-slate-400" />
+                                </div>
                               </TooltipTrigger>
-                              <TooltipContent side="left" className="bg-slate-50 text-slate-800 border-slate-200 max-w-[220px]">
-                                Confidential is only accessible to Project Leads, Client Partners & Org Owners.
+                              <TooltipContent side="left" className="text-xs max-w-[220px]">
+                                A shared document cannot be made Private. Turn off sharing first.
                               </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
-                        </DropdownMenuItem>
+                        ) : (
+                          <DropdownMenuItem onClick={() => onMakePrivate(document)} className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
+                            <FolderLock className="h-4 w-4 text-orange-500" />
+                            <span>Make Private</span>
+                          </DropdownMenuItem>
+                        )
                       )}
-                      {canManage && currentFolderType === 'confidential' && onRestoreToGeneral && (
-                        <DropdownMenuItem onClick={() => onRestoreToGeneral(document)} className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
-                          <FolderUp className="h-4 w-4 text-green-600" />
-                          <span className="whitespace-nowrap">Release to <strong>General</strong></span>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild onClick={(e) => e.stopPropagation()}>
-                                <span className="inline-flex text-gray-400 hover:text-gray-600 shrink-0">
-                                  <Info className="h-3.5 w-3.5" />
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent side="left" className="bg-slate-50 text-slate-800 border-slate-200 max-w-[220px]">
-                                General is visible to all project members.
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        </DropdownMenuItem>
-                      )}
-                      {canManage && currentFolderType === 'staging' && onPromoteToGeneral && (
-                        <DropdownMenuItem onClick={() => onPromoteToGeneral(document)} className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
-                          <FolderUp className="h-4 w-4 text-amber-600" />
-                          <span className="whitespace-nowrap">Promote to <strong>General</strong></span>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild onClick={(e) => e.stopPropagation()}>
-                                <span className="inline-flex text-gray-400 hover:text-gray-600 shrink-0">
-                                  <Info className="h-3.5 w-3.5" />
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent side="left" className="bg-slate-50 text-slate-800 border-slate-200 max-w-[220px]">
-                                Promote from Staging to General to make the file visible to all project members.
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
+                      {canManage && document.isPrivate && onMakePublic && (
+                        <DropdownMenuItem onClick={() => onMakePublic(document)} className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
+                          <FolderUp className="h-4 w-4 text-slate-500" />
+                          <span>Make Public</span>
                         </DropdownMenuItem>
                       )}
                     </DropdownMenuSubContent>
                   </DropdownMenuSub>
                 )}
-                {(!isExternalCollaborator || onDeleteDocument) && <DropdownMenuSeparator />}
+                {(!isExternalUser || onDeleteDocument) && <DropdownMenuSeparator />}
                 {onDeleteDocument && (
                   <TooltipProvider>
                     <Tooltip>
@@ -702,7 +682,7 @@ export function DocumentActionMenu({
                     </Tooltip>
                   </TooltipProvider>
                 )}
-                {!isExternalCollaborator && (
+                {!isExternalUser && (
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuSub>
@@ -756,7 +736,7 @@ export function DocumentActionMenu({
 
                 {!mime.includes('folder') && leadForVersionLock && projectId && (
                   <>
-                    {(document as { versionLocked?: boolean }).versionLocked ? (
+                    {(document as { lock?: { type?: string } | null }).lock?.type === 'finalize' ? (
                       <DropdownMenuItem
                         disabled={finalizeLockDisabled}
                         onClick={() => void handleUnlockVersion()}
@@ -800,17 +780,6 @@ export function DocumentActionMenu({
                       </DropdownMenuItem>
                     )}
                   </>
-                )}
-
-                {!mime.includes('folder') && isExternalCollaborator && projectId && !(document as { versionLocked?: boolean }).versionLocked && (
-                  <DropdownMenuItem
-                    disabled={finalizeLockDisabled}
-                    onClick={() => void handleAcceptDocument()}
-                    className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs text-emerald-800 focus:bg-emerald-50 focus:text-emerald-900 data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
-                  >
-                    <Check className="h-4 w-4 text-emerald-700 shrink-0" />
-                    <span className="whitespace-nowrap">Accept document</span>
-                  </DropdownMenuItem>
                 )}
 
                 {/* Share (submenu: Share + Copy link) */}
@@ -929,68 +898,43 @@ export function DocumentActionMenu({
                           <span className="whitespace-nowrap">Copy to another engagement…</span>
                         </DropdownMenuItem>
                       )}
-                      {(canManage && (onRestrictToConfidential || onRestoreToGeneral || onPromoteToGeneral)) && <DropdownMenuSeparator />}
-                      {canManage && currentFolderType === 'general' && onRestrictToConfidential && (
-                        <DropdownMenuItem
-                          onClick={() => onRestrictToConfidential(document)}
-                          className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
-                        >
-                          <FolderLock className="h-4 w-4 text-[#B91C1C]" />
-                          <span className="whitespace-nowrap">Move to <strong>Confidential</strong></span>
+                      {(canManage && (onMakePrivate || onMakePublic)) && <DropdownMenuSeparator />}
+                      {canManage && !document.isPrivate && onMakePrivate && (
+                        document.isSharedWithExternal ? (
                           <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild onClick={(e) => e.stopPropagation()}>
-                                <span className="inline-flex text-gray-400 hover:text-gray-600 shrink-0">
-                                  <Info className="h-3.5 w-3.5" />
-                                </span>
+                            <Tooltip open={privateInfoOpen} onOpenChange={setPrivateInfoOpen}>
+                              <TooltipTrigger asChild>
+                                <div
+                                  onClick={(e) => { e.stopPropagation(); setPrivateInfoOpen((v) => !v) }}
+                                  className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground cursor-pointer opacity-50 hover:bg-accent rounded-sm"
+                                >
+                                  <FolderLock className="h-4 w-4 text-orange-500" />
+                                  <span>Make Private</span>
+                                  <Info className="h-3.5 w-3.5 ml-auto text-slate-400" />
+                                </div>
                               </TooltipTrigger>
-                              <TooltipContent side="left" className="bg-slate-50 text-slate-800 border-slate-200 max-w-[220px]">
-                                Confidential is only accessible to Project Leads, Client Partners & Org Owners.
+                              <TooltipContent side="left" className="text-xs max-w-[220px]">
+                                A shared document cannot be made Private. Turn off sharing first.
                               </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
-                        </DropdownMenuItem>
+                        ) : (
+                          <DropdownMenuItem
+                            onClick={() => onMakePrivate(document)}
+                            className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                          >
+                            <FolderLock className="h-4 w-4 text-orange-500" />
+                            <span>Make Private</span>
+                          </DropdownMenuItem>
+                        )
                       )}
-                      {canManage && currentFolderType === 'confidential' && onRestoreToGeneral && (
+                      {canManage && document.isPrivate && onMakePublic && (
                         <DropdownMenuItem
-                          onClick={() => onRestoreToGeneral(document)}
+                          onClick={() => onMakePublic(document)}
                           className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
                         >
-                          <FolderUp className="h-4 w-4 text-green-600" />
-                          <span className="whitespace-nowrap">Release to <strong>General</strong></span>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild onClick={(e) => e.stopPropagation()}>
-                                <span className="inline-flex text-gray-400 hover:text-gray-600 shrink-0">
-                                  <Info className="h-3.5 w-3.5" />
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent side="left" className="bg-slate-50 text-slate-800 border-slate-200 max-w-[220px]">
-                                General is visible to all project members.
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        </DropdownMenuItem>
-                      )}
-                      {canManage && currentFolderType === 'staging' && onPromoteToGeneral && (
-                        <DropdownMenuItem
-                          onClick={() => onPromoteToGeneral(document)}
-                          className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
-                        >
-                          <FolderUp className="h-4 w-4 text-amber-600" />
-                          <span className="whitespace-nowrap">Promote to <strong>General</strong></span>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild onClick={(e) => e.stopPropagation()}>
-                                <span className="inline-flex text-gray-400 hover:text-gray-600 shrink-0">
-                                  <Info className="h-3.5 w-3.5" />
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent side="left" className="bg-slate-50 text-slate-800 border-slate-200 max-w-[220px]">
-                                Promote from Staging to General to make the file visible to all project members.
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
+                          <FolderUp className="h-4 w-4 text-slate-500" />
+                          <span>Make Public</span>
                         </DropdownMenuItem>
                       )}
                     </DropdownMenuSubContent>
@@ -1172,8 +1116,28 @@ export function DocumentActionMenu({
                   <Calendar className="h-4 w-4 text-orange-600" />
                   <span>Set Due Date</span>
                 </DropdownMenuItem>
+                {!mime.includes('folder') && isExternalViewer && projectId && (() => {
+                  const doc = document as { lock?: { type?: string } | null }
+                  const isAlreadyLocked = doc.lock?.type === 'finalize'
+                  if (isAlreadyLocked) return (
+                    <DropdownMenuItem disabled className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground opacity-50 cursor-not-allowed data-[disabled]:pointer-events-none">
+                      <BadgeCheck className="h-4 w-4 shrink-0" />
+                      <span className="whitespace-nowrap">Accepted</span>
+                    </DropdownMenuItem>
+                  )
+                  return (
+                    <DropdownMenuItem
+                      disabled={finalizeLockDisabled}
+                      onClick={() => void handleAcceptDocument()}
+                      className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs text-emerald-800 focus:bg-emerald-50 focus:text-emerald-900 data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                    >
+                      <BadgeCheck className="h-4 w-4 text-emerald-700 shrink-0" />
+                      <span className="whitespace-nowrap">Accept</span>
+                    </DropdownMenuItem>
+                  )
+                })()}
 
-                {(!isExternalCollaborator || onDeleteDocument) && <DropdownMenuSeparator />}
+                {(!isExternalUser || onDeleteDocument) && <DropdownMenuSeparator />}
 
                 {onDeleteDocument && (
 
@@ -1194,7 +1158,7 @@ export function DocumentActionMenu({
                     </Tooltip>
                   </TooltipProvider>
                 )}
-                {!isExternalCollaborator && (
+                {!isExternalUser && (
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuSub>

@@ -2135,6 +2135,27 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
         setRenameModalOpen(true)
     }, [])
 
+    const handlePrivacy = useCallback(async (file: DriveFile, makePrivate: boolean) => {
+        const docId = file.projectDocumentId ?? file.id
+        const res = await fetch(`/api/projects/${projectId}/documents/${docId}/privacy`, {
+            method: 'PATCH',
+            headers: {
+                'Authorization': `Bearer ${sessionRef.current?.access_token}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ private: makePrivate }),
+        })
+        if (!res.ok) {
+            addToast({ type: 'error', title: 'Failed to update privacy', message: 'Could not update file privacy.' })
+            return
+        }
+        addToast({
+            type: 'success',
+            title: makePrivate ? 'File marked Private' : 'File is now visible to all members',
+        })
+        refreshShareStateAndFiles()
+    }, [projectId, addToast, refreshShareStateAndFiles])
+
     // Keep search panel action menu ref updated so openSearchPanel (defined earlier) can read latest handlers
     useEffect(() => {
         if (!firmId) {
@@ -2163,12 +2184,11 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
             onMoveDocument: generalFolderId && canEdit ? (doc) => openCopyMoveModal(doc, 'move') : undefined,
             onDeleteDocument: canEdit ? (doc) => handleTrash(doc) : undefined,
             onRenameDocument: canEdit ? (doc) => openRenameModal(doc) : undefined,
-            onRestrictToConfidential: canManage && confidentialFolderId ? (doc) => handleMoveTree(doc, 'confidential') : undefined,
-            onRestoreToGeneral: canManage && generalFolderId ? (doc) => handleMoveTree(doc, 'general') : undefined,
-            onPromoteToGeneral: canManage && generalFolderId ? (doc) => handleMoveTree(doc, 'general') : undefined,
+            onMakePrivate: canManage ? (doc) => handlePrivacy(doc, true) : undefined,
+            onMakePublic: canManage ? (doc) => handlePrivacy(doc, false) : undefined,
             onShareSaved: refreshShareStateAndFiles,
         }
-    }, [firmId, canEdit, canManage, currentFolderType, generalFolderId, confidentialFolderId, isProjectLead, handleSecureOpen, handleDuplicate, openCopyMoveModal, handleTrash, openRenameModal, handleMoveTree, refreshShareStateAndFiles])
+    }, [firmId, canEdit, canManage, currentFolderType, generalFolderId, confidentialFolderId, isProjectLead, handleSecureOpen, handleDuplicate, openCopyMoveModal, handleTrash, openRenameModal, handleMoveTree, handlePrivacy, refreshShareStateAndFiles])
 
     const handleConfirmRename = useCallback(() => {
         if (!renameTarget || !renameNewName.trim() || !sessionRef.current?.access_token) return
@@ -2448,7 +2468,6 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                         <Folder className="mr-2 h-3.5 w-3.5 text-slate-500" />
                                         New folder
                                     </DropdownMenuItem>
-
                                     <DropdownMenuSeparator />
 
                                     {/* From your computer (expandable) */}
@@ -2484,7 +2503,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                         </>
                                     )}
 
-                                    {!restrictToSharedOnly && (
+                                    {!restrictToSharedOnly ? (
                                         <>
                                         <DropdownMenuSeparator />
 
@@ -2523,7 +2542,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
 
                                         <DropdownMenuSeparator />
                                         </>
-                                    )}
+                                    ) : <DropdownMenuSeparator />}
 
                                     {/* New File Section Header (expandable) */}
                                     <div
@@ -3124,7 +3143,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                         className={cn(
                                             "group grid grid-cols-12 gap-4 py-2 pl-3 pr-2 transition-all items-center cursor-default relative",
                                             isFolder && selectedFileIds.size === 0 && "cursor-pointer",
-                                            (isIntakeRow || file.versionLocked) ? "hover:bg-slate-50 opacity-60" : "hover:bg-slate-50",
+                                            (isIntakeRow || file.lock?.type === 'finalize' || (file.isPrivate && !isFolder)) ? "hover:bg-slate-50 opacity-60" : "hover:bg-slate-50",
                                             !isIntakeRow && selectedFileIds.has(file.id) && "bg-blue-50 hover:bg-blue-50",
                                             !isIntakeRow && file.id === actionMenuOpenFileId && "bg-slate-50",
                                             !isIntakeRow && (file.id === activeCommentDocId || file.id === activeInfoDocId || file.id === activeActivityDocId || file.id === activeVersionDocId) && "bg-slate-50",
@@ -3266,7 +3285,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                                 ? 'Contains shared items'
                                                                 : isFolder
                                                                     ? 'Shared folder'
-                                                                    : 'Shared externally'}
+                                                                    : 'Shared file'}
                                                         </TooltipContent>
                                                     </Tooltip>
                                                 ) : null}
@@ -3319,7 +3338,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                         )}
                                                     </span>
                                                 ) : null}
-                                                {file.versionLocked && !isFolder ? (
+                                                {file.lock?.type === 'finalize' && !isFolder ? (
                                                     <Tooltip>
                                                         <TooltipTrigger asChild>
                                                             <span className="inline-flex items-center gap-1 shrink-0 px-1.5 py-0.5 rounded text-[10px] font-normal bg-slate-50 text-slate-400 border border-slate-200">
@@ -3331,6 +3350,26 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                             Version locked by Engagement Lead — read-only
                                                         </TooltipContent>
                                                     </Tooltip>
+                                                ) : null}
+                                                {file.isPrivate && !isFolder ? (
+                                                    <span className="inline-flex items-center gap-1 shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-50 text-orange-700 border border-orange-200">
+                                                        <FolderLock className="h-3 w-3" />
+                                                        Private
+                                                        {(canManage && file.lock?.type !== 'finalize') && (
+                                                            <Tooltip>
+                                                                <TooltipTrigger asChild>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={(e) => { e.stopPropagation(); handlePrivacy(file, false) }}
+                                                                        className="ml-0.5 rounded-full text-orange-500 hover:text-orange-700 hover:bg-orange-100 p-0.5"
+                                                                    >
+                                                                        <FolderUp className="h-3 w-3" />
+                                                                    </button>
+                                                                </TooltipTrigger>
+                                                                <TooltipContent side="top" className="text-xs">Make Public</TooltipContent>
+                                                            </Tooltip>
+                                                        )}
+                                                    </span>
                                                 ) : null}
                                             </div>
                                         </div>
@@ -3429,7 +3468,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                         <div className="col-span-1 flex justify-end">
                                             <div onClick={(e) => e.stopPropagation()}>
                                                 {(() => {
-                                                    const locked = !!file.versionLocked
+                                                    const locked = file.lock?.type === 'finalize'
                                                     const canMutateFile = canEdit && !locked && !isIntakeRow
                                                     const canOrganizeTree = canManage && !locked && !isIntakeRow
                                                     return (
@@ -3438,7 +3477,8 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                             deeplinkBase={typeof window !== 'undefined' ? window.location.href.replace(/#.*$/, '') : ''}
                                                             showShareModal={isProjectLead && !isIntakeRow}
                                                             isEngagementLead={isProjectLead}
-                                                            isExternalCollaborator={viewAsPersonaSlug === 'eng_ext_collaborator'}
+                                                            isExternalUser={isEC || isGuest}
+                                                            isExternalViewer={isGuest}
                                                             projectId={projectId}
                                                             onShareSaved={refreshShareStateAndFiles}
                                                             canManage={canOrganizeTree}
@@ -3453,9 +3493,8 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                             onMoveDocument={generalFolderId && canMutateFile ? (doc) => openCopyMoveModal(doc as DriveFile, 'move') : undefined}
                                                             onCrossEngagementCopy={isProjectLead && canMutateFile ? (doc) => openCrossEngagementModal(doc as DriveFile) : undefined}
                                                             onDeleteDocument={canMutateFile ? (doc) => handleTrash(doc as DriveFile) : undefined}
-                                                            onRestrictToConfidential={canOrganizeTree && confidentialFolderId ? (doc) => handleMoveTree(doc as DriveFile, 'confidential') : undefined}
-                                                            onRestoreToGeneral={canOrganizeTree && generalFolderId ? (doc) => handleMoveTree(doc as DriveFile, 'general') : undefined}
-                                                            onPromoteToGeneral={canOrganizeTree && generalFolderId ? (doc) => handleMoveTree(doc as DriveFile, 'general') : undefined}
+                                                            onMakePrivate={canOrganizeTree && !file.isPrivate ? () => handlePrivacy(file, true) : undefined}
+                                                            onMakePublic={canOrganizeTree && file.isPrivate ? () => handlePrivacy(file, false) : undefined}
                                                             onOpenChange={(open) => setActionMenuOpenFileId(open ? file.id : null)}
                                                             onApproveFolder={isProjectLead && isFolder && isIntakeRow ? () => handleFolderIntakeAction(file, 'approve-folder') : undefined}
                                                             onRejectFolder={isProjectLead && isFolder && isIntakeRow ? () => handleFolderIntakeAction(file, 'reject-folder') : undefined}
