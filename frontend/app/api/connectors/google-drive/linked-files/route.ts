@@ -365,13 +365,13 @@ export async function POST(request: NextRequest) {
 
                 // Batch-resolve all relevant userIds → emails, and build email → engagement role map
                 const allRows = [...visibleDbRows, ...intakeRows]
-                const creatorIds = [...new Set(allRows.map((r: any) => r.createdBy).filter(Boolean))]
+                const creatorIds = Array.from(new Set(allRows.map((r: any) => r.createdBy).filter(Boolean)))
                 const projectMembers = await prisma.engagementMember.findMany({
                     where: { engagementId: projectContext.projectId },
                     select: { userId: true, role: true },
                 })
                 const memberRoleById = new Map<string, string>(projectMembers.map((m: any) => [m.userId, m.role]))
-                const allRelevantIds = [...new Set([...creatorIds, ...projectMembers.map((m: any) => m.userId)])]
+                const allRelevantIds = Array.from(new Set([...creatorIds, ...projectMembers.map((m: any) => m.userId)]))
                 const creatorEmailMap = new Map<string, string>()
                 const roleByEmail = new Map<string, string>()
                 {
