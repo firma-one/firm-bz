@@ -3797,7 +3797,7 @@ export class GoogleDriveConnector {
 
     try {
       const res = await fetch(
-        `https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,mimeType,size,modifiedTime,webViewLink,thumbnailLink,iconLink,parents,permissions,driveId&supportsAllDrives=true`,
+        `https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,mimeType,size,modifiedTime,webViewLink,thumbnailLink,iconLink,parents,permissions,driveId,owners(displayName,emailAddress,photoLink),lastModifyingUser(displayName,photoLink)&supportsAllDrives=true`,
         {
           headers: { Authorization: `Bearer ${accessToken}` },
         }
@@ -3817,6 +3817,8 @@ export class GoogleDriveConnector {
           permissions: f.permissions,
           driveId: f.driveId ?? null,
           connectorId: connectionId,
+          owners: f.owners ?? null,
+          lastModifyingUser: f.lastModifyingUser ?? null,
         } as GoogleDriveFile
       }
       return null

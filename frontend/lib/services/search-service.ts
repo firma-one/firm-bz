@@ -57,7 +57,9 @@ export class SearchService {
                     mimeType: meta.mimeType,
                     size: meta.size,
                     modifiedTime: meta.modifiedTime,
-                    webViewLink: meta.webViewLink
+                    webViewLink: meta.webViewLink,
+                    owners: meta.owners ?? null,
+                    lastModifyingUser: meta.lastModifyingUser ?? null,
                 }
                 if (!driveParentId && meta.parents && meta.parents.length > 0) {
                     driveParentId = meta.parents[0]

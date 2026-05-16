@@ -157,10 +157,41 @@ export async function PUT(
 
     if (!externalCollaborator && !guest) {
       if (existing) {
+        const oldSettings = parseSettingsFromDb((existing.settings as Record<string, unknown>) || {})
+        const disabledPersonas: Array<'guest' | 'externalCollaborator'> = []
+        if (oldSettings?.share?.guest?.enabled) disabledPersonas.push('guest')
+        if (oldSettings?.share?.externalCollaborator?.enabled) disabledPersonas.push('externalCollaborator')
+
+        // Trash the system PDF copy if guest sharing was active
+        const sharedPdfDriveId = oldSettings?.share?.guest?.options?.sharedPdfDriveId
+        if (sharedPdfDriveId) {
+          let resolvedConnectorId = existing.connectorId
+          if (!resolvedConnectorId) {
+            const org = await prisma.firm.findUnique({ where: { id: fileInfo.organizationId }, include: { connector: true } })
+            if (org?.connector?.type === 'GOOGLE_DRIVE' && org.connector.status === 'ACTIVE') resolvedConnectorId = org.connector.id
+          }
+          if (resolvedConnectorId) {
+            try { await GoogleDriveConnector.getInstance().trashFile(resolvedConnectorId, sharedPdfDriveId) } catch {}
+          }
+        }
+
         await prisma.engagementDocument.update({
           where: { id: existing.id },
           data: { settings: {}, slug: null, updatedAt: new Date() },
         })
+
+        // Revoke Drive permissions granted via regrant for any previously enabled personas
+        if (disabledPersonas.length > 0) {
+          await safeInngestSend('sharing.settings.updated', {
+            projectId,
+            organizationId: fileInfo.organizationId,
+            documentId: fileInfo.externalId,
+            sharingId: existing.id,
+            disabledPersonas,
+            timestamp: new Date().toISOString(),
+            userId: user.id,
+          })
+        }
       }
       return NextResponse.json({ sharing: null })
     }

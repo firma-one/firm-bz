@@ -348,7 +348,7 @@ export async function POST(request: NextRequest) {
                             parentId: folderId,
                             ...(folderInShared || folderUnderShared ? {} : { externalId: { in: Array.from(allowSet) } }),
                         },
-                        select: { id: true, externalId: true, fileName: true, mimeType: true, fileSize: true, isFolder: true, metadata: true, settings: true },
+                        select: { id: true, externalId: true, fileName: true, mimeType: true, fileSize: true, isFolder: true, metadata: true, settings: true, createdBy: true },
                     }),
                     // Also surface the EC/EV's own PENDING intake files/folders in this folder
                     prisma.engagementDocument.findMany({
@@ -357,25 +357,85 @@ export async function POST(request: NextRequest) {
                             parentId: folderId,
                             settings: { path: ['lock', 'uploadedBy'], equals: user.id } as any,
                         },
-                        select: { id: true, externalId: true, fileName: true, mimeType: true, fileSize: true, isFolder: true, metadata: true, settings: true },
+                        select: { id: true, externalId: true, fileName: true, mimeType: true, fileSize: true, isFolder: true, metadata: true, settings: true, createdBy: true },
                     }),
                 ])
 
                 const visibleDbRows = dbRows.filter((row) => !isDocumentPrivate(row.settings))
+
+                // Batch-resolve all relevant userIds → emails, and build email → engagement role map
+                const allRows = [...visibleDbRows, ...intakeRows]
+                const creatorIds = [...new Set(allRows.map((r: any) => r.createdBy).filter(Boolean))]
+                const projectMembers = await prisma.engagementMember.findMany({
+                    where: { engagementId: projectContext.projectId },
+                    select: { userId: true, role: true },
+                })
+                const memberRoleById = new Map<string, string>(projectMembers.map((m: any) => [m.userId, m.role]))
+                const allRelevantIds = [...new Set([...creatorIds, ...projectMembers.map((m: any) => m.userId)])]
+                const creatorEmailMap = new Map<string, string>()
+                const roleByEmail = new Map<string, string>()
+                {
+                    const { createAdminClient } = await import('@/utils/supabase/admin')
+                    const admin = createAdminClient()
+                    await Promise.all(allRelevantIds.map(async (uid: string) => {
+                        const { data: { user: u } } = await admin.auth.admin.getUserById(uid)
+                        if (u?.email) {
+                            creatorEmailMap.set(uid, u.email)
+                            const role = memberRoleById.get(uid)
+                            if (role) roleByEmail.set(u.email, role)
+                        }
+                    }))
+                }
+
+                // For rows missing owners or modifiedTime in metadata, fetch from Drive and write back (one-time backfill)
+                type FreshMeta = { owners: any; lastModifyingUser: any; modifiedTime: string | null }
+                const rowsMissingMeta = allRows.filter((r: any) => !(r.metadata as any)?.owners || !(r.metadata as any)?.modifiedTime)
+                const freshMetaMap = new Map<string, FreshMeta>()
+                if (rowsMissingMeta.length > 0) {
+                    const fetched = await Promise.all(
+                        rowsMissingMeta.map(async (r: any) => {
+                            try {
+                                const meta = await googleDriveConnector.getFileMetadata(connector.id, r.externalId)
+                                return meta ? { externalId: r.externalId, id: r.id, owners: meta.owners ?? null, lastModifyingUser: meta.lastModifyingUser ?? null, modifiedTime: meta.modifiedTime ?? null } : null
+                            } catch { return null }
+                        })
+                    )
+                    for (const item of fetched) {
+                        if (!item) continue
+                        freshMetaMap.set(item.externalId, { owners: item.owners, lastModifyingUser: item.lastModifyingUser, modifiedTime: item.modifiedTime })
+                        // Write-back: merge fresh fields into existing metadata so subsequent requests skip Drive
+                        const existingMeta = allRows.find((r: any) => r.id === item.id)?.metadata as object ?? {}
+                        prisma.engagementDocument.updateMany({
+                            where: { id: item.id },
+                            data: { metadata: { ...existingMeta, owners: item.owners, lastModifyingUser: item.lastModifyingUser, modifiedTime: item.modifiedTime } as any },
+                        }).catch(() => { /* best-effort */ })
+                    }
+                }
+
                 const seenIds = new Set<string>()
-                const mapRow = (row: any) => ({
+                const mapRow = (row: any) => {
+                    const fresh = freshMetaMap.get(row.externalId)
+                    return ({
                     id: row.externalId,
                     name: row.fileName,
                     mimeType: row.mimeType ?? null,
                     size: row.fileSize != null ? String(row.fileSize) : null,
-                    modifiedTime: (row.metadata as any)?.modifiedTime ?? null,
+                    modifiedTime: fresh?.modifiedTime ?? (row.metadata as any)?.modifiedTime ?? null,
                     webViewLink: (row.metadata as any)?.webViewLink ?? null,
+                    owners: fresh?.owners ?? (row.metadata as any)?.owners ?? null,
+                    lastModifyingUser: fresh?.lastModifyingUser ?? (row.metadata as any)?.lastModifyingUser ?? null,
+                    actorEmail: row.createdBy ? (creatorEmailMap.get(row.createdBy) ?? null) : null,
+                    ownerRole: (() => {
+                        const ownerEmail = row.createdBy ? creatorEmailMap.get(row.createdBy)
+                            : fresh?.owners?.[0]?.emailAddress ?? (row.metadata as any)?.owners?.[0]?.emailAddress ?? null
+                        return ownerEmail ? (roleByEmail.get(ownerEmail) ?? null) : null
+                    })(),
                     isFolder: row.isFolder,
                     connectorId: connector.id,
                     projectDocumentId: row.id,
                     lock: getLock(row.settings),
-                })
-                for (const row of [...visibleDbRows, ...intakeRows]) {
+                })}
+                for (const row of allRows) {
                     if (!seenIds.has(row.externalId)) {
                         seenIds.add(row.externalId)
                         files.push(mapRow(row))
@@ -427,12 +487,32 @@ const privateByExternal = new Map<string, boolean>(enrichRows.map((r: any) => [r
                         return [r.externalId, ecEnabled || guestEnabled]
                     }))
 
+                    // Build email → engagement role map for owner role display
+                    const elMembers = await prisma.engagementMember.findMany({
+                        where: { engagementId: bodyProjectId as string },
+                        select: { userId: true, role: true },
+                    })
+                    const elRoleById = new Map<string, string>(elMembers.map((m: any) => [m.userId, m.role]))
+                    const elRoleByEmail = new Map<string, string>()
+                    if (elMembers.length > 0) {
+                        const { createAdminClient } = await import('@/utils/supabase/admin')
+                        const admin = createAdminClient()
+                        await Promise.all(elMembers.map(async (m: any) => {
+                            const { data: { user: u } } = await admin.auth.admin.getUserById(m.userId)
+                            if (u?.email) elRoleByEmail.set(u.email, m.role)
+                        }))
+                    }
+
                     files = files.map((f: any) => ({
                         ...f,
                         projectDocumentId: internalByExternal.get(f.id) ?? undefined,
                         lock: lockByExternal.get(f.id) ?? null,
                         isPrivate: privateByExternal.get(f.id) ?? false,
                         isSharedWithExternal: sharedExternalByExternal.get(f.id) ?? false,
+                        ownerRole: (() => {
+                            const ownerEmail = f.owners?.[0]?.emailAddress ?? f.actorEmail ?? null
+                            return ownerEmail ? (elRoleByEmail.get(ownerEmail) ?? null) : null
+                        })(),
                     }))
 
                     // Merge PENDING intake rows that aren't already in Drive listing

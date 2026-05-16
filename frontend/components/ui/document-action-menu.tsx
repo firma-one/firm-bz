@@ -61,7 +61,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { useDownloadProgress } from "@/lib/download-progress-context"
 
 const VERSION_LOCK_TOOLTIP =
-  'Lock finalizes the current version in Google Drive (collaborators become view-only on this file). Unlock restores edit access for Engagement Lead actions.'
+  'Finalize locks the document — all collaborators become view-only. Return to Draft restores each collaborator\'s prior access level based on their role and sharing settings.'
 
 interface DocumentActionMenuProps {
   document: any
@@ -538,7 +538,7 @@ export function DocumentActionMenu({
                     className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs text-emerald-700 focus:text-emerald-700 focus:bg-emerald-50"
                   >
                     <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                    <span>Approve folder</span>
+                    <span>Approve folder upload</span>
                   </DropdownMenuItem>
                 )}
                 {onRejectFolder && (
@@ -732,54 +732,6 @@ export function DocumentActionMenu({
                     <Download className="h-4 w-4 text-blue-600" />
                     <span>Download</span>
                   </DropdownMenuItem>
-                )}
-
-                {!mime.includes('folder') && leadForVersionLock && projectId && (
-                  <>
-                    {(document as { lock?: { type?: string } | null }).lock?.type === 'finalize' ? (
-                      <DropdownMenuItem
-                        disabled={finalizeLockDisabled}
-                        onClick={() => void handleUnlockVersion()}
-                        className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
-                      >
-                        <Unlock className="h-4 w-4 text-emerald-700 shrink-0" />
-                        <span>Unlock version</span>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild onClick={(ev) => ev.stopPropagation()}>
-                              <span className="inline-flex text-gray-400 hover:text-gray-600 shrink-0">
-                                <Info className="h-3.5 w-3.5" />
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent side="left" className="bg-slate-50 text-slate-800 border-slate-200 max-w-[260px]">
-                              {VERSION_LOCK_TOOLTIP}
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      </DropdownMenuItem>
-                    ) : (
-                      <DropdownMenuItem
-                        disabled={finalizeLockDisabled}
-                        onClick={() => void handleFinalizeAndLock()}
-                        className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs text-amber-800 focus:bg-amber-50 focus:text-amber-900 data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
-                      >
-                        <Lock className="h-4 w-4 text-amber-700 shrink-0" />
-                        <span className="whitespace-nowrap">Lock version</span>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild onClick={(ev) => ev.stopPropagation()}>
-                              <span className="inline-flex text-gray-400 hover:text-gray-600 shrink-0">
-                                <Info className="h-3.5 w-3.5" />
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent side="left" className="bg-slate-50 text-slate-800 border-slate-200 max-w-[260px]">
-                              {VERSION_LOCK_TOOLTIP}
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      </DropdownMenuItem>
-                    )}
-                  </>
                 )}
 
                 {/* Share (submenu: Share + Copy link) */}
@@ -1116,6 +1068,53 @@ export function DocumentActionMenu({
                   <Calendar className="h-4 w-4 text-orange-600" />
                   <span>Set Due Date</span>
                 </DropdownMenuItem>
+                {!mime.includes('folder') && leadForVersionLock && projectId && (
+                  <>
+                    {(document as { lock?: { type?: string } | null }).lock?.type === 'finalize' ? (
+                      <DropdownMenuItem
+                        disabled={finalizeLockDisabled}
+                        onClick={() => void handleUnlockVersion()}
+                        className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                      >
+                        <Unlock className="h-4 w-4 text-emerald-700 shrink-0" />
+                        <span>Return to Draft</span>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild onClick={(ev) => ev.stopPropagation()}>
+                              <span className="inline-flex text-gray-400 hover:text-gray-600 shrink-0">
+                                <Info className="h-3.5 w-3.5" />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="left" className="bg-slate-50 text-slate-800 border-slate-200 max-w-[260px]">
+                              {VERSION_LOCK_TOOLTIP}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </DropdownMenuItem>
+                    ) : (
+                      <DropdownMenuItem
+                        disabled={finalizeLockDisabled}
+                        onClick={() => void handleFinalizeAndLock()}
+                        className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs text-amber-800 focus:bg-amber-50 focus:text-amber-900 data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                      >
+                        <Lock className="h-4 w-4 text-amber-700 shrink-0" />
+                        <span className="whitespace-nowrap">Finalize</span>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild onClick={(ev) => ev.stopPropagation()}>
+                              <span className="inline-flex text-gray-400 hover:text-gray-600 shrink-0">
+                                <Info className="h-3.5 w-3.5" />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="left" className="bg-slate-50 text-slate-800 border-slate-200 max-w-[260px]">
+                              {VERSION_LOCK_TOOLTIP}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </DropdownMenuItem>
+                    )}
+                  </>
+                )}
                 {!mime.includes('folder') && isExternalViewer && projectId && (() => {
                   const doc = document as { lock?: { type?: string } | null }
                   const isAlreadyLocked = doc.lock?.type === 'finalize'

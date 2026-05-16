@@ -1,6 +1,7 @@
 import { inngest } from "./client";
 import { prisma } from "@/lib/prisma";
 import { googleDriveConnector } from "@/lib/google-drive-connector";
+import { parseSettingsFromDb } from "@/lib/sharing-settings";
 import { logger } from "@/lib/logger";
 import { DocumentSharingPermissionStatus } from "@prisma/client";
 import { grantEngagementDriveFolderAccess } from "@/lib/grant-engagement-drive-folder-access";
@@ -406,6 +407,14 @@ export const reconcileFileDeletion = inngest.createFunction(
                     sharingUsers
                         .filter((s) => s.googlePermissionId)
                         .map((s) => googleDriveConnector.revokePermission(connectorId, externalId, s.googlePermissionId!))
+                )
+
+                // Trash system PDF copies (guest sharePdfOnly) — one per doc, if present
+                await Promise.allSettled(
+                    docs
+                        .map((d) => parseSettingsFromDb(d.settings)?.share?.guest?.options?.sharedPdfDriveId)
+                        .filter((pdfId): pdfId is string => !!pdfId)
+                        .map((pdfId) => googleDriveConnector.trashFile(connectorId, pdfId))
                 )
             }
 

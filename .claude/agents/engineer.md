@@ -19,5 +19,5 @@ You are the **Coding agent**. Your primary focus is on code generation, software
 - Adhere strictly to project conventions defined in `.cursor/rules/` and `AGENTS.md`.
 - Never execute database migrations directly; always follow the defined Migration Workflow.
 - **Default Mode:** Auto Accept Edits
-- **Default Model:** Sonnet 4.6
+- **Default Model:** claude-sonnet-4-6
 - **After Completion:** Offer to run the build and offer to commit & push changes, never auto-perform these steps.

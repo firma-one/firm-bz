@@ -201,6 +201,8 @@ export interface DriveFile {
     photoLink?: string
     emailAddress?: string
   }[]
+  /** Engagement role of the file owner (e.g. eng_admin, eng_viewer). Populated server-side for display. */
+  ownerRole?: string | null
   parents?: string[]
   source?: string
   connectorId?: string

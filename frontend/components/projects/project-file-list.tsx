@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
-import { SquarePlus, Upload, FolderUp, X, Folder, File as FileIcon, ArrowUp, ArrowDown, ChevronRight, Search, List as ListIcon, LayoutGrid, Filter, ChevronDown, User, FileText, FileSpreadsheet, Presentation, ListChecks, PenTool, Map as MapIcon, LayoutTemplate, FileCode, AlertCircle, ShieldCheck, Maximize2, Minimize2, CheckCircle2, XCircle, Trash2, Layout, Code, Laptop, RefreshCw, Info, Share2, Layers, Building2, Users, Briefcase, Lock, FolderLock, Inbox, Sparkles, Link2, MessageCircle, CircleChevronLeft, Download } from 'lucide-react'
+import { SquarePlus, Upload, FolderUp, X, Folder, File as FileIcon, ArrowUp, ArrowDown, ChevronRight, Search, List as ListIcon, LayoutGrid, Filter, ChevronDown, User, FileText, FileSpreadsheet, Presentation, ListChecks, PenTool, Map as MapIcon, LayoutTemplate, FileCode, AlertCircle, ShieldCheck, Maximize2, Minimize2, CheckCircle2, XCircle, Trash2, Layout, Code, Laptop, RefreshCw, Info, Share2, Layers, Building2, Users, Briefcase, Lock, FolderLock, Inbox, Sparkles, Link2, MessageCircle, CircleChevronLeft, Download, MoreVertical } from 'lucide-react'
 import Fuse from 'fuse.js'
 import { config } from "@/lib/config"
 import { DocumentIcon } from '@/components/ui/document-icon'
@@ -59,6 +59,7 @@ import { ProjectSearchPanel, type ProjectSearchPanelActionMenuProps } from '@/co
 import { getSavedFolderState, setSavedFolderState, consumeDeeplinkHighlight, type BreadcrumbItem } from '@/lib/files-folder-session'
 import { useSecureOpenDocument } from '@/lib/use-secure-open-document'
 import { SecureAccessModal } from '@/components/projects/shares/secure-access-modal'
+import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
 
 interface ProjectFileListProps {
     projectId: string
@@ -393,6 +394,11 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
     const setNewFileExpanded = (v: boolean) => setExpandedAddSection(v ? 'newFile' : null)
     const [copyMoveModalOpen, setCopyMoveModalOpen] = useState(false)
     const [copyMoveTarget, setCopyMoveTarget] = useState<DriveFile | null>(null)
+    const [expandedIntakeBadgeId, setExpandedIntakeBadgeId] = useState<string | null>(null)
+    const [unlockConfirmFile, setUnlockConfirmFile] = useState<DriveFile | null>(null)
+    const [unlockInProgress, setUnlockInProgress] = useState(false)
+    const [unshareConfirmFile, setUnshareConfirmFile] = useState<DriveFile | null>(null)
+    const [unshareInProgress, setUnshareInProgress] = useState(false)
     const [copyMoveAction, setCopyMoveAction] = useState<'copy' | 'move'>('copy')
     const [copyMoveKeepBoth, setCopyMoveKeepBoth] = useState(true)
     const [currentPath, setCurrentPath] = useState<{ id: string; name: string }[]>([])
@@ -1997,6 +2003,56 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
         }
     }, [projectId, currentFolderId, fetchFiles, addToast, startProcessing, stopProcessing])
 
+    const handleUnlockFromBadge = useCallback(async (file: DriveFile) => {
+        const docId = file.projectDocumentId ?? file.id
+        if (!docId || !sessionRef.current?.access_token) return
+        setUnlockInProgress(true)
+        try {
+            const res = await fetch(`/api/projects/${projectId}/documents/${encodeURIComponent(docId)}/sharing/unlock`, {
+                method: 'PATCH',
+                headers: { Authorization: `Bearer ${sessionRef.current.access_token}` },
+                credentials: 'include',
+            })
+            if (res.ok) {
+                addToast({ type: 'success', title: 'Returned to Draft', message: `"${file.name}" is now editable.` })
+                if (currentFolderId) fetchFiles(currentFolderId, true)
+            } else {
+                const d = await res.json().catch(() => ({}))
+                addToast({ type: 'error', title: 'Failed', message: d.error || 'Could not return to draft.' })
+            }
+        } catch {
+            addToast({ type: 'error', title: 'Failed', message: 'Network error.' })
+        } finally {
+            setUnlockInProgress(false)
+            setUnlockConfirmFile(null)
+        }
+    }, [projectId, currentFolderId, fetchFiles, addToast])
+
+    const handleUnshare = useCallback(async (file: DriveFile) => {
+        const docId = file.projectDocumentId ?? file.id
+        if (!docId || !sessionRef.current?.access_token) return
+        setUnshareInProgress(true)
+        try {
+            const res = await fetch(`/api/projects/${projectId}/documents/${encodeURIComponent(docId)}/sharing`, {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${sessionRef.current.access_token}` },
+                credentials: 'include',
+            })
+            if (res.ok) {
+                addToast({ type: 'success', title: 'Unshared', message: `"${file.name}" is no longer shared externally.` })
+                if (currentFolderId) fetchFiles(currentFolderId, true)
+            } else {
+                const d = await res.json().catch(() => ({}))
+                addToast({ type: 'error', title: 'Failed', message: d.error || 'Could not revoke access.' })
+            }
+        } catch {
+            addToast({ type: 'error', title: 'Failed', message: 'Network error.' })
+        } finally {
+            setUnshareInProgress(false)
+            setUnshareConfirmFile(null)
+        }
+    }, [projectId, currentFolderId, fetchFiles, addToast])
+
     const fetchFolderChildrenResult = useCallback(async (folderId: string): Promise<DriveFile[]> => {
         if (!sessionRef.current?.access_token) return []
         const r = await fetch('/api/connectors/google-drive/linked-files', {
@@ -2724,6 +2780,47 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                             </DropdownMenuContent>
                         </DropdownMenu>
 
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button disabled={loading} variant="outline" size="sm" className="h-8 gap-1.5 text-xs bg-white rounded-md border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+                                    <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24" fill="currentColor" className="h-3.5 w-3.5">
+                                        <path d="M120-240v-80h240v80H120Zm0-200v-80h480v80H120Zm0-200v-80h720v80H120Z" />
+                                    </svg>
+                                    Sort
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start" className="w-[220px] py-1 text-xs">
+                                <DropdownMenuLabel className="text-xs uppercase tracking-wider text-slate-400">Sort by</DropdownMenuLabel>
+                                <DropdownMenuCheckboxItem className="text-xs" checked={sortConfig.sortBy === 'name'} onCheckedChange={() => setSortBy('name')}>
+                                    Name
+                                </DropdownMenuCheckboxItem>
+                                <DropdownMenuCheckboxItem className="text-xs" checked={sortConfig.sortBy === 'modifiedTime'} onCheckedChange={() => setSortBy('modifiedTime')}>
+                                    Date modified
+                                </DropdownMenuCheckboxItem>
+                                <DropdownMenuCheckboxItem className="text-xs" checked={sortConfig.sortBy === 'modifiedTimeByMe'} onCheckedChange={() => setSortBy('modifiedTimeByMe')}>
+                                    Date modified by me
+                                </DropdownMenuCheckboxItem>
+                                <DropdownMenuCheckboxItem className="text-xs" checked={sortConfig.sortBy === 'viewedByMeTime'} onCheckedChange={() => setSortBy('viewedByMeTime')}>
+                                    Date opened by me
+                                </DropdownMenuCheckboxItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuLabel className="text-xs uppercase tracking-wider text-slate-400">Sort direction</DropdownMenuLabel>
+                                <DropdownMenuCheckboxItem className="text-xs" checked={sortConfig.direction === 'asc'} onCheckedChange={() => setSortDirection('asc')}>
+                                    A to Z
+                                </DropdownMenuCheckboxItem>
+                                <DropdownMenuCheckboxItem className="text-xs" checked={sortConfig.direction === 'desc'} onCheckedChange={() => setSortDirection('desc')}>
+                                    Z to A
+                                </DropdownMenuCheckboxItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuLabel className="text-xs uppercase tracking-wider text-slate-400">Folders</DropdownMenuLabel>
+                                <DropdownMenuCheckboxItem className="text-xs" checked={sortConfig.foldersFirst} onCheckedChange={(c) => c === true && setFoldersFirst(true)}>
+                                    On top
+                                </DropdownMenuCheckboxItem>
+                                <DropdownMenuCheckboxItem className="text-xs" checked={!sortConfig.foldersFirst} onCheckedChange={(c) => c === true && setFoldersFirst(false)}>
+                                    Mixed with files
+                                </DropdownMenuCheckboxItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
 
                         {(filterTypes.size > 0 || filterOwner !== 'any' || filterModified !== 'any' || filterShared !== 'all') && (
                             <Button
@@ -2992,8 +3089,8 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
 
                 {/* Fixed Table Header (Compact) */}
                 <div className="sticky top-0 bg-slate-50 border-b border-slate-200 pl-3 pr-2 py-2 shrink-0 z-10 font-medium text-slate-500 group">
-                    <div className="grid grid-cols-12 gap-4 items-center">
-                        <div className="col-span-4 flex items-center gap-3">
+                    <div className="grid gap-4 items-center" style={{ gridTemplateColumns: 'minmax(0, 1fr) 10% 10% 14% 12% 8%' }}>
+                        <div className="flex items-center gap-3">
                             {/* Select-all checkbox — visible on hover of header or when in selection mode */}
                             <div
                                 className={cn(
@@ -3013,53 +3110,10 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                             </div>
                             <TableHeader label="Name" />
                         </div>
-                        <div className="col-span-1 flex items-center"><TableHeader label="Quick" /></div>
-                        <div className="col-span-2 flex items-center"><TableHeader label="Owner" /></div>
-                        <div className="col-span-2 flex items-center"><TableHeader label="Date modified" /></div>
-                        <div className="col-span-2 flex items-center text-left"><TableHeader label="File size" /></div>
-                        <div className="col-span-1 flex justify-end">
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Button disabled={loading} variant="ghost" size="sm" className="h-7 gap-1.5 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700">
-                                        <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24" fill="currentColor" className="h-3.5 w-3.5">
-                                            <path d="M120-240v-80h240v80H120Zm0-200v-80h480v80H120Zm0-200v-80h720v80H120Z" />
-                                        </svg>
-                                        Sort
-                                    </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-[220px] py-1 text-xs">
-                                    <DropdownMenuLabel className="text-xs uppercase tracking-wider text-slate-400">Sort by</DropdownMenuLabel>
-                                    <DropdownMenuCheckboxItem className="text-xs" checked={sortConfig.sortBy === 'name'} onCheckedChange={() => setSortBy('name')}>
-                                        Name
-                                    </DropdownMenuCheckboxItem>
-                                    <DropdownMenuCheckboxItem className="text-xs" checked={sortConfig.sortBy === 'modifiedTime'} onCheckedChange={() => setSortBy('modifiedTime')}>
-                                        Date modified
-                                    </DropdownMenuCheckboxItem>
-                                    <DropdownMenuCheckboxItem className="text-xs" checked={sortConfig.sortBy === 'modifiedTimeByMe'} onCheckedChange={() => setSortBy('modifiedTimeByMe')}>
-                                        Date modified by me
-                                    </DropdownMenuCheckboxItem>
-                                    <DropdownMenuCheckboxItem className="text-xs" checked={sortConfig.sortBy === 'viewedByMeTime'} onCheckedChange={() => setSortBy('viewedByMeTime')}>
-                                        Date opened by me
-                                    </DropdownMenuCheckboxItem>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuLabel className="text-xs uppercase tracking-wider text-slate-400">Sort direction</DropdownMenuLabel>
-                                    <DropdownMenuCheckboxItem className="text-xs" checked={sortConfig.direction === 'asc'} onCheckedChange={() => setSortDirection('asc')}>
-                                        A to Z
-                                    </DropdownMenuCheckboxItem>
-                                    <DropdownMenuCheckboxItem className="text-xs" checked={sortConfig.direction === 'desc'} onCheckedChange={() => setSortDirection('desc')}>
-                                        Z to A
-                                    </DropdownMenuCheckboxItem>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuLabel className="text-xs uppercase tracking-wider text-slate-400">Folders</DropdownMenuLabel>
-                                    <DropdownMenuCheckboxItem className="text-xs" checked={sortConfig.foldersFirst} onCheckedChange={(c) => c === true && setFoldersFirst(true)}>
-                                        On top
-                                    </DropdownMenuCheckboxItem>
-                                    <DropdownMenuCheckboxItem className="text-xs" checked={!sortConfig.foldersFirst} onCheckedChange={(c) => c === true && setFoldersFirst(false)}>
-                                        Mixed with files
-                                    </DropdownMenuCheckboxItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-                        </div>
+                        <div className="col-span-2 flex items-center justify-center"><TableHeader label="Quick" /></div>
+                        <div className="flex items-center"><TableHeader label="Owner" /></div>
+                        <div className="flex items-center"><TableHeader label="Date modified" /></div>
+                        <div className="flex items-center"><TableHeader label="File size" /></div>
                     </div>
                 </div>
 
@@ -3140,8 +3194,9 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                         onDragOver={(e) => handleItemDragOver(e, file)}
                                         onDragLeave={handleItemDragLeave}
                                         onDrop={(e) => handleItemDrop(e, file)}
+                                        style={{ gridTemplateColumns: 'minmax(0, 1fr) 10% 10% 14% 12% 8%' }}
                                         className={cn(
-                                            "group grid grid-cols-12 gap-4 py-2 pl-3 pr-2 transition-all items-center cursor-default relative",
+                                            "group grid gap-4 py-2 pl-3 pr-2 transition-all items-center cursor-default relative",
                                             isFolder && selectedFileIds.size === 0 && "cursor-pointer",
                                             (isIntakeRow || file.lock?.type === 'finalize' || (file.isPrivate && !isFolder)) ? "hover:bg-slate-50 opacity-60" : "hover:bg-slate-50",
                                             !isIntakeRow && selectedFileIds.has(file.id) && "bg-blue-50 hover:bg-blue-50",
@@ -3169,7 +3224,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                         }}
                                     >
                                         {/* Name Column: icon and name (deeplink = skewed pastel marker on file name only) */}
-                                        <div className="col-span-4 flex items-center gap-3 min-w-0">
+                                        <div className="flex items-center gap-3 min-w-0">
                                             {/* OneDrive-style: checkbox on hover or in selection mode; icon otherwise */}
                                             <div
                                                 className="flex-shrink-0 w-4 h-4 flex items-center justify-center relative"
@@ -3268,86 +3323,123 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                         {file.name}
                                                     </TooltipContent>
                                                 </Tooltip>
+                                            </div>
+                                        </div>
+
+                                        {/* Badges */}
+                                        <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
                                                 {showBadge ? (
                                                     <Tooltip>
                                                         <TooltipTrigger asChild>
-                                                            <span className={`inline-flex items-center gap-1 shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium border ${
-                                                                isFolder && !directShared
-                                                                    ? 'bg-purple-50 text-purple-400 border-purple-100'
-                                                                    : 'bg-purple-100 text-purple-700 border-purple-200'
-                                                            }`}>
-                                                                <Share2 className="h-3 w-3" />
-                                                                Shared
-                                                            </span>
+                                                            {isProjectLead && directShared ? (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => { e.stopPropagation(); setUnshareConfirmFile(file) }}
+                                                                    className={`inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium border bg-purple-100 text-purple-700 border-purple-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors`}
+                                                                >
+                                                                    <Share2 className="h-3 w-3" />
+                                                                </button>
+                                                            ) : (
+                                                                <span className={`inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium border ${
+                                                                    isFolder && !directShared
+                                                                        ? 'bg-purple-50 text-purple-400 border-purple-100'
+                                                                        : 'bg-purple-100 text-purple-700 border-purple-200'
+                                                                }`}>
+                                                                    <Share2 className="h-3 w-3" />
+                                                                </span>
+                                                            )}
                                                         </TooltipTrigger>
                                                         <TooltipContent side="top">
-                                                            {isFolder && !directShared
-                                                                ? 'Contains shared items'
-                                                                : isFolder
-                                                                    ? 'Shared folder'
-                                                                    : 'Shared file'}
+                                                            {isProjectLead && directShared
+                                                                ? 'Shared externally — click to revoke'
+                                                                : isFolder && !directShared
+                                                                    ? 'Contains shared items'
+                                                                    : 'Shared externally'}
                                                         </TooltipContent>
                                                     </Tooltip>
                                                 ) : null}
                                                 {isIntakeRow ? (
                                                     <span className="inline-flex items-center gap-1 shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
-                                                        <Inbox className="h-3 w-3" />
-                                                        Pending Review
-                                                        {isProjectLead && (<>
-                                                            <Tooltip>
-                                                                <TooltipTrigger asChild>
-                                                                    <button
-                                                                        type="button"
-                                                                        disabled={intakeActionInProgress === file.id}
-                                                                        onClick={(e) => { e.stopPropagation(); isFolder ? handleFolderIntakeAction(file, 'approve-folder') : handleIntakeAction(file, 'approve') }}
-                                                                        className="ml-0.5 rounded-full text-emerald-600 hover:text-emerald-700 hover:bg-emerald-100 disabled:opacity-40 p-0.5"
-                                                                    >
-                                                                        <CheckCircle2 className="h-3 w-3" />
-                                                                    </button>
-                                                                </TooltipTrigger>
-                                                                <TooltipContent side="top" className="text-xs">{isFolder ? 'Approve folder' : 'Approve'}</TooltipContent>
-                                                            </Tooltip>
-                                                            <Tooltip>
-                                                                <TooltipTrigger asChild>
-                                                                    <button
-                                                                        type="button"
-                                                                        disabled={intakeActionInProgress === file.id}
-                                                                        onClick={(e) => { e.stopPropagation(); isFolder ? handleFolderIntakeAction(file, 'reject-folder') : handleIntakeAction(file, 'reject') }}
-                                                                        className="rounded-full text-red-500 hover:text-red-600 hover:bg-red-100 disabled:opacity-40 p-0.5"
-                                                                    >
-                                                                        <Trash2 className="h-3 w-3" />
-                                                                    </button>
-                                                                </TooltipTrigger>
-                                                                <TooltipContent side="top" className="text-xs">{isFolder ? 'Reject folder' : 'Reject'}</TooltipContent>
-                                                            </Tooltip>
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => { e.stopPropagation(); setExpandedIntakeBadgeId(expandedIntakeBadgeId === file.id ? null : file.id) }}
+                                                                    className="rounded p-0 leading-none text-amber-700 hover:text-amber-900"
+                                                                >
+                                                                    <Inbox className="h-3 w-3" />
+                                                                </button>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent side="top" className="text-xs">Pending Review</TooltipContent>
+                                                        </Tooltip>
+                                                        {expandedIntakeBadgeId === file.id && (<>
+                                                            {isProjectLead && (<>
+                                                                <Tooltip>
+                                                                    <TooltipTrigger asChild>
+                                                                        <button
+                                                                            type="button"
+                                                                            disabled={intakeActionInProgress === file.id}
+                                                                            onClick={(e) => { e.stopPropagation(); isFolder ? handleFolderIntakeAction(file, 'approve-folder') : handleIntakeAction(file, 'approve') }}
+                                                                            className="rounded-full text-emerald-600 hover:text-emerald-700 hover:bg-emerald-100 disabled:opacity-40 p-0.5"
+                                                                        >
+                                                                            <CheckCircle2 className="h-3 w-3" />
+                                                                        </button>
+                                                                    </TooltipTrigger>
+                                                                    <TooltipContent side="top" className="text-xs">{isFolder ? 'Approve folder' : 'Approve'}</TooltipContent>
+                                                                </Tooltip>
+                                                                <Tooltip>
+                                                                    <TooltipTrigger asChild>
+                                                                        <button
+                                                                            type="button"
+                                                                            disabled={intakeActionInProgress === file.id}
+                                                                            onClick={(e) => { e.stopPropagation(); isFolder ? handleFolderIntakeAction(file, 'reject-folder') : handleIntakeAction(file, 'reject') }}
+                                                                            className="rounded-full text-red-500 hover:text-red-600 hover:bg-red-100 disabled:opacity-40 p-0.5"
+                                                                        >
+                                                                            <Trash2 className="h-3 w-3" />
+                                                                        </button>
+                                                                    </TooltipTrigger>
+                                                                    <TooltipContent side="top" className="text-xs">{isFolder ? 'Reject folder' : 'Reject'}</TooltipContent>
+                                                                </Tooltip>
+                                                            </>)}
+                                                            {(isEC || isGuest) && isOwnIntake && (
+                                                                <Tooltip>
+                                                                    <TooltipTrigger asChild>
+                                                                        <button
+                                                                            type="button"
+                                                                            disabled={intakeActionInProgress === file.id}
+                                                                            onClick={(e) => { e.stopPropagation(); isFolder ? handleFolderIntakeAction(file, 'withdraw-folder') : handleIntakeAction(file, 'withdraw') }}
+                                                                            className="rounded-full text-amber-500 hover:text-red-600 hover:bg-red-100 disabled:opacity-40 p-0.5"
+                                                                        >
+                                                                            <Trash2 className="h-3 w-3" />
+                                                                        </button>
+                                                                    </TooltipTrigger>
+                                                                    <TooltipContent side="top" className="text-xs">{isFolder ? 'Withdraw folder' : 'Withdraw upload'}</TooltipContent>
+                                                                </Tooltip>
+                                                            )}
                                                         </>)}
-                                                        {(isEC || isGuest) && isOwnIntake && (
-                                                            <Tooltip>
-                                                                <TooltipTrigger asChild>
-                                                                    <button
-                                                                        type="button"
-                                                                        disabled={intakeActionInProgress === file.id}
-                                                                        onClick={(e) => { e.stopPropagation(); isFolder ? handleFolderIntakeAction(file, 'withdraw-folder') : handleIntakeAction(file, 'withdraw') }}
-                                                                        className="ml-0.5 rounded-full text-amber-500 hover:text-red-600 hover:bg-red-100 disabled:opacity-40 p-0.5"
-                                                                    >
-                                                                        <Trash2 className="h-3 w-3" />
-                                                                    </button>
-                                                                </TooltipTrigger>
-                                                                <TooltipContent side="top" className="text-xs">{isFolder ? 'Withdraw folder' : 'Withdraw upload'}</TooltipContent>
-                                                            </Tooltip>
-                                                        )}
                                                     </span>
                                                 ) : null}
                                                 {file.lock?.type === 'finalize' && !isFolder ? (
                                                     <Tooltip>
                                                         <TooltipTrigger asChild>
-                                                            <span className="inline-flex items-center gap-1 shrink-0 px-1.5 py-0.5 rounded text-[10px] font-normal bg-slate-50 text-slate-400 border border-slate-200">
-                                                                <Lock className="h-3 w-3" />
-                                                                Locked
-                                                            </span>
+                                                            {isProjectLead ? (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => { e.stopPropagation(); setUnlockConfirmFile(file) }}
+                                                                    className="inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-normal bg-slate-50 text-slate-400 border border-slate-200 hover:bg-amber-50 hover:text-amber-600 hover:border-amber-200 transition-colors"
+                                                                >
+                                                                    <Lock className="h-3 w-3" />
+                                                                </button>
+                                                            ) : (
+                                                                <span className="inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-normal bg-slate-50 text-slate-400 border border-slate-200">
+                                                                    <Lock className="h-3 w-3" />
+                                                                </span>
+                                                            )}
                                                         </TooltipTrigger>
                                                         <TooltipContent side="top">
-                                                            Version locked by Engagement Lead — read-only
+                                                            {isProjectLead
+                                                                ? 'Document Finalized — read-only. Click to Return to Draft'
+                                                                : 'Document Finalized — read-only. Engagement Lead can Return to Draft'}
                                                         </TooltipContent>
                                                     </Tooltip>
                                                 ) : null}
@@ -3371,12 +3463,36 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                         )}
                                                     </span>
                                                 ) : null}
-                                            </div>
                                         </div>
 
-                                        {/* Quick actions */}
-                                        <div className="col-span-1 flex items-center">
+                                        {/* Quick icons */}
+                                        <div className="flex items-center justify-end">
                                             <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                                {!isFolder && (
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <button
+                                                                type="button"
+                                                                className={cn(
+                                                                    'h-7 w-7 rounded-md inline-flex items-center justify-center disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-500',
+                                                                    file.id === activeCommentDocId
+                                                                        ? 'text-slate-700 bg-slate-100'
+                                                                        : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
+                                                                )}
+                                                                aria-label="Open comments"
+                                                                aria-pressed={file.id === activeCommentDocId}
+                                                                disabled={!isFolder && !file.projectDocumentId}
+                                                                onClick={() => openCommentsForFile(file)}
+                                                            >
+                                                                <MessageCircle className="h-4 w-4" />
+                                                            </button>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent side="top" className="text-xs">
+                                                            {!isFolder && !file.projectDocumentId ? 'Unavailable until indexed' : 'Comments'}
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                )}
+
                                                 <Tooltip>
                                                     <TooltipTrigger asChild>
                                                         <button
@@ -3406,67 +3522,6 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                         {file.projectDocumentId ? 'Copy link' : 'Unavailable until indexed'}
                                                     </TooltipContent>
                                                 </Tooltip>
-
-                                                {!isFolder && (
-                                                    <Tooltip>
-                                                        <TooltipTrigger asChild>
-                                                            <button
-                                                                type="button"
-                                                                className={cn(
-                                                                    'h-7 w-7 rounded-md inline-flex items-center justify-center disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-500',
-                                                                    file.id === activeCommentDocId
-                                                                        ? 'text-slate-700 bg-slate-100'
-                                                                        : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
-                                                                )}
-                                                                aria-label="Open comments"
-                                                                aria-pressed={file.id === activeCommentDocId}
-                                                                disabled={!isFolder && !file.projectDocumentId}
-                                                                onClick={() => openCommentsForFile(file)}
-                                                            >
-                                                                <MessageCircle className="h-4 w-4" />
-                                                            </button>
-                                                        </TooltipTrigger>
-                                                        <TooltipContent side="top" className="text-xs">
-                                                            {!isFolder && !file.projectDocumentId ? 'Unavailable until indexed' : 'Comments'}
-                                                        </TooltipContent>
-                                                    </Tooltip>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        {/* Owner Column */}
-                                        <div className="col-span-2 min-w-0">
-                                            <span className="text-xs text-slate-500 truncate block" title={file.actorEmail || 'me'}>
-                                                {file.actorEmail || 'me'}
-                                            </span>
-                                        </div>
-
-                                        {/* Date Modified Column */}
-                                        <div className="col-span-2">
-                                            <RelativeDateTime
-                                                date={file.modifiedTime}
-                                                textClassName="text-xs text-slate-500"
-                                                iconClassName="text-slate-300 hover:text-slate-500"
-                                                tooltipSide="top"
-                                            />
-                                        </div>
-
-                                        {/* File Size Column */}
-                                        <div className="col-span-2 text-left">
-                                            {isFolder ? (
-                                                <span className="text-xs text-slate-300">—</span>
-                                            ) : file.size ? (
-                                                <span className="text-xs text-slate-500 font-mono">
-                                                    {formatFileSize(Number(file.size))}
-                                                </span>
-                                            ) : (
-                                                <span className="text-xs text-slate-300">—</span>
-                                            )}
-                                        </div>
-
-                                        {/* Action Column - always visible, aligned with Sort header */}
-                                        <div className="col-span-1 flex justify-end">
-                                            <div onClick={(e) => e.stopPropagation()}>
                                                 {(() => {
                                                     const locked = file.lock?.type === 'finalize'
                                                     const canMutateFile = canEdit && !locked && !isIntakeRow
@@ -3474,6 +3529,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                     return (
                                                         <DocumentActionMenu
                                                             document={file}
+                                                            triggerIcon={<MoreVertical className="h-4 w-4" />}
                                                             deeplinkBase={typeof window !== 'undefined' ? window.location.href.replace(/#.*$/, '') : ''}
                                                             showShareModal={isProjectLead && !isIntakeRow}
                                                             isEngagementLead={isProjectLead}
@@ -3519,6 +3575,73 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                 })()}
                                             </div>
                                         </div>
+
+                                        {/* Owner Column */}
+                                        <div className="min-w-0">
+                                            {(() => {
+                                                const ownerName = file.owners?.[0]?.displayName
+                                                    || file.lastModifyingUser?.displayName
+                                                    || (file.actorEmail ? file.actorEmail.split('@')[0] : null)
+                                                    || null
+                                                const ownerEmail = file.owners?.[0]?.emailAddress
+                                                    || file.actorEmail
+                                                    || null
+                                                const ownerPhoto = file.owners?.[0]?.photoLink || null
+                                                const isMe = ownerEmail && session?.user?.email
+                                                    && ownerEmail.toLowerCase() === session.user.email.toLowerCase()
+                                                const ROLE_LABELS: Record<string, string> = {
+                                                    eng_admin: 'Engagement Lead',
+                                                    eng_member: 'Team Member',
+                                                    eng_ext_collaborator: 'External Collaborator',
+                                                    eng_viewer: 'Viewer (External)',
+                                                }
+                                                const personaName = file.ownerRole ? (ROLE_LABELS[file.ownerRole] ?? file.ownerRole) : undefined
+                                                if (!ownerName) return (
+                                                    <span className="text-xs text-slate-500">—</span>
+                                                )
+                                                return (
+                                                    <div className="flex items-center gap-1.5 min-w-0">
+                                                        <ProfileBubbleWithPopup
+                                                            name={ownerName}
+                                                            email={ownerEmail || ''}
+                                                            avatarUrl={ownerPhoto || null}
+                                                            personaName={personaName}
+                                                        />
+                                                        <span className="text-xs text-slate-500 truncate">
+                                                            {isMe ? 'me' : ownerName}
+                                                        </span>
+                                                    </div>
+                                                )
+                                            })()}
+                                        </div>
+
+                                        {/* Date Modified Column */}
+                                        <div>
+                                            {file.modifiedTime ? (
+                                                <RelativeDateTime
+                                                    date={file.modifiedTime}
+                                                    textClassName="text-xs text-slate-500"
+                                                    iconClassName="text-slate-300 hover:text-slate-500"
+                                                    tooltipSide="top"
+                                                />
+                                            ) : (
+                                                <span className="text-xs text-slate-400">—</span>
+                                            )}
+                                        </div>
+
+                                        {/* File Size Column */}
+                                        <div className="text-left">
+                                            {isFolder ? (
+                                                <span className="text-xs text-slate-300">—</span>
+                                            ) : file.size ? (
+                                                <span className="text-xs text-slate-500 font-mono">
+                                                    {formatFileSize(Number(file.size))}
+                                                </span>
+                                            ) : (
+                                                <span className="text-xs text-slate-300">—</span>
+                                            )}
+                                        </div>
+
                                         {(processingFileIds.has(file.id) || isRegrantingId === file.id) && (
                                             <div className="absolute bottom-0 left-0 right-0 z-10 pointer-events-none">
                                                 <div className="h-[2px] w-full bg-indigo-100 overflow-hidden">
@@ -3957,6 +4080,42 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                 className="bg-red-600 hover:bg-red-700 text-white"
                             >
                                 {trashConfirming ? <LoadingSpinner className="h-4 w-4" /> : 'Move to Bin'}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Return to Draft confirmation */}
+                <Dialog open={!!unlockConfirmFile} onOpenChange={(open) => { if (!open) setUnlockConfirmFile(null) }}>
+                    <DialogContent className="max-w-sm">
+                        <DialogHeader>
+                            <DialogTitle>Return to Draft?</DialogTitle>
+                            <DialogDescription>
+                                <span className="font-medium">{unlockConfirmFile?.name}</span> will be unlocked. All collaborators will regain their prior access level based on their role and sharing settings.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <DialogFooter>
+                            <Button variant="outline" size="sm" onClick={() => setUnlockConfirmFile(null)} disabled={unlockInProgress}>Cancel</Button>
+                            <Button variant="blackCta" size="sm" onClick={() => unlockConfirmFile && handleUnlockFromBadge(unlockConfirmFile)} disabled={unlockInProgress}>
+                                {unlockInProgress ? <LoadingSpinner className="h-4 w-4" /> : 'Return to Draft'}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Revoke external access confirmation */}
+                <Dialog open={!!unshareConfirmFile} onOpenChange={(open) => { if (!open) setUnshareConfirmFile(null) }}>
+                    <DialogContent className="max-w-sm">
+                        <DialogHeader>
+                            <DialogTitle>Revoke external access?</DialogTitle>
+                            <DialogDescription>
+                                <span className="font-medium">{unshareConfirmFile?.name}</span> will be unshared. All external collaborators and viewers will lose access, and any secure links sent by email will no longer work.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <DialogFooter>
+                            <Button variant="outline" size="sm" onClick={() => setUnshareConfirmFile(null)} disabled={unshareInProgress}>Cancel</Button>
+                            <Button variant="blackCta" size="sm" onClick={() => unshareConfirmFile && handleUnshare(unshareConfirmFile)} disabled={unshareInProgress}>
+                                {unshareInProgress ? <LoadingSpinner className="h-4 w-4" /> : 'Revoke Access'}
                             </Button>
                         </DialogFooter>
                     </DialogContent>
