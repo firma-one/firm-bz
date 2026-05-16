@@ -16,7 +16,4 @@ ADD COLUMN     "billingAddress" TEXT;
 ALTER TABLE "platform"."user_personalizations" ADD COLUMN "reminders" JSONB NOT NULL DEFAULT '[]';
 
 -- AlterTable
-ALTER TABLE "platform"."firm_workspace_migrations" ALTER COLUMN "updatedAt" DROP DEFAULT;
-
--- AlterTable
 ALTER TABLE "system"."system_signup_invites" ALTER COLUMN "updated_at" DROP DEFAULT;

@@ -22,6 +22,9 @@ CREATE TABLE "platform"."firm_workspace_migrations" (
     CONSTRAINT "firm_workspace_migrations_pkey" PRIMARY KEY ("id")
 );
 
+-- Prisma @updatedAt: drop DB default so ORM manages it
+ALTER TABLE "platform"."firm_workspace_migrations" ALTER COLUMN "updatedAt" DROP DEFAULT;
+
 CREATE TABLE "platform"."firm_workspace_migration_files" (
     "id"          UUID NOT NULL DEFAULT gen_random_uuid(),
     "migrationId" UUID NOT NULL,
