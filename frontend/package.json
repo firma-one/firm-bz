@@ -8,9 +8,11 @@
   "scripts": {
     "dev": "DEV_SERVER_START_VERSION=dev-$(date +%s) next dev",
     "dev:webpack": "DEV_SERVER_START_VERSION=dev-$(date +%s) next dev --webpack",
+    "prebuild": "tsc --noEmit",
     "build": "prisma generate && NEXT_PUBLIC_BUILD_TIMESTAMP=$(date +%s) next build --webpack",
     "postbuild": "prisma migrate deploy && npx prisma db seed",
     "start": "next start",
+    "typecheck": "tsc --noEmit",
     "lint": "next lint",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
