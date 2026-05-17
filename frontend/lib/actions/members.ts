@@ -29,8 +29,9 @@ function getAvatarUrlFromSupabaseUser(dbUser: any): string | null {
 
 export async function getProjectMembers(projectId: string) {
     const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error("Unauthorized")
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.user) throw new Error("Unauthorized")
+    const user = session.user
 
     // 1. Fetch Members (engagement = project in UI)
     const members = await prisma.engagementMember.findMany({
@@ -84,8 +85,8 @@ export type ProjectMemberSummary = {
 /** Lightweight member summaries per project */
 export async function getProjectMemberSummaries(projectIds: string[]): Promise<Record<string, ProjectMemberSummary>> {
     const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return {}
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.user) return {}
 
     if (projectIds.length === 0) return {}
 
@@ -107,20 +108,28 @@ export async function getProjectMemberSummaries(projectIds: string[]): Promise<R
         result[id] = { projectLeads: [], teamMembers: [], external: [] }
     }
 
+    // Fetch all unique user profiles in parallel instead of serially
+    const uniqueUserIds = Array.from(new Set(members.map(m => m.userId)))
+    const userDataMap = new Map<string, any>()
+    await Promise.all(uniqueUserIds.map(async (userId) => {
+        try {
+            const { data: { user: dbUser } } = await supabaseAdmin.auth.admin.getUserById(userId)
+            userDataMap.set(userId, dbUser ?? null)
+        } catch {
+            userDataMap.set(userId, null)
+        }
+    }))
+
     for (const m of members) {
         const displayPersonaName = roleToDisplayName[m.role] ?? ''
-        let userData: ProjectMemberSummaryUser
-        try {
-            const { data: { user: dbUser } } = await supabaseAdmin.auth.admin.getUserById(m.userId)
-            userData = {
-                name: dbUser?.user_metadata?.full_name || dbUser?.user_metadata?.name || dbUser?.email?.split('@')[0] || 'Unknown',
-                email: dbUser?.email || '',
-                avatarUrl: getAvatarUrlFromSupabaseUser(dbUser),
-                personaName: displayPersonaName || undefined
-            }
-        } catch {
-            userData = { name: 'Unknown', email: '', personaName: displayPersonaName || undefined }
-        }
+        const dbUser = userDataMap.get(m.userId) ?? null
+        const userData: ProjectMemberSummaryUser = dbUser ? {
+            name: dbUser.user_metadata?.full_name || dbUser.user_metadata?.name || dbUser.email?.split('@')[0] || 'Unknown',
+            email: dbUser.email || '',
+            avatarUrl: getAvatarUrlFromSupabaseUser(dbUser),
+            personaName: displayPersonaName || undefined
+        } : { name: 'Unknown', email: '', personaName: displayPersonaName || undefined }
+
         const personaLower = displayPersonaName.toLowerCase()
         if (personaLower.includes('lead')) result[m.engagementId].projectLeads.push(userData)
         else if (personaLower.includes('team')) result[m.engagementId].teamMembers.push(userData)
@@ -133,8 +142,9 @@ export async function getProjectMemberSummaries(projectIds: string[]): Promise<R
 export async function removeMember(memberId: string) {
     try {
         const supabase = await createClient()
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) throw new Error("Unauthorized")
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session?.user) throw new Error("Unauthorized")
+        const user = session.user
 
         const member = await prisma.engagementMember.findUnique({
             where: { id: memberId },
@@ -213,8 +223,9 @@ export async function revokeInvitation(invitationId: string) {
 export async function updateMemberPersona(memberId: string, personaId: string) {
     try {
         const supabase = await createClient()
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) throw new Error("Unauthorized")
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session?.user) throw new Error("Unauthorized")
+        const user = session.user
 
         const member = await prisma.engagementMember.findUnique({
             where: { id: memberId },
