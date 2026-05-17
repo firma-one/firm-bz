@@ -1,19 +1,15 @@
-import { getFirmHierarchy } from "@/lib/actions/hierarchy"
-import { prisma, basePrisma } from "@/lib/prisma"
+import { getClients } from "@/lib/actions/hierarchy"
+import { basePrisma } from "@/lib/prisma"
 import { FirmClientsView } from "@/components/projects/firm-clients-view"
 
 export default async function FirmPage({ params }: { params: Promise<{ slug: string }> }) {
     const { slug } = await params
 
-    const [clients, organization] = await Promise.all([
-        getFirmHierarchy(slug),
-        prisma.firm.findUnique({ where: { slug }, select: { id: true, sandboxOnly: true } }),
-    ])
+    const { clients, firmId, firmSandboxOnly } = await getClients(slug)
 
     let memberCount = 0
     let auditCount = 0
-    if (organization?.id) {
-        const firmId = organization.id
+    if (firmId) {
         const [firmMemberCount, firmInviteCount, firmAuditCount] = await Promise.all([
             (basePrisma as any).firmMember.count({ where: { firmId } }),
             (basePrisma as any).firmInvitation.count({ where: { firmId, status: { not: 'JOINED' } } }),
@@ -28,8 +24,8 @@ export default async function FirmPage({ params }: { params: Promise<{ slug: str
             <FirmClientsView
                 clients={clients}
                 orgSlug={slug}
-                orgId={organization?.id}
-                firmSandboxOnly={organization?.sandboxOnly ?? false}
+                orgId={firmId ?? undefined}
+                firmSandboxOnly={firmSandboxOnly}
                 memberCount={memberCount}
                 auditCount={auditCount}
             />

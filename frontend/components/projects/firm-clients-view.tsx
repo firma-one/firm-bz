@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { HierarchyClient, getFirmName } from '@/lib/actions/hierarchy'
+import { ClientSummary, getFirmName } from '@/lib/actions/hierarchy'
 import { UserPlus, Building2, LayoutGrid, List, Home, ChevronRight, Settings, Users, ClipboardList, UserCog, LayoutDashboard } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ClientList } from './client-list'
@@ -18,7 +18,7 @@ import { DriveInsightsSection } from '@/components/dashboard/drive-insights-sect
 import { FirmActionCenter } from '@/components/dashboard/firm-action-center'
 
 interface FirmClientsViewProps {
-    clients: HierarchyClient[]
+    clients: ClientSummary[]
     orgSlug: string
     orgId?: string
     /** From server: show "+ New Client" in sandbox so restriction toast is discoverable */

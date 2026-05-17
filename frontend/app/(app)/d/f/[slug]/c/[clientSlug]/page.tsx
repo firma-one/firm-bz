@@ -1,6 +1,6 @@
-import { getFirmHierarchy, getFirmName } from "@/lib/actions/hierarchy"
+import { getClientWithEngagements } from "@/lib/actions/hierarchy"
 import { ClientProjectView } from "@/components/projects/client-project-view"
-import { prisma, basePrisma } from "@/lib/prisma"
+import { basePrisma } from "@/lib/prisma"
 
 interface PageProps {
     params: Promise<{ slug: string; clientSlug: string }>
@@ -9,18 +9,12 @@ interface PageProps {
 export default async function ClientProjectPage({ params }: PageProps) {
     const { slug, clientSlug } = await params
 
-    const [clients, firmName, firm] = await Promise.all([
-        getFirmHierarchy(slug),
-        getFirmName(slug),
-        prisma.firm.findUnique({ where: { slug }, select: { id: true, sandboxOnly: true } }),
-    ])
-
-    const selectedClient = clients.find(c => c.slug === clientSlug)
+    const { client, firmId, firmName, firmSandboxOnly } = await getClientWithEngagements(slug, clientSlug)
 
     let contactCount = 0
     let memberCount = 0
-    if (selectedClient?.id) {
-        const clientId = selectedClient.id
+    if (client?.id) {
+        const clientId = client.id
         const [contactCountRaw, clientMemberCount, clientInviteCount] = await Promise.all([
             (basePrisma as any).clientContact.count({ where: { clientId } }),
             (basePrisma as any).clientMember.count({ where: { clientId } }),
@@ -33,11 +27,11 @@ export default async function ClientProjectPage({ params }: PageProps) {
     return (
         <div className="h-full flex flex-col">
             <ClientProjectView
-                clients={clients}
+                clients={client ? [client] : []}
                 firmSlug={slug}
-                firmName={firmName}
-                firmId={firm?.id}
-                firmSandboxOnly={firm?.sandboxOnly ?? false}
+                firmName={firmName ?? 'Firm'}
+                firmId={firmId ?? undefined}
+                firmSandboxOnly={firmSandboxOnly}
                 selectedClientSlug={clientSlug}
                 contactCount={contactCount}
                 memberCount={memberCount}
