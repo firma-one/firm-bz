@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>firmä | Client Settings</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Work+Sans:wght@300;400;500;600&amp;family=Space+Grotesk:wght@500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "primary": "#069668", // Updated to Requested Deep Green
+                        "on-primary": "#ffffff",
+                        "primary-container": "#069668",
+                        "on-primary-container": "#ffffff",
+                        "background": "#f9f9fb", // Pearl White
+                        "surface": "#ffffff", // Pure White Cards
+                        "surface-container-low": "#f3f4f6",
+                        "surface-container": "#f0edee",
+                        "on-surface": "#1b1b1d",
+                        "on-surface-variant": "#45474c",
+                        "outline": "#e5e7eb",
+                        "outline-variant": "#d1d5db",
+                        "secondary-container": "#ecfdf5",
+                        "on-secondary-container": "#065f46",
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "stack-lg": "32px",
+                        "stack-sm": "8px",
+                        "container-padding": "24px",
+                        "stack-md": "16px",
+                        "unit": "4px",
+                        "gutter": "16px"
+                    },
+                    "fontFamily": {
+                        "body": ["Work Sans"],
+                        "headline": ["Space Grotesk"],
+                        "mono": ["JetBrains Mono"]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            background-color: #f9f9fb;
+            color: #1b1b1d;
+            font-family: 'Work Sans', sans-serif;
+        }
+        .font-headline { font-family: 'Space Grotesk', sans-serif; }
+        .architectural-dot {
+            background-image: radial-gradient(#d1d5db 0.75px, transparent 0.75px);
+            background-size: 16px 16px;
+        }
+        
+        /* Sidebar transition */
+        #sidebar {
+            transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .sidebar-collapsed {
+            width: 72px !important;
+        }
+        .sidebar-collapsed .nav-text, 
+        .sidebar-collapsed .logo-text, 
+        .sidebar-collapsed .footer-nav {
+            display: none;
+        }
+        .sidebar-collapsed .px-6,
+        .sidebar-collapsed .px-4 {
+            padding-left: 16px;
+            padding-right: 16px;
+        }
+
+        /* Right Pane transition */
+        #right-pane {
+            transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), margin 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            width: 320px;
+        }
+        .pane-hidden {
+            width: 0 !important;
+            margin-left: 0 !important;
+            margin-right: 0 !important;
+            padding: 0 !important;
+            border-width: 0 !important;
+            opacity: 0;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden">
+<!-- Header Spans 100% -->
+<header class="w-full bg-white border-b border-outline z-50 shrink-0">
+<div class="flex items-center h-16 px-4">
+<!-- Brand Section -->
+<div class="w-60 shrink-0 flex flex-col justify-center">
+<div class="flex items-center">
+<h1 class="font-headline text-2xl font-bold tracking-tighter text-on-surface">firmä</h1>
+</div>
+<p class="font-mono text-[9px] text-on-surface-variant opacity-60 uppercase tracking-widest">v4.2.0-stable</p>
+</div>
+<!-- Central Prominent Search Bar -->
+<div class="flex-1 flex justify-center px-12">
+<div class="relative w-full max-w-2xl">
+<span class="absolute inset-y-0 left-3 flex items-center text-on-surface-variant/50">
+<span class="material-symbols-outlined text-[20px]">search</span>
+</span>
+<input class="w-full bg-background border border-outline rounded-lg pl-10 pr-4 py-2 text-sm focus:ring-1 focus:ring-primary focus:border-primary outline-none transition-all" placeholder="Search parameters, clients, or security logs..." type="text"/>
+</div>
+</div>
+<!-- Utility Actions -->
+<div class="flex items-center space-x-2">
+<button class="w-10 h-10 flex items-center justify-center rounded-full text-on-surface-variant hover:bg-background hover:text-on-surface transition-colors" title="Bookmarks">
+<span class="material-symbols-outlined text-[22px]">bookmark</span>
+</button>
+<button class="w-10 h-10 flex items-center justify-center rounded-full text-on-surface-variant hover:bg-background hover:text-on-surface transition-colors" onclick="toggleRightPane()" title="Activity Log">
+<span class="material-symbols-outlined text-[22px]">comment</span>
+</button>
+<button class="w-10 h-10 flex items-center justify-center rounded-full text-on-surface-variant hover:bg-background hover:text-on-surface relative transition-colors" title="Notifications">
+<span class="material-symbols-outlined text-[22px]">notifications</span>
+<span class="absolute top-2 right-2 w-2 h-2 bg-primary rounded-full border border-white"></span>
+</button>
+<button class="w-10 h-10 flex items-center justify-center rounded-full text-on-surface-variant hover:bg-background hover:text-on-surface transition-colors" title="Help">
+<span class="material-symbols-outlined text-[22px]">help_outline</span>
+</button>
+<div class="h-8 w-px bg-outline mx-2"></div>
+<button class="flex items-center gap-2 pl-2 pr-1 py-1 rounded-full hover:bg-background transition-colors">
+<div class="h-8 w-8 rounded-full bg-surface-container flex items-center justify-center border border-outline overflow-hidden">
+<span class="material-symbols-outlined text-on-surface-variant text-[20px]">account_circle</span>
+</div>
+</button>
+</div>
+</div>
+</header>
+<!-- Main Content Row -->
+<div class="flex flex-row flex-1 overflow-hidden">
+<!-- 1. [Minimizable Left Sidebar] -->
+<aside class="flex flex-col w-64 bg-white border-r border-outline py-container-padding z-30 shrink-0 relative" id="sidebar" style="padding-top: 1rem;">
+<button class="absolute -right-3 top-4 bg-white border border-outline rounded-full w-6 h-6 flex items-center justify-center hover:bg-background z-40" onclick="toggleSidebar()">
+<span class="material-symbols-outlined text-[16px]" id="collapse-icon">menu_open</span>
+</button>
+<nav class="flex-1 px-4 space-y-1 overflow-y-auto">
+<a class="flex items-center space-x-3 px-3 py-2 rounded text-sm font-medium text-on-surface-variant hover:bg-background hover:text-on-surface transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]">grid_view</span>
+<span class="nav-text">System Overview</span>
+</a>
+<a class="flex items-center space-x-3 px-3 py-2 rounded text-sm font-medium text-on-surface-variant hover:bg-background transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]">monitoring</span>
+<span class="nav-text">Analytics</span>
+</a>
+<a class="flex items-center space-x-3 px-3 py-2 rounded text-sm font-semibold bg-secondary-container text-on-secondary-container border-l-2 border-primary" href="#">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">folder_shared</span>
+<span class="nav-text">Client Assets</span>
+</a>
+<a class="flex items-center space-x-3 px-3 py-2 rounded text-sm font-medium text-on-surface-variant hover:bg-background transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]">terminal</span>
+<span class="nav-text">Network Logs</span>
+</a>
+<a class="flex items-center space-x-3 px-3 py-2 rounded text-sm font-medium text-on-surface-variant hover:bg-background transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]">security</span>
+<span class="nav-text">Security Audit</span>
+</a>
+</nav>
+<div class="mt-auto px-4 space-y-1 pt-4 border-t border-outline/50">
+<button class="w-full mb-stack-md py-2.5 px-4 bg-primary text-on-primary font-bold text-xs tracking-widest uppercase rounded shadow-sm hover:brightness-110 transition-all flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]">add_chart</span>
+<span class="nav-text ml-2">Generate Report</span>
+</button>
+<div class="footer-nav">
+<a class="flex items-center space-x-3 px-3 py-2 text-sm font-medium text-on-surface-variant hover:text-on-surface" href="#">
+<span class="material-symbols-outlined text-[20px]">menu_book</span>
+<span class="">Documentation</span>
+</a>
+</div>
+</div>
+</aside>
+<!-- 2. [Fixed Middle Content] -->
+<main class="flex-1 flex flex-col overflow-hidden relative bg-background">
+<div class="absolute inset-0 architectural-dot opacity-20 pointer-events-none"></div>
+<!-- Central Sub-Header Navigation -->
+<div class="relative z-20 bg-white border-b border-outline px-container-padding shrink-0">
+<div class="flex items-center justify-between h-14">
+<nav class="flex space-x-6 h-full">
+<a class="flex items-center gap-2 text-on-surface-variant font-medium text-sm hover:text-on-surface h-full border-b-2 border-transparent transition-all" href="#">
+<span class="material-symbols-outlined text-[18px]">dashboard</span>
+                            Dashboard
+                        </a>
+<a class="flex items-center gap-2 text-on-surface-variant font-medium text-sm hover:text-on-surface h-full border-b-2 border-transparent transition-all" href="#">
+<span class="material-symbols-outlined text-[18px]">list_alt</span>
+                            Engagements
+                        </a>
+<a class="flex items-center gap-2 text-on-surface-variant font-medium text-sm hover:text-on-surface h-full border-b-2 border-transparent transition-all" href="#">
+<span class="material-symbols-outlined text-[18px]">contacts</span>
+                            Contacts
+                        </a>
+<a class="flex items-center gap-2 text-on-surface-variant font-medium text-sm hover:text-on-surface h-full border-b-2 border-transparent transition-all" href="#">
+<span class="material-symbols-outlined text-[18px]">group</span>
+                            Members
+                        </a>
+<a class="flex items-center gap-2 text-on-surface font-bold text-sm h-full border-b-2 border-primary transition-all" href="#">
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">settings</span>
+                            Settings
+                        </a>
+</nav>
+<button class="bg-primary text-on-primary px-4 py-1.5 rounded font-headline text-[10px] font-bold tracking-widest uppercase hover:brightness-105 active:scale-95 transition-all shadow-sm">
+                        NEW ENGAGEMENT
+                    </button>
+</div>
+</div>
+<!-- Content Area Scrollable -->
+<div class="flex-1 overflow-y-auto relative z-10">
+<section class="p-container-padding space-y-stack-lg">
+<!-- Breadcrumbs -->
+<nav class="flex items-center space-x-2">
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">home</span>
+<span class="font-mono text-[11px] text-on-surface-variant opacity-60 uppercase tracking-tighter">root</span>
+<span class="material-symbols-outlined text-[14px] text-outline-variant">chevron_right</span>
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">folder</span>
+<span class="font-mono text-[11px] text-on-surface-variant opacity-60 uppercase tracking-tighter">clients</span>
+<span class="material-symbols-outlined text-[14px] text-outline-variant">chevron_right</span>
+<span class="material-symbols-outlined text-[16px] text-primary">corporate_fare</span>
+<span class="font-mono text-[11px] font-bold text-on-surface tracking-tighter">securesearch_pvt</span>
+</nav>
+<!-- Client Identification Header -->
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+<div class="flex items-center space-x-6">
+<div class="w-16 h-16 bg-white border border-outline flex items-center justify-center rounded-lg shadow-sm">
+<span class="material-symbols-outlined text-[40px] text-on-surface" style="font-variation-settings: 'FILL' 1;">corporate_fare</span>
+</div>
+<div>
+<div class="flex items-center space-x-3 flex-wrap gap-y-2">
+<h2 class="font-headline text-3xl md:text-4xl font-bold tracking-tight text-on-surface">SecureSearch Pvt. Ltd.</h2>
+<span class="bg-surface-container text-on-surface-variant border border-outline px-2 py-0.5 rounded font-mono text-[10px] tracking-tight uppercase">ID: SS-710092-B</span>
+</div>
+<div class="flex items-center mt-2 space-x-4">
+<div class="flex items-center text-on-surface-variant text-sm">
+<span class="material-symbols-outlined text-[16px] mr-1">location_on</span>
+                                        Mumbai, MH
+                                    </div>
+<div class="flex items-center text-primary text-sm font-medium">
+<span class="material-symbols-outlined text-[16px] mr-1" style="font-variation-settings: 'FILL' 1;">verified</span>
+                                        Verified Client
+                                    </div>
+</div>
+</div>
+</div>
+<div class="flex space-x-3">
+<button class="px-5 py-2 border border-outline font-bold text-[10px] tracking-widest uppercase text-on-surface bg-white hover:bg-background transition-all shadow-sm">
+                                EDIT PROFILE
+                            </button>
+</div>
+</div>
+<!-- Configuration Section -->
+<div class="pt-stack-md border-t border-outline">
+<div class="flex flex-col space-y-1 mb-stack-lg">
+<h3 class="font-headline text-xs font-bold text-on-surface uppercase tracking-[0.2em] flex items-center gap-2">
+<span class="w-2 h-2 bg-primary rounded-full"></span>
+                                Client Configuration
+                            </h3>
+<p class="text-sm text-on-surface-variant max-w-2xl">Manage organization-wide parameters, security protocols, and operational thresholds for this specific engagement cluster.</p>
+</div>
+<!-- Settings Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-gutter">
+<!-- Security Policy Card -->
+<div class="col-span-12 lg:col-span-4 bg-white border border-outline p-6 hover:shadow-lg hover:border-primary/50 transition-all group relative">
+<div class="flex justify-between items-start mb-6">
+<div class="p-2 bg-background rounded-lg group-hover:bg-primary/10 transition-colors">
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-primary">security</span>
+</div>
+<span class="h-2 w-2 rounded-full bg-primary shadow-[0_0_8px_rgba(6,150,104,0.4)]"></span>
+</div>
+<h4 class="font-headline font-bold text-on-surface text-lg">Security Enforcement</h4>
+<p class="text-sm text-on-surface-variant mt-2 leading-relaxed">Active AES-256 encryption with automated rotation cycles every 30 days.</p>
+<div class="mt-6 pt-4 border-t border-outline flex justify-between items-center">
+<span class="font-mono text-[10px] font-bold text-on-surface-variant tracking-widest uppercase">LEVEL: HIGH</span>
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant group-hover:translate-x-1 transition-transform group-hover:text-primary">arrow_forward</span>
+</div>
+</div>
+<!-- API Access Card -->
+<div class="col-span-12 lg:col-span-4 bg-white border border-outline p-6 hover:shadow-lg hover:border-primary/50 transition-all group">
+<div class="flex justify-between items-start mb-6">
+<div class="p-2 bg-background rounded-lg group-hover:bg-primary/10 transition-colors">
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-primary">api</span>
+</div>
+<span class="h-2 w-2 rounded-full bg-primary shadow-[0_0_8px_rgba(6,150,104,0.4)]"></span>
+</div>
+<h4 class="font-headline font-bold text-on-surface text-lg">API Orchestration</h4>
+<p class="text-sm text-on-surface-variant mt-2 leading-relaxed">12 active endpoints currently responding with 99.98% uptime latency.</p>
+<div class="mt-6 pt-4 border-t border-outline flex justify-between items-center">
+<span class="font-mono text-[10px] font-bold text-on-surface-variant tracking-widest uppercase">KEYS: 04 ACTIVE</span>
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant group-hover:translate-x-1 transition-transform group-hover:text-primary">arrow_forward</span>
+</div>
+</div>
+<!-- Compliance Card -->
+<div class="col-span-12 lg:col-span-4 bg-white border border-outline p-6 hover:shadow-lg hover:border-primary/50 transition-all group">
+<div class="flex justify-between items-start mb-6">
+<div class="p-2 bg-background rounded-lg group-hover:bg-primary/10 transition-colors">
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-primary">assignment_turned_in</span>
+</div>
+<span class="h-2 w-2 rounded-full bg-primary shadow-[0_0_8px_rgba(6,150,104,0.4)]"></span>
+</div>
+<h4 class="font-headline font-bold text-on-surface text-lg">Compliance Tracking</h4>
+<p class="text-sm text-on-surface-variant mt-2 leading-relaxed">ISO 27001 and GDPR compliance validated as of Q3 performance review.</p>
+<div class="mt-6 pt-4 border-t border-outline flex justify-between items-center">
+<span class="font-mono text-[10px] font-bold text-on-surface-variant tracking-widest uppercase">STATUS: COMPLIANT</span>
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant group-hover:translate-x-1 transition-transform group-hover:text-primary">arrow_forward</span>
+</div>
+</div>
+<!-- Data Visualization Module -->
+<div class="col-span-12 relative h-80 bg-white border border-outline overflow-hidden group shadow-sm">
+<img alt="Client Analytics Dashboard Interface" class="w-full h-full object-cover opacity-10 group-hover:opacity-40 transition-all duration-700 blur-[2px] group-hover:blur-0" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAw3F_eYi3MMxXPvg4jM2Ssyx-ue1jmqJuv1gIp5rre8mCp8q74ea-vRZk7Hl6eTZeuRbGHDxf2Fn6WRj5BhL1eMsuvekSid9bDyUxS0DkvdLtde-VS2Gg2NfS3rSV7By01SzbYHOTUSZbo8kp8djGx4-A1SxFHqhb4pPDFsq_OPRPSPHSIMf9Be5ZKjnMCR1ZozNl5AK30mjiSFnO8AcTYQbCcU_6mi8fhICg7h_GR6x2ELEgRDOU_glqEhIZIRLrKf6lvQzzPW28H"/>
+<div class="absolute inset-0 bg-gradient-to-t from-white via-white/20 to-transparent flex flex-col justify-end p-8">
+<div class="flex items-center space-x-3 mb-3">
+<span class="bg-primary text-on-primary px-2 py-0.5 font-mono text-[10px] font-bold tracking-widest rounded-sm">LIVE FEED</span>
+<span class="font-mono text-[10px] font-bold text-on-surface-variant tracking-widest uppercase">SECURESEARCH_OPS_NODE_4</span>
+</div>
+<div class="flex justify-between items-end">
+<div>
+<h4 class="font-headline text-3xl font-bold text-on-surface">Integrated Data Operations Terminal</h4>
+<p class="text-sm text-on-surface-variant mt-1 font-medium">Real-time performance monitoring and synchronization logs.</p>
+</div>
+<button class="p-3 bg-white border border-outline rounded-full hover:bg-primary hover:text-white transition-all group-hover:scale-110">
+<span class="material-symbols-outlined text-on-surface hover:text-white">open_in_new</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Subtle Footer inside scroll -->
+<footer class="p-container-padding border-t border-outline flex justify-between items-center bg-white/50 backdrop-blur-sm">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 bg-primary rounded-full animate-pulse"></span>
+<span class="font-mono text-[10px] font-bold tracking-[0.2em] text-on-surface-variant uppercase">All Systems Operational</span>
+</div>
+<div class="text-[11px] text-on-surface-variant opacity-60 font-medium">
+                        © 2026 firmä institution. All rights reserved.
+                    </div>
+</footer>
+</div>
+</main>
+<!-- 3. [Fully-Collapsible Right Pane] -->
+<aside class="bg-white border-outline flex flex-col shrink-0 overflow-hidden m-4 rounded-xl shadow-xl border" id="right-pane">
+<div class="p-4 border-b border-outline flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="p-1.5 bg-secondary-container rounded">
+<span class="material-symbols-outlined text-on-secondary-container text-[18px]">forum</span>
+</div>
+<div class="whitespace-nowrap">
+<h3 class="font-headline text-sm font-bold text-on-surface leading-tight">Activity Log</h3>
+<p class="text-[10px] text-on-surface-variant uppercase tracking-wider font-mono">Real-time Events</p>
+</div>
+</div>
+<div class="flex items-center gap-1">
+<button class="material-symbols-outlined text-[18px] text-on-surface-variant hover:text-on-surface">open_in_full</button>
+<button class="material-symbols-outlined text-[18px] text-on-surface-variant hover:text-on-surface" onclick="toggleRightPane()">close</button>
+</div>
+</div>
+<div class="flex-1 overflow-y-auto p-4 space-y-6 min-w-[280px]">
+<!-- Filter Bar -->
+<div class="flex gap-2">
+<button class="px-3 py-1 bg-background border border-outline rounded text-[11px] font-bold uppercase tracking-wider">All</button>
+<button class="px-3 py-1 text-on-surface-variant hover:bg-background rounded text-[11px] font-bold uppercase tracking-wider">Comments</button>
+<button class="px-3 py-1 text-on-surface-variant hover:bg-background rounded text-[11px] font-bold uppercase tracking-wider">Audit</button>
+</div>
+<!-- Example Activity Item -->
+<div class="space-y-4">
+<div class="flex gap-3">
+<div class="h-6 w-6 rounded-full bg-primary flex items-center justify-center border border-outline shrink-0">
+<span class="material-symbols-outlined text-[14px] text-on-primary">person</span>
+</div>
+<div class="space-y-1">
+<p class="text-xs"><span class="font-bold">System Admin</span> verified <span class="font-mono bg-background px-1 rounded text-[10px]">SS-710092-B</span></p>
+<p class="text-[10px] text-on-surface-variant">2 hours ago</p>
+</div>
+</div>
+<div class="flex gap-3">
+<div class="h-6 w-6 rounded-full bg-background flex items-center justify-center border border-outline shrink-0">
+<span class="material-symbols-outlined text-[14px] text-primary">security</span>
+</div>
+<div class="space-y-1">
+<p class="text-xs">Encryption keys rotated automatically.</p>
+<p class="text-[10px] text-on-surface-variant">5 hours ago</p>
+</div>
+</div>
+</div>
+</div>
+<div class="p-4 border-t border-outline bg-background/30 mt-auto">
+<div class="relative">
+<textarea class="w-full bg-white border border-outline rounded-lg p-3 text-sm focus:ring-1 focus:ring-primary focus:border-primary outline-none transition-all resize-none" placeholder="Add a comment..." rows="2"></textarea>
+<button class="absolute bottom-2 right-2 p-1.5 bg-primary text-on-primary rounded hover:brightness-110 transition-all">
+<span class="material-symbols-outlined text-[18px]">send</span>
+</button>
+</div>
+</div>
+</aside>
+</div>
+<script>
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const icon = document.getElementById('collapse-icon');
+            sidebar.classList.toggle('sidebar-collapsed');
+            if (sidebar.classList.contains('sidebar-collapsed')) {
+                icon.innerText = 'menu';
+            } else {
+                icon.innerText = 'menu_open';
+            }
+        }
+
+        function toggleRightPane() {
+            const pane = document.getElementById('right-pane');
+            pane.classList.toggle('pane-hidden');
+        }
+    </script>
+</body></html>
