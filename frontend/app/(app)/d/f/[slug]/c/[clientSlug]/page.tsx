@@ -1,6 +1,4 @@
-import { getFirmHierarchy, getFirmName, getIsOrgInternal } from "@/lib/actions/hierarchy"
-import { getProjectMemberSummaries } from "@/lib/actions/members"
-import { getFirmClientPermissions } from "@/lib/actions/permissions"
+import { getFirmHierarchy, getFirmName } from "@/lib/actions/hierarchy"
 import { ClientProjectView } from "@/components/projects/client-project-view"
 import { prisma, basePrisma } from "@/lib/prisma"
 
@@ -11,56 +9,38 @@ interface PageProps {
 export default async function ClientProjectPage({ params }: PageProps) {
     const { slug, clientSlug } = await params
 
-    const [clients, orgName, org] = await Promise.all([
+    const [clients, firmName, firm] = await Promise.all([
         getFirmHierarchy(slug),
         getFirmName(slug),
         prisma.firm.findUnique({ where: { slug }, select: { id: true, sandboxOnly: true } }),
     ])
 
     const selectedClient = clients.find(c => c.slug === clientSlug)
-    const projectIds = selectedClient?.projects?.map(p => p.id) ?? []
 
-    const [
-        contactCountRaw,
-        clientMemberCount,
-        clientInviteCount,
-        isOrgInternal,
-        memberSummaries,
-        perms,
-    ] = await Promise.all([
-        selectedClient?.id
-            ? (basePrisma as any).clientContact.count({ where: { clientId: selectedClient.id } })
-            : Promise.resolve(0),
-        selectedClient?.id
-            ? (basePrisma as any).clientMember.count({ where: { clientId: selectedClient.id } })
-            : Promise.resolve(0),
-        selectedClient?.id
-            ? (basePrisma as any).clientInvitation.count({ where: { clientId: selectedClient.id, status: { not: 'JOINED' } } })
-            : Promise.resolve(0),
-        getIsOrgInternal(slug),
-        projectIds.length > 0 ? getProjectMemberSummaries(projectIds) : Promise.resolve({}),
-        org?.id && selectedClient?.id
-            ? getFirmClientPermissions(org.id, selectedClient.id)
-            : Promise.resolve({ canManageClient: false }),
-    ])
-
-    const contactCount = contactCountRaw
-    const memberCount = clientMemberCount + clientInviteCount
+    let contactCount = 0
+    let memberCount = 0
+    if (selectedClient?.id) {
+        const clientId = selectedClient.id
+        const [contactCountRaw, clientMemberCount, clientInviteCount] = await Promise.all([
+            (basePrisma as any).clientContact.count({ where: { clientId } }),
+            (basePrisma as any).clientMember.count({ where: { clientId } }),
+            (basePrisma as any).clientInvitation.count({ where: { clientId, status: { not: 'JOINED' } } }),
+        ])
+        contactCount = contactCountRaw
+        memberCount = clientMemberCount + clientInviteCount
+    }
 
     return (
         <div className="h-full flex flex-col">
             <ClientProjectView
                 clients={clients}
-                orgSlug={slug}
-                orgName={orgName}
-                orgId={org?.id}
-                firmSandboxOnly={org?.sandboxOnly ?? false}
+                firmSlug={slug}
+                firmName={firmName}
+                firmId={firm?.id}
+                firmSandboxOnly={firm?.sandboxOnly ?? false}
                 selectedClientSlug={clientSlug}
                 contactCount={contactCount}
                 memberCount={memberCount}
-                isOrgInternal={isOrgInternal}
-                memberSummaries={memberSummaries}
-                canManageClient={perms.canManageClient}
             />
         </div>
     )

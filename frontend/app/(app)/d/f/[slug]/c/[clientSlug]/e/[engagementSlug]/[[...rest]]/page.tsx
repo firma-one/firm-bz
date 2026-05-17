@@ -62,7 +62,7 @@ export default async function EngagementPage({ params }: PageProps) {
     notFound()
   }
 
-  const project = client.projects.find(p => p.slug === engagementSlug)
+  const project = client.engagements.find(p => p.slug === engagementSlug)
   if (!project) {
     notFound()
   }

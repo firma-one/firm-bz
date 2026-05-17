@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/profile-bubble-popup'
 
 interface ProjectListProps {
-    projects: HierarchyClient['projects']
+    projects: HierarchyClient['engagements']
     orgSlug: string
     clientSlug: string
     viewMode?: 'grid' | 'list'

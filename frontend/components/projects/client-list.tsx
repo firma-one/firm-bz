@@ -109,7 +109,7 @@ export function ClientList({ clients, orgSlug, viewMode = 'grid' }: ClientListPr
                                 </td>
                                 <td className="px-4 py-3 text-slate-500">
                                     <span className="px-2 py-1 bg-slate-100 rounded-full text-xs font-medium">
-                                        {client.projects.length} {client.projects.length === 1 ? 'Engagement' : 'Engagements'}
+                                        {client.engagements.length} {client.engagements.length === 1 ? 'Engagement' : 'Engagements'}
                                     </span>
                                 </td>
                                 <td className="px-4 py-3 text-right text-slate-400">
@@ -159,7 +159,7 @@ export function ClientList({ clients, orgSlug, viewMode = 'grid' }: ClientListPr
                             <span>{formatDistanceToNow(new Date(client.updatedAt), { addSuffix: true })}</span>
                         </div>
                         <span className="font-medium text-slate-500">
-                            {client.projects.length} {client.projects.length === 1 ? 'engagement' : 'engagements'}
+                            {client.engagements.length} {client.engagements.length === 1 ? 'engagement' : 'engagements'}
                         </span>
                     </div>
                 </Link>

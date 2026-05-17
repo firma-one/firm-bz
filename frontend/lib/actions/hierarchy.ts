@@ -12,7 +12,6 @@ export type HierarchyClient = {
     name: string
     slug: string
     firmId?: string
-    organizationId?: string
     industry: string | null
     sector: string | null
     status: string | null
@@ -31,7 +30,7 @@ export type HierarchyClient = {
     billingAddress: string | null
     createdAt: Date
     updatedAt: Date
-    projects: {
+    engagements: {
         id: string
         clientId: string
         name: string
@@ -68,11 +67,13 @@ function tagsFromJson(j: unknown): string[] {
  */
 export async function getFirmHierarchy(firmSlug: string): Promise<HierarchyClient[]> {
     const supabase = await createClient()
-    const { data: { user }, error } = await supabase.auth.getUser()
+    const { data: { session } } = await supabase.auth.getSession()
 
-    if (error || !user) {
+    if (!session?.user) {
         redirect('/signin')
     }
+
+    const user = session.user
 
     const firm = await prisma.firm.findUnique({
         where: { slug: firmSlug },
@@ -94,18 +95,13 @@ export async function getFirmHierarchy(firmSlug: string): Promise<HierarchyClien
         return []
     }
 
-    let permissions: UserPermissions = { firms: [] }
-    try {
-        const settings = await userSettingsPlus.getUserSettingsPlus(user.id)
-        permissions = settings.permissions || { firms: [] }
-    } catch (e) {
-        logger.debug('Could not get cached permissions for hierarchy check', e as Error)
-    }
-
-    // Pure membership-based fetch (V2)
-    // A user sees a client if they have a ClientMember row OR at least one ProjectMember
-    // under that client. ProjectMember rows are the single source of truth — no isOwner branching.
-    const clients = await prisma.client.findMany({
+    // getUserSettingsPlus and client.findMany are independent — run in parallel.
+    const [settingsResult, clients] = await Promise.all([
+        userSettingsPlus.getUserSettingsPlus(user.id).catch((e: Error) => {
+            logger.debug('Could not get cached permissions for hierarchy check', e)
+            return null
+        }),
+        prisma.client.findMany({
         where: {
             firmId,
             OR: [
@@ -125,14 +121,16 @@ export async function getFirmHierarchy(firmSlug: string): Promise<HierarchyClien
             }
         },
         orderBy: { name: 'asc' }
-    })
+        }),
+    ])
+
+    const permissions: UserPermissions = settingsResult?.permissions || { firms: [] }
 
     return clients.map((c: any) => ({
         id: c.id,
         name: c.name,
         slug: c.slug,
         firmId,
-        organizationId: firmId,
         industry: c.industry,
         sector: c.sector,
         status: c.status,
@@ -151,17 +149,17 @@ export async function getFirmHierarchy(firmSlug: string): Promise<HierarchyClien
         billingAddress: c.billingAddress ?? null,
         createdAt: c.createdAt,
         updatedAt: c.updatedAt,
-        projects: c.engagements.map((p: any) => {
-            const projectPerms = findProjectInPermissions(
+        engagements: c.engagements.map((p: any) => {
+            const engagementPerms = findProjectInPermissions(
                 permissions,
                 firmId,
                 c.id,
                 p.id
             )
 
-            const canView = projectPerms?.scopes.project?.includes('can_view') || false
-            const canEdit = projectPerms?.scopes.project?.includes('can_edit') || false
-            const canManage = projectPerms?.scopes.project?.includes('can_manage') || false
+            const canView = engagementPerms?.scopes.project?.includes('can_view') || false
+            const canEdit = engagementPerms?.scopes.project?.includes('can_edit') || false
+            const canManage = engagementPerms?.scopes.project?.includes('can_manage') || false
 
             const engStatus = p.status ?? 'ACTIVE'
             return {
@@ -193,13 +191,14 @@ export async function getFirmHierarchy(firmSlug: string): Promise<HierarchyClien
 /**
  * Whether the current user is an org internal member (V2)
  */
-export async function getIsOrgInternal(organizationSlug: string): Promise<boolean> {
+export async function getIsOrgInternal(firmSlug: string): Promise<boolean> {
     const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return false
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.user) return false
+    const user = session.user
 
     const firm = await prisma.firm.findUnique({
-        where: { slug: organizationSlug },
+        where: { slug: firmSlug },
         select: { id: true }
     })
     if (!firm) return false
@@ -219,9 +218,11 @@ export async function getIsOrgInternal(organizationSlug: string): Promise<boolea
  */
 export async function getFirmName(firmSlug: string): Promise<string> {
     const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { session } } = await supabase.auth.getSession()
 
-    if (!user) return 'Firm'
+    if (!session?.user) return 'Firm'
+
+    const user = session.user
 
     const firm = await prisma.firm.findUnique({
         where: { slug: firmSlug },

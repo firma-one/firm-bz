@@ -38,11 +38,13 @@ export interface CreateFirmData {
  */
 export async function getUserFirms(): Promise<FirmOption[]> {
     const supabase = await createClient()
-    const { data: { user }, error } = await supabase.auth.getUser()
+    const { data: { session } } = await supabase.auth.getSession()
 
-    if (error || !user) {
+    if (!session?.user) {
         redirect('/signin')
     }
+
+    const user = session.user
 
     try {
         const firms = await FirmService.getUserFirms(user.id)

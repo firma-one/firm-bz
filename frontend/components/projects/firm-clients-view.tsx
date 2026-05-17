@@ -71,7 +71,7 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
 
     // Fetch permissions: canCreateClient (client scope can_manage), canViewOrgSettings (org scope can_manage)
     useEffect(() => {
-        const organizationId = orgId ?? (clients.length > 0 ? clients[0].organizationId : null)
+        const organizationId = orgId ?? (clients.length > 0 ? clients[0].firmId : null)
         if (!organizationId) return
         fetch(
             `/api/permissions/firm?firmId=${encodeURIComponent(organizationId)}&firmSlug=${encodeURIComponent(orgSlug)}`
@@ -237,11 +237,11 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                         </div>
                     </TabsContent>
 
-                    {canViewOrgAudit && (orgId ?? (clients[0]?.firmId ?? clients[0]?.organizationId)) && (
+                    {canViewOrgAudit && (orgId ?? (clients[0]?.firmId ?? clients[0]?.firmId)) && (
                         <TabsContent value="members" className="m-0 h-full">
                             <div className="py-1 h-full">
                                 <FirmMembersTab
-                                    firmId={orgId ?? clients[0]?.firmId ?? clients[0]?.organizationId ?? ''}
+                                    firmId={orgId ?? clients[0]?.firmId ?? clients[0]?.firmId ?? ''}
                                     orgSlug={orgSlug}
                                     canManage={canViewOrgAudit}
                                 />
@@ -254,7 +254,7 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                             <div className="py-1 h-full">
                                 <ErrorBoundary context="OrgAuditTab">
                                     <ProjectAuditPane
-                                        firmId={orgId ?? (clients.length > 0 ? clients[0].firmId ?? clients[0].organizationId : undefined)}
+                                        firmId={orgId ?? (clients.length > 0 ? clients[0].firmId : undefined)}
                                         exportTitle={orgName ?? 'firm'}
                                     />
                                 </ErrorBoundary>
@@ -262,20 +262,20 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                         </TabsContent>
                     )}
 
-                    {canViewOrgAudit && (orgId ?? (clients[0]?.firmId ?? clients[0]?.organizationId)) && (
+                    {canViewOrgAudit && (orgId ?? (clients[0]?.firmId ?? clients[0]?.firmId)) && (
                         <TabsContent value="insights" className="m-0">
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 22rem', gap: '1.5rem', paddingTop: '0.5rem', paddingBottom: '1.5rem' }}>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', minWidth: 0 }}>
                                     <ErrorBoundary context="FirmInsightsTab">
                                         <FirmBusinessInsights
-                                            firmId={orgId ?? clients[0]?.firmId ?? clients[0]?.organizationId ?? ''}
+                                            firmId={orgId ?? clients[0]?.firmId ?? clients[0]?.firmId ?? ''}
                                             firmSlug={orgSlug}
                                         />
                                     </ErrorBoundary>
                                     <DriveInsightsSection />
                                 </div>
                                 <FirmActionCenter
-                                    firmId={orgId ?? clients[0]?.firmId ?? clients[0]?.organizationId ?? ''}
+                                    firmId={orgId ?? clients[0]?.firmId ?? clients[0]?.firmId ?? ''}
                                     firmSlug={orgSlug}
                                 />
                             </div>

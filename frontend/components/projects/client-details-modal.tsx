@@ -276,7 +276,7 @@ export function ClientDetailsModal({ client, open, onOpenChange }: ClientDetails
                         </div>
                         <div className="flex-1">
                             <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Projects</div>
-                            <div className="text-sm font-medium text-slate-900">{client.projects.length} Active Projects</div>
+                            <div className="text-sm font-medium text-slate-900">{client.engagements.length} Active Engagements</div>
                         </div>
                     </div>
 
