@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react'
-import { Eye, MessageCircle, Send, Loader2, Calendar, Check, ChevronDown, Link2, SlidersHorizontal, Smile } from 'lucide-react'
+import { Eye, MessageCircle, Send, Loader2, Check, ChevronDown, Link2, SlidersHorizontal, Smile } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useRightPane } from '@/lib/right-pane-context'
@@ -21,9 +21,10 @@ import {
 } from '@/components/ui/tooltip'
 import { SandboxInfoBanner } from '@/components/ui/sandbox-info-banner'
 import { useOrgSandbox } from '@/lib/use-org-sandbox'
+import { DateTimePicker } from '@/components/ui/date-time-picker'
 
 export interface DocumentDocCommentsPaneProps {
-  projectId: string
+  engagementId: string
   documentId: string
   documentName?: string
 }
@@ -55,11 +56,11 @@ const REACTIONS: { key: ReactionKey; label: string; emoji: string; chipClass: st
 const LIGHT_TOOLTIP_CLASS =
   'z-[9999] max-w-[320px] p-3 text-xs bg-white text-slate-900 border border-slate-200 shadow-xl break-words'
 
-export function DocumentDocCommentsPane({ projectId, documentId, documentName }: DocumentDocCommentsPaneProps) {
+export function DocumentDocCommentsPane({ engagementId, documentId, documentName }: DocumentDocCommentsPaneProps) {
   const rightPane = useRightPane()
   const { user } = useAuth()
-  const orgSandbox = useOrgSandbox()
-  const isSandboxFirm = Boolean(orgSandbox?.sandboxOnly)
+  const firmSandbox = useOrgSandbox()
+  const isSandboxFirm = Boolean(firmSandbox?.sandboxOnly)
   const myEmail = user?.email ?? ''
   const isExpanded = rightPane.isExpanded
   const [messages, setMessages] = useState<CommentMessage[]>([])
@@ -83,7 +84,6 @@ export function DocumentDocCommentsPane({ projectId, documentId, documentName }:
 
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
-  const today = useMemo(() => new Date().toISOString().slice(0, 10), [])
 
   const toggleId = (list: string[], id: string) =>
     list.includes(id) ? list.filter((x) => x !== id) : [...list, id]
@@ -148,7 +148,7 @@ export function DocumentDocCommentsPane({ projectId, documentId, documentName }:
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/projects/${projectId}/documents/${documentId}/doc-comments`)
+      const res = await fetch(`/api/projects/${engagementId}/documents/${documentId}/doc-comments`)
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
         throw new Error(data.error ?? 'Failed to load comments')
@@ -160,7 +160,7 @@ export function DocumentDocCommentsPane({ projectId, documentId, documentName }:
     } finally {
       setLoading(false)
     }
-  }, [projectId, documentId])
+  }, [engagementId, documentId])
 
   useEffect(() => {
     fetchMessages()
@@ -169,7 +169,7 @@ export function DocumentDocCommentsPane({ projectId, documentId, documentName }:
   useEffect(() => {
     // Keyboard friendly: focus composer on open
     textareaRef.current?.focus()
-  }, [projectId, documentId])
+  }, [engagementId, documentId])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -188,7 +188,7 @@ export function DocumentDocCommentsPane({ projectId, documentId, documentName }:
     if (!content || submitting) return
     setSubmitting(true)
     try {
-      const res = await fetch(`/api/projects/${projectId}/documents/${documentId}/doc-comments`, {
+      const res = await fetch(`/api/projects/${engagementId}/documents/${documentId}/doc-comments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content }),
@@ -401,7 +401,7 @@ export function DocumentDocCommentsPane({ projectId, documentId, documentName }:
     async (messageId: string, emojiKey: ReactionKey, action: 'add' | 'remove') => {
       if (isSandboxFirm) return
       updateReactionOptimistic(messageId, emojiKey, action)
-      const res = await fetch(`/api/projects/${projectId}/documents/${documentId}/doc-comments/reactions`, {
+      const res = await fetch(`/api/projects/${engagementId}/documents/${documentId}/doc-comments/reactions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messageId, emojiKey, action }),
@@ -411,7 +411,7 @@ export function DocumentDocCommentsPane({ projectId, documentId, documentName }:
         updateReactionOptimistic(messageId, emojiKey, action === 'add' ? 'remove' : 'add')
       }
     },
-    [projectId, documentId, updateReactionOptimistic, isSandboxFirm]
+    [engagementId, documentId, updateReactionOptimistic, isSandboxFirm]
   )
 
   return (
@@ -591,38 +591,29 @@ export function DocumentDocCommentsPane({ projectId, documentId, documentName }:
               <div className="grid grid-cols-2 gap-2">
                 <div className="flex flex-col gap-1">
                   <label className="text-xs font-medium text-slate-600">From</label>
-                  <div className="relative">
-                    <input
-                      type="date"
-                      value={fromDate}
-                      max={toDate ? (toDate < today ? toDate : today) : today}
-                      onChange={(e) => {
-                        const next = e.target.value
-                        setFromDate(next)
-                        if (toDate && next && toDate < next) setToDate(next)
-                      }}
-                      className="h-9 rounded-xl border border-slate-200 bg-white pl-2 pr-8 text-sm w-full"
-                    />
-                    <Calendar className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-                  </div>
+                  <DateTimePicker
+                    value={fromDate}
+                    onChange={(iso) => {
+                      setFromDate(iso)
+                      if (toDate && iso && new Date(iso) > new Date(toDate)) setToDate(iso)
+                    }}
+                    placeholder="From date"
+                    defaultTime="00:00"
+                    allowFutureDateTimes={false}
+                  />
                 </div>
                 <div className="flex flex-col gap-1">
                   <label className="text-xs font-medium text-slate-600">To</label>
-                  <div className="relative">
-                    <input
-                      type="date"
-                      value={toDate}
-                      min={fromDate || undefined}
-                      max={today}
-                      onChange={(e) => {
-                        const next = e.target.value
-                        if (fromDate && next && next < fromDate) return
-                        setToDate(next)
-                      }}
-                      className="h-9 rounded-xl border border-slate-200 bg-white pl-2 pr-8 text-sm w-full"
-                    />
-                    <Calendar className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-                  </div>
+                  <DateTimePicker
+                    value={toDate}
+                    onChange={(iso) => {
+                      if (fromDate && iso && new Date(iso) < new Date(fromDate)) return
+                      setToDate(iso)
+                    }}
+                    placeholder="To date"
+                    defaultTime="23:59"
+                    allowFutureDateTimes={false}
+                  />
                 </div>
               </div>
 
@@ -776,38 +767,31 @@ export function DocumentDocCommentsPane({ projectId, documentId, documentName }:
               </div>
               <div className="flex flex-col gap-1">
                 <label className="text-xs font-medium text-slate-600">From</label>
-                <div className="relative">
-                  <input
-                    type="date"
-                    value={fromDate}
-                    max={toDate ? (toDate < today ? toDate : today) : today}
-                    onChange={(e) => {
-                      const next = e.target.value
-                      setFromDate(next)
-                      if (toDate && next && toDate < next) setToDate(next)
-                    }}
-                    className="h-9 rounded-xl border border-slate-200 bg-white pl-2 pr-8 text-sm min-w-[140px]"
-                  />
-                  <Calendar className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-                </div>
+                <DateTimePicker
+                  value={fromDate}
+                  onChange={(iso) => {
+                    setFromDate(iso)
+                    if (toDate && iso && new Date(iso) > new Date(toDate)) setToDate(iso)
+                  }}
+                  placeholder="From date"
+                  defaultTime="00:00"
+                  allowFutureDateTimes={false}
+                  className="min-w-[140px]"
+                />
               </div>
               <div className="flex flex-col gap-1">
                 <label className="text-xs font-medium text-slate-600">To</label>
-                <div className="relative">
-                  <input
-                    type="date"
-                    value={toDate}
-                    min={fromDate || undefined}
-                    max={today}
-                    onChange={(e) => {
-                      const next = e.target.value
-                      if (fromDate && next && next < fromDate) return
-                      setToDate(next)
-                    }}
-                    className="h-9 rounded-xl border border-slate-200 bg-white pl-2 pr-8 text-sm min-w-[140px]"
-                  />
-                  <Calendar className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-                </div>
+                <DateTimePicker
+                  value={toDate}
+                  onChange={(iso) => {
+                    if (fromDate && iso && new Date(iso) < new Date(fromDate)) return
+                    setToDate(iso)
+                  }}
+                  placeholder="To date"
+                  defaultTime="23:59"
+                  allowFutureDateTimes={false}
+                  className="min-w-[140px]"
+                />
               </div>
               <Button
                 variant="outline"

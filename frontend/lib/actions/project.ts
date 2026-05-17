@@ -251,7 +251,7 @@ export async function createEngagement(firmSlug: string, clientSlug: string, dat
     }).catch(() => {})
 
     revalidatePath(`/d/f/${firmSlug}/c/${clientSlug}`)
-    return newProject
+    return { id: newProject.id, slug: newProject.slug, name: newProject.name }
 }
 
 /**

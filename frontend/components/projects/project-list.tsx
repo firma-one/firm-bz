@@ -20,6 +20,7 @@ interface ProjectListProps {
     viewMode?: 'grid' | 'list'
     isOrgInternal?: boolean
     memberSummaries?: Record<string, ProjectMemberSummary>
+    isRefreshing?: boolean
 }
 
 function engagementStatusLabel(status: string | null | undefined): string {
@@ -155,8 +156,8 @@ function LeadAvatar({ user }: { user: ProfileBubblePopupUser }) {
     )
 }
 
-export function ProjectList({ projects, orgSlug, clientSlug, viewMode = 'grid', isOrgInternal, memberSummaries = {} }: ProjectListProps) {
-    if (projects.length === 0) {
+export function ProjectList({ projects, orgSlug, clientSlug, viewMode = 'grid', isOrgInternal, memberSummaries = {}, isRefreshing = false }: ProjectListProps) {
+    if (projects.length === 0 && !isRefreshing) {
         return (
             <div className="flex flex-col items-center justify-center h-64 text-center border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50">
                 <div className="h-12 w-12 bg-slate-100 rounded-full flex items-center justify-center mb-4 text-slate-400">
@@ -188,6 +189,15 @@ export function ProjectList({ projects, orgSlug, clientSlug, viewMode = 'grid', 
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
+                            {isRefreshing && (
+                                <tr className="animate-pulse">
+                                    <td className="px-4 py-3"><div className="h-4 w-40 bg-slate-100 rounded" /></td>
+                                    <td className="px-4 py-3"><div className="h-5 w-16 bg-slate-100 rounded-full" /></td>
+                                    <td className="px-4 py-3"><div className="h-4 w-32 bg-slate-100 rounded" /></td>
+                                    <td className="px-4 py-3"><div className="h-4 w-24 bg-slate-100 rounded" /></td>
+                                    <td className="px-4 py-3"><div className="h-4 w-20 bg-slate-100 rounded ml-auto" /></td>
+                                </tr>
+                            )}
                             {projects.map((project) => {
                                 const summary = showBubbles ? memberSummaries[project.id] : null
                                 const hasLeads = summary && summary.projectLeads.length > 0
@@ -273,6 +283,20 @@ export function ProjectList({ projects, orgSlug, clientSlug, viewMode = 'grid', 
     return (
         <TooltipProvider>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {isRefreshing && (
+                    <div className="relative bg-white border border-slate-200 rounded-xl p-5 flex flex-col h-48 animate-pulse">
+                        <div className="flex items-start justify-between mb-3">
+                            <div className="h-10 w-10 bg-slate-100 rounded-lg" />
+                            <div className="h-5 w-14 bg-slate-100 rounded-full" />
+                        </div>
+                        <div className="h-4 w-3/4 bg-slate-100 rounded mb-2" />
+                        <div className="h-3 w-full bg-slate-100 rounded mb-1" />
+                        <div className="h-3 w-2/3 bg-slate-100 rounded mb-auto" />
+                        <div className="mt-auto pt-3 border-t border-slate-50">
+                            <div className="h-3 w-24 bg-slate-100 rounded" />
+                        </div>
+                    </div>
+                )}
                 {projects.map((project) => {
                     const summary = showBubbles ? memberSummaries[project.id] : null
                     const hasLeads = summary && summary.projectLeads.length > 0

@@ -35,9 +35,10 @@ interface AddClientModalProps {
     /** Server-known flag so sandbox is enforced before client fetch completes */
     firmSandboxOnly?: boolean
     trigger?: React.ReactNode
+    onSaved?: () => void
 }
 
-export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigger }: AddClientModalProps) {
+export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigger, onSaved }: AddClientModalProps) {
     const [open, setOpen] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
     const [name, setName] = useState('')
@@ -155,7 +156,7 @@ export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigg
             window.dispatchEvent(new CustomEvent('firma-reminders-updated'))
             // Keep user on the Clients list view after creation.
             router.push(`/d/f/${orgSlug}?tab=clients`, { scroll: false })
-            router.refresh()
+            onSaved?.()
         } catch (error: any) {
             console.error(error)
             setError(error.message || "Failed to create client")

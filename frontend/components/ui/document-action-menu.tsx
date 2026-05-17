@@ -781,7 +781,7 @@ export function DocumentActionMenu({
                         rightPane.setHeaderSubtitle('Append-only. Visible to all project members.')
                         rightPane.setContent(
                           <DocumentDocCommentsPane
-                            projectId={projectId}
+                            engagementId={projectId}
                             documentId={docIdForComments}
                             documentName={document.name}
                           />

@@ -188,7 +188,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
             rightPane.setHeaderSubtitle('Append-only. Visible to all project members.')
             rightPane.setContent(
                 <DocumentDocCommentsPane
-                    projectId={projectId}
+                    engagementId={projectId}
                     documentId={docIdForComments}
                     documentName={file.name}
                 />
@@ -711,7 +711,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
             rightPane.setHeaderSubtitle('Append-only. Visible to all engagement members.')
             rightPane.setContent(
                 <DocumentDocCommentsPane
-                    projectId={projectId}
+                    engagementId={projectId}
                     documentId={documentIdParam}
                     documentName={fileName ?? undefined}
                 />

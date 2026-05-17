@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useTransition } from 'react'
 import { HierarchyClient, getIsOrgInternal } from '@/lib/actions/hierarchy'
 import { getProjectMemberSummaries, type ProjectMemberSummary } from '@/lib/actions/members'
 import { ProjectList } from './project-list'
@@ -9,7 +9,7 @@ import type { LwCrmClientStatus } from '@/lib/actions/client'
 import { SquarePlus, ChevronRight, Building2, Users, Briefcase, LayoutGrid, List, Home, Settings, UserCog, CalendarClock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
-import { AddProjectModal } from './add-project-modal'
+import { AddEngagementModal } from './add-engagement-modal'
 import { ClientDetailsModal } from './client-details-modal'
 import { ClientContactsTab } from './client-contacts-tab'
 import { ClientMembersTab } from './members/client-members-tab'
@@ -36,6 +36,7 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
     const [isFirmInternal, setIsFirmInternal] = useState(false)
     const [memberSummaries, setMemberSummaries] = useState<Record<string, ProjectMemberSummary>>({})
     const [canManageClient, setCanManageClient] = useState(false)
+    const [isPendingRefresh, startRefresh] = useTransition()
 
     // Load view mode preference from localStorage on mount
     useEffect(() => {
@@ -176,10 +177,11 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                         <Tabs value={currentTab} onValueChange={handleTabChange} className="flex-1 flex flex-col min-h-0">
                             <div className="mb-6">
                                 <TabsList className="h-10 p-1 bg-slate-100 rounded-lg inline-flex justify-start flex-wrap gap-1">
-                                    <AddProjectModal
-                                        orgSlug={firmSlug}
+                                    <AddEngagementModal
+                                        firmSlug={firmSlug}
                                         clientSlug={selectedClient.slug}
                                         firmSandboxOnly={firmSandboxOnly}
+                                        onSaved={() => startRefresh(() => router.refresh())}
                                         trigger={
                                             <Button
                                                 variant="blackCta"
@@ -273,6 +275,7 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                                                 viewMode={viewMode}
                                                 isOrgInternal={isFirmInternal}
                                                 memberSummaries={memberSummaries}
+                                                isRefreshing={isPendingRefresh}
                                             />
                                         </div>
                                     </div>
