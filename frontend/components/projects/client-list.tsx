@@ -10,6 +10,7 @@ interface ClientListProps {
     clients: ClientSummary[]
     orgSlug: string
     viewMode?: 'grid' | 'list'
+    isRefreshing?: boolean
 }
 
 function clientStatusLabel(status: string | null | undefined): string {
@@ -56,8 +57,8 @@ function getFollowUpChip(followUpDate: Date | null): { label: string; cls: strin
     }
 }
 
-export function ClientList({ clients, orgSlug, viewMode = 'grid' }: ClientListProps) {
-    if (clients.length === 0) {
+export function ClientList({ clients, orgSlug, viewMode = 'grid', isRefreshing = false }: ClientListProps) {
+    if (clients.length === 0 && !isRefreshing) {
         return (
             <div className="flex flex-col items-center justify-center h-64 text-center border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50">
                 <div className="h-12 w-12 bg-slate-100 rounded-full flex items-center justify-center mb-4 text-slate-400">
@@ -84,6 +85,14 @@ export function ClientList({ clients, orgSlug, viewMode = 'grid' }: ClientListPr
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
+                        {isRefreshing && (
+                            <tr className="animate-pulse">
+                                <td className="px-4 py-3"><div className="h-4 w-40 bg-slate-100 rounded" /></td>
+                                <td className="px-4 py-3"><div className="h-5 w-16 bg-slate-100 rounded-full" /></td>
+                                <td className="px-4 py-3"><div className="h-5 w-16 bg-slate-100 rounded-full" /></td>
+                                <td className="px-4 py-3"><div className="h-4 w-20 bg-slate-100 rounded ml-auto" /></td>
+                            </tr>
+                        )}
                         {clients.map((client) => (
                             <tr key={client.id} className="group hover:bg-slate-50 transition-colors">
                                 <td className="px-4 py-3">
@@ -128,6 +137,19 @@ export function ClientList({ clients, orgSlug, viewMode = 'grid' }: ClientListPr
 
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {isRefreshing && (
+                <div className="relative bg-white border border-slate-200 rounded-xl p-5 flex flex-col h-48 animate-pulse">
+                    <div className="flex items-start justify-between mb-3">
+                        <div className="h-10 w-10 bg-slate-100 rounded-lg" />
+                        <div className="h-5 w-14 bg-slate-100 rounded-full" />
+                    </div>
+                    <div className="h-4 w-3/4 bg-slate-100 rounded mb-auto" />
+                    <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between">
+                        <div className="h-3 w-20 bg-slate-100 rounded" />
+                        <div className="h-3 w-16 bg-slate-100 rounded" />
+                    </div>
+                </div>
+            )}
             {clients.map((client) => (
                 <Link
                     key={client.id}

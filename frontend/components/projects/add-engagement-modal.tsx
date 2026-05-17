@@ -19,18 +19,20 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { SquarePlus, Info, ChevronDown, Check } from "lucide-react"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { SandboxInfoBanner } from "@/components/ui/sandbox-info-banner"
+import { DateTimePicker } from "@/components/ui/date-time-picker"
 import { createProject, type LwCrmEngagementStatus } from '@/lib/actions/project'
 import { useOrgSandbox } from '@/lib/use-org-sandbox'
 
-interface AddProjectModalProps {
-    orgSlug: string
+interface AddEngagementModalProps {
+    firmSlug: string
     clientSlug: string
     /** Server-known flag so sandbox is enforced before client fetch completes */
     firmSandboxOnly?: boolean
     trigger?: React.ReactNode
+    onSaved?: () => void
 }
 
-export function AddProjectModal({ orgSlug, clientSlug, firmSandboxOnly = false, trigger }: AddProjectModalProps) {
+export function AddEngagementModal({ firmSlug, clientSlug, firmSandboxOnly = false, trigger, onSaved }: AddEngagementModalProps) {
     const [open, setOpen] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
     const [name, setName] = useState('')
@@ -52,7 +54,7 @@ export function AddProjectModal({ orgSlug, clientSlug, firmSandboxOnly = false, 
         let mounted = true
         const run = async () => {
             try {
-                const response = await fetch(`/api/billing/engagement-gate?firmSlug=${encodeURIComponent(orgSlug)}`)
+                const response = await fetch(`/api/billing/engagement-gate?firmSlug=${encodeURIComponent(firmSlug)}`)
                 if (!response.ok) return
                 const payload = (await response.json()) as { allowed?: boolean; cap?: number | null; count?: number }
                 if (!mounted) return
@@ -77,11 +79,11 @@ export function AddProjectModal({ orgSlug, clientSlug, firmSandboxOnly = false, 
         return () => {
             mounted = false
         }
-    }, [orgSlug])
+    }, [firmSlug])
 
     useEffect(() => {
         let mounted = true
-        fetch(`/api/firm?slug=${encodeURIComponent(orgSlug)}`)
+        fetch(`/api/firm?slug=${encodeURIComponent(firmSlug)}`)
             .then((r) => r.ok ? r.json() : null)
             .then((d) => {
                 if (!mounted || !d) return
@@ -91,10 +93,10 @@ export function AddProjectModal({ orgSlug, clientSlug, firmSandboxOnly = false, 
             })
             .catch(() => {})
         return () => { mounted = false }
-    }, [orgSlug])
+    }, [firmSlug])
 
-    const orgSandbox = useOrgSandbox()
-    const isSandboxFirm = Boolean(firmSandboxOnly || orgSandbox?.sandboxOnly)
+    const firmSandbox = useOrgSandbox()
+    const isSandboxFirm = Boolean(firmSandboxOnly || firmSandbox?.sandboxOnly)
 
     const wrapTrigger = (node: React.ReactNode): React.ReactNode => {
         if (!React.isValidElement(node)) return node
@@ -125,7 +127,7 @@ export function AddProjectModal({ orgSlug, clientSlug, firmSandboxOnly = false, 
         setError(null)
 
         try {
-            await createProject(orgSlug, clientSlug, {
+            await createProject(firmSlug, clientSlug, {
                 name,
                 description: description || undefined,
                 status,
@@ -148,8 +150,8 @@ export function AddProjectModal({ orgSlug, clientSlug, firmSandboxOnly = false, 
             setTagsInput('')
             setError(null)
             // Keep user on engagement cards/list tab after creation.
-            router.push(`/d/f/${orgSlug}/c/${clientSlug}?tab=projects`, { scroll: false })
-            router.refresh()
+            router.push(`/d/f/${firmSlug}/c/${clientSlug}?tab=projects`, { scroll: false })
+            onSaved?.()
         } catch (error: any) {
             console.error(error)
             setError(error.message || "Failed to create engagement")
@@ -224,25 +226,23 @@ export function AddProjectModal({ orgSlug, clientSlug, firmSandboxOnly = false, 
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                         <div className="space-y-2">
-                            <Label htmlFor="start" className={isSandboxFirm ? 'text-slate-500' : 'text-slate-900'}>Start (optional)</Label>
-                            <Input
-                                id="start"
-                                type="date"
+                            <Label className={isSandboxFirm ? 'text-slate-500' : 'text-slate-900'}>Start (optional)</Label>
+                            <DateTimePicker
                                 value={startDate}
-                                onChange={(e) => setStartDate(e.target.value)}
+                                onChange={setStartDate}
+                                placeholder="Start date"
+                                defaultTime="09:00"
                                 disabled={isSandboxFirm || capBlocked || isLoading}
-                                className="border-slate-200 text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
                             />
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="end" className={isSandboxFirm ? 'text-slate-500' : 'text-slate-900'}>End (optional)</Label>
-                            <Input
-                                id="end"
-                                type="date"
+                            <Label className={isSandboxFirm ? 'text-slate-500' : 'text-slate-900'}>End (optional)</Label>
+                            <DateTimePicker
                                 value={endDate}
-                                onChange={(e) => setEndDate(e.target.value)}
+                                onChange={setEndDate}
+                                placeholder="End date"
+                                defaultTime="17:00"
                                 disabled={isSandboxFirm || capBlocked || isLoading}
-                                className="border-slate-200 text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
                             />
                         </div>
                     </div>

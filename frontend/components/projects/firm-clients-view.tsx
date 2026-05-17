@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useTransition } from 'react'
 import { ClientSummary, getFirmName } from '@/lib/actions/hierarchy'
 import { UserPlus, Building2, LayoutGrid, List, Home, ChevronRight, Settings, Users, ClipboardList, UserCog, LayoutDashboard } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -33,6 +33,7 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
     const searchParams = useSearchParams()
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
     const [orgName, setOrgName] = useState<string | null>(null)
+    const [isPendingRefresh, startRefresh] = useTransition()
     const [canCreateClient, setCanCreateClient] = useState(false)
     const [canViewOrgSettings, setCanViewOrgSettings] = useState(false)
     const [canViewOrgAudit, setCanViewOrgAudit] = useState(false)
@@ -130,6 +131,7 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                                 orgSlug={orgSlug}
                                 firmId={orgId}
                                 firmSandboxOnly={firmSandboxOnly}
+                                onSaved={() => startRefresh(() => router.refresh())}
                                 trigger={
                                     <Button
                                         variant="blackCta"
@@ -232,6 +234,7 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                                     clients={clients}
                                     orgSlug={orgSlug}
                                     viewMode={viewMode}
+                                    isRefreshing={isPendingRefresh}
                                 />
                             </div>
                         </div>

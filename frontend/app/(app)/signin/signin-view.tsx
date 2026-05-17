@@ -200,7 +200,7 @@ export function SigninView() {
                         </p>
                       )}
                       {showTurnstile && (
-                        <div className="mt-3 flex justify-center">
+                        <div className="mt-3 flex justify-start">
                           <Turnstile
                             siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'}
                             onSuccess={handleTurnstileSuccess}
@@ -382,7 +382,7 @@ export function SigninView() {
                       </button>
 
                       {showTurnstile && step === 'otp-verify' && (
-                        <div className="flex justify-center">
+                        <div className="flex justify-start">
                           <Turnstile
                             siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'}
                             onSuccess={handleTurnstileSuccess}

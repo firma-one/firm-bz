@@ -1351,7 +1351,7 @@ export function ProjectSharesTab({
       rightPane.setHeaderIcon(<MessageCircle className="h-4 w-4" />)
       rightPane.setContent(
         <DocumentDocCommentsPane
-          projectId={share.projectId}
+          engagementId={share.projectId}
           documentId={share.documentId}
           documentName={share.documentName}
         />

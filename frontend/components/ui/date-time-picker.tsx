@@ -49,11 +49,13 @@ export function DateTimePicker({
 }: DateTimePickerProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [timeExpanded, setTimeExpanded] = useState(false)
+  const [viewMode, setViewMode] = useState<'calendar' | 'month-year'>('calendar')
   const [selectedDate, setSelectedDate] = useState<string>("")
   const [selectedTime, setSelectedTime] = useState<string>("")
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 })
   const triggerRef = useRef<HTMLButtonElement>(null)
+  const monthYearScrollRef = useRef<HTMLDivElement>(null)
   const onChangeRef = useRef(onChange)
   useEffect(() => { onChangeRef.current = onChange }, [onChange])
   const lastEmittedRef = useRef<string>("")
@@ -85,6 +87,7 @@ export function DateTimePicker({
         const portal = document.getElementById('date-time-picker-portal')
         if (portal && portal.contains(e.target as Node)) return
         setIsOpen(false)
+        setViewMode('calendar')
       }
     }
     document.addEventListener('mousedown', handleClick)
@@ -134,6 +137,13 @@ export function DateTimePicker({
       setSelectedTime(resolved)
     }
   }, [selectedDate, selectedTime, defaultTime])
+
+  // Auto-scroll to current year when month-year view opens
+  useEffect(() => {
+    if (viewMode !== 'month-year' || !monthYearScrollRef.current) return
+    const el = document.getElementById(`month-year-${currentMonth.getFullYear()}`)
+    if (el) el.scrollIntoView({ block: 'start' })
+  }, [viewMode]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const formatDisplayValue = () => {
     if (!selectedDate) return placeholder
@@ -231,7 +241,7 @@ export function DateTimePicker({
         <div className="flex items-center gap-2">
           <TimezoneOffsetBadge />
           <button
-            onClick={() => setIsOpen(false)}
+            onClick={() => { setIsOpen(false); setViewMode('calendar') }}
             className="text-gray-400 hover:text-gray-600 text-sm leading-none"
           >
             ×
@@ -241,53 +251,107 @@ export function DateTimePicker({
 
       {/* Calendar */}
       <div className="mb-3">
+        {/* Month/year header */}
         <div className="flex items-center justify-between mb-2">
+          {viewMode === 'calendar' && (
+            <button onClick={() => navigateMonth('prev')} className="p-1 hover:bg-gray-100 rounded text-sm leading-none">‹</button>
+          )}
           <button
-            onClick={() => navigateMonth('prev')}
-            className="p-1 hover:bg-gray-100 rounded text-sm leading-none"
+            onClick={() => setViewMode(v => v === 'calendar' ? 'month-year' : 'calendar')}
+            className="flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded hover:bg-gray-100 transition-colors mx-auto"
           >
-            ‹
-          </button>
-          <h4 className="text-xs font-medium">
             {currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-          </h4>
-          <button
-            onClick={() => navigateMonth('next')}
-            className="p-1 hover:bg-gray-100 rounded text-sm leading-none"
-          >
-            ›
+            <ChevronDown className={`h-3 w-3 text-gray-400 transition-transform duration-150 ${viewMode === 'month-year' ? 'rotate-180' : ''}`} />
           </button>
+          {viewMode === 'calendar' && (
+            <button onClick={() => navigateMonth('next')} className="p-1 hover:bg-gray-100 rounded text-sm leading-none">›</button>
+          )}
         </div>
 
-        {/* Day headers */}
-        <div className="grid grid-cols-7 gap-1 mb-1">
-          {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(day => (
-            <div key={day} className="text-xs text-gray-500 text-center p-1">
-              {day}
-            </div>
-          ))}
-        </div>
+        {viewMode === 'month-year' ? (() => {
+          const today = new Date()
+          const todayYear = today.getFullYear()
+          const todayMonth = today.getMonth()
+          const minYear = allowPastDateTimes ? todayYear - 50 : todayYear
+          const maxYear = allowFutureDateTimes ? todayYear + 20 : todayYear
+          const years = Array.from({ length: maxYear - minYear + 1 }, (_, i) => minYear + i)
+          const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
-        {/* Calendar days */}
-        <div className="grid grid-cols-7 gap-1">
-          {generateCalendarDays().map((day, index) => (
-            <button
-              key={index}
-              onClick={() => setSelectedDate(day.fullDate)}
-              disabled={day.isDisabled}
-              className={`
-                text-xs p-2 rounded transition-colors
-                ${day.isCurrentMonth ? 'text-gray-900' : 'text-gray-400'}
-                ${day.isToday ? 'bg-gray-100 text-gray-900 font-semibold ring-2 ring-gray-300' : ''}
-                ${day.isSelected ? 'bg-gray-900 text-white hover:bg-gray-800 font-semibold' : ''}
-                ${!day.isSelected && !day.isToday ? 'hover:bg-gray-100' : ''}
-                ${day.isDisabled ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}
-              `}
+          return (
+            <div
+              ref={monthYearScrollRef}
+              className="max-h-52 overflow-y-auto -mx-1 px-1"
             >
-              {day.date}
-            </button>
-          ))}
-        </div>
+              {years.map(y => {
+                const isCurrentYear = y === currentMonth.getFullYear()
+                return (
+                  <div key={y} id={`month-year-${y}`}>
+                    <div className={`text-xs font-semibold px-1 py-1.5 ${isCurrentYear ? 'text-gray-900' : 'text-gray-400'}`}>
+                      {y}
+                    </div>
+                    <div className="grid grid-cols-4 gap-1 mb-2">
+                      {MONTHS.map((m, mi) => {
+                        const isFutureDisabled = !allowFutureDateTimes && (y > todayYear || (y === todayYear && mi > todayMonth))
+                        const isPastDisabled = !allowPastDateTimes && (y < todayYear || (y === todayYear && mi < todayMonth))
+                        const isDisabled = isFutureDisabled || isPastDisabled
+                        const isSelected = y === currentMonth.getFullYear() && mi === currentMonth.getMonth()
+                        const isToday = y === todayYear && mi === todayMonth
+                        return (
+                          <button
+                            key={m}
+                            disabled={isDisabled}
+                            onClick={() => {
+                              setCurrentMonth(new Date(y, mi, 1))
+                              setViewMode('calendar')
+                            }}
+                            className={`
+                              text-xs py-1.5 rounded transition-colors
+                              ${isSelected ? 'bg-gray-900 text-white font-semibold' : ''}
+                              ${isToday && !isSelected ? 'ring-1 ring-gray-400 font-semibold text-gray-900' : ''}
+                              ${!isSelected && !isToday && !isDisabled ? 'hover:bg-gray-100 text-gray-700' : ''}
+                              ${isDisabled ? 'opacity-30 cursor-not-allowed text-gray-400' : 'cursor-pointer'}
+                            `}
+                          >
+                            {m}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )
+        })() : (
+          <>
+            {/* Day headers */}
+            <div className="grid grid-cols-7 gap-1 mb-1">
+              {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(day => (
+                <div key={day} className="text-xs text-gray-500 text-center p-1">{day}</div>
+              ))}
+            </div>
+            {/* Calendar days */}
+            <div className="grid grid-cols-7 gap-1">
+              {generateCalendarDays().map((day, index) => (
+                <button
+                  key={index}
+                  onClick={() => setSelectedDate(day.fullDate)}
+                  disabled={day.isDisabled}
+                  className={`
+                    text-xs p-2 rounded transition-colors
+                    ${day.isCurrentMonth ? 'text-gray-900' : 'text-gray-400'}
+                    ${day.isToday ? 'bg-gray-100 text-gray-900 font-semibold ring-2 ring-gray-300' : ''}
+                    ${day.isSelected ? 'bg-gray-900 text-white hover:bg-gray-800 font-semibold' : ''}
+                    ${!day.isSelected && !day.isToday ? 'hover:bg-gray-100' : ''}
+                    ${day.isDisabled ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}
+                  `}
+                >
+                  {day.date}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
       <div className="border-t border-gray-100 my-2" />

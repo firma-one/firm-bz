@@ -122,7 +122,7 @@ export function ProjectCommentsTab({
                   rightPane.setHeaderSubtitle('Append-only. Visible to all engagement members.')
                   rightPane.setContent(
                     <DocumentDocCommentsPane
-                      projectId={projectId}
+                      engagementId={projectId}
                       documentId={r.projectDocumentId}
                       documentName={r.documentName}
                     />
