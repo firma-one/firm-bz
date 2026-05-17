@@ -4,6 +4,10 @@ import { cookies } from 'next/headers'
 import { getDeploymentVersion, DEPLOYMENT_VERSION_COOKIE } from '@/lib/deployment-version'
 import { resolveDefaultFirmLandingPath } from '@/lib/actions/firms'
 import { BRAND_NAME, PLATFORM_BRAND_COOKIE } from '@/config/brand'
+import { createAdminClient } from '@/utils/supabase/admin'
+import { mergeLeanAppMetadata } from '@/lib/auth/supabase-jwt-metadata'
+import { FirmService } from '@/lib/firm-service'
+import { userSettingsPlus } from '@/lib/user-settings-plus'
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
@@ -46,6 +50,11 @@ export async function GET(request: Request) {
         // No slug / malformed firm data: same as legacy "no default firm" — send to onboarding.
         next = resolved ?? '/d/onboarding'
       }
+
+      // Warm JWT claims and userSettingsPlus cache on signin.
+      // This adds ~200-400ms to the signin redirect but makes all subsequent page
+      // loads faster: permission checks read from JWT/in-memory instead of hitting DB.
+      await warmUserSessionOnSignin(userId, user.app_metadata ?? {}, supabase)
 
       // Set deployment version cookie on successful login
       // This ensures session is invalidated if server restarts
@@ -100,4 +109,48 @@ export async function GET(request: Request) {
   const runningLocally = process.env.RUNNING_LOCALLY === 'true'
   const base = (process.env.NODE_ENV === 'development' || runningLocally) && isLocalhost ? `http://${url.host}` : origin
   return NextResponse.redirect(`${base}/signin?error=auth_code_error`)
+}
+
+/**
+ * On signin: embed the user's default firm + persona into JWT app_metadata (only when
+ * active_firm_id is absent — i.e. first signin or after a JWT reset), then refresh the
+ * session so the updated claims are in the cookie before the first page load.
+ * Also warms the in-memory userSettingsPlus cache (fire-and-forget).
+ *
+ * The added ~200-400ms is acceptable at signin; it eliminates DB round-trips on every
+ * subsequent page load that would otherwise rebuild permissions from scratch.
+ */
+async function warmUserSessionOnSignin(
+  userId: string,
+  currentAppMetadata: Record<string, unknown>,
+  supabase: ReturnType<typeof createServerClient>
+): Promise<void> {
+  // 1. Update JWT claims only when active_firm_id is missing (first signin or reset).
+  //    Returning users with a valid active_firm_id skip the admin API call entirely.
+  if (!currentAppMetadata.active_firm_id) {
+    try {
+      const defaultFirm = await FirmService.getDefaultFirm(userId)
+      if (defaultFirm) {
+        const membership = defaultFirm.members.find((m: any) => m.userId === userId)
+        if (membership) {
+          const adminClient = createAdminClient()
+          await adminClient.auth.admin.updateUserById(userId, {
+            app_metadata: mergeLeanAppMetadata(currentAppMetadata, {
+              active_firm_id: defaultFirm.id,
+              active_firm_slug: defaultFirm.slug ?? undefined,
+              active_persona: (membership.role as string) ?? undefined,
+            }),
+          })
+          // Refresh the session so the new JWT claims land in the cookie before redirect.
+          await supabase.auth.refreshSession()
+        }
+      }
+    } catch (e) {
+      // Non-critical — page loads work without warm JWT, just slower.
+      console.error('[signin] Failed to warm JWT app_metadata', e)
+    }
+  }
+
+  // 2. Pre-populate userSettingsPlus cache (fire-and-forget — don't block the redirect).
+  userSettingsPlus.getUserSettingsPlus(userId).catch(() => {})
 }
