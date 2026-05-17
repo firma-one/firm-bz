@@ -1,8 +1,8 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { HierarchyClient } from '@/lib/actions/hierarchy'
-import { type ProjectMemberSummary } from '@/lib/actions/members'
+import { HierarchyClient, getIsOrgInternal } from '@/lib/actions/hierarchy'
+import { getProjectMemberSummaries, type ProjectMemberSummary } from '@/lib/actions/members'
 import { ProjectList } from './project-list'
 import { ClientSettingsForm } from './client-settings-form'
 import type { LwCrmClientStatus } from '@/lib/actions/client'
@@ -25,17 +25,17 @@ interface ClientProjectViewProps {
     selectedClientSlug?: string
     contactCount?: number
     memberCount?: number
-    isOrgInternal?: boolean
-    memberSummaries?: Record<string, ProjectMemberSummary>
-    canManageClient?: boolean
 }
 
-export function ClientProjectView({ clients, orgSlug, orgName, orgId, firmSandboxOnly = false, selectedClientSlug, contactCount, memberCount, isOrgInternal = false, memberSummaries = {}, canManageClient = false }: ClientProjectViewProps) {
+export function ClientProjectView({ clients, orgSlug, orgName, orgId, firmSandboxOnly = false, selectedClientSlug, contactCount, memberCount }: ClientProjectViewProps) {
     const router = useRouter()
     const pathname = usePathname()
     const searchParams = useSearchParams()
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
     const [isClientDetailsOpen, setIsClientDetailsOpen] = useState(false)
+    const [isOrgInternal, setIsOrgInternal] = useState(false)
+    const [memberSummaries, setMemberSummaries] = useState<Record<string, ProjectMemberSummary>>({})
+    const [canManageClient, setCanManageClient] = useState(false)
 
     // Load view mode preference from localStorage on mount
     useEffect(() => {
@@ -71,7 +71,29 @@ export function ClientProjectView({ clients, orgSlug, orgName, orgId, firmSandbo
     const activeClientSlug = selectedClientSlug || (clients.length > 0 ? clients[0].slug : '')
     const selectedClient = clients.find(c => c.slug === activeClientSlug)
 
+    useEffect(() => {
+        const firmId = orgId ?? clients[0]?.firmId ?? clients[0]?.organizationId
+        const slug = selectedClientSlug || (clients.length > 0 ? clients[0].slug : '')
+        const client = clients.find(c => c.slug === slug)
+        if (!firmId || !client?.id) return
+        fetch(`/api/permissions/firm?firmId=${firmId}&clientId=${client.id}`)
+            .then(res => res.json())
+            .then(data => setCanManageClient(data.canManageClient ?? false))
+            .catch(() => setCanManageClient(false))
+    }, [orgId, clients, selectedClientSlug])
 
+    useEffect(() => {
+        getIsOrgInternal(orgSlug).then(setIsOrgInternal)
+    }, [orgSlug])
+
+    useEffect(() => {
+        if (!selectedClient?.projects?.length) {
+            setMemberSummaries({})
+            return
+        }
+        const projectIds = selectedClient.projects.map((p) => p.id)
+        getProjectMemberSummaries(projectIds).then(setMemberSummaries)
+    }, [selectedClient?.id, selectedClient?.projects?.length])
 
     if (clients.length === 0) {
         return (
