@@ -9,7 +9,7 @@ interface PageProps {
 export default async function ClientProjectPage({ params }: PageProps) {
     const { slug, clientSlug } = await params
 
-    const [clients, orgName, org] = await Promise.all([
+    const [clients, firmName, firm] = await Promise.all([
         getFirmHierarchy(slug),
         getFirmName(slug),
         prisma.firm.findUnique({ where: { slug }, select: { id: true, sandboxOnly: true } }),
@@ -34,10 +34,10 @@ export default async function ClientProjectPage({ params }: PageProps) {
         <div className="h-full flex flex-col">
             <ClientProjectView
                 clients={clients}
-                orgSlug={slug}
-                orgName={orgName}
-                orgId={org?.id}
-                firmSandboxOnly={org?.sandboxOnly ?? false}
+                firmSlug={slug}
+                firmName={firmName}
+                firmId={firm?.id}
+                firmSandboxOnly={firm?.sandboxOnly ?? false}
                 selectedClientSlug={clientSlug}
                 contactCount={contactCount}
                 memberCount={memberCount}

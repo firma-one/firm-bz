@@ -18,22 +18,22 @@ import Link from 'next/link'
 
 interface ClientProjectViewProps {
     clients: HierarchyClient[]
-    orgSlug: string
-    orgName?: string
-    orgId?: string
+    firmSlug: string
+    firmName?: string
+    firmId?: string
     firmSandboxOnly?: boolean
     selectedClientSlug?: string
     contactCount?: number
     memberCount?: number
 }
 
-export function ClientProjectView({ clients, orgSlug, orgName, orgId, firmSandboxOnly = false, selectedClientSlug, contactCount, memberCount }: ClientProjectViewProps) {
+export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSandboxOnly = false, selectedClientSlug, contactCount, memberCount }: ClientProjectViewProps) {
     const router = useRouter()
     const pathname = usePathname()
     const searchParams = useSearchParams()
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
     const [isClientDetailsOpen, setIsClientDetailsOpen] = useState(false)
-    const [isOrgInternal, setIsOrgInternal] = useState(false)
+    const [isFirmInternal, setIsFirmInternal] = useState(false)
     const [memberSummaries, setMemberSummaries] = useState<Record<string, ProjectMemberSummary>>({})
     const [canManageClient, setCanManageClient] = useState(false)
 
@@ -72,19 +72,19 @@ export function ClientProjectView({ clients, orgSlug, orgName, orgId, firmSandbo
     const selectedClient = clients.find(c => c.slug === activeClientSlug)
 
     useEffect(() => {
-        const firmId = orgId ?? clients[0]?.firmId ?? clients[0]?.organizationId
+        const resolvedFirmId = firmId ?? clients[0]?.firmId ?? clients[0]?.organizationId
         const slug = selectedClientSlug || (clients.length > 0 ? clients[0].slug : '')
         const client = clients.find(c => c.slug === slug)
-        if (!firmId || !client?.id) return
-        fetch(`/api/permissions/firm?firmId=${firmId}&clientId=${client.id}`)
+        if (!resolvedFirmId || !client?.id) return
+        fetch(`/api/permissions/firm?firmId=${resolvedFirmId}&clientId=${client.id}`)
             .then(res => res.json())
             .then(data => setCanManageClient(data.canManageClient ?? false))
             .catch(() => setCanManageClient(false))
-    }, [orgId, clients, selectedClientSlug])
+    }, [firmId, clients, selectedClientSlug])
 
     useEffect(() => {
-        getIsOrgInternal(orgSlug).then(setIsOrgInternal)
-    }, [orgSlug])
+        getIsOrgInternal(firmSlug).then(setIsFirmInternal)
+    }, [firmSlug])
 
     useEffect(() => {
         if (!selectedClient?.projects?.length) {
@@ -113,11 +113,11 @@ export function ClientProjectView({ clients, orgSlug, orgName, orgId, firmSandbo
                 </span>
                 <ChevronRight className="h-4 w-4 mx-1 text-slate-300" />
                 <Link 
-                    href={`/d/f/${orgSlug}`}
+                    href={`/d/f/${firmSlug}`}
                     className="flex items-center gap-2 hover:text-slate-900 transition-colors cursor-pointer"
                 >
                     <Building2 className="h-4 w-4" />
-                    <span className="font-medium">{orgName || 'Organization'}</span>
+                    <span className="font-medium">{firmName || 'Firm'}</span>
                 </Link>
                 {selectedClient && (
                     <>
@@ -177,7 +177,7 @@ export function ClientProjectView({ clients, orgSlug, orgName, orgId, firmSandbo
                             <div className="mb-6">
                                 <TabsList className="h-10 p-1 bg-slate-100 rounded-lg inline-flex justify-start flex-wrap gap-1">
                                     <AddProjectModal
-                                        orgSlug={orgSlug}
+                                        orgSlug={firmSlug}
                                         clientSlug={selectedClient.slug}
                                         firmSandboxOnly={firmSandboxOnly}
                                         trigger={
@@ -268,10 +268,10 @@ export function ClientProjectView({ clients, orgSlug, orgName, orgId, firmSandbo
                                             </div>
                                             <ProjectList
                                                 projects={selectedClient.projects}
-                                                orgSlug={orgSlug}
+                                                orgSlug={firmSlug}
                                                 clientSlug={selectedClient.slug}
                                                 viewMode={viewMode}
-                                                isOrgInternal={isOrgInternal}
+                                                isOrgInternal={isFirmInternal}
                                                 memberSummaries={memberSummaries}
                                             />
                                         </div>
@@ -281,7 +281,7 @@ export function ClientProjectView({ clients, orgSlug, orgName, orgId, firmSandbo
                                 <TabsContent value="contacts" className="m-0 h-full">
                                     <div className="w-full py-2">
                                         <ClientContactsTab
-                                            orgSlug={orgSlug}
+                                            orgSlug={firmSlug}
                                             clientSlug={selectedClient.slug}
                                             canManage={canManageClient}
                                             firmSandboxOnly={firmSandboxOnly}
@@ -293,9 +293,9 @@ export function ClientProjectView({ clients, orgSlug, orgName, orgId, firmSandbo
                                     <TabsContent value="members" className="m-0 h-full">
                                         <div className="w-full py-2">
                                             <ClientMembersTab
-                                                firmId={orgId ?? selectedClient?.firmId ?? selectedClient?.organizationId ?? ''}
+                                                firmId={firmId ?? selectedClient?.firmId ?? selectedClient?.organizationId ?? ''}
                                                 clientId={selectedClient.id}
-                                                orgSlug={orgSlug}
+                                                orgSlug={firmSlug}
                                                 clientSlug={selectedClient.slug}
                                                 canManage={canManageClient}
                                             />
@@ -307,8 +307,8 @@ export function ClientProjectView({ clients, orgSlug, orgName, orgId, firmSandbo
                                     <TabsContent value="settings" className="m-0 h-full">
                                         <div className="w-full py-2">
                                             <ClientSettingsForm
-                                            orgSlug={orgSlug}
-                                            firmId={orgId ?? selectedClient.firmId ?? selectedClient.organizationId}
+                                            orgSlug={firmSlug}
+                                            firmId={firmId ?? selectedClient.firmId ?? selectedClient.organizationId}
                                             clientSlug={selectedClient.slug}
                                             initialName={selectedClient.name}
                                             initialIndustry={selectedClient.industry ?? undefined}
