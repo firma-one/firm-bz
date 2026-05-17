@@ -72,7 +72,7 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
     const selectedClient = clients.find(c => c.slug === activeClientSlug)
 
     useEffect(() => {
-        const resolvedFirmId = firmId ?? clients[0]?.firmId ?? clients[0]?.organizationId
+        const resolvedFirmId = firmId ?? clients[0]?.firmId
         const slug = selectedClientSlug || (clients.length > 0 ? clients[0].slug : '')
         const client = clients.find(c => c.slug === slug)
         if (!resolvedFirmId || !client?.id) return
@@ -87,13 +87,13 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
     }, [firmSlug])
 
     useEffect(() => {
-        if (!selectedClient?.projects?.length) {
+        if (!selectedClient?.engagements?.length) {
             setMemberSummaries({})
             return
         }
-        const projectIds = selectedClient.projects.map((p) => p.id)
+        const projectIds = selectedClient.engagements.map((p) => p.id)
         getProjectMemberSummaries(projectIds).then(setMemberSummaries)
-    }, [selectedClient?.id, selectedClient?.projects?.length])
+    }, [selectedClient?.id, selectedClient?.engagements?.length])
 
     if (clients.length === 0) {
         return (
@@ -197,9 +197,9 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                                     >
                                         <Briefcase className="w-4 h-4 mr-2" />
                                         Engagements
-                                        {selectedClient && selectedClient.projects.length > 0 && (
+                                        {selectedClient && selectedClient.engagements.length > 0 && (
                                             <span className="ml-2 rounded-full bg-slate-900 px-1.5 py-0.5 text-xs font-medium text-white tabular-nums leading-none">
-                                                {selectedClient.projects.length}
+                                                {selectedClient.engagements.length}
                                             </span>
                                         )}
                                     </TabsTrigger>
@@ -247,7 +247,7 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                                         <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
                                             <div className="flex items-center gap-4 mb-4">
                                                 <span className="px-3 py-1 bg-slate-100 rounded-full text-sm font-medium text-slate-600">
-                                                    {selectedClient.projects.length} Engagements
+                                                    {selectedClient.engagements.length} Engagements
                                                 </span>
                                                 <div className="flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200">
                                                     <button
@@ -267,7 +267,7 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                                                 </div>
                                             </div>
                                             <ProjectList
-                                                projects={selectedClient.projects}
+                                                projects={selectedClient.engagements}
                                                 orgSlug={firmSlug}
                                                 clientSlug={selectedClient.slug}
                                                 viewMode={viewMode}
@@ -293,7 +293,7 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                                     <TabsContent value="members" className="m-0 h-full">
                                         <div className="w-full py-2">
                                             <ClientMembersTab
-                                                firmId={firmId ?? selectedClient?.firmId ?? selectedClient?.organizationId ?? ''}
+                                                firmId={firmId ?? selectedClient?.firmId ?? ''}
                                                 clientId={selectedClient.id}
                                                 orgSlug={firmSlug}
                                                 clientSlug={selectedClient.slug}
@@ -308,7 +308,7 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                                         <div className="w-full py-2">
                                             <ClientSettingsForm
                                             orgSlug={firmSlug}
-                                            firmId={firmId ?? selectedClient.firmId ?? selectedClient.organizationId}
+                                            firmId={firmId ?? selectedClient.firmId}
                                             clientSlug={selectedClient.slug}
                                             initialName={selectedClient.name}
                                             initialIndustry={selectedClient.industry ?? undefined}
