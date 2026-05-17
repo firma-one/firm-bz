@@ -20,11 +20,13 @@ function firmPrivileges(scopes: Record<string, string[]> | undefined): string[] 
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { session } } = await supabase.auth.getSession()
 
-    if (!user) {
+    if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+
+    const user = session.user
 
     const { searchParams } = new URL(request.url)
     let firmId = searchParams.get('firmId')
