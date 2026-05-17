@@ -123,9 +123,7 @@ export function LayoutRightPanel({
       >
         <aside
           className={cn(
-            'flex flex-col h-full w-full bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_3px_rgba(0,0,0,0.06)] overflow-hidden transition-all ease-out shrink-0',
-            // When expanded, keep the docked panel subtly present but inactive so
-            // collapsing back feels like a smooth reverse of the expand motion.
+            'flex flex-col h-full w-full bg-white rounded-xl border border-[#e5e7eb] shadow-xl overflow-hidden transition-all ease-out shrink-0',
             isExpanded
               ? 'opacity-0 translate-x-1 pointer-events-none'
               : 'opacity-100 translate-x-0'
@@ -135,19 +133,19 @@ export function LayoutRightPanel({
             transitionDuration: `${TRANSITION_MS}ms`,
           }}
         >
-          <header className="flex items-center justify-between gap-2 px-4 border-b border-slate-200/60 bg-white shrink-0 rounded-t-2xl" style={{ height: subtitle ? 64 : 52 }}>
-            <div className="flex items-center gap-2 min-w-0 flex-1">
+          <header className="flex items-center justify-between gap-2 px-4 border-b border-[#e5e7eb] bg-white shrink-0 rounded-t-xl" style={{ height: subtitle ? 64 : 52 }}>
+            <div className="flex items-center gap-2.5 min-w-0 flex-1">
               {icon ? (
-                <div className="h-8 w-8 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600 shrink-0">
+                <div className="h-8 w-8 rounded bg-[#ecfdf5] flex items-center justify-center text-[#069668] shrink-0">
                   {icon}
                 </div>
               ) : null}
               <div className="min-w-0 flex-1">
-                <h2 className="text-sm font-semibold text-slate-900 truncate" title={title}>
+                <h2 className="font-headline text-sm font-bold text-[#1b1b1d] truncate" title={title}>
                   {title}
                 </h2>
                 {subtitle ? (
-                  <p className="text-xs text-slate-500 truncate" title={subtitle}>
+                  <p className="font-mono text-[10px] text-[#45474c] uppercase tracking-wider truncate" title={subtitle}>
                     {subtitle}
                   </p>
                 ) : null}
@@ -158,7 +156,7 @@ export function LayoutRightPanel({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+                className="h-8 w-8 rounded text-[#45474c] hover:text-[#1b1b1d] hover:bg-[#f0edee]"
                 onClick={() => setExpanded(true)}
                 title="Expand to full screen"
               >
@@ -167,7 +165,7 @@ export function LayoutRightPanel({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+                className="h-8 w-8 rounded text-[#45474c] hover:text-[#1b1b1d] hover:bg-[#f0edee]"
                 onClick={handleClose}
                 title="Close"
               >
@@ -184,7 +182,7 @@ export function LayoutRightPanel({
       {/* Full overlay: top bar card (logo + collapse + close), smooth transition */}
       <div
         className={cn(
-          'fixed inset-0 z-[100] flex flex-col bg-slate-50 transition-opacity ease-out',
+          'fixed inset-0 z-[100] flex flex-col bg-[#f9f9fb] transition-opacity ease-out',
           isExpanded ? 'opacity-100' : 'pointer-events-none opacity-0'
         )}
         style={{
@@ -195,7 +193,7 @@ export function LayoutRightPanel({
         {/* Top bar card - match dashboard top bar look */}
         <header
           className={cn(
-            'mx-4 mt-4 rounded-2xl border border-slate-200/80 border-b-slate-200 bg-white shadow-sm flex items-center shrink-0 transition-transform ease-out',
+            'mx-4 mt-4 rounded border border-[#e5e7eb] bg-white shadow-sm flex items-center shrink-0 transition-transform ease-out',
             overlayEntered ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0'
           )}
           style={{
@@ -213,7 +211,7 @@ export function LayoutRightPanel({
             <Button
               variant="outline"
               size="sm"
-              className="rounded-xl border-slate-200 text-slate-600 hover:bg-slate-100 h-9"
+              className="rounded border-[#e5e7eb] text-[#45474c] hover:bg-[#f0edee] h-9"
               onClick={() => setExpanded(false)}
               title="Collapse to side panel"
             >
@@ -223,7 +221,7 @@ export function LayoutRightPanel({
             <Button
               variant="ghost"
               size="icon"
-              className="h-9 w-9 rounded-xl text-slate-500 hover:text-slate-700 hover:bg-slate-200/80"
+              className="h-9 w-9 rounded text-[#45474c] hover:text-[#1b1b1d] hover:bg-[#f0edee]"
               onClick={handleClose}
               title="Close"
             >
@@ -235,7 +233,7 @@ export function LayoutRightPanel({
         {/* Content area - fills rest, with subtle enter */}
         <div
           className={cn(
-            'flex-1 min-h-0 flex flex-col overflow-hidden mt-4 mx-4 mb-4 rounded-2xl border border-slate-200/80 bg-white shadow-sm transition-all ease-out',
+            'flex-1 min-h-0 flex flex-col overflow-hidden mt-4 mx-4 mb-4 rounded-xl border border-[#e5e7eb] bg-white shadow-sm transition-all ease-out',
             overlayEntered ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0'
           )}
           style={{ transitionDuration: `${TRANSITION_MS}ms` }}

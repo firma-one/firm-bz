@@ -37,7 +37,7 @@ function clientStatusBadgeClass(status: string | null | undefined): string {
             return 'bg-zinc-50 text-zinc-400 ring-1 ring-zinc-200'
         case 'ACTIVE':
         default:
-            return 'bg-teal-50 text-teal-600 ring-1 ring-teal-200'
+            return 'bg-[#ecfdf5] text-[#069668] ring-1 ring-[#069668]/25'
     }
 }
 
@@ -60,8 +60,8 @@ function getFollowUpChip(followUpDate: Date | null): { label: string; cls: strin
 export function ClientList({ clients, orgSlug, viewMode = 'grid', isRefreshing = false }: ClientListProps) {
     if (clients.length === 0 && !isRefreshing) {
         return (
-            <div className="flex flex-col items-center justify-center h-64 text-center border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50">
-                <div className="h-12 w-12 bg-slate-100 rounded-full flex items-center justify-center mb-4 text-slate-400">
+            <div className="flex flex-col items-center justify-center h-64 text-center border-2 border-dashed border-slate-200 rounded bg-slate-50/50">
+                <div className="h-12 w-12 bg-slate-100 rounded flex items-center justify-center mb-4 text-slate-400">
                     <Users className="h-6 w-6" />
                 </div>
                 <h3 className="text-sm font-semibold text-slate-900">No clients found</h3>
@@ -74,10 +74,10 @@ export function ClientList({ clients, orgSlug, viewMode = 'grid', isRefreshing =
 
     if (viewMode === 'list') {
         return (
-            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+            <div className="bg-white border border-[#e5e7eb] rounded overflow-hidden">
                 <table className="w-full text-left text-sm">
                     <thead>
-                        <tr className="bg-slate-50 border-b border-slate-200">
+                        <tr className="bg-white border-b border-[#e5e7eb]">
                             <th className="px-4 py-3 font-medium text-slate-500">Client</th>
                             <th className="px-4 py-3 font-medium text-slate-500">Status</th>
                             <th className="px-4 py-3 font-medium text-slate-500">Projects</th>
@@ -88,22 +88,22 @@ export function ClientList({ clients, orgSlug, viewMode = 'grid', isRefreshing =
                         {isRefreshing && (
                             <tr className="animate-pulse">
                                 <td className="px-4 py-3"><div className="h-4 w-40 bg-slate-100 rounded" /></td>
-                                <td className="px-4 py-3"><div className="h-5 w-16 bg-slate-100 rounded-full" /></td>
-                                <td className="px-4 py-3"><div className="h-5 w-16 bg-slate-100 rounded-full" /></td>
+                                <td className="px-4 py-3"><div className="h-5 w-16 bg-slate-100 rounded-sm" /></td>
+                                <td className="px-4 py-3"><div className="h-5 w-16 bg-slate-100 rounded-sm" /></td>
                                 <td className="px-4 py-3"><div className="h-4 w-20 bg-slate-100 rounded ml-auto" /></td>
                             </tr>
                         )}
                         {clients.map((client) => (
-                            <tr key={client.id} className="group hover:bg-slate-50 transition-colors">
+                            <tr key={client.id} className="group hover:bg-[#f3f4f6] transition-colors">
                                 <td className="px-4 py-3">
                                     <Link href={`/d/f/${orgSlug}/c/${client.slug}`} className="flex items-center gap-3">
-                                        <div className="h-8 w-8 bg-slate-100 text-slate-700 rounded-lg flex items-center justify-center">
+                                        <div className="h-8 w-8 bg-[#f3f4f6] text-[#45474c] rounded flex items-center justify-center">
                                             <Users className="h-4 w-4" />
                                         </div>
                                         <div className="flex items-center gap-2 flex-wrap">
                                             <span className="font-medium text-slate-900 group-hover:text-black transition-colors">{client.name}</span>
                                             {(() => { const chip = getFollowUpChip(client.followUpDate ?? null); return chip ? (
-                                                <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${chip.cls}`}>
+                                                <span className={`inline-flex items-center gap-1 rounded-sm border px-2 py-0.5 text-xs font-medium ${chip.cls}`}>
                                                     <CalendarClock className="h-3 w-3" />
                                                     {chip.label}
                                                 </span>
@@ -112,12 +112,12 @@ export function ClientList({ clients, orgSlug, viewMode = 'grid', isRefreshing =
                                     </Link>
                                 </td>
                                 <td className="px-4 py-3">
-                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${clientStatusBadgeClass(client.status)}`}>
+                                    <span className={`px-2 py-0.5 rounded-sm text-xs font-medium ${clientStatusBadgeClass(client.status)}`}>
                                         {clientStatusLabel(client.status)}
                                     </span>
                                 </td>
                                 <td className="px-4 py-3 text-slate-500">
-                                    <span className="px-2 py-1 bg-slate-100 rounded-full text-xs font-medium">
+                                    <span className="px-2 py-0.5 bg-[#f3f4f6] text-[#45474c] ring-1 ring-[#e5e7eb] rounded-sm text-xs font-medium">
                                         {client.engagements.length} {client.engagements.length === 1 ? 'Engagement' : 'Engagements'}
                                     </span>
                                 </td>
@@ -138,10 +138,10 @@ export function ClientList({ clients, orgSlug, viewMode = 'grid', isRefreshing =
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {isRefreshing && (
-                <div className="relative bg-white border border-slate-200 rounded-xl p-5 flex flex-col h-48 animate-pulse">
+                <div className="relative bg-white border border-[#e5e7eb] rounded p-5 flex flex-col h-48 animate-pulse">
                     <div className="flex items-start justify-between mb-3">
-                        <div className="h-10 w-10 bg-slate-100 rounded-lg" />
-                        <div className="h-5 w-14 bg-slate-100 rounded-full" />
+                        <div className="h-10 w-10 bg-slate-100 rounded" />
+                        <div className="h-5 w-14 bg-slate-100 rounded-sm" />
                     </div>
                     <div className="h-4 w-3/4 bg-slate-100 rounded mb-auto" />
                     <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between">
@@ -154,13 +154,13 @@ export function ClientList({ clients, orgSlug, viewMode = 'grid', isRefreshing =
                 <Link
                     key={client.id}
                     href={`/d/f/${orgSlug}/c/${client.slug}`}
-                    className="group relative bg-white border border-slate-200 rounded-xl p-5 hover:shadow-lg hover:border-slate-300 hover:-translate-y-0.5 transition-all duration-200 flex flex-col h-48"
+                    className="group relative bg-white border border-[#e5e7eb] rounded p-5 hover:shadow-lg hover:border-[#069668]/50 transition-all duration-200 flex flex-col h-48"
                 >
                     <div className="flex items-start justify-between mb-3">
-                        <div className="h-10 w-10 bg-slate-100 text-slate-700 rounded-lg flex items-center justify-center group-hover:scale-105 transition-transform shrink-0">
+                        <div className="h-10 w-10 bg-[#f3f4f6] text-[#45474c] rounded flex items-center justify-center group-hover:bg-[#ecfdf5] group-hover:text-[#069668] transition-colors shrink-0">
                             <Users className="h-5 w-5" />
                         </div>
-                        <span className={`shrink-0 px-2 py-0.5 rounded-full text-xs font-medium ${clientStatusBadgeClass(client.status)}`}>
+                        <span className={`shrink-0 px-2 py-0.5 rounded-sm text-xs font-medium ${clientStatusBadgeClass(client.status)}`}>
                             {clientStatusLabel(client.status)}
                         </span>
                     </div>
@@ -169,7 +169,7 @@ export function ClientList({ clients, orgSlug, viewMode = 'grid', isRefreshing =
                         {client.name}
                     </h3>
                     {(() => { const chip = getFollowUpChip(client.followUpDate ?? null); return chip ? (
-                        <span className={`inline-flex items-center gap-1 mt-2 rounded-full border px-2 py-0.5 text-[11px] font-medium w-fit ${chip.cls}`}>
+                        <span className={`inline-flex items-center gap-1 mt-2 rounded-sm border px-2 py-0.5 text-[11px] font-medium w-fit ${chip.cls}`}>
                             <CalendarClock className="h-3 w-3" />
                             {chip.label}
                         </span>

@@ -308,7 +308,7 @@ export function FirmBusinessInsights({ firmId }: FirmBusinessInsightsProps) {
     const atRiskClientCount = data ? data.clientCounts.ACTIVE + data.clientCounts.PROSPECT - (data.engagementsDueSoon?.length ?? 0) : 0
 
     return (
-        <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
+        <div className="bg-white border border-[#e5e7eb] rounded p-6 shadow-sm">
             <div className="flex items-center justify-between mb-6">
                 <div>
                     <h2 className="text-xl font-bold text-gray-900">Business Overview</h2>
@@ -316,7 +316,7 @@ export function FirmBusinessInsights({ firmId }: FirmBusinessInsightsProps) {
                 </div>
                 <button
                     onClick={() => setRefreshTick((t) => t + 1)}
-                    className="p-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors"
+                    className="p-1.5 rounded-md bg-gray-100 hover:bg-gray-200 transition-colors"
                     title="Refresh"
                 >
                     <RefreshCw className={`h-4 w-4 text-gray-700 ${loading ? 'animate-spin' : ''}`} />
@@ -375,7 +375,7 @@ export function FirmBusinessInsights({ firmId }: FirmBusinessInsightsProps) {
                             </span>
                         </div>
                     </div>
-                    <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                    <div className="bg-[#f3f4f6] rounded p-4 border border-gray-100">
                         <PipelineBar items={data!.clientPipelineBreakdown} total={data?.pipelineValue ?? 0} symbol={data?.currencySymbol ?? ''} />
                     </div>
                 </div>
@@ -386,7 +386,7 @@ export function FirmBusinessInsights({ firmId }: FirmBusinessInsightsProps) {
                     <h3 className="text-sm font-semibold text-gray-500 mb-3 mt-5">Engagement Types</h3>
                     <div className="flex flex-wrap gap-2">
                         {data!.contractTypeBreakdown.map(({ type, count }) => (
-                            <div key={type} className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-100 rounded-lg">
+                            <div key={type} className="flex items-center gap-2 px-3 py-1.5 bg-[#f3f4f6] border border-gray-100 rounded">
                                 <span className="text-sm font-semibold text-gray-900">{count}</span>
                                 <span className="text-xs text-gray-500">{type}</span>
                             </div>

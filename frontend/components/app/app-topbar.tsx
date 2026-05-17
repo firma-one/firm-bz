@@ -6,7 +6,7 @@ import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react
 import { usePathname } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { supabase } from "@/lib/supabase"
-import { Bell, Bookmark, ChevronDown, ChevronUp, Info, Megaphone, Send, Trash2, X } from "lucide-react"
+import { Bell, Bookmark, ChevronDown, ChevronUp, HelpCircle, Info, Megaphone, Search, Send, Trash2, User, X } from "lucide-react"
 import { Tip } from "@/components/ui/tip"
 import { RemindersPanel } from "@/components/app/reminders-panel"
 
@@ -343,22 +343,42 @@ export function AppTopbar() {
   // Hide until mounted (Safari hydration) but always render the same subtree so child hooks run every render.
   return (
     <div
-      className={`flex h-full w-full items-center justify-between px-4 py-2.5 sm:px-5 ${!mounted ? 'invisible pointer-events-none' : ''}`}
+      className={`flex h-full w-full items-center px-4 gap-4 ${!mounted ? 'invisible pointer-events-none' : ''}`}
       aria-hidden={!mounted}
     >
-      {/* Left: Branding */}
-      <div className="flex items-center gap-3">
-        <Logo size="xl" branding={branding ?? undefined} />
+      {/* Left: Branding — w-60 matches HTML mockup, aligns with sidebar */}
+      <div className="w-60 shrink-0 flex items-center pl-1">
+        <Logo
+          size="md"
+          showText
+          branding={branding ?? undefined}
+          wordmarkClassName="font-headline text-2xl font-bold tracking-tighter text-[#1b1b1d]"
+        />
       </div>
 
-      {/* Right: Bookmarks + Alerts */}
-      <div className="flex items-center gap-1.5">
+      {/* Center: Prominent Search — flex-1, constrained max-width */}
+      <div className="flex-1 flex justify-center px-12">
+        <div className="relative w-full max-w-2xl">
+          <span className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-[#45474c]/50">
+            <Search className="h-4 w-4" />
+          </span>
+          <input
+            className="w-full bg-[#f9f9fb] border border-[#e5e7eb] rounded-sm pl-9 pr-4 py-2 text-sm text-[#1b1b1d] placeholder:text-[#45474c]/60 focus:ring-1 focus:ring-[#069668] focus:border-[#069668] outline-none transition-all"
+            placeholder="Search clients, engagements, documents…"
+            type="text"
+            aria-label="Global search"
+          />
+        </div>
+      </div>
+
+      {/* Right: Utility actions — w-64, justify-end */}
+      <div className="w-64 shrink-0 flex items-center justify-end gap-1 pr-4">
         <RemindersPanel />
         <div className="relative bookmarks-container">
           <Tip label="Bookmarks" position="bottom">
           <button
             type="button"
-            className="p-2 text-indigo-600/80 hover:text-indigo-700 hover:bg-indigo-50 rounded-full transition-colors relative"
+            className="w-10 h-10 flex items-center justify-center rounded-full text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] transition-colors relative"
             aria-label="Bookmarks"
             onClick={() => {
               setShowBookmarksDropdown((v) => !v)
@@ -368,24 +388,24 @@ export function AppTopbar() {
           >
             <Bookmark className="h-5 w-5" />
             {bookmarks.length > 0 ? (
-              <span className="absolute top-0.5 right-0.5 min-w-[14px] h-3.5 px-1 bg-indigo-500 text-white text-[9px] font-bold rounded-full border border-white flex items-center justify-center leading-none">
+              <span className="absolute top-0.5 right-0.5 min-w-[14px] h-3.5 px-1 bg-[#069668] text-white text-[9px] font-bold rounded-full border border-white flex items-center justify-center leading-none">
                 {bookmarks.length}
               </span>
             ) : null}
           </button>
           </Tip>
           {showBookmarksDropdown ? (
-            <div className="absolute right-0 top-full mt-2 w-[360px] bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden">
+            <div className="absolute right-0 top-full mt-2 w-[360px] bg-white border border-slate-200 rounded shadow-lg z-50 overflow-hidden">
               <div className="px-4 py-3 border-b border-slate-200 bg-slate-50">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <span className="text-[13px] font-bold text-slate-900 tracking-tight">Bookmarks</span>
                     {bookmarks.length > 0 ? (
-                      <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-600 text-white">{bookmarks.length}</span>
+                      <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#069668] text-white">{bookmarks.length}</span>
                     ) : null}
                   </div>
                   <button type="button" onClick={() => setShowBookmarksDropdown(false)} aria-label="Close"
-                    className="p-1 rounded-lg hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors">
+                    className="p-1 rounded hover:bg-[#f0edee] text-[#45474c] hover:text-[#1b1b1d] transition-colors">
                     <X className="h-4 w-4" />
                   </button>
                 </div>
@@ -394,7 +414,7 @@ export function AppTopbar() {
                     value={bookmarkQuery}
                     onChange={(e) => { setBookmarkQuery(e.target.value); setVisibleBookmarksCount(10) }}
                     placeholder="Search bookmarks…"
-                    className="w-full h-8 rounded-md border border-slate-200 bg-white px-2.5 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200 focus:border-slate-300"
+                    className="w-full h-8 rounded border border-[#e5e7eb] bg-white px-2.5 text-xs text-[#1b1b1d] placeholder:text-[#45474c] focus:outline-none focus:ring-1 focus:ring-[#069668] focus:border-[#069668]"
                   />
                 </div>
               </div>
@@ -417,7 +437,7 @@ export function AppTopbar() {
                   return (
                     <>
                       {visible.map((b) => (
-                        <div key={b.id} className="group flex items-start gap-2 p-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50">
+                        <div key={b.id} className="group flex items-start gap-2 p-3 rounded border border-[#e5e7eb] bg-white hover:bg-[#f0edee]">
                           <button
                             type="button"
                             className="flex-1 min-w-0 text-left"
@@ -492,22 +512,22 @@ export function AppTopbar() {
           <Tip label="Notifications" position="bottom-right">
           <button
             type="button"
-            className="p-2 text-rose-600/80 hover:text-rose-700 hover:bg-rose-50 rounded-full transition-colors relative"
+            className="w-10 h-10 flex items-center justify-center rounded-full text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] transition-colors relative"
             aria-label="Notifications"
             onClick={() => setShowNotificationsDropdown((v) => !v)}
           >
             <Bell className="h-5 w-5" />
             {unreadCount > 0 ? (
-              <span className="absolute top-0.5 right-0.5 min-w-[14px] h-3.5 px-1 bg-rose-600 text-white text-[9px] font-bold rounded-full border border-white flex items-center justify-center leading-none">
+              <span className="absolute top-1 right-1 min-w-[14px] h-3.5 px-1 bg-[#069668] text-white text-[9px] font-bold rounded-full border border-white flex items-center justify-center leading-none">
                 {unreadCount}
               </span>
             ) : (
-              <span className="absolute top-0.5 right-0.5 h-2 w-2 bg-slate-300 rounded-full border border-white" />
+              <span className="absolute top-1 right-1 h-2 w-2 bg-[#069668] rounded-full border border-white" />
             )}
           </button>
           </Tip>
           {showNotificationsDropdown ? (
-            <div className="absolute right-0 top-full mt-2 w-[360px] bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden">
+            <div className="absolute right-0 top-full mt-2 w-[360px] bg-white border border-slate-200 rounded shadow-lg z-50 overflow-hidden">
               <div className="px-4 py-3 border-b border-slate-200 bg-slate-50">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
@@ -518,7 +538,7 @@ export function AppTopbar() {
                   </div>
                   <div className="flex items-center gap-1">
                     <button type="button" onClick={() => setShowNotificationsDropdown(false)} aria-label="Close"
-                      className="p-1 rounded-lg hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors">
+                      className="p-1 rounded hover:bg-[#f0edee] text-[#45474c] hover:text-[#1b1b1d] transition-colors">
                       <X className="h-4 w-4" />
                     </button>
                   </div>
@@ -526,7 +546,7 @@ export function AppTopbar() {
                 <div className="mt-2 grid grid-cols-2 gap-2">
                   <button
                     type="button"
-                    className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-800 hover:border-rose-300 hover:bg-white whitespace-nowrap"
+                    className="h-9 rounded border border-[#e5e7eb] bg-white px-2 text-xs font-semibold text-[#1b1b1d] hover:border-[#069668]/50 hover:bg-[#f9f9fb] whitespace-nowrap"
                     title="Clear all notifications"
                     onClick={async () => {
                       try {
@@ -555,7 +575,7 @@ export function AppTopbar() {
                   </button>
                   <button
                     type="button"
-                    className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-800 hover:border-rose-300 hover:bg-white whitespace-nowrap disabled:opacity-50"
+                    className="h-9 rounded border border-[#e5e7eb] bg-white px-2 text-xs font-semibold text-[#1b1b1d] hover:border-[#069668]/50 hover:bg-[#f9f9fb] whitespace-nowrap disabled:opacity-50"
                     onClick={() => setShowBroadcastComposer((v) => !v)}
                     disabled={!canBroadcast}
                     title={canBroadcast ? 'Send a broadcast to a team' : 'Broadcasts are available to admins'}
@@ -572,7 +592,7 @@ export function AppTopbar() {
                   </button>
                 </div>
                 {canBroadcast && showBroadcastComposer ? (
-                  <div className="mt-3 rounded-lg border border-slate-200 bg-white p-2.5">
+                  <div className="mt-3 rounded border border-[#e5e7eb] bg-white p-2.5">
                     <div className="mb-2 flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 min-w-0">
                         <div className="text-[11px] font-semibold text-slate-700 whitespace-nowrap">Scope</div>
@@ -593,12 +613,12 @@ export function AppTopbar() {
                             key={s}
                             type="button"
                             disabled={!enabled}
-                            className={`h-9 rounded-lg border px-2 text-xs font-semibold transition-colors whitespace-nowrap ${
+                            className={`h-9 rounded border px-2 text-xs font-semibold transition-colors whitespace-nowrap ${
                               !enabled
-                                ? 'border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed'
+                                ? 'border-[#e5e7eb] bg-[#f9f9fb] text-[#45474c] cursor-not-allowed'
                                 : isActive
                                   ? 'border-rose-300 bg-white text-slate-900 shadow-sm'
-                                  : 'border-slate-200 bg-white text-slate-700 hover:border-rose-300 hover:bg-slate-50'
+                                  : 'border-[#e5e7eb] bg-white text-[#1b1b1d] hover:border-[#069668]/50 hover:bg-[#f9f9fb]'
                             }`}
                             title={enabled ? label : `${label} (coming soon)`}
                             onClick={() => enabled && setBroadcastScope(s)}
@@ -612,21 +632,21 @@ export function AppTopbar() {
                       value={broadcastTitle}
                       onChange={(e) => setBroadcastTitle(e.target.value)}
                       placeholder="Title (optional)"
-                      className="w-full h-8 rounded-md border border-slate-200 bg-white px-2.5 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200 focus:border-slate-300"
+                      className="w-full h-8 rounded border border-[#e5e7eb] bg-white px-2.5 text-xs text-[#1b1b1d] placeholder:text-[#45474c] focus:outline-none focus:ring-1 focus:ring-[#069668] focus:border-[#069668]"
                     />
                     <textarea
                       value={broadcastText}
                       onChange={(e) => setBroadcastText(e.target.value.slice(0, 1000))}
                       placeholder="Broadcast message (max 1000 chars)…"
                       rows={4}
-                      className="mt-2 w-full rounded-md border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200 focus:border-slate-300 resize-none"
+                      className="mt-2 w-full rounded border border-[#e5e7eb] bg-white px-2.5 py-2 text-xs text-[#1b1b1d] placeholder:text-[#45474c] focus:outline-none focus:ring-1 focus:ring-[#069668] focus:border-[#069668] resize-none"
                     />
                     <div className="mt-2 flex items-center justify-between">
                       <div className="text-[11px] text-slate-500">{broadcastText.length}/1000</div>
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                          className="h-9 w-9 inline-flex items-center justify-center rounded border border-[#e5e7eb] bg-white text-[#1b1b1d] hover:bg-[#f0edee] disabled:opacity-60"
                           disabled={broadcastSending}
                           onClick={() => {
                             setShowBroadcastComposer(false)
@@ -639,7 +659,7 @@ export function AppTopbar() {
                         </button>
                         <button
                           type="button"
-                          className="h-9 w-9 inline-flex items-center justify-center rounded-lg bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-60"
+                          className="h-9 w-9 inline-flex items-center justify-center rounded bg-[#069668] text-white hover:bg-[#057a54] disabled:opacity-60"
                           disabled={broadcastSending || broadcastText.trim().length === 0}
                           onClick={async () => {
                             try {
@@ -815,6 +835,31 @@ export function AppTopbar() {
             </div>
           ) : null}
         </div>
+
+        {/* Help */}
+        <Tip label="Help" position="bottom-right">
+          <button
+            type="button"
+            className="w-10 h-10 flex items-center justify-center rounded-full text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] transition-colors"
+            aria-label="Help"
+          >
+            <HelpCircle className="h-5 w-5" />
+          </button>
+        </Tip>
+
+        {/* Vertical separator */}
+        <div className="h-8 w-px bg-[#e5e7eb] mx-2" />
+
+        {/* Profile button */}
+        <button
+          type="button"
+          className="flex items-center gap-2 pl-2 pr-1 py-1 rounded-full hover:bg-[#f9f9fb] transition-colors"
+          aria-label="Profile"
+        >
+          <div className="h-8 w-8 rounded-full bg-[#f3f4f6] flex items-center justify-center border border-[#e5e7eb]">
+            <User className="h-4 w-4 text-[#45474c]" />
+          </div>
+        </button>
       </div>
     </div>
   )

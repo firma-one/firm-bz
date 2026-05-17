@@ -38,7 +38,8 @@ export function SharedFolderIcon({
       width={size}
       height={size}
       viewBox="0 0 24 24"
-      className={cn('text-purple-600 flex-shrink-0 block', className)}
+      className={cn('flex-shrink-0 block', className)}
+      style={{ color: '#5A78FF' }}
       aria-hidden
     >
       <path d="M0 0h24v24H0z" fill="none" />

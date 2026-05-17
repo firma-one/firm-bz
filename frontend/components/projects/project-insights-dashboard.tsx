@@ -41,7 +41,7 @@ import type { EngagementInsightsResponse, UnansweredThreadItem, DocumentDueDateI
 function getDocTypeBgColor(mimeType?: string): string {
     if (!mimeType) return 'bg-gray-50'
     const m = mimeType.toLowerCase()
-    if (m === 'application/vnd.google-apps.folder') return 'bg-purple-50'
+    if (m === 'application/vnd.google-apps.folder') return 'bg-[#5A78FF]/5'
     if (m === 'application/vnd.google-apps.spreadsheet') return 'bg-green-50'
     if (m === 'application/vnd.google-apps.presentation') return 'bg-amber-50'
     if (m === 'application/vnd.google-apps.document') return 'bg-blue-50'
@@ -49,7 +49,7 @@ function getDocTypeBgColor(mimeType?: string): string {
     if (m.includes('excel') || m.includes('spreadsheetml') || m.includes('spreadsheet')) return 'bg-green-50'
     if (m.includes('powerpoint') || m.includes('presentationml') || m.includes('presentation')) return 'bg-orange-50'
     if (m.includes('word') || m.includes('wordprocessingml') || m.includes('document')) return 'bg-blue-50'
-    if (m.includes('image')) return 'bg-purple-50'
+    if (m.includes('image')) return 'bg-[#5A78FF]/5'
     if (m.includes('video')) return 'bg-red-50'
     if (m.includes('audio')) return 'bg-blue-50'
     if (m.includes('archive') || m.includes('zip')) return 'bg-yellow-50'
@@ -107,7 +107,7 @@ function scoreLabel(score: number): string {
 
 function EmptyState({ message }: { message: string }) {
     return (
-        <div className="flex items-center gap-2 p-4 rounded-xl bg-green-50 border border-green-100">
+        <div className="flex items-center gap-2 p-4 rounded bg-green-50 border border-green-100">
             <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
             <span className="text-sm text-green-700">{message}</span>
         </div>
@@ -205,7 +205,7 @@ function SharesProgressCard({ data }: { data: EngagementInsightsResponse }) {
     if (!sp || sp.total === 0) return null
 
     return (
-        <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
+        <div className="bg-white border border-[#e5e7eb] rounded p-4">
             <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-semibold text-gray-700">Shares Board</h3>
                 <span className="text-xs text-gray-400">{sp.total} share{sp.total !== 1 ? 's' : ''}</span>
@@ -262,7 +262,7 @@ function ACRow({ href, isExternal, children }: { href: string; isExternal?: bool
             href={href}
             target={isExternal ? '_blank' : undefined}
             rel={isExternal ? 'noopener noreferrer' : undefined}
-            className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-gray-50 transition-colors rounded-xl border border-gray-100 bg-white"
+            className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-[#f3f4f6] transition-colors rounded border border-[#e5e7eb] bg-white"
         >
             {children}
         </Link>
@@ -349,7 +349,7 @@ function ACSensitiveRow({ item, engagementBase, onDismiss }: { item: SensitiveFi
 
 function ACStorageRow({ label, sub }: { label: string; sub: string }) {
     return (
-        <div className="flex items-center justify-between gap-2 px-4 py-3 rounded-xl border border-gray-100 bg-white">
+        <div className="flex items-center justify-between gap-2 px-4 py-3 rounded border border-[#e5e7eb] bg-white">
             <p className="text-sm font-semibold text-gray-900 truncate flex-1">{label}</p>
             <span className="text-xs text-gray-400 shrink-0">{sub}</span>
         </div>
@@ -440,11 +440,11 @@ function EngagementActionCenter({ data, loading, engagementBase, projectId, setR
         threads: 'bg-blue-100 text-blue-700',
         sharing: 'bg-indigo-100 text-indigo-700',
         sensitive: 'bg-orange-100 text-orange-700',
-        storage: 'bg-purple-100 text-purple-700',
+        storage: 'bg-[#5A78FF]/10 text-[#5A78FF]',
     }
 
     return (
-        <div className="flex flex-col gap-3 border border-gray-200 rounded-2xl p-4 bg-gray-50 shadow-sm">
+        <div className="flex flex-col gap-3 border border-[#e5e7eb] rounded p-4 bg-[#f9f9fb]">
             {/* Header */}
             <div className="flex items-center justify-between">
                 {acView === 'summary' ? (
@@ -453,7 +453,7 @@ function EngagementActionCenter({ data, loading, engagementBase, projectId, setR
                     <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2 duration-200">
                         <button
                             onClick={() => setAcView('summary')}
-                            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-gray-200 hover:bg-gray-300 active:scale-95 transition-all duration-150 text-gray-700 font-medium text-xs"
+                            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-[#f3f4f6] hover:bg-[#e5e7eb] active:scale-95 transition-all duration-150 text-gray-700 font-medium text-xs"
                         >
                             <ArrowLeft className="h-3.5 w-3.5" />
                             Back
@@ -488,7 +488,7 @@ function EngagementActionCenter({ data, loading, engagementBase, projectId, setR
                                 {overdueCount > 0 && (
                                     <button
                                         onClick={() => setAcView('overdue')}
-                                        className="w-full flex items-center justify-between p-3 bg-white rounded-xl border border-red-100 shadow-sm hover:bg-red-50 hover:shadow-md hover:scale-[1.01] active:scale-[0.99] transition-all duration-150"
+                                        className="w-full flex items-center justify-between p-3 bg-white rounded border border-red-100 hover:bg-red-50 hover:scale-[1.01] active:scale-[0.99] transition-all duration-150"
                                     >
                                         <div className="flex items-center gap-3">
                                             <div className="p-2 rounded-lg bg-red-50"><AlertCircle className="h-4 w-4 text-red-600" /></div>
@@ -506,7 +506,7 @@ function EngagementActionCenter({ data, loading, engagementBase, projectId, setR
                                 {upcomingCount > 0 && (
                                     <button
                                         onClick={() => setAcView('upcoming')}
-                                        className="w-full flex items-center justify-between p-3 bg-white rounded-xl border border-amber-100 shadow-sm hover:bg-amber-50 hover:shadow-md hover:scale-[1.01] active:scale-[0.99] transition-all duration-150"
+                                        className="w-full flex items-center justify-between p-3 bg-white rounded border border-amber-100 hover:bg-amber-50 hover:scale-[1.01] active:scale-[0.99] transition-all duration-150"
                                     >
                                         <div className="flex items-center gap-3">
                                             <div className="p-2 rounded-lg bg-amber-50"><Clock className="h-4 w-4 text-amber-600" /></div>
@@ -535,7 +535,7 @@ function EngagementActionCenter({ data, loading, engagementBase, projectId, setR
                                     { key: 'threads' as const, icon: MessageCircle, label: 'Threads', count: threadCount, sub: threadCount > 0 ? `${threadCount} unanswered thread${threadCount > 1 ? 's' : ''}` : 'No unanswered threads', active: { border: 'border-blue-100', hover: 'hover:bg-blue-50', text: 'text-blue-700', iconBg: 'bg-blue-50', iconText: 'text-blue-600', chevron: 'text-blue-400', num: 'text-blue-600' } },
                                     { key: 'sharing' as const, icon: Share2, label: 'Sharing', count: sharingCount, sub: sharingCount > 0 ? `${sharingCount} invitation${sharingCount > 1 ? 's' : ''} pending` : 'No pending invites', active: { border: 'border-indigo-100', hover: 'hover:bg-indigo-50', text: 'text-indigo-700', iconBg: 'bg-indigo-50', iconText: 'text-indigo-600', chevron: 'text-indigo-400', num: 'text-indigo-600' } },
                                     { key: 'sensitive' as const, icon: FileWarning, label: 'Sensitive', count: sensitiveCount, sub: sensitiveCount > 0 ? `${sensitiveCount} file${sensitiveCount > 1 ? 's' : ''} flagged` : 'No sensitive files', active: { border: 'border-orange-100', hover: 'hover:bg-orange-50', text: 'text-orange-700', iconBg: 'bg-orange-50', iconText: 'text-orange-600', chevron: 'text-orange-400', num: 'text-orange-600' } },
-                                    { key: 'storage' as const, icon: HardDrive, label: 'Storage', count: storageCount, sub: storageCount > 0 ? [data?.storageHealth.staleCount ? `${data.storageHealth.staleCount} stale` : '', data?.storageHealth.largeCount ? `${data.storageHealth.largeCount} large` : '', duplicateCount ? `${duplicateCount} duplicate${duplicateCount > 1 ? 's' : ''}` : ''].filter(Boolean).join(' · ') : 'Storage looks healthy', active: { border: 'border-purple-100', hover: 'hover:bg-purple-50', text: 'text-purple-700', iconBg: 'bg-purple-50', iconText: 'text-purple-600', chevron: 'text-purple-400', num: 'text-purple-600' } },
+                                    { key: 'storage' as const, icon: HardDrive, label: 'Storage', count: storageCount, sub: storageCount > 0 ? [data?.storageHealth.staleCount ? `${data.storageHealth.staleCount} stale` : '', data?.storageHealth.largeCount ? `${data.storageHealth.largeCount} large` : '', duplicateCount ? `${duplicateCount} duplicate${duplicateCount > 1 ? 's' : ''}` : ''].filter(Boolean).join(' · ') : 'Storage looks healthy', active: { border: 'border-[#5A78FF]/20', hover: 'hover:bg-[#5A78FF]/5', text: 'text-[#5A78FF]', iconBg: 'bg-[#5A78FF]/5', iconText: 'text-[#5A78FF]', chevron: 'text-[#5A78FF]/50', num: 'text-[#5A78FF]' } },
                                 ] as const).map(({ key, icon: Icon, label, count, sub, active }) => {
                                     const isAlert = count > 0
                                     const border = isAlert ? active.border : 'border-green-100'
@@ -549,7 +549,7 @@ function EngagementActionCenter({ data, loading, engagementBase, projectId, setR
                                         <button
                                             key={key}
                                             onClick={() => setAcView(key)}
-                                            className={`w-full flex items-center justify-between p-3 bg-white rounded-xl border ${border} shadow-sm ${hover} hover:shadow-md hover:scale-[1.01] active:scale-[0.99] transition-all duration-150`}
+                                            className={`w-full flex items-center justify-between p-3 bg-white rounded border ${border} ${hover} hover:scale-[1.01] active:scale-[0.99] transition-all duration-150`}
                                         >
                                             <div className="flex items-center gap-3">
                                                 <div className={`p-2 rounded-lg ${iconBg}`}><Icon className={`h-4 w-4 ${iconText}`} /></div>
@@ -589,7 +589,7 @@ function EngagementActionCenter({ data, loading, engagementBase, projectId, setR
                     <div className="flex flex-col gap-4">
                         {engagementDueSoon > 0 && data && (
                             <SectionBlock title="Engagement End Date" icon={CalendarClock}>
-                                <div className="flex items-center justify-between gap-2 px-4 py-3 rounded-xl border border-gray-100 bg-white">
+                                <div className="flex items-center justify-between gap-2 px-4 py-3 rounded border border-[#e5e7eb] bg-white">
                                     <p className="text-sm font-semibold text-gray-900 flex-1 truncate">
                                         {data.engagementDueDate
                                             ? new Date(data.engagementDueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -678,7 +678,7 @@ function EngagementActionCenter({ data, loading, engagementBase, projectId, setR
                                         >
                                             <div className="space-y-2">
                                                 {(showAllDuplicates ? duplicateGroups : duplicateGroups.slice(0, 5)).map(g => (
-                                                    <div key={g.baseKey} className="px-4 py-3 rounded-xl border border-gray-100 bg-white">
+                                                    <div key={g.baseKey} className="px-4 py-3 rounded border border-[#e5e7eb] bg-white">
                                                         <p className="text-xs font-semibold text-gray-500 mb-1.5">
                                                             {g.type === 'exact' ? 'Exact size match' : `"${g.baseKey}"`}
                                                             <span className="ml-1.5 font-normal text-gray-400">· {g.files.length} files</span>
@@ -712,7 +712,7 @@ function EngagementActionCenter({ data, loading, engagementBase, projectId, setR
                                                     <button
                                                         type="button"
                                                         onClick={() => setShowAllDuplicates(v => !v)}
-                                                        className="w-full text-[11px] font-medium text-purple-600 hover:text-purple-800 text-center py-1.5 rounded-lg hover:bg-purple-50 transition-colors"
+                                                        className="w-full text-[11px] font-medium text-[#5A78FF] hover:text-[#3d5ce0] text-center py-1.5 rounded hover:bg-[#5A78FF]/5 transition-colors"
                                                     >
                                                         {showAllDuplicates ? 'Show less' : `Show all ${duplicateGroups.length} groups`}
                                                     </button>
@@ -755,7 +755,7 @@ function EngagementActionCenter({ data, loading, engagementBase, projectId, setR
             {/* Delete confirmation modal */}
             {deleteTarget && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setDeleteTarget(null)}>
-                    <div className="bg-white rounded-2xl p-6 shadow-xl max-w-sm w-full mx-4" onClick={e => e.stopPropagation()}>
+                    <div className="bg-white rounded p-6 shadow-xl max-w-sm w-full mx-4" onClick={e => e.stopPropagation()}>
                         <h3 className="text-base font-bold text-gray-900 mb-2">Move to Trash?</h3>
                         <p className="text-sm text-gray-500 mb-1">
                             &quot;<span className="font-medium text-gray-700">{deleteTarget.fileName}</span>&quot; will be moved to the Google Drive Trash.
@@ -801,13 +801,13 @@ function FilterDropdown({ label, allLabel, options, value, onChange, formatOptio
             {open && <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />}
             <button
                 onClick={() => setOpen(!open)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 border text-xs font-medium rounded-lg transition-colors shadow-sm ${hasActive ? 'bg-gray-900 border-gray-900 text-white' : 'bg-white border-gray-200 hover:bg-gray-50 text-gray-700'}`}
+                className={`flex items-center gap-1.5 px-3 py-1.5 border text-xs font-medium rounded transition-colors ${hasActive ? 'bg-gray-900 border-gray-900 text-white' : 'bg-white border-[#e5e7eb] hover:bg-[#f3f4f6] text-gray-700'}`}
             >
                 <span>{value ? (formatOption ? formatOption(value) : value) : label}</span>
                 <ChevronDown className={`h-3 w-3 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
             </button>
             {open && (
-                <div className="absolute right-0 top-full mt-1.5 w-52 bg-white border border-gray-200 rounded-xl shadow-xl py-1 z-50 animate-in fade-in zoom-in-95 duration-100">
+                <div className="absolute right-0 top-full mt-1.5 w-52 bg-white border border-[#e5e7eb] rounded shadow-xl py-1 z-50 animate-in fade-in zoom-in-95 duration-100">
                     <div className="px-3 py-2 border-b border-gray-100 mb-1 flex items-center justify-between bg-gray-50/50 rounded-t-xl">
                         <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{label}</span>
                         <button onClick={() => setOpen(false)} className="text-[10px] font-semibold text-white bg-gray-900 hover:bg-gray-800 px-2 py-0.5 rounded transition-colors">Done</button>
@@ -889,7 +889,7 @@ function DocActivitySection({ data, engagementBase }: { data: EngagementInsights
     const tabLabels: Record<ActivityTab, string> = { '24h': '24h', '1w': '1 wk', '1m': '1 mo' }
 
     return (
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm">
+        <div className="bg-white rounded border border-[#e5e7eb]">
             <div className="p-4 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap">
                 <div className="flex items-center gap-2">
                     <Activity className="h-4 w-4 text-gray-500" />
@@ -936,7 +936,7 @@ function DocActivitySection({ data, engagementBase }: { data: EngagementInsights
                     <EmptyState message="No document changes in this period." />
                 </div>
             ) : (
-                <div ref={scrollContainerRef} className="overflow-y-auto max-h-[640px] divide-y divide-gray-50 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
+                <div ref={scrollContainerRef} className="overflow-y-auto max-h-[640px] divide-y divide-[#e5e7eb] [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
                     {visibleList.map((doc) => {
                         const d = doc as RecentDocumentItem & { folderPath?: string | null; updatedByEmail?: string | null }
                             const href = engagementBase ? `${engagementBase}/files#doc-file:${d.id}` : '#'
@@ -1025,7 +1025,7 @@ export function ProjectInsightsDashboard({
     return (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 22rem', gap: '1.5rem', alignItems: 'start' }}>
             {/* Left: outer card — all informational content */}
-            <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm flex flex-col gap-6">
+            <div className="p-6 flex flex-col gap-6">
                 {/* Header */}
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -1062,7 +1062,7 @@ export function ProjectInsightsDashboard({
                                 : null
                             const totalDeducted = penalties.reduce((s, p) => s + p.points, 0)
                             return (
-                                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                                <div className="bg-white rounded border border-[#e5e7eb] overflow-hidden">
                                     {/* Header */}
                                     <div className="flex items-center gap-4 px-4 pt-4 pb-3">
                                         <div className={`p-2 rounded-xl shrink-0 ${iconClass}`}>
@@ -1201,7 +1201,7 @@ export function ProjectInsightsDashboard({
                             icon={Users}
                             label="Pending Invites"
                             count={loading ? '—' : (data?.pendingInvitations.length ?? 0)}
-                            colorClass="bg-purple-50 text-purple-600"
+                            colorClass="bg-[#5A78FF]/5 text-[#5A78FF]"
                         />
                     </div>
                     <div className="flex-1 min-w-[calc(25%-12px)]">

@@ -2390,7 +2390,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
             onDrop={handleDrop}
         >
             {/* Top Bar: Breadcrumbs & Actions */}
-            <div className="px-0 py-0 border-b border-transparent bg-white flex flex-col gap-4 sticky top-0 z-20">
+            <div className="px-4 pt-3 pb-0 border-b border-transparent bg-white flex flex-col gap-4 sticky top-0 z-20">
                 {/* Breadcrumbs: root always visible (as dropdown when canManage); truncate middle */}
                 <div className="flex items-center text-xs font-medium text-slate-700 min-w-0">
                     <div className="flex items-center min-w-0 overflow-x-auto whitespace-nowrap custom-scrollbar">
@@ -2904,7 +2904,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
             </div >
 
             {/* Content Area - Styled as a Card */}
-            < div className="flex-1 overflow-hidden flex flex-col relative my-4 bg-white rounded-xl border border-slate-200 shadow-sm" >
+            < div className="flex-1 overflow-hidden flex flex-col relative m-4 bg-white rounded border border-[#e5e7eb]" >
                 {/* Google Drive Style Upload Progress Modal - portaled to body so fixed positioning is viewport-relative and not clipped by overflow-hidden */}
                 {uploadQueue.length > 0 && typeof document !== 'undefined' && document.body && createPortal(
                     <div className={cn(
@@ -3088,7 +3088,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                 }
 
                 {/* Fixed Table Header (Compact) */}
-                <div className="sticky top-0 bg-slate-50 border-b border-slate-200 pl-3 pr-2 py-2 shrink-0 z-10 font-medium text-slate-500 group">
+                <div className="sticky top-0 bg-white border-b border-[#e5e7eb] pl-3 pr-2 py-2 shrink-0 z-10 font-medium text-slate-500 group">
                     <div className="grid gap-4 items-center" style={{ gridTemplateColumns: 'minmax(0, 1fr) 10% 10% 14% 12% 8%' }}>
                         <div className="flex items-center gap-3">
                             {/* Select-all checkbox — visible on hover of header or when in selection mode */}
@@ -3120,7 +3120,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                 {/* File List */}
                 <div className="flex-1 overflow-y-auto custom-scrollbar relative">
                     {deeplinkResolving ? (
-                        <div className="divide-y divide-slate-100 animate-pulse">
+                        <div className="divide-y divide-[#e5e7eb] animate-pulse">
                             {Array.from({ length: 7 }).map((_, i) => (
                                 <div key={i} className="grid items-center px-4 py-2.5" style={{ gridTemplateColumns: '1fr 80px 120px 160px 80px 36px' }}>
                                     <div className="flex items-center gap-2.5 min-w-0">
@@ -3166,7 +3166,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                             </p>
                         </div>
                     ) : (
-                        <div className={cn("divide-y divide-slate-100", isUploading && "opacity-50 transition-opacity")}>
+                        <div className={cn("divide-y divide-[#e5e7eb]", isUploading && "opacity-50 transition-opacity")}>
                             {sortedFiles.map((file) => {
                                 const isDeeplinkHighlight = file.id === highlightedFileId
                                 const isFolder = (file.mimeType ?? (file as { type?: string }).type) === 'application/vnd.google-apps.folder'
@@ -3198,12 +3198,12 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                         className={cn(
                                             "group grid gap-4 py-2 pl-3 pr-2 transition-all items-center cursor-default relative",
                                             isFolder && selectedFileIds.size === 0 && "cursor-pointer",
-                                            (isIntakeRow || file.lock?.type === 'finalize' || (file.isPrivate && !isFolder)) ? "hover:bg-slate-50 opacity-60" : "hover:bg-slate-50",
+                                            (isIntakeRow || file.lock?.type === 'finalize' || (file.isPrivate && !isFolder)) ? "hover:bg-[#f3f4f6] opacity-60" : "hover:bg-[#f3f4f6]",
                                             !isIntakeRow && selectedFileIds.has(file.id) && "bg-blue-50 hover:bg-blue-50",
-                                            !isIntakeRow && file.id === actionMenuOpenFileId && "bg-slate-50",
-                                            !isIntakeRow && (file.id === activeCommentDocId || file.id === activeInfoDocId || file.id === activeActivityDocId || file.id === activeVersionDocId) && "bg-slate-50",
+                                            !isIntakeRow && file.id === actionMenuOpenFileId && "bg-[#f3f4f6]",
+                                            !isIntakeRow && (file.id === activeCommentDocId || file.id === activeInfoDocId || file.id === activeActivityDocId || file.id === activeVersionDocId) && "bg-[#f3f4f6]",
                                             draggedItem?.id === file.id && "opacity-40 grayscale",
-                                            dragOverFolderId === file.id && "bg-slate-100 ring-2 ring-inset ring-slate-300/60 shadow-sm z-[1]"
+                                            dragOverFolderId === file.id && "bg-[#e5e7eb] ring-2 ring-inset ring-[#e5e7eb] z-[1]"
                                         )}
                                         onMouseEnter={() => {
                                             if (isDeeplinkHighlight) setHighlightedFileId(null)
@@ -3259,7 +3259,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                             tooltip={directShared ? 'shared' : 'contains-shared'}
                                                         />
                                                     ) : isFolder ? (
-                                                        <Folder className="h-4 w-4 text-purple-600 fill-purple-200 flex-shrink-0" />
+                                                        <Folder className="h-4 w-4 fill-[#5A78FF]/20 flex-shrink-0" style={{ color: '#5A78FF' }} />
                                                     ) : (
                                                         <DocumentIcon mimeType={file.mimeType} className="h-4 w-4" />
                                                     )}
@@ -3335,15 +3335,15 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                                 <button
                                                                     type="button"
                                                                     onClick={(e) => { e.stopPropagation(); setUnshareConfirmFile(file) }}
-                                                                    className={`inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium border bg-purple-100 text-purple-700 border-purple-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors`}
+                                                                    className={`inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium border bg-[#5A78FF]/10 text-[#5A78FF] border-[#5A78FF]/30 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors`}
                                                                 >
                                                                     <Share2 className="h-3 w-3" />
                                                                 </button>
                                                             ) : (
                                                                 <span className={`inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium border ${
                                                                     isFolder && !directShared
-                                                                        ? 'bg-purple-50 text-purple-400 border-purple-100'
-                                                                        : 'bg-purple-100 text-purple-700 border-purple-200'
+                                                                        ? 'bg-[#5A78FF]/5 text-[#5A78FF]/50 border-[#5A78FF]/20'
+                                                                        : 'bg-[#5A78FF]/10 text-[#5A78FF] border-[#5A78FF]/30'
                                                                 }`}>
                                                                     <Share2 className="h-3 w-3" />
                                                                 </span>

@@ -85,7 +85,7 @@ export function DocumentListCard({
 
     return (
         <div className={cn(
-            "bg-white border border-gray-200 rounded-2xl shadow-sm relative",
+            "bg-white border border-[#e5e7eb] rounded shadow-sm relative",
             variant === 'flat' && "border-none shadow-none bg-transparent rounded-none",
             className
         )}>
@@ -96,7 +96,7 @@ export function DocumentListCard({
 
             {/* Card Header */}
             <div className={cn(
-                "px-6 py-4 border-b border-gray-100 bg-gray-50 rounded-t-2xl relative z-20",
+                "px-6 py-4 border-b border-gray-100 bg-[#f3f4f6] rounded-t relative z-20",
                 variant === 'flat' && "bg-transparent border-none px-0 py-0 mb-0",
                 // If hiding title, we create a 'toolbar' feel
                 hideTitle && "flex justify-end pt-0 pb-0 border-b-0"
@@ -138,8 +138,8 @@ export function DocumentListCard({
 
                                 {/* Dropdown Menu */}
                                 {isFilterOpen && (
-                                    <div className="absolute right-0 top-full mt-2 w-48 bg-white border border-gray-200 rounded-xl shadow-xl py-1 z-50 animate-in fade-in zoom-in-95 duration-100">
-                                        <div className="px-3 py-2 border-b border-gray-100 mb-1 flex items-center justify-between bg-gray-50/50 rounded-t-xl">
+                                    <div className="absolute right-0 top-full mt-2 w-48 bg-white border border-[#e5e7eb] rounded shadow-xl py-1 z-50 animate-in fade-in zoom-in-95 duration-100">
+                                        <div className="px-3 py-2 border-b border-gray-100 mb-1 flex items-center justify-between bg-[#f3f4f6]/50 rounded-t">
                                             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">File Type</span>
                                             <button
                                                 onClick={() => setIsFilterOpen(false)}
@@ -234,7 +234,7 @@ export function DocumentListCard({
                 {isLoading ? (
                     Array.from({ length: 5 }).map((_, i) => (
                         <div key={i} className="px-6 py-3.5 flex items-center gap-4 animate-pulse border-b border-gray-50 last:border-0">
-                            <div className="h-10 w-10 bg-gray-100 rounded-xl flex-shrink-0"></div>
+                            <div className="h-10 w-10 bg-gray-100 rounded flex-shrink-0"></div>
                             <div className="flex-1 space-y-2">
                                 <div className="h-4 bg-gray-100 rounded w-3/4"></div>
                                 <div className="h-3 bg-gray-50 rounded w-1/2"></div>
@@ -251,7 +251,7 @@ export function DocumentListCard({
                         <div
                             key={`${file.id}-${file.lastAction || index}`}
                             onClick={() => setPreviewDoc(file)}
-                            className="group relative flex items-center gap-4 px-6 py-3.5 hover:bg-gray-50/80 transition-all cursor-pointer"
+                            className="group relative flex items-center gap-4 px-6 py-3.5 hover:bg-[#f3f4f6]/80 transition-all cursor-pointer"
                         >
 
                             {/* Rank Badge */}
@@ -268,7 +268,7 @@ export function DocumentListCard({
 
                             {/* Icon */}
                             <div className="flex-shrink-0">
-                                <div className="p-2.5 bg-white border border-gray-100 rounded-xl shadow-sm group-hover:border-gray-200 transition-colors">
+                                <div className="p-2.5 bg-white border border-gray-100 rounded shadow-sm group-hover:border-gray-200 transition-colors">
                                     <DocumentIcon mimeType={file.mimeType} className="h-6 w-6" />
                                 </div>
                             </div>
@@ -401,7 +401,7 @@ export function DocumentListCard({
             </div>
 
             {/* Footer */}
-            <div className="mt-auto px-6 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between rounded-b-2xl">
+            <div className="mt-auto px-6 py-3 bg-[#f3f4f6] border-t border-gray-100 flex items-center justify-between rounded-b">
                 <div className="text-xs text-gray-400 font-medium">
                     {isLoading ? (
                         <div className="h-3 w-24 bg-gray-200 rounded animate-pulse"></div>

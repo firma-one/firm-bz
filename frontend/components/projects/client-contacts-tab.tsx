@@ -104,20 +104,15 @@ export function ClientContactsTab({
   }
 
   return (
-    <div className="space-y-6">
-      <div className="space-y-1">
-        <h2 className="text-lg font-semibold text-slate-900">Contacts</h2>
-        <p className="text-sm text-slate-500">Keep track of key people for this client (external contacts).</p>
-      </div>
-
+    <div className="space-y-4">
       {/* Table */}
-      <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between gap-3">
+      <div className="rounded border border-[#e5e7eb] bg-white overflow-hidden">
+        <div className="px-4 py-3 border-b border-[#e5e7eb] flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <UserPlus className="h-4 w-4 text-slate-500" />
             <span className="text-sm font-semibold text-slate-800">Client contacts</span>
             {!loading && (
-              <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-lg">
+              <span className="font-mono text-[10px] font-bold bg-[#069668] text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
                 {filtered.length}
               </span>
             )}
@@ -141,15 +136,16 @@ export function ClientContactsTab({
             </div>
             <Button
               disabled={!canManage && !isSandboxFirm}
+              variant="ghost"
               size="sm"
-              className="h-8 px-3 bg-slate-900 text-white hover:bg-slate-800"
+              className="h-auto px-4 py-1.5 rounded-[2px] bg-[#069668] text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-[#069668] hover:brightness-105 hover:text-white active:scale-95 transition-all shadow-sm border-0 inline-flex items-center gap-1.5"
               onClick={() => {
                 setNewContactDraft({ name: '', email: '', phone: '', title: '', notes: '', tags: '' })
                 setNewContactModalOpen(true)
               }}
             >
-              <UserPlus className="h-3.5 w-3.5 mr-1.5" />
-              <span className="text-xs font-medium">New contact</span>
+              <UserPlus className="h-4 w-4" />
+              New contact
             </Button>
           </div>
         </div>
@@ -159,11 +155,11 @@ export function ClientContactsTab({
         ) : filtered.length === 0 ? (
           <div className="p-6 text-sm text-slate-500">No contacts yet.</div>
         ) : (
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-[#e5e7eb]">
             {filtered.map((c) => {
               const isEditing = editingId === c.id
               return (
-                <div key={c.id} className={cn('p-5 flex flex-col gap-3', isEditing && 'bg-slate-50/60')}>
+                <div key={c.id} className={cn('p-4 flex flex-col gap-3 hover:bg-[#f3f4f6] transition-colors', isEditing && 'bg-[#f3f4f6]')}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
@@ -197,7 +193,7 @@ export function ClientContactsTab({
                           <Button
                             size="sm"
                             disabled={!canManage || isPending}
-                            className="bg-slate-900 text-white hover:bg-slate-800"
+                            className="bg-[#069668] text-white hover:bg-[#069668] hover:brightness-105"
                             onClick={() => {
                               const clean = normalizeDraft(editDraft)
                               startTransition(async () => {
@@ -365,7 +361,7 @@ export function ClientContactsTab({
               </Button>
               <Button
                 disabled={isSandboxFirm || !canManage || isPending}
-                className="bg-slate-900 text-white hover:bg-slate-800"
+                className="bg-[#069668] text-white hover:bg-[#069668] hover:brightness-105"
                 onClick={() => {
                   if (isSandboxFirm) return
                   const clean = normalizeDraft(newContactDraft)

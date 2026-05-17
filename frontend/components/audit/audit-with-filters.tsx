@@ -431,7 +431,10 @@ export function AuditWithFilters({
         const data = await fetchPage(cursor)
         const list = data.events ?? []
         if (isInitial) setEvents(list)
-        else setEvents((prev) => [...prev, ...list])
+        else setEvents((prev) => {
+          const seen = new Set(prev.map((e: AuditEventRow) => e.id))
+          return [...prev, ...list.filter((e: AuditEventRow) => !seen.has(e.id))]
+        })
         setNextCursor(data.nextCursor ?? null)
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to load audit')
@@ -860,7 +863,7 @@ export function AuditWithFilters({
         )}
       </div>
 
-      <div className="flex-1 overflow-auto min-h-0 border border-gray-200 rounded-lg">
+      <div className="flex-1 overflow-auto min-h-0 bg-white border border-[#e5e7eb] rounded">
         {loading ? (
           <div className="flex items-center justify-center py-8 text-gray-500">
             <Loader2 className="h-6 w-6 animate-spin mr-2" />
@@ -873,7 +876,7 @@ export function AuditWithFilters({
           </div>
         ) : (
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
+            <thead className="bg-white border-b border-[#e5e7eb] sticky top-0">
               <tr>
                 <th className="text-left py-2.5 px-3 font-medium text-gray-700 w-[160px]">
                   <span className="inline-flex items-center gap-1.5">
@@ -898,8 +901,8 @@ export function AuditWithFilters({
                 </th>
                 <th className="text-left py-2.5 px-3 font-medium text-gray-700 w-[120px]">Client</th>
                 <th className="text-left py-2.5 px-3 font-medium text-gray-700 w-[120px]">Engagement</th>
-                <th className="text-left py-2.5 px-3 font-medium text-gray-700 w-[160px]">Event type</th>
-                <th className="text-left py-2.5 px-3 font-medium text-gray-700 min-w-[120px]">Details</th>
+                <th className="text-left py-2.5 px-3 font-medium text-gray-700 w-[210px]">Event type</th>
+                <th className="text-left py-2.5 px-3 font-medium text-gray-700 min-w-[80px]">Details</th>
                 <th className="text-left py-2.5 px-3 font-medium text-gray-700 w-[200px]">Actor</th>
                 <th className="py-2.5 px-2 w-8 text-right">
                   <DropdownMenu>
@@ -947,9 +950,9 @@ export function AuditWithFilters({
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-[#e5e7eb]">
               {visibleEvents.map((ev) => (
-                <tr key={ev.id} className="hover:bg-gray-50/80">
+                <tr key={ev.id} className="hover:bg-[#f3f4f6] transition-colors">
                   <td className="py-2 px-3 whitespace-nowrap">
                     <TooltipProvider>
                       <RelativeDateTime
@@ -983,7 +986,7 @@ export function AuditWithFilters({
           </table>
         )}
 
-        <div ref={sentinelRef} className="flex items-center justify-center py-3 border-t border-gray-100">
+        <div ref={sentinelRef} className="flex items-center justify-center py-3 border-t border-[#e5e7eb]">
           {loadingMore && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
         </div>
       </div>

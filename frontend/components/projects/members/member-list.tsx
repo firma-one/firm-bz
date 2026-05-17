@@ -180,10 +180,10 @@ export function MemberList({ members, invitations, personas, onRefresh, canManag
                     const PersonaIcon = () => getPersonaIcon(persona.slug)
 
                     return (
-                        <div key={persona.id} className="flex flex-col overflow-hidden rounded-lg border border-slate-200/80 bg-white min-h-[160px] max-h-[300px]">
+                        <div key={persona.id} className="flex flex-col overflow-hidden rounded border border-[#e5e7eb] bg-white min-h-[160px] max-h-[300px]">
                             {/* Single-line header: icon + title + count + action (Linear-style) */}
-                            <div className="flex items-center gap-2 px-3 py-2.5 border-b border-slate-100 flex-shrink-0">
-                                <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-slate-100 ${iconColorClass}`}>
+                            <div className="flex items-center gap-2 px-3 py-2.5 border-b border-[#e5e7eb] flex-shrink-0">
+                                <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded bg-[#f3f4f6] ${iconColorClass}`}>
                                     <PersonaIcon />
                                 </div>
                                 <h3 className="text-[13px] font-medium text-slate-900 truncate flex items-center gap-1.5 flex-1 min-w-0">
@@ -214,9 +214,9 @@ export function MemberList({ members, invitations, personas, onRefresh, canManag
                                 </h3>
                                 {canManage && onInviteWithPersona && (
                                     <Button
-                                        variant="blackCta"
+                                        variant="ghost"
                                         size="sm"
-                                        className="h-7 gap-1 px-2 text-xs shrink-0"
+                                        className="h-auto px-3 py-1 rounded-[2px] bg-[#069668] text-white text-[10px] font-bold tracking-widest uppercase hover:bg-[#069668] hover:brightness-105 hover:text-white active:scale-95 transition-all border-0 inline-flex items-center gap-1 shrink-0"
                                         onClick={() => onInviteWithPersona(persona.id)}
                                     >
                                         <SquarePlus className="h-3.5 w-3.5" />
@@ -227,10 +227,10 @@ export function MemberList({ members, invitations, personas, onRefresh, canManag
 
                             <div className="flex-1 overflow-y-auto min-h-0">
                                 {personaMembers.length > 0 ? (
-                                    <div className="divide-y divide-slate-100/80">
+                                    <div className="divide-y divide-[#e5e7eb]">
                                         {personaMembers.map((member: any) => (
-                                            <div key={member.id} className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50/80 transition-colors">
-                                                <Avatar className="h-7 w-7 shrink-0 border border-slate-200/80">
+                                            <div key={member.id} className="flex items-center gap-2 px-3 py-2 hover:bg-[#f3f4f6] transition-colors">
+                                                <Avatar className="h-7 w-7 shrink-0 border border-[#e5e7eb]">
                                                     <AvatarImage src={member.user.avatarUrl} />
                                                     <AvatarFallback className="bg-slate-100 text-[11px] font-medium text-slate-600">{getInitials(member.user.name)}</AvatarFallback>
                                                 </Avatar>
@@ -268,10 +268,10 @@ export function MemberList({ members, invitations, personas, onRefresh, canManag
 
                                 {/* Pending invitations — minimal, same row style as members */}
                                 {personaInvitations.length > 0 && (
-                                    <div className="border-t border-slate-100 divide-y divide-slate-100/80">
+                                    <div className="border-t border-[#e5e7eb] divide-y divide-[#e5e7eb]">
                                         {personaInvitations.map((invite: any) => (
-                                            <div key={invite.id} className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50/80 transition-colors">
-                                                <div className="h-7 w-7 shrink-0 rounded-full bg-slate-100 flex items-center justify-center text-slate-500">
+                                            <div key={invite.id} className="flex items-center gap-2 px-3 py-2 hover:bg-[#f3f4f6] transition-colors">
+                                                <div className="h-7 w-7 shrink-0 rounded bg-[#f3f4f6] flex items-center justify-center text-slate-500">
                                                     <Mail className="h-3.5 w-3.5" />
                                                 </div>
                                                 <div className="flex-1 min-w-0">
@@ -319,16 +319,16 @@ export function MemberList({ members, invitations, personas, onRefresh, canManag
                     </div>
                 ) : (
                     /* Fallback when no personas exist */
-                    <div className="rounded-lg border border-slate-200/80 bg-white overflow-hidden">
-                        <div className="flex items-center justify-between px-3 py-2.5 border-b border-slate-100">
+                    <div className="rounded border border-[#e5e7eb] bg-white overflow-hidden">
+                        <div className="flex items-center justify-between px-3 py-2.5 border-b border-[#e5e7eb]">
                             <h3 className="text-[13px] font-medium text-slate-900">Members</h3>
                             <span className="text-[11px] text-slate-500">Joined</span>
                         </div>
                         {members.length > 0 ? (
-                            <div className="divide-y divide-slate-100/80">
+                            <div className="divide-y divide-[#e5e7eb]">
                                 {members.map((member) => (
-                                    <div key={member.id} className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50/80 transition-colors">
-                                        <Avatar className="h-7 w-7 shrink-0 border border-slate-200/80">
+                                    <div key={member.id} className="flex items-center gap-2 px-3 py-2 hover:bg-[#f3f4f6] transition-colors">
+                                        <Avatar className="h-7 w-7 shrink-0 border border-[#e5e7eb]">
                                             <AvatarImage src={member.user.avatarUrl} />
                                             <AvatarFallback className="bg-slate-100 text-[11px] font-medium text-slate-600">{getInitials(member.user.name)}</AvatarFallback>
                                         </Avatar>
@@ -364,15 +364,15 @@ export function MemberList({ members, invitations, personas, onRefresh, canManag
 
                 {/* Members / invitations without a persona */}
                 {(membersWithoutPersona.length > 0 || invitationsWithoutPersona.length > 0) && (
-                    <div className="mt-4 rounded-lg border border-slate-200/80 bg-white overflow-hidden">
-                        <div className="flex items-center justify-between px-3 py-2.5 border-b border-slate-100">
+                    <div className="mt-4 rounded border border-[#e5e7eb] bg-white overflow-hidden">
+                        <div className="flex items-center justify-between px-3 py-2.5 border-b border-[#e5e7eb]">
                             <h3 className="text-[13px] font-medium text-slate-900">Other members</h3>
                             <span className="text-[11px] text-slate-500">Joined</span>
                         </div>
-                        <div className="divide-y divide-slate-100/80">
+                        <div className="divide-y divide-[#e5e7eb]">
                             {membersWithoutPersona.map((member: any) => (
-                                <div key={member.id} className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50/80 transition-colors">
-                                    <Avatar className="h-7 w-7 shrink-0 border border-slate-200/80">
+                                <div key={member.id} className="flex items-center gap-2 px-3 py-2 hover:bg-[#f3f4f6] transition-colors">
+                                    <Avatar className="h-7 w-7 shrink-0 border border-[#e5e7eb]">
                                         <AvatarImage src={member.user.avatarUrl} />
                                         <AvatarFallback className="bg-slate-100 text-[11px] font-medium text-slate-600">{getInitials(member.user.name)}</AvatarFallback>
                                     </Avatar>
@@ -413,7 +413,7 @@ export function MemberList({ members, invitations, personas, onRefresh, canManag
                         <div className="py-4">
                             <RadioGroup value={selectedPersonaId} onValueChange={setSelectedPersonaId} className="gap-4">
                                 {personas.map((persona) => (
-                                    <div key={persona.id} className="flex items-center space-x-2 border p-3 rounded-md hover:bg-slate-50 cursor-pointer" onClick={() => setSelectedPersonaId(persona.id)}>
+                                    <div key={persona.id} className="flex items-center space-x-2 border border-[#e5e7eb] p-3 rounded hover:bg-[#f3f4f6] cursor-pointer" onClick={() => setSelectedPersonaId(persona.id)}>
                                         <RadioGroupItem value={persona.id} id={persona.id} />
                                         <div className="flex-1 cursor-pointer">
                                             <Label htmlFor={persona.id} className="font-medium cursor-pointer">{persona.displayName}</Label>

@@ -38,10 +38,10 @@ export function InsightCard({
     const t = THEME_STYLES[theme]
 
     return (
-        <div className={`bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col h-full ${className || ''}`}>
+        <div className={`bg-white border border-[#e5e7eb] rounded shadow-sm flex flex-col h-full ${className || ''}`}>
 
             {/* Header */}
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between rounded-t-2xl">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between rounded-t">
                 <div className="flex items-center gap-3">
                     <div className={`p-2 rounded-lg border border-gray-100 shadow-sm ${t.iconBg}`}>
                         <Icon className={`h-4.5 w-4.5 ${t.iconColor}`} />
@@ -81,7 +81,7 @@ export function InsightCard({
 
                 {/* Footer Action (Only if no children provided, usually) */}
                 {!children && (
-                    <div className="px-6 py-3 border-t border-gray-100 flex items-center justify-between group cursor-pointer hover:bg-gray-50 rounded-b-2xl transition-colors">
+                    <div className="px-6 py-3 border-t border-gray-100 flex items-center justify-between group cursor-pointer hover:bg-[#f3f4f6] rounded-b transition-colors">
                         <span className="text-xs font-medium text-gray-500 group-hover:text-gray-900 transition-colors flex items-center gap-1">
                             View Details
                         </span>

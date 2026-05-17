@@ -70,7 +70,7 @@ export function DocumentIcon({ mimeType, size = 20, className = "", name = "" }:
 
   // Handle folder types - use Google Drive mimeType for all folders
   if (mimeType === 'application/vnd.google-apps.folder') {
-    return <Folder className={cn("text-purple-600 fill-purple-200", className)} size={size} />
+    return <Folder className={cn("fill-[#5A78FF]/20", className)} style={{ color: '#5A78FF' }} size={size} />
   }
 
   const m = (mimeType || '').toLowerCase()
@@ -104,7 +104,7 @@ export function DocumentIcon({ mimeType, size = 20, className = "", name = "" }:
     iconColor = 'text-blue-600'
   } else if (m.includes('image')) {
     IconComponent = FileImage
-    iconColor = 'text-purple-600'
+    iconColor = 'text-[#5A78FF]'
   } else if (mimeType.includes('video')) {
     IconComponent = FileVideo
     iconColor = 'text-red-500'

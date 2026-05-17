@@ -150,7 +150,7 @@ export default async function RootLayout({
           }}
         />
         {/* Force Unregister Service Workers and Handle Chunk Errors (Fix ChunkLoadError) */}
-        <Script src="/fix-chunk-errors.js" strategy="beforeInteractive" />
+        <Script src="/fix-chunk-errors.js" strategy="afterInteractive" />
         <AuthProvider initialSession={initialSession}>
           <ToastProvider>
             {children}

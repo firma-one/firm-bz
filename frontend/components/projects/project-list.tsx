@@ -41,15 +41,15 @@ function engagementStatusLabel(status: string | null | undefined): string {
 function engagementStatusBadgeClass(status: string | null | undefined): string {
     switch (status) {
         case 'PLANNED':
-            return 'bg-blue-100 text-blue-800'
+            return 'bg-blue-50 text-blue-600 ring-1 ring-blue-200/60'
         case 'ACTIVE':
-            return 'bg-black/80 text-white/90'
+            return 'bg-[#ecfdf5] text-[#069668] ring-1 ring-[#069668]/25'
         case 'COMPLETED':
-            return 'bg-emerald-100 text-emerald-800'
+            return 'bg-[#f3f4f6] text-[#45474c] ring-1 ring-[#e5e7eb]'
         case 'PAUSED':
-            return 'bg-amber-100 text-amber-800'
+            return 'bg-amber-50 text-amber-600 ring-1 ring-amber-200'
         default:
-            return 'bg-black/80 text-white/90'
+            return 'bg-[#ecfdf5] text-[#069668] ring-1 ring-[#069668]/25'
     }
 }
 
@@ -78,7 +78,7 @@ function MemberBubbleStack({
                 </div>
             ))}
             {users.length > 4 && (
-                <div className={`rounded-lg border border-slate-200 bg-white ${sizeClass} flex items-center justify-center font-medium text-slate-600 shrink-0 p-0.5`}>
+                <div className={`rounded border border-[#e5e7eb] bg-white ${sizeClass} flex items-center justify-center font-medium text-slate-600 shrink-0 p-0.5`}>
                     +{users.length - 4}
                 </div>
             )}
@@ -106,7 +106,7 @@ function LeadAvatar({ user }: { user: ProfileBubblePopupUser }) {
     return (
         <Tooltip delayDuration={200}>
             <TooltipTrigger asChild>
-                <div className="h-5 w-5 rounded-lg border border-slate-200/80 bg-slate-50 flex-shrink-0 overflow-hidden flex items-center justify-center font-bold text-slate-600 cursor-default text-[9px]">
+                <div className="h-5 w-5 rounded border border-[#e5e7eb] bg-[#f3f4f6] flex-shrink-0 overflow-hidden flex items-center justify-center font-bold text-slate-600 cursor-default text-[9px]">
                     {user.avatarUrl ? (
                         <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
                     ) : (
@@ -117,7 +117,7 @@ function LeadAvatar({ user }: { user: ProfileBubblePopupUser }) {
             <TooltipContent side="top" className="bg-white border border-slate-200 text-slate-700 text-xs p-3 shadow-lg max-w-[320px]">
                 <div className="space-y-2">
                     <div className="flex items-center gap-2">
-                        <div className="h-8 w-8 rounded-lg border border-slate-200/80 bg-slate-50 flex items-center justify-center font-bold text-slate-600 flex-shrink-0 overflow-hidden">
+                        <div className="h-8 w-8 rounded border border-[#e5e7eb] bg-[#f3f4f6] flex items-center justify-center font-bold text-slate-600 flex-shrink-0 overflow-hidden">
                             {user.avatarUrl ? (
                                 <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
                             ) : (
@@ -145,7 +145,7 @@ function LeadAvatar({ user }: { user: ProfileBubblePopupUser }) {
                     )}
                     {user.personaName && (
                         <div className="flex items-center gap-2">
-                            <span className="inline-block px-2 py-1 rounded bg-slate-100 text-slate-700 text-[11px] font-medium">
+                            <span className="inline-block px-2 py-1 rounded bg-[#f3f4f6] text-[#45474c] text-[11px] font-medium">
                                 {user.personaName}
                             </span>
                         </div>
@@ -159,8 +159,8 @@ function LeadAvatar({ user }: { user: ProfileBubblePopupUser }) {
 export function ProjectList({ projects, orgSlug, clientSlug, viewMode = 'grid', isOrgInternal, memberSummaries = {}, isRefreshing = false }: ProjectListProps) {
     if (projects.length === 0 && !isRefreshing) {
         return (
-            <div className="flex flex-col items-center justify-center h-64 text-center border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50">
-                <div className="h-12 w-12 bg-slate-100 rounded-full flex items-center justify-center mb-4 text-slate-400">
+            <div className="flex flex-col items-center justify-center h-64 text-center border-2 border-dashed border-slate-200 rounded bg-slate-50/50">
+                <div className="h-12 w-12 bg-[#f3f4f6] rounded flex items-center justify-center mb-4 text-[#45474c]">
                     <Briefcase className="h-6 w-6" />
                 </div>
                 <h3 className="text-sm font-semibold text-slate-900">No projects found</h3>
@@ -177,10 +177,10 @@ export function ProjectList({ projects, orgSlug, clientSlug, viewMode = 'grid', 
     if (viewMode === 'list') {
         return (
             <TooltipProvider>
-                <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+                <div className="bg-white border border-[#e5e7eb] rounded overflow-hidden">
                     <table className="w-full text-left text-sm">
                         <thead>
-                            <tr className="bg-slate-50 border-b border-slate-200">
+                            <tr className="bg-white border-b border-[#e5e7eb]">
                                 <th className="px-4 py-3 font-medium text-slate-500">Project</th>
                                 <th className="px-4 py-3 font-medium text-slate-500">Status</th>
                                 <th className="px-4 py-3 font-medium text-slate-500">Description</th>
@@ -188,11 +188,11 @@ export function ProjectList({ projects, orgSlug, clientSlug, viewMode = 'grid', 
                                 <th className="px-4 py-3 font-medium text-slate-500 text-right">Last Updated</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100">
+                        <tbody className="divide-y divide-[#e5e7eb]">
                             {isRefreshing && (
                                 <tr className="animate-pulse">
                                     <td className="px-4 py-3"><div className="h-4 w-40 bg-slate-100 rounded" /></td>
-                                    <td className="px-4 py-3"><div className="h-5 w-16 bg-slate-100 rounded-full" /></td>
+                                    <td className="px-4 py-3"><div className="h-5 w-16 bg-slate-100 rounded-sm" /></td>
                                     <td className="px-4 py-3"><div className="h-4 w-32 bg-slate-100 rounded" /></td>
                                     <td className="px-4 py-3"><div className="h-4 w-24 bg-slate-100 rounded" /></td>
                                     <td className="px-4 py-3"><div className="h-4 w-20 bg-slate-100 rounded ml-auto" /></td>
@@ -205,17 +205,17 @@ export function ProjectList({ projects, orgSlug, clientSlug, viewMode = 'grid', 
                                 const hasExternal = summary && summary.external.length > 0
                                 const hasAny = hasLeads || hasTeam || hasExternal
                                 return (
-                                    <tr key={project.id} className="group hover:bg-slate-50 transition-colors">
+                                    <tr key={project.id} className="group hover:bg-[#f3f4f6] transition-colors">
                                         <td className="px-4 py-3">
                                             <Link href={`/d/f/${orgSlug}/c/${clientSlug}/e/${project.slug}/files`} className="flex items-center gap-3">
-                                                <div className="h-8 w-8 bg-slate-100 text-slate-700 rounded-lg flex items-center justify-center">
+                                                <div className="h-8 w-8 bg-[#f3f4f6] text-[#45474c] rounded flex items-center justify-center">
                                                     <Briefcase className="h-4 w-4" />
                                                 </div>
                                                 <span className="font-medium text-slate-900 group-hover:text-black transition-colors">{project.name}</span>
                                             </Link>
                                         </td>
                                         <td className="px-4 py-3">
-                                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${engagementStatusBadgeClass(project.status)}`}>
+                                            <span className={`px-2 py-1 rounded-sm text-xs font-medium ${engagementStatusBadgeClass(project.status)}`}>
                                                 {engagementStatusLabel(project.status)}
                                             </span>
                                         </td>
@@ -284,15 +284,15 @@ export function ProjectList({ projects, orgSlug, clientSlug, viewMode = 'grid', 
         <TooltipProvider>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {isRefreshing && (
-                    <div className="relative bg-white border border-slate-200 rounded-xl p-5 flex flex-col h-48 animate-pulse">
+                    <div className="relative bg-white border border-[#e5e7eb] rounded p-5 flex flex-col h-48 animate-pulse">
                         <div className="flex items-start justify-between mb-3">
-                            <div className="h-10 w-10 bg-slate-100 rounded-lg" />
-                            <div className="h-5 w-14 bg-slate-100 rounded-full" />
+                            <div className="h-10 w-10 bg-slate-100 rounded" />
+                            <div className="h-5 w-14 bg-slate-100 rounded-sm" />
                         </div>
                         <div className="h-4 w-3/4 bg-slate-100 rounded mb-2" />
                         <div className="h-3 w-full bg-slate-100 rounded mb-1" />
                         <div className="h-3 w-2/3 bg-slate-100 rounded mb-auto" />
-                        <div className="mt-auto pt-3 border-t border-slate-50">
+                        <div className="mt-auto pt-3 border-t border-[#e5e7eb]">
                             <div className="h-3 w-24 bg-slate-100 rounded" />
                         </div>
                     </div>
@@ -306,10 +306,10 @@ export function ProjectList({ projects, orgSlug, clientSlug, viewMode = 'grid', 
                         <Link
                             key={project.id}
                             href={`/d/f/${orgSlug}/c/${clientSlug}/e/${project.slug}/files`}
-                            className="group relative bg-white border border-slate-200 rounded-xl p-5 hover:shadow-lg hover:border-slate-300 hover:-translate-y-0.5 transition-all duration-200 flex flex-col h-48"
+                            className="group relative bg-white border border-[#e5e7eb] rounded p-5 hover:shadow-lg hover:border-[#069668]/50 transition-all duration-200 flex flex-col h-48"
                         >
                             <div className="flex items-start justify-between mb-3">
-                                <div className="h-10 w-10 bg-slate-100 text-slate-700 rounded-lg flex items-center justify-center group-hover:scale-105 transition-transform shrink-0">
+                                <div className="h-10 w-10 bg-[#f3f4f6] text-[#45474c] rounded flex items-center justify-center group-hover:bg-[#ecfdf5] group-hover:text-[#069668] transition-all shrink-0">
                                     <Briefcase className="h-5 w-5" />
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0">
@@ -320,7 +320,7 @@ export function ProjectList({ projects, orgSlug, clientSlug, viewMode = 'grid', 
                                             ))}
                                         </div>
                                     )}
-                                    <span className={`shrink-0 px-2 py-0.5 rounded-full text-xs font-medium ${engagementStatusBadgeClass(project.status)}`}>
+                                    <span className={`shrink-0 px-2 py-0.5 rounded-sm text-xs font-medium ${engagementStatusBadgeClass(project.status)}`}>
                                         {engagementStatusLabel(project.status)}
                                     </span>
                                 </div>
@@ -353,7 +353,7 @@ export function ProjectList({ projects, orgSlug, clientSlug, viewMode = 'grid', 
                                     )}
                                 </div>
                             )}
-                            <div className="mt-auto pt-3 border-t border-slate-50 flex items-center justify-between text-[11px] text-slate-400">
+                            <div className="mt-auto pt-3 border-t border-[#e5e7eb] flex items-center justify-between text-[11px] text-slate-400">
                                 <div className="flex items-center gap-1.5" title="Last updated">
                                     <Clock className="h-3 w-3" />
                                     <span>{formatDistanceToNow(new Date(project.updatedAt), { addSuffix: true })}</span>
