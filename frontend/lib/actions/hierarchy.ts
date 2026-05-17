@@ -75,10 +75,17 @@ export async function getFirmHierarchy(firmSlug: string): Promise<HierarchyClien
 
     const user = session.user
 
-    const firm = await prisma.firm.findUnique({
-        where: { slug: firmSlug },
-        select: { id: true }
-    })
+    // Phase 1: firm lookup + userSettingsPlus in parallel (userSettings doesn't need firmId).
+    const [firm, settingsResult] = await Promise.all([
+        prisma.firm.findUnique({
+            where: { slug: firmSlug },
+            select: { id: true }
+        }),
+        userSettingsPlus.getUserSettingsPlus(user.id).catch((e: Error) => {
+            logger.debug('Could not get cached permissions for hierarchy check', e)
+            return null
+        }),
+    ])
 
     if (!firm) {
         redirect('/d')
@@ -86,20 +93,10 @@ export async function getFirmHierarchy(firmSlug: string): Promise<HierarchyClien
 
     const firmId = firm.id
 
-    const anyMembership = await prisma.firmMember.findFirst({
-        where: { userId: user.id, firmId }
-    })
-
-    if (!anyMembership) {
-        logger.warn('User has no firm membership, returning empty hierarchy', { userId: user.id, firmId })
-        return []
-    }
-
-    // getUserSettingsPlus and client.findMany are independent — run in parallel.
-    const [settingsResult, clients] = await Promise.all([
-        userSettingsPlus.getUserSettingsPlus(user.id).catch((e: Error) => {
-            logger.debug('Could not get cached permissions for hierarchy check', e)
-            return null
+    // Phase 2: member check + client.findMany in parallel (both need firmId from phase 1).
+    const [anyMembership, clients] = await Promise.all([
+        prisma.firmMember.findFirst({
+            where: { userId: user.id, firmId }
         }),
         prisma.client.findMany({
         where: {
@@ -123,6 +120,11 @@ export async function getFirmHierarchy(firmSlug: string): Promise<HierarchyClien
         orderBy: { name: 'asc' }
         }),
     ])
+
+    if (!anyMembership) {
+        logger.warn('User has no firm membership, returning empty hierarchy', { userId: user.id, firmId })
+        return []
+    }
 
     const permissions: UserPermissions = settingsResult?.permissions || { firms: [] }
 
@@ -186,6 +188,202 @@ export async function getFirmHierarchy(firmSlug: string): Promise<HierarchyClien
             }
         })
     }))
+}
+
+/** Lightweight client summary used by the firm page — engagements only carried for count. */
+export type ClientSummary = Omit<HierarchyClient, 'engagements'> & {
+    engagements: { id: string }[]
+}
+
+export type ClientsWithFirmMeta = {
+    clients: ClientSummary[]
+    firmId: string | null
+    firmSandboxOnly: boolean
+}
+
+/**
+ * Fetch the client list for the firm page.
+ * Only loads engagement IDs (for count badges) — avoids fetching full engagement details.
+ */
+export async function getClients(firmSlug: string): Promise<ClientsWithFirmMeta> {
+    const supabase = await createClient()
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.user) redirect('/signin')
+    const user = session.user
+
+    const firm = await prisma.firm.findUnique({
+        where: { slug: firmSlug },
+        select: { id: true, sandboxOnly: true }
+    })
+
+    if (!firm) return { clients: [], firmId: null, firmSandboxOnly: false }
+
+    // Phase 2: member check + clients in parallel.
+    const [anyMembership, rawClients] = await Promise.all([
+        prisma.firmMember.findFirst({ where: { userId: user.id, firmId: firm.id } }),
+        prisma.client.findMany({
+            where: {
+                firmId: firm.id,
+                OR: [
+                    { members: { some: { userId: user.id } } },
+                    { engagements: { some: { isDeleted: false, members: { some: { userId: user.id } } } } }
+                ]
+            },
+            select: {
+                id: true, name: true, slug: true, firmId: true,
+                industry: true, sector: true, status: true, website: true,
+                description: true, tags: true, ownerId: true, followUpDate: true,
+                expectedCloseDate: true, leadSource: true, internalMemo: true,
+                relationshipValue: true, clientSinceDate: true, linkedInUrl: true,
+                companySizeBracket: true, billingAddress: true,
+                createdAt: true, updatedAt: true,
+                engagements: {
+                    where: { isDeleted: false, members: { some: { userId: user.id } } },
+                    select: { id: true }
+                }
+            },
+            orderBy: { name: 'asc' }
+        }),
+    ])
+
+    if (!anyMembership) return { clients: [], firmId: firm.id, firmSandboxOnly: firm.sandboxOnly ?? false }
+
+    const clients: ClientSummary[] = rawClients.map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        slug: c.slug,
+        firmId: firm.id,
+        industry: c.industry,
+        sector: c.sector,
+        status: c.status,
+        website: c.website ?? null,
+        description: c.description ?? null,
+        tags: tagsFromJson(c.tags),
+        ownerId: c.ownerId ?? null,
+        followUpDate: c.followUpDate ?? null,
+        expectedCloseDate: c.expectedCloseDate ?? null,
+        leadSource: c.leadSource ?? null,
+        internalMemo: c.internalMemo ?? null,
+        relationshipValue: c.relationshipValue != null ? String(c.relationshipValue) : null,
+        clientSinceDate: c.clientSinceDate ?? null,
+        linkedInUrl: c.linkedInUrl ?? null,
+        companySizeBracket: c.companySizeBracket ?? null,
+        billingAddress: c.billingAddress ?? null,
+        createdAt: c.createdAt,
+        updatedAt: c.updatedAt,
+        engagements: c.engagements,
+    }))
+
+    return { clients, firmId: firm.id, firmSandboxOnly: firm.sandboxOnly ?? false }
+}
+
+export type ClientWithFirmMeta = {
+    client: HierarchyClient | null
+    firmId: string | null
+    firmName: string | null
+    firmSandboxOnly: boolean
+}
+
+/**
+ * Fetch a single client with its engagements for the client detail page.
+ * Only queries the one requested client — avoids loading the full firm hierarchy.
+ */
+export async function getClientWithEngagements(
+    firmSlug: string,
+    clientSlug: string
+): Promise<ClientWithFirmMeta> {
+    const supabase = await createClient()
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.user) redirect('/signin')
+    const user = session.user
+
+    // Phase 1: firm lookup + user settings in parallel.
+    const [firm, settingsResult] = await Promise.all([
+        prisma.firm.findUnique({
+            where: { slug: firmSlug },
+            select: { id: true, name: true, sandboxOnly: true }
+        }),
+        userSettingsPlus.getUserSettingsPlus(user.id).catch((e: Error) => {
+            logger.debug('Could not get cached permissions for client hierarchy check', e)
+            return null
+        }),
+    ])
+
+    if (!firm) return { client: null, firmId: null, firmName: null, firmSandboxOnly: false }
+
+    // Phase 2: single targeted client query — auth is embedded in the WHERE clause.
+    const c = await prisma.client.findFirst({
+        where: {
+            slug: clientSlug,
+            firmId: firm.id,
+            OR: [
+                { members: { some: { userId: user.id } } },
+                { engagements: { some: { isDeleted: false, members: { some: { userId: user.id } } } } }
+            ]
+        },
+        include: {
+            engagements: {
+                where: { isDeleted: false, members: { some: { userId: user.id } } },
+                include: { members: { where: { userId: user.id } } },
+                orderBy: { updatedAt: 'desc' }
+            }
+        }
+    })
+
+    if (!c) return { client: null, firmId: firm.id, firmName: firm.name, firmSandboxOnly: firm.sandboxOnly ?? false }
+
+    const permissions = settingsResult?.permissions || { firms: [] }
+
+    const client: HierarchyClient = {
+        id: c.id,
+        name: c.name,
+        slug: c.slug,
+        firmId: firm.id,
+        industry: c.industry,
+        sector: c.sector,
+        status: c.status,
+        website: c.website ?? null,
+        description: c.description ?? null,
+        tags: tagsFromJson(c.tags),
+        ownerId: (c as any).ownerId ?? null,
+        followUpDate: (c as any).followUpDate ?? null,
+        expectedCloseDate: (c as any).expectedCloseDate ?? null,
+        leadSource: (c as any).leadSource ?? null,
+        internalMemo: (c as any).internalMemo ?? null,
+        relationshipValue: (c as any).relationshipValue != null ? String((c as any).relationshipValue) : null,
+        clientSinceDate: (c as any).clientSinceDate ?? null,
+        linkedInUrl: (c as any).linkedInUrl ?? null,
+        companySizeBracket: (c as any).companySizeBracket ?? null,
+        billingAddress: (c as any).billingAddress ?? null,
+        createdAt: c.createdAt,
+        updatedAt: c.updatedAt,
+        engagements: (c.engagements as any[]).map((p: any) => {
+            const engagementPerms = findProjectInPermissions(permissions, firm.id, c.id, p.id)
+            const canView = engagementPerms?.scopes.project?.includes('can_view') || false
+            const canEdit = engagementPerms?.scopes.project?.includes('can_edit') || false
+            const canManage = engagementPerms?.scopes.project?.includes('can_manage') || false
+            const engStatus = p.status ?? 'ACTIVE'
+            return {
+                id: p.id,
+                clientId: p.clientId,
+                name: p.name,
+                slug: p.slug,
+                description: p.description,
+                updatedAt: p.updatedAt,
+                connectorRootFolderId: p.connectorRootFolderId,
+                status: engStatus,
+                contractType: p.contractType ?? null,
+                rateOrValue: p.rateOrValue != null ? String(p.rateOrValue) : null,
+                tags: tagsFromJson(p.tags),
+                kickoffDate: p.kickoffDate ? new Date(p.kickoffDate).toISOString() : null,
+                dueDate: p.dueDate ? new Date(p.dueDate).toISOString() : null,
+                isClosed: engStatus === 'COMPLETED',
+                members: [{ userId: user.id, canView: canView || canManage, canEdit: canEdit || canManage, canManage }]
+            }
+        })
+    }
+
+    return { client, firmId: firm.id, firmName: firm.name, firmSandboxOnly: firm.sandboxOnly ?? false }
 }
 
 /**

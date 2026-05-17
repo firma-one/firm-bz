@@ -1,7 +1,7 @@
 'use client'
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { HierarchyClient } from '@/lib/actions/hierarchy'
+import { ClientSummary } from '@/lib/actions/hierarchy'
 import { Users, Building, Calendar, Clock, Tag, TrendingUp, GitBranch, CalendarClock, Lock, Linkedin, Users2, MapPin } from 'lucide-react'
 import { formatDistanceToNow, format } from 'date-fns'
 import { formatFullDate } from '@/lib/utils'
@@ -22,7 +22,7 @@ function formatClientStatus(status: string | null | undefined): string {
 }
 
 interface ClientDetailsModalProps {
-    client: HierarchyClient | null
+    client: ClientSummary | null
     open: boolean
     onOpenChange: (open: boolean) => void
 }
@@ -99,7 +99,7 @@ export function ClientDetailsModal({ client, open, onOpenChange }: ClientDetails
                             <div className="flex-1">
                                 <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Tags</div>
                                 <div className="flex flex-wrap gap-1.5">
-                                    {client.tags!.map((t) => (
+                                    {client.tags!.map((t: string) => (
                                         <span key={t} className="px-2 py-0.5 bg-slate-100 text-slate-700 text-xs rounded-md">
                                             {t}
                                         </span>

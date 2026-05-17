@@ -2,12 +2,12 @@
 
 import React from 'react'
 import { Users, Clock, CalendarClock } from 'lucide-react'
-import { HierarchyClient } from '@/lib/actions/hierarchy'
+import { ClientSummary } from '@/lib/actions/hierarchy'
 import Link from 'next/link'
 import { formatDistanceToNow } from 'date-fns'
 
 interface ClientListProps {
-    clients: HierarchyClient[]
+    clients: ClientSummary[]
     orgSlug: string
     viewMode?: 'grid' | 'list'
 }
