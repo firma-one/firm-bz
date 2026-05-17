@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 /**
  * GET /api/firm/maintenance-by-slug?slug=<slug>
  *
- * Lightweight endpoint called by the middleware (proxy.ts) to check whether a
+ * Lightweight endpoint called by the middleware (middleware.ts) to check whether a
  * firm is currently in maintenance mode — without importing Prisma at the edge.
  * The route runs in the Node.js runtime so Prisma is available.
  *

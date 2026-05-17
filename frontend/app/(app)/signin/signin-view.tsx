@@ -223,7 +223,7 @@ export function SigninView() {
                       </div>
                     )}
 
-                    {!noAccountMessage && (
+                    {!noAccountMessage && emailVerified && (
                       <div className="space-y-4">
                         <button
                           type="button"
@@ -252,7 +252,7 @@ export function SigninView() {
                       </div>
                     )}
 
-                    {!noAccountMessage && (
+                    {!noAccountMessage && emailVerified && (
                       <div className="relative py-1">
                         <div className="absolute inset-0 flex items-center">
                           <div className="w-full border-t border-[#e4e2e3]" />
@@ -267,7 +267,7 @@ export function SigninView() {
                       </div>
                     )}
 
-                    {!noAccountMessage && (
+                    {!noAccountMessage && emailVerified && (
                       <Button
                         type="button"
                         onClick={() => handleEmailSubmit('google')}

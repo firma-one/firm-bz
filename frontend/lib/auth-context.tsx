@@ -21,10 +21,11 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
-  const [session, setSession] = useState<Session | null>(null)
-  const [loading, setLoading] = useState(true)
+export function AuthProvider({ children, initialSession }: { children: ReactNode; initialSession?: Session | null }) {
+  const [user, setUser] = useState<User | null>(initialSession?.user ?? null)
+  const [session, setSession] = useState<Session | null>(initialSession ?? null)
+  // If server provided a session, skip the loading state entirely
+  const [loading, setLoading] = useState<boolean>(initialSession == null)
   const lastBuiltUserIdRef = useRef<string | null>(null)
   const lastBuiltAtRef = useRef<number>(0)
 
@@ -41,20 +42,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
-    // Get initial session
-    const getInitialSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      setSession(session)
-      setUser(session?.user ?? null)
-
-      if (session?.user) {
-        maybeBuildUserSettingsPlus(session.user.id)
-      }
-
-      setLoading(false)
+    if (initialSession?.user) {
+      maybeBuildUserSettingsPlus(initialSession.user.id)
     }
 
-    getInitialSession()
+    // Only fetch session client-side if server didn't provide one (unauthenticated pages,
+    // or static/edge cases where cookies weren't readable during SSR).
+    if (initialSession == null) {
+      const getInitialSession = async () => {
+        const { data: { session } } = await supabase.auth.getSession()
+        setSession(session)
+        setUser(session?.user ?? null)
+        if (session?.user) {
+          maybeBuildUserSettingsPlus(session.user.id)
+        }
+        setLoading(false)
+      }
+      getInitialSession()
+    }
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(

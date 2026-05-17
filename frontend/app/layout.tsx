@@ -8,6 +8,8 @@ import { CookieConsent } from '@/components/ui/cookie-consent'
 import { ConsentAwareGoogleAnalytics } from '@/components/analytics/consent-aware-google-analytics'
 import { BRAND_NAME, BRAND_NAME_TEAM } from '@/config/brand'
 import { getPlatformSiteOrigin } from '@/config/platform-domain'
+import { createClient } from '@/utils/supabase/server'
+import type { Session } from '@supabase/supabase-js'
 
 // Satoshi font via CDN fallback - using Inter as base with Satoshi-like styling
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
@@ -95,11 +97,23 @@ export const metadata: Metadata = {
   category: 'technology',
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  // Read session from cookie server-side — no network call, just JWT decode.
+  // Passed to AuthProvider so the client skips its own getSession() round-trip,
+  // which was causing AuthGuard to block rendering for 500ms–2s on Vercel.
+  let initialSession: Session | null = null
+  try {
+    const supabase = await createClient()
+    const { data } = await supabase.auth.getSession()
+    initialSession = data.session
+  } catch {
+    // fail silently — client AuthProvider will fall back to its own getSession()
+  }
+
   return (
     <html lang="en" suppressHydrationWarning>
       <body
@@ -137,7 +151,7 @@ export default function RootLayout({
         />
         {/* Force Unregister Service Workers and Handle Chunk Errors (Fix ChunkLoadError) */}
         <Script src="/fix-chunk-errors.js" strategy="beforeInteractive" />
-        <AuthProvider>
+        <AuthProvider initialSession={initialSession}>
           <ToastProvider>
             {children}
             <CookieConsent />
