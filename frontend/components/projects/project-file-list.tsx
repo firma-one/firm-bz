@@ -2378,7 +2378,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
     }, [files, sortConfig, filterTypes, filterOwner, filterModified, filterShared, sharedByMeExternalIds, sharedExternalIds, ancestorFolderIds, session?.user?.email])
 
     const TableHeader = ({ label }: { label: string }) => (
-        <div className="flex items-center gap-1 text-xs font-medium text-slate-500 tracking-wider select-none">
+        <div className="flex items-center gap-1 text-[0.8125rem] font-medium text-[#45474c] select-none">
             {label}
         </div>
     )
@@ -2514,12 +2514,12 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                         {!isAtProjectRoot && (canEdit || (restrictToSharedOnly && currentFolderType === 'general')) && (
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
-                                    <Button disabled={loading || isLoadingFolders} className="h-8 gap-2 bg-slate-100 text-slate-900 hover:bg-slate-200 border-slate-200 border rounded-md shadow-sm">
-                                        <SquarePlus className="h-4 w-4" />
+                                    <Button disabled={loading || isLoadingFolders} className="h-auto px-4 py-1.5 rounded-[2px] bg-[#069668] text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-[#069668] hover:brightness-105 hover:text-white active:scale-95 transition-all shadow-sm border-0 inline-flex items-center gap-1.5">
+                                        <SquarePlus className="h-3.5 w-3.5" />
                                         Add
                                     </Button>
                                 </DropdownMenuTrigger>
-                                <DropdownMenuContent align="start" className="w-[280px] py-1">
+                                <DropdownMenuContent align="start" className="w-[280px] py-1 rounded-[2px]">
                                     <DropdownMenuItem onClick={() => openCreateDialog('folder')} className="text-xs py-1.5">
                                         <Folder className="mr-2 h-3.5 w-3.5 text-slate-500" />
                                         New folder
@@ -2663,16 +2663,16 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
 
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button disabled={loading} variant="outline" size="sm" className="h-8 gap-1.5 text-xs bg-white rounded-md border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+                                <Button disabled={loading} variant="outline" size="sm" className="h-8 gap-1.5 text-xs bg-white rounded-[2px] border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
                                     Type
                                     {filterTypes.size > 0 && <span className="ml-0.5 bg-slate-200 text-slate-800 px-1.5 rounded-full text-[10px] font-medium">{filterTypes.size}</span>}
                                     <ChevronDown className="h-3 w-3 opacity-50" />
                                 </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" className="w-[200px] py-1 text-xs">
+                            <DropdownMenuContent align="start" className="w-[200px] py-1 text-xs rounded-[2px]">
                                 <div className="flex items-center justify-between px-2 py-1.5 border-b border-slate-100">
                                     <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 p-0 font-medium">Type</DropdownMenuLabel>
-                                    <DropdownMenuItem className="text-xs rounded-md bg-slate-900 text-white hover:bg-slate-800 focus:bg-slate-800 p-1.5 px-2 cursor-pointer">
+                                    <DropdownMenuItem className="text-xs rounded-[2px] bg-slate-900 text-white hover:bg-slate-800 hover:text-white focus:bg-slate-800 focus:text-white p-1.5 px-2 cursor-pointer">
                                         Done
                                     </DropdownMenuItem>
                                 </div>
@@ -2701,16 +2701,16 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                         {/* ... Other Filters (unchanged) ... */}
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button disabled={loading} variant="outline" size="sm" className={cn("h-8 gap-1.5 text-xs bg-white rounded-md border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors", (filterOwner !== 'any' || filterShared !== 'all') && "border-slate-400 ring-1 ring-slate-300")}>
+                                <Button disabled={loading} variant="outline" size="sm" className={cn("h-8 gap-1.5 text-xs bg-white rounded-[2px] border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors", (filterOwner !== 'any' || filterShared !== 'all') && "border-slate-400 ring-1 ring-slate-300")}>
                                     People
                                     {(filterOwner !== 'any' || filterShared !== 'all') && <span className="ml-0.5 bg-slate-200 text-slate-800 px-1.5 rounded-full text-[10px] font-medium">{(filterOwner !== 'any' ? 1 : 0) + (filterShared !== 'all' ? 1 : 0)}</span>}
                                     <ChevronDown className="h-3 w-3 opacity-50" />
                                 </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" className="w-[200px] py-1 text-xs">
+                            <DropdownMenuContent align="start" className="w-[200px] py-1 text-xs rounded-[2px]">
                                 <div className="flex items-center justify-between px-2 py-1.5 border-b border-slate-100">
                                     <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 p-0 font-medium">People</DropdownMenuLabel>
-                                    <DropdownMenuItem className="text-xs rounded-md bg-slate-900 text-white hover:bg-slate-800 focus:bg-slate-800 p-1.5 px-2 cursor-pointer">
+                                    <DropdownMenuItem className="text-xs rounded-[2px] bg-slate-900 text-white hover:bg-slate-800 hover:text-white focus:bg-slate-800 focus:text-white p-1.5 px-2 cursor-pointer">
                                         Done
                                     </DropdownMenuItem>
                                 </div>
@@ -2752,16 +2752,16 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
 
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button disabled={loading} variant="outline" size="sm" className={cn("h-8 gap-1.5 text-xs bg-white rounded-md border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors", filterModified !== 'any' && "border-slate-400 ring-1 ring-slate-300")}>
+                                <Button disabled={loading} variant="outline" size="sm" className={cn("h-8 gap-1.5 text-xs bg-white rounded-[2px] border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors", filterModified !== 'any' && "border-slate-400 ring-1 ring-slate-300")}>
                                     Modified
                                     {filterModified !== 'any' && <span className="ml-0.5 bg-slate-200 text-slate-800 px-1.5 rounded-full text-[10px] font-medium">1</span>}
                                     <ChevronDown className="h-3 w-3 opacity-50" />
                                 </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" className="w-[180px] py-1 text-xs">
+                            <DropdownMenuContent align="start" className="w-[180px] py-1 text-xs rounded-[2px]">
                                 <div className="flex items-center justify-between px-2 py-1.5 border-b border-slate-100">
                                     <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 p-0 font-medium">Modified</DropdownMenuLabel>
-                                    <DropdownMenuItem className="text-xs rounded-md bg-slate-900 text-white hover:bg-slate-800 focus:bg-slate-800 p-1.5 px-2 cursor-pointer">
+                                    <DropdownMenuItem className="text-xs rounded-[2px] bg-slate-900 text-white hover:bg-slate-800 hover:text-white focus:bg-slate-800 focus:text-white p-1.5 px-2 cursor-pointer">
                                         Done
                                     </DropdownMenuItem>
                                 </div>
@@ -2782,14 +2782,14 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
 
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button disabled={loading} variant="outline" size="sm" className="h-8 gap-1.5 text-xs bg-white rounded-md border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+                                <Button disabled={loading} variant="outline" size="sm" className="h-8 gap-1.5 text-xs bg-white rounded-[2px] border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
                                     <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24" fill="currentColor" className="h-3.5 w-3.5">
                                         <path d="M120-240v-80h240v80H120Zm0-200v-80h480v80H120Zm0-200v-80h720v80H120Z" />
                                     </svg>
                                     Sort
                                 </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" className="w-[220px] py-1 text-xs">
+                            <DropdownMenuContent align="start" className="w-[220px] py-1 text-xs rounded-[2px]">
                                 <DropdownMenuLabel className="text-xs uppercase tracking-wider text-slate-400">Sort by</DropdownMenuLabel>
                                 <DropdownMenuCheckboxItem className="text-xs" checked={sortConfig.sortBy === 'name'} onCheckedChange={() => setSortBy('name')}>
                                     Name
@@ -3088,7 +3088,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                 }
 
                 {/* Fixed Table Header (Compact) */}
-                <div className="sticky top-0 bg-white border-b border-[#e5e7eb] pl-3 pr-2 py-2 shrink-0 z-10 font-medium text-slate-500 group">
+                <div className="sticky top-0 bg-white border-b border-[#e5e7eb] pl-3 pr-2 py-2.5 shrink-0 z-10 group">
                     <div className="grid gap-4 items-center" style={{ gridTemplateColumns: 'minmax(0, 1fr) 10% 10% 14% 12% 8%' }}>
                         <div className="flex items-center gap-3">
                             {/* Select-all checkbox — visible on hover of header or when in selection mode */}
@@ -3196,9 +3196,9 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                         onDrop={(e) => handleItemDrop(e, file)}
                                         style={{ gridTemplateColumns: 'minmax(0, 1fr) 10% 10% 14% 12% 8%' }}
                                         className={cn(
-                                            "group grid gap-4 py-2 pl-3 pr-2 transition-all items-center cursor-default relative",
+                                            "group grid gap-4 h-10 pl-3 pr-2 transition-all items-center cursor-default relative text-[0.8125rem]",
                                             isFolder && selectedFileIds.size === 0 && "cursor-pointer",
-                                            (isIntakeRow || file.lock?.type === 'finalize' || (file.isPrivate && !isFolder)) ? "hover:bg-[#f3f4f6] opacity-60" : "hover:bg-[#f3f4f6]",
+                                            (isIntakeRow || file.lock?.type === 'finalize' || (file.isPrivate && !isFolder)) ? "hover:bg-[#f9f9fb] opacity-60" : "hover:bg-[#f9f9fb]",
                                             !isIntakeRow && selectedFileIds.has(file.id) && "bg-blue-50 hover:bg-blue-50",
                                             !isIntakeRow && file.id === actionMenuOpenFileId && "bg-[#f3f4f6]",
                                             !isIntakeRow && (file.id === activeCommentDocId || file.id === activeInfoDocId || file.id === activeActivityDocId || file.id === activeVersionDocId) && "bg-[#f3f4f6]",
@@ -3273,10 +3273,10 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                                 <div className="flex w-full min-w-0 items-center gap-3">
                                                                     <mark
                                                                         className={cn(
-                                                                            "file-deeplink-highlight block w-max max-w-[calc(100%-2rem)] min-w-0 text-xs font-medium text-left",
+                                                                            "file-deeplink-highlight block w-max max-w-[calc(100%-2rem)] min-w-0 text-[0.8125rem] font-medium text-left",
                                                                             isFolder
-                                                                                ? "text-slate-800 hover:text-slate-600 cursor-pointer"
-                                                                                : "text-slate-700"
+                                                                                ? "text-[#1b1b1d] hover:text-[#45474c] cursor-pointer"
+                                                                                : "text-[#45474c]"
                                                                         )}
                                                                     >
                                                                         <span className="block min-w-0 break-words">
@@ -3293,8 +3293,8 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                                 <div className="flex w-full min-w-0 items-center gap-3">
                                                                     <span
                                                                         className={cn(
-                                                                            "text-xs font-medium truncate min-w-0 flex-1",
-                                                                            "text-slate-700"
+                                                                            "text-[0.8125rem] font-medium truncate min-w-0 flex-1",
+                                                                            "text-[#45474c]"
                                                                         )}
                                                                     >
                                                                         {file.name}
@@ -3308,10 +3308,10 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                             ) : (
                                                                 <span
                                                                     className={cn(
-                                                                        "text-xs font-medium truncate",
+                                                                        "text-[0.8125rem] font-medium truncate",
                                                                         isFolder
-                                                                            ? "text-slate-800 hover:text-slate-600 cursor-pointer"
-                                                                            : "text-slate-700"
+                                                                            ? "text-[#1b1b1d] hover:text-[#45474c] cursor-pointer"
+                                                                            : "text-[#45474c]"
                                                                     )}
                                                                 >
                                                                     {file.name}
@@ -3597,7 +3597,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                 }
                                                 const personaName = file.ownerRole ? (ROLE_LABELS[file.ownerRole] ?? file.ownerRole) : undefined
                                                 if (!ownerName) return (
-                                                    <span className="text-xs text-slate-500">—</span>
+                                                    <span className="text-[0.8125rem] text-[#45474c]">—</span>
                                                 )
                                                 return (
                                                     <div className="flex items-center gap-1.5 min-w-0">
@@ -3607,7 +3607,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                             avatarUrl={ownerPhoto || null}
                                                             personaName={personaName}
                                                         />
-                                                        <span className="text-xs text-slate-500 truncate">
+                                                        <span className="text-[0.8125rem] text-[#45474c] truncate">
                                                             {isMe ? 'me' : ownerName}
                                                         </span>
                                                     </div>
@@ -3620,25 +3620,25 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                             {file.modifiedTime ? (
                                                 <RelativeDateTime
                                                     date={file.modifiedTime}
-                                                    textClassName="text-xs text-slate-500"
-                                                    iconClassName="text-slate-300 hover:text-slate-500"
+                                                    textClassName="text-[0.8125rem] text-[#45474c]"
+                                                    iconClassName="text-[#e5e7eb] hover:text-[#45474c]"
                                                     tooltipSide="top"
                                                 />
                                             ) : (
-                                                <span className="text-xs text-slate-400">—</span>
+                                                <span className="text-[0.8125rem] text-[#45474c]">—</span>
                                             )}
                                         </div>
 
                                         {/* File Size Column */}
                                         <div className="text-left">
                                             {isFolder ? (
-                                                <span className="text-xs text-slate-300">—</span>
+                                                <span className="text-[0.8125rem] text-[#45474c]/40">—</span>
                                             ) : file.size ? (
-                                                <span className="text-xs text-slate-500 font-mono">
+                                                <span className="text-[0.8125rem] text-[#45474c] font-mono">
                                                     {formatFileSize(Number(file.size))}
                                                 </span>
                                             ) : (
-                                                <span className="text-xs text-slate-300">—</span>
+                                                <span className="text-[0.8125rem] text-[#45474c]/40">—</span>
                                             )}
                                         </div>
 

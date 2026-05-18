@@ -1166,8 +1166,8 @@ export function ProjectInsightsDashboard({
                             const hasUpcoming = (upcoming ?? 0) > 0
                             const iconClass = hasOverdue ? 'bg-red-50 text-red-600' : hasUpcoming ? 'bg-amber-50 text-amber-600' : 'bg-green-50 text-green-600'
                             return (
-                                <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex items-center gap-3 h-full">
-                                    <div className={`p-2.5 rounded-xl shrink-0 ${iconClass}`}>
+                                <div className="bg-white rounded p-4 border border-[#e5e7eb] shadow-sm flex items-center gap-3 h-full">
+                                    <div className={`p-2.5 rounded shrink-0 ${iconClass}`}>
                                         <CalendarClock className="h-4 w-4" />
                                     </div>
                                     <div className="min-w-0 flex-1">

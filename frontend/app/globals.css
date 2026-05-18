@@ -187,9 +187,47 @@
   }
   .d-app .d-sidebar-nav {
     font-size: 0.8125rem;
-    font-weight: 500;
-    color: #45474c;
   }
+
+  /* View As + Firm Selector dropdowns — match font size to sidebar nav */
+  [data-view-as-select] [role="option"],
+  [data-firm-selector] [role="option"] {
+    font-size: 0.8125rem;
+  }
+  [data-firm-selector] [role="option"][data-highlighted],
+  [data-firm-selector] [role="option"]:focus {
+    background-color: #f9f9fb !important;
+    color: #1b1b1d !important;
+  }
+  /* Add Firm CTA item stays green on hover */
+  [data-firm-selector] [data-value="__create__"][data-highlighted],
+  [data-firm-selector] [data-value="__create__"]:focus {
+    background-color: #d1fae5 !important;
+    color: #065f46 !important;
+  }
+
+  /* Tree branch L-connector on each sub-nav item */
+  .d-app .d-tree-link {
+    position: relative;
+  }
+  .d-app .d-tree-link::before {
+    content: '';
+    position: absolute;
+    left: -12px;
+    top: 0;
+    width: 8px;
+    height: 60%;
+    border-left: 1.5px solid #e5e7eb;
+    border-bottom: 1.5px solid #e5e7eb;
+    border-bottom-left-radius: 2px;
+    pointer-events: none;
+  }
+  /* Active: border-l-2 shifts the padding box 2px right, dragging ::before with it.
+     Compensate by moving ::before 2px further left so it stays aligned with inactive Ls. */
+  .d-app .d-tree-link.border-l-2::before {
+    left: -14px;
+  }
+
 
   /* Sub-header navigation strip — used inside content pages (e.g. client view tab nav) */
   .d-app .ki-subnav {
@@ -219,6 +257,12 @@
   /* Under /d/, remap slate-50 → pearl #f9f9fb */
   .d-app.bg-slate-50,
   .d-app .bg-slate-50 {
+    background-color: #f9f9fb !important;
+  }
+
+  /* Universal row/item hover — remap #f3f4f6 hover to lighter #f9f9fb across all tables and lists */
+  .d-app .hover\:bg-\[#f3f4f6\]:hover,
+  .d-app .hover\:bg-\[\#f3f4f6\]:hover {
     background-color: #f9f9fb !important;
   }
   .d-app .bg-slate-50\/50 {
@@ -271,10 +315,11 @@
     color: #065f46 !important;
   }
 
-  /* View As dropdown hover */
+  /* View As dropdown hover — matches sidebar nav hover color */
   [data-view-as-select] [role="option"]:hover,
+  [data-view-as-select] [role="option"]:focus,
   [data-view-as-select] [role="option"][data-highlighted] {
-    background-color: #f0edee !important;
+    background-color: #f9f9fb !important;
     color: #1b1b1d !important;
   }
 }

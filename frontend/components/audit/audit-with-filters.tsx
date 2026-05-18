@@ -878,7 +878,7 @@ export function AuditWithFilters({
           <table className="w-full text-sm">
             <thead className="bg-white border-b border-[#e5e7eb] sticky top-0">
               <tr>
-                <th className="text-left py-2.5 px-3 font-medium text-gray-700 w-[160px]">
+                <th className="text-left py-2.5 px-3 text-[0.8125rem] font-medium text-[#45474c] w-[160px]">
                   <span className="inline-flex items-center gap-1.5">
                     Date
                     <TooltipProvider>
@@ -899,11 +899,11 @@ export function AuditWithFilters({
                     </TooltipProvider>
                   </span>
                 </th>
-                <th className="text-left py-2.5 px-3 font-medium text-gray-700 w-[120px]">Client</th>
-                <th className="text-left py-2.5 px-3 font-medium text-gray-700 w-[120px]">Engagement</th>
-                <th className="text-left py-2.5 px-3 font-medium text-gray-700 w-[210px]">Event type</th>
-                <th className="text-left py-2.5 px-3 font-medium text-gray-700 min-w-[80px]">Details</th>
-                <th className="text-left py-2.5 px-3 font-medium text-gray-700 w-[200px]">Actor</th>
+                <th className="text-left py-2.5 px-3 text-[0.8125rem] font-medium text-[#45474c] w-[120px]">Client</th>
+                <th className="text-left py-2.5 px-3 text-[0.8125rem] font-medium text-[#45474c] w-[120px]">Engagement</th>
+                <th className="text-left py-2.5 px-3 text-[0.8125rem] font-medium text-[#45474c] w-[210px]">Event type</th>
+                <th className="text-left py-2.5 px-3 text-[0.8125rem] font-medium text-[#45474c] min-w-[80px]">Details</th>
+                <th className="text-left py-2.5 px-3 text-[0.8125rem] font-medium text-[#45474c] w-[200px]">Actor</th>
                 <th className="py-2.5 px-2 w-8 text-right">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -952,34 +952,34 @@ export function AuditWithFilters({
             </thead>
             <tbody className="divide-y divide-[#e5e7eb]">
               {visibleEvents.map((ev) => (
-                <tr key={ev.id} className="hover:bg-[#f3f4f6] transition-colors">
-                  <td className="py-2 px-3 whitespace-nowrap">
+                <tr key={ev.id} className="hover:bg-[#f9f9fb] transition-colors">
+                  <td className="py-2.5 px-3 whitespace-nowrap">
                     <TooltipProvider>
                       <RelativeDateTime
                         date={ev.eventAt}
                         displayFormat={showFullDate ? 'verbose' : 'short'}
                         tooltipSide="right"
-                        textClassName="text-gray-600 text-sm"
+                        textClassName="text-[#45474c] text-[0.8125rem]"
                       />
                     </TooltipProvider>
                   </td>
-                  <td className="py-2 px-3 text-gray-700 max-w-[120px] truncate" title={ev.clientName ?? ''}>
+                  <td className="py-2.5 px-3 text-[#45474c] text-[0.8125rem] max-w-[120px] truncate" title={ev.clientName ?? ''}>
                     {ev.clientName ?? '—'}
                   </td>
-                  <td className="py-2 px-3 text-gray-700 max-w-[120px] truncate" title={ev.projectName ?? ''}>
+                  <td className="py-2.5 px-3 text-[#45474c] text-[0.8125rem] max-w-[120px] truncate" title={ev.projectName ?? ''}>
                     {ev.projectName ?? '—'}
                   </td>
-                  <td className="py-2 px-3">
+                  <td className="py-2.5 px-3">
                     <div className="flex items-center gap-2">
                       <EventIcon eventType={ev.eventType} />
-                      <span className="font-medium text-gray-900">{eventTypeLabel(ev.eventType)}</span>
+                      <span className="font-medium text-[#1b1b1d] text-[0.8125rem]">{eventTypeLabel(ev.eventType)}</span>
                     </div>
                   </td>
-                  <td className="py-2 px-3">
+                  <td className="py-2.5 px-3 text-[0.8125rem]">
                     <DetailCell ev={ev} />
                   </td>
-                  <td className="py-2 px-3 text-gray-600">{ev.actorEmail ?? (ev.actorUserId ? 'User' : 'System')}</td>
-                  <td className="py-2 px-2" />
+                  <td className="py-2.5 px-3 text-[#45474c] text-[0.8125rem]">{ev.actorEmail ?? (ev.actorUserId ? 'User' : 'System')}</td>
+                  <td className="py-2.5 px-2" />
                 </tr>
               ))}
             </tbody>

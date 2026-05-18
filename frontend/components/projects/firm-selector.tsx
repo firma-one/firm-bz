@@ -46,7 +46,6 @@ export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className 
     const [targetOrg, setTargetOrg] = useState<{ slug: string; name: string } | null>(null)
     const [addOrgModalOpen, setAddOrgModalOpen] = useState(false)
 
-    // Extract current firm slug from pathname
     const currentOrgSlug = pathname?.match(/\/(?:d\/)?f\/([^\/]+)/)?.[1] || null
     const currentOrg = currentOrgSlug ? firms.find(o => o.slug === currentOrgSlug) : null
     const selectedOrg = firms.find(o => o.slug === selectedFirmSlug) || null
@@ -100,20 +99,14 @@ export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className 
     }
 
     const handleDialogClose = (open: boolean) => {
-        if (!open) {
-            // User cancelled - reset pending slug
-            setTargetOrg(null)
-        }
+        if (!open) setTargetOrg(null)
         setSwitchDialogOpen(open)
     }
 
     if (firms.length === 0) {
         return (
             <div className={`w-full max-w-xs ${className || ''}`}>
-                <label className="d-section mb-4 block">
-                    Firm Workspace
-                </label>
-                <div className="w-full h-10 bg-stone-100/80 border border-stone-200 rounded-md flex items-center px-3 d-body text-stone-400">
+                <div className="w-full h-10 bg-[#f3f4f6] border border-[#e5e7eb] rounded flex items-center px-3 text-sm text-[#45474c]">
                     No firms found
                 </div>
             </div>
@@ -122,24 +115,21 @@ export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className 
 
     return (
         <div className={`w-full ${className || ''}`}>
-            <Select
-                value={selectedFirmSlug}
-                onValueChange={handleValueChange}
-            >
-                <SelectTrigger className="flex h-auto min-h-0 w-full min-w-0 items-start gap-2 whitespace-normal rounded-lg border-none bg-transparent px-3 pt-2 pb-1.5 text-stone-900 shadow-none transition-colors hover:bg-slate-50 focus:ring-0 [&>svg]:ml-auto [&>svg]:mt-0.5 [&>svg]:shrink-0">
+            <Select value={selectedFirmSlug} onValueChange={handleValueChange}>
+                <SelectTrigger className="flex h-auto min-h-0 w-full min-w-0 items-start gap-2 whitespace-normal rounded border-none bg-transparent px-3 pt-2 pb-1.5 text-[#1b1b1d] shadow-none transition-colors hover:bg-[#f3f4f6] focus:ring-0 [&>svg]:ml-auto [&>svg]:mt-0.5 [&>svg]:shrink-0">
                     <div className="flex flex-1 flex-col min-w-0 text-left leading-tight">
                         <div className="flex items-center gap-2 min-w-0">
-                            <Building2 className="h-4 w-4 shrink-0 text-stone-500" />
-                            <span className="text-sm font-semibold truncate">
+                            <Building2 className="h-4 w-4 shrink-0 text-[#45474c]" />
+                            <span className="text-sm font-semibold truncate text-[#1b1b1d]">
                                 {selectedOrg?.name || 'Select Workspace...'}
                             </span>
                         </div>
                         <div className="mt-0.5 flex items-center gap-2 min-w-0">
-                            <span className="truncate text-[10px] leading-snug text-slate-500 font-mono">
+                            <span className="truncate text-[10px] leading-snug text-[#45474c] font-mono">
                                 {selectedOrg ? `/${selectedOrg.slug}` : '/—'}
                             </span>
                             {selectedOrg?.sandboxOnly && (
-                                <span className="inline-flex items-center rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20 whitespace-nowrap shrink-0">
+                                <span className="inline-flex items-center rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20 whitespace-nowrap shrink-0">
                                     Sandbox
                                 </span>
                             )}
@@ -148,22 +138,23 @@ export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className 
                 </SelectTrigger>
                 <SelectContent
                     sideOffset={4}
-                    className="d-app max-h-[min(70vh,24rem)] min-w-[var(--radix-select-trigger-width)] max-w-[min(100vw-1.5rem,18rem)] overflow-y-auto overflow-x-hidden rounded-xl border border-slate-100 bg-white p-0 shadow-md"
+                    className="d-app max-h-[min(70vh,24rem)] min-w-[var(--radix-select-trigger-width)] max-w-[min(100vw-1.5rem,18rem)] overflow-y-auto overflow-x-hidden rounded border border-[#e5e7eb] bg-white p-0 shadow-md"
                     viewportClassName="space-y-0 px-0 pb-2 pt-0"
+                    data-firm-selector
                 >
                     {showAddFirmUpgradeHint ? (
                         <div
-                            className="w-full max-w-full rounded-t-xl border border-slate-200 border-b-0 border-x-0 bg-slate-50/50 px-3 py-2.5"
+                            className="w-full max-w-full border-b border-[#e5e7eb] bg-[#f3f4f6] px-3 py-2.5"
                             onPointerDown={(e) => e.stopPropagation()}
                             role="presentation"
                         >
                             <div className="flex items-start gap-2 min-w-0">
-                                <SquarePlus className="h-4 w-4 shrink-0 text-slate-500 translate-y-0.5" aria-hidden />
+                                <SquarePlus className="h-4 w-4 shrink-0 text-[#45474c] translate-y-0.5" aria-hidden />
                                 <div className="min-w-0 flex-1 text-left">
-                                    <p className="text-sm font-medium text-slate-900 leading-snug">
+                                    <p className="text-sm font-medium text-[#1b1b1d] leading-snug">
                                         {upgradeCopy.dropdownHeadline}
                                     </p>
-                                    <p className="text-xs text-slate-600 leading-snug mt-1.5">
+                                    <p className="text-xs text-[#45474c] leading-snug mt-1.5">
                                         {upgradeCopy.dropdownBody}
                                     </p>
                                     <Link
@@ -171,7 +162,7 @@ export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className 
                                             firmSlug: firmForBilling?.slug ?? null,
                                             pathname: pathname ?? null,
                                         })}
-                                        className="mt-2 inline-block text-xs font-semibold text-purple-700 hover:text-purple-800 underline-offset-2 hover:underline text-left"
+                                        className="mt-2 inline-block text-xs font-semibold text-[#069668] hover:text-[#065f46] underline-offset-2 hover:underline text-left"
                                     >
                                         {upgradeCopy.dropdownAction}
                                     </Link>
@@ -182,40 +173,38 @@ export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className 
                         <SelectItem
                             value={ADD_FIRM_VALUE}
                             disabled={addFirmDisabled}
-                            className="w-full cursor-pointer items-stretch rounded-t-xl rounded-b-none border-0 bg-slate-50 px-3 py-3 text-left text-sm text-slate-900 outline-none ring-0 ring-offset-0 focus:bg-slate-100 focus:text-slate-900 focus-visible:ring-0 data-[highlighted]:bg-slate-100 data-[highlighted]:text-slate-900 data-[disabled]:pointer-events-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 [&>span:last-child]:block [&>span:last-child]:min-w-0 [&>span:last-child]:w-full"
+                            className="w-full cursor-pointer items-stretch rounded-none border-0 bg-[#ecfdf5] px-3 py-3 text-left text-[0.8125rem] text-[#069668] outline-none ring-0 ring-offset-0 focus:bg-[#d1fae5] focus:text-[#065f46] focus-visible:ring-0 data-[highlighted]:bg-[#d1fae5] data-[highlighted]:text-[#065f46] data-[disabled]:pointer-events-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 [&>span:last-child]:block [&>span:last-child]:min-w-0 [&>span:last-child]:w-full"
                         >
                             <div className="flex w-full min-w-0 items-center gap-2.5">
-                                <SquarePlus className="h-4 w-4 shrink-0 text-stone-500" aria-hidden />
-                                <span className="font-medium text-slate-900">Add Firm</span>
+                                <SquarePlus className="h-4 w-4 shrink-0 text-[#069668]" aria-hidden />
+                                <span className="font-semibold text-[#069668]">Add Firm</span>
                             </div>
                         </SelectItem>
                     )}
-                    <div className="h-px w-full shrink-0 bg-slate-200" role="separator" aria-hidden />
+                    <div className="h-px w-full shrink-0 bg-[#e5e7eb]" role="separator" aria-hidden />
                     {firms.map((org, index) => (
                         <React.Fragment key={org.id}>
                             {index > 0 ? (
-                                <div className="h-px w-full shrink-0 bg-slate-200" role="separator" aria-hidden />
+                                <div className="h-px w-full shrink-0 bg-[#e5e7eb]" role="separator" aria-hidden />
                             ) : null}
                             <SelectItem
                                 value={org.slug}
-                                // Ensure the trigger shows a concise, single-line label (prevents multi-line content
-                                // from the dropdown item from overflowing the trigger on hover).
                                 textValue={org.name}
-                                className="min-w-0 w-full cursor-pointer items-stretch rounded-none border-0 px-3 py-2.5 text-left text-sm text-slate-600 outline-none ring-0 ring-offset-0 last:rounded-b-xl focus:bg-slate-50 focus:text-slate-900 focus-visible:ring-0 data-[highlighted]:bg-slate-50 data-[highlighted]:text-slate-900 [&>span:last-child]:block [&>span:last-child]:min-w-0 [&>span:last-child]:w-full"
+                                className="min-w-0 w-full cursor-pointer items-stretch rounded-none border-0 px-3 py-2.5 text-left text-[0.8125rem] text-[#45474c] outline-none ring-0 ring-offset-0 focus:bg-[#f9f9fb] focus:text-[#1b1b1d] focus-visible:ring-0 data-[highlighted]:bg-[#f9f9fb] data-[highlighted]:text-[#1b1b1d] data-[state=checked]:text-[#069668] [&>span:last-child]:block [&>span:last-child]:min-w-0 [&>span:last-child]:w-full"
                             >
                                 <div className="flex w-full min-w-0 flex-col items-start gap-0.5 text-left">
                                     <div className="flex min-w-0 w-full items-center gap-2">
-                                        <Building2 className="h-4 w-4 shrink-0 text-stone-500" aria-hidden />
-                                        <span className="line-clamp-1 min-w-0 flex-1 font-medium text-slate-900" title={org.name}>
+                                        <Building2 className="h-4 w-4 shrink-0 text-[#45474c]" aria-hidden />
+                                        <span className="line-clamp-1 min-w-0 flex-1 font-medium text-[#1b1b1d]" title={org.name}>
                                             {org.name}
                                         </span>
                                     </div>
                                     <div className="flex w-full items-center justify-between gap-2 pl-6">
-                                        <span className="truncate font-mono text-[10px] text-slate-500">
+                                        <span className="truncate font-mono text-[10px] text-[#45474c]">
                                             /{org.slug}
                                         </span>
                                         {org.sandboxOnly && (
-                                            <span className="inline-flex shrink-0 items-center rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap text-amber-700 ring-1 ring-inset ring-amber-600/20">
+                                            <span className="inline-flex shrink-0 items-center rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap text-amber-700 ring-1 ring-inset ring-amber-600/20">
                                                 Sandbox
                                             </span>
                                         )}
