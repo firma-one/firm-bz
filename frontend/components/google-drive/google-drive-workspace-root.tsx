@@ -260,18 +260,18 @@ export function GoogleDriveWorkspaceRoot({
             {/* Single clean row */}
             <div className="flex items-center gap-3 min-w-0">
               {/* Icon */}
-              <div className="shrink-0 flex h-9 w-9 items-center justify-center rounded-lg bg-violet-50 ring-1 ring-violet-100" aria-hidden>
-                <Warehouse className="h-4.5 w-4.5 text-violet-600" strokeWidth={2} />
+              <div className="shrink-0 flex h-9 w-9 items-center justify-center rounded-[2px] border border-[#e5e7eb] bg-[#f9f9fb]" aria-hidden>
+                <Warehouse className="h-4.5 w-4.5 text-[#45474c]" strokeWidth={2} />
               </div>
 
               {/* Folder name + location badge */}
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-semibold text-sm text-gray-900 truncate" title={displayName}>
+                  <span className="font-bold text-[0.8125rem] text-[#1b1b1d] truncate" title={displayName}>
                     {displayName}
                   </span>
                   {breadcrumbRootLabel ? (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-500 shrink-0">
+                    <span className="inline-flex items-center gap-1 rounded-sm border border-[#e5e7eb] bg-[#f9f9fb] px-1.5 py-0.5 text-[10px] font-medium text-[#45474c] shrink-0">
                       {workspaceRootLocation === "SHARED_DRIVE" ? (
                         <GoogleSharedDriveIcon size={11} className="shrink-0 opacity-80" aria-hidden />
                       ) : workspaceRootLocation === "MY_DRIVE" ? (
@@ -292,7 +292,7 @@ export function GoogleDriveWorkspaceRoot({
                         href={driveUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 rounded-md h-8 px-3 text-xs font-medium text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 transition-colors"
+                        className="inline-flex items-center gap-1.5 rounded-[2px] h-8 px-3 text-xs font-medium text-[#45474c] bg-white border border-[#e5e7eb] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] transition-colors"
                         aria-label="Open in Google Drive"
                       >
                         Open
@@ -307,7 +307,7 @@ export function GoogleDriveWorkspaceRoot({
                     <button
                       type="button"
                       className={cn(
-                        "inline-flex items-center gap-1.5 rounded-md h-8 px-3 text-xs font-medium text-white bg-gray-900 hover:bg-gray-800 transition-colors",
+                        "inline-flex items-center gap-1.5 rounded-[2px] h-8 px-4 text-[10px] font-headline font-bold tracking-widest uppercase text-white bg-[#069668] hover:bg-[#069668] hover:brightness-105 active:scale-95 transition-all shadow-sm",
                         (!accessToken || WORKSPACE_MIGRATE_DISABLED) && "opacity-40 cursor-not-allowed",
                       )}
                       onClick={() => {
@@ -340,10 +340,10 @@ export function GoogleDriveWorkspaceRoot({
         ) : (
           <TooltipProvider delayDuration={300}>
             <div className="flex items-center gap-3 min-w-0">
-              <div className="shrink-0 flex h-9 w-9 items-center justify-center rounded-lg bg-gray-50 ring-1 ring-gray-200" aria-hidden>
-                <FolderOpen className="h-4.5 w-4.5 text-gray-400" strokeWidth={1.75} />
+              <div className="shrink-0 flex h-9 w-9 items-center justify-center rounded-[2px] border border-[#e5e7eb] bg-[#f9f9fb]" aria-hidden>
+                <FolderOpen className="h-4.5 w-4.5 text-[#45474c]" strokeWidth={1.75} />
               </div>
-              <p className="min-w-0 flex-1 text-sm text-gray-500">
+              <p className="min-w-0 flex-1 text-[0.8125rem] text-[#45474c]">
                 No workspace folder selected yet.
               </p>
               <Tooltip>
@@ -351,7 +351,7 @@ export function GoogleDriveWorkspaceRoot({
                   <button
                     type="button"
                     className={cn(
-                      "inline-flex items-center gap-1.5 rounded-md h-8 px-3 text-xs font-medium text-white bg-gray-900 hover:bg-gray-800 transition-colors shrink-0",
+                      "inline-flex items-center gap-1.5 rounded-[2px] h-8 px-4 text-[10px] font-headline font-bold tracking-widest uppercase text-white bg-[#069668] hover:bg-[#069668] hover:brightness-105 active:scale-95 transition-all shadow-sm shrink-0",
                       (!accessToken || WORKSPACE_MIGRATE_DISABLED) && "opacity-40 cursor-not-allowed",
                     )}
                     onClick={() => {
@@ -404,7 +404,7 @@ export function GoogleDriveWorkspaceRoot({
 
           {!previewDrive ? (
             <div className="space-y-3 py-1">
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Step 1 · Location</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#45474c]">Step 1 · Location</p>
               <p className="text-sm text-gray-600">
                 The next steps are the same for both: we suggest a unique folder name, you create it in Google Drive, then you select it here.
               </p>
@@ -436,7 +436,7 @@ export function GoogleDriveWorkspaceRoot({
           ) : (
             <div className="space-y-4 py-1">
               <div className="flex items-center gap-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#45474c]">
                   {isShared ? "Shared drive" : "My Drive"} · Step {wizardStep} of {rootFolderId ? 3 : 2}
                 </p>
               </div>
@@ -465,7 +465,7 @@ export function GoogleDriveWorkspaceRoot({
                   <GoogleDriveMock folderName={generatedFolderName} />
                   <div className="flex justify-between">
                     <Button variant="ghost" onClick={resetFlow}>Change location</Button>
-                    <Button className="bg-gray-900 text-white hover:bg-gray-800" onClick={() => setWizardStep(2)}>
+                    <Button className="bg-[#069668] text-white hover:bg-[#069668] hover:brightness-105 rounded-[2px]" onClick={() => setWizardStep(2)}>
                       Select Folder<ArrowRight className="ml-2 h-4 w-4" />
                     </Button>
                   </div>
@@ -505,7 +505,7 @@ export function GoogleDriveWorkspaceRoot({
                   </ol>
                   <div className="flex justify-between">
                     <Button variant="ghost" onClick={resetFlow}>Change location</Button>
-                    <Button className="bg-gray-900 text-white hover:bg-gray-800" onClick={() => setWizardStep(2)}>
+                    <Button className="bg-[#069668] text-white hover:bg-[#069668] hover:brightness-105 rounded-[2px]" onClick={() => setWizardStep(2)}>
                       Select Folder<ArrowRight className="ml-2 h-4 w-4" />
                     </Button>
                   </div>
@@ -553,7 +553,7 @@ export function GoogleDriveWorkspaceRoot({
                     >
                       <Button
                         type="button"
-                        className="flex-1 h-11 bg-gray-900 text-white hover:bg-gray-800 text-sm font-medium"
+                        className="flex-1 h-11 bg-[#069668] text-white hover:bg-[#069668] hover:brightness-105 text-sm font-medium rounded-[2px]"
                         disabled={saving}
                       >
                         <FolderOpen className="h-4 w-4 mr-2 shrink-0" />
@@ -612,7 +612,7 @@ export function GoogleDriveWorkspaceRoot({
                     </Button>
                     <Button
                       type="button"
-                      className="flex-1 h-11 bg-gray-900 text-white hover:bg-gray-800 text-sm font-medium"
+                      className="flex-1 h-11 bg-[#069668] text-white hover:bg-[#069668] hover:brightness-105 text-sm font-medium rounded-[2px]"
                       disabled={saving}
                       onClick={() => void confirmMigration()}
                     >
