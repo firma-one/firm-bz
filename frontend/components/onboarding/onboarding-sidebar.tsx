@@ -33,13 +33,13 @@ const ONBOARDING_STEPS: {
 function RequirementPill({ requirement }: { requirement: Requirement }) {
     if (requirement === 'mandatory') {
         return (
-            <span className="inline-flex shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide bg-slate-200 text-slate-800">
+            <span className="font-mono inline-flex shrink-0 rounded-sm px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide tabular-nums leading-none bg-[#1b1b1d]/10 text-[#1b1b1d]">
                 Mandatory
             </span>
         )
     }
     return (
-        <span className="inline-flex shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide bg-amber-50 text-amber-900 border border-amber-200/80">
+        <span className="font-mono inline-flex shrink-0 rounded-sm px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide tabular-nums leading-none bg-amber-50 text-amber-900 border border-amber-200/80">
             Optional
         </span>
     )
@@ -131,7 +131,7 @@ export function OnboardingSidebar() {
     const steps = ONBOARDING_STEPS.filter((s) => s.id !== 0)
 
     return (
-        <div className="flex flex-col h-full bg-white border-r border-stone-200 rounded-2xl overflow-hidden">
+        <div className="flex flex-col h-full bg-white border-r border-[#e5e7eb] rounded-[2px] overflow-hidden">
             {/* Steps: fixed-height connectors in the timeline column (not stretched by copy height). */}
             <div className="flex-1 overflow-y-auto custom-scrollbar px-4 py-4 pt-4">
                 <div className="flex flex-col gap-0">
@@ -147,15 +147,15 @@ export function OnboardingSidebar() {
                         const iconForStep = () => {
                             if (isCompleted) {
                                 if (s.id === 3) return <GoogleDriveIcon size={20} />
-                                if (s.id === 4) return <Building2 className="h-4 w-4 text-slate-900" />
-                                return <StepIcon className="h-4 w-4 text-slate-900" />
+                                if (s.id === 4) return <Building2 className="h-4 w-4 text-[#069668]" />
+                                return <StepIcon className="h-4 w-4 text-[#069668]" />
                             }
                             if (isSkipped) {
-                                return <Minus className="h-4 w-4 text-slate-600" strokeWidth={2.5} />
+                                return <Minus className="h-4 w-4 text-[#45474c]/50" strokeWidth={2.5} />
                             }
                             if (s.id === 3) return <GoogleDriveIcon size={16} />
-                            if (s.id === 4) return <Building2 className="h-4 w-4 text-slate-600" />
-                            return <StepIcon className="h-4 w-4" />
+                            if (s.id === 4) return <Building2 className={`h-4 w-4 ${isActive ? 'text-[#45474c]' : 'text-[#45474c]/50'}`} />
+                            return <StepIcon className={`h-4 w-4 ${isActive ? 'text-[#45474c]' : 'text-[#45474c]/50'}`} />
                         }
 
                         return (
@@ -168,19 +168,19 @@ export function OnboardingSidebar() {
                                 <div className="flex w-10 shrink-0 flex-col items-center self-stretch">
                                     <div
                                         className={`relative z-[1] flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 bg-white transition-all ${isCompleted
-                                            ? 'border-slate-900'
+                                            ? 'border-[#069668]'
                                             : isSkipped
-                                              ? 'border-slate-300 bg-slate-50'
+                                              ? 'border-[#e5e7eb] bg-[#f9f9fb]'
                                               : isActive
-                                                ? 'border-slate-300 bg-slate-50'
-                                                : 'border-slate-300 bg-slate-50'
+                                                ? 'border-[#069668]/40 bg-[#f9f9fb]'
+                                                : 'border-[#e5e7eb] bg-[#f9f9fb]'
                                             }`}
                                     >
                                         {iconForStep()}
                                     </div>
                                     {!isLast ? (
                                         <div
-                                            className={`relative z-0 -mt-px w-0.5 flex-1 min-h-[0.75rem] rounded-none ${segmentPast ? 'bg-slate-300' : 'bg-slate-200'}`}
+                                            className={`relative z-0 -mt-px w-0.5 flex-1 min-h-[0.75rem] rounded-none ${segmentPast ? 'bg-[#069668]/30' : 'bg-[#e5e7eb]'}`}
                                             aria-hidden
                                         />
                                     ) : null}
@@ -191,10 +191,10 @@ export function OnboardingSidebar() {
                                     <div className="flex flex-wrap items-center gap-1.5 gap-y-1">
                                         <h3
                                             className={`text-xs font-semibold leading-tight ${isActive
-                                                ? 'text-slate-900'
+                                                ? 'text-[#1b1b1d]'
                                                 : isPast
-                                                  ? 'text-slate-500'
-                                                  : 'text-slate-400'
+                                                  ? 'text-[#45474c]'
+                                                  : 'text-[#45474c]/50'
                                                 }`}
                                         >
                                             {s.name}
@@ -204,15 +204,15 @@ export function OnboardingSidebar() {
                                     {/* Same min-height so “Completed” vs description rows align across steps */}
                                     <div className="mt-0.5 min-h-[2.75rem]">
                                         {isCompleted ? (
-                                            <p className="text-xs font-medium text-slate-900">Completed</p>
+                                            <p className="text-xs font-medium text-[#069668]">Completed</p>
                                         ) : isSkipped ? (
-                                            <p className="flex items-center gap-0.5 text-xs text-slate-400">
+                                            <p className="flex items-center gap-0.5 text-xs text-[#45474c]/50">
                                                 <Minus className="h-3 w-3" />
                                                 Skipped
                                             </p>
                                         ) : (
                                             <p
-                                                className={`text-xs leading-snug ${isActive ? 'text-slate-500' : 'text-slate-400'}`}
+                                                className={`text-xs leading-snug ${isActive ? 'text-[#45474c]' : 'text-[#45474c]/50'}`}
                                             >
                                                 {s.description}
                                             </p>
