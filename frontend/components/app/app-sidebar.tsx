@@ -21,6 +21,7 @@ import {
   Lock,
   Info,
   HelpCircle,
+  ArrowUpRight,
 } from "lucide-react"
 import { FirmSelector, type FirmOption } from "@/components/projects/firm-selector"
 import { getUserFirms } from "@/lib/actions/firms"
@@ -632,10 +633,17 @@ export function AppSidebar({ variant = 'fixed' }: AppSidebarProps = {}) {
                       <TooltipTrigger asChild>
                         <Link
                           href="/resources/faq"
+                          target="_blank"
+                          rel="noopener noreferrer"
                           className={`flex items-center d-sidebar-nav rounded-r transition-colors ${isCollapsed ? 'flex-1 px-0 justify-center' : 'px-3'} py-2 ${pathname?.startsWith('/resources/faq') ? 'bg-[#ecfdf5] border-l-2 border-[#069668] text-[#065f46] font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}
                         >
                           <HelpCircle className={`h-4 w-4 shrink-0 ${isCollapsed ? 'mx-auto' : 'mr-3'} ${pathname?.startsWith('/resources/faq') ? 'text-[#069668]' : 'text-[#45474c]'}`} />
-                          {!isCollapsed && <span>FAQs</span>}
+                          {!isCollapsed && (
+                            <>
+                              <span className="flex-1">FAQs</span>
+                              <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-[#45474c]/50" />
+                            </>
+                          )}
                         </Link>
                       </TooltipTrigger>
                       {isCollapsed && <TooltipContent side="right">FAQs</TooltipContent>}
