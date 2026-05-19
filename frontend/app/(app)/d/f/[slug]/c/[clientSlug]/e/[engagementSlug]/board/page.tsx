@@ -15,66 +15,43 @@ import { ErrorBoundary } from "@/components/error-boundary"
 import type { ProjectPathSegments } from "@/components/projects/project-workspace"
 import { getAccessibleFileCountForPersona } from "@/lib/project-sharing-ids"
 
-const VALID_TABS = new Set(['files', 'shares', 'comments', 'members', 'analytics', 'sources', 'audit', 'settings', 'wiki'])
-
-function parseRest(rest: string[] | undefined): ProjectPathSegments {
-  const tab = rest?.[0] && VALID_TABS.has(rest[0]) ? rest[0] : 'files'
-  if (tab === 'shares') {
-    const viewMode = (rest?.[1] === 'board' ? 'board' : (rest?.[1] === 'list' ? 'list' : 'grid')) as 'list' | 'board' | 'grid'
-    return { tab, viewMode, wikiPageSlug: null }
-  }
-  if (tab === 'wiki') {
-    return { tab, viewMode: 'list', wikiPageSlug: rest?.[1] ?? null }
-  }
-  return { tab, viewMode: 'list', wikiPageSlug: null }
-}
+const BOARD_PATH_SEGMENTS: ProjectPathSegments = { tab: 'board', viewMode: 'list', wikiPageSlug: null }
 
 interface PageProps {
-  params: Promise<{ slug: string; clientSlug: string; engagementSlug: string; rest?: string[] }>
+  params: Promise<{ slug: string; clientSlug: string; engagementSlug: string }>
 }
 
-/** Canonical engagement (project) page under /e/. */
-export default async function EngagementPage({ params }: PageProps) {
-  const { slug, clientSlug, engagementSlug, rest } = await params
-  const pathSegments = parseRest(rest)
+export default async function EngagementBoardPage({ params }: PageProps) {
+  const { slug, clientSlug, engagementSlug } = await params
 
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-
-  if (!user) {
-    notFound()
-  }
+  if (!user) notFound()
 
   let clients: HierarchyClient[]
   try {
     clients = await getFirmHierarchy(slug)
-  } catch (e) {
+  } catch {
     notFound()
   }
-  const orgName = await getFirmName(slug)
 
+  const orgName = await getFirmName(slug)
   const client = clients.find(c => c.slug === clientSlug)
-  if (!client) {
-    notFound()
-  }
+  if (!client) notFound()
 
   const project = client.engagements.find(p => p.slug === engagementSlug)
-  if (!project) {
-    notFound()
-  }
+  if (!project) notFound()
 
   const org = await prisma.firm.findUnique({
-    where: { slug: slug },
-    select: { id: true, sandboxOnly: true, settings: true }
+    where: { slug },
+    select: { id: true, sandboxOnly: true, settings: true },
   })
-  if (!org) {
-    notFound()
-  }
+  if (!org) notFound()
 
   const canView = await canViewProject(org.id, client.id, project.id)
-  if (!canView) {
-    notFound()
-  }
+  if (!canView) notFound()
+
+  const enableBetaFeatures = (org.settings as Record<string, unknown> | null)?.enableBetaFeatures === true
 
   const viewAsSlug = await getViewAsPersonaFromCookie()
   const applyViewAs = viewAsSlug && (await canAccessRbacAdmin(user.id))
@@ -82,11 +59,14 @@ export default async function EngagementPage({ params }: PageProps) {
     ? await resolveProjectCapabilitiesForPersona(viewAsSlug)
     : await resolveProjectCapabilitiesForUser(org.id, client.id, project.id)
 
-  const canViewSettings = capabilities['project:can_manage'] ?? false
   const canViewInternalTabs = capabilities['project:can_view_internal'] ?? false
+  const canViewSettings = capabilities['project:can_manage'] ?? false
   const canEdit = capabilities['project:can_edit'] ?? false
   const canManage = canViewSettings
-  const enableBetaFeatures = (org.settings as Record<string, unknown> | null)?.enableBetaFeatures === true
+
+  if (!enableBetaFeatures || !canViewInternalTabs) {
+    redirect(`/d/f/${slug}/c/${clientSlug}/e/${engagementSlug}/files`)
+  }
 
   const projectRole = applyViewAs ? viewAsSlug : await getProjectPersona(org.id, client.id, project.id)
   const restrictToSharedOnly = projectRole ? !['eng_admin', 'eng_member'].includes(projectRole) : false
@@ -97,30 +77,9 @@ export default async function EngagementPage({ params }: PageProps) {
       ? (projectPersonas as { slug: string; displayName: string }[]).find((p) => p.slug === projectRole)?.displayName ?? null
       : null
 
-  const basePath = `/d/f/${slug}/c/${clientSlug}/e/${engagementSlug}`
-
-  if (!rest || rest.length === 0) {
-    redirect(`${basePath}/${canViewInternalTabs ? 'analytics' : 'files'}`)
-  }
-
-  if (pathSegments.tab === 'settings' && !canViewSettings) {
-    redirect(`${basePath}/files`)
-  }
-  if (pathSegments.tab === 'audit' && !canManage) {
-    redirect(`${basePath}/files`)
-  }
-  if (['members', 'analytics', 'sources'].includes(pathSegments.tab) && !canViewInternalTabs) {
-    redirect(`${basePath}/files`)
-  }
-  if (pathSegments.tab === 'wiki' && (!enableBetaFeatures || !canViewInternalTabs)) {
-    redirect(`${basePath}/files`)
-  }
-
-  const ecGuestPersona = (projectRole === 'eng_ext_collaborator' || projectRole === 'eng_viewer') ? projectRole : null
-
   const [fileCount, sharesCount, commentsCount, engMemberCount, engInviteCount, auditCount, wikiPageCount] = await Promise.all([
-    ecGuestPersona
-      ? getAccessibleFileCountForPersona(project.id, ecGuestPersona)
+    projectRole === 'eng_ext_collaborator' || projectRole === 'eng_viewer'
+      ? getAccessibleFileCountForPersona(project.id, projectRole)
       : (basePrisma as any).engagementDocument.count({ where: { engagementId: project.id, isFolder: false } }),
     (basePrisma as any).engagementDocument.count({ where: { engagementId: project.id, slug: { not: null } } }),
     (basePrisma as any).docCommentMessage.count({ where: { engagementId: project.id } }),
@@ -129,7 +88,6 @@ export default async function EngagementPage({ params }: PageProps) {
     (basePrisma as any).platformAuditEvent.count({ where: { engagementId: project.id, scope: 'PROJECT' } }),
     (prisma as any).engagementWikiPage.count({ where: { engagementId: project.id } }),
   ])
-  const engagementMemberCount = engMemberCount + engInviteCount
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
@@ -156,7 +114,7 @@ export default async function EngagementPage({ params }: PageProps) {
           engagementContractType={project.contractType ?? ""}
           engagementRateOrValue={project.rateOrValue}
           engagementTags={project.tags ?? []}
-          pathSegments={pathSegments}
+          pathSegments={BOARD_PATH_SEGMENTS}
           projectPersonaDisplayName={projectPersonaDisplayName}
           engagementSlug={engagementSlug}
           firmSandboxOnly={org.sandboxOnly ?? false}
@@ -164,7 +122,7 @@ export default async function EngagementPage({ params }: PageProps) {
           fileCount={fileCount}
           sharesCount={sharesCount}
           commentsCount={commentsCount}
-          memberCount={engagementMemberCount}
+          memberCount={engMemberCount + engInviteCount}
           auditCount={auditCount}
           wikiPageCount={wikiPageCount}
         />

@@ -16,7 +16,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core'
-import { Share2, User, Lock, ListTodo, Loader2, CheckCircle, GripVertical, FolderOpen, Clock, Copy, Check, Search, MessageCircle, Link2, X, RefreshCw, ChevronDown, Filter } from 'lucide-react'
+import { Share2, User, Lock, ListTodo, Loader2, CheckCircle, Eye, GripVertical, FolderOpen, Clock, Copy, Check, Search, MessageCircle, Link2, X, RefreshCw, ChevronDown, Filter } from 'lucide-react'
 import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
 import { DocumentBreadcrumb } from '@/components/ui/document-breadcrumb'
 import { DocumentIcon } from '@/components/ui/document-icon'
@@ -48,7 +48,7 @@ import { cn } from '@/lib/utils'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useProjectPersonaLabels } from '@/lib/hooks/use-project-persona-labels'
 
-type ActivityStatus = 'to_do' | 'in_progress' | 'done'
+type ActivityStatus = 'to_do' | 'in_progress' | 'in_review' | 'done'
 
 interface ShareRecord {
   id: string
@@ -119,26 +119,31 @@ const LANES: {
   status: ActivityStatus
   label: string
   icon: React.ReactNode
-  /** Gradient for icon pill in header */
-  iconGradient: string
+  iconBg: string
 }[] = [
     {
       status: 'to_do',
       label: 'To Do',
-      icon: <ListTodo className="h-4 w-4 text-white" />,
-      iconGradient: 'from-[#ddd6fe] to-[#c4b5fd]',
+      icon: <ListTodo className="h-3.5 w-3.5 text-[#45474c]" />,
+      iconBg: 'bg-[#f3f4f6]',
     },
     {
       status: 'in_progress',
       label: 'In Progress',
-      icon: <Loader2 className="h-4 w-4 text-white" />,
-      iconGradient: 'from-[#5eead4] to-[#2dd4bf]',
+      icon: <Loader2 className="h-3.5 w-3.5 text-[#5A78FF]" />,
+      iconBg: 'bg-[#eff2ff]',
+    },
+    {
+      status: 'in_review',
+      label: 'In Review',
+      icon: <Eye className="h-3.5 w-3.5 text-[#c2410c]" />,
+      iconBg: 'bg-[#fff7ed]',
     },
     {
       status: 'done',
       label: 'Done',
-      icon: <CheckCircle className="h-4 w-4 text-white" />,
-      iconGradient: 'from-[#7dd3fc] to-[#38bdf8]',
+      icon: <CheckCircle className="h-3.5 w-3.5 text-[#069668]" />,
+      iconBg: 'bg-[#ecfdf5]',
     },
   ]
 
@@ -167,29 +172,17 @@ function DroppableLane({
 }) {
   const { setNodeRef, isOver } = useDroppable({ id })
   return (
-    <div ref={setNodeRef} className={cn(className, isOver && 'ring-1 ring-slate-300/80 ring-inset rounded-2xl')}>
+    <div ref={setNodeRef} className={cn(className, isOver && 'bg-[#069668]/5 rounded')}>
       {children}
     </div>
   )
 }
 
-/** Card accent: header gradient (top-left → bottom-right, soft pastel to white) + subtle left edge. Matches workflow-card reference. */
-const CARD_ACCENT: Record<ActivityStatus, { border: string; headerBg: string; iconPillBg: string }> = {
-  to_do: {
-    border: 'border-l-2 border-l-[#eae8ff]',
-    headerBg: 'bg-gradient-to-br from-[#f5f3ff] to-white',
-    iconPillBg: 'bg-[#ede9fe]/90',
-  },
-  in_progress: {
-    border: 'border-l-2 border-l-[#ccfbf1]',
-    headerBg: 'bg-gradient-to-br from-[#ecfdf8] to-white',
-    iconPillBg: 'bg-[#ccfbf1]/90',
-  },
-  done: {
-    border: 'border-l-2 border-l-[#e0f2fe]',
-    headerBg: 'bg-gradient-to-br from-[#eff6ff] to-white',
-    iconPillBg: 'bg-[#e0f2fe]/90',
-  },
+const CARD_ACCENT: Record<ActivityStatus, { iconPillBg: string }> = {
+  to_do: { iconPillBg: 'bg-[#f3f4f6]' },
+  in_progress: { iconPillBg: 'bg-[#eff2ff]' },
+  in_review: { iconPillBg: 'bg-[#fff7ed]' },
+  done: { iconPillBg: 'bg-[#ecfdf5]' },
 }
 
 function DraggableCard({
@@ -239,7 +232,7 @@ function DraggableCard({
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id })
   const { setNodeRef: setDropRef, isOver } = useDroppable({ id })
-  const accent = CARD_ACCENT[laneStatus]
+  const { iconPillBg } = CARD_ACCENT[laneStatus]
 
   const previewDoc = {
     id: share.documentId,
@@ -260,22 +253,20 @@ function DraggableCard({
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.98 }}
       transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-      whileHover={!isDragging ? { y: -3, boxShadow: '0 8px 20px -4px rgba(0,0,0,0.1)' } : undefined}
+      whileHover={!isDragging ? { y: -2, boxShadow: '0 4px 12px -2px rgba(0,0,0,0.08)' } : undefined}
       className={cn(
-        'rounded-2xl overflow-hidden select-none border border-slate-200/80 transition-shadow duration-200',
-        accent.border,
-        'bg-white shadow-[0_1px_3px_0_rgba(0,0,0,0.06)]',
-        isDragging && 'opacity-60 shadow-[0_8px_24px_-8px_rgba(0,0,0,0.12)] z-10 scale-[1.02]',
-        isOver && !isDragging && 'ring-1 ring-slate-300/70 ring-inset'
+        'rounded overflow-hidden select-none border border-[#e5e7eb] transition-shadow duration-200',
+        'bg-white shadow-sm',
+        isDragging && 'opacity-60 shadow-md z-10 scale-[1.02]',
+        isOver && !isDragging && 'ring-1 ring-[#069668]/30 ring-inset'
       )}
     >
-      <div className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-50/70 border-b border-slate-100/80" {...listeners} {...attributes}>
+      <div className="flex items-center gap-1 px-2.5 py-1 bg-[#f9f9fb] border-b border-[#e5e7eb]" {...listeners} {...attributes}>
         <GripVertical className="h-4 w-4 text-slate-400 cursor-grab active:cursor-grabbing" />
       </div>
       <ShareCardContent
         share={share}
-        laneHeaderBg={accent.headerBg}
-        iconPillBg={accent.iconPillBg}
+        iconPillBg={iconPillBg}
         formatDate={formatDate}
         getDocumentForMenu={getDocumentForMenu}
         showActions={showActions}
@@ -303,7 +294,6 @@ function DraggableCard({
 
 function ShareCardContent({
   share,
-  laneHeaderBg,
   iconPillBg,
   formatDate,
   getDocumentForMenu,
@@ -326,7 +316,6 @@ function ShareCardContent({
   generalFolderId,
 }: {
   share: ShareRecord
-  laneHeaderBg: string
   iconPillBg: string
   formatDate: (s: string) => string
   getDocumentForMenu: (s: ShareRecord) => { id: string; name: string; mimeType?: string; externalId: string }
@@ -354,9 +343,9 @@ function ShareCardContent({
 
   return (
     <>
-      <div className={cn('transition-colors duration-200', laneHeaderBg)}>
-        <div className="flex items-center gap-3 px-3 pt-3 pb-2">
-          <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-xl shadow-[0_1px_2px_rgba(0,0,0,0.06)]', iconPillBg)}>
+      <div className="bg-[#f9f9fb] border-b border-[#e5e7eb]">
+        <div className="flex items-center gap-2.5 px-3 pt-2.5 pb-2">
+          <div className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded', iconPillBg)}>
             {share.documentMimeType?.includes('folder') ? (
               <SharedFolderIcon fillLevel={1} tooltip="shared" />
             ) : (
@@ -365,7 +354,7 @@ function ShareCardContent({
           </div>
           <div className="min-w-0 flex-1">
             <div
-              className="text-sm font-semibold text-slate-800 truncate cursor-pointer hover:text-[#069668] transition-colors"
+              className="text-[13px] font-semibold text-[#1b1b1d] truncate cursor-pointer hover:text-[#069668] transition-colors"
               title={share.documentName}
               onClick={onClickTitle}
             >
@@ -384,8 +373,8 @@ function ShareCardContent({
         <div className="flex items-center justify-between">
           <RelativeDateTime
             date={share.updatedAt}
-            textClassName="text-[11px] text-slate-400"
-            iconClassName="text-slate-300 hover:text-slate-500"
+            textClassName="text-[11px] text-[#9a9ba0]"
+            iconClassName="text-[#9a9ba0] hover:text-[#45474c]"
             tooltipSide="top"
           />
           <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
@@ -394,7 +383,7 @@ function ShareCardContent({
                 <TooltipTrigger asChild>
                   <button
                     type="button"
-                    className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors"
+                    className="p-1 rounded hover:bg-[#f3f4f6] text-[#9a9ba0] hover:text-[#45474c] transition-colors"
                     onClick={(e) => {
                       e.stopPropagation()
                       if (!deeplinkBase || !share.documentId) return
@@ -415,7 +404,7 @@ function ShareCardContent({
                 <TooltipTrigger asChild>
                   <button
                     type="button"
-                    className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors"
+                    className="p-1 rounded hover:bg-[#f3f4f6] text-[#9a9ba0] hover:text-[#45474c] transition-colors"
                     onClick={(e) => { e.stopPropagation(); onOpenComments?.(share) }}
                   >
                     <MessageCircle className="h-3.5 w-3.5" />
@@ -438,7 +427,7 @@ function ShareCardContent({
         </div>
         {/* Shared by */}
         <div className="flex items-center gap-1.5">
-          <span className="text-[10px] text-slate-400 w-14 shrink-0 whitespace-nowrap">Shared by</span>
+          <span className="text-[10px] text-[#9a9ba0] w-14 shrink-0 whitespace-nowrap">Shared by</span>
           <TooltipProvider>
             <ProfileBubbleWithPopup
               name={share.createdByName || share.createdByEmail || 'Team Member'}
@@ -451,7 +440,7 @@ function ShareCardContent({
         {/* Shared with */}
         {(share.settings?.externalCollaborator || share.settings?.guest) && (
           <div className="flex items-center gap-1.5">
-            <span className="text-[10px] text-slate-400 w-14 shrink-0 whitespace-nowrap">Shared with</span>
+            <span className="text-[10px] text-[#9a9ba0] w-14 shrink-0 whitespace-nowrap">Shared with</span>
             <div className="flex items-center gap-1">
               {share.settings?.externalCollaborator && (
                 <TooltipProvider>
@@ -478,12 +467,12 @@ function ShareCardContent({
         )}
       </div>
       {showActions && (canManage && isDoneLane && !isFinalized || isFinalized) && (
-        <div className="px-3 pb-3 pt-1 flex items-center gap-2 border-t border-slate-100/80 bg-white" onClick={(e) => e.stopPropagation()}>
+        <div className="px-3 pb-2.5 pt-1.5 flex items-center gap-2 border-t border-[#e5e7eb] bg-white" onClick={(e) => e.stopPropagation()}>
           {canManage && isDoneLane && !isFinalized && (
             <Button
               size="sm"
               variant="outline"
-              className="text-xs h-7 text-amber-700 border-amber-200 hover:bg-amber-50"
+              className="text-xs h-7 rounded-[2px] text-amber-700 border-amber-200 hover:bg-amber-50"
               disabled={!!finalizingId}
               onClick={(e) => { e.stopPropagation(); onFinalize?.() }}
             >
@@ -491,7 +480,7 @@ function ShareCardContent({
             </Button>
           )}
           {isFinalized && (
-            <span className="text-[11px] text-slate-500 flex items-center gap-1">
+            <span className="text-[11px] text-[#45474c] flex items-center gap-1">
               <Lock className="h-3 w-3" /> Finalized
             </span>
           )}
@@ -504,13 +493,15 @@ function ShareCardContent({
 const STATUS_LABELS: Record<ActivityStatus, string> = {
   to_do: 'To Do',
   in_progress: 'In Progress',
+  in_review: 'In Review',
   done: 'Done',
 }
 
 const STATUS_PILL_CLASS: Record<ActivityStatus, string> = {
   to_do: 'bg-[#ede9fe]/90 text-[#5b21b6]',
-  in_progress: 'bg-[#ccfbf1]/90 text-[#0f766e]',
-  done: 'bg-[#e0f2fe]/90 text-[#0369a1]',
+  in_progress: 'bg-[#eff2ff]/90 text-[#5A78FF]',
+  in_review: 'bg-[#fff7ed]/90 text-[#c2410c]',
+  done: 'bg-[#ecfdf5]/90 text-[#069668]',
 }
 
 
@@ -1080,7 +1071,7 @@ function ShareCard({
         {/* Shared by / Shared with rows */}
         <div className="mt-3 pt-3 -mx-4 px-4 border-t border-[#e5e7eb] space-y-1.5">
           <div className="flex items-center gap-2">
-            <span className="text-[10px] text-slate-400 w-14 shrink-0 whitespace-nowrap">Shared by</span>
+            <span className="text-[10px] text-[#9a9ba0] w-14 shrink-0 whitespace-nowrap">Shared by</span>
             <TooltipProvider>
               <ProfileBubbleWithPopup
                 name={share.createdByName || share.createdByEmail || 'Team Member'}
@@ -1092,7 +1083,7 @@ function ShareCard({
           </div>
           {(share.settings.externalCollaborator || share.settings.guest) && (
             <div className="flex items-center gap-2">
-              <span className="text-[10px] text-slate-400 w-14 shrink-0 whitespace-nowrap">Shared with</span>
+              <span className="text-[10px] text-[#9a9ba0] w-14 shrink-0 whitespace-nowrap">Shared with</span>
               <div className="flex items-center gap-1">
                 {share.settings.externalCollaborator && (
                   <TooltipProvider>
@@ -1202,14 +1193,14 @@ export function ProjectSharesTab({
     })
   }, [refreshData])
 
-  const saveOrder = useCallback(async (toDo: string[], inProgress: string[], done: string[]) => {
+  const saveOrder = useCallback(async (toDo: string[], inProgress: string[], inReview: string[], done: string[]) => {
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session?.access_token) return
       await fetch(`/api/projects/${projectId}/shares/order`, {
         method: 'PUT',
         headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to_do: toDo, in_progress: inProgress, done }),
+        body: JSON.stringify({ to_do: toDo, in_progress: inProgress, in_review: inReview, done }),
       })
       await refreshData()
     } catch (e) {
@@ -1322,24 +1313,28 @@ export function ProjectSharesTab({
   const byLane = React.useMemo(() => {
     const toDo: ShareRecord[] = []
     const inProgress: ShareRecord[] = []
+    const inReview: ShareRecord[] = []
     const done: ShareRecord[] = []
     shares.forEach((s) => {
       const status = s.activity?.status ?? 'to_do'
       const orderIndex = s.activity?.orderIndex ?? 0
       const rec = { ...s, _orderIndex: orderIndex }
       if (status === 'in_progress') inProgress.push(rec)
+      else if (status === 'in_review') inReview.push(rec)
       else if (status === 'done') done.push(rec)
       else toDo.push(rec)
     })
     toDo.sort((a, b) => (a._orderIndex ?? 0) - (b._orderIndex ?? 0))
     inProgress.sort((a, b) => (a._orderIndex ?? 0) - (b._orderIndex ?? 0))
+    inReview.sort((a, b) => (a._orderIndex ?? 0) - (b._orderIndex ?? 0))
     done.sort((a, b) => (a._orderIndex ?? 0) - (b._orderIndex ?? 0))
-    return { to_do: toDo, in_progress: inProgress, done }
+    return { to_do: toDo, in_progress: inProgress, in_review: inReview, done }
   }, [shares])
 
   const laneOrder = React.useMemo(() => ({
     to_do: byLane.to_do.map((s) => s.id),
     in_progress: byLane.in_progress.map((s) => s.id),
+    in_review: byLane.in_review.map((s) => s.id),
     done: byLane.done.map((s) => s.id),
   }), [byLane])
 
@@ -1360,7 +1355,7 @@ export function ProjectSharesTab({
     const overId = String(over.id)
     let targetLane: ActivityStatus
     let insertIndex: number
-    if (['to_do', 'in_progress', 'done'].includes(overId)) {
+    if (['to_do', 'in_progress', 'in_review', 'done'].includes(overId)) {
       targetLane = overId as ActivityStatus
       insertIndex = laneOrder[targetLane].length
     } else {
@@ -1370,18 +1365,19 @@ export function ProjectSharesTab({
       insertIndex = laneOrder[targetLane].indexOf(overId)
       if (insertIndex < 0) insertIndex = laneOrder[targetLane].length
     }
-    const currentLane = laneOrder.to_do.includes(shareId) ? 'to_do' : laneOrder.in_progress.includes(shareId) ? 'in_progress' : 'done'
     const newToDo = laneOrder.to_do.filter((id) => id !== shareId)
     const newInProgress = laneOrder.in_progress.filter((id) => id !== shareId)
+    const newInReview = laneOrder.in_review.filter((id) => id !== shareId)
     const newDone = laneOrder.done.filter((id) => id !== shareId)
     const insertAt = (arr: string[], id: string, idx: number) => {
       const out = arr.slice()
       out.splice(idx, 0, id)
       return out
     }
-    if (targetLane === 'to_do') saveOrder(insertAt(newToDo, shareId, insertIndex), newInProgress, newDone)
-    else if (targetLane === 'in_progress') saveOrder(newToDo, insertAt(newInProgress, shareId, insertIndex), newDone)
-    else saveOrder(newToDo, newInProgress, insertAt(newDone, shareId, insertIndex))
+    if (targetLane === 'to_do') saveOrder(insertAt(newToDo, shareId, insertIndex), newInProgress, newInReview, newDone)
+    else if (targetLane === 'in_progress') saveOrder(newToDo, insertAt(newInProgress, shareId, insertIndex), newInReview, newDone)
+    else if (targetLane === 'in_review') saveOrder(newToDo, newInProgress, insertAt(newInReview, shareId, insertIndex), newDone)
+    else saveOrder(newToDo, newInProgress, newInReview, insertAt(newDone, shareId, insertIndex))
   }
 
   const detailShare = detailShareId ? shares.find((s) => s.id === detailShareId) : null
@@ -1552,8 +1548,8 @@ export function ProjectSharesTab({
         </div>
       </div>
 
-      <div className="flex flex-1 min-h-0 overflow-hidden gap-4 bg-white border border-[#e5e7eb] rounded">
-        <div className={cn('flex-1 min-w-0 overflow-auto bg-white rounded', viewMode === 'list' ? '' : 'p-4')}>
+      <div className={cn('flex flex-1 min-h-0 overflow-hidden gap-4 rounded', viewMode === 'board' ? '' : 'bg-white border border-[#e5e7eb]')}>
+        <div className={cn('flex-1 min-w-0 overflow-auto rounded', viewMode === 'list' ? 'bg-white' : viewMode === 'board' ? '' : 'bg-white p-4')}>
           {isLoading ? (
             <div className="flex items-center justify-center min-h-[200px]">
               <LoadingSpinner size="md" className="min-h-0" />
@@ -1615,22 +1611,22 @@ export function ProjectSharesTab({
                 onDragStart={handleDragStart}
                 onDragEnd={handleDragEnd}
               >
-                <div className="grid grid-cols-3 gap-4 min-h-[360px]">
+                <div className="grid grid-cols-4 gap-4 min-h-[360px]">
                   {LANES.map((lane) => (
                     <motion.div
                       key={lane.status}
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
-                      className="flex flex-col rounded-2xl overflow-hidden border border-slate-200/70 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
+                      className="flex flex-col rounded border border-[#e5e7eb] bg-white overflow-hidden"
                     >
-                      <div className="flex items-center gap-2.5 px-4 py-3 border-b border-slate-200/50 bg-white/60">
-                        <div className={cn('rounded-lg bg-gradient-to-br p-1.5', lane.iconGradient)}>
+                      <div className="flex items-center gap-2 px-3 py-2.5 border-b border-[#e5e7eb]">
+                        <div className={cn('rounded p-1', lane.iconBg)}>
                           {lane.icon}
                         </div>
-                        <span className="text-sm font-semibold text-slate-700">{lane.label}</span>
-                        <span className="text-xs text-slate-500">({byLane[lane.status].length})</span>
+                        <span className="text-xs font-semibold text-[#1b1b1d]">{lane.label}</span>
+                        <span className="text-[11px] text-[#9a9ba0] ml-0.5">({byLane[lane.status].length})</span>
                       </div>
-                      <DroppableLane id={lane.status} className="flex-1 overflow-y-auto p-3 space-y-3 min-h-[120px]">
+                      <DroppableLane id={lane.status} className="flex-1 overflow-y-auto p-3 space-y-2.5 min-h-[120px]">
                         <AnimatePresence mode="popLayout">
                           {byLane[lane.status].map((share) => (
                             <DraggableCard
@@ -1673,18 +1669,13 @@ export function ProjectSharesTab({
                     return (
                       <motion.div
                         layoutId={activeId}
-                        className={cn(
-                          'rounded-2xl overflow-hidden w-[280px] border border-slate-200/80 bg-white',
-                          accent.border,
-                          'shadow-[0_8px_24px_-8px_rgba(0,0,0,0.15)]'
-                        )}
+                        className="rounded overflow-hidden w-[280px] border border-[#e5e7eb] bg-white shadow-md"
                         style={{ cursor: 'grabbing' }}
                       >
-                        <div className="h-2 bg-slate-100/80" />
+                        <div className="h-1.5 bg-[#f9f9fb] border-b border-[#e5e7eb]" />
                         <ShareCardContent
                           share={share}
-                          laneHeaderBg={accent.headerBg}
-                          iconPillBg={accent.iconPillBg}
+                          iconPillBg={CARD_ACCENT[status].iconPillBg}
                           formatDate={formatDate}
                           getDocumentForMenu={getDocumentForMenu}
                           showActions={false}

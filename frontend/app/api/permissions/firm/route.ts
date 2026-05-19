@@ -122,6 +122,9 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    const orgSettings = firmId ? settings.organizationSettings[firmId] : undefined
+    const enableBetaFeatures = orgSettings?.enableBetaFeatures === true
+
     const body: Record<string, unknown> = {
       canView,
       canEdit,
@@ -132,6 +135,7 @@ export async function GET(request: NextRequest) {
       isFirmOwner,
       isOrgOwner: isFirmOwner, // alias for consumers still using org terminology
       scopes: firm.scopes,
+      enableBetaFeatures,
     }
     if (clientId !== null && clientId !== undefined) {
       body.canManageClient = canManageClient

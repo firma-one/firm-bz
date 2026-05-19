@@ -161,7 +161,7 @@ export async function GET(
       updatedByAvatarUrl: s.updatedBy ? (userMap[s.updatedBy]?.avatarUrl ?? null) : null,
     }))
 
-    const statusOrder = { to_do: 0, in_progress: 1, done: 2 }
+    const statusOrder: Record<string, number> = { to_do: 0, in_progress: 1, in_review: 2, done: 3 }
     enriched.sort((a, b) => {
       const sa = a.activity?.status ?? 'to_do'
       const sb = b.activity?.status ?? 'to_do'

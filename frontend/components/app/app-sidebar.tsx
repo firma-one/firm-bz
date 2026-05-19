@@ -22,6 +22,7 @@ import {
   Info,
   HelpCircle,
   ArrowUpRight,
+  LayoutGrid,
 } from "lucide-react"
 import { FirmSelector, type FirmOption } from "@/components/projects/firm-selector"
 import { getUserFirms } from "@/lib/actions/firms"
@@ -98,6 +99,7 @@ export function AppSidebar({ variant = 'fixed' }: AppSidebarProps = {}) {
     canEditClients: boolean
     canViewClients: boolean
     isOrgOwner?: boolean
+    enableBetaFeatures?: boolean
   } | null>(null)
 
   // View As: show dropdown based on persona (can use RBAC admin), not page location
@@ -280,6 +282,7 @@ export function AppSidebar({ variant = 'fixed' }: AppSidebarProps = {}) {
   const canShowProjectInternalTabs = Boolean(projectTabPermissions?.canViewInternalTabs || canManageOrg || canEditOrg || canViewOrg)
   const canShowProjectAuditTab = Boolean(projectTabPermissions?.canViewAudit || canManageOrg)
   const canShowProjectSettingsTab = Boolean(projectTabPermissions?.canViewSettings || canManageOrg)
+  const enableBetaFeatures = orgPermissions?.enableBetaFeatures === true
 
 
   // View As dropdown: show when user has RBAC admin (real role), regardless of currently assumed persona
@@ -360,7 +363,7 @@ export function AppSidebar({ variant = 'fixed' }: AppSidebarProps = {}) {
   const isInline = variant === 'inline'
   const outerClass = isInline
     ? 'h-full w-full flex flex-col bg-white overflow-visible'
-    : `fixed inset-y-0 left-0 z-40 bg-white border-r border-[#e5e7eb] transition-all duration-300 pt-16 overflow-x-hidden ${isCollapsed ? 'w-16' : 'w-64'}`
+    : `fixed inset-y-0 left-0 z-40 bg-white border-r border-[#e5e7eb] transition-all duration-300 pt-16 overflow-visible ${isCollapsed ? 'w-16' : 'w-64'}`
 
   return (
     <div className={outerClass}>
@@ -534,13 +537,29 @@ export function AppSidebar({ variant = 'fixed' }: AppSidebarProps = {}) {
                           </Link>
                           <Link
                             href={`${baseUrl}/c/${clientSlug}/e/${projectSlug}/shares`}
-                            className={`flex items-center d-sidebar-nav d-tree-link rounded-r py-1.5 px-2.5 transition-colors ${pathname.includes('/shares')
+                            className={`flex items-center d-sidebar-nav d-tree-link rounded-r py-1.5 px-2.5 transition-colors ${pathname.includes('/shares') && !pathname.includes('/shares/board')
                               ? 'bg-[#ecfdf5] border-l-2 border-[#069668] text-[#065f46] font-semibold'
                               : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}
                           >
-                            <Share2 className={`h-3.5 w-3.5 mr-2.5 ${pathname.includes('/shares') ? 'text-[#069668]' : 'text-[#45474c]'}`} />
+                            <Share2 className={`h-3.5 w-3.5 mr-2.5 ${pathname.includes('/shares') && !pathname.includes('/shares/board') ? 'text-[#069668]' : 'text-[#45474c]'}`} />
                             Shares
                           </Link>
+
+                          {canShowProjectInternalTabs && enableBetaFeatures && (
+                            <Link
+                              href={`${baseUrl}/c/${clientSlug}/e/${projectSlug}/board`}
+                              className={`group flex items-center d-sidebar-nav d-tree-link rounded-r py-1.5 px-2.5 transition-colors ${pathname.endsWith('/board')
+                                ? 'bg-[#ecfdf5] border-l-2 border-[#069668] text-[#065f46] font-semibold'
+                                : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}
+                            >
+                              <LayoutGrid className={`h-3.5 w-3.5 mr-2.5 ${pathname.endsWith('/board') ? 'text-[#069668]' : 'text-[#45474c]'}`} />
+                              Board
+                              <span className="ml-auto shrink-0 flex items-center gap-1">
+                                <span className="text-[9px] font-semibold uppercase tracking-wide px-1 py-0.5 rounded bg-amber-100 text-amber-700 leading-none">Beta</span>
+                                <Lock className="w-2.5 h-2.5 text-[#d1d5db] group-hover:text-[#45474c] transition-colors" />
+                              </span>
+                            </Link>
+                          )}
 
                           <Link
                             href={`${baseUrl}/c/${clientSlug}/e/${projectSlug}/comments`}
@@ -552,7 +571,7 @@ export function AppSidebar({ variant = 'fixed' }: AppSidebarProps = {}) {
                             Comments
                           </Link>
 
-                          {canShowProjectInternalTabs && (
+                          {canShowProjectInternalTabs && enableBetaFeatures && (
                             <Link
                               href={`${baseUrl}/c/${clientSlug}/e/${projectSlug}/wiki`}
                               className={`group flex items-center d-sidebar-nav d-tree-link rounded-r py-1.5 px-2.5 transition-colors ${pathname.includes('/wiki')
@@ -561,7 +580,10 @@ export function AppSidebar({ variant = 'fixed' }: AppSidebarProps = {}) {
                             >
                               <PenTool className={`h-3.5 w-3.5 mr-2.5 ${pathname.includes('/wiki') ? 'text-[#069668]' : 'text-[#45474c]'}`} />
                               Dossier
-                              <span title="Internal only" className="ml-auto shrink-0"><Lock className="w-2.5 h-2.5 text-[#d1d5db] group-hover:text-[#45474c] transition-colors" /></span>
+                              <span className="ml-auto shrink-0 flex items-center gap-1">
+                                <span className="text-[9px] font-semibold uppercase tracking-wide px-1 py-0.5 rounded bg-amber-100 text-amber-700 leading-none">Beta</span>
+                                <Lock className="w-2.5 h-2.5 text-[#d1d5db] group-hover:text-[#45474c] transition-colors" />
+                              </span>
                             </Link>
                           )}
 

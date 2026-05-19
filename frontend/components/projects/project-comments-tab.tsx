@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { MessageCircle, Search, ChevronRight } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
@@ -54,65 +54,54 @@ export function ProjectCommentsTab({
 
   const empty = !loading && !error && rows.length === 0
 
-  const header = useMemo(() => {
-    return (
-      <div className="bg-white border border-stone-200 rounded-xl p-4 shadow-sm">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <MessageCircle className="h-5 w-5 text-slate-600" />
-              <div className="text-base font-semibold text-slate-900">Comments</div>
-            </div>
-            <div className="mt-1 text-sm text-slate-600">
-              Pick a document to view and post in its thread.
-            </div>
-          </div>
-          <div className="shrink-0 text-xs text-slate-500">
-            {loading ? 'Loading…' : `${rows.length} docs`}
-          </div>
+  return (
+    <div className="p-4 flex flex-col gap-3">
+      {/* toolbar row */}
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <MessageCircle className="h-4 w-4 text-[#45474c]" />
+          <span className="text-sm font-semibold text-[#1b1b1d]">Comments</span>
+          {!loading && (
+            <span className="font-mono text-[10px] font-bold bg-[#069668] text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
+              {rows.length}
+            </span>
+          )}
         </div>
-        <div className="mt-3 relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+        <div className="relative w-52">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#45474c]" />
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search documents…"
-            className="pl-9 h-9 bg-slate-50 border-slate-200 focus:bg-white"
+            className="pl-8 h-8 text-xs bg-[#f9f9fb] border-[#e5e7eb] focus:bg-white rounded"
           />
         </div>
       </div>
-    )
-  }, [loading, rows.length, query])
 
-  return (
-    <div className="space-y-4">
-      {header}
-
-      <div className="bg-white border border-stone-200 rounded-xl shadow-sm overflow-hidden">
+      {/* content card */}
+      <div className="bg-white border border-[#e5e7eb] rounded overflow-hidden">
         {error ? (
           <div className="p-6 text-sm text-rose-700 bg-rose-50 border-b border-rose-100">
             {error}
           </div>
-        ) : null}
-
-        {loading ? (
-          <div className="p-6 text-sm text-slate-500">Loading comments…</div>
+        ) : loading ? (
+          <div className="p-6 text-sm text-[#45474c]">Loading comments…</div>
         ) : empty ? (
-          <div className="p-8 text-center">
-            <MessageCircle className="h-8 w-8 text-slate-300 mx-auto mb-2" />
-            <div className="text-sm font-medium text-slate-700">No comments yet</div>
-            <div className="text-xs text-slate-500 mt-1">
+          <div className="py-12 text-center">
+            <MessageCircle className="h-7 w-7 text-[#e5e7eb] mx-auto mb-2.5" />
+            <div className="text-sm font-medium text-[#1b1b1d]">No comments yet</div>
+            <div className="text-xs text-[#45474c] mt-1">
               Add a comment from any document, then it will show up here.
             </div>
           </div>
         ) : (
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-[#e5e7eb]">
             {rows.map((r) => (
               <button
                 key={r.projectDocumentId}
                 type="button"
                 className={cn(
-                  'w-full text-left p-4 hover:bg-slate-50 transition-colors',
+                  'w-full text-left px-4 py-3 hover:bg-[#f9f9fb] transition-colors',
                   'flex items-start gap-3'
                 )}
                 onClick={() => {
@@ -133,24 +122,24 @@ export function ProjectCommentsTab({
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="text-sm font-semibold text-slate-900 truncate">
+                      <div className="text-sm font-semibold text-[#1b1b1d] truncate">
                         {r.documentName}
                       </div>
                       {r.latest ? (
-                        <div className="mt-1 text-xs text-slate-600 line-clamp-2">
+                        <div className="mt-0.5 text-xs text-[#45474c] line-clamp-2">
                           {r.latest.preview}
                         </div>
                       ) : null}
                     </div>
                     <div className="shrink-0 flex items-center gap-2">
-                      <span className="inline-flex items-center rounded-full bg-slate-100 border border-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
+                      <span className="inline-flex items-center rounded border border-[#e5e7eb] bg-[#f3f4f6] px-1.5 py-0.5 text-[10px] font-semibold text-[#45474c]">
                         {r.count}
                       </span>
-                      <ChevronRight className="h-4 w-4 text-slate-300" />
+                      <ChevronRight className="h-3.5 w-3.5 text-[#c5c7cc]" />
                     </div>
                   </div>
                   {r.latest ? (
-                    <div className="mt-2 text-[11px] text-slate-400">
+                    <div className="mt-1.5 text-[10px] text-[#9a9ba0]">
                       <RelativeDateTime date={r.latest.createdAt} />
                     </div>
                   ) : null}
@@ -163,4 +152,3 @@ export function ProjectCommentsTab({
     </div>
   )
 }
-

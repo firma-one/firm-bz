@@ -1,13 +1,13 @@
 'use client'
 
-import { useEffect, useCallback, useState } from 'react'
+import { useEffect, useCallback, useState, useRef } from 'react'
 import { cn } from '@/lib/utils'
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ProjectInsightsDashboard } from './project-insights-dashboard'
 import { ProjectFileList } from './project-file-list'
 import { setSavedFolderState, type BreadcrumbItem } from '@/lib/files-folder-session'
 import { ProjectSettingsForm } from './project-settings-form'
-import { Folder, BarChart3, Building2, PenTool, ChevronRight, Users, Briefcase, Share2, Settings, Home, ClipboardList, MessageCircle, Lock, LayoutGrid, List } from 'lucide-react'
+import { Folder, BarChart3, Building2, PenTool, ChevronRight, ChevronLeft, Users, Briefcase, Share2, Settings, Home, ClipboardList, MessageCircle, Lock, LayoutGrid, List } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { ProjectMembersTab } from './members/project-members-tab'
@@ -59,6 +59,7 @@ interface ProjectWorkspaceProps {
     /** When set, use /e/ (engagement) routes instead of /p/ (project). */
     engagementSlug?: string
     firmSandboxOnly?: boolean
+    enableBetaFeatures?: boolean
     fileCount?: number
     sharesCount?: number
     commentsCount?: number
@@ -96,6 +97,7 @@ export function ProjectWorkspace({
     projectPersonaDisplayName,
     engagementSlug,
     firmSandboxOnly = false,
+    enableBetaFeatures = false,
     fileCount,
     sharesCount,
     commentsCount,
@@ -107,6 +109,26 @@ export function ProjectWorkspace({
     const router = useRouter()
     const { viewAsPersonaSlug } = useViewAs()
     const [filesNavSlot, setFilesNavSlot] = useState<HTMLDivElement | null>(null)
+    const tabsScrollRef = useRef<HTMLDivElement>(null)
+    const [canScrollLeft, setCanScrollLeft] = useState(false)
+    const [canScrollRight, setCanScrollRight] = useState(false)
+
+    const updateScrollState = useCallback(() => {
+        const el = tabsScrollRef.current
+        if (!el) return
+        setCanScrollLeft(el.scrollLeft > 0)
+        setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1)
+    }, [])
+
+    useEffect(() => {
+        const el = tabsScrollRef.current
+        if (!el) return
+        updateScrollState()
+        el.addEventListener('scroll', updateScrollState)
+        const ro = new ResizeObserver(updateScrollState)
+        ro.observe(el)
+        return () => { el.removeEventListener('scroll', updateScrollState); ro.disconnect() }
+    }, [updateScrollState])
     const slugFromPath = pathname?.split('/e/')[1]?.split('/')[0] ?? pathname?.split('/p/')[1]?.split('/')[0] ?? ''
     const projectSlug = engagementSlug ?? slugFromPath
     const useEngagement = Boolean(engagementSlug)
@@ -130,6 +152,7 @@ export function ProjectWorkspace({
     }, [base, currentTab, router])
 
     const handleTabChange = useCallback((value: string) => {
+        if (value === 'board') { router.push(`${base}/board`); return }
         const suffix = value === 'shares' ? '/grid' : ''
         router.push(`${base}/${value}${suffix}`)
     }, [base, router])
@@ -218,8 +241,33 @@ export function ProjectWorkspace({
             <Tabs value={currentTab} onValueChange={handleTabChange} className="flex-1 flex flex-col min-h-0">
                 {/* Tab strip — full-width white with border-b, scrollable for many tabs */}
                 <div className="bg-white border border-[#e5e7eb] rounded mb-3 shrink-0 flex items-center h-14">
-                    <div className="flex-1 overflow-x-auto custom-scrollbar">
-                    <div className="flex items-center h-14 min-w-max">
+                    <div className="flex-1 min-w-0 relative h-full">
+                    {canScrollLeft && (
+                        <button
+                            type="button"
+                            onClick={() => tabsScrollRef.current?.scrollBy({ left: -160, behavior: 'smooth' })}
+                            className="absolute left-0 top-0 z-10 h-full w-14 flex items-center justify-center bg-gradient-to-r from-white from-70% to-transparent text-[#45474c] hover:text-[#1b1b1d] transition-colors"
+                            aria-label="Scroll tabs left"
+                        >
+                            <span className="w-5 h-5 rounded-full border border-[#069668] bg-white flex items-center justify-center shadow-sm">
+                                <ChevronLeft className="w-3 h-3 text-[#069668]" />
+                            </span>
+                        </button>
+                    )}
+                    {canScrollRight && (
+                        <button
+                            type="button"
+                            onClick={() => tabsScrollRef.current?.scrollBy({ left: 160, behavior: 'smooth' })}
+                            className="absolute right-0 top-0 z-10 h-full w-14 flex items-center justify-center bg-gradient-to-l from-white from-70% to-transparent text-[#45474c] hover:text-[#1b1b1d] transition-colors"
+                            aria-label="Scroll tabs right"
+                        >
+                            <span className="w-5 h-5 rounded-full border border-[#069668] bg-white flex items-center justify-center shadow-sm">
+                                <ChevronRight className="w-3 h-3 text-[#069668]" />
+                            </span>
+                        </button>
+                    )}
+                    <div ref={tabsScrollRef} className="overflow-x-auto h-full [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" style={{ scrollPaddingLeft: canScrollLeft ? 40 : 0, scrollPaddingRight: canScrollRight ? 40 : 0 }}>
+                    <div className="flex items-center h-full min-w-max" style={{ paddingLeft: canScrollLeft ? 56 : 0, paddingRight: canScrollRight ? 56 : 0 }}>
                         <TabsList className="h-full p-0 bg-transparent rounded-none inline-flex justify-start gap-0 border-0">
                             <TabsTrigger
                                 value="files"
@@ -267,7 +315,7 @@ export function ProjectWorkspace({
                                     <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
                                 </TabsTrigger>
                             )}
-                            {canViewInternalTabs && (
+                            {enableBetaFeatures && canViewInternalTabs && (
                                 <TabsTrigger
                                     value="wiki"
                                     className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
@@ -275,12 +323,23 @@ export function ProjectWorkspace({
                                     <PenTool className="w-4 h-4 mr-2" />
                                     Dossier
                                     <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
-                                    <span className="ml-2 rounded px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-violet-100 text-violet-600 leading-none">Beta</span>
+                                    <span className="ml-2 rounded px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 leading-none">Beta</span>
                                     {wikiPageCount !== undefined && wikiPageCount > 0 && (
                                         <span className="ml-1 font-mono text-[10px] font-bold bg-[#069668] text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
                                             {wikiPageCount}
                                         </span>
                                     )}
+                                </TabsTrigger>
+                            )}
+                            {enableBetaFeatures && canViewInternalTabs && (
+                                <TabsTrigger
+                                    value="board"
+                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                >
+                                    <LayoutGrid className="w-4 h-4 mr-2" />
+                                    Board
+                                    <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
+                                    <span className="ml-2 rounded px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 leading-none">Beta</span>
                                 </TabsTrigger>
                             )}
                             {canManage && (
@@ -326,6 +385,7 @@ export function ProjectWorkspace({
                         </TabsList>
                     </div>
                     </div>
+                    </div>
                     {/* New Document button slot — ProjectFileList portals into this when Files is active */}
                     {currentTab === 'files' && (
                         <div ref={setFilesNavSlot} className="shrink-0 px-3 border-l border-[#e5e7eb] flex items-center" />
@@ -362,7 +422,7 @@ export function ProjectWorkspace({
                 {/* Only mount the active tab's content so Files tree is not rendered when on Shares/others (performance). */}
                 {/* Shares gets its own layout (toolbar on bg + content card); all other tabs share the card wrapper */}
                 {/* Files and Shares render breadcrumb/toolbar on bg; content card is owned by the component */}
-                {(currentTab === 'files' || currentTab === 'shares') ? (
+                {(currentTab === 'files' || currentTab === 'shares' || currentTab === 'board') ? (
                     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
                         {currentTab === 'files' && (
                             <ErrorBoundary context="ProjectFileList">
@@ -402,16 +462,51 @@ export function ProjectWorkspace({
                                 />
                             </ErrorBoundary>
                         )}
+                        {currentTab === 'board' && (
+                            <ErrorBoundary context="ProjectBoard">
+                                <ProjectSharesTab
+                                    projectId={projectId}
+                                    canManage={canManage}
+                                    restrictToSharedOnly={restrictToSharedOnly}
+                                    isExternalViewer={isExternalViewer}
+                                    connectorRootFolderId={connectorRootFolderId ?? undefined}
+                                    orgName={orgName}
+                                    clientName={clientName}
+                                    projectName={projectName}
+                                    onOpenInFiles={handleOpenInFiles}
+                                    sharesBasePath={`${projectBase(orgSlug, clientSlug, projectSlug, useEngagement)}/shares`}
+                                    pathViewMode="board"
+                                    deeplinkBase={typeof window !== 'undefined' ? `${window.location.origin}${projectBase(orgSlug, clientSlug, projectSlug, useEngagement)}/files` : undefined}
+                                />
+                            </ErrorBoundary>
+                        )}
+                    </div>
+                ) : (currentTab === 'settings') ? (
+                    <div className="flex-1 overflow-y-auto custom-scrollbar py-4">
+                        {canViewSettings && (
+                            <ProjectSettingsForm
+                                projectId={projectId}
+                                orgSlug={orgSlug}
+                                clientSlug={clientSlug}
+                                initialName={projectName ?? ''}
+                                initialDescription={projectDescription}
+                                initialKickoffDate={engagementKickoffDate}
+                                initialDueDate={engagementDueDate}
+                                initialStatus={engagementStatus}
+                                initialContractType={engagementContractType}
+                                initialRateOrValue={engagementRateOrValue}
+                                initialTags={engagementTags}
+                                firmSandboxOnly={firmSandboxOnly}
+                                onCancel={() => router.push(`${base}/files`)}
+                                onSaved={() => {
+                                    router.push(`${base}/files`)
+                                    router.refresh()
+                                }}
+                            />
+                        )}
                     </div>
                 ) : (
                 <div className="flex-1 overflow-y-auto custom-scrollbar bg-white border border-[#e5e7eb] rounded">
-                    {currentTab === 'comments' && (
-                        <div className="py-1 h-full">
-                            <ErrorBoundary context="ProjectComments">
-                                <ProjectCommentsTab projectId={projectId} />
-                            </ErrorBoundary>
-                        </div>
-                    )}
                     {currentTab === 'comments' && (
                         <div className="py-1 h-full">
                             <ErrorBoundary context="ProjectComments">
@@ -456,29 +551,6 @@ export function ProjectWorkspace({
                                     base={base}
                                 />
                             </ErrorBoundary>
-                        </div>
-                    )}
-                    {canViewSettings && currentTab === 'settings' && (
-                        <div className="w-full py-2">
-                            <ProjectSettingsForm
-                                projectId={projectId}
-                                orgSlug={orgSlug}
-                                clientSlug={clientSlug}
-                                initialName={projectName ?? ''}
-                                initialDescription={projectDescription}
-                                initialKickoffDate={engagementKickoffDate}
-                                initialDueDate={engagementDueDate}
-                                initialStatus={engagementStatus}
-                                initialContractType={engagementContractType}
-                                initialRateOrValue={engagementRateOrValue}
-                                initialTags={engagementTags}
-                                firmSandboxOnly={firmSandboxOnly}
-                                onCancel={() => router.push(`${base}/files`)}
-                                onSaved={() => {
-                                    router.push(`${base}/files`)
-                                    router.refresh()
-                                }}
-                            />
                         </div>
                     )}
                 </div>

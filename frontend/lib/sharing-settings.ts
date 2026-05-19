@@ -3,7 +3,7 @@
  * Supports both legacy (flat) and new (nested share/activity/comments) shapes.
  */
 
-export type ActivityStatus = 'to_do' | 'in_progress' | 'done'
+export type ActivityStatus = 'to_do' | 'in_progress' | 'in_review' | 'done'
 
 export interface ShareGuestOptions {
   publish?: boolean
@@ -152,7 +152,7 @@ export function parseSettingsFromDb(settings: unknown): ProjectDocumentSharingSe
 
   const activityBlock: ActivityBlock = activity
     ? {
-        status: activity.status === 'in_progress' || activity.status === 'done' ? activity.status : 'to_do',
+        status: (['to_do', 'in_progress', 'in_review', 'done'] as ActivityStatus[]).includes(activity.status) ? activity.status : 'to_do',
         updatedAt: activity.updatedAt || new Date().toISOString(),
         orderIndex: typeof activity.orderIndex === 'number' ? activity.orderIndex : 0,
       }

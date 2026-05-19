@@ -5,13 +5,10 @@ import { useRouter } from 'next/navigation'
 import {
     Dialog,
     DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden"
 import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { UserPlus, X, CornerDownLeft, Linkedin, Users2, MapPin } from "lucide-react"
@@ -37,6 +34,9 @@ interface AddClientModalProps {
     trigger?: React.ReactNode
     onSaved?: () => void
 }
+
+const fieldLabel = 'font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] block mb-1'
+const inputCls = 'border-[#e5e7eb] text-[#1b1b1d] text-sm placeholder:text-[#9a9ba0] rounded focus-visible:ring-1 focus-visible:ring-[#069668] focus-visible:border-[#069668] disabled:opacity-50 disabled:cursor-not-allowed'
 
 export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigger, onSaved }: AddClientModalProps) {
     const [open, setOpen] = useState(false)
@@ -110,11 +110,8 @@ export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigg
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
 
-        if (isSandboxFirm) {
-            return
-        }
+        if (isSandboxFirm) return
 
-        // Commit any partially typed tag on submit
         const finalTags = tagInput.trim()
             ? Array.from(new Set([...tags, tagInput.trim().toLowerCase().replace(/\s+/g, '-')]))
             : tags
@@ -154,7 +151,6 @@ export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigg
             setError(null)
 
             window.dispatchEvent(new CustomEvent('firma-reminders-updated'))
-            // Keep user on the Clients list view after creation.
             router.push(`/d/f/${orgSlug}?tab=clients`, { scroll: false })
             onSaved?.()
         } catch (error: any) {
@@ -169,247 +165,248 @@ export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigg
         <>
             {wrapTrigger(
                 trigger || (
-                    <Button
-                        variant="blackCta"
-                        type="button"
-                        size="sm"
-                        className="gap-2"
-                    >
+                    <Button variant="greenCta" type="button" size="sm" className="gap-2">
                         <UserPlus className="h-4 w-4" />
                         New Client
                     </Button>
                 ),
             )}
             <Dialog open={open} onOpenChange={setOpen}>
-            <DialogContent className="sm:max-w-[480px] border-slate-200 max-h-[90vh] overflow-y-auto p-6 pb-4">
-                <DialogHeader>
-                    <DialogTitle className="text-slate-900">Add Client</DialogTitle>
-                    <DialogDescription className="text-slate-600">
-                        Create a new client to organize engagements and projects within your firm.
-                    </DialogDescription>
-                </DialogHeader>
-                <form onSubmit={handleSubmit} className="space-y-4 pt-4">
-                    {isSandboxFirm && <SandboxInfoBanner />}
-                    {error && (
-                        <div className="bg-slate-50 border border-slate-200 text-slate-700 text-sm px-3 py-2 rounded-md">
-                            {error}
+                <DialogContent className="sm:max-w-[620px] border-[#e5e7eb] max-h-[90vh] overflow-y-auto p-0 gap-0 rounded-[2px]">
+
+                    <VisuallyHidden><DialogTitle>New Client</DialogTitle></VisuallyHidden>
+
+                    {/* Header */}
+                    <div className="px-5 py-4 border-b border-[#e5e7eb] bg-[#f9f9fb] flex items-start gap-3">
+                        <div className="mt-0.5 h-7 w-7 rounded bg-[#ecfdf5] flex items-center justify-center shrink-0">
+                            <UserPlus className="h-3.5 w-3.5 text-[#069668]" />
                         </div>
-                    )}
-                    <div className="space-y-2">
-                        <Label htmlFor="name" className={isSandboxFirm ? 'text-slate-500' : 'text-slate-900'}>
-                            Client Name <span className="text-slate-500">*</span>
-                        </Label>
-                        <Input
-                            id="name"
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            placeholder="e.g. Acme Corp"
-                            required={!isSandboxFirm}
-                            disabled={isSandboxFirm || isLoading}
-                            className="border-slate-200 text-slate-900 placeholder:text-slate-400 disabled:cursor-not-allowed disabled:opacity-60"
-                        />
+                        <div>
+                            <p className="text-sm font-semibold text-[#1b1b1d] leading-tight">New Client</p>
+                            <p className="text-xs text-[#45474c] mt-0.5">Create a new client record within your firm.</p>
+                        </div>
                     </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="client-status" className={isSandboxFirm ? 'text-slate-500' : 'text-slate-900'}>Status</Label>
-                        <Select
-                            value={status}
-                            onValueChange={(v) => setStatus(v as LwCrmClientStatus)}
-                            disabled={isSandboxFirm || isLoading}
-                        >
-                            <SelectTrigger id="client-status" className="border-slate-200 text-slate-900 disabled:cursor-not-allowed disabled:opacity-60">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="PROSPECT">Prospect</SelectItem>
-                                <SelectItem value="ACTIVE">Active</SelectItem>
-                                <SelectItem value="ON_HOLD">On hold</SelectItem>
-                                <SelectItem value="PAST">Past</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="industry" className={isSandboxFirm ? 'text-slate-500' : 'text-slate-900'}>
-                            Industry (optional)
-                        </Label>
-                        <Input
-                            id="industry"
-                            value={industry}
-                            onChange={(e) => setIndustry(e.target.value)}
-                            placeholder="e.g. Technology"
-                            disabled={isSandboxFirm || isLoading}
-                            className="border-slate-200 text-slate-900 placeholder:text-slate-400 disabled:cursor-not-allowed disabled:opacity-60"
-                        />
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="website" className={isSandboxFirm ? 'text-slate-500' : 'text-slate-900'}>
-                            Website (optional)
-                        </Label>
-                        <Input
-                            id="website"
-                            value={website}
-                            onChange={(e) => setWebsite(e.target.value)}
-                            placeholder="https://…"
-                            disabled={isSandboxFirm || isLoading}
-                            className="border-slate-200 text-slate-900 placeholder:text-slate-400 disabled:cursor-not-allowed disabled:opacity-60"
-                        />
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="description" className={isSandboxFirm ? 'text-slate-500' : 'text-slate-900'}>
-                            Description (optional)
-                        </Label>
-                        <Textarea
-                            id="description"
-                            value={description}
-                            onChange={(e) => setDescription(e.target.value)}
-                            placeholder="Notes about this client"
-                            rows={2}
-                            disabled={isSandboxFirm || isLoading}
-                            className="min-h-[52px] border-slate-200 text-slate-900 placeholder:text-slate-400 disabled:cursor-not-allowed disabled:opacity-60"
-                        />
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="linkedin-url" className={isSandboxFirm ? 'text-slate-500' : 'text-slate-900'}>
-                            <span className="inline-flex items-center gap-1"><Linkedin className="h-3.5 w-3.5" /> Company LinkedIn (optional)</span>
-                        </Label>
-                        <Input
-                            id="linkedin-url"
-                            value={linkedInUrl}
-                            onChange={(e) => setLinkedInUrl(e.target.value)}
-                            placeholder="https://linkedin.com/company/…"
-                            disabled={isSandboxFirm || isLoading}
-                            className="border-slate-200 text-slate-900 placeholder:text-slate-400 disabled:cursor-not-allowed disabled:opacity-60"
-                        />
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="company-size" className={isSandboxFirm ? 'text-slate-500' : 'text-slate-900'}>
-                            <span className="inline-flex items-center gap-1"><Users2 className="h-3.5 w-3.5" /> Company size (optional)</span>
-                        </Label>
-                        <SelectWithCustomEntry
-                            id="company-size"
-                            value={companySizeBracket}
-                            onChange={setCompanySizeBracket}
-                            options={['<10', '11–50', '51–200', '201–1000', '1000+']}
-                            placeholder="Select size bracket…"
-                            customEntryHint="Custom…"
-                            disabled={isSandboxFirm || isLoading}
-                        />
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="billing-address" className={isSandboxFirm ? 'text-slate-500' : 'text-slate-900'}>
-                            <span className="inline-flex items-center gap-1"><MapPin className="h-3.5 w-3.5" /> Billing address (optional)</span>
-                        </Label>
-                        <Textarea
-                            id="billing-address"
-                            value={billingAddress}
-                            onChange={(e) => setBillingAddress(e.target.value)}
-                            placeholder={"123 Main St\nCity, State ZIP\nCountry"}
-                            rows={2}
-                            disabled={isSandboxFirm || isLoading}
-                            className="min-h-[52px] border-slate-200 text-slate-900 placeholder:text-slate-400 disabled:cursor-not-allowed disabled:opacity-60"
-                        />
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="tags" className={isSandboxFirm ? 'text-slate-500' : 'text-slate-900'}>
-                            Tags (optional)
-                        </Label>
-                        <div
-                            className={`flex flex-wrap gap-1.5 min-h-[38px] w-full rounded-md border px-3 py-2 text-sm transition-colors
-                                ${isSandboxFirm || isLoading
-                                    ? 'border-slate-200 bg-slate-50 opacity-60 cursor-not-allowed'
-                                    : 'border-slate-200 bg-white focus-within:ring-2 focus-within:ring-slate-900 focus-within:ring-offset-0 focus-within:border-slate-900'
-                                }`}
-                            onClick={() => tagInputRef.current?.focus()}
-                        >
-                            {tags.map((tag) => (
-                                <span
-                                    key={tag}
-                                    className="inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700"
+
+                    <form onSubmit={handleSubmit}>
+                        <div className="p-5 space-y-4">
+                            {isSandboxFirm && <SandboxInfoBanner />}
+                            {error && (
+                                <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs px-3 py-2 rounded">
+                                    {error}
+                                </div>
+                            )}
+
+                            {/* Client Name */}
+                            <div>
+                                <label htmlFor="name" className={fieldLabel}>
+                                    Client name <span className="text-red-500 normal-case tracking-normal font-sans">*</span>
+                                </label>
+                                <Input
+                                    id="name"
+                                    value={name}
+                                    onChange={(e) => setName(e.target.value)}
+                                    placeholder="e.g. Acme Corp"
+                                    required={!isSandboxFirm}
+                                    disabled={isSandboxFirm || isLoading}
+                                    className={inputCls}
+                                />
+                            </div>
+
+                            {/* Status + Industry + Onboarding Date — 3 col */}
+                            <div className="grid grid-cols-3 gap-3">
+                                <div>
+                                    <label htmlFor="client-status" className={fieldLabel}>Status</label>
+                                    <Select value={status} onValueChange={(v) => setStatus(v as LwCrmClientStatus)} disabled={isSandboxFirm || isLoading}>
+                                        <SelectTrigger id="client-status" className={inputCls}>
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="PROSPECT">Prospect</SelectItem>
+                                            <SelectItem value="ACTIVE">Active</SelectItem>
+                                            <SelectItem value="ON_HOLD">On hold</SelectItem>
+                                            <SelectItem value="PAST">Past</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div>
+                                    <label htmlFor="industry" className={fieldLabel}>Industry <span className="normal-case tracking-normal font-sans text-[#9a9ba0]">(optional)</span></label>
+                                    <Input
+                                        id="industry"
+                                        value={industry}
+                                        onChange={(e) => setIndustry(e.target.value)}
+                                        placeholder="e.g. Technology"
+                                        disabled={isSandboxFirm || isLoading}
+                                        className={inputCls}
+                                    />
+                                </div>
+                                <div>
+                                    <label className={fieldLabel}>Onboarding date <span className="normal-case tracking-normal font-sans text-[#9a9ba0]">(optional)</span></label>
+                                    <DateTimePicker
+                                        value={clientSinceDate}
+                                        onChange={setClientSinceDate}
+                                        placeholder="Select date"
+                                        disabled={isSandboxFirm || isLoading}
+                                        defaultTime="00:00"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Website + Company Size — 2 col */}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label htmlFor="website" className={fieldLabel}>Website <span className="normal-case tracking-normal font-sans text-[#9a9ba0]">(optional)</span></label>
+                                    <Input
+                                        id="website"
+                                        value={website}
+                                        onChange={(e) => setWebsite(e.target.value)}
+                                        placeholder="https://…"
+                                        disabled={isSandboxFirm || isLoading}
+                                        className={inputCls}
+                                    />
+                                </div>
+                                <div>
+                                    <label htmlFor="company-size" className={fieldLabel}>
+                                        <span className="inline-flex items-center gap-1"><Users2 className="h-3 w-3" /> Company size <span className="normal-case tracking-normal font-sans text-[#9a9ba0]">(optional)</span></span>
+                                    </label>
+                                    <SelectWithCustomEntry
+                                        id="company-size"
+                                        value={companySizeBracket}
+                                        onChange={setCompanySizeBracket}
+                                        options={['<10', '11–50', '51–200', '201–1000', '1000+']}
+                                        placeholder="Select bracket…"
+                                        customEntryHint="Custom…"
+                                        disabled={isSandboxFirm || isLoading}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Description */}
+                            <div>
+                                <label htmlFor="description" className={fieldLabel}>Description <span className="normal-case tracking-normal font-sans text-[#9a9ba0]">(optional)</span></label>
+                                <Textarea
+                                    id="description"
+                                    value={description}
+                                    onChange={(e) => setDescription(e.target.value)}
+                                    placeholder="Notes about this client"
+                                    rows={2}
+                                    disabled={isSandboxFirm || isLoading}
+                                    className={`min-h-[52px] ${inputCls}`}
+                                />
+                            </div>
+
+                            {/* LinkedIn */}
+                            <div>
+                                <label htmlFor="linkedin-url" className={fieldLabel}>
+                                    <span className="inline-flex items-center gap-1"><Linkedin className="h-3 w-3" /> Company LinkedIn <span className="normal-case tracking-normal font-sans text-[#9a9ba0]">(optional)</span></span>
+                                </label>
+                                <Input
+                                    id="linkedin-url"
+                                    value={linkedInUrl}
+                                    onChange={(e) => setLinkedInUrl(e.target.value)}
+                                    placeholder="https://linkedin.com/company/…"
+                                    disabled={isSandboxFirm || isLoading}
+                                    className={inputCls}
+                                />
+                            </div>
+
+                            {/* Billing address */}
+                            <div>
+                                <label htmlFor="billing-address" className={fieldLabel}>
+                                    <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" /> Billing address <span className="normal-case tracking-normal font-sans text-[#9a9ba0]">(optional)</span></span>
+                                </label>
+                                <Textarea
+                                    id="billing-address"
+                                    value={billingAddress}
+                                    onChange={(e) => setBillingAddress(e.target.value)}
+                                    placeholder={"123 Main St\nCity, State ZIP\nCountry"}
+                                    rows={2}
+                                    disabled={isSandboxFirm || isLoading}
+                                    className={`min-h-[52px] ${inputCls}`}
+                                />
+                            </div>
+
+                            {/* Tags */}
+                            <div>
+                                <label htmlFor="tags" className={fieldLabel}>Tags <span className="normal-case tracking-normal font-sans text-[#9a9ba0]">(optional)</span></label>
+                                <div
+                                    className={`flex flex-wrap gap-1.5 min-h-[36px] w-full rounded border px-3 py-2 text-sm transition-colors cursor-text
+                                        ${isSandboxFirm || isLoading
+                                            ? 'border-[#e5e7eb] bg-[#f9f9fb] opacity-50 cursor-not-allowed'
+                                            : 'border-[#e5e7eb] bg-white focus-within:ring-1 focus-within:ring-[#069668] focus-within:border-[#069668]'
+                                        }`}
+                                    onClick={() => tagInputRef.current?.focus()}
                                 >
-                                    {tag}
-                                    {!isSandboxFirm && !isLoading && (
-                                        <button
-                                            type="button"
-                                            onClick={(e) => { e.stopPropagation(); removeTag(tag) }}
-                                            className="text-slate-400 hover:text-slate-700 transition-colors"
-                                            aria-label={`Remove ${tag}`}
-                                        >
-                                            <X className="h-3 w-3" />
-                                        </button>
-                                    )}
-                                </span>
-                            ))}
-                            <input
-                                ref={tagInputRef}
-                                id="tags"
-                                value={tagInput}
-                                onChange={handleTagChange}
-                                onKeyDown={handleTagKeyDown}
-                                onBlur={() => { if (tagInput.trim()) commitTag(tagInput) }}
-                                placeholder={tags.length === 0 ? 'Type a tag, press Enter or comma' : ''}
-                                disabled={isSandboxFirm || isLoading}
-                                className="flex-1 min-w-[120px] bg-transparent outline-none placeholder:text-slate-400 text-slate-900 disabled:cursor-not-allowed"
-                            />
-                            <CornerDownLeft className="h-3.5 w-3.5 text-emerald-500 shrink-0 self-center ml-1" />
+                                    {tags.map((tag) => (
+                                        <span key={tag} className="inline-flex items-center gap-1 rounded bg-[#f3f4f6] border border-[#e5e7eb] px-2 py-0.5 text-[11px] font-medium text-[#45474c]">
+                                            {tag}
+                                            {!isSandboxFirm && !isLoading && (
+                                                <button type="button" onClick={(e) => { e.stopPropagation(); removeTag(tag) }} className="text-[#9a9ba0] hover:text-[#1b1b1d] transition-colors" aria-label={`Remove ${tag}`}>
+                                                    <X className="h-3 w-3" />
+                                                </button>
+                                            )}
+                                        </span>
+                                    ))}
+                                    <input
+                                        ref={tagInputRef}
+                                        id="tags"
+                                        value={tagInput}
+                                        onChange={handleTagChange}
+                                        onKeyDown={handleTagKeyDown}
+                                        onBlur={() => { if (tagInput.trim()) commitTag(tagInput) }}
+                                        placeholder={tags.length === 0 ? 'Type a tag, press Enter or comma…' : ''}
+                                        disabled={isSandboxFirm || isLoading}
+                                        className="flex-1 min-w-[120px] bg-transparent outline-none placeholder:text-[#9a9ba0] text-[#1b1b1d] text-xs disabled:cursor-not-allowed"
+                                    />
+                                    <CornerDownLeft className="h-3 w-3 text-[#069668] shrink-0 self-center ml-1" />
+                                </div>
+                            </div>
+
+                            {/* Prospect-only fields */}
+                            {status === 'PROSPECT' && (
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label htmlFor="lead-source" className={fieldLabel}>Lead source <span className="normal-case tracking-normal font-sans text-[#9a9ba0]">(optional)</span></label>
+                                        <SelectWithCustomEntry
+                                            id="lead-source"
+                                            value={leadSource}
+                                            onChange={setLeadSource}
+                                            options={['Referral', 'Inbound', 'Outbound', 'Conference', 'Existing Network']}
+                                            placeholder="Select source…"
+                                            customEntryHint="Other…"
+                                            disabled={isSandboxFirm || isLoading}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className={fieldLabel}>Follow-up date <span className="normal-case tracking-normal font-sans text-[#9a9ba0]">(optional)</span></label>
+                                        <DateTimePicker
+                                            value={followUpDate}
+                                            onChange={setFollowUpDate}
+                                            placeholder="Select date"
+                                            disabled={isSandboxFirm || isLoading}
+                                            defaultTime="09:00"
+                                        />
+                                    </div>
+                                </div>
+                            )}
                         </div>
-                    </div>
-                    <div className="space-y-2">
-                        <Label className={isSandboxFirm ? 'text-slate-500' : 'text-slate-900'}>
-                            Client since (optional)
-                        </Label>
-                        <DateTimePicker
-                            value={clientSinceDate}
-                            onChange={setClientSinceDate}
-                            placeholder="Select date"
-                            disabled={isSandboxFirm || isLoading}
-                            defaultTime="00:00"
-                        />
-                    </div>
-                    {status === 'PROSPECT' && (
-                        <>
-                            <div className="space-y-2">
-                                <Label htmlFor="lead-source" className={isSandboxFirm ? 'text-slate-500' : 'text-slate-900'}>
-                                    Lead source (optional)
-                                </Label>
-                                <SelectWithCustomEntry
-                                    id="lead-source"
-                                    value={leadSource}
-                                    onChange={setLeadSource}
-                                    options={['Referral', 'Inbound', 'Outbound', 'Conference', 'Existing Network']}
-                                    placeholder="Select source…"
-                                    customEntryHint="Other…"
-                                    disabled={isSandboxFirm || isLoading}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label className={isSandboxFirm ? 'text-slate-500' : 'text-slate-900'}>
-                                    Follow-up date (optional)
-                                </Label>
-                                <DateTimePicker
-                                    value={followUpDate}
-                                    onChange={setFollowUpDate}
-                                    placeholder="Select date"
-                                    disabled={isSandboxFirm || isLoading}
-                                    defaultTime="09:00"
-                                />
-                            </div>
-                        </>
-                    )}
-                    <DialogFooter>
-                        <Button type="button" variant="outline" className="border-slate-200 text-slate-700 hover:bg-slate-50" onClick={() => setOpen(false)} disabled={isLoading}>
-                            Cancel
-                        </Button>
-                        <Button
-                            variant="blackCta"
-                            type="submit"
-                            disabled={isSandboxFirm || isLoading || !name.trim()}
-                        >
-                            {isLoading && <LoadingSpinner size="sm" />}
-                            Create Client
-                        </Button>
-                    </DialogFooter>
-                </form>
-            </DialogContent>
-        </Dialog>
+
+                        {/* Footer */}
+                        <div className="px-5 py-3 border-t border-[#e5e7eb] flex items-center justify-end gap-3">
+                            <Button type="button" variant="outline" className="rounded-[2px]" onClick={() => setOpen(false)} disabled={isLoading}>
+                                Cancel
+                            </Button>
+                            <Button
+                                variant="greenCta"
+                                type="submit"
+                                disabled={isSandboxFirm || isLoading || !name.trim()}
+                                className="rounded-[2px] min-w-[8rem] text-[10px] font-headline font-bold tracking-widest uppercase"
+                            >
+                                {isLoading ? <LoadingSpinner size="sm" /> : 'Create'}
+                            </Button>
+                        </div>
+                    </form>
+                </DialogContent>
+            </Dialog>
         </>
     )
 }

@@ -104,7 +104,7 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
 
                     {/* ── Left sidebar: border-r only, animates width ── */}
                     <div
-                        className="bg-white border-r border-[#e5e7eb] flex flex-col shrink-0 overflow-visible transition-all duration-300 relative z-10"
+                        className="bg-white border-r border-[#e5e7eb] flex flex-col shrink-0 overflow-visible transition-all duration-300 relative z-20"
                         style={{ width: sidebarWidth }}
                     >
                         {showOnboardingSidebar ? <OnboardingSidebar /> : <AppSidebar variant="inline" />}
