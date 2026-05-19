@@ -16,9 +16,11 @@ import {
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
@@ -143,21 +145,30 @@ export function RemindersTable({ initialReminders }: Props) {
             <Button
               variant="outline"
               size="sm"
-              className={`h-8 gap-1.5 text-xs bg-white rounded-[2px] border-[#e5e7eb] text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] transition-colors ${statusFilter !== 'all' ? 'border-[#069668] ring-1 ring-[#069668]/30 text-[#069668]' : ''}`}
+              className={`h-8 gap-1.5 text-xs bg-white rounded-[2px] border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors ${statusFilter !== 'all' ? 'border-slate-400 ring-1 ring-slate-300' : ''}`}
             >
-              <Filter className="h-3.5 w-3.5" />
-              Status{statusFilter !== 'all' && `: ${STATUS_LABELS[statusFilter]}`}
-              <ChevronDown className="h-3 w-3 ml-0.5" />
+              <Filter className="h-3 w-3 opacity-60" />
+              Status
+              {statusFilter !== 'all' && <span className="ml-0.5 bg-slate-200 text-slate-800 px-1.5 rounded-full text-[10px] font-medium">1</span>}
+              <ChevronDown className="h-3 w-3 opacity-50" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-44">
-            <DropdownMenuRadioGroup value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
-              {(Object.keys(STATUS_LABELS) as StatusFilter[]).map((key) => (
-                <DropdownMenuRadioItem key={key} value={key} className="text-xs">
-                  {STATUS_LABELS[key]}
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
+          <DropdownMenuContent align="start" className="w-[180px] py-1 text-xs rounded-[2px]">
+            <div className="flex items-center justify-between px-2 py-1.5 border-b border-slate-100">
+              <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 p-0 font-medium">Status</DropdownMenuLabel>
+              <DropdownMenuItem className="text-xs rounded-[2px] bg-slate-900 text-white hover:bg-slate-800 hover:text-white focus:bg-slate-800 focus:text-white p-1.5 px-2 cursor-pointer" onSelect={() => {}}>
+                Done
+              </DropdownMenuItem>
+            </div>
+            <DropdownMenuCheckboxItem checked={statusFilter === 'all'} onCheckedChange={() => setStatusFilter('all')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
+              Any status
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuSeparator />
+            {(['overdue', 'today', 'upcoming', 'no-date'] as StatusFilter[]).map((key) => (
+              <DropdownMenuCheckboxItem key={key} checked={statusFilter === key} onCheckedChange={() => setStatusFilter(statusFilter === key ? 'all' : key)} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
+                {STATUS_LABELS[key]}
+              </DropdownMenuCheckboxItem>
+            ))}
           </DropdownMenuContent>
         </DropdownMenu>
 
@@ -166,23 +177,39 @@ export function RemindersTable({ initialReminders }: Props) {
             <Button
               variant="outline"
               size="sm"
-              className={`h-8 gap-1.5 text-xs bg-white rounded-[2px] border-[#e5e7eb] text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] transition-colors ${entityFilter !== 'all' ? 'border-[#069668] ring-1 ring-[#069668]/30 text-[#069668]' : ''}`}
+              className={`h-8 gap-1.5 text-xs bg-white rounded-[2px] border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors ${entityFilter !== 'all' ? 'border-slate-400 ring-1 ring-slate-300' : ''}`}
             >
-              <Filter className="h-3.5 w-3.5" />
-              Type{entityFilter !== 'all' && `: ${ENTITY_LABELS[entityFilter]}`}
-              <ChevronDown className="h-3 w-3 ml-0.5" />
+              <Filter className="h-3 w-3 opacity-60" />
+              Type
+              {entityFilter !== 'all' && <span className="ml-0.5 bg-slate-200 text-slate-800 px-1.5 rounded-full text-[10px] font-medium">1</span>}
+              <ChevronDown className="h-3 w-3 opacity-50" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-40">
-            <DropdownMenuRadioGroup value={entityFilter} onValueChange={(v) => setEntityFilter(v as EntityFilter)}>
-              {(Object.keys(ENTITY_LABELS) as EntityFilter[]).map((key) => (
-                <DropdownMenuRadioItem key={key} value={key} className="text-xs">
-                  {ENTITY_LABELS[key]}
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
+          <DropdownMenuContent align="start" className="w-[180px] py-1 text-xs rounded-[2px]">
+            <div className="flex items-center justify-between px-2 py-1.5 border-b border-slate-100">
+              <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 p-0 font-medium">Type</DropdownMenuLabel>
+              <DropdownMenuItem className="text-xs rounded-[2px] bg-slate-900 text-white hover:bg-slate-800 hover:text-white focus:bg-slate-800 focus:text-white p-1.5 px-2 cursor-pointer" onSelect={() => {}}>
+                Done
+              </DropdownMenuItem>
+            </div>
+            <DropdownMenuCheckboxItem checked={entityFilter === 'all'} onCheckedChange={() => setEntityFilter('all')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
+              Any type
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuCheckboxItem checked={entityFilter === 'client'} onCheckedChange={() => setEntityFilter(entityFilter === 'client' ? 'all' : 'client')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
+              Client
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem checked={entityFilter === 'engagement'} onCheckedChange={() => setEntityFilter(entityFilter === 'engagement' ? 'all' : 'engagement')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
+              Engagement
+            </DropdownMenuCheckboxItem>
           </DropdownMenuContent>
         </DropdownMenu>
+
+        {(statusFilter !== 'all' || entityFilter !== 'all') && (
+          <button type="button" onClick={() => { setStatusFilter('all'); setEntityFilter('all') }} className="h-8 px-2.5 text-xs rounded-[2px] border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+            Clear all
+          </button>
+        )}
 
         <span className="ml-auto text-[0.8125rem] text-[#45474c]">
           {filtered.length} {filtered.length === 1 ? 'reminder' : 'reminders'}
@@ -199,21 +226,21 @@ export function RemindersTable({ initialReminders }: Props) {
           <button
             type="button"
             onClick={() => toggleSort('name')}
-            className="flex items-center gap-1 h-9 text-[11px] font-medium text-[#45474c] opacity-60 uppercase tracking-tight hover:opacity-100 text-left transition-opacity"
+            className="flex items-center gap-1 h-9 text-[0.8125rem] font-medium text-[#45474c] select-none hover:opacity-100 text-left transition-opacity"
           >
             Entity <SortIcon field="name" />
           </button>
-          <span className="text-[11px] font-medium text-[#45474c] opacity-60 uppercase tracking-tight">Action</span>
+          <span className="text-[0.8125rem] font-medium text-[#45474c] select-none">Action</span>
           <button
             type="button"
             onClick={() => toggleSort('date')}
-            className="flex items-center gap-1 h-9 text-[11px] font-medium text-[#45474c] opacity-60 uppercase tracking-tight hover:opacity-100 text-left transition-opacity"
+            className="flex items-center gap-1 h-9 text-[0.8125rem] font-medium text-[#45474c] select-none hover:opacity-100 text-left transition-opacity"
           >
             Due date <SortIcon field="date" />
           </button>
-          <span className="text-[11px] font-medium text-[#45474c] opacity-60 uppercase tracking-tight">Status</span>
-          <span className="text-[11px] font-medium text-[#45474c] opacity-60 uppercase tracking-tight">Note</span>
-          <span className="text-[11px] font-medium text-[#45474c] opacity-60 uppercase tracking-tight" />
+          <span className="text-[0.8125rem] font-medium text-[#45474c] select-none">Status</span>
+          <span className="text-[0.8125rem] font-medium text-[#45474c] select-none">Note</span>
+          <span className="text-[0.8125rem] font-medium text-[#45474c] select-none" />
         </div>
 
         {/* Rows */}

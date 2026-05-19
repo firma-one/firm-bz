@@ -18,9 +18,11 @@ import {
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
@@ -49,6 +51,7 @@ const KIND_FILTER_LABELS: Record<KindFilter, string> = {
   comment: 'Comment',
   url: 'Link',
 }
+
 
 const KIND_BADGE: Record<string, string> = {
   document: 'bg-blue-50 text-blue-700',
@@ -150,23 +153,38 @@ export function BookmarksTable({ initialBookmarks, atCap }: Props) {
             <Button
               variant="outline"
               size="sm"
-              className={`h-8 gap-1.5 text-xs bg-white rounded-[2px] border-[#e5e7eb] text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] transition-colors ${kindFilter !== 'all' ? 'border-[#069668] ring-1 ring-[#069668]/30 text-[#069668]' : ''}`}
+              className={`h-8 gap-1.5 text-xs bg-white rounded-[2px] border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors ${kindFilter !== 'all' ? 'border-slate-400 ring-1 ring-slate-300' : ''}`}
             >
-              <Filter className="h-3.5 w-3.5" />
-              Kind{kindFilter !== 'all' && `: ${KIND_FILTER_LABELS[kindFilter]}`}
-              <ChevronDown className="h-3 w-3 ml-0.5" />
+              <Filter className="h-3 w-3 opacity-60" />
+              Type
+              {kindFilter !== 'all' && <span className="ml-0.5 bg-slate-200 text-slate-800 px-1.5 rounded-full text-[10px] font-medium">1</span>}
+              <ChevronDown className="h-3 w-3 opacity-50" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-40">
-            <DropdownMenuRadioGroup value={kindFilter} onValueChange={(v) => setKindFilter(v as KindFilter)}>
-              {(Object.keys(KIND_FILTER_LABELS) as KindFilter[]).map((key) => (
-                <DropdownMenuRadioItem key={key} value={key} className="text-xs">
-                  {KIND_FILTER_LABELS[key]}
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
+          <DropdownMenuContent align="start" className="w-[180px] py-1 text-xs rounded-[2px]">
+            <div className="flex items-center justify-between px-2 py-1.5 border-b border-slate-100">
+              <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 p-0 font-medium">Type</DropdownMenuLabel>
+              <DropdownMenuItem className="text-xs rounded-[2px] bg-slate-900 text-white hover:bg-slate-800 hover:text-white focus:bg-slate-800 focus:text-white p-1.5 px-2 cursor-pointer" onSelect={() => {}}>
+                Done
+              </DropdownMenuItem>
+            </div>
+            <DropdownMenuCheckboxItem checked={kindFilter === 'all'} onCheckedChange={() => setKindFilter('all')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
+              Any type
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuSeparator />
+            {(['document', 'project', 'comment', 'url'] as KindFilter[]).map((key) => (
+              <DropdownMenuCheckboxItem key={key} checked={kindFilter === key} onCheckedChange={() => setKindFilter(kindFilter === key ? 'all' : key)} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
+                {KIND_FILTER_LABELS[key]}
+              </DropdownMenuCheckboxItem>
+            ))}
           </DropdownMenuContent>
         </DropdownMenu>
+
+        {kindFilter !== 'all' && (
+          <button type="button" onClick={() => setKindFilter('all')} className="h-8 px-2.5 text-xs rounded-[2px] border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+            Clear all
+          </button>
+        )}
 
         <span className="ml-auto text-[0.8125rem] text-[#45474c]">
           {filtered.length} / 50 bookmarks
@@ -183,21 +201,21 @@ export function BookmarksTable({ initialBookmarks, atCap }: Props) {
           <button
             type="button"
             onClick={() => toggleSort('name')}
-            className="flex items-center gap-1 h-9 text-[11px] font-medium text-[#45474c] opacity-60 uppercase tracking-tight hover:opacity-100 text-left transition-opacity"
+            className="flex items-center gap-1 h-9 text-[0.8125rem] font-medium text-[#45474c] select-none hover:opacity-100 text-left transition-opacity"
           >
             Name <SortIcon field="name" />
           </button>
-          <span className="text-[11px] font-medium text-[#45474c] opacity-60 uppercase tracking-tight">Kind</span>
-          <span className="text-[11px] font-medium text-[#45474c] opacity-60 uppercase tracking-tight">Client</span>
-          <span className="text-[11px] font-medium text-[#45474c] opacity-60 uppercase tracking-tight">Engagement</span>
+          <span className="text-[0.8125rem] font-medium text-[#45474c] select-none">Type</span>
+          <span className="text-[0.8125rem] font-medium text-[#45474c] select-none">Client</span>
+          <span className="text-[0.8125rem] font-medium text-[#45474c] select-none">Engagement</span>
           <button
             type="button"
             onClick={() => toggleSort('date')}
-            className="flex items-center gap-1 h-9 text-[11px] font-medium text-[#45474c] opacity-60 uppercase tracking-tight hover:opacity-100 text-left transition-opacity"
+            className="flex items-center gap-1 h-9 text-[0.8125rem] font-medium text-[#45474c] select-none hover:opacity-100 text-left transition-opacity"
           >
             Bookmarked <SortIcon field="date" />
           </button>
-          <span className="text-[11px] font-medium text-[#45474c] opacity-60 uppercase tracking-tight" />
+          <span className="text-[0.8125rem] font-medium text-[#45474c] select-none" />
         </div>
 
         {/* Rows */}

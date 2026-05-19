@@ -6,9 +6,11 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
@@ -78,21 +80,38 @@ export default function RecentPage() {
             <Button
               variant="outline"
               size="sm"
-              className={`h-8 gap-1.5 text-xs bg-white rounded-[2px] border-[#e5e7eb] text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] transition-colors ${typeFilter !== 'all' ? 'border-[#069668] ring-1 ring-[#069668]/30 text-[#069668]' : ''}`}
+              className={`h-8 gap-1.5 text-xs bg-white rounded-[2px] border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors ${typeFilter !== 'all' ? 'border-slate-400 ring-1 ring-slate-300' : ''}`}
             >
-              <Filter className="h-3.5 w-3.5" />
-              Type{typeFilter !== 'all' && `: ${typeFilter === 'client' ? 'Client' : 'Engagement'}`}
-              <ChevronDown className="h-3 w-3 ml-0.5" />
+              <Filter className="h-3 w-3 opacity-60" />
+              Type
+              {typeFilter !== 'all' && <span className="ml-0.5 bg-slate-200 text-slate-800 px-1.5 rounded-full text-[10px] font-medium">1</span>}
+              <ChevronDown className="h-3 w-3 opacity-50" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-40">
-            <DropdownMenuRadioGroup value={typeFilter} onValueChange={(v) => setTypeFilter(v as TypeFilter)}>
-              <DropdownMenuRadioItem value="all" className="text-xs">All</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="client" className="text-xs">Client</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="engagement" className="text-xs">Engagement</DropdownMenuRadioItem>
-            </DropdownMenuRadioGroup>
+          <DropdownMenuContent align="start" className="w-[180px] py-1 text-xs rounded-[2px]">
+            <div className="flex items-center justify-between px-2 py-1.5 border-b border-slate-100">
+              <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 p-0 font-medium">Type</DropdownMenuLabel>
+              <DropdownMenuItem className="text-xs rounded-[2px] bg-slate-900 text-white hover:bg-slate-800 hover:text-white focus:bg-slate-800 focus:text-white p-1.5 px-2 cursor-pointer" onSelect={() => {}}>
+                Done
+              </DropdownMenuItem>
+            </div>
+            <DropdownMenuCheckboxItem checked={typeFilter === 'all'} onCheckedChange={() => setTypeFilter('all')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
+              Any type
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuCheckboxItem checked={typeFilter === 'client'} onCheckedChange={() => setTypeFilter(typeFilter === 'client' ? 'all' : 'client')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
+              Client
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem checked={typeFilter === 'engagement'} onCheckedChange={() => setTypeFilter(typeFilter === 'engagement' ? 'all' : 'engagement')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
+              Engagement
+            </DropdownMenuCheckboxItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        {typeFilter !== 'all' && (
+          <button type="button" onClick={() => setTypeFilter('all')} className="h-8 px-2.5 text-xs rounded-[2px] border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+            Clear all
+          </button>
+        )}
         <span className="ml-auto text-[0.8125rem] text-[#45474c]">{filtered.length} pages</span>
       </div>
 
@@ -100,12 +119,12 @@ export default function RecentPage() {
       <div className="bg-white border border-[#e5e7eb] rounded overflow-hidden">
         {/* Column headers */}
         <div
-          className="grid items-center h-10 px-4 gap-3 border-b border-[#e5e7eb] bg-white"
+          className="grid items-center py-2.5 px-4 gap-3 border-b border-[#e5e7eb] bg-white"
           style={{ gridTemplateColumns: COLS }}
         >
-          <span className="text-[11px] font-medium text-[#45474c] opacity-60 uppercase tracking-tight">Name</span>
-          <span className="text-[11px] font-medium text-[#45474c] opacity-60 uppercase tracking-tight">Type</span>
-          <span className="text-[11px] font-medium text-[#45474c] opacity-60 uppercase tracking-tight">Last visited</span>
+          <span className="text-[0.8125rem] font-medium text-[#45474c] select-none">Name</span>
+          <span className="text-[0.8125rem] font-medium text-[#45474c] select-none">Type</span>
+          <span className="text-[0.8125rem] font-medium text-[#45474c] select-none">Last visited</span>
         </div>
 
         {filtered.length === 0 ? (
@@ -129,11 +148,9 @@ export default function RecentPage() {
               >
                 <Link href={item.href} className="flex items-center gap-2 min-w-0 group">
                   <Icon className="h-3.5 w-3.5 shrink-0 text-[#45474c]" />
-                  <span className="flex-1 min-w-0">
-                    <span className="block text-[0.8125rem] font-medium text-[#1b1b1d] truncate group-hover:text-[#069668] transition-colors">
-                      {item.name}
-                    </span>
-                    <span className="block text-[10px] font-mono text-[#9ca3af] truncate">/{item.slug}</span>
+                  <span className="flex items-baseline gap-2 min-w-0 flex-1 truncate">
+                    <span className="text-[0.8125rem] font-medium text-[#1b1b1d] shrink-0 group-hover:text-[#069668] transition-colors">{item.name}</span>
+                    <span className="text-[11px] font-mono text-[#9ca3af] truncate">/{item.slug}</span>
                   </span>
                 </Link>
                 <span className="text-[0.8125rem] text-[#45474c] capitalize">{item.type}</span>

@@ -43,6 +43,8 @@ import { getUserReminders, markReminderDone, type ReminderWithContext } from "@/
 interface AppSidebarProps {
   /** When "inline", sidebar fills its container (no fixed positioning). Used in 3-pane card layout. */
   variant?: 'fixed' | 'inline'
+  /** Passed from server layout after checking SYSTEM_ADMIN_EMAILS env var. */
+  isSystemAdmin?: boolean
 }
 
 /** Widen to `Set<string>` so `.has(unknown)` accepts normalized API/cookie values. */
@@ -186,7 +188,7 @@ function reminderLabelColor(style: ReminderWithContext['labelStyle']): string {
   }
 }
 
-export function AppSidebar({ variant = 'fixed' }: AppSidebarProps = {}) {
+export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSidebarProps = {}) {
   const { user, signOut } = useAuth()
   const { isCollapsed, toggleSidebar } = useSidebar()
   const { viewAsPersonaSlug, setViewAsPersonaSlug, effectivePermissions, isViewAsActive, personas } = useViewAs()
@@ -353,7 +355,6 @@ export function AppSidebar({ variant = 'fixed' }: AppSidebarProps = {}) {
   const canViewOrg = effective ? effective.canView : (orgPermissions?.canView ?? true)
   const canShowInsights = canManageOrg || canEditOrg || canViewOrg
   const canShowViewAsDropdown = canUseViewAs
-  const isSystemAdmin = (user?.app_metadata?.role as string) === 'SYS_ADMIN'
 
   // Active state helpers
   const isInsightsActive = pathname.includes('/insights')
@@ -907,6 +908,7 @@ export function AppSidebar({ variant = 'fixed' }: AppSidebarProps = {}) {
                 showBillingLink={canManageOrg}
                 billingHref={buildBillingPageHref({ firmSlug: billingFirmSlug, pathname })}
                 connectorsHref={canManageOrg && firmScopedNavBase ? `${firmScopedNavBase}/connectors` : undefined}
+                isSystemAdmin={isSystemAdmin}
                 {...(firms.length > 0 && billingFirmId
                   ? { planSubtitle: profilePlanSubtitle, planSubtitleLoading: billingPlanLoading }
                   : {})}

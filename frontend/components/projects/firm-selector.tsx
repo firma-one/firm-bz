@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Building2, SquarePlus } from 'lucide-react'
+import { Building2, SquarePlus, ChevronDown, ChevronUp } from 'lucide-react'
 import {
     Select,
     SelectContent,
@@ -46,6 +46,7 @@ export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className,
     const [switchDialogOpen, setSwitchDialogOpen] = useState(false)
     const [targetOrg, setTargetOrg] = useState<{ slug: string; name: string } | null>(null)
     const [addOrgModalOpen, setAddOrgModalOpen] = useState(false)
+    const [isSelectOpen, setIsSelectOpen] = useState(false)
 
     const currentOrgSlug = pathname?.match(/\/(?:d\/)?f\/([^\/]+)/)?.[1] || null
     const currentOrg = currentOrgSlug ? firms.find(o => o.slug === currentOrgSlug) : null
@@ -116,9 +117,9 @@ export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className,
 
     return (
         <div className={`w-full ${compact ? 'h-8 overflow-hidden' : ''} ${className || ''}`}>
-            <Select value={selectedFirmSlug} onValueChange={handleValueChange}>
+            <Select value={selectedFirmSlug} onValueChange={handleValueChange} open={isSelectOpen} onOpenChange={setIsSelectOpen}>
                 {compact ? (
-                    <SelectTrigger className="flex h-8 w-full items-center gap-2 rounded border-none bg-transparent px-3 py-1 text-[#1b1b1d] shadow-none transition-colors hover:bg-[#f3f4f6] focus:ring-0 [&>svg]:ml-auto [&>svg]:shrink-0">
+                    <SelectTrigger className="flex h-8 w-full items-center gap-2 rounded border-none bg-transparent px-3 py-1 text-[#1b1b1d] shadow-none transition-colors hover:bg-[#f3f4f6] focus:ring-0 [&>svg]:hidden">
                         <Building2 className="h-4 w-4 shrink-0 text-[#45474c]" />
                         <span className="d-sidebar-section truncate flex-1 text-left">
                             {selectedOrg?.name || 'Select Workspace...'}
@@ -128,9 +129,15 @@ export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className,
                                 Sandbox
                             </span>
                         )}
+                        <span className="ml-auto shrink-0 flex items-center">
+                            {isSelectOpen
+                                ? <ChevronUp className="h-3 w-3 text-[#9ca3af]" />
+                                : <ChevronDown className="h-3 w-3 text-[#9ca3af]" />
+                            }
+                        </span>
                     </SelectTrigger>
                 ) : (
-                    <SelectTrigger className="flex h-auto min-h-0 w-full min-w-0 items-start gap-2 whitespace-normal rounded border-none bg-transparent px-3 pt-2 pb-1.5 text-[#1b1b1d] shadow-none transition-colors hover:bg-[#f3f4f6] focus:ring-0 [&>svg]:ml-auto [&>svg]:mt-0.5 [&>svg]:shrink-0">
+                    <SelectTrigger className="flex h-auto min-h-0 w-full min-w-0 items-start gap-2 whitespace-normal rounded border-none bg-transparent px-3 pt-2 pb-1.5 text-[#1b1b1d] shadow-none transition-colors hover:bg-[#f3f4f6] focus:ring-0 [&>svg]:hidden">
                         <div className="flex flex-1 flex-col min-w-0 text-left leading-tight">
                             <div className="flex items-center gap-2 min-w-0">
                                 <Building2 className="h-4 w-4 shrink-0 text-[#45474c]" />
@@ -149,6 +156,12 @@ export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className,
                                 )}
                             </div>
                         </div>
+                        <span className="shrink-0 flex items-start mt-0.5">
+                            {isSelectOpen
+                                ? <ChevronUp className="h-3.5 w-3.5 text-[#9ca3af]" />
+                                : <ChevronDown className="h-3.5 w-3.5 text-[#9ca3af]" />
+                            }
+                        </span>
                     </SelectTrigger>
                 )}
                 <SelectContent

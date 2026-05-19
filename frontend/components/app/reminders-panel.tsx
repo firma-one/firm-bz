@@ -174,10 +174,17 @@ export function RemindersPanel({ onCountChange }: Props) {
     const mountedRef = useRef(false)
 
     const isHidden = (r: ReminderWithContext) => r.hiddenAt !== null
-    const sorted = [...reminders]
+    const sorted = [...reminders].sort((a, b) => {
+      // Overdue (most overdue first) → due today → upcoming (soonest first) → no date
+      const aPriority = a.delta === null ? 3 : a.delta < 0 ? 0 : a.delta === 0 ? 1 : 2
+      const bPriority = b.delta === null ? 3 : b.delta < 0 ? 0 : b.delta === 0 ? 1 : 2
+      if (aPriority !== bPriority) return aPriority - bPriority
+      if (a.delta !== null && b.delta !== null) return a.delta - b.delta
+      return 0
+    })
     const visible = sorted.filter((r) => !isHidden(r))
     const hidden = sorted.filter((r) => isHidden(r))
-    const displayed = showHidden ? sorted : visible
+    const displayed = (showHidden ? sorted : visible).slice(0, 5)
     const urgentCount = visible.filter((r) => r.delta !== null && r.delta <= 0).length
 
     const load = useCallback(async () => {

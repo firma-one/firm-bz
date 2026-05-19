@@ -2863,19 +2863,18 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                         </DropdownMenu>
 
                         {(filterTypes.size > 0 || filterOwner !== 'any' || filterModified !== 'any' || filterShared !== 'all') && (
-                            <Button
-                                variant="ghost"
-                                size="sm"
+                            <button
+                                type="button"
                                 onClick={() => {
                                     setFilterTypes(new Set())
                                     setFilterOwner('any')
                                     setFilterModified('any')
                                     setFilterShared('all')
                                 }}
-                                className="h-8 text-xs text-slate-500 hover:text-slate-800 px-2"
+                                className="h-8 px-2.5 text-xs rounded-[2px] border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition-colors"
                             >
-                                Clear All Filters
-                            </Button>
+                                Clear all
+                            </button>
                         )}
                     </div>
 

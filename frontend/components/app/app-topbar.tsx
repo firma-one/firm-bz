@@ -80,8 +80,8 @@ export function AppTopbar() {
   const [bookmarks, setBookmarks] = useState<BookmarkItem[]>([])
   const [canBroadcast, setCanBroadcast] = useState(false)
 
-  const [visibleNotificationsCount, setVisibleNotificationsCount] = useState(10)
-  const [visibleBookmarksCount, setVisibleBookmarksCount] = useState(10)
+  const [visibleNotificationsCount] = useState(5)
+  const [visibleBookmarksCount] = useState(5)
   const [bookmarkQuery, setBookmarkQuery] = useState('')
 
   const [showBroadcastComposer, setShowBroadcastComposer] = useState(false)
@@ -383,7 +383,6 @@ export function AppTopbar() {
             aria-label="Bookmarks"
             onClick={() => {
               setShowBookmarksDropdown((v) => !v)
-              setVisibleBookmarksCount(10)
               setBookmarkQuery('')
             }}
           >
@@ -413,7 +412,7 @@ export function AppTopbar() {
                 <div className="mt-2">
                   <input
                     value={bookmarkQuery}
-                    onChange={(e) => { setBookmarkQuery(e.target.value); setVisibleBookmarksCount(10) }}
+                    onChange={(e) => { setBookmarkQuery(e.target.value) }}
                     placeholder="Search bookmarks…"
                     className="w-full h-8 rounded-[2px] border border-[#e5e7eb] bg-white px-2.5 text-[0.8125rem] text-[#1b1b1d] placeholder:text-[#45474c] focus:outline-none focus:ring-1 focus:ring-[#069668] focus:border-[#069668]"
                   />
@@ -485,27 +484,16 @@ export function AppTopbar() {
                       ))}
                       <div className="sticky bottom-0 pt-2 bg-white">
                         <div className="flex items-center justify-between border-t border-[#e5e7eb] pt-2">
-                          <div className="text-[11px] text-[#45474c]">
-                            Showing {Math.min(visibleBookmarksCount, filtered.length)} of {filtered.length}
-                          </div>
-                          <div className="flex items-center gap-3">
-                            {visibleBookmarksCount < filtered.length && (
-                              <button
-                                type="button"
-                                className="text-[11px] font-semibold text-[#1b1b1d] hover:text-[#069668]"
-                                onClick={() => setVisibleBookmarksCount((c) => c + 10)}
-                              >
-                                Show 10 more
-                              </button>
-                            )}
-                            <Link
-                              href="/d/u/bookmarks"
-                              className="flex items-center gap-0.5 text-[11px] font-semibold text-[#069668] hover:text-[#065f46]"
-                              onClick={() => setShowBookmarksDropdown(false)}
-                            >
-                              View all <ArrowUpRight className="h-3 w-3" />
-                            </Link>
-                          </div>
+                          <span className="text-[11px] text-[#45474c]">
+                            {filtered.length} {filtered.length === 1 ? 'bookmark' : 'bookmarks'}
+                          </span>
+                          <Link
+                            href="/d/u/bookmarks"
+                            className="flex items-center gap-0.5 text-[11px] font-semibold text-[#069668] hover:text-[#065f46]"
+                            onClick={() => setShowBookmarksDropdown(false)}
+                          >
+                            View all <ArrowUpRight className="h-3 w-3" />
+                          </Link>
                         </div>
                       </div>
                     </>
@@ -822,27 +810,16 @@ export function AppTopbar() {
                 {notifications.length > 0 ? (
                   <div className="sticky bottom-0 pt-2 bg-white">
                     <div className="flex items-center justify-between border-t border-[#e5e7eb] pt-2">
-                      <div className="text-[11px] text-[#45474c]">
-                        Showing {Math.min(visibleNotificationsCount, notifications.length)} of {notifications.length}
-                      </div>
-                      <div className="flex items-center gap-3">
-                        {visibleNotificationsCount < notifications.length && (
-                          <button
-                            type="button"
-                            className="text-[11px] font-semibold text-[#1b1b1d] hover:text-[#069668]"
-                            onClick={() => setVisibleNotificationsCount((c) => c + 10)}
-                          >
-                            Show 10 more
-                          </button>
-                        )}
-                        <Link
-                          href="/d/u/notifications"
-                          className="flex items-center gap-0.5 text-[11px] font-semibold text-[#069668] hover:text-[#065f46]"
-                          onClick={() => setShowNotificationsDropdown(false)}
-                        >
-                          View all <ArrowUpRight className="h-3 w-3" />
-                        </Link>
-                      </div>
+                      <span className="text-[11px] text-[#45474c]">
+                        {notifications.length} {notifications.length === 1 ? 'notification' : 'notifications'}
+                      </span>
+                      <Link
+                        href="/d/u/notifications"
+                        className="flex items-center gap-0.5 text-[11px] font-semibold text-[#069668] hover:text-[#065f46]"
+                        onClick={() => setShowNotificationsDropdown(false)}
+                      >
+                        View all <ArrowUpRight className="h-3 w-3" />
+                      </Link>
                     </div>
                   </div>
                 ) : null}
