@@ -1,7 +1,8 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { markReminderDone, getUserReminders, type ReminderWithContext } from "@/lib/actions/user-reminders"
+import { useTabCount } from "../layout"
 import {
   Users,
   CalendarClock,
@@ -12,6 +13,7 @@ import {
   ChevronUp,
   ChevronsUpDown,
   Filter,
+  RotateCw,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -84,11 +86,23 @@ type Props = { initialReminders: ReminderWithContext[] }
 
 export function RemindersTable({ initialReminders }: Props) {
   const [reminders, setReminders] = useState(initialReminders)
+  const setTabCount = useTabCount()
+
+  useEffect(() => {
+    const visible = reminders.filter((r) => r.hiddenAt === null)
+    setTabCount('/d/u/reminders', visible.length)
+  }, [reminders, setTabCount])
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [entityFilter, setEntityFilter] = useState<EntityFilter>('all')
   const [sortField, setSortField] = useState<SortField>('date')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [actingId, setActingId] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
+
+  async function handleRefresh() {
+    setRefreshing(true)
+    try { setReminders(await getUserReminders()) } finally { setRefreshing(false) }
+  }
 
   function toggleSort(field: SortField) {
     if (sortField === field) {
@@ -211,9 +225,15 @@ export function RemindersTable({ initialReminders }: Props) {
           </button>
         )}
 
-        <span className="ml-auto text-[0.8125rem] text-[#45474c]">
-          {filtered.length} {filtered.length === 1 ? 'reminder' : 'reminders'}
-        </span>
+        <div className="ml-auto flex items-center gap-2">
+          <span className="text-[0.8125rem] text-[#45474c]">
+            {filtered.length} {filtered.length === 1 ? 'reminder' : 'reminders'}
+          </span>
+          <button type="button" disabled={refreshing} onClick={handleRefresh} className="inline-flex items-center gap-1.5 h-8 px-2.5 text-xs rounded-[2px] border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-900 disabled:opacity-40 transition-colors">
+            <RotateCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Table */}

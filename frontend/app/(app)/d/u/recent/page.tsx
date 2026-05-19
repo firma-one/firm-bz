@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useState } from "react"
-import { Users, Briefcase, Clock, Filter, ChevronDown } from "lucide-react"
+import { useEffect, useState, useCallback } from "react"
+import { Users, Briefcase, Clock, Filter, ChevronDown, RotateCw } from "lucide-react"
 import Link from "next/link"
+import { useTabCount } from "../layout"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -36,8 +37,9 @@ export default function RecentPage() {
   const [items, setItems] = useState<RecentItem[]>([])
   const [mounted, setMounted] = useState(false)
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
+  const setTabCount = useTabCount()
 
-  useEffect(() => {
+  const loadItems = useCallback(() => {
     const allItems: RecentItem[] = []
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i)
@@ -54,18 +56,18 @@ export default function RecentPage() {
     for (const item of allItems) {
       const existing = seen.get(item.href)
       if (!existing || item.visitedAt > existing.visitedAt) {
-        seen.set(item.href, {
-          ...item,
-          name: item.name || toLabel(item.slug),
-        })
+        seen.set(item.href, { ...item, name: item.name || toLabel(item.slug) })
       }
     }
     const sorted = Array.from(seen.values())
       .sort((a, b) => b.visitedAt - a.visitedAt)
       .slice(0, MAX_RECENT_ITEMS)
     setItems(sorted)
-    setMounted(true)
-  }, [])
+    setTabCount('/d/u/recent', sorted.length)
+    return sorted
+  }, [setTabCount])
+
+  useEffect(() => { loadItems(); setMounted(true) }, [loadItems])
 
   if (!mounted) return null
 
@@ -112,7 +114,13 @@ export default function RecentPage() {
             Clear all
           </button>
         )}
-        <span className="ml-auto text-[0.8125rem] text-[#45474c]">{filtered.length} pages</span>
+        <div className="ml-auto flex items-center gap-2">
+          <span className="text-[0.8125rem] text-[#45474c]">{filtered.length} pages</span>
+          <button type="button" onClick={() => loadItems()} className="inline-flex items-center gap-1.5 h-8 px-2.5 text-xs rounded-[2px] border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+            <RotateCw className="h-3.5 w-3.5" />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Table */}

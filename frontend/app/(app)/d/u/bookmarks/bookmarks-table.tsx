@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { type BookmarkWithContext } from "@/lib/actions/user-bookmarks"
 import {
   FileText,
@@ -14,8 +14,10 @@ import {
   ChevronsUpDown,
   AlertCircle,
   Filter,
+  RotateCw,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { useTabCount } from "../layout"
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -89,6 +91,18 @@ export function BookmarksTable({ initialBookmarks, atCap }: Props) {
   const [sortField, setSortField] = useState<SortField>('date')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [removing, setRemoving] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const setTabCount = useTabCount()
+
+  useEffect(() => { setTabCount('/d/u/bookmarks', bookmarks.length) }, [bookmarks.length, setTabCount])
+
+  async function handleRefresh() {
+    setRefreshing(true)
+    try {
+      const res = await fetch('/api/bookmarks')
+      if (res.ok) { const data = await res.json(); setBookmarks(data.bookmarks ?? []) }
+    } finally { setRefreshing(false) }
+  }
 
   function toggleSort(field: SortField) {
     if (sortField === field) {
@@ -186,9 +200,13 @@ export function BookmarksTable({ initialBookmarks, atCap }: Props) {
           </button>
         )}
 
-        <span className="ml-auto text-[0.8125rem] text-[#45474c]">
-          {filtered.length} / 50 bookmarks
-        </span>
+        <div className="ml-auto flex items-center gap-2">
+          <span className="text-[0.8125rem] text-[#45474c]">{filtered.length} / 50 bookmarks</span>
+          <button type="button" disabled={refreshing} onClick={handleRefresh} className="inline-flex items-center gap-1.5 h-8 px-2.5 text-xs rounded-[2px] border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-900 disabled:opacity-40 transition-colors">
+            <RotateCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Table */}

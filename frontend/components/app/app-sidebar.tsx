@@ -819,27 +819,6 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
 
                   {!isCollapsed && <SeparatorLine />}
 
-                  {/* SYSTEM — SYS_ADMIN only */}
-                  {isSystemAdmin && (
-                    <>
-                      <div className={isCollapsed ? 'w-full flex items-center gap-0.5' : 'pt-2'}>
-                        {!isCollapsed && <h3 className={`d-sidebar-section px-3 ${spaceTitle}`}>System</h3>}
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Link
-                              href="/system"
-                              className={`flex items-center d-sidebar-nav rounded-r transition-colors ${isCollapsed ? 'flex-1 px-0 justify-center' : 'px-3'} py-2 ${pathname.startsWith('/system') ? 'bg-[#ecfdf5] border-l-2 border-[#069668] text-[#065f46] font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}
-                            >
-                              <Shield className={`h-4 w-4 shrink-0 ${isCollapsed ? 'mx-auto' : 'mr-3'} ${pathname.startsWith('/system') ? 'text-[#069668]' : 'text-[#45474c]'}`} />
-                              {!isCollapsed && <span>Administration</span>}
-                            </Link>
-                          </TooltipTrigger>
-                          {isCollapsed && <TooltipContent side="right">Administration</TooltipContent>}
-                        </Tooltip>
-                      </div>
-                      {!isCollapsed && <SeparatorLine />}
-                    </>
-                  )}
 
                 </nav>
               </div>

@@ -10,6 +10,7 @@ import { Bell, Bookmark, ChevronDown, ChevronUp, Info, Megaphone, Search, Send, 
 import Link from "next/link"
 import { Tip } from "@/components/ui/tip"
 import { RemindersPanel } from "@/components/app/reminders-panel"
+import { CommandPalette } from "@/components/app/command-palette"
 
 // Cache firm branding by slug (in-memory for session)
 const brandingCache = new Map<string, { branding: OrganizationBranding | null; firmId?: string }>()
