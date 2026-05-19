@@ -3,7 +3,8 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Home, User, ChevronRight, Clock, Bell, Bookmark, BellRing } from "lucide-react"
-import { createContext, useContext, useState, useCallback, type ReactNode } from "react"
+import { useState, useCallback, type ReactNode } from "react"
+import { LayoutContext } from "./layout-context"
 
 const TABS = [
   { label: 'Profile',       href: '/d/u/profile',       icon: User     },
@@ -12,14 +13,6 @@ const TABS = [
   { label: 'Bookmarks',     href: '/d/u/bookmarks',     icon: Bookmark },
   { label: 'Notifications', href: '/d/u/notifications', icon: BellRing },
 ]
-
-type LayoutCtx = {
-  setSlot: (node: ReactNode) => void
-  setTabCount: (href: string, count: number | null) => void
-}
-const LayoutContext = createContext<LayoutCtx>({ setSlot: () => {}, setTabCount: () => {} })
-export function useTabRightSlot() { return useContext(LayoutContext) }
-export function useTabCount() { return useContext(LayoutContext).setTabCount }
 
 export default function UserLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname()
@@ -32,7 +25,7 @@ export default function UserLayout({ children }: { children: ReactNode }) {
   }, [])
 
   return (
-    <LayoutContext.Provider value={{ setSlot, setTabCount }}>
+    <LayoutContext.Provider value={{ slot, setSlot, setTabCount }}>
       <div className="flex flex-col flex-1 min-h-0">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-1.5 mb-4">

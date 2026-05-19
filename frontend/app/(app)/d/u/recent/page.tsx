@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react"
 import { Users, Briefcase, Clock, Filter, ChevronDown, RotateCw } from "lucide-react"
 import Link from "next/link"
-import { useTabCount } from "../layout"
+import { useTabCount } from "../layout-context"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,

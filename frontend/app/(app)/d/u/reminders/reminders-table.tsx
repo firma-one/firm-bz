@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react"
 import { markReminderDone, getUserReminders, type ReminderWithContext } from "@/lib/actions/user-reminders"
-import { useTabCount } from "../layout"
+import { useTabCount } from "../layout-context"
 import {
   Users,
   CalendarClock,

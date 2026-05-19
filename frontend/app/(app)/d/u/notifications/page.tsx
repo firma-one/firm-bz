@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { NotificationsTable } from "./notifications-table"
 import { BroadcastModal } from "./broadcast-modal"
-import { useTabRightSlot, useTabCount } from "../layout"
+import { useTabRightSlot, useTabCount } from "../layout-context"
 import { Megaphone } from "lucide-react"
 
 type NotificationItem = {
