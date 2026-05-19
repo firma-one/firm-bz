@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import { usePathname } from "next/navigation"
-import { BellOff, Building2, CalendarClock, CheckCircle2, ChevronRight, Clock, Eye, EyeOff, FileText, Undo2, Users, X } from "lucide-react"
+import { ArrowUpRight, BellOff, Building2, CalendarClock, CheckCircle2, ChevronRight, Clock, Eye, EyeOff, FileText, Undo2, Users, X } from "lucide-react"
+import Link from "next/link"
 import {
     getUserReminders,
     markReminderDone,
@@ -313,6 +314,20 @@ export function RemindersPanel({ onCountChange }: Props) {
                             ))
                         )}
                     </div>
+                    {!loading && displayed.length > 0 && (
+                        <div className="sticky bottom-0 bg-white border-t border-[#e5e7eb] px-3 py-2 flex items-center justify-between">
+                            <span className="text-[11px] text-[#45474c]">
+                                {displayed.length} {displayed.length === 1 ? 'reminder' : 'reminders'}
+                            </span>
+                            <Link
+                                href="/d/u/reminders"
+                                onClick={() => setOpen(false)}
+                                className="flex items-center gap-0.5 text-[11px] font-semibold text-[#069668] hover:text-[#065f46]"
+                            >
+                                View all <ArrowUpRight className="h-3 w-3" />
+                            </Link>
+                        </div>
+                    )}
                 </div>
             ) : null}
         </div>

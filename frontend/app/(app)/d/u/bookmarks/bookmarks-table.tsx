@@ -13,7 +13,16 @@ import {
   ChevronUp,
   ChevronsUpDown,
   AlertCircle,
+  Filter,
 } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 type KindFilter = 'all' | 'document' | 'project' | 'comment' | 'url'
 type SortField = 'date' | 'name'
@@ -27,6 +36,14 @@ const KIND_ICONS: Record<string, React.ElementType> = {
 }
 
 const KIND_LABELS: Record<string, string> = {
+  document: 'Document',
+  project: 'Engagement',
+  comment: 'Comment',
+  url: 'Link',
+}
+
+const KIND_FILTER_LABELS: Record<KindFilter, string> = {
+  all: 'All',
   document: 'Document',
   project: 'Engagement',
   comment: 'Comment',
@@ -117,40 +134,50 @@ export function BookmarksTable({ initialBookmarks, atCap }: Props) {
   }
 
   return (
-    <>
+    <div className="flex flex-col gap-3">
       {atCap && (
-        <div className="mb-3 flex items-center gap-2 px-4 py-2.5 rounded border border-amber-200 bg-amber-50 text-[0.8125rem] text-amber-800">
+        <div className="flex items-center gap-2 px-4 py-2.5 rounded border border-amber-200 bg-amber-50 text-[0.8125rem] text-amber-800">
           <AlertCircle className="h-4 w-4 shrink-0" />
           <span className="font-semibold">Bookmarks are capped at 50.</span>
           <span>Remove older or unused ones to add more.</span>
         </div>
       )}
 
-      <div className="bg-white border border-[#e5e7eb] rounded overflow-hidden">
-        {/* Filters + count */}
-        <div className="flex items-center gap-3 px-4 py-2.5 border-b border-[#e5e7eb] bg-[#f9f9fb] flex-wrap">
-          <div className="flex items-center gap-1.5">
-            <label className="text-[0.8125rem] font-medium text-[#45474c]">Kind</label>
-            <select
-              value={kindFilter}
-              onChange={(e) => setKindFilter(e.target.value as KindFilter)}
-              className="h-8 rounded border border-[#e5e7eb] bg-white px-3 text-[0.8125rem] text-[#1b1b1d] focus:outline-none focus:ring-1 focus:ring-[#069668]"
+      {/* Filter bar */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              className={`h-8 gap-1.5 text-xs bg-white rounded-[2px] border-[#e5e7eb] text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] transition-colors ${kindFilter !== 'all' ? 'border-[#069668] ring-1 ring-[#069668]/30 text-[#069668]' : ''}`}
             >
-              <option value="all">All</option>
-              <option value="document">Document</option>
-              <option value="project">Engagement</option>
-              <option value="comment">Comment</option>
-              <option value="url">Link</option>
-            </select>
-          </div>
-          <div className="ml-auto text-[0.8125rem] text-[#45474c]">
-            {filtered.length} / 50 bookmarks
-          </div>
-        </div>
+              <Filter className="h-3.5 w-3.5" />
+              Kind{kindFilter !== 'all' && `: ${KIND_FILTER_LABELS[kindFilter]}`}
+              <ChevronDown className="h-3 w-3 ml-0.5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-40">
+            <DropdownMenuRadioGroup value={kindFilter} onValueChange={(v) => setKindFilter(v as KindFilter)}>
+              {(Object.keys(KIND_FILTER_LABELS) as KindFilter[]).map((key) => (
+                <DropdownMenuRadioItem key={key} value={key} className="text-xs">
+                  {KIND_FILTER_LABELS[key]}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
+        <span className="ml-auto text-[0.8125rem] text-[#45474c]">
+          {filtered.length} / 50 bookmarks
+        </span>
+      </div>
+
+      {/* Table */}
+      <div className="bg-white border border-[#e5e7eb] rounded overflow-hidden">
         {/* Column headers */}
         <div
-          className="grid items-center bg-[#f9f9fb] border-b border-[#e5e7eb] px-4 gap-3"
+          className="grid items-center bg-white border-b border-[#e5e7eb] px-4 gap-3"
           style={{ gridTemplateColumns: COLS }}
         >
           <button
@@ -238,6 +265,6 @@ export function BookmarksTable({ initialBookmarks, atCap }: Props) {
           })
         )}
       </div>
-    </>
+    </div>
   )
 }

@@ -3,6 +3,14 @@
 import { useEffect, useState } from "react"
 import { Users, Briefcase, Clock, Filter, ChevronDown } from "lucide-react"
 import Link from "next/link"
+import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 type RecentItem = {
   type: 'client' | 'engagement'
@@ -65,19 +73,26 @@ export default function RecentPage() {
     <div className="flex flex-col gap-3">
       {/* Filter bar */}
       <div className="flex items-center gap-2">
-        <div className="relative">
-          <select
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value as TypeFilter)}
-            className="h-8 rounded border border-[#e5e7eb] bg-white pl-8 pr-8 text-[0.8125rem] text-[#45474c] hover:bg-[#f9f9fb] transition-colors appearance-none focus:outline-none focus:ring-1 focus:ring-[#069668] cursor-pointer"
-          >
-            <option value="all">Type: All</option>
-            <option value="client">Type: Client</option>
-            <option value="engagement">Type: Engagement</option>
-          </select>
-          <Filter className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#45474c]" />
-          <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 text-[#45474c]" />
-        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              className={`h-8 gap-1.5 text-xs bg-white rounded-[2px] border-[#e5e7eb] text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] transition-colors ${typeFilter !== 'all' ? 'border-[#069668] ring-1 ring-[#069668]/30 text-[#069668]' : ''}`}
+            >
+              <Filter className="h-3.5 w-3.5" />
+              Type{typeFilter !== 'all' && `: ${typeFilter === 'client' ? 'Client' : 'Engagement'}`}
+              <ChevronDown className="h-3 w-3 ml-0.5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-40">
+            <DropdownMenuRadioGroup value={typeFilter} onValueChange={(v) => setTypeFilter(v as TypeFilter)}>
+              <DropdownMenuRadioItem value="all" className="text-xs">All</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="client" className="text-xs">Client</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="engagement" className="text-xs">Engagement</DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <span className="ml-auto text-[0.8125rem] text-[#45474c]">{filtered.length} pages</span>
       </div>
 
@@ -85,7 +100,7 @@ export default function RecentPage() {
       <div className="bg-white border border-[#e5e7eb] rounded overflow-hidden">
         {/* Column headers */}
         <div
-          className="grid items-center h-10 px-4 gap-3 border-b border-[#e5e7eb] bg-[#f9f9fb]"
+          className="grid items-center h-10 px-4 gap-3 border-b border-[#e5e7eb] bg-white"
           style={{ gridTemplateColumns: COLS }}
         >
           <span className="text-[11px] font-medium text-[#45474c] opacity-60 uppercase tracking-tight">Name</span>

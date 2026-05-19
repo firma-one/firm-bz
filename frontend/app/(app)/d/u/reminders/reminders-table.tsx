@@ -11,7 +11,16 @@ import {
   ChevronDown,
   ChevronUp,
   ChevronsUpDown,
+  Filter,
 } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 const ENTITY_ICONS: Record<string, React.ElementType> = {
   'platform.clients': Users,
@@ -29,6 +38,20 @@ type StatusFilter = 'all' | 'overdue' | 'today' | 'upcoming' | 'no-date'
 type EntityFilter = 'all' | 'client' | 'engagement'
 type SortField = 'date' | 'name'
 type SortDir = 'asc' | 'desc'
+
+const STATUS_LABELS: Record<StatusFilter, string> = {
+  all: 'All',
+  overdue: 'Overdue',
+  today: 'Due today',
+  upcoming: 'Upcoming',
+  'no-date': 'No date',
+}
+
+const ENTITY_LABELS: Record<EntityFilter, string> = {
+  all: 'All types',
+  client: 'Client',
+  engagement: 'Engagement',
+}
 
 const STATUS_COLORS: Record<ReminderWithContext['labelStyle'], string> = {
   slate:  'bg-[#f3f4f6] text-[#45474c]',
@@ -112,64 +135,86 @@ export function RemindersTable({ initialReminders }: Props) {
   }
 
   return (
-    <div className="bg-white border border-[#e5e7eb] rounded overflow-hidden">
-      {/* Filters + count */}
-      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-[#e5e7eb] bg-[#f9f9fb] flex-wrap">
-        <div className="flex items-center gap-1.5">
-          <label className="text-[0.8125rem] font-medium text-[#45474c]">Status</label>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-            className="h-8 rounded border border-[#e5e7eb] bg-white px-3 text-[0.8125rem] text-[#1b1b1d] focus:outline-none focus:ring-1 focus:ring-[#069668]"
-          >
-            <option value="all">All</option>
-            <option value="overdue">Overdue</option>
-            <option value="today">Due today</option>
-            <option value="upcoming">Upcoming</option>
-            <option value="no-date">No date</option>
-          </select>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <label className="text-[0.8125rem] font-medium text-[#45474c]">Type</label>
-          <select
-            value={entityFilter}
-            onChange={(e) => setEntityFilter(e.target.value as EntityFilter)}
-            className="h-8 rounded border border-[#e5e7eb] bg-white px-3 text-[0.8125rem] text-[#1b1b1d] focus:outline-none focus:ring-1 focus:ring-[#069668]"
-          >
-            <option value="all">All types</option>
-            <option value="client">Client</option>
-            <option value="engagement">Engagement</option>
-          </select>
-        </div>
-        <div className="ml-auto text-[0.8125rem] text-[#45474c]">
+    <div className="flex flex-col gap-3">
+      {/* Filter bar */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              className={`h-8 gap-1.5 text-xs bg-white rounded-[2px] border-[#e5e7eb] text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] transition-colors ${statusFilter !== 'all' ? 'border-[#069668] ring-1 ring-[#069668]/30 text-[#069668]' : ''}`}
+            >
+              <Filter className="h-3.5 w-3.5" />
+              Status{statusFilter !== 'all' && `: ${STATUS_LABELS[statusFilter]}`}
+              <ChevronDown className="h-3 w-3 ml-0.5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-44">
+            <DropdownMenuRadioGroup value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
+              {(Object.keys(STATUS_LABELS) as StatusFilter[]).map((key) => (
+                <DropdownMenuRadioItem key={key} value={key} className="text-xs">
+                  {STATUS_LABELS[key]}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              className={`h-8 gap-1.5 text-xs bg-white rounded-[2px] border-[#e5e7eb] text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] transition-colors ${entityFilter !== 'all' ? 'border-[#069668] ring-1 ring-[#069668]/30 text-[#069668]' : ''}`}
+            >
+              <Filter className="h-3.5 w-3.5" />
+              Type{entityFilter !== 'all' && `: ${ENTITY_LABELS[entityFilter]}`}
+              <ChevronDown className="h-3 w-3 ml-0.5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-40">
+            <DropdownMenuRadioGroup value={entityFilter} onValueChange={(v) => setEntityFilter(v as EntityFilter)}>
+              {(Object.keys(ENTITY_LABELS) as EntityFilter[]).map((key) => (
+                <DropdownMenuRadioItem key={key} value={key} className="text-xs">
+                  {ENTITY_LABELS[key]}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <span className="ml-auto text-[0.8125rem] text-[#45474c]">
           {filtered.length} {filtered.length === 1 ? 'reminder' : 'reminders'}
-        </div>
+        </span>
       </div>
 
-      {/* Column headers */}
-      <div
-        className="grid items-center bg-[#f9f9fb] border-b border-[#e5e7eb] px-4 gap-3"
-        style={{ gridTemplateColumns: COLS }}
-      >
-        <button
-          type="button"
-          onClick={() => toggleSort('name')}
-          className="flex items-center gap-1 h-9 text-[11px] font-medium text-[#45474c] opacity-60 uppercase tracking-tight hover:opacity-100 text-left transition-opacity"
+      {/* Table */}
+      <div className="bg-white border border-[#e5e7eb] rounded overflow-hidden">
+        {/* Column headers */}
+        <div
+          className="grid items-center bg-white border-b border-[#e5e7eb] px-4 gap-3"
+          style={{ gridTemplateColumns: COLS }}
         >
-          Entity <SortIcon field="name" />
-        </button>
-        <span className="text-[11px] font-medium text-[#45474c] opacity-60 uppercase tracking-tight">Action</span>
-        <button
-          type="button"
-          onClick={() => toggleSort('date')}
-          className="flex items-center gap-1 h-9 text-[11px] font-medium text-[#45474c] opacity-60 uppercase tracking-tight hover:opacity-100 text-left transition-opacity"
-        >
-          Due date <SortIcon field="date" />
-        </button>
-        <span className="text-[11px] font-medium text-[#45474c] opacity-60 uppercase tracking-tight">Status</span>
-        <span className="text-[11px] font-medium text-[#45474c] opacity-60 uppercase tracking-tight">Note</span>
-        <span className="text-[11px] font-medium text-[#45474c] opacity-60 uppercase tracking-tight" />
-      </div>
+          <button
+            type="button"
+            onClick={() => toggleSort('name')}
+            className="flex items-center gap-1 h-9 text-[11px] font-medium text-[#45474c] opacity-60 uppercase tracking-tight hover:opacity-100 text-left transition-opacity"
+          >
+            Entity <SortIcon field="name" />
+          </button>
+          <span className="text-[11px] font-medium text-[#45474c] opacity-60 uppercase tracking-tight">Action</span>
+          <button
+            type="button"
+            onClick={() => toggleSort('date')}
+            className="flex items-center gap-1 h-9 text-[11px] font-medium text-[#45474c] opacity-60 uppercase tracking-tight hover:opacity-100 text-left transition-opacity"
+          >
+            Due date <SortIcon field="date" />
+          </button>
+          <span className="text-[11px] font-medium text-[#45474c] opacity-60 uppercase tracking-tight">Status</span>
+          <span className="text-[11px] font-medium text-[#45474c] opacity-60 uppercase tracking-tight">Note</span>
+          <span className="text-[11px] font-medium text-[#45474c] opacity-60 uppercase tracking-tight" />
+        </div>
 
         {/* Rows */}
         {filtered.length === 0 ? (
@@ -221,6 +266,7 @@ export function RemindersTable({ initialReminders }: Props) {
             )
           })
         )}
+      </div>
     </div>
   )
 }

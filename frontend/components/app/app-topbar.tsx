@@ -6,7 +6,8 @@ import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react
 import { usePathname } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { supabase } from "@/lib/supabase"
-import { Bell, Bookmark, ChevronDown, ChevronUp, Info, Megaphone, Search, Send, Trash2, X } from "lucide-react"
+import { Bell, Bookmark, ChevronDown, ChevronUp, Info, Megaphone, Search, Send, Trash2, X, ArrowUpRight } from "lucide-react"
+import Link from "next/link"
 import { Tip } from "@/components/ui/tip"
 import { RemindersPanel } from "@/components/app/reminders-panel"
 
@@ -487,17 +488,24 @@ export function AppTopbar() {
                           <div className="text-[11px] text-[#45474c]">
                             Showing {Math.min(visibleBookmarksCount, filtered.length)} of {filtered.length}
                           </div>
-                          {visibleBookmarksCount < filtered.length ? (
-                            <button
-                              type="button"
-                              className="text-[11px] font-semibold text-[#1b1b1d] hover:text-[#069668]"
-                              onClick={() => setVisibleBookmarksCount((c) => c + 10)}
+                          <div className="flex items-center gap-3">
+                            {visibleBookmarksCount < filtered.length && (
+                              <button
+                                type="button"
+                                className="text-[11px] font-semibold text-[#1b1b1d] hover:text-[#069668]"
+                                onClick={() => setVisibleBookmarksCount((c) => c + 10)}
+                              >
+                                Show 10 more
+                              </button>
+                            )}
+                            <Link
+                              href="/d/u/bookmarks"
+                              className="flex items-center gap-0.5 text-[11px] font-semibold text-[#069668] hover:text-[#065f46]"
+                              onClick={() => setShowBookmarksDropdown(false)}
                             >
-                              Show 10 more
-                            </button>
-                          ) : (
-                            <div className="text-[11px] text-[#45474c]">All shown</div>
-                          )}
+                              View all <ArrowUpRight className="h-3 w-3" />
+                            </Link>
+                          </div>
                         </div>
                       </div>
                     </>
@@ -817,17 +825,24 @@ export function AppTopbar() {
                       <div className="text-[11px] text-[#45474c]">
                         Showing {Math.min(visibleNotificationsCount, notifications.length)} of {notifications.length}
                       </div>
-                      {visibleNotificationsCount < notifications.length ? (
-                        <button
-                          type="button"
-                          className="text-[11px] font-semibold text-[#1b1b1d] hover:text-[#069668]"
-                          onClick={() => setVisibleNotificationsCount((c) => c + 10)}
+                      <div className="flex items-center gap-3">
+                        {visibleNotificationsCount < notifications.length && (
+                          <button
+                            type="button"
+                            className="text-[11px] font-semibold text-[#1b1b1d] hover:text-[#069668]"
+                            onClick={() => setVisibleNotificationsCount((c) => c + 10)}
+                          >
+                            Show 10 more
+                          </button>
+                        )}
+                        <Link
+                          href="/d/u/notifications"
+                          className="flex items-center gap-0.5 text-[11px] font-semibold text-[#069668] hover:text-[#065f46]"
+                          onClick={() => setShowNotificationsDropdown(false)}
                         >
-                          Show 10 more
-                        </button>
-                      ) : (
-                        <div className="text-[11px] text-[#45474c]">All shown</div>
-                      )}
+                          View all <ArrowUpRight className="h-3 w-3" />
+                        </Link>
+                      </div>
                     </div>
                   </div>
                 ) : null}
