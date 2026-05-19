@@ -307,7 +307,7 @@ export function GoogleDriveWorkspaceRoot({
                     <button
                       type="button"
                       className={cn(
-                        "inline-flex items-center gap-1.5 rounded-[2px] h-8 px-4 text-[10px] font-headline font-bold tracking-widest uppercase text-white bg-[#069668] hover:bg-[#069668] hover:brightness-105 active:scale-95 transition-all shadow-sm",
+                        "inline-flex items-center gap-1.5 rounded-[2px] h-8 px-4 text-[10px] font-headline font-bold tracking-widest uppercase text-white bg-[#069668] hover:bg-[#069668] hover:brightness-105 shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(6,150,104,0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all",
                         (!accessToken || WORKSPACE_MIGRATE_DISABLED) && "opacity-40 cursor-not-allowed",
                       )}
                       onClick={() => {
@@ -351,7 +351,7 @@ export function GoogleDriveWorkspaceRoot({
                   <button
                     type="button"
                     className={cn(
-                      "inline-flex items-center gap-1.5 rounded-[2px] h-8 px-4 text-[10px] font-headline font-bold tracking-widest uppercase text-white bg-[#069668] hover:bg-[#069668] hover:brightness-105 active:scale-95 transition-all shadow-sm shrink-0",
+                      "inline-flex items-center gap-1.5 rounded-[2px] h-8 px-4 text-[10px] font-headline font-bold tracking-widest uppercase text-white bg-[#069668] hover:bg-[#069668] hover:brightness-105 shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(6,150,104,0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all shrink-0",
                       (!accessToken || WORKSPACE_MIGRATE_DISABLED) && "opacity-40 cursor-not-allowed",
                     )}
                     onClick={() => {
@@ -465,7 +465,7 @@ export function GoogleDriveWorkspaceRoot({
                   <GoogleDriveMock folderName={generatedFolderName} />
                   <div className="flex justify-between">
                     <Button variant="ghost" onClick={resetFlow}>Change location</Button>
-                    <Button className="bg-[#069668] text-white hover:bg-[#069668] hover:brightness-105 rounded-[2px]" onClick={() => setWizardStep(2)}>
+                    <Button variant="greenCta" className="rounded-[2px]" onClick={() => setWizardStep(2)}>
                       Select Folder<ArrowRight className="ml-2 h-4 w-4" />
                     </Button>
                   </div>
@@ -505,7 +505,7 @@ export function GoogleDriveWorkspaceRoot({
                   </ol>
                   <div className="flex justify-between">
                     <Button variant="ghost" onClick={resetFlow}>Change location</Button>
-                    <Button className="bg-[#069668] text-white hover:bg-[#069668] hover:brightness-105 rounded-[2px]" onClick={() => setWizardStep(2)}>
+                    <Button variant="greenCta" className="rounded-[2px]" onClick={() => setWizardStep(2)}>
                       Select Folder<ArrowRight className="ml-2 h-4 w-4" />
                     </Button>
                   </div>
@@ -553,7 +553,7 @@ export function GoogleDriveWorkspaceRoot({
                     >
                       <Button
                         type="button"
-                        className="flex-1 h-11 bg-[#069668] text-white hover:bg-[#069668] hover:brightness-105 text-sm font-medium rounded-[2px]"
+                        variant="greenCta" className="flex-1 h-11 text-sm font-medium rounded-[2px]"
                         disabled={saving}
                       >
                         <FolderOpen className="h-4 w-4 mr-2 shrink-0" />
@@ -612,7 +612,7 @@ export function GoogleDriveWorkspaceRoot({
                     </Button>
                     <Button
                       type="button"
-                      className="flex-1 h-11 bg-[#069668] text-white hover:bg-[#069668] hover:brightness-105 text-sm font-medium rounded-[2px]"
+                      variant="greenCta" className="flex-1 h-11 text-sm font-medium rounded-[2px]"
                       disabled={saving}
                       onClick={() => void confirmMigration()}
                     >

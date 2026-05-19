@@ -143,7 +143,7 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                             {canViewOrgAudit && (
                                 <TabsTrigger
                                     value="analytics"
-                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent transition-all shadow-none bg-transparent"
+                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                                 >
                                     <LayoutDashboard className="w-4 h-4 mr-2" />
                                     Analytics
@@ -152,7 +152,7 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                             )}
                             <TabsTrigger
                                 value="clients"
-                                className="h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent transition-all shadow-none bg-transparent"
+                                className="h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                             >
                                 <Users className="w-4 h-4 mr-2" />
                                 Clients
@@ -165,7 +165,7 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                             {canViewOrgAudit && (
                                 <TabsTrigger
                                     value="members"
-                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent transition-all shadow-none bg-transparent"
+                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                                 >
                                     <UserCog className="w-4 h-4 mr-2" />
                                     Members
@@ -180,7 +180,7 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                             {canViewOrgAudit && (
                                 <TabsTrigger
                                     value="audit"
-                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent transition-all shadow-none bg-transparent"
+                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                                 >
                                     <ClipboardList className="w-4 h-4 mr-2" />
                                     Audit
@@ -195,7 +195,7 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                             {canViewOrgSettings && (
                                 <TabsTrigger
                                     value="settings"
-                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent transition-all shadow-none bg-transparent"
+                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                                 >
                                     <Settings className="w-4 h-4 mr-2" />
                                     Settings
@@ -234,7 +234,7 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                                         variant="ghost"
                                         size="sm"
                                         type="button"
-                                        className="h-auto px-4 py-1.5 rounded-[2px] bg-[#069668] text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-[#069668] hover:brightness-105 hover:text-white active:scale-95 transition-all shadow-sm border-0 inline-flex items-center gap-1.5"
+                                        className="h-auto px-4 py-1.5 rounded-[2px] bg-[#069668] text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-[#069668] hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(6,150,104,0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1.5"
                                     >
                                         <UserPlus className="h-3.5 w-3.5" />
                                         New Client

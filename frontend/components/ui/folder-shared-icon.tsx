@@ -55,12 +55,12 @@ export function SharedFolderIcon({
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <span className="inline-flex items-center justify-center w-4 h-4">{icon}</span>
+          <span className="inline-flex items-center justify-center" style={{ width: size, height: size }}>{icon}</span>
         </TooltipTrigger>
         <TooltipContent side="top">{tooltipText}</TooltipContent>
       </Tooltip>
     )
   }
 
-  return <span className="inline-flex items-center justify-center w-4 h-4">{icon}</span>
+  return <span className="inline-flex items-center justify-center" style={{ width: size, height: size }}>{icon}</span>
 }

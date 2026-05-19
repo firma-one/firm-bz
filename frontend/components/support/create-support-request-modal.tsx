@@ -224,7 +224,7 @@ export function CreateSupportRequestModal({ firmSlug, trigger }: CreateSupportRe
       {wrapTrigger(trigger || (
         <button
           type="button"
-          className="h-auto px-4 py-1.5 rounded-[2px] bg-[#069668] text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:brightness-105 active:scale-95 transition-all shadow-sm inline-flex items-center gap-1.5"
+          className="h-auto px-4 py-1.5 rounded-[2px] bg-[#069668] text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:brightness-105 shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(6,150,104,0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all inline-flex items-center gap-1.5"
         >
           <LifeBuoy className="h-3.5 w-3.5" />
           New Request

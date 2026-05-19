@@ -246,7 +246,7 @@ const billingTrustPanelClass = (compact: boolean, blueAccentTrial?: boolean) =>
 const polarBillingCtaButtonClass = cn(
     'text-sm font-semibold rounded-[2px]',
     'bg-[#069668] text-white hover:bg-[#069668] hover:brightness-105 hover:text-white',
-    'active:scale-95 transition-all shadow-sm'
+    'shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(6,150,104,0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all'
 )
 
 /** Billing page trial: primary checkout filled with #ECC0AA */

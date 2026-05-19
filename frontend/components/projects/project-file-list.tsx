@@ -76,6 +76,8 @@ interface ProjectFileListProps {
     firmId?: string
     /** When true, firm is sandbox-only (restricts Add menu: no new folder / native Google types; upload + Drive import allowed). */
     firmSandboxOnly?: boolean
+    /** Portal target for the New Document button in the workspace nav bar. */
+    navSlot?: HTMLElement | null
 }
 
 type SortByOption = 'name' | 'modifiedTime' | 'modifiedTimeByMe' | 'viewedByMeTime'
@@ -103,7 +105,7 @@ type UploadQueueItem = {
 
 const VIEW_AS_SHARED_ONLY_PERSONAS = ['eng_ext_collaborator', 'eng_viewer']
 
-export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderName = 'Engagement Files', orgName, clientName, projectName, canEdit = false, canManage = false, restrictToSharedOnly = false, firmId, firmSandboxOnly = false }: ProjectFileListProps) {
+export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderName = 'Engagement Files', orgName, clientName, projectName, canEdit = false, canManage = false, restrictToSharedOnly = false, firmId, firmSandboxOnly = false, navSlot }: ProjectFileListProps) {
     const { session } = useAuth()
     const sessionRef = useRef(session)
     const orgSandbox = useOrgSandbox()
@@ -2320,6 +2322,18 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                 if (filterTypes.has('spreadsheet') && mime === 'application/vnd.google-apps.spreadsheet') return true
                 if (filterTypes.has('presentation') && mime === 'application/vnd.google-apps.presentation') return true
                 if (filterTypes.has('image') && mime.startsWith('image/')) return true
+                if (filterTypes.has('other')) {
+                    const isKnown = mime === 'application/vnd.google-apps.folder' ||
+                        mime === 'application/vnd.google-apps.document' ||
+                        mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+                        mime === 'application/msword' ||
+                        mime === 'application/vnd.google-apps.spreadsheet' ||
+                        mime === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+                        mime === 'application/vnd.google-apps.presentation' ||
+                        mime === 'application/vnd.openxmlformats-officedocument.presentationml.presentation' ||
+                        mime.startsWith('image/')
+                    if (!isKnown) return true
+                }
                 return false
             })
         }
@@ -2392,13 +2406,13 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
     )
 
     return (
-        <div className="flex flex-col h-full bg-white"
+        <div className="flex flex-col h-full overflow-hidden"
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
         >
-            {/* Top Bar: Breadcrumbs & Actions */}
-            <div className="px-4 pt-3 pb-0 border-b border-transparent bg-white flex flex-col gap-4 sticky top-0 z-20">
+            {/* Top Bar: Breadcrumbs & Actions — renders on background, outside the content card */}
+            <div className="px-0 pt-1 pb-2 flex flex-col gap-2.5 shrink-0 z-20">
                 {/* Breadcrumbs: root always visible (as dropdown when canManage); truncate middle */}
                 <div className="flex items-center text-xs font-medium text-slate-700 min-w-0">
                     <div className="flex items-center min-w-0 overflow-x-auto whitespace-nowrap custom-scrollbar">
@@ -2514,19 +2528,16 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                     </div>
                 </div>
 
-                {/* Toolbar */}
-                <div className="flex items-center justify-between gap-4">
-                    {/* Left: Filters */}
-                    <div className="flex items-center gap-2">
-                        {/* Show Add button for editors and for external viewers (EC/EV) in General folder */}
-                        {!isAtProjectRoot && (canEdit || (restrictToSharedOnly && currentFolderType === 'general')) && (
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Button disabled={loading || isLoadingFolders} className="h-auto px-4 py-1.5 rounded-[2px] bg-[#069668] text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-[#069668] hover:brightness-105 hover:text-white active:scale-95 transition-all shadow-sm border-0 inline-flex items-center gap-1.5">
-                                        <SquarePlus className="h-3.5 w-3.5" />
-                                        Add
-                                    </Button>
-                                </DropdownMenuTrigger>
+                {/* New Document button portaled into the workspace nav bar slot */}
+                {navSlot && createPortal(
+                    !isAtProjectRoot && (canEdit || (restrictToSharedOnly && currentFolderType === 'general')) ? (
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button disabled={loading || isLoadingFolders} className="h-auto px-4 py-1.5 rounded-[2px] bg-[#069668] text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-[#069668] hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(6,150,104,0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1.5">
+                                    <Upload className="h-3.5 w-3.5" />
+                                    New Document
+                                </Button>
+                            </DropdownMenuTrigger>
                                 <DropdownMenuContent align="start" className="w-[280px] py-1 rounded-[2px]">
                                     <DropdownMenuItem onClick={() => openCreateDialog('folder')} className="text-xs py-1.5">
                                         <Folder className="mr-2 h-3.5 w-3.5 text-slate-500" />
@@ -2665,13 +2676,19 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                     )}
 
                                 </DropdownMenuContent>
-                                <div className="h-6 w-px bg-slate-200 mx-2" />
                             </DropdownMenu>
-                        )}
+                    ) : null,
+                    navSlot
+                )}
 
+                {/* Toolbar: Filters + right-side actions */}
+                <div className="flex items-center justify-between gap-4">
+                    {/* Left: Filters */}
+                    <div className="flex items-center gap-2">
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button disabled={loading} variant="outline" size="sm" className="h-8 gap-1.5 text-xs bg-white rounded-[2px] border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+                                    <Filter className="h-3 w-3 opacity-60" />
                                     Type
                                     {filterTypes.size > 0 && <span className="ml-0.5 bg-slate-200 text-slate-800 px-1.5 rounded-full text-[10px] font-medium">{filterTypes.size}</span>}
                                     <ChevronDown className="h-3 w-3 opacity-50" />
@@ -2703,6 +2720,9 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                 <DropdownMenuCheckboxItem checked={filterTypes.has('image')} onCheckedChange={() => toggleFilterType('image')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
                                     Images
                                 </DropdownMenuCheckboxItem>
+                                <DropdownMenuCheckboxItem checked={filterTypes.has('other')} onCheckedChange={() => toggleFilterType('other')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
+                                    Other
+                                </DropdownMenuCheckboxItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
 
@@ -2710,6 +2730,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                         <DropdownMenu open={peopleFilterOpen} onOpenChange={setPeopleFilterOpen}>
                             <DropdownMenuTrigger asChild>
                                 <Button disabled={loading} variant="outline" size="sm" className={cn("h-8 gap-1.5 text-xs bg-white rounded-[2px] border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors", (filterOwner !== 'any' || filterShared !== 'all') && "border-slate-400 ring-1 ring-slate-300")}>
+                                    <Filter className="h-3 w-3 opacity-60" />
                                     People
                                     {(filterOwner !== 'any' || filterShared !== 'all') && <span className="ml-0.5 bg-slate-200 text-slate-800 px-1.5 rounded-full text-[10px] font-medium">{(filterOwner !== 'any' ? 1 : 0) + (filterShared !== 'all' ? 1 : 0)}</span>}
                                     <ChevronDown className="h-3 w-3 opacity-50" />
@@ -2771,6 +2792,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button disabled={loading} variant="outline" size="sm" className={cn("h-8 gap-1.5 text-xs bg-white rounded-[2px] border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors", filterModified !== 'any' && "border-slate-400 ring-1 ring-slate-300")}>
+                                    <Filter className="h-3 w-3 opacity-60" />
                                     Modified
                                     {filterModified !== 'any' && <span className="ml-0.5 bg-slate-200 text-slate-800 px-1.5 rounded-full text-[10px] font-medium">1</span>}
                                     <ChevronDown className="h-3 w-3 opacity-50" />
@@ -2922,7 +2944,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
             </div >
 
             {/* Content Area - Styled as a Card */}
-            < div className="flex-1 overflow-hidden flex flex-col relative m-4 bg-white rounded border border-[#e5e7eb]" >
+            <div className="flex-1 overflow-hidden flex flex-col relative bg-white rounded border border-[#e5e7eb]">
                 {/* Google Drive Style Upload Progress Modal - portaled to body so fixed positioning is viewport-relative and not clipped by overflow-hidden */}
                 {uploadQueue.length > 0 && typeof document !== 'undefined' && document.body && createPortal(
                     <div className={cn(

@@ -35,6 +35,22 @@ export async function GET(
     const canView = await canViewProject(ctx.firmId, ctx.clientId, ctx.projectId)
     if (!canView) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
+    // Resolve generalFolderId from connector settings for the "General" breadcrumb fallback
+    let generalFolderId: string | null = null
+    try {
+      const project = await prisma.engagement.findUnique({
+        where: { id: projectId },
+        select: { slug: true, client: { select: { firm: { select: { connectorId: true } } } } },
+      })
+      const connectorId = project?.client?.firm?.connectorId
+      const projectSlug = project?.slug
+      if (connectorId && projectSlug) {
+        const connector = await (prisma as any).connector.findUnique({ where: { id: connectorId }, select: { settings: true } })
+        const ps = (connector?.settings as any)?.projectFolderSettings?.[projectSlug]
+        generalFolderId = ps?.generalFolderId ?? null
+      }
+    } catch { /* non-critical */ }
+
     const shares = await prisma.engagementDocument.findMany({
       where: { engagementId: projectId, slug: { not: null } },
       orderBy: { createdAt: 'desc' },
@@ -155,7 +171,7 @@ export async function GET(
       return oa - ob
     })
 
-    return NextResponse.json({ shares: enriched })
+    return NextResponse.json({ shares: enriched, generalFolderId })
   } catch (e) {
     console.error('GET shares error', e)
     return NextResponse.json({ error: 'Failed to load shares' }, { status: 500 })

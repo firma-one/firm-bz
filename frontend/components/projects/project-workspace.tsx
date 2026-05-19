@@ -1,12 +1,13 @@
 'use client'
 
-import { useEffect, useCallback } from 'react'
+import { useEffect, useCallback, useState } from 'react'
+import { cn } from '@/lib/utils'
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ProjectInsightsDashboard } from './project-insights-dashboard'
 import { ProjectFileList } from './project-file-list'
 import { setSavedFolderState, type BreadcrumbItem } from '@/lib/files-folder-session'
 import { ProjectSettingsForm } from './project-settings-form'
-import { Folder, BarChart3, Building2, PenTool, ChevronRight, Users, Briefcase, Share2, Settings, Home, ClipboardList, MessageCircle, Lock } from 'lucide-react'
+import { Folder, BarChart3, Building2, PenTool, ChevronRight, Users, Briefcase, Share2, Settings, Home, ClipboardList, MessageCircle, Lock, LayoutGrid, List } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { ProjectMembersTab } from './members/project-members-tab'
@@ -105,6 +106,7 @@ export function ProjectWorkspace({
     const pathname = usePathname()
     const router = useRouter()
     const { viewAsPersonaSlug } = useViewAs()
+    const [filesNavSlot, setFilesNavSlot] = useState<HTMLDivElement | null>(null)
     const slugFromPath = pathname?.split('/e/')[1]?.split('/')[0] ?? pathname?.split('/p/')[1]?.split('/')[0] ?? ''
     const projectSlug = engagementSlug ?? slugFromPath
     const useEngagement = Boolean(engagementSlug)
@@ -215,12 +217,13 @@ export function ProjectWorkspace({
 
             <Tabs value={currentTab} onValueChange={handleTabChange} className="flex-1 flex flex-col min-h-0">
                 {/* Tab strip — full-width white with border-b, scrollable for many tabs */}
-                <div className="bg-white border border-[#e5e7eb] rounded mb-6 shrink-0 overflow-x-auto custom-scrollbar">
+                <div className="bg-white border border-[#e5e7eb] rounded mb-3 shrink-0 flex items-center h-14">
+                    <div className="flex-1 overflow-x-auto custom-scrollbar">
                     <div className="flex items-center h-14 min-w-max">
                         <TabsList className="h-full p-0 bg-transparent rounded-none inline-flex justify-start gap-0 border-0">
                             <TabsTrigger
                                 value="files"
-                                className="h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent transition-all shadow-none bg-transparent"
+                                className="h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                             >
                                 <Folder className="w-4 h-4 mr-2" />
                                 Files
@@ -232,7 +235,7 @@ export function ProjectWorkspace({
                             </TabsTrigger>
                             <TabsTrigger
                                 value="shares"
-                                className="h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent transition-all shadow-none bg-transparent"
+                                className="h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                             >
                                 <Share2 className="w-4 h-4 mr-2" />
                                 Shares
@@ -244,7 +247,7 @@ export function ProjectWorkspace({
                             </TabsTrigger>
                             <TabsTrigger
                                 value="comments"
-                                className="h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent transition-all shadow-none bg-transparent"
+                                className="h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                             >
                                 <MessageCircle className="w-4 h-4 mr-2" />
                                 Comments
@@ -257,7 +260,7 @@ export function ProjectWorkspace({
                             {canViewInternalTabs && (
                                 <TabsTrigger
                                     value="analytics"
-                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent transition-all shadow-none bg-transparent"
+                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                                 >
                                     <BarChart3 className="w-4 h-4 mr-2" />
                                     Analytics
@@ -267,7 +270,7 @@ export function ProjectWorkspace({
                             {canViewInternalTabs && (
                                 <TabsTrigger
                                     value="wiki"
-                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent transition-all shadow-none bg-transparent"
+                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                                 >
                                     <PenTool className="w-4 h-4 mr-2" />
                                     Dossier
@@ -283,7 +286,7 @@ export function ProjectWorkspace({
                             {canManage && (
                                 <TabsTrigger
                                     value="audit"
-                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent transition-all shadow-none bg-transparent"
+                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                                 >
                                     <ClipboardList className="w-4 h-4 mr-2" />
                                     Audit
@@ -298,7 +301,7 @@ export function ProjectWorkspace({
                             {canViewInternalTabs && (
                                 <TabsTrigger
                                     value="members"
-                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent transition-all shadow-none bg-transparent"
+                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                                 >
                                     <Users className="w-4 h-4 mr-2" />
                                     Members
@@ -313,7 +316,7 @@ export function ProjectWorkspace({
                             {canViewSettings && (
                                 <TabsTrigger
                                     value="settings"
-                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent transition-all shadow-none bg-transparent"
+                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                                 >
                                     <Settings className="w-4 h-4 mr-2" />
                                     Settings
@@ -322,12 +325,46 @@ export function ProjectWorkspace({
                             )}
                         </TabsList>
                     </div>
+                    </div>
+                    {/* New Document button slot — ProjectFileList portals into this when Files is active */}
+                    {currentTab === 'files' && (
+                        <div ref={setFilesNavSlot} className="shrink-0 px-3 border-l border-[#e5e7eb] flex items-center" />
+                    )}
+                    {/* Grid / List toggle — only when Shares tab is active */}
+                    {currentTab === 'shares' && (() => {
+                        const sharesBase = `${projectBase(orgSlug, clientSlug, projectSlug, useEngagement)}/shares`
+                        const sharesViewMode = pathSegments?.viewMode ?? 'grid'
+                        return (
+                            <div className="shrink-0 px-3 border-l border-[#e5e7eb] flex items-center">
+                                <div className="flex items-center bg-[#f3f4f6] p-0.5 rounded border border-[#e5e7eb]">
+                                    <button
+                                        type="button"
+                                        title="Grid view"
+                                        onClick={() => router.push(`${sharesBase}/grid`)}
+                                        className={`px-1.5 py-1 rounded transition-all ${sharesViewMode === 'grid' ? 'bg-white shadow-sm text-[#069668]' : 'text-[#45474c] hover:text-[#1b1b1d] hover:bg-[#f0edee]'}`}
+                                    >
+                                        <LayoutGrid className="h-3 w-3" />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        title="List view"
+                                        onClick={() => router.push(`${sharesBase}/list`)}
+                                        className={`px-1.5 py-1 rounded transition-all ${sharesViewMode === 'list' ? 'bg-white shadow-sm text-[#069668]' : 'text-[#45474c] hover:text-[#1b1b1d] hover:bg-[#f0edee]'}`}
+                                    >
+                                        <List className="h-3 w-3" />
+                                    </button>
+                                </div>
+                            </div>
+                        )
+                    })()}
                 </div>
 
                 {/* Only mount the active tab's content so Files tree is not rendered when on Shares/others (performance). */}
-                <div className="flex-1 overflow-y-auto custom-scrollbar bg-white border border-[#e5e7eb] rounded">
-                    {currentTab === 'files' && (
-                        <div className="py-1 h-full">
+                {/* Shares gets its own layout (toolbar on bg + content card); all other tabs share the card wrapper */}
+                {/* Files and Shares render breadcrumb/toolbar on bg; content card is owned by the component */}
+                {(currentTab === 'files' || currentTab === 'shares') ? (
+                    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                        {currentTab === 'files' && (
                             <ErrorBoundary context="ProjectFileList">
                                 <ProjectSearchProvider projectId={projectId} viewAsPersonaSlug={viewAsPersonaSlug}>
                                     <ProjectFileList
@@ -342,13 +379,12 @@ export function ProjectWorkspace({
                                         restrictToSharedOnly={restrictToSharedOnly}
                                         firmId={firmId}
                                         firmSandboxOnly={firmSandboxOnly}
+                                        navSlot={filesNavSlot}
                                     />
                                 </ProjectSearchProvider>
                             </ErrorBoundary>
-                        </div>
-                    )}
-                    {currentTab === 'shares' && (
-                        <div className="py-1 h-full">
+                        )}
+                        {currentTab === 'shares' && (
                             <ErrorBoundary context="ProjectShares">
                                 <ProjectSharesTab
                                     projectId={projectId}
@@ -364,6 +400,15 @@ export function ProjectWorkspace({
                                     pathViewMode={pathSegments?.viewMode}
                                     deeplinkBase={typeof window !== 'undefined' ? `${window.location.origin}${projectBase(orgSlug, clientSlug, projectSlug, useEngagement)}/files` : undefined}
                                 />
+                            </ErrorBoundary>
+                        )}
+                    </div>
+                ) : (
+                <div className="flex-1 overflow-y-auto custom-scrollbar bg-white border border-[#e5e7eb] rounded">
+                    {currentTab === 'comments' && (
+                        <div className="py-1 h-full">
+                            <ErrorBoundary context="ProjectComments">
+                                <ProjectCommentsTab projectId={projectId} />
                             </ErrorBoundary>
                         </div>
                     )}
@@ -437,6 +482,7 @@ export function ProjectWorkspace({
                         </div>
                     )}
                 </div>
+                )}
             </Tabs>
         </div>
     )

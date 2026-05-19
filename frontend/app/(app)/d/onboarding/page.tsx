@@ -252,7 +252,7 @@ const AlreadyCompletedScreen = ({ onGoToDashboard }: { onGoToDashboard: () => vo
             </p>
             <button
                 onClick={onGoToDashboard}
-                className="inline-flex items-center gap-2 h-auto px-4 py-1.5 rounded-[2px] bg-[#069668] text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-[#069668] hover:brightness-105 active:scale-95 transition-all shadow-sm border-0"
+                className="inline-flex items-center gap-2 h-auto px-4 py-1.5 rounded-[2px] bg-[#069668] text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-[#069668] hover:brightness-105 shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(6,150,104,0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0"
             >
                 Go to Dashboard <ArrowRight className="h-4 w-4" />
             </button>
