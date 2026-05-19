@@ -112,65 +112,64 @@ export function RemindersTable({ initialReminders }: Props) {
   }
 
   return (
-    <div className="px-6 py-6">
-      <div className="bg-white border border-[#e5e7eb] rounded-[2px] overflow-hidden">
-        {/* Filters + count */}
-        <div className="flex items-center gap-3 px-4 py-2.5 border-b border-[#e5e7eb] bg-[#f9f9fb] flex-wrap">
-          <div className="flex items-center gap-1.5">
-            <label className="text-[0.75rem] font-medium text-[#45474c]">Status</label>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-              className="h-7 rounded-[2px] border border-[#e5e7eb] bg-white px-2 text-[0.75rem] text-[#1b1b1d] focus:outline-none focus:ring-1 focus:ring-[#069668]"
-            >
-              <option value="all">All</option>
-              <option value="overdue">Overdue</option>
-              <option value="today">Due today</option>
-              <option value="upcoming">Upcoming</option>
-              <option value="no-date">No date</option>
-            </select>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <label className="text-[0.75rem] font-medium text-[#45474c]">Type</label>
-            <select
-              value={entityFilter}
-              onChange={(e) => setEntityFilter(e.target.value as EntityFilter)}
-              className="h-7 rounded-[2px] border border-[#e5e7eb] bg-white px-2 text-[0.75rem] text-[#1b1b1d] focus:outline-none focus:ring-1 focus:ring-[#069668]"
-            >
-              <option value="all">All types</option>
-              <option value="client">Client</option>
-              <option value="engagement">Engagement</option>
-            </select>
-          </div>
-          <div className="ml-auto text-[0.75rem] text-[#45474c]">
-            {filtered.length} {filtered.length === 1 ? 'reminder' : 'reminders'}
-          </div>
+    <div className="bg-white border border-[#e5e7eb] rounded overflow-hidden">
+      {/* Filters + count */}
+      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-[#e5e7eb] bg-[#f9f9fb] flex-wrap">
+        <div className="flex items-center gap-1.5">
+          <label className="text-[0.8125rem] font-medium text-[#45474c]">Status</label>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+            className="h-8 rounded border border-[#e5e7eb] bg-white px-3 text-[0.8125rem] text-[#1b1b1d] focus:outline-none focus:ring-1 focus:ring-[#069668]"
+          >
+            <option value="all">All</option>
+            <option value="overdue">Overdue</option>
+            <option value="today">Due today</option>
+            <option value="upcoming">Upcoming</option>
+            <option value="no-date">No date</option>
+          </select>
         </div>
+        <div className="flex items-center gap-1.5">
+          <label className="text-[0.8125rem] font-medium text-[#45474c]">Type</label>
+          <select
+            value={entityFilter}
+            onChange={(e) => setEntityFilter(e.target.value as EntityFilter)}
+            className="h-8 rounded border border-[#e5e7eb] bg-white px-3 text-[0.8125rem] text-[#1b1b1d] focus:outline-none focus:ring-1 focus:ring-[#069668]"
+          >
+            <option value="all">All types</option>
+            <option value="client">Client</option>
+            <option value="engagement">Engagement</option>
+          </select>
+        </div>
+        <div className="ml-auto text-[0.8125rem] text-[#45474c]">
+          {filtered.length} {filtered.length === 1 ? 'reminder' : 'reminders'}
+        </div>
+      </div>
 
-        {/* Column headers */}
-        <div
-          className="grid items-center bg-[#f9f9fb] border-b border-[#e5e7eb] px-4 gap-3"
-          style={{ gridTemplateColumns: COLS }}
+      {/* Column headers */}
+      <div
+        className="grid items-center bg-[#f9f9fb] border-b border-[#e5e7eb] px-4 gap-3"
+        style={{ gridTemplateColumns: COLS }}
+      >
+        <button
+          type="button"
+          onClick={() => toggleSort('name')}
+          className="flex items-center gap-1 h-9 text-[11px] font-medium text-[#45474c] opacity-60 uppercase tracking-tight hover:opacity-100 text-left transition-opacity"
         >
-          <button
-            type="button"
-            onClick={() => toggleSort('name')}
-            className="flex items-center gap-1 h-9 text-[0.75rem] font-semibold text-[#45474c] hover:text-[#1b1b1d] text-left"
-          >
-            Entity <SortIcon field="name" />
-          </button>
-          <span className="text-[0.75rem] font-semibold text-[#45474c]">Action</span>
-          <button
-            type="button"
-            onClick={() => toggleSort('date')}
-            className="flex items-center gap-1 h-9 text-[0.75rem] font-semibold text-[#45474c] hover:text-[#1b1b1d] text-left"
-          >
-            Due date <SortIcon field="date" />
-          </button>
-          <span className="text-[0.75rem] font-semibold text-[#45474c]">Status</span>
-          <span className="text-[0.75rem] font-semibold text-[#45474c]">Note</span>
-          <span className="text-[0.75rem] font-semibold text-[#45474c]" />
-        </div>
+          Entity <SortIcon field="name" />
+        </button>
+        <span className="text-[11px] font-medium text-[#45474c] opacity-60 uppercase tracking-tight">Action</span>
+        <button
+          type="button"
+          onClick={() => toggleSort('date')}
+          className="flex items-center gap-1 h-9 text-[11px] font-medium text-[#45474c] opacity-60 uppercase tracking-tight hover:opacity-100 text-left transition-opacity"
+        >
+          Due date <SortIcon field="date" />
+        </button>
+        <span className="text-[11px] font-medium text-[#45474c] opacity-60 uppercase tracking-tight">Status</span>
+        <span className="text-[11px] font-medium text-[#45474c] opacity-60 uppercase tracking-tight">Note</span>
+        <span className="text-[11px] font-medium text-[#45474c] opacity-60 uppercase tracking-tight" />
+      </div>
 
         {/* Rows */}
         {filtered.length === 0 ? (
@@ -222,7 +221,6 @@ export function RemindersTable({ initialReminders }: Props) {
             )
           })
         )}
-      </div>
     </div>
   )
 }

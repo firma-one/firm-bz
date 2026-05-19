@@ -117,24 +117,24 @@ export function BookmarksTable({ initialBookmarks, atCap }: Props) {
   }
 
   return (
-    <div className="px-6 py-6">
+    <>
       {atCap && (
-        <div className="mb-4 flex items-center gap-2 px-4 py-2.5 rounded-[2px] border border-amber-200 bg-amber-50 text-[0.8125rem] text-amber-800">
+        <div className="mb-3 flex items-center gap-2 px-4 py-2.5 rounded border border-amber-200 bg-amber-50 text-[0.8125rem] text-amber-800">
           <AlertCircle className="h-4 w-4 shrink-0" />
           <span className="font-semibold">Bookmarks are capped at 50.</span>
           <span>Remove older or unused ones to add more.</span>
         </div>
       )}
 
-      <div className="bg-white border border-[#e5e7eb] rounded-[2px] overflow-hidden">
+      <div className="bg-white border border-[#e5e7eb] rounded overflow-hidden">
         {/* Filters + count */}
         <div className="flex items-center gap-3 px-4 py-2.5 border-b border-[#e5e7eb] bg-[#f9f9fb] flex-wrap">
           <div className="flex items-center gap-1.5">
-            <label className="text-[0.75rem] font-medium text-[#45474c]">Kind</label>
+            <label className="text-[0.8125rem] font-medium text-[#45474c]">Kind</label>
             <select
               value={kindFilter}
               onChange={(e) => setKindFilter(e.target.value as KindFilter)}
-              className="h-7 rounded-[2px] border border-[#e5e7eb] bg-white px-2 text-[0.75rem] text-[#1b1b1d] focus:outline-none focus:ring-1 focus:ring-[#069668]"
+              className="h-8 rounded border border-[#e5e7eb] bg-white px-3 text-[0.8125rem] text-[#1b1b1d] focus:outline-none focus:ring-1 focus:ring-[#069668]"
             >
               <option value="all">All</option>
               <option value="document">Document</option>
@@ -143,7 +143,7 @@ export function BookmarksTable({ initialBookmarks, atCap }: Props) {
               <option value="url">Link</option>
             </select>
           </div>
-          <div className="ml-auto text-[0.75rem] text-[#45474c]">
+          <div className="ml-auto text-[0.8125rem] text-[#45474c]">
             {filtered.length} / 50 bookmarks
           </div>
         </div>
@@ -156,21 +156,21 @@ export function BookmarksTable({ initialBookmarks, atCap }: Props) {
           <button
             type="button"
             onClick={() => toggleSort('name')}
-            className="flex items-center gap-1 h-9 text-[0.75rem] font-semibold text-[#45474c] hover:text-[#1b1b1d] text-left"
+            className="flex items-center gap-1 h-9 text-[11px] font-medium text-[#45474c] opacity-60 uppercase tracking-tight hover:opacity-100 text-left transition-opacity"
           >
             Name <SortIcon field="name" />
           </button>
-          <span className="text-[0.75rem] font-semibold text-[#45474c]">Kind</span>
-          <span className="text-[0.75rem] font-semibold text-[#45474c]">Client</span>
-          <span className="text-[0.75rem] font-semibold text-[#45474c]">Engagement</span>
+          <span className="text-[11px] font-medium text-[#45474c] opacity-60 uppercase tracking-tight">Kind</span>
+          <span className="text-[11px] font-medium text-[#45474c] opacity-60 uppercase tracking-tight">Client</span>
+          <span className="text-[11px] font-medium text-[#45474c] opacity-60 uppercase tracking-tight">Engagement</span>
           <button
             type="button"
             onClick={() => toggleSort('date')}
-            className="flex items-center gap-1 h-9 text-[0.75rem] font-semibold text-[#45474c] hover:text-[#1b1b1d] text-left"
+            className="flex items-center gap-1 h-9 text-[11px] font-medium text-[#45474c] opacity-60 uppercase tracking-tight hover:opacity-100 text-left transition-opacity"
           >
             Bookmarked <SortIcon field="date" />
           </button>
-          <span className="text-[0.75rem] font-semibold text-[#45474c]" />
+          <span className="text-[11px] font-medium text-[#45474c] opacity-60 uppercase tracking-tight" />
         </div>
 
         {/* Rows */}
@@ -238,6 +238,6 @@ export function BookmarksTable({ initialBookmarks, atCap }: Props) {
           })
         )}
       </div>
-    </div>
+    </>
   )
 }
