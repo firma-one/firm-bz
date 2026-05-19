@@ -20,7 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
-import { ViewSupportRequestModal } from './view-support-request-modal'
+import { SupportTicketDetailsPane } from './support-ticket-details-pane'
 import { SupportTicketCommentsPane } from './support-ticket-comments-pane'
 import { useRightPane } from '@/lib/right-pane-context'
 
@@ -67,9 +67,8 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
   const [requests, setRequests] = useState<SupportRequest[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
-  const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null)
+  const [activeDetailsTicketId, setActiveDetailsTicketId] = useState<string | null>(null)
   const [activeCommentTicketId, setActiveCommentTicketId] = useState<string | null>(null)
-  const [detailsOpen, setDetailsOpen] = useState(false)
   const [copiedTicketId, setCopiedTicketId] = useState<string | null>(null)
 
   // Search
@@ -85,7 +84,30 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
   const [sortField, setSortField] = useState<SortField>('createdAt')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
 
-  const selectedRequest = requests.find(r => r.id === selectedRequestId)
+  const openDetailsPane = useCallback((request: SupportRequest) => {
+    if (activeDetailsTicketId === request.ticketNumber) {
+      rightPane.clearPane()
+      setActiveDetailsTicketId(null)
+      return
+    }
+    setActiveDetailsTicketId(request.ticketNumber)
+    setActiveCommentTicketId(null)
+    rightPane.setTitle(request.ticketNumber)
+    rightPane.setHeaderIcon(<Eye className="h-4 w-4" />)
+    rightPane.setHeaderSubtitle(
+      request.type === 'BUG' ? 'Bug Report' :
+      request.type === 'REQUEST' ? 'Feature Request' : 'General Enquiry'
+    )
+    rightPane.setContent(
+      <SupportTicketDetailsPane
+        firmSlug={firmSlug}
+        ticket={request}
+        onStatusUpdate={(newStatus) => {
+          setRequests(prev => prev.map(r => r.id === request.id ? { ...r, status: newStatus } : r))
+        }}
+      />
+    )
+  }, [activeDetailsTicketId, rightPane, firmSlug])
 
   const openCommentsPane = useCallback((request: SupportRequest) => {
     if (activeCommentTicketId === request.ticketNumber) {
@@ -94,6 +116,7 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
       return
     }
     setActiveCommentTicketId(request.ticketNumber)
+    setActiveDetailsTicketId(null)
     rightPane.setTitle('Comments')
     rightPane.setHeaderIcon(<MessageCircle className="h-4 w-4" />)
     rightPane.setHeaderSubtitle('Append-only. Visible to Firm Administrators.')
@@ -110,10 +133,11 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
     )
   }, [activeCommentTicketId, rightPane])
 
-  // When the right pane is closed externally (X button), clear the active ticket
+  // When the right pane is closed externally (X button), clear active states
   useEffect(() => {
     if (!rightPane.content) {
       setActiveCommentTicketId(null)
+      setActiveDetailsTicketId(null)
     }
   }, [rightPane.content])
 
@@ -424,9 +448,11 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
               const statusColor = STATUS_COLORS[request.status || 'NEW']
 
               const isCommentActive = request.ticketNumber === activeCommentTicketId
+              const isDetailsActive = request.ticketNumber === activeDetailsTicketId
+              const isRowActive = isCommentActive || isDetailsActive
 
               return (
-                <tr key={request.id} className={cn("hover:bg-[#f9f9fb] transition-colors", isCommentActive && "bg-[#f9f9fb]")}>
+                <tr key={request.id} className={cn("hover:bg-[#f9f9fb] transition-colors", isRowActive && "bg-[#f9f9fb]")}>
                   {/* Type */}
                   <td className="px-3 py-2 overflow-hidden" style={{ width: '160px' }}>
                     <div className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium whitespace-nowrap ${config.bgColor} ${config.color}`}>
@@ -462,10 +488,16 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <button
-                              onClick={() => { setSelectedRequestId(request.id); setDetailsOpen(true) }}
-                              className="p-1 hover:bg-slate-200 rounded transition-colors"
+                              onClick={() => openDetailsPane(request)}
+                              className={cn(
+                                "p-1 rounded transition-colors",
+                                isDetailsActive
+                                  ? "bg-slate-200 text-slate-800"
+                                  : "hover:bg-slate-200 text-slate-600"
+                              )}
+                              aria-pressed={isDetailsActive}
                             >
-                              <Eye className="h-4 w-4 text-slate-600" />
+                              <Eye className="h-4 w-4" />
                             </button>
                           </TooltipTrigger>
                           <TooltipContent side="bottom" className="text-xs">View Details</TooltipContent>
@@ -497,8 +529,8 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
                   <td className="px-3 py-2 min-w-0">
                     <div className="flex items-center gap-2 min-w-0">
                       <p className="text-slate-700 truncate text-xs flex-1 min-w-0" title={request.description}>{request.description}</p>
-                      {isCommentActive && (
-                        <CircleChevronLeft className="h-3.5 w-3.5 shrink-0 text-slate-500 animate-pulse" aria-label="Comments open" />
+                      {isRowActive && (
+                        <CircleChevronLeft className="h-3.5 w-3.5 shrink-0 text-slate-500 animate-pulse" aria-label="Pane open" />
                       )}
                     </div>
                   </td>
@@ -553,15 +585,6 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
         </table>
       </div>
 
-      {/* View Details Modal */}
-      {selectedRequest && (
-        <ViewSupportRequestModal
-          open={detailsOpen}
-          onOpenChange={setDetailsOpen}
-          firmSlug={firmSlug}
-          ticket={selectedRequest}
-        />
-      )}
     </>
   )
 }
