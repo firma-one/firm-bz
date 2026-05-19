@@ -526,6 +526,19 @@ export function AppSidebar({ variant = 'fixed' }: AppSidebarProps = {}) {
                       {/* Project sub-menus - tree-like hierarchy with connector line */}
                       {!isCollapsed && projectSlug && isProjectsOpen && (
                         <div className="flex flex-col gap-0.5 mt-0.5 mb-2 pl-4 ml-3 animate-in slide-in-from-top-1 fade-in duration-200">
+                          {canShowProjectInternalTabs && (
+                            <Link
+                              href={`${baseUrl}/c/${clientSlug}/e/${projectSlug}/analytics`}
+                              className={`group flex items-center d-sidebar-nav d-tree-link rounded-r py-1.5 px-2.5 transition-colors ${pathname.includes('/analytics')
+                                ? 'bg-[#ecfdf5] border-l-2 border-[#069668] text-[#065f46] font-semibold'
+                                : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}
+                            >
+                              <BarChart3 className={`h-3.5 w-3.5 mr-2.5 ${pathname.includes('/analytics') ? 'text-[#069668]' : 'text-[#45474c]'}`} />
+                              Analytics
+                              <span title="Internal only" className="ml-auto shrink-0"><Lock className="w-2.5 h-2.5 text-[#d1d5db] group-hover:text-[#45474c] transition-colors" /></span>
+                            </Link>
+                          )}
+
                           <Link
                             href={`${baseUrl}/c/${clientSlug}/e/${projectSlug}/files`}
                             className={`flex items-center d-sidebar-nav d-tree-link rounded-r py-1.5 px-2.5 transition-colors ${pathname.includes(projectSlug) && (pathname.endsWith('/files') || pathname.match(/\/(?:e|p)\/[^/]+\/files(\/|$)/))
@@ -584,19 +597,6 @@ export function AppSidebar({ variant = 'fixed' }: AppSidebarProps = {}) {
                                 <span className="text-[9px] font-semibold uppercase tracking-wide px-1 py-0.5 rounded bg-amber-100 text-amber-700 leading-none">Beta</span>
                                 <Lock className="w-2.5 h-2.5 text-[#d1d5db] group-hover:text-[#45474c] transition-colors" />
                               </span>
-                            </Link>
-                          )}
-
-                          {canShowProjectInternalTabs && (
-                            <Link
-                              href={`${baseUrl}/c/${clientSlug}/e/${projectSlug}/analytics`}
-                              className={`group flex items-center d-sidebar-nav d-tree-link rounded-r py-1.5 px-2.5 transition-colors ${pathname.includes('/analytics')
-                                ? 'bg-[#ecfdf5] border-l-2 border-[#069668] text-[#065f46] font-semibold'
-                                : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}
-                            >
-                              <BarChart3 className={`h-3.5 w-3.5 mr-2.5 ${pathname.includes('/analytics') ? 'text-[#069668]' : 'text-[#45474c]'}`} />
-                              Analytics
-                              <span title="Internal only" className="ml-auto shrink-0"><Lock className="w-2.5 h-2.5 text-[#d1d5db] group-hover:text-[#45474c] transition-colors" /></span>
                             </Link>
                           )}
 

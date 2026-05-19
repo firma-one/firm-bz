@@ -269,6 +269,16 @@ export function ProjectWorkspace({
                     <div ref={tabsScrollRef} className="overflow-x-auto h-full [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" style={{ scrollPaddingLeft: canScrollLeft ? 40 : 0, scrollPaddingRight: canScrollRight ? 40 : 0 }}>
                     <div className="flex items-center h-full min-w-max" style={{ paddingLeft: canScrollLeft ? 56 : 0, paddingRight: canScrollRight ? 56 : 0 }}>
                         <TabsList className="h-full p-0 bg-transparent rounded-none inline-flex justify-start gap-0 border-0">
+                            {canViewInternalTabs && (
+                                <TabsTrigger
+                                    value="analytics"
+                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                >
+                                    <BarChart3 className="w-4 h-4 mr-2" />
+                                    Analytics
+                                    <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
+                                </TabsTrigger>
+                            )}
                             <TabsTrigger
                                 value="files"
                                 className="h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
@@ -293,6 +303,17 @@ export function ProjectWorkspace({
                                     </span>
                                 )}
                             </TabsTrigger>
+                            {enableBetaFeatures && canViewInternalTabs && (
+                                <TabsTrigger
+                                    value="board"
+                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                >
+                                    <LayoutGrid className="w-4 h-4 mr-2" />
+                                    Board
+                                    <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
+                                    <span className="ml-2 rounded px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 leading-none">Beta</span>
+                                </TabsTrigger>
+                            )}
                             <TabsTrigger
                                 value="comments"
                                 className="h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
@@ -305,16 +326,6 @@ export function ProjectWorkspace({
                                     </span>
                                 )}
                             </TabsTrigger>
-                            {canViewInternalTabs && (
-                                <TabsTrigger
-                                    value="analytics"
-                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
-                                >
-                                    <BarChart3 className="w-4 h-4 mr-2" />
-                                    Analytics
-                                    <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
-                                </TabsTrigger>
-                            )}
                             {enableBetaFeatures && canViewInternalTabs && (
                                 <TabsTrigger
                                     value="wiki"
@@ -329,17 +340,6 @@ export function ProjectWorkspace({
                                             {wikiPageCount}
                                         </span>
                                     )}
-                                </TabsTrigger>
-                            )}
-                            {enableBetaFeatures && canViewInternalTabs && (
-                                <TabsTrigger
-                                    value="board"
-                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
-                                >
-                                    <LayoutGrid className="w-4 h-4 mr-2" />
-                                    Board
-                                    <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
-                                    <span className="ml-2 rounded px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 leading-none">Beta</span>
                                 </TabsTrigger>
                             )}
                             {canManage && (
