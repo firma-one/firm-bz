@@ -358,20 +358,22 @@ export function AppTopbar() {
         />
       </div>
 
-      {/* Center: Prominent Search — flex-1, constrained max-width */}
+      {/* Center: Command palette trigger */}
       <div className="flex-1 flex justify-center px-12">
-        <div className="relative w-full max-w-2xl">
-          <span className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-[#45474c]/50">
-            <Search className="h-4 w-4" />
-          </span>
-          <input
-            className="w-full bg-[#f9f9fb] border border-[#e5e7eb] rounded-sm pl-9 pr-4 py-2 text-sm text-[#1b1b1d] placeholder:text-[#45474c]/60 focus:ring-1 focus:ring-[#069668] focus:border-[#069668] outline-none transition-all"
-            placeholder="Search clients, engagements, documents…"
-            type="text"
-            aria-label="Global search"
-          />
-        </div>
+        <button
+          type="button"
+          onClick={() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true, bubbles: true }))}
+          className="flex items-center gap-2.5 w-full max-w-sm bg-[#f9f9fb] border border-[#e5e7eb] rounded-sm px-3 py-2 text-sm text-[#45474c]/60 hover:border-[#069668]/40 hover:bg-white transition-colors group"
+          aria-label="Open command palette"
+        >
+          <Search className="h-4 w-4 shrink-0" />
+          <span className="flex-1 text-left">Go to…</span>
+          <kbd className="hidden sm:inline-flex items-center gap-0.5 rounded border border-[#e5e7eb] bg-white px-1.5 py-0.5 text-[10px] font-mono text-[#45474c]/50 group-hover:border-[#069668]/30">
+            ⌘K
+          </kbd>
+        </button>
       </div>
+      <CommandPalette />
 
       {/* Right: Utility actions — w-64, justify-end */}
       <div className="w-64 shrink-0 flex items-center justify-end gap-1 pr-4">

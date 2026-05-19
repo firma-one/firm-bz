@@ -6,6 +6,7 @@ import { Home, User, ChevronRight, Clock, Bell, Bookmark, BellRing } from "lucid
 import { createContext, useContext, useState, useCallback, type ReactNode } from "react"
 
 const TABS = [
+  { label: 'Profile',       href: '/d/u/profile',       icon: User     },
   { label: 'Recent',        href: '/d/u/recent',        icon: Clock    },
   { label: 'Reminders',     href: '/d/u/reminders',     icon: Bell     },
   { label: 'Bookmarks',     href: '/d/u/bookmarks',     icon: Bookmark },
@@ -54,7 +55,7 @@ export default function UserLayout({ children }: { children: ReactNode }) {
                 Personalization
               </h1>
               <p className="text-sm text-[#45474c] mt-1">
-                Manage your recent pages, reminders, bookmarks and notifications.
+                Manage your profile, recent pages, reminders, bookmarks and notifications.
               </p>
             </div>
           </div>

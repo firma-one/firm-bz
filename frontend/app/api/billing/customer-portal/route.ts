@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
     let returnUrl: string | null = null
     try {
         if (origin) {
-            const pathForReturn = validatedReturnPath ?? '/d/profile'
+            const pathForReturn = validatedReturnPath ?? '/d/u/profile'
             returnUrl = new URL(pathForReturn, origin).toString()
         }
     } catch {

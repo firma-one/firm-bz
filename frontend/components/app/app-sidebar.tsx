@@ -23,6 +23,7 @@ import {
   CheckCircle2,
   History,
   CornerDownRight,
+  Settings,
 } from "lucide-react"
 import { FirmSelector, type FirmOption } from "@/components/projects/firm-selector"
 import { getUserFirms } from "@/lib/actions/firms"
@@ -358,6 +359,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
 
   // Active state helpers
   const isInsightsActive = pathname.includes('/insights')
+  const isSettingsActive = pathname.includes('/connectors')
   const isSupportActive = pathname.startsWith('/d/support')
   const isRemindersPageActive = pathname.startsWith('/d/u/reminders')
   const isClientsActive =
@@ -492,7 +494,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                         }}
                         compact
                       />
-                      {/* Tree sub-items: Clients + Analytics */}
+                      {/* Tree sub-items: Clients + Analytics + Settings */}
                       <div className="ml-1 space-y-0.5">
                         <Link href={baseUrl} className={`flex items-center rounded-r transition-colors pl-2 pr-2 py-1.5 text-[0.8125rem] ${isClientsActive ? 'bg-[#ecfdf5] text-[#065f46] font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}>
                           <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-1.5" />
@@ -504,6 +506,13 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                             <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-1.5" />
                             <BarChart3 className={`h-3.5 w-3.5 mr-2 shrink-0 ${isInsightsActive ? 'text-[#069668]' : 'text-[#45474c]'}`} />
                             <span>Analytics</span>
+                          </Link>
+                        )}
+                        {canManageOrg && (
+                          <Link href={`${firmScopedNavBase}/connectors`} className={`flex items-center rounded-r transition-colors pl-2 pr-2 py-1.5 text-[0.8125rem] ${isSettingsActive ? 'bg-[#ecfdf5] text-[#065f46] font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}>
+                            <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-1.5" />
+                            <Settings className={`h-3.5 w-3.5 mr-2 shrink-0 ${isSettingsActive ? 'text-[#069668]' : 'text-[#45474c]'}`} />
+                            <span>Settings</span>
                           </Link>
                         )}
                       </div>
@@ -537,6 +546,16 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                             </Link>
                           </TooltipTrigger>
                           <TooltipContent side="right">Analytics</TooltipContent>
+                        </Tooltip>
+                      )}
+                      {canManageOrg && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Link href={`${firmScopedNavBase}/connectors`} className={navLinkClass(isSettingsActive)}>
+                              <Settings className={navIconClass(isSettingsActive)} />
+                            </Link>
+                          </TooltipTrigger>
+                          <TooltipContent side="right">Settings</TooltipContent>
                         </Tooltip>
                       )}
                     </>

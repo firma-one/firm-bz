@@ -7,12 +7,14 @@ import {
   BarChart3,
   Bell,
   Bookmark,
-  Clock,
+  CalendarClock,
   Search,
   UserCircle,
-  HelpCircle,
-  Plug,
+  LifeBuoy,
+  Settings,
+  Clock,
 } from "lucide-react"
+import { getFirmRole } from "@/lib/actions/firm"
 
 type CommandItem = {
   id: string
@@ -21,6 +23,7 @@ type CommandItem = {
   icon: React.ReactNode
   href: string
   group: string
+  adminOnly?: boolean
 }
 
 function getSlugFromPath(pathname: string): string | null {
@@ -28,7 +31,21 @@ function getSlugFromPath(pathname: string): string | null {
   return m?.[1] ?? null
 }
 
-function buildItems(firmSlug: string | null): CommandItem[] {
+function getLastKnownSlug(pathname: string): string | null {
+  const fromUrl = getSlugFromPath(pathname)
+  if (fromUrl) return fromUrl
+  // Fall back to the last firm whose branding was cached by the topbar
+  if (typeof window === "undefined") return null
+  for (let i = 0; i < sessionStorage.length; i++) {
+    const key = sessionStorage.key(i)
+    if (key?.startsWith("fm_firm_branding_")) {
+      return key.replace("fm_firm_branding_", "")
+    }
+  }
+  return null
+}
+
+function buildItems(firmSlug: string | null, canManageOrg: boolean): CommandItem[] {
   const firmBase = firmSlug ? `/d/f/${firmSlug}` : null
 
   const items: CommandItem[] = []
@@ -41,7 +58,7 @@ function buildItems(firmSlug: string | null): CommandItem[] {
         description: "View all clients",
         icon: <Users className="h-4 w-4" />,
         href: firmBase,
-        group: "Workspace",
+        group: "Firm",
       },
       {
         id: "analytics",
@@ -49,17 +66,20 @@ function buildItems(firmSlug: string | null): CommandItem[] {
         description: "Firm-wide insights and reporting",
         icon: <BarChart3 className="h-4 w-4" />,
         href: `${firmBase}/insights`,
-        group: "Workspace",
-      },
-      {
-        id: "connectors",
-        label: "Connectors",
-        description: "Manage integrations",
-        icon: <Plug className="h-4 w-4" />,
-        href: `${firmBase}/connectors`,
-        group: "Workspace",
+        group: "Firm",
       },
     )
+    if (canManageOrg) {
+      items.push({
+        id: "settings",
+        label: "Settings",
+        description: "Manage integrations and firm settings",
+        icon: <Settings className="h-4 w-4" />,
+        href: `${firmBase}/connectors`,
+        group: "Firm",
+        adminOnly: true,
+      })
+    }
   }
 
   items.push(
@@ -67,7 +87,7 @@ function buildItems(firmSlug: string | null): CommandItem[] {
       id: "reminders",
       label: "Reminders",
       description: "Your upcoming reminders",
-      icon: <Clock className="h-4 w-4" />,
+      icon: <CalendarClock className="h-4 w-4" style={{ color: "#C4572B" }} />,
       href: "/d/u/reminders",
       group: "Personal",
     },
@@ -100,18 +120,22 @@ function buildItems(firmSlug: string | null): CommandItem[] {
       label: "Profile",
       description: "Your account and settings",
       icon: <UserCircle className="h-4 w-4" />,
-      href: "/d/profile",
-      group: "Account",
-    },
-    {
-      id: "support",
-      label: "Support",
-      description: "Help and documentation",
-      icon: <HelpCircle className="h-4 w-4" />,
-      href: "/d/support",
+      href: "/d/u/profile",
       group: "Account",
     },
   )
+
+  if (canManageOrg) {
+    items.push({
+      id: "support",
+      label: "Support",
+      description: "Help and documentation",
+      icon: <LifeBuoy className="h-4 w-4" />,
+      href: "/d/support",
+      group: "Account",
+      adminOnly: true,
+    })
+  }
 
   return items
 }
@@ -120,13 +144,30 @@ export function CommandPalette() {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState("")
   const [activeIndex, setActiveIndex] = useState(0)
+  const [canManageOrg, setCanManageOrg] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
 
-  const firmSlug = getSlugFromPath(pathname ?? "")
-  const allItems = buildItems(firmSlug)
+  const [firmSlug, setFirmSlug] = useState<string | null>(() =>
+    typeof window !== "undefined" ? getLastKnownSlug(pathname ?? "") : getSlugFromPath(pathname ?? "")
+  )
+
+  // Keep firm slug in sync with navigation; fall back to sessionStorage on user-scoped pages
+  useEffect(() => {
+    setFirmSlug(getLastKnownSlug(pathname ?? ""))
+  }, [pathname])
+
+  // Fetch role whenever firm slug is resolved
+  useEffect(() => {
+    if (!firmSlug) return
+    getFirmRole(firmSlug).then((role) => {
+      setCanManageOrg(role === "FIRM_ADMIN")
+    })
+  }, [firmSlug])
+
+  const allItems = buildItems(firmSlug, canManageOrg)
 
   const filtered = query.trim()
     ? allItems.filter(
@@ -136,7 +177,6 @@ export function CommandPalette() {
       )
     : allItems
 
-  // Group filtered items
   const groups = filtered.reduce<Record<string, CommandItem[]>>((acc, item) => {
     if (!acc[item.group]) acc[item.group] = []
     acc[item.group].push(item)
@@ -188,7 +228,6 @@ export function CommandPalette() {
     }
   }
 
-  // Scroll active item into view
   useEffect(() => {
     const el = listRef.current?.querySelector(`[data-idx="${activeIndex}"]`)
     el?.scrollIntoView({ block: "nearest" })
@@ -205,10 +244,8 @@ export function CommandPalette() {
         if (e.target === e.currentTarget) setOpen(false)
       }}
     >
-      {/* Backdrop */}
       <div className="absolute inset-0 bg-black/30" />
 
-      {/* Panel */}
       <div className="relative w-full max-w-[520px] mx-4 bg-white border border-[#e5e7eb] rounded-[4px] shadow-2xl overflow-hidden">
         {/* Input row */}
         <div className="flex items-center gap-3 px-4 border-b border-[#e5e7eb]">
@@ -255,7 +292,7 @@ export function CommandPalette() {
                       onClick={() => navigate(item.href)}
                     >
                       <span
-                        className={`shrink-0 ${isActive ? "text-[#069668]" : "text-[#45474c]"}`}
+                        className={`shrink-0 ${isActive && !item.adminOnly ? "text-[#069668]" : ""}`}
                       >
                         {item.icon}
                       </span>
@@ -290,13 +327,4 @@ export function CommandPalette() {
       </div>
     </div>
   )
-}
-
-export function useCommandPalette() {
-  return {
-    open: () =>
-      document.dispatchEvent(
-        new KeyboardEvent("keydown", { key: "k", metaKey: true, bubbles: true }),
-      ),
-  }
 }

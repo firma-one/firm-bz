@@ -18,12 +18,12 @@ export function buildBillingPageHref(opts: {
 
     let returnTo: string
     if (path.startsWith('/d') && !path.startsWith('/d/billing')) {
-        returnTo = validateCheckoutReturnTo(path) ?? (slug ? `/d/f/${slug}` : '/d/profile')
+        returnTo = validateCheckoutReturnTo(path) ?? (slug ? `/d/f/${slug}` : '/d/u/profile')
     } else {
-        returnTo = slug ? `/d/f/${slug}` : '/d/profile'
+        returnTo = slug ? `/d/f/${slug}` : '/d/u/profile'
     }
 
-    params.set('returnTo', validateCheckoutReturnTo(returnTo) ?? '/d/profile')
+    params.set('returnTo', validateCheckoutReturnTo(returnTo) ?? '/d/u/profile')
 
     return `/d/billing?${params.toString()}`
 }

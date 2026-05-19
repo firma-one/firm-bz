@@ -202,7 +202,7 @@ export function ProfileSection({
               footer={
                 <div className="space-y-0.5">
                   <Link
-                    href="/d/profile"
+                    href="/d/u/profile"
                     onClick={() => setIsProfileOpen(false)}
                     className="d-sidebar-nav flex w-full items-center gap-2 rounded px-3 py-2 text-[#45474c] transition-colors hover:bg-[#f3f4f6] hover:text-[#1b1b1d]"
                   >
