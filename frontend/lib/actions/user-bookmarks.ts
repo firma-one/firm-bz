@@ -33,7 +33,7 @@ export async function getUserBookmarks(): Promise<BookmarkWithContext[]> {
   const raw = Array.isArray(row?.bookmarks) ? (row!.bookmarks as any[]) : []
 
   // Batch-resolve engagement context for bookmarks that have a projectId
-  const projectIds = [...new Set(raw.filter((b) => b.projectId).map((b) => b.projectId as string))]
+  const projectIds = Array.from(new Set(raw.filter((b) => b.projectId).map((b) => b.projectId as string)))
 
   const engagements = projectIds.length > 0
     ? await (prisma as any).engagement.findMany({
