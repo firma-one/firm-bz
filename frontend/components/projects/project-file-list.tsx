@@ -154,7 +154,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
     const [sharedExternalIdsForGuest, setSharedExternalIdsForGuest] = useState<Set<string>>(new Set())
     const [ancestorFolderIdsForGuest, setAncestorFolderIdsForGuest] = useState<Set<string>>(new Set())
     const [sharedByMeExternalIds, setSharedByMeExternalIds] = useState<Set<string>>(new Set())
-    const [filterShared, setFilterShared] = useState<'all' | 'by_me' | 'by_others' | 'pending_intake'>('all')
+    const [filterShared, setFilterShared] = useState<'all' | 'by_me' | 'by_others' | 'with_collaborator' | 'with_viewer' | 'pending_intake'>('all')
 
     useEffect(() => {
         sessionRef.current = session
@@ -379,7 +379,8 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
     const [sortConfig, setSortConfig] = useState<SortConfig>({ sortBy: 'name', direction: 'asc', foldersFirst: true })
     const { searchQuery, setSearchQuery, isSearching } = useProjectSearch()
     const [filterTypes, setFilterTypes] = useState<Set<string>>(new Set())
-    const [filterOwner, setFilterOwner] = useState<'any' | 'me' | 'not-me'>('any')
+    const [filterOwner, setFilterOwner] = useState<'any' | 'me' | 'not-me' | 'private-me'>('any')
+    const [peopleFilterOpen, setPeopleFilterOpen] = useState(false)
     const [filterModified, setFilterModified] = useState<'any' | '7d' | '30d' | 'year'>('any')
     const [highlightedFileId, setHighlightedFileId] = useState<string | null>(null)
     const [actionMenuOpenFileId, setActionMenuOpenFileId] = useState<string | null>(null)
@@ -2329,6 +2330,11 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                 const owner = (f.actorEmail || '').toLowerCase()
                 if (filterOwner === 'me') return owner === myEmail || owner === '' || !owner
                 if (filterOwner === 'not-me') return owner !== '' && owner !== myEmail
+                if (filterOwner === 'private-me') {
+                    const isOwner = owner === myEmail || owner === '' || !owner
+                    const isShared = sharedExternalIds.has(f.id) || ancestorFolderIds.has(f.id)
+                    return isOwner && !isShared
+                }
                 return true
             })
         }
@@ -2365,6 +2371,8 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                     const isShared = sharedExternalIds.has(f.id) || ancestorFolderIds.has(f.id)
                     return isShared && !sharedByMeExternalIds.has(f.id)
                 }
+                if (filterShared === 'with_collaborator') return sharedExternalIdsForEC.has(f.id) || ancestorFolderIdsForEC.has(f.id)
+                if (filterShared === 'with_viewer') return sharedExternalIdsForGuest.has(f.id) || ancestorFolderIdsForGuest.has(f.id)
                 if (filterShared === 'pending_intake') return f.lock?.type === 'intake'
                 return true
             })
@@ -2375,7 +2383,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
             return [...folders, ...rest]
         }
         return result.sort(cmp)
-    }, [files, sortConfig, filterTypes, filterOwner, filterModified, filterShared, sharedByMeExternalIds, sharedExternalIds, ancestorFolderIds, session?.user?.email])
+    }, [files, sortConfig, filterTypes, filterOwner, filterModified, filterShared, sharedByMeExternalIds, sharedExternalIds, sharedExternalIdsForEC, sharedExternalIdsForGuest, ancestorFolderIds, ancestorFolderIdsForEC, ancestorFolderIdsForGuest, session?.user?.email])
 
     const TableHeader = ({ label }: { label: string }) => (
         <div className="flex items-center gap-1 text-[0.8125rem] font-medium text-[#45474c] select-none">
@@ -2699,7 +2707,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                         </DropdownMenu>
 
                         {/* ... Other Filters (unchanged) ... */}
-                        <DropdownMenu>
+                        <DropdownMenu open={peopleFilterOpen} onOpenChange={setPeopleFilterOpen}>
                             <DropdownMenuTrigger asChild>
                                 <Button disabled={loading} variant="outline" size="sm" className={cn("h-8 gap-1.5 text-xs bg-white rounded-[2px] border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors", (filterOwner !== 'any' || filterShared !== 'all') && "border-slate-400 ring-1 ring-slate-300")}>
                                     People
@@ -2710,11 +2718,11 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                             <DropdownMenuContent align="start" className="w-[200px] py-1 text-xs rounded-[2px]">
                                 <div className="flex items-center justify-between px-2 py-1.5 border-b border-slate-100">
                                     <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 p-0 font-medium">People</DropdownMenuLabel>
-                                    <DropdownMenuItem className="text-xs rounded-[2px] bg-slate-900 text-white hover:bg-slate-800 hover:text-white focus:bg-slate-800 focus:text-white p-1.5 px-2 cursor-pointer">
+                                    <DropdownMenuItem onSelect={() => setPeopleFilterOpen(false)} className="text-xs rounded-[2px] bg-slate-900 text-white hover:bg-slate-800 hover:text-white focus:bg-slate-800 focus:text-white p-1.5 px-2 cursor-pointer">
                                         Done
                                     </DropdownMenuItem>
                                 </div>
-                                <DropdownMenuCheckboxItem checked={filterOwner === 'any' && filterShared === 'all'} onCheckedChange={() => { setFilterOwner('any'); setFilterShared('all') }} className="text-xs py-1.5 pl-8">
+                                <DropdownMenuCheckboxItem checked={filterOwner === 'any' && filterShared === 'all'} onCheckedChange={() => { setFilterOwner('any'); setFilterShared('all') }} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
                                     <User className="h-3.5 w-3.5 mr-2" />
                                     Anyone
                                 </DropdownMenuCheckboxItem>
@@ -2722,29 +2730,39 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                 <div className="px-2 pt-1.5 pb-0.5">
                                     <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 p-0 font-medium">Owner</DropdownMenuLabel>
                                 </div>
-                                <DropdownMenuCheckboxItem checked={filterOwner === 'me'} onCheckedChange={() => setFilterOwner(filterOwner === 'me' ? 'any' : 'me')} className="text-xs py-1.5 pl-8">
+                                <DropdownMenuCheckboxItem checked={filterOwner === 'me'} onCheckedChange={() => setFilterOwner(filterOwner === 'me' ? 'any' : 'me')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
                                     <User className="h-3.5 w-3.5 mr-2" />
                                     Owned by me
                                 </DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem checked={filterOwner === 'not-me'} onCheckedChange={() => setFilterOwner(filterOwner === 'not-me' ? 'any' : 'not-me')} className="text-xs py-1.5 pl-8">
+                                <DropdownMenuCheckboxItem checked={filterOwner === 'not-me'} onCheckedChange={() => setFilterOwner(filterOwner === 'not-me' ? 'any' : 'not-me')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
                                     <User className="h-3.5 w-3.5 mr-2" />
-                                    Not owned by me
+                                    Owned by others
+                                </DropdownMenuCheckboxItem>
+                                <DropdownMenuCheckboxItem checked={filterOwner === 'private-me'} onCheckedChange={() => setFilterOwner(filterOwner === 'private-me' ? 'any' : 'private-me')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
+                                    <User className="h-3.5 w-3.5 mr-2" />
+                                    Private to me
                                 </DropdownMenuCheckboxItem>
                                 <DropdownMenuSeparator />
                                 <div className="px-2 pt-1.5 pb-0.5">
                                     <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 p-0 font-medium">Shared</DropdownMenuLabel>
                                 </div>
-                                <DropdownMenuCheckboxItem checked={filterShared === 'by_me'} onCheckedChange={() => setFilterShared(filterShared === 'by_me' ? 'all' : 'by_me')} className="text-xs py-1.5 pl-8">
+                                <DropdownMenuCheckboxItem checked={filterShared === 'by_me'} onCheckedChange={() => setFilterShared(filterShared === 'by_me' ? 'all' : 'by_me')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
                                     Shared by me
                                 </DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem checked={filterShared === 'by_others'} onCheckedChange={() => setFilterShared(filterShared === 'by_others' ? 'all' : 'by_others')} className="text-xs py-1.5 pl-8">
+                                <DropdownMenuCheckboxItem checked={filterShared === 'by_others'} onCheckedChange={() => setFilterShared(filterShared === 'by_others' ? 'all' : 'by_others')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
                                     Shared by others
+                                </DropdownMenuCheckboxItem>
+                                <DropdownMenuCheckboxItem checked={filterShared === 'with_collaborator'} onCheckedChange={() => setFilterShared(filterShared === 'with_collaborator' ? 'all' : 'with_collaborator')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
+                                    Shared with Collaborator (External)
+                                </DropdownMenuCheckboxItem>
+                                <DropdownMenuCheckboxItem checked={filterShared === 'with_viewer'} onCheckedChange={() => setFilterShared(filterShared === 'with_viewer' ? 'all' : 'with_viewer')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
+                                    Shared with Viewer (External)
                                 </DropdownMenuCheckboxItem>
                                 <DropdownMenuSeparator />
                                 <div className="px-2 pt-1.5 pb-0.5">
                                     <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 p-0 font-medium">Intake</DropdownMenuLabel>
                                 </div>
-                                <DropdownMenuCheckboxItem checked={filterShared === 'pending_intake'} onCheckedChange={() => setFilterShared(filterShared === 'pending_intake' ? 'all' : 'pending_intake')} className="text-xs py-1.5 pl-8">
+                                <DropdownMenuCheckboxItem checked={filterShared === 'pending_intake'} onCheckedChange={() => setFilterShared(filterShared === 'pending_intake' ? 'all' : 'pending_intake')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
                                     Pending Review
                                 </DropdownMenuCheckboxItem>
                             </DropdownMenuContent>

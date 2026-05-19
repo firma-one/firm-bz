@@ -16,7 +16,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core'
-import { Share2, User, Lock, ListTodo, Loader2, CheckCircle, GripVertical, List, FolderOpen, LayoutGrid, Clock, Copy, Check, Search, MessageCircle, Link2, X, RefreshCw } from 'lucide-react'
+import { Share2, User, Lock, ListTodo, Loader2, CheckCircle, GripVertical, List, FolderOpen, LayoutGrid, Clock, Copy, Check, Search, MessageCircle, Link2, X, RefreshCw, ChevronDown, Filter } from 'lucide-react'
 import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
 import { DocumentBreadcrumb } from '@/components/ui/document-breadcrumb'
 import { DocumentIcon } from '@/components/ui/document-icon'
@@ -25,6 +25,15 @@ import { DocumentActionMenu } from '@/components/ui/document-action-menu'
 import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { ShareDetailPanel } from './share-detail-panel'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { SecureAccessModal } from './secure-access-modal'
@@ -804,7 +813,7 @@ function SharesGridView({
   deeplinkBase?: string
 }) {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 py-2">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 py-2">
       {shares.map((share) => (
         <ShareCard
           key={share.id}
@@ -877,9 +886,9 @@ function ShareCard({
       layout
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      whileHover={{ y: -4, boxShadow: '0 20px 40px -10px rgba(0,0,0,0.12)' }}
+      whileHover={{ y: -2, boxShadow: '0 8px 24px -4px rgba(0,0,0,0.10)' }}
       transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-      className="group relative bg-white rounded-xl border border-slate-200/80 border-l-2 border-l-[#eae8ff] shadow-[0_1px_3px_0_rgba(0,0,0,0.06)] overflow-hidden flex flex-col h-full"
+      className="group relative bg-white rounded border border-[#e5e7eb] shadow-sm overflow-hidden flex flex-col h-full"
     >
       {/* Thumbnail / Large Icon Area */}
       <div
@@ -899,11 +908,11 @@ function ShareCard({
             <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-60 group-hover:opacity-40 transition-opacity duration-500" />
           </div>
         ) : isFolder ? (
-          <div className="w-full h-full bg-indigo-50/20 flex items-center justify-center relative group-hover:bg-indigo-50/40 transition-colors duration-500">
-            <div className="transform group-hover:scale-110 transition-transform duration-700 ease-out shadow-indigo-200/50">
-              <SharedFolderIcon fillLevel={1} tooltip="shared" className="h-32 w-32 opacity-40" />
+          <div className="w-full h-full bg-[#5A78FF]/5 flex items-center justify-center relative group-hover:bg-[#5A78FF]/10 transition-colors duration-500">
+            <div className="transform group-hover:scale-110 transition-transform duration-700 ease-out">
+              <SharedFolderIcon fillLevel={1} tooltip="shared" className="h-24 w-24 opacity-40" />
             </div>
-            <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/10 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-tr from-[#5A78FF]/8 to-transparent" />
           </div>
         ) : (
           <div className="w-full h-full bg-slate-50 flex items-center justify-center relative group-hover:bg-indigo-50/30 transition-colors duration-700">
@@ -925,7 +934,7 @@ function ShareCard({
             </div>
 
             <div className="transform group-hover:scale-110 group-hover:rotate-1 transition-all duration-700 ease-out flex items-center justify-center z-10 drop-shadow-sm">
-              <DocumentIcon mimeType={share.documentMimeType ?? undefined} size={120} />
+              <DocumentIcon mimeType={share.documentMimeType ?? undefined} size={80} />
             </div>
 
             <div className="absolute bottom-4 left-0 right-0 flex justify-center opacity-0 group-hover:opacity-100 transition-all duration-500 translate-y-1 group-hover:translate-y-0 text-center">
@@ -939,19 +948,19 @@ function ShareCard({
         {/* Overlay Badge for MimeType */}
         {!isFolder && (
           <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-all duration-300 scale-90 group-hover:scale-100">
-            <div className="bg-white/80 backdrop-blur-md px-2.5 py-1 rounded-xl border border-white/50 shadow-sm text-[10px] font-black text-indigo-600 tracking-wider uppercase">
+            <div className="bg-white/80 backdrop-blur-md px-2 py-0.5 rounded border border-[#e5e7eb]/80 shadow-sm text-[9px] font-semibold text-[#45474c] tracking-wider uppercase">
               {share.documentMimeType?.split('.').pop()?.split('/').pop()?.replace('vnd.google-apps.', '')}
             </div>
           </div>
         )}
       </div>
 
-      {/* Gradient title area */}
-      <div className="bg-gradient-to-br from-[#f5f3ff] to-white px-5 pt-4 pb-3">
+      {/* Title area */}
+      <div className="bg-[#f9f9fb] px-4 pt-3 pb-2.5 border-b border-[#e5e7eb]">
         <div className="flex items-start gap-2">
           <DocumentIcon mimeType={share.documentMimeType ?? undefined} className="w-5 h-5 shrink-0 mt-0.5" />
           <h3
-            className="font-bold text-slate-800 text-[15px] leading-tight truncate cursor-pointer hover:text-indigo-600 transition-colors flex-1 min-w-0"
+            className="font-semibold text-[#1b1b1d] text-[13px] leading-tight truncate cursor-pointer hover:text-[#069668] transition-colors flex-1 min-w-0"
             title={share.documentName}
             onClick={handleOpenPreview}
           >
@@ -966,7 +975,7 @@ function ShareCard({
       </div>
 
       {/* Content Area */}
-      <div className="px-5 pb-5 flex flex-col flex-1 bg-white relative">
+      <div className="px-4 pb-4 flex flex-col flex-1 bg-white relative">
         {/* DateTime + quick links row */}
         <div className="flex items-center justify-between mt-2">
           <div className="flex items-center gap-1.5">
@@ -999,20 +1008,22 @@ function ShareCard({
                 <TooltipContent side="top" className="text-xs">{deeplinkBase && share.documentId ? 'Copy link' : 'No link available'}</TooltipContent>
               </Tooltip>
             </TooltipProvider>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors"
-                    onClick={(e) => { e.stopPropagation(); onOpenComments?.(share) }}
-                  >
-                    <MessageCircle className="h-4 w-4" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="text-xs">Comments</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            {!isFolder && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors"
+                      onClick={(e) => { e.stopPropagation(); onOpenComments?.(share) }}
+                    >
+                      <MessageCircle className="h-4 w-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-xs">Comments</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
             <DocumentActionMenu
               document={getDocumentForMenu(share)}
               showShareModal={canManage}
@@ -1029,7 +1040,7 @@ function ShareCard({
         </div>
 
         {/* Shared by / Shared with rows */}
-        <div className="mt-4 pt-4 -mx-5 px-5 border-t border-slate-100 space-y-2">
+        <div className="mt-3 pt-3 -mx-4 px-4 border-t border-[#e5e7eb] space-y-1.5">
           <div className="flex items-center gap-2">
             <span className="text-[10px] text-slate-400 w-14 shrink-0 whitespace-nowrap">Shared by</span>
             <TooltipProvider>
@@ -1099,6 +1110,9 @@ export function ProjectSharesTab({
   const [detailShareId, setDetailShareId] = useState<string | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [filterShared, setFilterShared] = useState<'all' | 'by_me' | 'by_others' | 'with_collaborator' | 'with_viewer'>('all')
+  const [filterSharedOpen, setFilterSharedOpen] = useState(false)
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null)
 
   const {
     handleSecureOpen,
@@ -1141,6 +1155,9 @@ export function ProjectSharesTab({
 
   useEffect(() => {
     refreshData()
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setCurrentUserEmail(session?.user?.email ?? null)
+    })
   }, [refreshData])
 
   const saveOrder = useCallback(async (toDo: string[], inProgress: string[], done: string[]) => {
@@ -1327,22 +1344,20 @@ export function ProjectSharesTab({
 
   const detailShare = detailShareId ? shares.find((s) => s.id === detailShareId) : null
   const normalizedQuery = searchQuery.trim().toLowerCase()
-  const filteredShares =
-    normalizedQuery.length === 0
-      ? shares
-      : shares.filter((s) => {
-          const hay = [
-            s.documentName,
-            s.createdByEmail,
-            s.updatedByEmail,
-            s.createdBy,
-            s.updatedBy,
-          ]
-            .filter(Boolean)
-            .join(' ')
-            .toLowerCase()
-          return hay.includes(normalizedQuery)
-        })
+  const filteredShares = shares.filter((s) => {
+    if (normalizedQuery.length > 0) {
+      const hay = [s.documentName, s.createdByEmail, s.updatedByEmail, s.createdBy, s.updatedBy]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+      if (!hay.includes(normalizedQuery)) return false
+    }
+    if (filterShared === 'by_me') return !!currentUserEmail && s.createdByEmail === currentUserEmail
+    if (filterShared === 'by_others') return !currentUserEmail || s.createdByEmail !== currentUserEmail
+    if (filterShared === 'with_collaborator') return !!s.settings.externalCollaborator
+    if (filterShared === 'with_viewer') return !!s.settings.guest
+    return true
+  })
 
   const handleOpenComments = useCallback(
     (share: ShareRecord) => {
@@ -1423,6 +1438,40 @@ export function ProjectSharesTab({
           </button>
           </nav>
           <div className="ml-auto pb-1 flex items-center gap-2">
+            <DropdownMenu open={filterSharedOpen} onOpenChange={setFilterSharedOpen}>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className={cn("h-8 gap-1.5 text-xs bg-white rounded-[2px] border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors", filterShared !== 'all' && "border-slate-400 ring-1 ring-slate-300")}>
+                  <Filter className="h-3 w-3 opacity-60" />
+                  Shared
+                  {filterShared !== 'all' && <span className="ml-0.5 bg-slate-200 text-slate-800 px-1.5 rounded-full text-[10px] font-medium">1</span>}
+                  <ChevronDown className="h-3 w-3 opacity-50" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-[220px] py-1 text-xs rounded-[2px]">
+                <div className="flex items-center justify-between px-2 py-1.5 border-b border-slate-100">
+                  <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 p-0 font-medium">Shared</DropdownMenuLabel>
+                  <DropdownMenuItem onSelect={() => setFilterSharedOpen(false)} className="text-xs rounded-[2px] bg-slate-900 text-white hover:bg-slate-800 hover:text-white focus:bg-slate-800 focus:text-white p-1.5 px-2 cursor-pointer">
+                    Done
+                  </DropdownMenuItem>
+                </div>
+                <DropdownMenuCheckboxItem checked={filterShared === 'all'} onCheckedChange={() => setFilterShared('all')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
+                  All
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuCheckboxItem checked={filterShared === 'by_me'} onCheckedChange={() => setFilterShared(filterShared === 'by_me' ? 'all' : 'by_me')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
+                  Shared by me
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem checked={filterShared === 'by_others'} onCheckedChange={() => setFilterShared(filterShared === 'by_others' ? 'all' : 'by_others')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
+                  Shared by others
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem checked={filterShared === 'with_collaborator'} onCheckedChange={() => setFilterShared(filterShared === 'with_collaborator' ? 'all' : 'with_collaborator')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
+                  Shared with Collaborator (External)
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem checked={filterShared === 'with_viewer'} onCheckedChange={() => setFilterShared(filterShared === 'with_viewer' ? 'all' : 'with_viewer')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
+                  Shared with Viewer (External)
+                </DropdownMenuCheckboxItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <button
               type="button"
               onClick={refreshData}
@@ -1454,7 +1503,7 @@ export function ProjectSharesTab({
       </div>
 
       <div className="flex flex-1 min-h-0 overflow-hidden gap-4">
-        <div className="flex-1 min-w-0 overflow-auto p-4 bg-white rounded-2xl">
+        <div className="flex-1 min-w-0 overflow-auto p-4 bg-white">
           {isLoading ? (
             <div className="flex items-center justify-center min-h-[200px]">
               <LoadingSpinner size="md" className="min-h-0" />
@@ -1463,11 +1512,11 @@ export function ProjectSharesTab({
             <div className="flex flex-col items-center justify-center h-64 text-slate-500 bg-white/60 rounded-2xl border border-slate-200/60 mx-2">
               <Share2 className="h-11 w-11 mb-3 text-slate-300" />
               <p className="text-sm font-medium text-slate-600">
-                {searchQuery.trim().length > 0 ? 'No matches' : 'No shared documents yet'}
+                {searchQuery.trim().length > 0 || filterShared !== 'all' ? 'No matches' : 'No shared documents yet'}
               </p>
               <p className="text-xs mt-1 text-slate-400">
-                {searchQuery.trim().length > 0
-                  ? 'Try a different search.'
+                {searchQuery.trim().length > 0 || filterShared !== 'all'
+                  ? 'Try adjusting your search or filter.'
                   : 'Share documents from the Files tab to see them here'}
               </p>
             </div>
