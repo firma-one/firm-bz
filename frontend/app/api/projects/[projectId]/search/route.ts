@@ -200,7 +200,7 @@ export async function GET(
         if (finalFiles.length > 0) {
             try {
                 const allExternalIds = finalFiles.map((f: any) => f.id).filter(Boolean)
-                const lockedRows = await (prisma as any).$queryRawUnsafe<{ externalId: string }[]>(
+                const lockedRows = await (prisma as any).$queryRawUnsafe(
                     `SELECT "externalId" FROM platform.engagement_documents
                      WHERE "engagementId" = $1::uuid
                        AND "externalId" = ANY($2::text[])
