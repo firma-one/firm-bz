@@ -33,9 +33,10 @@ interface FirmSelectorProps {
     selectedFirmSlug: string
     onFirmChange: (firmSlug: string) => void
     className?: string
+    compact?: boolean
 }
 
-export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className }: FirmSelectorProps) {
+export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className, compact }: FirmSelectorProps) {
     const { user } = useAuth()
     const { canCreateAdditionalFirm, loadingEntitlement } = useCanCreateAdditionalFirm(user?.id)
     const addFirmDisabled = !user?.id || loadingEntitlement || !canCreateAdditionalFirm
@@ -114,28 +115,42 @@ export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className 
     }
 
     return (
-        <div className={`w-full ${className || ''}`}>
+        <div className={`w-full ${compact ? 'h-8 overflow-hidden' : ''} ${className || ''}`}>
             <Select value={selectedFirmSlug} onValueChange={handleValueChange}>
-                <SelectTrigger className="flex h-auto min-h-0 w-full min-w-0 items-start gap-2 whitespace-normal rounded border-none bg-transparent px-3 pt-2 pb-1.5 text-[#1b1b1d] shadow-none transition-colors hover:bg-[#f3f4f6] focus:ring-0 [&>svg]:ml-auto [&>svg]:mt-0.5 [&>svg]:shrink-0">
-                    <div className="flex flex-1 flex-col min-w-0 text-left leading-tight">
-                        <div className="flex items-center gap-2 min-w-0">
-                            <Building2 className="h-4 w-4 shrink-0 text-[#45474c]" />
-                            <span className="text-sm font-semibold truncate text-[#1b1b1d]">
-                                {selectedOrg?.name || 'Select Workspace...'}
+                {compact ? (
+                    <SelectTrigger className="flex h-8 w-full items-center gap-2 rounded border-none bg-transparent px-3 py-1 text-[#1b1b1d] shadow-none transition-colors hover:bg-[#f3f4f6] focus:ring-0 [&>svg]:ml-auto [&>svg]:shrink-0">
+                        <Building2 className="h-4 w-4 shrink-0 text-[#45474c]" />
+                        <span className="d-sidebar-section truncate flex-1 text-left">
+                            {selectedOrg?.name || 'Select Workspace...'}
+                        </span>
+                        {selectedOrg?.sandboxOnly && (
+                            <span className="inline-flex items-center rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20 whitespace-nowrap shrink-0">
+                                Sandbox
                             </span>
-                        </div>
-                        <div className="mt-0.5 flex items-center gap-2 min-w-0">
-                            <span className="truncate text-[10px] leading-snug text-[#45474c] font-mono">
-                                {selectedOrg ? `/${selectedOrg.slug}` : '/—'}
-                            </span>
-                            {selectedOrg?.sandboxOnly && (
-                                <span className="inline-flex items-center rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20 whitespace-nowrap shrink-0">
-                                    Sandbox
+                        )}
+                    </SelectTrigger>
+                ) : (
+                    <SelectTrigger className="flex h-auto min-h-0 w-full min-w-0 items-start gap-2 whitespace-normal rounded border-none bg-transparent px-3 pt-2 pb-1.5 text-[#1b1b1d] shadow-none transition-colors hover:bg-[#f3f4f6] focus:ring-0 [&>svg]:ml-auto [&>svg]:mt-0.5 [&>svg]:shrink-0">
+                        <div className="flex flex-1 flex-col min-w-0 text-left leading-tight">
+                            <div className="flex items-center gap-2 min-w-0">
+                                <Building2 className="h-4 w-4 shrink-0 text-[#45474c]" />
+                                <span className="text-sm font-semibold truncate text-[#1b1b1d]">
+                                    {selectedOrg?.name || 'Select Workspace...'}
                                 </span>
-                            )}
+                            </div>
+                            <div className="mt-0.5 flex items-center gap-2 min-w-0">
+                                <span className="truncate text-[10px] leading-snug text-[#45474c] font-mono">
+                                    {selectedOrg ? `/${selectedOrg.slug}` : '/—'}
+                                </span>
+                                {selectedOrg?.sandboxOnly && (
+                                    <span className="inline-flex items-center rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20 whitespace-nowrap shrink-0">
+                                        Sandbox
+                                    </span>
+                                )}
+                            </div>
                         </div>
-                    </div>
-                </SelectTrigger>
+                    </SelectTrigger>
+                )}
                 <SelectContent
                     sideOffset={4}
                     className="d-app max-h-[min(70vh,24rem)] min-w-[var(--radix-select-trigger-width)] max-w-[min(100vw-1.5rem,18rem)] overflow-y-auto overflow-x-hidden rounded border border-[#e5e7eb] bg-white p-0 shadow-md"
