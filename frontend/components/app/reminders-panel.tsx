@@ -67,12 +67,12 @@ function ReminderRow({ r, isPending, acting, onDone, onUndoDone, onHide, onShow,
     const Icon = getEntityIcon(r.entityKey)
     return (
         <div
-            className={`group grid px-3 py-2 rounded-xl border transition-all ${
+            className={`group grid px-3 py-2 rounded-[2px] border transition-all ${
                 isPending
-                    ? 'border-slate-100 bg-slate-50 opacity-60'
+                    ? 'border-[#e5e7eb] bg-[#f9f9fb] opacity-60'
                     : hidden
-                    ? 'border-slate-100 bg-slate-50 hover:bg-white hover:border-slate-200'
-                    : 'border-slate-100 bg-white hover:border-slate-200 hover:shadow-sm'
+                    ? 'border-[#e5e7eb] bg-[#f9f9fb] hover:bg-white hover:border-[#e5e7eb]'
+                    : 'border-[#e5e7eb] bg-white hover:border-[#e5e7eb] hover:shadow-sm'
             }`}
             style={{ borderLeftWidth: '3px', borderLeftColor: isPending ? '#C4572B' : hidden ? '#E8E8E8' : accent.border }}
         >
@@ -84,14 +84,14 @@ function ReminderRow({ r, isPending, acting, onDone, onUndoDone, onHide, onShow,
                     className="flex items-center gap-1.5 min-w-0 group/link"
                     onClick={onNavigate}
                 >
-                    <Icon className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                    <span className={`text-[13px] font-semibold truncate leading-snug transition-colors group-hover/link:text-[#C4572B] ${hidden || isPending ? 'text-slate-400' : 'text-slate-800'} ${isPending ? 'line-through' : ''}`}>
+                    <Icon className="h-3.5 w-3.5 shrink-0 text-[#45474c]" />
+                    <span className={`text-[0.8125rem] font-semibold truncate leading-snug transition-colors group-hover/link:text-[#C4572B] ${hidden || isPending ? 'text-[#45474c]' : 'text-[#1b1b1d]'} ${isPending ? 'line-through' : ''}`}>
                         {r.action}
                     </span>
                     {r.note && (
-                        <span className="text-[11px] text-slate-400 truncate ml-1 font-normal">{r.note}</span>
+                        <span className="text-[11px] text-[#45474c] truncate ml-1 font-normal">{r.note}</span>
                     )}
-                    <ChevronRight className="h-3 w-3 shrink-0 text-slate-300 group-hover/link:text-[#C4572B]/60 transition-colors" />
+                    <ChevronRight className="h-3 w-3 shrink-0 text-[#45474c]/40 group-hover/link:text-[#C4572B]/60 transition-colors" />
                 </a>
                 </Tip>
                 <div className="flex items-center gap-1">
@@ -100,7 +100,7 @@ function ReminderRow({ r, isPending, acting, onDone, onUndoDone, onHide, onShow,
                             <button
                                 type="button"
                                 onClick={() => onUndoDone(r.id)}
-                                className="shrink-0 h-6 w-6 inline-flex items-center justify-center rounded-md border border-[#C4572B]/30 bg-white text-[#C4572B]/60 hover:text-[#C4572B] hover:border-[#C4572B] transition-colors"
+                                className="shrink-0 h-6 w-6 inline-flex items-center justify-center rounded-[2px] border border-[#C4572B]/30 bg-white text-[#C4572B]/60 hover:text-[#C4572B] hover:border-[#C4572B] transition-colors"
                             >
                                 <Undo2 className="h-3 w-3" />
                             </button>
@@ -111,7 +111,7 @@ function ReminderRow({ r, isPending, acting, onDone, onUndoDone, onHide, onShow,
                                 type="button"
                                 disabled={acting === r.id}
                                 onClick={() => onDone(r.id)}
-                                className="shrink-0 h-6 w-6 inline-flex items-center justify-center rounded-md border border-slate-200 bg-white text-slate-300 hover:text-emerald-600 hover:border-emerald-300 disabled:opacity-40 transition-colors"
+                                className="shrink-0 h-6 w-6 inline-flex items-center justify-center rounded-[2px] border border-[#e5e7eb] bg-white text-[#45474c]/50 hover:text-emerald-600 hover:border-emerald-300 disabled:opacity-40 transition-colors"
                             >
                                 <CheckCircle2 className="h-3 w-3" />
                             </button>
@@ -123,7 +123,7 @@ function ReminderRow({ r, isPending, acting, onDone, onUndoDone, onHide, onShow,
                             type="button"
                             disabled={acting === r.id || isPending}
                             onClick={() => hidden ? onShow(r.id) : onHide(r.id)}
-                            className="shrink-0 h-6 w-6 inline-flex items-center justify-center rounded-md border border-slate-200 bg-white text-slate-300 hover:text-slate-500 hover:border-slate-300 disabled:opacity-40 transition-colors"
+                            className="shrink-0 h-6 w-6 inline-flex items-center justify-center rounded-[2px] border border-[#e5e7eb] bg-white text-[#45474c]/50 hover:text-[#45474c] hover:border-[#e5e7eb] disabled:opacity-40 transition-colors"
                         >
                             {hidden ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
                         </button>
@@ -138,7 +138,7 @@ function ReminderRow({ r, isPending, acting, onDone, onUndoDone, onHide, onShow,
                         <Clock className="h-3 w-3 shrink-0 text-[#C4572B]/50" />
                         <span className="text-[11px] font-medium text-[#C4572B]/60">Marking done…</span>
                     </div>
-                    <div className="h-0.5 w-full rounded-full bg-slate-200 overflow-hidden">
+                    <div className="h-0.5 w-full rounded-full bg-[#e5e7eb] overflow-hidden">
                         <div
                             className="h-full rounded-full bg-[#C4572B]"
                             style={{ animation: 'reminder-undo-shrink 10s linear forwards' }}
@@ -148,8 +148,8 @@ function ReminderRow({ r, isPending, acting, onDone, onUndoDone, onHide, onShow,
             ) : (
                 <Tip label={r.dateValue ? fullDateLabel(r.dateValue) : ''}>
                     <div className={`flex items-center gap-1.5 mt-0.5 ${hidden ? 'opacity-40' : ''}`}>
-                        <Clock className="h-3 w-3 shrink-0" style={{ color: hidden ? '#94a3b8' : accent.chipText }} />
-                        <span className="text-[11px] font-medium" style={{ color: hidden ? '#94a3b8' : accent.chipText }}>
+                        <Clock className="h-3 w-3 shrink-0" style={{ color: hidden ? '#45474c' : accent.chipText }} />
+                        <span className="text-[11px] font-medium" style={{ color: hidden ? '#45474c' : accent.chipText }}>
                             {r.delta !== null ? relativeDueLabel(r.delta) : r.label}
                         </span>
                     </div>
@@ -239,7 +239,7 @@ export function RemindersPanel({ onCountChange }: Props) {
                 type="button"
                 aria-label="Reminders"
                 onClick={() => setOpen((v) => !v)}
-                className="p-2 hover:bg-orange-50 rounded-full transition-colors relative"
+                className="p-2 hover:bg-orange-50 rounded-xl transition-colors relative"
                 style={{ color: '#C4572B' }}
             >
                 <CalendarClock className="h-5 w-5" />
@@ -252,18 +252,18 @@ export function RemindersPanel({ onCountChange }: Props) {
             </Tip>
 
             {open ? (
-                <div className="absolute right-0 top-full mt-2 w-[340px] border border-slate-200 rounded-2xl shadow-xl z-50">
-                    {/* Header — rounded-t-2xl clips bg-slate-50 to top corners without overflow-hidden on outer panel */}
-                    <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between rounded-t-2xl">
+                <div className="absolute right-0 top-full mt-2 w-[340px] border border-[#e5e7eb] rounded-[2px] shadow-lg z-50 overflow-hidden">
+                    {/* Header */}
+                    <div className="px-4 py-3 bg-[#f9f9fb] border-b border-[#e5e7eb] flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                            <span className="text-[13px] font-bold text-slate-900 tracking-tight">Reminders</span>
+                            <span className="text-[0.8125rem] font-bold text-[#1b1b1d] tracking-tight">Reminders</span>
                             {reminders.length > 0 ? (
-                                <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full text-white min-w-[1.75rem] text-center" style={{ background: '#C4572B' }}>
+                                <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded-sm tabular-nums leading-none text-white" style={{ background: '#C4572B' }}>
                                     {reminders.length}
                                 </span>
                             ) : null}
                             {urgentCount > 0 ? (
-                                <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full border" style={{ background: '#FDF0EA', color: '#7A2414', borderColor: '#D9937A' }}>
+                                <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded-sm tabular-nums leading-none border" style={{ background: '#FDF0EA', color: '#7A2414', borderColor: '#D9937A' }}>
                                     {urgentCount} overdue
                                 </span>
                             ) : null}
@@ -273,14 +273,14 @@ export function RemindersPanel({ onCountChange }: Props) {
                                 <button
                                     type="button"
                                     onClick={() => setShowHidden((v) => !v)}
-                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-200 transition-colors"
+                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-[2px] text-[11px] font-medium text-[#45474c] hover:text-[#1b1b1d] hover:bg-[#f3f4f6] transition-colors"
                                 >
                                     {showHidden ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
                                     {`Hidden · ${hidden.length}`}
                                 </button>
                             ) : null}
                             <button type="button" onClick={() => setOpen(false)} aria-label="Close"
-                                className="p-1 rounded-lg hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors">
+                                className="p-1 rounded-[2px] hover:bg-[#f3f4f6] text-[#45474c] hover:text-[#1b1b1d] transition-colors">
                                 <X className="h-4 w-4" />
                             </button>
                         </div>
@@ -288,14 +288,14 @@ export function RemindersPanel({ onCountChange }: Props) {
 
                     {/* Body */}
                     <style>{`@keyframes reminder-undo-shrink { from { width: 100% } to { width: 0% } }`}</style>
-                    <div className="p-3 space-y-1.5 max-h-[400px] overflow-y-auto bg-white rounded-b-2xl">
+                    <div className="p-3 space-y-1.5 max-h-[400px] overflow-y-auto bg-white">
                         {loading ? (
-                            <div className="text-center py-8 text-xs text-slate-400">Loading…</div>
+                            <div className="text-center py-8 text-[0.8125rem] text-[#45474c]">Loading…</div>
                         ) : displayed.length === 0 ? (
                             <div className="text-center py-8">
-                                <BellOff className="h-7 w-7 mx-auto mb-2 text-slate-300" />
-                                <p className="text-[13px] font-semibold text-slate-700">No reminders</p>
-                                <p className="text-xs text-slate-400 mt-0.5">Overdue and upcoming follow-ups appear here.</p>
+                                <BellOff className="h-7 w-7 mx-auto mb-2 text-[#e5e7eb]" />
+                                <p className="text-[0.8125rem] font-semibold text-[#1b1b1d]">No reminders</p>
+                                <p className="text-xs text-[#45474c] mt-0.5">Overdue and upcoming follow-ups appear here.</p>
                             </div>
                         ) : (
                             displayed.map((r) => (

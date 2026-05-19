@@ -26,8 +26,8 @@ function StatCard({ icon: Icon, label, value, color }: { icon: any, label: strin
     const bgClass = colorClasses[color] || colorClasses.blue
 
     return (
-        <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex items-center gap-3">
-            <div className={`p-2.5 rounded-xl shrink-0 ${bgClass}`}>
+        <div className="bg-white rounded p-4 border border-[#e5e7eb] shadow-sm flex items-center gap-3">
+            <div className={`p-2.5 rounded shrink-0 ${bgClass}`}>
                 <Icon className="h-4 w-4" />
             </div>
             <p className="text-2xl font-bold text-gray-900 leading-none shrink-0">{value}</p>
@@ -246,7 +246,7 @@ export function DriveInsightsSection() {
 
     if (!isConnected) {
         return (
-            <div className="py-8 flex flex-col items-center justify-center text-center bg-white rounded-2xl border border-gray-100">
+            <div className="py-8 flex flex-col items-center justify-center text-center bg-white rounded border border-[#e5e7eb]">
                 <div className="p-4 bg-white rounded-full mb-4 shadow-sm">
                     <Zap className="h-10 w-10 text-indigo-400" />
                 </div>
@@ -260,7 +260,7 @@ export function DriveInsightsSection() {
     }
 
     return (
-        <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
+        <div className="bg-white border border-[#e5e7eb] rounded p-6 shadow-sm">
             <div className="flex gap-6 items-start">
                 {/* Left: main content */}
                 <div className="flex-1 min-w-0 space-y-6">

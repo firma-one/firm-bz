@@ -6,7 +6,7 @@ import { requireEngagementMember, isEngagementLeadRole } from '@/lib/engagement-
 
 /**
  * PATCH /api/projects/[projectId]/documents/[documentId]/privacy
- * Set or clear the `settings.locked = 'private'` flag (Engagement Lead only).
+ * Set or clear the `settings.lock = { type: 'private' }` flag (Engagement Lead only).
  * Private files are hidden from EC/EV users in the file list without moving them in Drive.
  */
 export async function PATCH(
@@ -52,9 +52,10 @@ export async function PATCH(
 
     let nextSettings: Record<string, unknown>
     if (makePrivate) {
-      nextSettings = { ...prevSettings, locked: 'private' }
+      const { locked: _legacy, ...rest } = prevSettings
+      nextSettings = { ...rest, lock: { type: 'private' } }
     } else {
-      const { locked: _removed, ...rest } = prevSettings
+      const { lock: _lock, locked: _legacy, ...rest } = prevSettings
       nextSettings = rest
     }
 

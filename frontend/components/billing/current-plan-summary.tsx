@@ -49,12 +49,12 @@ export function CurrentPlanSummary({
         }
     }, [firmId, portalReturnPath])
 
-    const labelClass = 'text-slate-600'
-    const valueClass = 'font-semibold text-slate-900'
+    const labelClass = 'text-[#45474c]'
+    const valueClass = 'font-bold text-[#1b1b1d]'
     const shell = cn(
         variant === 'embedded'
-            ? 'rounded-lg border border-slate-200 bg-slate-50/80 px-3.5 py-3 sm:px-4'
-            : 'rounded-2xl border border-slate-200/90 bg-white px-4 py-4 sm:px-5'
+            ? 'rounded-[2px] border border-[#e5e7eb] bg-[#f9f9fb] px-3.5 py-3 sm:px-4'
+            : 'rounded-[2px] border border-[#e5e7eb] bg-white px-4 py-4 sm:px-5'
     )
 
     if (loading) {
@@ -64,8 +64,8 @@ export function CurrentPlanSummary({
                 aria-busy="true"
                 aria-live="polite"
             >
-                <div className="flex items-center gap-2 text-sm text-slate-600">
-                    <Loader2 className="h-4 w-4 shrink-0 animate-spin text-slate-400" aria-hidden />
+                <div className="flex items-center gap-2 text-xs text-[#45474c]">
+                    <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[#45474c]/60" aria-hidden />
                     <span>Loading plan…</span>
                 </div>
             </div>
@@ -75,7 +75,7 @@ export function CurrentPlanSummary({
     if (!currentPlanState) {
         return (
             <div className={shell}>
-                <p className="text-sm text-slate-600">{upgradeCopy.currentPlanSummaryUnavailable}</p>
+                <p className="text-xs text-[#45474c]">{upgradeCopy.currentPlanSummaryUnavailable}</p>
             </div>
         )
     }
@@ -96,11 +96,11 @@ export function CurrentPlanSummary({
             )}
         >
             <div className="min-w-0 flex-1">
-                <p className={cn('text-sm leading-relaxed', labelClass)}>
+                <p className={cn('text-xs leading-relaxed', labelClass)}>
                     <span className="font-medium">{upgradeCopy.currentPlanLabelPlan}:</span>{' '}
                     <span className={valueClass}>{planName}</span>
                 </p>
-                <p className={cn('mt-2 text-sm leading-relaxed', labelClass)}>
+                <p className={cn('mt-2 text-xs leading-relaxed', labelClass)}>
                     <span className="font-medium">{upgradeCopy.currentPlanLabelValidUntil}:</span>{' '}
                     <span className={cn('tabular-nums', valueClass)}>{validUntil}</span>
                 </p>
@@ -109,8 +109,8 @@ export function CurrentPlanSummary({
                 <div className="flex w-full shrink-0 flex-col sm:w-auto sm:items-end">
                     <Button
                         type="button"
-                        variant="blackCta"
-                        className="h-9 w-full min-w-[6.5rem] gap-2 rounded-lg sm:w-auto sm:px-5"
+                        variant="greenCta"
+                        className="h-auto py-1.5 px-4 w-full min-w-[6.5rem] gap-2 rounded-[2px] sm:w-auto text-[10px] font-headline font-bold tracking-widest uppercase"
                         disabled={portalLoading}
                         onClick={() => void openBillingPortal()}
                     >

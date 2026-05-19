@@ -183,7 +183,7 @@ export async function PATCH(
 
     const doc = await prisma.engagementDocument.findFirst({
       where: { engagementId: projectId, externalId: fileInfo.externalId },
-      select: { id: true, settings: true, fileName: true, firmId: true, connectorId: true },
+      select: { id: true, settings: true, fileName: true, firmId: true, connectorId: true, clientId: true },
     })
     if (!doc) return NextResponse.json({ error: 'Document record not found' }, { status: 404 })
 
@@ -257,6 +257,7 @@ export async function PATCH(
       audit(AUDIT_EVENT.DOCUMENT_CHANGED)
         .scope(AUDIT_SCOPE.DOCUMENT)
         .firm(doc.firmId)
+        .client(doc.clientId ?? undefined)
         .engagement(projectId)
         .document(doc.id)
         .actor(user.id)
@@ -291,6 +292,7 @@ export async function PATCH(
     audit(AUDIT_EVENT.DOCUMENT_DELETED)
       .scope(AUDIT_SCOPE.DOCUMENT)
       .firm(doc.firmId)
+      .client(doc.clientId ?? undefined)
       .engagement(projectId)
       .document(doc.id)
       .actor(user.id)

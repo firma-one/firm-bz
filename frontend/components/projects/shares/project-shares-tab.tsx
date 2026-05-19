@@ -16,7 +16,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core'
-import { Share2, User, Lock, ListTodo, Loader2, CheckCircle, GripVertical, List, FolderOpen, LayoutGrid, Clock, Copy, Check, Search, MessageCircle, Link2, X, RefreshCw } from 'lucide-react'
+import { Share2, User, Lock, ListTodo, Loader2, CheckCircle, Eye, GripVertical, FolderOpen, Clock, Copy, Check, Search, MessageCircle, Link2, X, RefreshCw, ChevronDown, Filter } from 'lucide-react'
 import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
 import { DocumentBreadcrumb } from '@/components/ui/document-breadcrumb'
 import { DocumentIcon } from '@/components/ui/document-icon'
@@ -25,6 +25,15 @@ import { DocumentActionMenu } from '@/components/ui/document-action-menu'
 import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { ShareDetailPanel } from './share-detail-panel'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { SecureAccessModal } from './secure-access-modal'
@@ -37,10 +46,9 @@ import { DocumentDocCommentsPane } from '@/components/projects/document-doc-comm
 import { formatDistanceToNow } from 'date-fns'
 import { cn } from '@/lib/utils'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useRouter } from 'next/navigation'
 import { useProjectPersonaLabels } from '@/lib/hooks/use-project-persona-labels'
 
-type ActivityStatus = 'to_do' | 'in_progress' | 'done'
+type ActivityStatus = 'to_do' | 'in_progress' | 'in_review' | 'done'
 
 interface ShareRecord {
   id: string
@@ -111,26 +119,31 @@ const LANES: {
   status: ActivityStatus
   label: string
   icon: React.ReactNode
-  /** Gradient for icon pill in header */
-  iconGradient: string
+  iconBg: string
 }[] = [
     {
       status: 'to_do',
       label: 'To Do',
-      icon: <ListTodo className="h-4 w-4 text-white" />,
-      iconGradient: 'from-[#ddd6fe] to-[#c4b5fd]',
+      icon: <ListTodo className="h-3.5 w-3.5 text-[#45474c]" />,
+      iconBg: 'bg-[#f3f4f6]',
     },
     {
       status: 'in_progress',
       label: 'In Progress',
-      icon: <Loader2 className="h-4 w-4 text-white" />,
-      iconGradient: 'from-[#5eead4] to-[#2dd4bf]',
+      icon: <Loader2 className="h-3.5 w-3.5 text-[#5A78FF]" />,
+      iconBg: 'bg-[#eff2ff]',
+    },
+    {
+      status: 'in_review',
+      label: 'In Review',
+      icon: <Eye className="h-3.5 w-3.5 text-[#c2410c]" />,
+      iconBg: 'bg-[#fff7ed]',
     },
     {
       status: 'done',
       label: 'Done',
-      icon: <CheckCircle className="h-4 w-4 text-white" />,
-      iconGradient: 'from-[#7dd3fc] to-[#38bdf8]',
+      icon: <CheckCircle className="h-3.5 w-3.5 text-[#069668]" />,
+      iconBg: 'bg-[#ecfdf5]',
     },
   ]
 
@@ -159,29 +172,17 @@ function DroppableLane({
 }) {
   const { setNodeRef, isOver } = useDroppable({ id })
   return (
-    <div ref={setNodeRef} className={cn(className, isOver && 'ring-1 ring-slate-300/80 ring-inset rounded-2xl')}>
+    <div ref={setNodeRef} className={cn(className, isOver && 'bg-[#069668]/5 rounded')}>
       {children}
     </div>
   )
 }
 
-/** Card accent: header gradient (top-left → bottom-right, soft pastel to white) + subtle left edge. Matches workflow-card reference. */
-const CARD_ACCENT: Record<ActivityStatus, { border: string; headerBg: string; iconPillBg: string }> = {
-  to_do: {
-    border: 'border-l-2 border-l-[#eae8ff]',
-    headerBg: 'bg-gradient-to-br from-[#f5f3ff] to-white',
-    iconPillBg: 'bg-[#ede9fe]/90',
-  },
-  in_progress: {
-    border: 'border-l-2 border-l-[#ccfbf1]',
-    headerBg: 'bg-gradient-to-br from-[#ecfdf8] to-white',
-    iconPillBg: 'bg-[#ccfbf1]/90',
-  },
-  done: {
-    border: 'border-l-2 border-l-[#e0f2fe]',
-    headerBg: 'bg-gradient-to-br from-[#eff6ff] to-white',
-    iconPillBg: 'bg-[#e0f2fe]/90',
-  },
+const CARD_ACCENT: Record<ActivityStatus, { iconPillBg: string }> = {
+  to_do: { iconPillBg: 'bg-[#f3f4f6]' },
+  in_progress: { iconPillBg: 'bg-[#eff2ff]' },
+  in_review: { iconPillBg: 'bg-[#fff7ed]' },
+  done: { iconPillBg: 'bg-[#ecfdf5]' },
 }
 
 function DraggableCard({
@@ -205,6 +206,7 @@ function DraggableCard({
   isExternalPersona,
   isExternalViewer,
   deeplinkBase,
+  generalFolderId,
 }: {
   id: string
   share: ShareRecord
@@ -226,10 +228,11 @@ function DraggableCard({
   isExternalPersona?: boolean
   isExternalViewer?: boolean
   deeplinkBase?: string
+  generalFolderId?: string | null
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id })
   const { setNodeRef: setDropRef, isOver } = useDroppable({ id })
-  const accent = CARD_ACCENT[laneStatus]
+  const { iconPillBg } = CARD_ACCENT[laneStatus]
 
   const previewDoc = {
     id: share.documentId,
@@ -250,22 +253,20 @@ function DraggableCard({
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.98 }}
       transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-      whileHover={!isDragging ? { y: -3, boxShadow: '0 8px 20px -4px rgba(0,0,0,0.1)' } : undefined}
+      whileHover={!isDragging ? { y: -2, boxShadow: '0 4px 12px -2px rgba(0,0,0,0.08)' } : undefined}
       className={cn(
-        'rounded-2xl overflow-hidden select-none border border-slate-200/80 transition-shadow duration-200',
-        accent.border,
-        'bg-white shadow-[0_1px_3px_0_rgba(0,0,0,0.06)]',
-        isDragging && 'opacity-60 shadow-[0_8px_24px_-8px_rgba(0,0,0,0.12)] z-10 scale-[1.02]',
-        isOver && !isDragging && 'ring-1 ring-slate-300/70 ring-inset'
+        'rounded overflow-hidden select-none border border-[#e5e7eb] transition-shadow duration-200',
+        'bg-white shadow-sm',
+        isDragging && 'opacity-60 shadow-md z-10 scale-[1.02]',
+        isOver && !isDragging && 'ring-1 ring-[#069668]/30 ring-inset'
       )}
     >
-      <div className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-50/70 border-b border-slate-100/80" {...listeners} {...attributes}>
+      <div className="flex items-center gap-1 px-2.5 py-1 bg-[#f9f9fb] border-b border-[#e5e7eb]" {...listeners} {...attributes}>
         <GripVertical className="h-4 w-4 text-slate-400 cursor-grab active:cursor-grabbing" />
       </div>
       <ShareCardContent
         share={share}
-        laneHeaderBg={accent.headerBg}
-        iconPillBg={accent.iconPillBg}
+        iconPillBg={iconPillBg}
         formatDate={formatDate}
         getDocumentForMenu={getDocumentForMenu}
         showActions={showActions}
@@ -284,6 +285,7 @@ function DraggableCard({
         isExternalPersona={isExternalPersona}
         isExternalViewer={isExternalViewer}
         deeplinkBase={deeplinkBase}
+        generalFolderId={generalFolderId}
       />
     </motion.div>
   )
@@ -292,7 +294,6 @@ function DraggableCard({
 
 function ShareCardContent({
   share,
-  laneHeaderBg,
   iconPillBg,
   formatDate,
   getDocumentForMenu,
@@ -312,9 +313,9 @@ function ShareCardContent({
   isExternalPersona,
   isExternalViewer,
   deeplinkBase,
+  generalFolderId,
 }: {
   share: ShareRecord
-  laneHeaderBg: string
   iconPillBg: string
   formatDate: (s: string) => string
   getDocumentForMenu: (s: ShareRecord) => { id: string; name: string; mimeType?: string; externalId: string }
@@ -334,6 +335,7 @@ function ShareCardContent({
   isExternalPersona?: boolean
   isExternalViewer?: boolean
   deeplinkBase?: string
+  generalFolderId?: string | null
 }) {
   const latestComment = share.comments?.[0]
   const isFinalized = !!share.finalizedAt
@@ -341,9 +343,9 @@ function ShareCardContent({
 
   return (
     <>
-      <div className={cn('transition-colors duration-200', laneHeaderBg)}>
-        <div className="flex items-center gap-3 px-3 pt-3 pb-2">
-          <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-xl shadow-[0_1px_2px_rgba(0,0,0,0.06)]', iconPillBg)}>
+      <div className="bg-[#f9f9fb] border-b border-[#e5e7eb]">
+        <div className="flex items-center gap-2.5 px-3 pt-2.5 pb-2">
+          <div className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded', iconPillBg)}>
             {share.documentMimeType?.includes('folder') ? (
               <SharedFolderIcon fillLevel={1} tooltip="shared" />
             ) : (
@@ -352,15 +354,15 @@ function ShareCardContent({
           </div>
           <div className="min-w-0 flex-1">
             <div
-              className="text-sm font-semibold text-slate-800 truncate cursor-pointer hover:text-indigo-600 transition-colors"
+              className="text-[13px] font-semibold text-[#1b1b1d] truncate cursor-pointer hover:text-[#069668] transition-colors"
               title={share.documentName}
               onClick={onClickTitle}
             >
               {share.documentName}
             </div>
             <DocumentBreadcrumb
-              parentName={share.parentName}
-              parentId={share.parentId}
+              parentName={share.parentName ?? (generalFolderId ? 'General' : null)}
+              parentId={share.parentId ?? generalFolderId ?? null}
               onFolderClick={onParentFolderClick}
             />
           </div>
@@ -371,8 +373,8 @@ function ShareCardContent({
         <div className="flex items-center justify-between">
           <RelativeDateTime
             date={share.updatedAt}
-            textClassName="text-[11px] text-slate-400"
-            iconClassName="text-slate-300 hover:text-slate-500"
+            textClassName="text-[11px] text-[#9a9ba0]"
+            iconClassName="text-[#9a9ba0] hover:text-[#45474c]"
             tooltipSide="top"
           />
           <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
@@ -381,7 +383,7 @@ function ShareCardContent({
                 <TooltipTrigger asChild>
                   <button
                     type="button"
-                    className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors"
+                    className="p-1 rounded hover:bg-[#f3f4f6] text-[#9a9ba0] hover:text-[#45474c] transition-colors"
                     onClick={(e) => {
                       e.stopPropagation()
                       if (!deeplinkBase || !share.documentId) return
@@ -402,7 +404,7 @@ function ShareCardContent({
                 <TooltipTrigger asChild>
                   <button
                     type="button"
-                    className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors"
+                    className="p-1 rounded hover:bg-[#f3f4f6] text-[#9a9ba0] hover:text-[#45474c] transition-colors"
                     onClick={(e) => { e.stopPropagation(); onOpenComments?.(share) }}
                   >
                     <MessageCircle className="h-3.5 w-3.5" />
@@ -425,7 +427,7 @@ function ShareCardContent({
         </div>
         {/* Shared by */}
         <div className="flex items-center gap-1.5">
-          <span className="text-[10px] text-slate-400 w-14 shrink-0 whitespace-nowrap">Shared by</span>
+          <span className="text-[10px] text-[#9a9ba0] w-14 shrink-0 whitespace-nowrap">Shared by</span>
           <TooltipProvider>
             <ProfileBubbleWithPopup
               name={share.createdByName || share.createdByEmail || 'Team Member'}
@@ -438,13 +440,13 @@ function ShareCardContent({
         {/* Shared with */}
         {(share.settings?.externalCollaborator || share.settings?.guest) && (
           <div className="flex items-center gap-1.5">
-            <span className="text-[10px] text-slate-400 w-14 shrink-0 whitespace-nowrap">Shared with</span>
+            <span className="text-[10px] text-[#9a9ba0] w-14 shrink-0 whitespace-nowrap">Shared with</span>
             <div className="flex items-center gap-1">
               {share.settings?.externalCollaborator && (
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <div className="h-5 w-5 rounded-lg bg-violet-100 text-violet-800 flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EC</div>
+                      <div className="h-5 w-5 rounded-lg bg-[#ecfdf5] text-[#065f46] flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EC</div>
                     </TooltipTrigger>
                     <TooltipContent side="top" className="text-xs">{extCollaboratorLabel}</TooltipContent>
                   </Tooltip>
@@ -454,7 +456,7 @@ function ShareCardContent({
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <div className="h-5 w-5 rounded-lg bg-sky-100 text-sky-800 flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EV</div>
+                      <div className="h-5 w-5 rounded-lg bg-[#f3f4f6] text-[#45474c] flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EV</div>
                     </TooltipTrigger>
                     <TooltipContent side="top" className="text-xs">{viewerLabel}</TooltipContent>
                   </Tooltip>
@@ -465,12 +467,12 @@ function ShareCardContent({
         )}
       </div>
       {showActions && (canManage && isDoneLane && !isFinalized || isFinalized) && (
-        <div className="px-3 pb-3 pt-1 flex items-center gap-2 border-t border-slate-100/80 bg-white" onClick={(e) => e.stopPropagation()}>
+        <div className="px-3 pb-2.5 pt-1.5 flex items-center gap-2 border-t border-[#e5e7eb] bg-white" onClick={(e) => e.stopPropagation()}>
           {canManage && isDoneLane && !isFinalized && (
             <Button
               size="sm"
               variant="outline"
-              className="text-xs h-7 text-amber-700 border-amber-200 hover:bg-amber-50"
+              className="text-xs h-7 rounded-[2px] text-amber-700 border-amber-200 hover:bg-amber-50"
               disabled={!!finalizingId}
               onClick={(e) => { e.stopPropagation(); onFinalize?.() }}
             >
@@ -478,7 +480,7 @@ function ShareCardContent({
             </Button>
           )}
           {isFinalized && (
-            <span className="text-[11px] text-slate-500 flex items-center gap-1">
+            <span className="text-[11px] text-[#45474c] flex items-center gap-1">
               <Lock className="h-3 w-3" /> Finalized
             </span>
           )}
@@ -491,13 +493,15 @@ function ShareCardContent({
 const STATUS_LABELS: Record<ActivityStatus, string> = {
   to_do: 'To Do',
   in_progress: 'In Progress',
+  in_review: 'In Review',
   done: 'Done',
 }
 
 const STATUS_PILL_CLASS: Record<ActivityStatus, string> = {
   to_do: 'bg-[#ede9fe]/90 text-[#5b21b6]',
-  in_progress: 'bg-[#ccfbf1]/90 text-[#0f766e]',
-  done: 'bg-[#e0f2fe]/90 text-[#0369a1]',
+  in_progress: 'bg-[#eff2ff]/90 text-[#5A78FF]',
+  in_review: 'bg-[#fff7ed]/90 text-[#c2410c]',
+  done: 'bg-[#ecfdf5]/90 text-[#069668]',
 }
 
 
@@ -597,6 +601,7 @@ function SharesListView({
   isExternalPersona,
   isExternalViewer,
   deeplinkBase,
+  generalFolderId,
 }: {
   shares: ShareRecord[]
   formatDate: (s: string) => string
@@ -613,159 +618,201 @@ function SharesListView({
   isExternalPersona?: boolean
   isExternalViewer?: boolean
   deeplinkBase?: string
+  generalFolderId?: string | null
 }) {
   const [actionMenuOpenShareId, setActionMenuOpenShareId] = useState<string | null>(null)
+  const [linkCopiedId, setLinkCopiedId] = useState<string | null>(null)
+
+  const COL_TEMPLATE = 'minmax(0,1fr) 120px 160px 120px 88px'
+
   return (
-    <div className="grid grid-cols-2 gap-4">
-      {shares.map((share) => {
-        const ec = share.settings?.externalCollaborator ?? false
-        const guest = share.settings?.guest ?? false
-        return (
-          <div
-            key={share.id}
-            className={cn(
-              'bg-white rounded-xl border border-slate-200 border-l-2 border-l-[#eae8ff] shadow-[0_1px_3px_0_rgba(0,0,0,0.06)] overflow-hidden transition-all duration-300',
-              'hover:-translate-y-0.5 hover:shadow-[0_8px_20px_-4px_rgba(0,0,0,0.1)]',
-              actionMenuOpenShareId === share.id && 'bg-slate-50'
-            )}
-          >
-            {/* Gradient header: icon + title + actions */}
-            <div className={cn('px-5 pt-4 pb-3 bg-gradient-to-br from-[#f5f3ff] to-white', actionMenuOpenShareId === share.id && 'from-[#ede9fe]')}>
-              <div className="flex items-center gap-2 w-full">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/80 border border-slate-200/60">
-                  {share.documentMimeType?.includes('folder') ? (
-                    <SharedFolderIcon fillLevel={1} tooltip="shared" />
+    <div className="m-4 bg-white rounded border border-[#e5e7eb] overflow-hidden flex flex-col">
+      {/* Header */}
+      <div className="sticky top-0 bg-white border-b border-[#e5e7eb] pl-3 pr-2 py-2.5 shrink-0 z-10">
+        <div className="grid gap-4 items-center" style={{ gridTemplateColumns: COL_TEMPLATE }}>
+          <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Name</span>
+          <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Shared with</span>
+          <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Shared by</span>
+          <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Modified</span>
+          <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider text-right">Actions</span>
+        </div>
+      </div>
+
+      {/* Rows */}
+      <div className="divide-y divide-[#e5e7eb]">
+        {shares.map((share) => {
+          const ec = share.settings?.externalCollaborator ?? false
+          const guest = share.settings?.guest ?? false
+          const isFolder = share.documentMimeType?.includes('folder')
+          const isModified = new Date(share.updatedAt).getTime() > new Date(share.createdAt).getTime()
+          const samePerson = share.updatedBy && share.updatedBy === share.createdBy
+          const showCreatorProfile = !isModified || (isModified && !samePerson)
+          const showModifierProfile = isModified && share.updatedBy && !samePerson
+
+          return (
+            <div
+              key={share.id}
+              className={cn(
+                'group grid gap-4 pl-3 pr-2 py-2 items-center cursor-default transition-colors text-[0.8125rem]',
+                'hover:bg-[#f9f9fb]',
+                actionMenuOpenShareId === share.id && 'bg-[#f3f4f6]'
+              )}
+              style={{ gridTemplateColumns: COL_TEMPLATE }}
+            >
+              {/* Name column */}
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="flex-shrink-0 w-4 h-4 flex items-center justify-center">
+                  {isFolder ? (
+                    <SharedFolderIcon fillLevel={1} size={16} />
                   ) : (
-                    <DocumentIcon mimeType={share.documentMimeType ?? undefined} size={18} />
+                    <DocumentIcon mimeType={share.documentMimeType ?? undefined} className="h-4 w-4" />
                   )}
                 </div>
-                <h3 className="font-semibold text-slate-900 truncate flex-1 min-w-0" title={share.documentName}>
-                  {share.documentName}
-                </h3>
-                <div className="flex items-center gap-1 shrink-0 ml-auto">
-                    <RelativeDateTime
-                      date={share.updatedAt}
-                      iconOnly
-                      iconClassName="text-slate-400 hover:text-slate-600"
-                      tooltipSide="top"
+                <div className="flex flex-col min-w-0 flex-1">
+                  <span
+                    className="text-[0.8125rem] font-medium truncate text-[#1b1b1d] hover:text-[#069668] cursor-pointer transition-colors"
+                    title={share.documentName}
+                    onClick={() => handleSecureOpen(share)}
+                  >
+                    {share.documentName}
+                  </span>
+                  <DocumentBreadcrumb
+                    parentName={share.parentName ?? (generalFolderId ? 'General' : null)}
+                    parentId={share.parentId ?? generalFolderId ?? null}
+                    onFolderClick={onParentFolderClick}
+                  />
+                </div>
+              </div>
+
+              {/* Shared with column */}
+              <div className="flex items-center gap-1">
+                {ec && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="h-5 px-1.5 rounded bg-[#ecfdf5] text-[#065f46] flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EC</div>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="text-xs">{extCollaboratorLabel}</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
+                {guest && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="h-5 px-1.5 rounded bg-[#f3f4f6] text-[#45474c] flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EV</div>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="text-xs">{viewerLabel}</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
+                {!ec && !guest && <span className="text-[11px] text-slate-300">—</span>}
+              </div>
+
+              {/* Shared by column */}
+              <div className="flex items-center gap-1.5 min-w-0">
+                {(showCreatorProfile || (!showCreatorProfile && samePerson && isModified)) && (
+                  <TooltipProvider>
+                    <ProfileBubbleWithPopup
+                      name={share.createdByName || share.createdByEmail || 'Team Member'}
+                      email={share.createdByEmail || ''}
+                      avatarUrl={share.createdByAvatarUrl}
+                      size="default"
                     />
-                    <button
-                      type="button"
-                      className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors"
-                      onClick={(e) => { e.stopPropagation(); onOpenComments?.(share) }}
-                      title="Comments"
-                    >
-                      <MessageCircle className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        if (!deeplinkBase || !share.documentId) return
-                        navigator.clipboard.writeText(`${deeplinkBase}#doc-file:${share.documentId}`)
-                      }}
-                      title={deeplinkBase && share.documentId ? 'Copy link' : 'No link available'}
-                      disabled={!deeplinkBase || !share.documentId}
-                    >
-                      <Link2 className="h-4 w-4" />
-                    </button>
-                    {share.documentMimeType?.includes('folder') && onOpenInFilesForFolder && (
+                  </TooltipProvider>
+                )}
+                {showModifierProfile && share.updatedBy && (
+                  <ModifierBubble
+                    updatedBy={share.updatedBy}
+                    updatedByEmail={share.updatedByEmail}
+                    updatedByAvatarUrl={share.updatedByAvatarUrl}
+                    updatedAt={share.updatedAt}
+                    formatDate={formatDate}
+                  />
+                )}
+              </div>
+
+              {/* Modified column */}
+              <div className="flex items-center">
+                <RelativeDateTime
+                  date={share.updatedAt}
+                  textClassName="text-xs text-slate-500"
+                  iconClassName="hidden"
+                  tooltipSide="top"
+                />
+              </div>
+
+              {/* Actions column */}
+              <div className="flex items-center justify-end gap-0.5" onClick={(e) => e.stopPropagation()}>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
                       <button
                         type="button"
-                        className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors"
-                        onClick={() => onOpenInFilesForFolder(share)}
-                        title="Open in Files"
+                        className="h-7 w-7 rounded-md inline-flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-40 transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          if (!deeplinkBase || !share.documentId) return
+                          navigator.clipboard.writeText(`${deeplinkBase}#doc-file:${share.documentId}`)
+                          setLinkCopiedId(share.id)
+                          setTimeout(() => setLinkCopiedId(null), 1500)
+                        }}
+                        disabled={!deeplinkBase || !share.documentId}
                       >
-                        <FolderOpen className="h-4 w-4" />
+                        {linkCopiedId === share.id ? <Check className="h-4 w-4 text-[#069668]" /> : <Link2 className="h-4 w-4" />}
                       </button>
-                    )}
-                    <DocumentActionMenu
-                      document={getDocumentForMenu(share)}
-                      showShareModal={canManage}
-                      projectId={share.projectId}
-                      onShareSaved={onShareSaved}
-                      onOpenChange={(open) => setActionMenuOpenShareId(open ? share.id : null)}
-                      onOpenDocument={() => handleSecureOpen(share)}
-                      isExternalUser={isExternalPersona}
-                      isExternalViewer={isExternalViewer}
-                    />
-                    {isRegrantingId === share.id && (
-                      <LoadingSpinner size="sm" className="min-h-0 ml-1" />
-                    )}
-                  </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="text-xs">{deeplinkBase && share.documentId ? 'Copy link' : 'No link'}</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                {!isFolder && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          className="h-7 w-7 rounded-md inline-flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                          onClick={(e) => { e.stopPropagation(); onOpenComments?.(share) }}
+                        >
+                          <MessageCircle className="h-4 w-4" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="text-xs">Comments</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
+                {isFolder && onOpenInFilesForFolder && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          className="h-7 w-7 rounded-md inline-flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                          onClick={() => onOpenInFilesForFolder(share)}
+                        >
+                          <FolderOpen className="h-4 w-4" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="text-xs">Open in Files</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
+                <DocumentActionMenu
+                  document={getDocumentForMenu(share)}
+                  showShareModal={canManage}
+                  projectId={share.projectId}
+                  onShareSaved={onShareSaved}
+                  onOpenChange={(open) => setActionMenuOpenShareId(open ? share.id : null)}
+                  onOpenDocument={() => handleSecureOpen(share)}
+                  isExternalUser={isExternalPersona}
+                  isExternalViewer={isExternalViewer}
+                />
+                {isRegrantingId === share.id && <LoadingSpinner size="sm" className="min-h-0 ml-0.5" />}
               </div>
-              <DocumentBreadcrumb
-                parentName={share.parentName}
-                parentId={share.parentId}
-                onFolderClick={onParentFolderClick}
-              />
             </div>
-            {/* White content: shared-by / shared-with */}
-            <div className="px-5 pb-4 pt-3 bg-white">
-              {(() => {
-                const isModified = new Date(share.updatedAt).getTime() > new Date(share.createdAt).getTime()
-                const samePerson = share.updatedBy && share.updatedBy === share.createdBy
-                const showCreatorProfile = !isModified || (isModified && !samePerson)
-                const showModifierProfile = isModified && share.updatedBy && !samePerson
-                const showModifiedAtOnly = isModified && !share.updatedBy
-                return (
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] text-slate-400 shrink-0">Shared by</span>
-                      {(showCreatorProfile || (!showCreatorProfile && samePerson && isModified)) && (
-                        <TooltipProvider>
-                          <ProfileBubbleWithPopup
-                            name={share.createdByName || share.createdByEmail || 'Team Member'}
-                            email={share.createdByEmail || ''}
-                            avatarUrl={share.createdByAvatarUrl}
-                            size="default"
-                          />
-                        </TooltipProvider>
-                      )}
-                      {showModifierProfile && share.updatedBy && (
-                        <ModifierBubble
-                          updatedBy={share.updatedBy}
-                          updatedByEmail={share.updatedByEmail}
-                          updatedByAvatarUrl={share.updatedByAvatarUrl}
-                          updatedAt={share.updatedAt}
-                          formatDate={formatDate}
-                        />
-                      )}
-                      {showModifiedAtOnly && <ModifiedAtOnlyBubble updatedAt={share.updatedAt} formatDate={formatDate} />}
-                    </div>
-                    {(ec || guest) && (
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] text-slate-400 shrink-0">Shared with</span>
-                        {ec && (
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <div className="h-6 w-6 rounded-lg bg-violet-100 text-violet-800 flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EC</div>
-                              </TooltipTrigger>
-                              <TooltipContent side="top" className="bg-slate-50 border border-slate-200 text-slate-700 text-xs p-2 shadow-md">{extCollaboratorLabel}</TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        )}
-                        {guest && (
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <div className="h-6 w-6 rounded-lg bg-sky-100 text-sky-800 flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EV</div>
-                              </TooltipTrigger>
-                              <TooltipContent side="top" className="bg-slate-50 border border-slate-200 text-slate-700 text-xs p-2 shadow-md">{viewerLabel}</TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )
-              })()}
-            </div>
-          </div>
-        )
-      })}
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -786,6 +833,7 @@ function SharesGridView({
   isExternalPersona,
   isExternalViewer,
   deeplinkBase,
+  generalFolderId,
 }: {
   shares: ShareRecord[]
   formatDate: (s: string) => string
@@ -802,9 +850,10 @@ function SharesGridView({
   isExternalPersona?: boolean
   isExternalViewer?: boolean
   deeplinkBase?: string
+  generalFolderId?: string | null
 }) {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 py-2">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 py-2">
       {shares.map((share) => (
         <ShareCard
           key={share.id}
@@ -823,6 +872,7 @@ function SharesGridView({
           isExternalPersona={isExternalPersona}
           isExternalViewer={isExternalViewer}
           deeplinkBase={deeplinkBase}
+          generalFolderId={generalFolderId}
         />
       ))}
     </div>
@@ -845,6 +895,7 @@ function ShareCard({
   isExternalPersona,
   isExternalViewer,
   deeplinkBase,
+  generalFolderId,
 }: {
   share: ShareRecord
   formatDate: (s: string) => string
@@ -861,6 +912,7 @@ function ShareCard({
   isExternalPersona?: boolean
   isExternalViewer?: boolean
   deeplinkBase?: string
+  generalFolderId?: string | null
 }) {
   const isFolder = share.documentMimeType?.includes('folder')
   const [linkCopied, setLinkCopied] = useState(false)
@@ -877,9 +929,9 @@ function ShareCard({
       layout
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      whileHover={{ y: -4, boxShadow: '0 20px 40px -10px rgba(0,0,0,0.12)' }}
+      whileHover={{ y: -2, boxShadow: '0 8px 24px -4px rgba(0,0,0,0.10)' }}
       transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-      className="group relative bg-white rounded-xl border border-slate-200/80 border-l-2 border-l-[#eae8ff] shadow-[0_1px_3px_0_rgba(0,0,0,0.06)] overflow-hidden flex flex-col h-full"
+      className="group relative bg-white rounded border border-[#e5e7eb] shadow-sm overflow-hidden flex flex-col h-full"
     >
       {/* Thumbnail / Large Icon Area */}
       <div
@@ -899,14 +951,14 @@ function ShareCard({
             <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-60 group-hover:opacity-40 transition-opacity duration-500" />
           </div>
         ) : isFolder ? (
-          <div className="w-full h-full bg-indigo-50/20 flex items-center justify-center relative group-hover:bg-indigo-50/40 transition-colors duration-500">
-            <div className="transform group-hover:scale-110 transition-transform duration-700 ease-out shadow-indigo-200/50">
-              <SharedFolderIcon fillLevel={1} tooltip="shared" className="h-32 w-32 opacity-40" />
+          <div className="w-full h-full bg-[#ecfdf5] flex items-center justify-center relative group-hover:bg-[#d1fae5] transition-colors duration-500">
+            <div className="transform group-hover:scale-110 transition-transform duration-700 ease-out">
+              <SharedFolderIcon fillLevel={1} tooltip="shared" size={96} className="opacity-40" />
             </div>
-            <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/10 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-tr from-[#069668]/8 to-transparent" />
           </div>
         ) : (
-          <div className="w-full h-full bg-slate-50 flex items-center justify-center relative group-hover:bg-indigo-50/30 transition-colors duration-700">
+          <div className="w-full h-full bg-slate-50 flex items-center justify-center relative group-hover:bg-[#ecfdf5]/40 transition-colors duration-700">
             {/* Subtle Background Pattern/Gradient */}
             <div
               className="absolute inset-0 opacity-[0.03] pointer-events-none"
@@ -914,24 +966,8 @@ function ShareCard({
             />
             <div className="absolute inset-0 bg-gradient-to-b from-white/50 to-transparent pointer-events-none" />
 
-            {/* Parsing / Scanning Animation */}
-            <div className="absolute inset-0 opacity-10 pointer-events-none overflow-hidden">
-              <motion.div
-                initial={{ top: '-10%' }}
-                animate={{ top: '110%' }}
-                transition={{ duration: 4, repeat: Infinity, ease: 'linear' }}
-                className="absolute left-0 right-0 h-0.5 bg-indigo-500/50 blur-[1px] z-10"
-              />
-            </div>
-
             <div className="transform group-hover:scale-110 group-hover:rotate-1 transition-all duration-700 ease-out flex items-center justify-center z-10 drop-shadow-sm">
-              <DocumentIcon mimeType={share.documentMimeType ?? undefined} size={120} />
-            </div>
-
-            <div className="absolute bottom-4 left-0 right-0 flex justify-center opacity-0 group-hover:opacity-100 transition-all duration-500 translate-y-1 group-hover:translate-y-0 text-center">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em] bg-white/40 backdrop-blur-md px-3 py-1 rounded-full border border-white/30 shadow-sm leading-none">
-                Syncing Metadata...
-              </span>
+              <DocumentIcon mimeType={share.documentMimeType ?? undefined} size={80} />
             </div>
           </div>
         )}
@@ -939,34 +975,36 @@ function ShareCard({
         {/* Overlay Badge for MimeType */}
         {!isFolder && (
           <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-all duration-300 scale-90 group-hover:scale-100">
-            <div className="bg-white/80 backdrop-blur-md px-2.5 py-1 rounded-xl border border-white/50 shadow-sm text-[10px] font-black text-indigo-600 tracking-wider uppercase">
+            <div className="bg-white/80 backdrop-blur-md px-2 py-0.5 rounded border border-[#e5e7eb]/80 shadow-sm text-[9px] font-semibold text-[#45474c] tracking-wider uppercase">
               {share.documentMimeType?.split('.').pop()?.split('/').pop()?.replace('vnd.google-apps.', '')}
             </div>
           </div>
         )}
       </div>
 
-      {/* Gradient title area */}
-      <div className="bg-gradient-to-br from-[#f5f3ff] to-white px-5 pt-4 pb-3">
-        <div className="flex items-start gap-2">
-          <DocumentIcon mimeType={share.documentMimeType ?? undefined} className="w-5 h-5 shrink-0 mt-0.5" />
-          <h3
-            className="font-bold text-slate-800 text-[15px] leading-tight truncate cursor-pointer hover:text-indigo-600 transition-colors flex-1 min-w-0"
-            title={share.documentName}
-            onClick={handleOpenPreview}
-          >
-            {share.documentName}
-          </h3>
+      {/* Title area */}
+      <div className="bg-[#f9f9fb] px-4 pt-3 pb-2.5 border-b border-[#e5e7eb]">
+        <div className="flex items-start gap-2.5">
+          <DocumentIcon mimeType={share.documentMimeType ?? undefined} className="w-7 h-7 shrink-0 mt-0.5" />
+          <div className="flex flex-col min-w-0 flex-1">
+            <h3
+              className="font-semibold text-[#1b1b1d] text-[13px] leading-tight truncate cursor-pointer hover:text-[#069668] transition-colors"
+              title={share.documentName}
+              onClick={handleOpenPreview}
+            >
+              {share.documentName}
+            </h3>
+            <DocumentBreadcrumb
+              parentName={share.parentName ?? (generalFolderId ? 'General' : null)}
+              parentId={share.parentId ?? generalFolderId ?? null}
+              onFolderClick={onParentFolderClick}
+            />
+          </div>
         </div>
-        <DocumentBreadcrumb
-          parentName={share.parentName}
-          parentId={share.parentId}
-          onFolderClick={onParentFolderClick}
-        />
       </div>
 
       {/* Content Area */}
-      <div className="px-5 pb-5 flex flex-col flex-1 bg-white relative">
+      <div className="px-4 pb-4 flex flex-col flex-1 bg-white relative">
         {/* DateTime + quick links row */}
         <div className="flex items-center justify-between mt-2">
           <div className="flex items-center gap-1.5">
@@ -999,20 +1037,22 @@ function ShareCard({
                 <TooltipContent side="top" className="text-xs">{deeplinkBase && share.documentId ? 'Copy link' : 'No link available'}</TooltipContent>
               </Tooltip>
             </TooltipProvider>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors"
-                    onClick={(e) => { e.stopPropagation(); onOpenComments?.(share) }}
-                  >
-                    <MessageCircle className="h-4 w-4" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="text-xs">Comments</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            {!isFolder && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors"
+                      onClick={(e) => { e.stopPropagation(); onOpenComments?.(share) }}
+                    >
+                      <MessageCircle className="h-4 w-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-xs">Comments</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
             <DocumentActionMenu
               document={getDocumentForMenu(share)}
               showShareModal={canManage}
@@ -1029,9 +1069,9 @@ function ShareCard({
         </div>
 
         {/* Shared by / Shared with rows */}
-        <div className="mt-4 pt-4 -mx-5 px-5 border-t border-slate-100 space-y-2">
+        <div className="mt-3 pt-3 -mx-4 px-4 border-t border-[#e5e7eb] space-y-1.5">
           <div className="flex items-center gap-2">
-            <span className="text-[10px] text-slate-400 w-14 shrink-0 whitespace-nowrap">Shared by</span>
+            <span className="text-[10px] text-[#9a9ba0] w-14 shrink-0 whitespace-nowrap">Shared by</span>
             <TooltipProvider>
               <ProfileBubbleWithPopup
                 name={share.createdByName || share.createdByEmail || 'Team Member'}
@@ -1043,13 +1083,13 @@ function ShareCard({
           </div>
           {(share.settings.externalCollaborator || share.settings.guest) && (
             <div className="flex items-center gap-2">
-              <span className="text-[10px] text-slate-400 w-14 shrink-0 whitespace-nowrap">Shared with</span>
+              <span className="text-[10px] text-[#9a9ba0] w-14 shrink-0 whitespace-nowrap">Shared with</span>
               <div className="flex items-center gap-1">
                 {share.settings.externalCollaborator && (
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <div className="h-6 w-6 rounded-lg bg-violet-100 text-violet-800 flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EC</div>
+                        <div className="h-6 w-6 rounded-lg bg-[#ecfdf5] text-[#065f46] flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EC</div>
                       </TooltipTrigger>
                       <TooltipContent side="top" className="text-xs">{extCollaboratorLabel}</TooltipContent>
                     </Tooltip>
@@ -1059,7 +1099,7 @@ function ShareCard({
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <div className="h-6 w-6 rounded-lg bg-sky-100 text-sky-800 flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EV</div>
+                        <div className="h-6 w-6 rounded-lg bg-[#f3f4f6] text-[#45474c] flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EV</div>
                       </TooltipTrigger>
                       <TooltipContent side="top" className="text-xs">{viewerLabel}</TooltipContent>
                     </Tooltip>
@@ -1087,18 +1127,24 @@ export function ProjectSharesTab({
   clientName,
   projectName,
   onOpenInFiles,
-  sharesBasePath,
   pathViewMode,
   deeplinkBase,
 }: ProjectSharesTabProps) {
-  const router = useRouter()
   const rightPane = useRightPane()
   const [shares, setShares] = useState<ShareRecord[]>([])
+  const [generalFolderId, setGeneralFolderId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [finalizingId, setFinalizingId] = useState<string | null>(null)
   const [detailShareId, setDetailShareId] = useState<string | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [filterShared, setFilterShared] = useState<'all' | 'by_me' | 'by_others' | 'with_collaborator' | 'with_viewer'>('all')
+  const [filterSharedOpen, setFilterSharedOpen] = useState(false)
+  const [filterTypes, setFilterTypes] = useState<Set<string>>(new Set())
+  const [filterTypeOpen, setFilterTypeOpen] = useState(false)
+  const [filterModified, setFilterModified] = useState<'any' | '7d' | '30d' | 'year'>('any')
+  const [filterModifiedOpen, setFilterModifiedOpen] = useState(false)
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null)
 
   const {
     handleSecureOpen,
@@ -1132,6 +1178,7 @@ export function ProjectSharesTab({
       if (!response.ok) throw new Error('Failed to fetch shares')
       const data = await response.json()
       setShares(data.shares || [])
+      setGeneralFolderId(data.generalFolderId ?? null)
     } catch (error) {
       logger.error('Failed to fetch shares data', error instanceof Error ? error : new Error(String(error)), 'ProjectShares', { projectId })
     } finally {
@@ -1141,16 +1188,19 @@ export function ProjectSharesTab({
 
   useEffect(() => {
     refreshData()
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setCurrentUserEmail(session?.user?.email ?? null)
+    })
   }, [refreshData])
 
-  const saveOrder = useCallback(async (toDo: string[], inProgress: string[], done: string[]) => {
+  const saveOrder = useCallback(async (toDo: string[], inProgress: string[], inReview: string[], done: string[]) => {
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session?.access_token) return
       await fetch(`/api/projects/${projectId}/shares/order`, {
         method: 'PUT',
         headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to_do: toDo, in_progress: inProgress, done }),
+        body: JSON.stringify({ to_do: toDo, in_progress: inProgress, in_review: inReview, done }),
       })
       await refreshData()
     } catch (e) {
@@ -1263,24 +1313,28 @@ export function ProjectSharesTab({
   const byLane = React.useMemo(() => {
     const toDo: ShareRecord[] = []
     const inProgress: ShareRecord[] = []
+    const inReview: ShareRecord[] = []
     const done: ShareRecord[] = []
     shares.forEach((s) => {
       const status = s.activity?.status ?? 'to_do'
       const orderIndex = s.activity?.orderIndex ?? 0
       const rec = { ...s, _orderIndex: orderIndex }
       if (status === 'in_progress') inProgress.push(rec)
+      else if (status === 'in_review') inReview.push(rec)
       else if (status === 'done') done.push(rec)
       else toDo.push(rec)
     })
     toDo.sort((a, b) => (a._orderIndex ?? 0) - (b._orderIndex ?? 0))
     inProgress.sort((a, b) => (a._orderIndex ?? 0) - (b._orderIndex ?? 0))
+    inReview.sort((a, b) => (a._orderIndex ?? 0) - (b._orderIndex ?? 0))
     done.sort((a, b) => (a._orderIndex ?? 0) - (b._orderIndex ?? 0))
-    return { to_do: toDo, in_progress: inProgress, done }
+    return { to_do: toDo, in_progress: inProgress, in_review: inReview, done }
   }, [shares])
 
   const laneOrder = React.useMemo(() => ({
     to_do: byLane.to_do.map((s) => s.id),
     in_progress: byLane.in_progress.map((s) => s.id),
+    in_review: byLane.in_review.map((s) => s.id),
     done: byLane.done.map((s) => s.id),
   }), [byLane])
 
@@ -1301,7 +1355,7 @@ export function ProjectSharesTab({
     const overId = String(over.id)
     let targetLane: ActivityStatus
     let insertIndex: number
-    if (['to_do', 'in_progress', 'done'].includes(overId)) {
+    if (['to_do', 'in_progress', 'in_review', 'done'].includes(overId)) {
       targetLane = overId as ActivityStatus
       insertIndex = laneOrder[targetLane].length
     } else {
@@ -1311,38 +1365,61 @@ export function ProjectSharesTab({
       insertIndex = laneOrder[targetLane].indexOf(overId)
       if (insertIndex < 0) insertIndex = laneOrder[targetLane].length
     }
-    const currentLane = laneOrder.to_do.includes(shareId) ? 'to_do' : laneOrder.in_progress.includes(shareId) ? 'in_progress' : 'done'
     const newToDo = laneOrder.to_do.filter((id) => id !== shareId)
     const newInProgress = laneOrder.in_progress.filter((id) => id !== shareId)
+    const newInReview = laneOrder.in_review.filter((id) => id !== shareId)
     const newDone = laneOrder.done.filter((id) => id !== shareId)
     const insertAt = (arr: string[], id: string, idx: number) => {
       const out = arr.slice()
       out.splice(idx, 0, id)
       return out
     }
-    if (targetLane === 'to_do') saveOrder(insertAt(newToDo, shareId, insertIndex), newInProgress, newDone)
-    else if (targetLane === 'in_progress') saveOrder(newToDo, insertAt(newInProgress, shareId, insertIndex), newDone)
-    else saveOrder(newToDo, newInProgress, insertAt(newDone, shareId, insertIndex))
+    if (targetLane === 'to_do') saveOrder(insertAt(newToDo, shareId, insertIndex), newInProgress, newInReview, newDone)
+    else if (targetLane === 'in_progress') saveOrder(newToDo, insertAt(newInProgress, shareId, insertIndex), newInReview, newDone)
+    else if (targetLane === 'in_review') saveOrder(newToDo, newInProgress, insertAt(newInReview, shareId, insertIndex), newDone)
+    else saveOrder(newToDo, newInProgress, newInReview, insertAt(newDone, shareId, insertIndex))
   }
 
   const detailShare = detailShareId ? shares.find((s) => s.id === detailShareId) : null
   const normalizedQuery = searchQuery.trim().toLowerCase()
-  const filteredShares =
-    normalizedQuery.length === 0
-      ? shares
-      : shares.filter((s) => {
-          const hay = [
-            s.documentName,
-            s.createdByEmail,
-            s.updatedByEmail,
-            s.createdBy,
-            s.updatedBy,
-          ]
-            .filter(Boolean)
-            .join(' ')
-            .toLowerCase()
-          return hay.includes(normalizedQuery)
-        })
+  const filteredShares = shares.filter((s) => {
+    if (normalizedQuery.length > 0) {
+      const hay = [s.documentName, s.createdByEmail, s.updatedByEmail, s.createdBy, s.updatedBy]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+      if (!hay.includes(normalizedQuery)) return false
+    }
+    if (filterTypes.size > 0) {
+      const m = (s.documentMimeType ?? '').toLowerCase()
+      const isFolder = m.includes('folder')
+      const matched =
+        (filterTypes.has('folder') && isFolder) ||
+        (filterTypes.has('document') && !isFolder && (m.includes('document') || m.includes('wordprocessingml'))) ||
+        (filterTypes.has('spreadsheet') && !isFolder && (m.includes('spreadsheet') || m.includes('spreadsheetml'))) ||
+        (filterTypes.has('presentation') && !isFolder && (m.includes('presentation') || m.includes('presentationml'))) ||
+        (filterTypes.has('image') && !isFolder && m.includes('image')) ||
+        (filterTypes.has('other') && !isFolder &&
+          !m.includes('folder') && !m.includes('document') && !m.includes('wordprocessingml') &&
+          !m.includes('spreadsheet') && !m.includes('spreadsheetml') &&
+          !m.includes('presentation') && !m.includes('presentationml') &&
+          !m.includes('image'))
+      if (!matched) return false
+    }
+    if (filterModified !== 'any') {
+      const t = new Date(s.updatedAt).getTime()
+      const now = Date.now()
+      const day = 86400000
+      if (filterModified === '7d' && now - t > 7 * day) return false
+      if (filterModified === '30d' && now - t > 30 * day) return false
+      if (filterModified === 'year' && new Date(s.updatedAt).getFullYear() !== new Date().getFullYear()) return false
+    }
+    if (filterShared === 'by_me') return !!currentUserEmail && s.createdByEmail === currentUserEmail
+    if (filterShared === 'by_others') return !currentUserEmail || s.createdByEmail !== currentUserEmail
+    if (filterShared === 'with_collaborator') return !!s.settings.externalCollaborator
+    if (filterShared === 'with_viewer') return !!s.settings.guest
+    return true
+  })
 
   const handleOpenComments = useCallback(
     (share: ShareRecord) => {
@@ -1361,100 +1438,118 @@ export function ProjectSharesTab({
   )
 
   return (
-    <div className="flex flex-col h-full bg-[#fafafa] rounded-2xl border border-slate-200/80 shadow-[0_1px_3px_rgba(0,0,0,0.06)] overflow-hidden">
-      <div className="px-6 py-4 border-b border-slate-200/60 bg-white shrink-0">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
-            <Share2 className="h-5 w-5 text-slate-500" />
-            Shared Documents
-            {!isLoading && filteredShares.length > 0 && (
-              <span className="text-xs font-medium text-slate-500 bg-slate-100/80 px-2 py-0.5 rounded-lg">
-                {filteredShares.length}
-              </span>
-            )}
-          </h2>
-          <p className="text-sm text-slate-500 mt-0.5">
-            {viewMode === 'board'
-              ? 'Drag cards between lanes to update status. Engagement Lead can finalize from Done.'
-              : 'Browse shared documents. Use the actions menu on each row to view, edit, or share.'}
-          </p>
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Toolbar: on background, outside the card */}
+      <div className="shrink-0 pt-1 pb-2.5 flex items-center gap-2">
+        {/* Left: filters */}
+        <div className="flex items-center gap-2">
+          {/* Type filter */}
+          <DropdownMenu open={filterTypeOpen} onOpenChange={setFilterTypeOpen}>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className={cn("h-8 gap-1.5 text-xs bg-white rounded-[2px] border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors", filterTypes.size > 0 && "border-slate-400 ring-1 ring-slate-300")}>
+                <Filter className="h-3 w-3 opacity-60" />
+                Type
+                {filterTypes.size > 0 && <span className="ml-0.5 bg-slate-200 text-slate-800 px-1.5 rounded-full text-[10px] font-medium">{filterTypes.size}</span>}
+                <ChevronDown className="h-3 w-3 opacity-50" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-[200px] py-1 text-xs rounded-[2px]">
+              <div className="flex items-center justify-between px-2 py-1.5 border-b border-slate-100">
+                <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 p-0 font-medium">Type</DropdownMenuLabel>
+                <DropdownMenuItem onSelect={() => setFilterTypeOpen(false)} className="text-xs rounded-[2px] bg-slate-900 text-white hover:bg-slate-800 hover:text-white focus:bg-slate-800 focus:text-white p-1.5 px-2 cursor-pointer">Done</DropdownMenuItem>
+              </div>
+              <DropdownMenuCheckboxItem checked={filterTypes.size === 0} onCheckedChange={() => setFilterTypes(new Set())} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Any type</DropdownMenuCheckboxItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuCheckboxItem checked={filterTypes.has('folder')} onCheckedChange={() => setFilterTypes(prev => { const n = new Set(prev); n.has('folder') ? n.delete('folder') : n.add('folder'); return n })} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Folders</DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem checked={filterTypes.has('document')} onCheckedChange={() => setFilterTypes(prev => { const n = new Set(prev); n.has('document') ? n.delete('document') : n.add('document'); return n })} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Documents</DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem checked={filterTypes.has('spreadsheet')} onCheckedChange={() => setFilterTypes(prev => { const n = new Set(prev); n.has('spreadsheet') ? n.delete('spreadsheet') : n.add('spreadsheet'); return n })} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Spreadsheets</DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem checked={filterTypes.has('presentation')} onCheckedChange={() => setFilterTypes(prev => { const n = new Set(prev); n.has('presentation') ? n.delete('presentation') : n.add('presentation'); return n })} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Presentations</DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem checked={filterTypes.has('image')} onCheckedChange={() => setFilterTypes(prev => { const n = new Set(prev); n.has('image') ? n.delete('image') : n.add('image'); return n })} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Images</DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem checked={filterTypes.has('other')} onCheckedChange={() => setFilterTypes(prev => { const n = new Set(prev); n.has('other') ? n.delete('other') : n.add('other'); return n })} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Other</DropdownMenuCheckboxItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* People filter */}
+          <DropdownMenu open={filterSharedOpen} onOpenChange={setFilterSharedOpen}>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className={cn("h-8 gap-1.5 text-xs bg-white rounded-[2px] border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors", filterShared !== 'all' && "border-slate-400 ring-1 ring-slate-300")}>
+                <Filter className="h-3 w-3 opacity-60" />
+                People
+                {filterShared !== 'all' && <span className="ml-0.5 bg-slate-200 text-slate-800 px-1.5 rounded-full text-[10px] font-medium">1</span>}
+                <ChevronDown className="h-3 w-3 opacity-50" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-[220px] py-1 text-xs rounded-[2px]">
+              <div className="flex items-center justify-between px-2 py-1.5 border-b border-slate-100">
+                <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 p-0 font-medium">People</DropdownMenuLabel>
+                <DropdownMenuItem onSelect={() => setFilterSharedOpen(false)} className="text-xs rounded-[2px] bg-slate-900 text-white hover:bg-slate-800 hover:text-white focus:bg-slate-800 focus:text-white p-1.5 px-2 cursor-pointer">Done</DropdownMenuItem>
+              </div>
+              <DropdownMenuCheckboxItem checked={filterShared === 'all'} onCheckedChange={() => setFilterShared('all')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">All</DropdownMenuCheckboxItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuCheckboxItem checked={filterShared === 'by_me'} onCheckedChange={() => setFilterShared(filterShared === 'by_me' ? 'all' : 'by_me')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Shared by me</DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem checked={filterShared === 'by_others'} onCheckedChange={() => setFilterShared(filterShared === 'by_others' ? 'all' : 'by_others')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Shared by others</DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem checked={filterShared === 'with_collaborator'} onCheckedChange={() => setFilterShared(filterShared === 'with_collaborator' ? 'all' : 'with_collaborator')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Shared with Collaborator (External)</DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem checked={filterShared === 'with_viewer'} onCheckedChange={() => setFilterShared(filterShared === 'with_viewer' ? 'all' : 'with_viewer')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Shared with Viewer (External)</DropdownMenuCheckboxItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* Modified filter */}
+          <DropdownMenu open={filterModifiedOpen} onOpenChange={setFilterModifiedOpen}>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className={cn("h-8 gap-1.5 text-xs bg-white rounded-[2px] border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors", filterModified !== 'any' && "border-slate-400 ring-1 ring-slate-300")}>
+                <Filter className="h-3 w-3 opacity-60" />
+                Modified
+                {filterModified !== 'any' && <span className="ml-0.5 bg-slate-200 text-slate-800 px-1.5 rounded-full text-[10px] font-medium">1</span>}
+                <ChevronDown className="h-3 w-3 opacity-50" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-[180px] py-1 text-xs rounded-[2px]">
+              <div className="flex items-center justify-between px-2 py-1.5 border-b border-slate-100">
+                <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 p-0 font-medium">Modified</DropdownMenuLabel>
+                <DropdownMenuItem onSelect={() => setFilterModifiedOpen(false)} className="text-xs rounded-[2px] bg-slate-900 text-white hover:bg-slate-800 hover:text-white focus:bg-slate-800 focus:text-white p-1.5 px-2 cursor-pointer">Done</DropdownMenuItem>
+              </div>
+              <DropdownMenuCheckboxItem checked={filterModified === 'any'} onCheckedChange={() => setFilterModified('any')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Any time</DropdownMenuCheckboxItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuCheckboxItem checked={filterModified === '7d'} onCheckedChange={() => setFilterModified(filterModified === '7d' ? 'any' : '7d')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Last 7 days</DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem checked={filterModified === '30d'} onCheckedChange={() => setFilterModified(filterModified === '30d' ? 'any' : '30d')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Last 30 days</DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem checked={filterModified === 'year'} onCheckedChange={() => setFilterModified(filterModified === 'year' ? 'any' : 'year')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">This year</DropdownMenuCheckboxItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
-        <div className="mt-4 flex items-center gap-2 border-b border-slate-200">
-          <nav className="flex items-center gap-1 -mb-px" aria-label="View mode">
+        {/* Right: refresh + search */}
+        <div className="ml-auto flex items-center gap-2">
           <button
             type="button"
-            onClick={() => { if (sharesBasePath) router.push(`${sharesBasePath}/grid`) }}
-            className={cn(
-              'flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors border-b-2 -mb-px',
-              viewMode === 'grid'
-                ? 'bg-slate-100 text-slate-900 border-slate-900'
-                : 'text-slate-500 border-transparent hover:bg-slate-50 hover:text-slate-700'
-            )}
+            onClick={refreshData}
+            className="h-8 w-8 flex items-center justify-center rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+            title="Refresh"
           >
-            <LayoutGrid className="h-4 w-4" />
-            Grid
+            <RefreshCw className="h-4 w-4" />
           </button>
-          <button
-            type="button"
-            onClick={() => { if (sharesBasePath) router.push(`${sharesBasePath}/list`) }}
-            className={cn(
-              'flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors border-b-2 -mb-px',
-              viewMode === 'list'
-                ? 'bg-slate-100 text-slate-900 border-slate-900'
-                : 'text-slate-500 border-transparent hover:bg-slate-50 hover:text-slate-700'
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Quick search ..."
+              className="pl-9 pr-8 h-8 text-sm border-slate-200 w-56 rounded-[2px]"
+            />
+            {searchQuery.trim().length > 0 && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              >
+                <X className="h-4 w-4" />
+              </button>
             )}
-          >
-            <List className="h-4 w-4" />
-            Compact
-          </button>
-          <button
-            type="button"
-            onClick={() => { if (sharesBasePath) router.push(`${sharesBasePath}/board`) }}
-            className={cn(
-              'flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors border-b-2 -mb-px',
-              viewMode === 'board'
-                ? 'bg-slate-100 text-slate-900 border-slate-900'
-                : 'text-slate-500 border-transparent hover:bg-slate-50 hover:text-slate-700'
-            )}
-          >
-            <ListTodo className="h-4 w-4" />
-            Board
-          </button>
-          </nav>
-          <div className="ml-auto pb-1 flex items-center gap-2">
-            <button
-              type="button"
-              onClick={refreshData}
-              className="h-8 w-8 flex items-center justify-center rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
-              title="Refresh"
-            >
-              <RefreshCw className="h-4 w-4" />
-            </button>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-              <Input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Quick search ..."
-                className="pl-9 pr-8 h-8 text-sm border-slate-200 w-56"
-              />
-              {searchQuery.trim().length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
-            </div>
           </div>
         </div>
       </div>
 
-      <div className="flex flex-1 min-h-0 overflow-hidden gap-4">
-        <div className="flex-1 min-w-0 overflow-auto p-4 bg-white rounded-2xl">
+      <div className={cn('flex flex-1 min-h-0 overflow-hidden gap-4 rounded', viewMode === 'board' ? '' : 'bg-white border border-[#e5e7eb]')}>
+        <div className={cn('flex-1 min-w-0 overflow-auto rounded', viewMode === 'list' ? 'bg-white' : viewMode === 'board' ? '' : 'bg-white p-4')}>
           {isLoading ? (
             <div className="flex items-center justify-center min-h-[200px]">
               <LoadingSpinner size="md" className="min-h-0" />
@@ -1463,11 +1558,11 @@ export function ProjectSharesTab({
             <div className="flex flex-col items-center justify-center h-64 text-slate-500 bg-white/60 rounded-2xl border border-slate-200/60 mx-2">
               <Share2 className="h-11 w-11 mb-3 text-slate-300" />
               <p className="text-sm font-medium text-slate-600">
-                {searchQuery.trim().length > 0 ? 'No matches' : 'No shared documents yet'}
+                {searchQuery.trim().length > 0 || filterShared !== 'all' ? 'No matches' : 'No shared documents yet'}
               </p>
               <p className="text-xs mt-1 text-slate-400">
-                {searchQuery.trim().length > 0
-                  ? 'Try a different search.'
+                {searchQuery.trim().length > 0 || filterShared !== 'all'
+                  ? 'Try adjusting your search or filter.'
                   : 'Share documents from the Files tab to see them here'}
               </p>
             </div>
@@ -1488,6 +1583,7 @@ export function ProjectSharesTab({
               isExternalPersona={restrictToSharedOnly}
               isExternalViewer={isExternalViewer}
               deeplinkBase={deeplinkBase}
+              generalFolderId={generalFolderId}
             />
           ) : viewMode === 'list' ? (
             <SharesListView
@@ -1506,6 +1602,7 @@ export function ProjectSharesTab({
               isExternalPersona={restrictToSharedOnly}
               isExternalViewer={isExternalViewer}
               deeplinkBase={deeplinkBase}
+              generalFolderId={generalFolderId}
             />
           ) : (
             <>
@@ -1514,22 +1611,22 @@ export function ProjectSharesTab({
                 onDragStart={handleDragStart}
                 onDragEnd={handleDragEnd}
               >
-                <div className="grid grid-cols-3 gap-4 min-h-[360px]">
+                <div className="grid grid-cols-4 gap-4 min-h-[360px]">
                   {LANES.map((lane) => (
                     <motion.div
                       key={lane.status}
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
-                      className="flex flex-col rounded-2xl overflow-hidden border border-slate-200/70 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
+                      className="flex flex-col rounded border border-[#e5e7eb] bg-white overflow-hidden"
                     >
-                      <div className="flex items-center gap-2.5 px-4 py-3 border-b border-slate-200/50 bg-white/60">
-                        <div className={cn('rounded-lg bg-gradient-to-br p-1.5', lane.iconGradient)}>
+                      <div className="flex items-center gap-2 px-3 py-2.5 border-b border-[#e5e7eb]">
+                        <div className={cn('rounded p-1', lane.iconBg)}>
                           {lane.icon}
                         </div>
-                        <span className="text-sm font-semibold text-slate-700">{lane.label}</span>
-                        <span className="text-xs text-slate-500">({byLane[lane.status].length})</span>
+                        <span className="text-xs font-semibold text-[#1b1b1d]">{lane.label}</span>
+                        <span className="text-[11px] text-[#9a9ba0] ml-0.5">({byLane[lane.status].length})</span>
                       </div>
-                      <DroppableLane id={lane.status} className="flex-1 overflow-y-auto p-3 space-y-3 min-h-[120px]">
+                      <DroppableLane id={lane.status} className="flex-1 overflow-y-auto p-3 space-y-2.5 min-h-[120px]">
                         <AnimatePresence mode="popLayout">
                           {byLane[lane.status].map((share) => (
                             <DraggableCard
@@ -1554,6 +1651,7 @@ export function ProjectSharesTab({
                               isExternalPersona={restrictToSharedOnly}
                               isExternalViewer={isExternalViewer}
                               deeplinkBase={deeplinkBase}
+                              generalFolderId={generalFolderId}
                             />
                           ))}
                         </AnimatePresence>
@@ -1571,18 +1669,13 @@ export function ProjectSharesTab({
                     return (
                       <motion.div
                         layoutId={activeId}
-                        className={cn(
-                          'rounded-2xl overflow-hidden w-[280px] border border-slate-200/80 bg-white',
-                          accent.border,
-                          'shadow-[0_8px_24px_-8px_rgba(0,0,0,0.15)]'
-                        )}
+                        className="rounded overflow-hidden w-[280px] border border-[#e5e7eb] bg-white shadow-md"
                         style={{ cursor: 'grabbing' }}
                       >
-                        <div className="h-2 bg-slate-100/80" />
+                        <div className="h-1.5 bg-[#f9f9fb] border-b border-[#e5e7eb]" />
                         <ShareCardContent
                           share={share}
-                          laneHeaderBg={accent.headerBg}
-                          iconPillBg={accent.iconPillBg}
+                          iconPillBg={CARD_ACCENT[status].iconPillBg}
                           formatDate={formatDate}
                           getDocumentForMenu={getDocumentForMenu}
                           showActions={false}
@@ -1595,6 +1688,7 @@ export function ProjectSharesTab({
                           extCollaboratorLabel={projExtCollaborator}
                           viewerLabel={projViewer}
                           onParentFolderClick={onOpenInFiles ? handleOpenParentFolder : undefined}
+                          generalFolderId={generalFolderId}
                         />
                       </motion.div>
                     )

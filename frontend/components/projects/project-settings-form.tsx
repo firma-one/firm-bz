@@ -1,8 +1,7 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { updateProject, deleteProject } from '@/lib/actions/project'
 import type { LwCrmEngagementStatus } from '@/lib/actions/project'
@@ -11,10 +10,11 @@ import { useToast } from '@/components/ui/toast'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { FileText, AlertTriangle, ChevronDown, Check } from 'lucide-react'
+import { AlertTriangle, ChevronDown, Check, X, CornerDownLeft } from 'lucide-react'
 import { SandboxInfoBanner } from '@/components/ui/sandbox-info-banner'
 import { useOrgSandbox } from '@/lib/use-org-sandbox'
 import { DateTimePicker } from '@/components/ui/date-time-picker'
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
 
 export interface ProjectSettingsFormProps {
     projectId: string
@@ -29,10 +29,12 @@ export interface ProjectSettingsFormProps {
     initialRateOrValue?: string | null
     initialTags?: string[]
     firmSandboxOnly?: boolean
-    /** Close modal or navigate away (e.g. back to Files). Always enabled even in Sandbox. */
     onCancel?: () => void
     onSaved?: () => void
 }
+
+const fieldLabel = 'font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] block mb-1'
+const inputCls = 'border-[#e5e7eb] text-[#1b1b1d] text-sm placeholder:text-[#9a9ba0] rounded focus-visible:ring-1 focus-visible:ring-[#069668] focus-visible:border-[#069668] disabled:opacity-50 disabled:cursor-not-allowed'
 
 export function ProjectSettingsForm({
     projectId,
@@ -66,9 +68,12 @@ export function ProjectSettingsForm({
     )
     const [rateOrValue, setRateOrValue] = useState(initialRateOrValue ?? '')
     const [currencySymbol, setCurrencySymbol] = useState('')
-    const [tagsInput, setTagsInput] = useState(initialTags.join(', '))
+    const [tags, setTags] = useState<string[]>(initialTags)
+    const [tagInput, setTagInput] = useState('')
+    const tagInputRef = useRef<HTMLInputElement>(null)
     const [saving, setSaving] = useState(false)
     const [deleting, setDeleting] = useState(false)
+    const [dangerOpen, setDangerOpen] = useState(false)
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
 
     const isCompleted = status === 'COMPLETED'
@@ -81,17 +86,8 @@ export function ProjectSettingsForm({
         setStatus(initialStatus ?? 'ACTIVE')
         setContractType(initialContractType ?? '')
         setRateOrValue(initialRateOrValue ?? '')
-        setTagsInput(initialTags.join(', '))
-    }, [
-        initialName,
-        initialDescription,
-        initialKickoffDate,
-        initialDueDate,
-        initialStatus,
-        initialContractType,
-        initialRateOrValue,
-        initialTags,
-    ])
+        setTags(initialTags)
+    }, [initialName, initialDescription, initialKickoffDate, initialDueDate, initialStatus, initialContractType, initialRateOrValue, initialTags])
 
     useEffect(() => {
         let mounted = true
@@ -107,39 +103,47 @@ export function ProjectSettingsForm({
         return () => { mounted = false }
     }, [orgSlug])
 
-    const parseTags = (raw: string) =>
-        raw
-            .split(',')
-            .map((t) => t.trim())
-            .filter(Boolean)
+    const commitTag = (raw: string) => {
+        const value = raw.trim().toLowerCase().replace(/\s+/g, '-')
+        if (value && !tags.includes(value)) setTags((prev) => [...prev, value])
+        setTagInput('')
+    }
+
+    const handleTagKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') { e.preventDefault(); commitTag(tagInput) }
+        else if (e.key === ',') { e.preventDefault(); commitTag(tagInput) }
+        else if (e.key === 'Backspace' && tagInput === '' && tags.length > 0) setTags((prev) => prev.slice(0, -1))
+    }
+
+    const handleTagChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const val = e.target.value
+        if (val.endsWith(',')) commitTag(val.slice(0, -1))
+        else setTagInput(val)
+    }
+
+    const removeTag = (tag: string) => {
+        setTags((prev) => prev.filter((t) => t !== tag))
+        tagInputRef.current?.focus()
+    }
 
     const handleSaveProperties = async () => {
         if (isSandboxFirm) return
         setSaving(true)
         try {
-            await updateProject(
-                projectId,
-                {
-                    name,
-                    description,
-                    kickoffDate: kickoffDate || null,
-                    dueDate: dueDate || null,
-                    status,
-                    contractType: contractType.trim() || null,
-                    rateOrValue: rateOrValue.trim() === '' ? null : rateOrValue.trim(),
-                    tags: parseTags(tagsInput),
-                },
-                orgSlug,
-                clientSlug
-            )
+            await updateProject(projectId, {
+                name,
+                description,
+                kickoffDate: kickoffDate || null,
+                dueDate: dueDate || null,
+                status,
+                contractType: contractType.trim() || null,
+                rateOrValue: rateOrValue.trim() === '' ? null : rateOrValue.trim(),
+                tags: tagInput.trim() ? [...tags, tagInput.trim().toLowerCase().replace(/\s+/g, '-')] : tags,
+            }, orgSlug, clientSlug)
             addToast({ type: 'success', title: 'Saved', message: 'Engagement properties updated.' })
             onSaved?.()
         } catch (e: unknown) {
-            addToast({
-                type: 'error',
-                title: 'Update failed',
-                message: e instanceof Error ? e.message : 'Could not update project.',
-            })
+            addToast({ type: 'error', title: 'Update failed', message: e instanceof Error ? e.message : 'Could not update project.' })
         } finally {
             setSaving(false)
         }
@@ -153,65 +157,48 @@ export function ProjectSettingsForm({
             addToast({ type: 'success', title: 'Engagement deleted', message: 'Engagement has been removed.' })
             setIsDeleteDialogOpen(false)
             onSaved?.()
-            router.push(`/d/f/${orgSlug}/c/${clientSlug}`)
+            router.push(`/d/f/${orgSlug}/c/${clientSlug}?tab=projects`)
         } catch (e: unknown) {
-            addToast({
-                type: 'error',
-                title: 'Delete failed',
-                message: e instanceof Error ? e.message : 'Could not delete project.',
-            })
+            addToast({ type: 'error', title: 'Delete failed', message: e instanceof Error ? e.message : 'Could not delete project.' })
         } finally {
             setDeleting(false)
         }
     }
 
-    const buttonClass = 'min-w-[11rem] sm:w-[11rem]'
+    const contractValueHint = contractType === 'Fixed Price' ? 'Total project fee'
+        : contractType === 'Time & Material' ? 'Estimated total — leave blank if unknown'
+        : contractType === 'Retainer' ? 'Total retainer value (e.g. 5 000/mo × 12 = 60 000)'
+        : contractType === 'Milestone-Based' ? 'Sum of all milestone values'
+        : contractType === 'Subscription / Recurring' ? 'Total value over engagement period'
+        : contractType ? 'Total value of this engagement'
+        : null
 
     return (
-        <div className="space-y-0">
-            <div className="mb-8">
-                <h2 className="text-lg font-semibold text-gray-900 tracking-tight">Engagement settings</h2>
-                <p className="text-sm text-gray-500 mt-1">Edit details, status, and commercial fields, or remove the engagement.</p>
-            </div>
+        <div className="flex flex-col gap-3">
+            {isSandboxFirm && <SandboxInfoBanner />}
 
-            {isSandboxFirm && (
-                <div className="mb-6">
-                    <SandboxInfoBanner />
+            {isCompleted && (
+                <div className="text-xs text-[#45474c] rounded border border-[#e5e7eb] bg-[#f9f9fb] px-3 py-2">
+                    This engagement is completed. Change status to edit other fields.
                 </div>
             )}
 
-            <section className="rounded-lg border border-gray-200 bg-white p-6 mb-12">
-                <div className="flex items-center gap-2 mb-1">
-                    <FileText className="h-4 w-4 text-gray-500" aria-hidden />
-                    <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">Details</h3>
-                </div>
-                <p className="text-sm text-gray-500 mb-4">Name, dates, and description shown in the engagement workspace.</p>
-                {isCompleted && (
-                    <p className="text-xs text-gray-500 mb-3 rounded-md bg-gray-50 border border-gray-100 px-3 py-2">
-                        This engagement is completed. Change status below to edit other fields.
-                    </p>
-                )}
-                <div className="space-y-4 w-full">
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="engagement-status" className="text-gray-700 font-medium">Status</Label>
-                            <Select
-                                value={status}
-                                onValueChange={(value) => setStatus(value as LwCrmEngagementStatus)}
-                                disabled={isSandboxFirm}
-                            >
-                                <SelectTrigger
-                                    id="engagement-status"
-                                    className="w-full h-10 rounded-md border-gray-200 bg-white px-3 text-sm text-gray-900 focus:ring-2 focus:ring-gray-400"
-                                >
+            {/* Tile grid */}
+            <div className="grid grid-cols-3 gap-3">
+
+                {/* DETAILS — col-span-2 */}
+                <div className="col-span-2 bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
+                    <p className={fieldLabel}>Details</p>
+
+                    {/* Status + Start date + End date */}
+                    <div className="grid grid-cols-3 gap-3">
+                        <div>
+                            <label htmlFor="engagement-status" className={fieldLabel}>Status</label>
+                            <Select value={status} onValueChange={(v) => setStatus(v as LwCrmEngagementStatus)} disabled={isSandboxFirm}>
+                                <SelectTrigger id="engagement-status" className={inputCls}>
                                     <SelectValue placeholder="Select status" />
                                 </SelectTrigger>
-                                <SelectContent
-                                    side="bottom"
-                                    align="start"
-                                    sideOffset={6}
-                                    className="z-[70] border border-gray-200 bg-white shadow-lg"
-                                >
+                                <SelectContent side="bottom" align="start" sideOffset={6} className="z-[70] border border-[#e5e7eb] bg-white shadow-sm rounded">
                                     <SelectItem value="PLANNED">Planned</SelectItem>
                                     <SelectItem value="ACTIVE">Active</SelectItem>
                                     <SelectItem value="PAUSED">Paused</SelectItem>
@@ -219,214 +206,217 @@ export function ProjectSettingsForm({
                                 </SelectContent>
                             </Select>
                         </div>
-                        <div className="space-y-2">
-                            <Label className="text-gray-700 font-medium">Start date (optional)</Label>
-                            <DateTimePicker
-                                value={kickoffDate}
-                                onChange={setKickoffDate}
-                                placeholder="Select start date"
-                                disabled={isCompleted || isSandboxFirm}
-                                defaultTime="09:00"
-                            />
+                        <div>
+                            <label className={fieldLabel}>Start date <span className="normal-case tracking-normal font-sans text-[#9a9ba0]">(optional)</span></label>
+                            <DateTimePicker value={kickoffDate} onChange={setKickoffDate} placeholder="Select date" disabled={isCompleted || isSandboxFirm} defaultTime="09:00" />
                         </div>
-                        <div className="space-y-2">
-                            <Label className="text-gray-700 font-medium">End date (optional)</Label>
-                            <DateTimePicker
-                                value={dueDate}
-                                onChange={setDueDate}
-                                placeholder="Select end date"
-                                disabled={isCompleted || isSandboxFirm}
-                                defaultTime="17:00"
-                            />
+                        <div>
+                            <label className={fieldLabel}>End date <span className="normal-case tracking-normal font-sans text-[#9a9ba0]">(optional)</span></label>
+                            <DateTimePicker value={dueDate} onChange={setDueDate} placeholder="Select date" disabled={isCompleted || isSandboxFirm} defaultTime="17:00" />
                         </div>
                     </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="project-name" className="text-gray-700 font-medium">Name</Label>
+
+                    {/* Name */}
+                    <div>
+                        <label htmlFor="project-name" className={fieldLabel}>Name</label>
                         <Input
                             id="project-name"
                             value={name}
                             onChange={(e) => setName(e.target.value)}
                             placeholder="Engagement name"
-                            className="bg-white border-gray-200 text-gray-900 placeholder:text-gray-400 focus-visible:ring-gray-400"
                             disabled={isCompleted || isSandboxFirm}
+                            className={inputCls}
                         />
                     </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="project-description" className="text-gray-700 font-medium">Description</Label>
+
+                    {/* Description */}
+                    <div>
+                        <label htmlFor="project-description" className={fieldLabel}>Description <span className="normal-case tracking-normal font-sans text-[#9a9ba0]">(optional)</span></label>
                         <textarea
                             id="project-description"
                             value={description}
                             onChange={(e) => setDescription(e.target.value)}
                             placeholder="Brief description of this engagement"
                             rows={3}
-                            className="flex w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400 disabled:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-70"
                             disabled={isCompleted || isSandboxFirm}
+                            className={`flex w-full rounded border border-[#e5e7eb] bg-white px-3 py-2 text-sm text-[#1b1b1d] placeholder:text-[#9a9ba0] focus:outline-none focus:ring-1 focus:ring-[#069668] focus:border-[#069668] disabled:bg-[#f9f9fb] disabled:cursor-not-allowed disabled:opacity-50`}
                         />
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="contract-type" className="text-gray-700 font-medium">Contract type (optional)</Label>
-                            <DropdownMenu open={contractTypeOpen} onOpenChange={setContractTypeOpen}>
-                                <DropdownMenuTrigger asChild disabled={isCompleted || isSandboxFirm}>
-                                    <button
-                                        id="contract-type"
-                                        className="w-full h-10 flex items-center justify-between rounded-md border border-gray-200 bg-white px-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
-                                    >
-                                        <span className={contractType ? 'text-gray-900' : 'text-gray-400'}>
-                                            {contractType || 'Select a contract type'}
-                                        </span>
-                                        <ChevronDown className="h-4 w-4 text-gray-500 shrink-0" />
-                                    </button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent
-                                    className="w-[var(--radix-dropdown-menu-trigger-width)] p-1"
-                                    onCloseAutoFocus={(e) => e.preventDefault()}
+                </div>
+
+                {/* COMMERCIAL — col-span-1 */}
+                <div className="bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
+                    <p className={fieldLabel}>Commercial</p>
+
+                    {/* Contract type */}
+                    <div>
+                        <label htmlFor="contract-type" className={fieldLabel}>Contract type <span className="normal-case tracking-normal font-sans text-[#9a9ba0]">(optional)</span></label>
+                        <DropdownMenu open={contractTypeOpen} onOpenChange={setContractTypeOpen}>
+                            <DropdownMenuTrigger asChild disabled={isCompleted || isSandboxFirm}>
+                                <button
+                                    id="contract-type"
+                                    className="w-full h-9 flex items-center justify-between rounded border border-[#e5e7eb] bg-white px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus:ring-1 focus:ring-[#069668]"
                                 >
-                                    {[
-                                        'Fixed Price',
-                                        'Retainer',
-                                        'Time & Material',
-                                        'Case Management',
-                                        'Milestone-Based',
-                                        'Strategic Advisory',
-                                        'Success Fee',
-                                        'Subscription / Recurring',
-                                    ].map((label) => (
-                                        <DropdownMenuItem
-                                            key={label}
-                                            className="flex items-center justify-between cursor-pointer"
-                                            onSelect={() => {
-                                                setContractType(label)
-                                                setContractTypeIsCustom(false)
-                                                setContractTypeOpen(false)
-                                            }}
-                                        >
-                                            {label}
-                                            {contractType === label && !contractTypeIsCustom && (
-                                                <Check className="h-4 w-4 text-gray-700" />
-                                            )}
-                                        </DropdownMenuItem>
-                                    ))}
-                                    <DropdownMenuSeparator />
-                                    <div className="px-2 py-1.5 flex items-center gap-2">
-                                        <input
-                                            value={contractTypeIsCustom ? contractType : ''}
-                                            onChange={(e) => {
-                                                setContractType(e.target.value)
-                                                setContractTypeIsCustom(true)
-                                            }}
-                                            onKeyDown={(e) => {
-                                                e.stopPropagation()
-                                                if (e.key === 'Enter') setContractTypeOpen(false)
-                                            }}
-                                            onClick={(e) => e.stopPropagation()}
-                                            placeholder="Other..."
-                                            className="flex-1 text-sm text-gray-900 placeholder:text-gray-400 outline-none bg-transparent"
-                                        />
-                                        {contractTypeIsCustom && contractType && (
-                                            <Check className="h-4 w-4 text-gray-700 shrink-0" />
-                                        )}
-                                    </div>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="rate-value" className="text-gray-700 font-medium">Contract Value <span className="text-gray-400 font-normal">(optional)</span></Label>
-                            <div className={`flex items-center rounded-md border border-gray-200 bg-white focus-within:ring-1 focus-within:ring-gray-400 ${isCompleted || isSandboxFirm ? 'opacity-60 cursor-not-allowed' : ''}`}>
-                                {currencySymbol && (
-                                    <span className="pl-3 pr-1 text-sm text-gray-500 shrink-0 select-none">{currencySymbol}</span>
-                                )}
-                                <input
-                                    id="rate-value"
-                                    value={rateOrValue}
-                                    onChange={(e) => setRateOrValue(e.target.value)}
-                                    placeholder="Total engagement value"
-                                    disabled={isCompleted || isSandboxFirm}
-                                    className="flex-1 h-10 px-3 text-sm text-gray-900 bg-transparent outline-none placeholder:text-gray-400 disabled:cursor-not-allowed"
-                                />
-                            </div>
-                            {contractType && (
-                                <p className="text-xs text-gray-400">
-                                    {contractType === 'Fixed Price' && 'Total project fee'}
-                                    {contractType === 'Time & Material' && 'Estimated total — leave blank if unknown'}
-                                    {contractType === 'Retainer' && 'Total retainer value (e.g. 5 000/mo × 12 = 60 000)'}
-                                    {contractType === 'Milestone-Based' && 'Sum of all milestone values'}
-                                    {contractType === 'Subscription / Recurring' && 'Total value over engagement period'}
-                                    {!['Fixed Price','Time & Material','Retainer','Milestone-Based','Subscription / Recurring'].includes(contractType) && 'Total value of this engagement'}
-                                </p>
+                                    <span className={contractType ? 'text-[#1b1b1d]' : 'text-[#9a9ba0]'}>
+                                        {contractType || 'Select type…'}
+                                    </span>
+                                    <ChevronDown className="h-3.5 w-3.5 text-[#45474c] shrink-0" />
+                                </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent className="w-[var(--radix-dropdown-menu-trigger-width)] p-1 border-[#e5e7eb] shadow-sm rounded" onCloseAutoFocus={(e) => e.preventDefault()}>
+                                {['Fixed Price','Retainer','Time & Material','Case Management','Milestone-Based','Strategic Advisory','Success Fee','Subscription / Recurring'].map((label) => (
+                                    <DropdownMenuItem
+                                        key={label}
+                                        className="flex items-center justify-between cursor-pointer text-sm text-[#1b1b1d]"
+                                        onSelect={() => { setContractType(label); setContractTypeIsCustom(false); setContractTypeOpen(false) }}
+                                    >
+                                        {label}
+                                        {contractType === label && !contractTypeIsCustom && <Check className="h-3.5 w-3.5 text-[#069668]" />}
+                                    </DropdownMenuItem>
+                                ))}
+                                <DropdownMenuSeparator />
+                                <div className="px-2 py-1.5 flex items-center gap-2">
+                                    <input
+                                        value={contractTypeIsCustom ? contractType : ''}
+                                        onChange={(e) => { setContractType(e.target.value); setContractTypeIsCustom(true) }}
+                                        onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') setContractTypeOpen(false) }}
+                                        onClick={(e) => e.stopPropagation()}
+                                        placeholder="Other…"
+                                        className="flex-1 text-sm text-[#1b1b1d] placeholder:text-[#9a9ba0] outline-none bg-transparent"
+                                    />
+                                    {contractTypeIsCustom && contractType && <Check className="h-3.5 w-3.5 text-[#069668] shrink-0" />}
+                                </div>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </div>
+
+                    {/* Contract value */}
+                    <div>
+                        <label htmlFor="rate-value" className={fieldLabel}>Contract value <span className="normal-case tracking-normal font-sans text-[#9a9ba0]">(optional)</span></label>
+                        <div className={`flex items-center rounded border border-[#e5e7eb] bg-white focus-within:ring-1 focus-within:ring-[#069668] focus-within:border-[#069668] ${isCompleted || isSandboxFirm ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                            {currencySymbol && (
+                                <span className="pl-3 pr-1 text-sm text-[#45474c] shrink-0 select-none">{currencySymbol}</span>
                             )}
+                            <input
+                                id="rate-value"
+                                value={rateOrValue}
+                                onChange={(e) => setRateOrValue(e.target.value)}
+                                placeholder="Total value"
+                                disabled={isCompleted || isSandboxFirm}
+                                className="flex-1 h-9 px-3 text-sm text-[#1b1b1d] bg-transparent outline-none placeholder:text-[#9a9ba0] disabled:cursor-not-allowed"
+                            />
+                        </div>
+                        {contractValueHint && (
+                            <p className="mt-1 text-[10px] text-[#9a9ba0]">{contractValueHint}</p>
+                        )}
+                    </div>
+
+                    {/* Tags */}
+                    <div>
+                        <label htmlFor="engagement-tags" className={fieldLabel}>Tags <span className="normal-case tracking-normal font-sans text-[#9a9ba0]">(optional)</span></label>
+                        <div
+                            className={`flex flex-wrap gap-1.5 min-h-[36px] w-full rounded border px-3 py-2 text-sm transition-colors cursor-text
+                                ${isCompleted || isSandboxFirm
+                                    ? 'border-[#e5e7eb] bg-[#f9f9fb] opacity-50 cursor-not-allowed'
+                                    : 'border-[#e5e7eb] bg-white focus-within:ring-1 focus-within:ring-[#069668] focus-within:border-[#069668]'
+                                }`}
+                            onClick={() => tagInputRef.current?.focus()}
+                        >
+                            {tags.map((tag) => (
+                                <span key={tag} className="inline-flex items-center gap-1 rounded bg-[#f3f4f6] border border-[#e5e7eb] px-2 py-0.5 text-[11px] font-medium text-[#45474c]">
+                                    {tag}
+                                    {!isCompleted && !isSandboxFirm && (
+                                        <button type="button" onClick={(e) => { e.stopPropagation(); removeTag(tag) }} className="text-[#9a9ba0] hover:text-[#1b1b1d] transition-colors" aria-label={`Remove ${tag}`}>
+                                            <X className="h-3 w-3" />
+                                        </button>
+                                    )}
+                                </span>
+                            ))}
+                            <input
+                                ref={tagInputRef}
+                                id="engagement-tags"
+                                value={tagInput}
+                                onChange={handleTagChange}
+                                onKeyDown={handleTagKeyDown}
+                                onBlur={() => { if (tagInput.trim()) commitTag(tagInput) }}
+                                placeholder={tags.length === 0 ? 'Type a tag, press Enter or comma…' : ''}
+                                disabled={isCompleted || isSandboxFirm}
+                                className="flex-1 min-w-[120px] bg-transparent outline-none placeholder:text-[#9a9ba0] text-[#1b1b1d] text-xs disabled:cursor-not-allowed"
+                            />
+                            <CornerDownLeft className="h-3 w-3 text-[#069668] shrink-0 self-center ml-1" />
                         </div>
                     </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="engagement-tags" className="text-gray-700 font-medium">Tags</Label>
-                        <Input
-                            id="engagement-tags"
-                            value={tagsInput}
-                            onChange={(e) => setTagsInput(e.target.value)}
-                            placeholder="Comma-separated"
-                            disabled={isCompleted || isSandboxFirm}
-                            className="bg-white border-gray-200 text-gray-900 placeholder:text-gray-400 focus-visible:ring-gray-400"
-                        />
+                </div>
+
+            </div>
+
+            {/* Actions bar */}
+            <div className="flex items-center gap-3">
+                {onCancel && (
+                    <Button type="button" variant="outline" className="rounded-[2px]" onClick={onCancel}>
+                        Cancel
+                    </Button>
+                )}
+                <Button
+                    onClick={handleSaveProperties}
+                    disabled={saving || isSandboxFirm}
+                    variant="greenCta"
+                    className="rounded-[2px] min-w-[8rem] text-[10px] font-headline font-bold tracking-widest uppercase"
+                >
+                    {saving ? 'Saving…' : 'Save'}
+                </Button>
+            </div>
+
+            {/* Danger zone — collapsible */}
+            <section className="border border-red-200 rounded overflow-hidden">
+                <button
+                    type="button"
+                    onClick={() => setDangerOpen((v) => !v)}
+                    className="w-full px-4 py-3 flex items-center justify-between bg-red-50/60 hover:bg-red-50 transition-colors"
+                >
+                    <div className="flex items-center gap-2">
+                        <AlertTriangle className="h-3.5 w-3.5 text-red-500" aria-hidden />
+                        <span className="font-mono text-[9px] font-bold uppercase tracking-widest text-red-700">Danger zone</span>
                     </div>
-                    <div className="flex flex-wrap gap-3">
-                        {onCancel ? (
-                            <Button type="button" variant="outline" className={buttonClass} onClick={onCancel}>
-                                Cancel
-                            </Button>
-                        ) : null}
+                    <ChevronDown className={`h-3.5 w-3.5 text-red-500 transition-transform duration-200 ${dangerOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {dangerOpen && (
+                    <div className="p-4 border-t border-red-200 bg-red-50/40 space-y-3">
+                        <p className="text-xs text-[#45474c]">
+                            Permanently removes this engagement. All members are removed and Drive access revoked. The engagement folder remains in Google Drive for the firm admin.
+                        </p>
                         <Button
-                            onClick={handleSaveProperties}
-                            disabled={saving || isSandboxFirm}
-                            className={`${buttonClass} bg-gray-900 text-white hover:bg-black`}
+                            type="button"
+                            onClick={() => setIsDeleteDialogOpen(true)}
+                            disabled={isSandboxFirm || deleting}
+                            className="rounded-[2px] bg-red-700 text-white hover:bg-red-800 border-0 text-[10px] font-headline font-bold tracking-widest uppercase"
                         >
-                            {saving ? 'Saving...' : 'Save changes'}
+                            {deleting ? 'Deleting…' : 'Delete engagement'}
                         </Button>
                     </div>
-                </div>
-            </section>
-
-            <section className="rounded-lg border border-red-200 bg-red-50/50 p-6">
-                <div className="flex items-center gap-2 mb-1">
-                    <AlertTriangle className="h-4 w-4 text-red-700" aria-hidden />
-                    <h3 className="text-sm font-semibold text-red-800 uppercase tracking-wide">Danger zone</h3>
-                </div>
-                <p className="text-sm text-gray-600 mb-4">
-                    Permanently remove this engagement from Pockett. All members are removed and Drive access is revoked. The engagement folder remains in Google Drive for the firm admin.
-                </p>
-                <Button
-                    onClick={() => setIsDeleteDialogOpen(true)}
-                    disabled={isSandboxFirm || deleting}
-                    className={`${buttonClass} bg-red-800 text-white hover:bg-red-900 border-0`}
-                >
-                    {deleting ? 'Deleting...' : 'Delete project'}
-                </Button>
+                )}
             </section>
 
             <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
                 <DialogContent className="max-w-md">
+                    <VisuallyHidden><DialogTitle>Delete engagement</DialogTitle></VisuallyHidden>
                     <DialogHeader>
                         <DialogTitle>Delete engagement?</DialogTitle>
                         <DialogDescription>
-                            Permanently delete this engagement in Pockett? All members will be removed and Drive access revoked.
-                            The engagement folder will remain in Google Drive for the firm admin to access directly. This action cannot be undone.
+                            Permanently delete this engagement? All members will be removed and Drive access revoked. The folder remains in Google Drive for the firm admin. This cannot be undone.
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter>
-                        <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => setIsDeleteDialogOpen(false)}
-                            disabled={deleting}
-                        >
+                        <Button type="button" variant="outline" className="rounded-[2px]" onClick={() => setIsDeleteDialogOpen(false)} disabled={deleting}>
                             Cancel
                         </Button>
                         <Button
                             type="button"
                             onClick={handleDeleteProject}
                             disabled={deleting}
-                            className="bg-red-800 text-white hover:bg-red-900 border-0"
+                            className="rounded-[2px] bg-red-700 text-white hover:bg-red-800 border-0 text-[10px] font-headline font-bold tracking-widest uppercase"
                         >
-                            {deleting ? 'Deleting...' : 'Delete engagement'}
+                            {deleting ? 'Deleting…' : 'Delete engagement'}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

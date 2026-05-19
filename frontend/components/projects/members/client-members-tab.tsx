@@ -101,10 +101,10 @@ export function ClientMembersTab({ firmId, clientId, orgSlug, clientSlug, canMan
     }
 
     return (
-        <div className="flex flex-col h-full bg-slate-50/50 rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-white">
+        <div className="flex flex-col h-full bg-white rounded border border-[#e5e7eb] overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[#e5e7eb] bg-white">
                 <div className="flex items-start gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600 ring-1 ring-slate-200/80">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-[#f3f4f6] text-[#45474c]">
                         <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
                         </svg>
@@ -113,7 +113,7 @@ export function ClientMembersTab({ firmId, clientId, orgSlug, clientSlug, canMan
                         <h2 className="text-xl font-semibold tracking-tight text-slate-900 flex items-center gap-2">
                             Client Members
                             {!isLoading && (members.length > 0 || invitations.length > 0) && (
-                                <span className="inline-flex items-center rounded-full bg-slate-200/80 px-2.5 py-0.5 text-xs font-medium text-slate-700">
+                                <span className="font-mono text-[10px] font-bold bg-[#069668] text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
                                     {members.length + invitations.length}
                                 </span>
                             )}
@@ -124,21 +124,22 @@ export function ClientMembersTab({ firmId, clientId, orgSlug, clientSlug, canMan
                 {canManage && (
                     <Button
                         onClick={() => setIsInviteModalOpen(true)}
+                        variant="ghost"
                         size="sm"
-                        className="h-8 px-3 bg-slate-900 text-white hover:bg-slate-800"
+                        className="h-auto px-4 py-1.5 rounded-[2px] bg-[#069668] text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-[#069668] hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(6,150,104,0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1.5"
                     >
-                        <UserPlus className="h-3.5 w-3.5 mr-1.5" />
-                        <span className="text-xs font-medium">Invite</span>
+                        <UserPlus className="h-4 w-4" />
+                        Invite
                     </Button>
                 )}
             </div>
 
-            <div className="flex-1 overflow-auto p-6 bg-slate-50/50">
+            <div className="flex-1 overflow-auto p-4">
                 {isLoading ? (
                     <div className="space-y-3">
                         {[1, 2, 3].map((i) => (
-                            <div key={i} className="rounded-xl border border-slate-200 bg-white p-4 animate-pulse flex items-center gap-3">
-                                <div className="h-9 w-9 rounded-full bg-slate-200" />
+                            <div key={i} className="rounded border border-[#e5e7eb] bg-white p-4 animate-pulse flex items-center gap-3">
+                                <div className="h-9 w-9 rounded bg-slate-200" />
                                 <div className="flex-1 space-y-2">
                                     <div className="h-4 w-32 rounded bg-slate-200" />
                                     <div className="h-3 w-48 rounded bg-slate-100" />
@@ -147,14 +148,14 @@ export function ClientMembersTab({ firmId, clientId, orgSlug, clientSlug, canMan
                         ))}
                     </div>
                 ) : (
-                    <div className="rounded-lg border border-slate-200/80 bg-white overflow-hidden">
-                        <div className="px-3 py-2.5 border-b border-slate-100 bg-slate-50/80">
+                    <div className="rounded border border-[#e5e7eb] bg-white overflow-hidden">
+                        <div className="px-3 py-2.5 border-b border-[#e5e7eb] bg-white">
                             <h3 className="text-[13px] font-medium text-slate-700">Client Administrator</h3>
                         </div>
-                        <div className="divide-y divide-slate-100">
+                        <div className="divide-y divide-[#e5e7eb]">
                             {members.map((member) => (
-                                <div key={member.id} className="flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50/80">
-                                    <Avatar className="h-8 w-8 shrink-0 border border-slate-200/80">
+                                <div key={member.id} className="flex items-center gap-3 px-3 py-2.5 hover:bg-[#f3f4f6] transition-colors">
+                                    <Avatar className="h-8 w-8 shrink-0 border border-[#e5e7eb]">
                                         <AvatarImage src={member.user?.avatarUrl} />
                                         <AvatarFallback className="bg-slate-100 text-xs font-medium text-slate-600">
                                             {getInitials(member.user?.name)}
@@ -168,8 +169,8 @@ export function ClientMembersTab({ firmId, clientId, orgSlug, clientSlug, canMan
                                 </div>
                             ))}
                             {invitations.map((inv) => (
-                                <div key={inv.id} className="flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50/80">
-                                    <div className="h-8 w-8 shrink-0 rounded-full bg-slate-100 flex items-center justify-center">
+                                <div key={inv.id} className="flex items-center gap-3 px-3 py-2.5 hover:bg-[#f3f4f6] transition-colors">
+                                    <div className="h-8 w-8 shrink-0 rounded bg-[#f3f4f6] flex items-center justify-center">
                                         <Mail className="h-4 w-4 text-slate-500" />
                                     </div>
                                     <div className="flex-1 min-w-0">

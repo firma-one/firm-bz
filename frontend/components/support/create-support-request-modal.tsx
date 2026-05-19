@@ -5,21 +5,16 @@ import { useRouter } from 'next/navigation'
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
 } from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { SquarePlus, AlertCircle, Lightbulb, HelpCircle, Paperclip, FileIcon, CheckCircle2, X } from "lucide-react"
+import { AlertCircle, Lightbulb, HelpCircle, Paperclip, FileIcon, CheckCircle2, X, LifeBuoy, Loader2 } from "lucide-react"
 import { TicketType } from '@prisma/client'
 import { submitErrorTicket } from '@/app/actions/submit-ticket'
 import { useToast } from "@/components/ui/toast"
 import { uploadSupportAttachment, type AttachmentMeta } from '@/lib/support-attachment-upload'
 import { supabase } from '@/lib/supabase'
+import { cn } from '@/lib/utils'
 
 interface CreateSupportRequestModalProps {
   firmSlug: string
@@ -40,20 +35,26 @@ const REQUEST_TYPES = [
   {
     id: TicketType.BUG,
     label: 'Bug Report',
-    description: 'Report an issue or unexpected behavior',
     icon: AlertCircle,
+    color: '#f43f5e',
+    activeBgColor: '#fff1f2',
+    activeBorderColor: '#fda4af',
   },
   {
     id: TicketType.REQUEST,
     label: 'Feature Request',
-    description: 'Suggest a new feature or improvement',
     icon: Lightbulb,
+    color: '#069668',
+    activeBgColor: '#f0faf6',
+    activeBorderColor: '#6ee7c7',
   },
   {
     id: TicketType.ENQUIRY,
     label: 'General Enquiry',
-    description: 'Ask a question or seek assistance',
     icon: HelpCircle,
+    color: '#5A78FF',
+    activeBgColor: '#f0f3ff',
+    activeBorderColor: '#a5b4fc',
   },
 ]
 
@@ -75,7 +76,7 @@ export function CreateSupportRequestModal({ firmSlug, trigger }: CreateSupportRe
   const router = useRouter()
   const { addToast } = useToast()
 
-  const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50 MB
+  const MAX_FILE_SIZE = 50 * 1024 * 1024
 
   const updateAttachment = (id: string, updates: Partial<PendingAttachment>) => {
     setAttachments(prev => prev.map(a => a.id === id ? { ...a, ...updates } : a))
@@ -84,16 +85,9 @@ export function CreateSupportRequestModal({ firmSlug, trigger }: CreateSupportRe
   const addFiles = (files: File[]) => {
     const newItems: PendingAttachment[] = files
       .filter(f => {
-        if (attachments.some(a => a.file.name === f.name && a.file.size === f.size)) {
-          return false
-        }
+        if (attachments.some(a => a.file.name === f.name && a.file.size === f.size)) return false
         if (f.size > MAX_FILE_SIZE) {
-          addToast({
-            title: 'File too large',
-            message: `${f.name} exceeds the 50 MB limit`,
-            type: 'error',
-            duration: 4000,
-          })
+          addToast({ title: 'File too large', message: `${f.name} exceeds the 50 MB limit`, type: 'error', duration: 4000 })
           return false
         }
         return true
@@ -130,29 +124,17 @@ export function CreateSupportRequestModal({ firmSlug, trigger }: CreateSupportRe
 
   const uploadAttachments = async (ticketNumber: string, session: any) => {
     if (attachments.length === 0) return []
-
     const uploadedMeta: AttachmentMeta[] = []
     const token = session?.access_token
+    if (!token) return []
 
-    if (!token) {
-      console.warn('No session token for uploads')
-      return []
-    }
-
-    // Upload in batches of 3 concurrently
     const batchSize = 3
     for (let i = 0; i < attachments.length; i += batchSize) {
       const batch = attachments.slice(i, i + batchSize)
       await Promise.all(
         batch.map(async (a) => {
           updateAttachment(a.id, { status: 'uploading' })
-          const result = await uploadSupportAttachment(
-            token,
-            firmSlug,
-            ticketNumber,
-            a.file,
-            (pct) => updateAttachment(a.id, { progress: pct })
-          )
+          const result = await uploadSupportAttachment(token, firmSlug, ticketNumber, a.file, (pct) => updateAttachment(a.id, { progress: pct }))
           if (result.success && result.meta) {
             updateAttachment(a.id, { status: 'done', meta: result.meta })
             uploadedMeta.push(result.meta)
@@ -162,19 +144,16 @@ export function CreateSupportRequestModal({ firmSlug, trigger }: CreateSupportRe
         })
       )
     }
-
     return uploadedMeta
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (!description.trim()) return
-
     setIsLoading(true)
     setError(null)
 
     try {
-      // Phase 1: Create ticket to get ticketNumber
       const result = await submitErrorTicket({
         description: description.trim(),
         type: selectedType,
@@ -191,30 +170,16 @@ export function CreateSupportRequestModal({ firmSlug, trigger }: CreateSupportRe
         return
       }
 
-      // Phase 2: Upload attachments if any
       if (attachments.length > 0) {
         const { data: { session } } = await supabase.auth.getSession()
-
         if (session?.access_token) {
           const uploadedMeta = await uploadAttachments(result.ticketNumber, session)
-
           if (uploadedMeta.length > 0) {
-            // Persist attachment metadata to ticket
-            const attachRes = await fetch(
-              `/api/support/requests/${result.ticketNumber}/attachments`,
-              {
-                method: 'PATCH',
-                headers: {
-                  Authorization: `Bearer ${session.access_token}`,
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ attachments: uploadedMeta }),
-              }
-            )
-
-            if (!attachRes.ok) {
-              console.warn('Failed to persist attachment metadata to ticket')
-            }
+            await fetch(`/api/support/requests/${result.ticketNumber}/attachments`, {
+              method: 'PATCH',
+              headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ attachments: uploadedMeta }),
+            })
           }
         }
       }
@@ -227,14 +192,13 @@ export function CreateSupportRequestModal({ firmSlug, trigger }: CreateSupportRe
 
       addToast({
         title: 'Request submitted',
-        message: 'Thank you for reaching out. We\'ve received your request and will review it shortly.',
+        message: "Thank you for reaching out. We've received your request and will review it shortly.",
         type: 'success',
         duration: 5000,
       })
-
+      window.dispatchEvent(new CustomEvent('support-requests-updated'))
       router.refresh()
     } catch (err: any) {
-      console.error('Failed to submit request:', err)
       setError(err.message || 'Failed to submit request')
     } finally {
       setIsLoading(false)
@@ -253,180 +217,228 @@ export function CreateSupportRequestModal({ firmSlug, trigger }: CreateSupportRe
     })
   }
 
-  const selectedTypeInfo = REQUEST_TYPES.find(t => t.id === selectedType)
+  const selectedTypeInfo = REQUEST_TYPES.find(t => t.id === selectedType)!
 
   return (
     <>
-      {wrapTrigger(
-        trigger || (
-          <Button
-            variant="blackCta"
-            type="button"
-            className="gap-2"
-          >
-            <SquarePlus className="h-4 w-4" />
-            New Request
-          </Button>
-        ),
-      )}
+      {wrapTrigger(trigger || (
+        <button
+          type="button"
+          className="h-auto px-4 py-1.5 rounded-[2px] bg-[#069668] text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:brightness-105 shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(6,150,104,0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all inline-flex items-center gap-1.5"
+        >
+          <LifeBuoy className="h-3.5 w-3.5" />
+          New Request
+        </button>
+      ))}
+
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-[480px] border-slate-200 max-h-[90vh] overflow-y-auto p-6 pb-4">
-          <DialogHeader>
-            <DialogTitle className="text-slate-900">Create Support Request</DialogTitle>
-            <DialogDescription className="text-slate-600">
-              Report issues, request features, or ask questions. We&apos;ll review your request and get back to you.
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleSubmit} onPaste={handlePaste} className="space-y-4 pt-4">
-            {error && (
-              <div className="bg-slate-50 border border-slate-200 text-slate-700 text-sm px-3 py-2 rounded-md">
-                {error}
+        <DialogContent className="sm:max-w-[500px] p-0 border-[#e5e7eb] !rounded-[2px] overflow-hidden max-h-[90vh] flex flex-col gap-0">
+
+          {/* Modal header */}
+          <div className="border-b border-[#e5e7eb] px-6 py-5 shrink-0">
+            <div className="flex items-center gap-3 mb-1">
+              <div className="w-8 h-8 bg-[#f3f4f6] border border-[#e5e7eb] rounded flex items-center justify-center shrink-0">
+                <LifeBuoy className="h-4 w-4 text-[#1b1b1d]" />
               </div>
-            )}
-            <div className="space-y-2">
-              <Label className="text-slate-900">
-                Request Type <span className="text-slate-500">*</span>
-              </Label>
-              <Select value={selectedType} onValueChange={(value) => setSelectedType(value as TicketType)} disabled={isLoading}>
-                <SelectTrigger className="border-slate-200 text-slate-900 disabled:cursor-not-allowed disabled:opacity-60">
-                  <SelectValue placeholder="Select request type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {REQUEST_TYPES.map(type => (
-                    <SelectItem key={type.id} value={type.id}>
-                      {type.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <h2 className="font-headline text-lg font-bold tracking-tight text-[#1b1b1d]">
+                New Support Request
+              </h2>
             </div>
+            <p className="text-[0.8125rem] text-[#45474c] pl-11">
+              Report issues, request features, or ask questions. We&apos;ll review and get back to you.
+            </p>
+          </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="description" className="text-slate-900">
-                Description <span className="text-slate-500">*</span>
-              </Label>
-              <p className="text-xs text-slate-500">
-                {selectedTypeInfo?.label} — Provide as much detail as possible to help us assist you better.
-              </p>
-              <Textarea
-                id="description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder={placeholders[selectedType]}
-                className="border-slate-200 text-slate-900 placeholder:text-slate-400 disabled:cursor-not-allowed disabled:opacity-60 min-h-32"
-                disabled={isLoading}
-                required
-              />
-            </div>
+          {/* Form body */}
+          <form
+            onSubmit={handleSubmit}
+            onPaste={handlePaste}
+            className="flex flex-col flex-1 min-h-0 overflow-y-auto"
+          >
+            <div className="px-6 py-5 space-y-5">
 
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label className="text-slate-900">Attachments (optional)</Label>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-auto p-0 text-slate-600 hover:text-slate-900"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isLoading}
-                >
-                  <Paperclip className="h-4 w-4 mr-1" />
-                  Add files
-                </Button>
-              </div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                className="hidden"
-                onChange={(e) => {
-                  if (e.target.files) {
-                    addFiles(Array.from(e.target.files))
-                  }
-                  e.target.value = ''
-                }}
-              />
-              <div
-                onDragOver={(e) => {
-                  e.preventDefault()
-                  setIsDragOver(true)
-                }}
-                onDragLeave={() => setIsDragOver(false)}
-                onDrop={handleDrop}
-                className={`border-2 border-dashed rounded-md p-4 text-center transition-colors ${
-                  isDragOver ? 'border-slate-400 bg-slate-50' : 'border-slate-300 bg-slate-100'
-                }`}
-              >
-                <Paperclip className="h-5 w-5 text-slate-400 mx-auto mb-2" />
-                <p className="text-sm text-slate-600">
-                  Drop files here, click above to browse, or paste a screenshot
-                </p>
-              </div>
-
-              {attachments.length > 0 && (
-                <div className="space-y-2 max-h-48 overflow-y-auto">
-                  {attachments.map((a) => (
-                    <div
-                      key={a.id}
-                      className="flex items-center gap-2 p-2 bg-slate-50 rounded border border-slate-200"
-                    >
-                      <FileIcon className="h-4 w-4 text-slate-500 flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-slate-900 truncate">{a.displayName}</p>
-                        {a.status === 'uploading' && (
-                          <div className="flex items-center gap-2 mt-1">
-                            <div className="flex-1 h-1 bg-slate-300 rounded overflow-hidden">
-                              <div
-                                className="h-full bg-slate-600 transition-all"
-                                style={{ width: `${a.progress}%` }}
-                              />
-                            </div>
-                            <span className="text-xs text-slate-500">{a.progress}%</span>
-                          </div>
-                        )}
-                        {a.status === 'done' && (
-                          <p className="text-xs text-emerald-600 flex items-center gap-1 mt-1">
-                            <CheckCircle2 className="h-3 w-3" /> Uploaded
-                          </p>
-                        )}
-                        {a.status === 'error' && (
-                          <p className="text-xs text-red-600 mt-1">{a.error}</p>
-                        )}
-                      </div>
-                      {(a.status === 'pending' || a.status === 'error') && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-auto p-1 text-slate-500 hover:text-red-600"
-                          onClick={() => setAttachments(prev => prev.filter(att => att.id !== a.id))}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
-                  ))}
+              {error && (
+                <div className="flex items-start gap-2 bg-rose-50 border border-rose-200 text-rose-700 text-xs px-3 py-2.5 rounded">
+                  <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-px" />
+                  {error}
                 </div>
               )}
+
+              {/* Request type — visual card picker */}
+              <div className="space-y-2">
+                <Label className="text-xs font-medium text-[#45474c] uppercase tracking-wider">
+                  Request Type <span className="text-rose-400">*</span>
+                </Label>
+                <div className="grid grid-cols-3 gap-2">
+                  {REQUEST_TYPES.map(type => {
+                    const Icon = type.icon
+                    const isActive = selectedType === type.id
+                    return (
+                      <button
+                        key={type.id}
+                        type="button"
+                        disabled={isLoading}
+                        onClick={() => setSelectedType(type.id)}
+                        className="flex flex-col items-center gap-2 px-2 py-4 rounded-[2px] border text-center transition-all"
+                        style={isActive ? {
+                          backgroundColor: type.activeBgColor,
+                          borderColor: type.activeBorderColor,
+                        } : {
+                          backgroundColor: '#ffffff',
+                          borderColor: '#e5e7eb',
+                        }}
+                      >
+                        <Icon
+                          className="h-5 w-5 transition-all"
+                          style={{ color: type.color, opacity: isActive ? 1 : 0.45 }}
+                        />
+                        <span
+                          className="text-[0.8125rem] leading-tight"
+                          style={{ fontWeight: isActive ? 600 : 400, color: isActive ? '#1b1b1d' : '#45474c' }}
+                        >
+                          {type.label}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Description */}
+              <div className="space-y-1.5">
+                <Label htmlFor="description" className="text-xs font-medium text-[#45474c] uppercase tracking-wider">
+                  Description <span className="text-rose-400">*</span>
+                </Label>
+                <p className="text-[0.8125rem] text-[#45474c]">
+                  {selectedTypeInfo.label} — Provide as much detail as possible to help us assist you better.
+                </p>
+                <Textarea
+                  id="description"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder={placeholders[selectedType]}
+                  className="border-[#e5e7eb] rounded-[2px] text-[0.8125rem] text-[#1b1b1d] placeholder:text-[#45474c]/50 focus:border-[#069668] focus:ring-[#069668]/20 disabled:opacity-60 min-h-32 resize-none"
+                  disabled={isLoading}
+                  required
+                />
+              </div>
+
+              {/* Attachments */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-medium text-[#45474c] uppercase tracking-wider">
+                    Attachments
+                    <span className="ml-1 font-normal normal-case tracking-normal text-[#45474c]/60">(optional)</span>
+                  </Label>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isLoading}
+                    className="inline-flex items-center gap-1 text-[0.8125rem] text-[#069668] hover:text-[#047a55] font-medium transition-colors disabled:opacity-50"
+                  >
+                    <Paperclip className="h-3.5 w-3.5" />
+                    Add files
+                  </button>
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files) addFiles(Array.from(e.target.files))
+                    e.target.value = ''
+                  }}
+                />
+                <div
+                  onDragOver={(e) => { e.preventDefault(); setIsDragOver(true) }}
+                  onDragLeave={() => setIsDragOver(false)}
+                  onDrop={handleDrop}
+                  className={cn(
+                    "border border-dashed rounded-[2px] px-4 py-5 text-center transition-colors cursor-pointer",
+                    isDragOver
+                      ? "border-[#069668] bg-[#f0faf6]"
+                      : "border-[#d1d5db] bg-[#f9f9fb] hover:border-[#069668]/50 hover:bg-[#f9f9fb]"
+                  )}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Paperclip className="h-4 w-4 text-[#45474c]/50 mx-auto mb-1.5" />
+                  <p className="text-[0.8125rem] text-[#45474c]">
+                    Drop files here, click to browse, or paste a screenshot
+                  </p>
+                </div>
+
+                {attachments.length > 0 && (
+                  <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                    {attachments.map((a) => (
+                      <div
+                        key={a.id}
+                        className="flex items-center gap-2 px-3 py-2 bg-[#f9f9fb] rounded border border-[#e5e7eb]"
+                      >
+                        <FileIcon className="h-3.5 w-3.5 text-[#45474c] shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[0.8125rem] text-[#1b1b1d] truncate font-medium">{a.displayName}</p>
+                          {a.status === 'uploading' && (
+                            <div className="flex items-center gap-2 mt-1">
+                              <div className="flex-1 h-0.5 bg-[#e5e7eb] rounded overflow-hidden">
+                                <div className="h-full bg-[#069668] transition-all" style={{ width: `${a.progress}%` }} />
+                              </div>
+                              <span className="text-[10px] text-[#45474c] tabular-nums">{a.progress}%</span>
+                            </div>
+                          )}
+                          {a.status === 'done' && (
+                            <p className="text-[10px] text-[#069668] flex items-center gap-1 mt-0.5 font-medium">
+                              <CheckCircle2 className="h-3 w-3" /> Uploaded
+                            </p>
+                          )}
+                          {a.status === 'error' && (
+                            <p className="text-[10px] text-rose-600 mt-0.5">{a.error}</p>
+                          )}
+                        </div>
+                        {(a.status === 'pending' || a.status === 'error') && (
+                          <button
+                            type="button"
+                            onClick={() => setAttachments(prev => prev.filter(att => att.id !== a.id))}
+                            className="p-0.5 rounded hover:bg-[#f3f4f6] text-[#45474c] hover:text-rose-600 transition-colors"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
-            <DialogFooter className="gap-2 pt-2">
-              <Button
+            {/* Footer */}
+            <div className="shrink-0 border-t border-[#e5e7eb] px-6 py-4 flex items-center justify-end gap-2 bg-[#f9f9fb]">
+              <button
                 type="button"
-                variant="outline"
                 onClick={() => setOpen(false)}
                 disabled={isLoading}
+                className="px-4 py-2 text-[0.8125rem] font-medium text-[#45474c] bg-white border border-[#e5e7eb] rounded-[2px] hover:bg-[#f3f4f6] hover:text-[#1b1b1d] transition-colors disabled:opacity-50"
               >
                 Cancel
-              </Button>
-              <Button
+              </button>
+              <button
                 type="submit"
-                variant="blackCta"
                 disabled={!description.trim() || isLoading}
+                className="group inline-flex items-center gap-2 px-4 py-2 rounded-[2px] bg-[#1a5c3a] hover:bg-[#164f32] text-white text-xs font-headline font-bold tracking-widest uppercase transition-all shadow-[0_1px_2px_rgba(0,0,0,0.25),inset_0_1px_0_rgba(255,255,255,0.08)] hover:shadow-[0_4px_8px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.08)] hover:-translate-y-px active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none disabled:translate-y-0"
               >
-                {isLoading ? 'Submitting...' : 'Submit Request'}
-              </Button>
-            </DialogFooter>
+                {isLoading ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Submitting…
+                  </>
+                ) : (
+                  <>
+                    <LifeBuoy className="h-3.5 w-3.5" />
+                    Submit
+                  </>
+                )}
+              </button>
+            </div>
           </form>
         </DialogContent>
       </Dialog>

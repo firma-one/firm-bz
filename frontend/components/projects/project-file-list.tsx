@@ -76,6 +76,8 @@ interface ProjectFileListProps {
     firmId?: string
     /** When true, firm is sandbox-only (restricts Add menu: no new folder / native Google types; upload + Drive import allowed). */
     firmSandboxOnly?: boolean
+    /** Portal target for the New Document button in the workspace nav bar. */
+    navSlot?: HTMLElement | null
 }
 
 type SortByOption = 'name' | 'modifiedTime' | 'modifiedTimeByMe' | 'viewedByMeTime'
@@ -103,7 +105,7 @@ type UploadQueueItem = {
 
 const VIEW_AS_SHARED_ONLY_PERSONAS = ['eng_ext_collaborator', 'eng_viewer']
 
-export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderName = 'Engagement Files', orgName, clientName, projectName, canEdit = false, canManage = false, restrictToSharedOnly = false, firmId, firmSandboxOnly = false }: ProjectFileListProps) {
+export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderName = 'Engagement Files', orgName, clientName, projectName, canEdit = false, canManage = false, restrictToSharedOnly = false, firmId, firmSandboxOnly = false, navSlot }: ProjectFileListProps) {
     const { session } = useAuth()
     const sessionRef = useRef(session)
     const orgSandbox = useOrgSandbox()
@@ -154,7 +156,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
     const [sharedExternalIdsForGuest, setSharedExternalIdsForGuest] = useState<Set<string>>(new Set())
     const [ancestorFolderIdsForGuest, setAncestorFolderIdsForGuest] = useState<Set<string>>(new Set())
     const [sharedByMeExternalIds, setSharedByMeExternalIds] = useState<Set<string>>(new Set())
-    const [filterShared, setFilterShared] = useState<'all' | 'by_me' | 'by_others' | 'pending_intake'>('all')
+    const [filterShared, setFilterShared] = useState<'all' | 'by_me' | 'by_others' | 'with_collaborator' | 'with_viewer' | 'pending_intake'>('all')
 
     useEffect(() => {
         sessionRef.current = session
@@ -379,7 +381,8 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
     const [sortConfig, setSortConfig] = useState<SortConfig>({ sortBy: 'name', direction: 'asc', foldersFirst: true })
     const { searchQuery, setSearchQuery, isSearching } = useProjectSearch()
     const [filterTypes, setFilterTypes] = useState<Set<string>>(new Set())
-    const [filterOwner, setFilterOwner] = useState<'any' | 'me' | 'not-me'>('any')
+    const [filterOwner, setFilterOwner] = useState<'any' | 'me' | 'not-me' | 'private-me'>('any')
+    const [peopleFilterOpen, setPeopleFilterOpen] = useState(false)
     const [filterModified, setFilterModified] = useState<'any' | '7d' | '30d' | 'year'>('any')
     const [highlightedFileId, setHighlightedFileId] = useState<string | null>(null)
     const [actionMenuOpenFileId, setActionMenuOpenFileId] = useState<string | null>(null)
@@ -2319,6 +2322,18 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                 if (filterTypes.has('spreadsheet') && mime === 'application/vnd.google-apps.spreadsheet') return true
                 if (filterTypes.has('presentation') && mime === 'application/vnd.google-apps.presentation') return true
                 if (filterTypes.has('image') && mime.startsWith('image/')) return true
+                if (filterTypes.has('other')) {
+                    const isKnown = mime === 'application/vnd.google-apps.folder' ||
+                        mime === 'application/vnd.google-apps.document' ||
+                        mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+                        mime === 'application/msword' ||
+                        mime === 'application/vnd.google-apps.spreadsheet' ||
+                        mime === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+                        mime === 'application/vnd.google-apps.presentation' ||
+                        mime === 'application/vnd.openxmlformats-officedocument.presentationml.presentation' ||
+                        mime.startsWith('image/')
+                    if (!isKnown) return true
+                }
                 return false
             })
         }
@@ -2329,6 +2344,11 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                 const owner = (f.actorEmail || '').toLowerCase()
                 if (filterOwner === 'me') return owner === myEmail || owner === '' || !owner
                 if (filterOwner === 'not-me') return owner !== '' && owner !== myEmail
+                if (filterOwner === 'private-me') {
+                    const isOwner = owner === myEmail || owner === '' || !owner
+                    const isShared = sharedExternalIds.has(f.id) || ancestorFolderIds.has(f.id)
+                    return isOwner && !isShared
+                }
                 return true
             })
         }
@@ -2365,6 +2385,8 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                     const isShared = sharedExternalIds.has(f.id) || ancestorFolderIds.has(f.id)
                     return isShared && !sharedByMeExternalIds.has(f.id)
                 }
+                if (filterShared === 'with_collaborator') return sharedExternalIdsForEC.has(f.id) || ancestorFolderIdsForEC.has(f.id)
+                if (filterShared === 'with_viewer') return sharedExternalIdsForGuest.has(f.id) || ancestorFolderIdsForGuest.has(f.id)
                 if (filterShared === 'pending_intake') return f.lock?.type === 'intake'
                 return true
             })
@@ -2375,22 +2397,22 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
             return [...folders, ...rest]
         }
         return result.sort(cmp)
-    }, [files, sortConfig, filterTypes, filterOwner, filterModified, filterShared, sharedByMeExternalIds, sharedExternalIds, ancestorFolderIds, session?.user?.email])
+    }, [files, sortConfig, filterTypes, filterOwner, filterModified, filterShared, sharedByMeExternalIds, sharedExternalIds, sharedExternalIdsForEC, sharedExternalIdsForGuest, ancestorFolderIds, ancestorFolderIdsForEC, ancestorFolderIdsForGuest, session?.user?.email])
 
     const TableHeader = ({ label }: { label: string }) => (
-        <div className="flex items-center gap-1 text-xs font-medium text-slate-500 tracking-wider select-none">
+        <div className="flex items-center gap-1 text-[0.8125rem] font-medium text-[#45474c] select-none">
             {label}
         </div>
     )
 
     return (
-        <div className="flex flex-col h-full bg-white"
+        <div className="flex flex-col h-full overflow-hidden"
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
         >
-            {/* Top Bar: Breadcrumbs & Actions */}
-            <div className="px-0 py-0 border-b border-transparent bg-white flex flex-col gap-4 sticky top-0 z-20">
+            {/* Top Bar: Breadcrumbs & Actions — renders on background, outside the content card */}
+            <div className="px-0 pt-1 pb-2 flex flex-col gap-2.5 shrink-0 z-20">
                 {/* Breadcrumbs: root always visible (as dropdown when canManage); truncate middle */}
                 <div className="flex items-center text-xs font-medium text-slate-700 min-w-0">
                     <div className="flex items-center min-w-0 overflow-x-auto whitespace-nowrap custom-scrollbar">
@@ -2506,20 +2528,17 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                     </div>
                 </div>
 
-                {/* Toolbar */}
-                <div className="flex items-center justify-between gap-4">
-                    {/* Left: Filters */}
-                    <div className="flex items-center gap-2">
-                        {/* Show Add button for editors and for external viewers (EC/EV) in General folder */}
-                        {!isAtProjectRoot && (canEdit || (restrictToSharedOnly && currentFolderType === 'general')) && (
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Button disabled={loading || isLoadingFolders} className="h-8 gap-2 bg-slate-100 text-slate-900 hover:bg-slate-200 border-slate-200 border rounded-md shadow-sm">
-                                        <SquarePlus className="h-4 w-4" />
-                                        Add
-                                    </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="start" className="w-[280px] py-1">
+                {/* New Document button portaled into the workspace nav bar slot */}
+                {navSlot && createPortal(
+                    !isAtProjectRoot && (canEdit || (restrictToSharedOnly && currentFolderType === 'general')) ? (
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button disabled={loading || isLoadingFolders} className="h-auto px-4 py-1.5 rounded-[2px] bg-[#069668] text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-[#069668] hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(6,150,104,0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1.5">
+                                    <Upload className="h-3.5 w-3.5" />
+                                    New Document
+                                </Button>
+                            </DropdownMenuTrigger>
+                                <DropdownMenuContent align="start" className="w-[280px] py-1 rounded-[2px]">
                                     <DropdownMenuItem onClick={() => openCreateDialog('folder')} className="text-xs py-1.5">
                                         <Folder className="mr-2 h-3.5 w-3.5 text-slate-500" />
                                         New folder
@@ -2657,22 +2676,28 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                     )}
 
                                 </DropdownMenuContent>
-                                <div className="h-6 w-px bg-slate-200 mx-2" />
                             </DropdownMenu>
-                        )}
+                    ) : null,
+                    navSlot
+                )}
 
+                {/* Toolbar: Filters + right-side actions */}
+                <div className="flex items-center justify-between gap-4">
+                    {/* Left: Filters */}
+                    <div className="flex items-center gap-2">
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button disabled={loading} variant="outline" size="sm" className="h-8 gap-1.5 text-xs bg-white rounded-md border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+                                <Button disabled={loading} variant="outline" size="sm" className="h-8 gap-1.5 text-xs bg-white rounded-[2px] border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+                                    <Filter className="h-3 w-3 opacity-60" />
                                     Type
                                     {filterTypes.size > 0 && <span className="ml-0.5 bg-slate-200 text-slate-800 px-1.5 rounded-full text-[10px] font-medium">{filterTypes.size}</span>}
                                     <ChevronDown className="h-3 w-3 opacity-50" />
                                 </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" className="w-[200px] py-1 text-xs">
+                            <DropdownMenuContent align="start" className="w-[200px] py-1 text-xs rounded-[2px]">
                                 <div className="flex items-center justify-between px-2 py-1.5 border-b border-slate-100">
                                     <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 p-0 font-medium">Type</DropdownMenuLabel>
-                                    <DropdownMenuItem className="text-xs rounded-md bg-slate-900 text-white hover:bg-slate-800 focus:bg-slate-800 p-1.5 px-2 cursor-pointer">
+                                    <DropdownMenuItem className="text-xs rounded-[2px] bg-slate-900 text-white hover:bg-slate-800 hover:text-white focus:bg-slate-800 focus:text-white p-1.5 px-2 cursor-pointer">
                                         Done
                                     </DropdownMenuItem>
                                 </div>
@@ -2695,26 +2720,30 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                 <DropdownMenuCheckboxItem checked={filterTypes.has('image')} onCheckedChange={() => toggleFilterType('image')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
                                     Images
                                 </DropdownMenuCheckboxItem>
+                                <DropdownMenuCheckboxItem checked={filterTypes.has('other')} onCheckedChange={() => toggleFilterType('other')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
+                                    Other
+                                </DropdownMenuCheckboxItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
 
                         {/* ... Other Filters (unchanged) ... */}
-                        <DropdownMenu>
+                        <DropdownMenu open={peopleFilterOpen} onOpenChange={setPeopleFilterOpen}>
                             <DropdownMenuTrigger asChild>
-                                <Button disabled={loading} variant="outline" size="sm" className={cn("h-8 gap-1.5 text-xs bg-white rounded-md border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors", (filterOwner !== 'any' || filterShared !== 'all') && "border-slate-400 ring-1 ring-slate-300")}>
+                                <Button disabled={loading} variant="outline" size="sm" className={cn("h-8 gap-1.5 text-xs bg-white rounded-[2px] border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors", (filterOwner !== 'any' || filterShared !== 'all') && "border-slate-400 ring-1 ring-slate-300")}>
+                                    <Filter className="h-3 w-3 opacity-60" />
                                     People
                                     {(filterOwner !== 'any' || filterShared !== 'all') && <span className="ml-0.5 bg-slate-200 text-slate-800 px-1.5 rounded-full text-[10px] font-medium">{(filterOwner !== 'any' ? 1 : 0) + (filterShared !== 'all' ? 1 : 0)}</span>}
                                     <ChevronDown className="h-3 w-3 opacity-50" />
                                 </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" className="w-[200px] py-1 text-xs">
+                            <DropdownMenuContent align="start" className="w-[200px] py-1 text-xs rounded-[2px]">
                                 <div className="flex items-center justify-between px-2 py-1.5 border-b border-slate-100">
                                     <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 p-0 font-medium">People</DropdownMenuLabel>
-                                    <DropdownMenuItem className="text-xs rounded-md bg-slate-900 text-white hover:bg-slate-800 focus:bg-slate-800 p-1.5 px-2 cursor-pointer">
+                                    <DropdownMenuItem onSelect={() => setPeopleFilterOpen(false)} className="text-xs rounded-[2px] bg-slate-900 text-white hover:bg-slate-800 hover:text-white focus:bg-slate-800 focus:text-white p-1.5 px-2 cursor-pointer">
                                         Done
                                     </DropdownMenuItem>
                                 </div>
-                                <DropdownMenuCheckboxItem checked={filterOwner === 'any' && filterShared === 'all'} onCheckedChange={() => { setFilterOwner('any'); setFilterShared('all') }} className="text-xs py-1.5 pl-8">
+                                <DropdownMenuCheckboxItem checked={filterOwner === 'any' && filterShared === 'all'} onCheckedChange={() => { setFilterOwner('any'); setFilterShared('all') }} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
                                     <User className="h-3.5 w-3.5 mr-2" />
                                     Anyone
                                 </DropdownMenuCheckboxItem>
@@ -2722,29 +2751,39 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                 <div className="px-2 pt-1.5 pb-0.5">
                                     <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 p-0 font-medium">Owner</DropdownMenuLabel>
                                 </div>
-                                <DropdownMenuCheckboxItem checked={filterOwner === 'me'} onCheckedChange={() => setFilterOwner(filterOwner === 'me' ? 'any' : 'me')} className="text-xs py-1.5 pl-8">
+                                <DropdownMenuCheckboxItem checked={filterOwner === 'me'} onCheckedChange={() => setFilterOwner(filterOwner === 'me' ? 'any' : 'me')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
                                     <User className="h-3.5 w-3.5 mr-2" />
                                     Owned by me
                                 </DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem checked={filterOwner === 'not-me'} onCheckedChange={() => setFilterOwner(filterOwner === 'not-me' ? 'any' : 'not-me')} className="text-xs py-1.5 pl-8">
+                                <DropdownMenuCheckboxItem checked={filterOwner === 'not-me'} onCheckedChange={() => setFilterOwner(filterOwner === 'not-me' ? 'any' : 'not-me')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
                                     <User className="h-3.5 w-3.5 mr-2" />
-                                    Not owned by me
+                                    Owned by others
+                                </DropdownMenuCheckboxItem>
+                                <DropdownMenuCheckboxItem checked={filterOwner === 'private-me'} onCheckedChange={() => setFilterOwner(filterOwner === 'private-me' ? 'any' : 'private-me')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
+                                    <User className="h-3.5 w-3.5 mr-2" />
+                                    Private to me
                                 </DropdownMenuCheckboxItem>
                                 <DropdownMenuSeparator />
                                 <div className="px-2 pt-1.5 pb-0.5">
                                     <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 p-0 font-medium">Shared</DropdownMenuLabel>
                                 </div>
-                                <DropdownMenuCheckboxItem checked={filterShared === 'by_me'} onCheckedChange={() => setFilterShared(filterShared === 'by_me' ? 'all' : 'by_me')} className="text-xs py-1.5 pl-8">
+                                <DropdownMenuCheckboxItem checked={filterShared === 'by_me'} onCheckedChange={() => setFilterShared(filterShared === 'by_me' ? 'all' : 'by_me')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
                                     Shared by me
                                 </DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem checked={filterShared === 'by_others'} onCheckedChange={() => setFilterShared(filterShared === 'by_others' ? 'all' : 'by_others')} className="text-xs py-1.5 pl-8">
+                                <DropdownMenuCheckboxItem checked={filterShared === 'by_others'} onCheckedChange={() => setFilterShared(filterShared === 'by_others' ? 'all' : 'by_others')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
                                     Shared by others
+                                </DropdownMenuCheckboxItem>
+                                <DropdownMenuCheckboxItem checked={filterShared === 'with_collaborator'} onCheckedChange={() => setFilterShared(filterShared === 'with_collaborator' ? 'all' : 'with_collaborator')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
+                                    Shared with Collaborator (External)
+                                </DropdownMenuCheckboxItem>
+                                <DropdownMenuCheckboxItem checked={filterShared === 'with_viewer'} onCheckedChange={() => setFilterShared(filterShared === 'with_viewer' ? 'all' : 'with_viewer')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
+                                    Shared with Viewer (External)
                                 </DropdownMenuCheckboxItem>
                                 <DropdownMenuSeparator />
                                 <div className="px-2 pt-1.5 pb-0.5">
                                     <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 p-0 font-medium">Intake</DropdownMenuLabel>
                                 </div>
-                                <DropdownMenuCheckboxItem checked={filterShared === 'pending_intake'} onCheckedChange={() => setFilterShared(filterShared === 'pending_intake' ? 'all' : 'pending_intake')} className="text-xs py-1.5 pl-8">
+                                <DropdownMenuCheckboxItem checked={filterShared === 'pending_intake'} onCheckedChange={() => setFilterShared(filterShared === 'pending_intake' ? 'all' : 'pending_intake')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
                                     Pending Review
                                 </DropdownMenuCheckboxItem>
                             </DropdownMenuContent>
@@ -2752,16 +2791,17 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
 
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button disabled={loading} variant="outline" size="sm" className={cn("h-8 gap-1.5 text-xs bg-white rounded-md border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors", filterModified !== 'any' && "border-slate-400 ring-1 ring-slate-300")}>
+                                <Button disabled={loading} variant="outline" size="sm" className={cn("h-8 gap-1.5 text-xs bg-white rounded-[2px] border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors", filterModified !== 'any' && "border-slate-400 ring-1 ring-slate-300")}>
+                                    <Filter className="h-3 w-3 opacity-60" />
                                     Modified
                                     {filterModified !== 'any' && <span className="ml-0.5 bg-slate-200 text-slate-800 px-1.5 rounded-full text-[10px] font-medium">1</span>}
                                     <ChevronDown className="h-3 w-3 opacity-50" />
                                 </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" className="w-[180px] py-1 text-xs">
+                            <DropdownMenuContent align="start" className="w-[180px] py-1 text-xs rounded-[2px]">
                                 <div className="flex items-center justify-between px-2 py-1.5 border-b border-slate-100">
                                     <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 p-0 font-medium">Modified</DropdownMenuLabel>
-                                    <DropdownMenuItem className="text-xs rounded-md bg-slate-900 text-white hover:bg-slate-800 focus:bg-slate-800 p-1.5 px-2 cursor-pointer">
+                                    <DropdownMenuItem className="text-xs rounded-[2px] bg-slate-900 text-white hover:bg-slate-800 hover:text-white focus:bg-slate-800 focus:text-white p-1.5 px-2 cursor-pointer">
                                         Done
                                     </DropdownMenuItem>
                                 </div>
@@ -2782,14 +2822,14 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
 
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button disabled={loading} variant="outline" size="sm" className="h-8 gap-1.5 text-xs bg-white rounded-md border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+                                <Button disabled={loading} variant="outline" size="sm" className="h-8 gap-1.5 text-xs bg-white rounded-[2px] border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
                                     <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24" fill="currentColor" className="h-3.5 w-3.5">
                                         <path d="M120-240v-80h240v80H120Zm0-200v-80h480v80H120Zm0-200v-80h720v80H120Z" />
                                     </svg>
                                     Sort
                                 </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" className="w-[220px] py-1 text-xs">
+                            <DropdownMenuContent align="start" className="w-[220px] py-1 text-xs rounded-[2px]">
                                 <DropdownMenuLabel className="text-xs uppercase tracking-wider text-slate-400">Sort by</DropdownMenuLabel>
                                 <DropdownMenuCheckboxItem className="text-xs" checked={sortConfig.sortBy === 'name'} onCheckedChange={() => setSortBy('name')}>
                                     Name
@@ -2904,7 +2944,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
             </div >
 
             {/* Content Area - Styled as a Card */}
-            < div className="flex-1 overflow-hidden flex flex-col relative my-4 bg-white rounded-xl border border-slate-200 shadow-sm" >
+            <div className="flex-1 overflow-hidden flex flex-col relative bg-white rounded border border-[#e5e7eb]">
                 {/* Google Drive Style Upload Progress Modal - portaled to body so fixed positioning is viewport-relative and not clipped by overflow-hidden */}
                 {uploadQueue.length > 0 && typeof document !== 'undefined' && document.body && createPortal(
                     <div className={cn(
@@ -3088,7 +3128,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                 }
 
                 {/* Fixed Table Header (Compact) */}
-                <div className="sticky top-0 bg-slate-50 border-b border-slate-200 pl-3 pr-2 py-2 shrink-0 z-10 font-medium text-slate-500 group">
+                <div className="sticky top-0 bg-white border-b border-[#e5e7eb] pl-3 pr-2 py-2.5 shrink-0 z-10 group">
                     <div className="grid gap-4 items-center" style={{ gridTemplateColumns: 'minmax(0, 1fr) 10% 10% 14% 12% 8%' }}>
                         <div className="flex items-center gap-3">
                             {/* Select-all checkbox — visible on hover of header or when in selection mode */}
@@ -3120,7 +3160,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                 {/* File List */}
                 <div className="flex-1 overflow-y-auto custom-scrollbar relative">
                     {deeplinkResolving ? (
-                        <div className="divide-y divide-slate-100 animate-pulse">
+                        <div className="divide-y divide-[#e5e7eb] animate-pulse">
                             {Array.from({ length: 7 }).map((_, i) => (
                                 <div key={i} className="grid items-center px-4 py-2.5" style={{ gridTemplateColumns: '1fr 80px 120px 160px 80px 36px' }}>
                                     <div className="flex items-center gap-2.5 min-w-0">
@@ -3166,7 +3206,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                             </p>
                         </div>
                     ) : (
-                        <div className={cn("divide-y divide-slate-100", isUploading && "opacity-50 transition-opacity")}>
+                        <div className={cn("divide-y divide-[#e5e7eb]", isUploading && "opacity-50 transition-opacity")}>
                             {sortedFiles.map((file) => {
                                 const isDeeplinkHighlight = file.id === highlightedFileId
                                 const isFolder = (file.mimeType ?? (file as { type?: string }).type) === 'application/vnd.google-apps.folder'
@@ -3196,14 +3236,14 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                         onDrop={(e) => handleItemDrop(e, file)}
                                         style={{ gridTemplateColumns: 'minmax(0, 1fr) 10% 10% 14% 12% 8%' }}
                                         className={cn(
-                                            "group grid gap-4 py-2 pl-3 pr-2 transition-all items-center cursor-default relative",
+                                            "group grid gap-4 h-10 pl-3 pr-2 transition-all items-center cursor-default relative text-[0.8125rem]",
                                             isFolder && selectedFileIds.size === 0 && "cursor-pointer",
-                                            (isIntakeRow || file.lock?.type === 'finalize' || (file.isPrivate && !isFolder)) ? "hover:bg-slate-50 opacity-60" : "hover:bg-slate-50",
+                                            (isIntakeRow || file.lock?.type === 'finalize' || (file.isPrivate && !isFolder)) ? "hover:bg-[#f9f9fb] opacity-60" : "hover:bg-[#f9f9fb]",
                                             !isIntakeRow && selectedFileIds.has(file.id) && "bg-blue-50 hover:bg-blue-50",
-                                            !isIntakeRow && file.id === actionMenuOpenFileId && "bg-slate-50",
-                                            !isIntakeRow && (file.id === activeCommentDocId || file.id === activeInfoDocId || file.id === activeActivityDocId || file.id === activeVersionDocId) && "bg-slate-50",
+                                            !isIntakeRow && file.id === actionMenuOpenFileId && "bg-[#f3f4f6]",
+                                            !isIntakeRow && (file.id === activeCommentDocId || file.id === activeInfoDocId || file.id === activeActivityDocId || file.id === activeVersionDocId) && "bg-[#f3f4f6]",
                                             draggedItem?.id === file.id && "opacity-40 grayscale",
-                                            dragOverFolderId === file.id && "bg-slate-100 ring-2 ring-inset ring-slate-300/60 shadow-sm z-[1]"
+                                            dragOverFolderId === file.id && "bg-[#e5e7eb] ring-2 ring-inset ring-[#e5e7eb] z-[1]"
                                         )}
                                         onMouseEnter={() => {
                                             if (isDeeplinkHighlight) setHighlightedFileId(null)
@@ -3259,7 +3299,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                             tooltip={directShared ? 'shared' : 'contains-shared'}
                                                         />
                                                     ) : isFolder ? (
-                                                        <Folder className="h-4 w-4 text-purple-600 fill-purple-200 flex-shrink-0" />
+                                                        <Folder className="h-4 w-4 fill-[#069668]/20 flex-shrink-0" style={{ color: '#069668' }} />
                                                     ) : (
                                                         <DocumentIcon mimeType={file.mimeType} className="h-4 w-4" />
                                                     )}
@@ -3273,10 +3313,10 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                                 <div className="flex w-full min-w-0 items-center gap-3">
                                                                     <mark
                                                                         className={cn(
-                                                                            "file-deeplink-highlight block w-max max-w-[calc(100%-2rem)] min-w-0 text-xs font-medium text-left",
+                                                                            "file-deeplink-highlight block w-max max-w-[calc(100%-2rem)] min-w-0 text-[0.8125rem] font-medium text-left",
                                                                             isFolder
-                                                                                ? "text-slate-800 hover:text-slate-600 cursor-pointer"
-                                                                                : "text-slate-700"
+                                                                                ? "text-[#1b1b1d] hover:text-[#45474c] cursor-pointer"
+                                                                                : "text-[#45474c]"
                                                                         )}
                                                                     >
                                                                         <span className="block min-w-0 break-words">
@@ -3293,8 +3333,8 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                                 <div className="flex w-full min-w-0 items-center gap-3">
                                                                     <span
                                                                         className={cn(
-                                                                            "text-xs font-medium truncate min-w-0 flex-1",
-                                                                            "text-slate-700"
+                                                                            "text-[0.8125rem] font-medium truncate min-w-0 flex-1",
+                                                                            "text-[#45474c]"
                                                                         )}
                                                                     >
                                                                         {file.name}
@@ -3308,10 +3348,10 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                             ) : (
                                                                 <span
                                                                     className={cn(
-                                                                        "text-xs font-medium truncate",
+                                                                        "text-[0.8125rem] font-medium truncate",
                                                                         isFolder
-                                                                            ? "text-slate-800 hover:text-slate-600 cursor-pointer"
-                                                                            : "text-slate-700"
+                                                                            ? "text-[#1b1b1d] hover:text-[#45474c] cursor-pointer"
+                                                                            : "text-[#45474c]"
                                                                     )}
                                                                 >
                                                                     {file.name}
@@ -3335,15 +3375,15 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                                 <button
                                                                     type="button"
                                                                     onClick={(e) => { e.stopPropagation(); setUnshareConfirmFile(file) }}
-                                                                    className={`inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium border bg-purple-100 text-purple-700 border-purple-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors`}
+                                                                    className={`inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium border bg-[#069668]/10 text-[#069668] border-[#069668]/30 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors`}
                                                                 >
                                                                     <Share2 className="h-3 w-3" />
                                                                 </button>
                                                             ) : (
                                                                 <span className={`inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium border ${
                                                                     isFolder && !directShared
-                                                                        ? 'bg-purple-50 text-purple-400 border-purple-100'
-                                                                        : 'bg-purple-100 text-purple-700 border-purple-200'
+                                                                        ? 'bg-[#069668]/5 text-[#069668]/50 border-[#069668]/20'
+                                                                        : 'bg-[#069668]/10 text-[#069668] border-[#069668]/30'
                                                                 }`}>
                                                                     <Share2 className="h-3 w-3" />
                                                                 </span>
@@ -3597,7 +3637,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                 }
                                                 const personaName = file.ownerRole ? (ROLE_LABELS[file.ownerRole] ?? file.ownerRole) : undefined
                                                 if (!ownerName) return (
-                                                    <span className="text-xs text-slate-500">—</span>
+                                                    <span className="text-[0.8125rem] text-[#45474c]">—</span>
                                                 )
                                                 return (
                                                     <div className="flex items-center gap-1.5 min-w-0">
@@ -3607,7 +3647,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                             avatarUrl={ownerPhoto || null}
                                                             personaName={personaName}
                                                         />
-                                                        <span className="text-xs text-slate-500 truncate">
+                                                        <span className="text-[0.8125rem] text-[#45474c] truncate">
                                                             {isMe ? 'me' : ownerName}
                                                         </span>
                                                     </div>
@@ -3620,25 +3660,25 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                             {file.modifiedTime ? (
                                                 <RelativeDateTime
                                                     date={file.modifiedTime}
-                                                    textClassName="text-xs text-slate-500"
-                                                    iconClassName="text-slate-300 hover:text-slate-500"
+                                                    textClassName="text-[0.8125rem] text-[#45474c]"
+                                                    iconClassName="text-[#e5e7eb] hover:text-[#45474c]"
                                                     tooltipSide="top"
                                                 />
                                             ) : (
-                                                <span className="text-xs text-slate-400">—</span>
+                                                <span className="text-[0.8125rem] text-[#45474c]">—</span>
                                             )}
                                         </div>
 
                                         {/* File Size Column */}
                                         <div className="text-left">
                                             {isFolder ? (
-                                                <span className="text-xs text-slate-300">—</span>
+                                                <span className="text-[0.8125rem] text-[#45474c]/40">—</span>
                                             ) : file.size ? (
-                                                <span className="text-xs text-slate-500 font-mono">
+                                                <span className="text-[0.8125rem] text-[#45474c] font-mono">
                                                     {formatFileSize(Number(file.size))}
                                                 </span>
                                             ) : (
-                                                <span className="text-xs text-slate-300">—</span>
+                                                <span className="text-[0.8125rem] text-[#45474c]/40">—</span>
                                             )}
                                         </div>
 

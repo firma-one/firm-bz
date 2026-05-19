@@ -375,7 +375,7 @@ export interface FirmCurrency {
  */
 export async function updateFirm(
     firmSlug: string,
-    data: { name?: string; branding?: FirmBranding; currency?: FirmCurrency }
+    data: { name?: string; branding?: FirmBranding; currency?: FirmCurrency; enableBetaFeatures?: boolean }
 ): Promise<void> {
     const supabase = await createClient()
     const { data: { user }, error } = await supabase.auth.getUser()
@@ -390,7 +390,7 @@ export async function updateFirm(
     let payload: any = {}
     if (data.name !== undefined) payload.name = data.name
 
-    if (data.branding !== undefined || data.currency !== undefined) {
+    if (data.branding !== undefined || data.currency !== undefined || data.enableBetaFeatures !== undefined) {
         const current = (firm.settings as Record<string, unknown>) || {}
         if (data.branding !== undefined) {
             const branding = {
@@ -410,9 +410,17 @@ export async function updateFirm(
             }
             payload.settings = { ...(payload.settings ?? current), currency }
         }
+        if (data.enableBetaFeatures !== undefined) {
+            payload.settings = { ...(payload.settings ?? current), enableBetaFeatures: data.enableBetaFeatures }
+        }
     }
 
     await FirmService.updateFirm(firm.id, user.id, payload)
+
+    if (data.enableBetaFeatures !== undefined) {
+        const { invalidateUserSettingsPlus } = await import('@/lib/actions/user-settings')
+        await invalidateUserSettingsPlus(user.id)
+    }
 
     const eventType = data.branding !== undefined && data.name === undefined
         ? AUDIT_EVENT.FIRM_BRANDING_CHANGED

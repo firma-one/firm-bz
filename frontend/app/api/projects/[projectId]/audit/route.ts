@@ -39,7 +39,7 @@ export async function GET(
 
     const where: Prisma.PlatformAuditEventWhereInput = {
       engagementId: projectId,
-      scope: 'PROJECT',
+      scope: { in: ['ENGAGEMENT', 'DOCUMENT'] },
     }
     if (documentId) where.projectDocumentId = documentId
     const validEventTypes = eventTypes.filter(isValidAuditEventType)
@@ -83,6 +83,7 @@ export async function GET(
 
     const uniqueActorIds = Array.from(new Set(items.map((e) => e.actorUserId).filter(Boolean))) as string[]
     const actorEmailMap: Record<string, string> = {}
+    const actorNameMap: Record<string, string> = {}
     if (uniqueActorIds.length > 0) {
       const supabaseAdmin = createSupabaseAdmin(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -93,8 +94,10 @@ export async function GET(
           try {
             const { data: { user: u } } = await supabaseAdmin.auth.admin.getUserById(actorId)
             actorEmailMap[actorId] = u?.email ?? ''
+            actorNameMap[actorId] = (u?.user_metadata?.full_name as string | undefined) ?? (u?.user_metadata?.name as string | undefined) ?? u?.email ?? ''
           } catch {
             actorEmailMap[actorId] = ''
+            actorNameMap[actorId] = ''
           }
         })
       )
@@ -106,6 +109,7 @@ export async function GET(
       eventAt: e.eventAt.toISOString(),
       actorUserId: e.actorUserId,
       actorEmail: e.actorUserId ? (actorEmailMap[e.actorUserId] ?? null) : null,
+      actorName: e.actorUserId ? (actorNameMap[e.actorUserId] ?? null) : null,
       projectDocumentId: e.projectDocumentId,
       metadata: e.metadata,
       clientName: e.client?.name ?? null,

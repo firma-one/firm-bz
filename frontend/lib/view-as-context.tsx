@@ -24,12 +24,12 @@ export type EffectivePermissions = {
 
 /** Personas available in the View As dropdown (excludes sys_admin). */
 export const RBAC_PERSONAS = [
-  { slug: "firm_admin", displayName: "Firm Administrator" },
-  { slug: "firm_member", displayName: "Firm Member" },
-  { slug: "eng_admin", displayName: "Engagement Lead" },
-  { slug: "eng_member", displayName: "Contributor (Internal)" },
-  { slug: "eng_ext_collaborator", displayName: "Contributor (External)" },
-  { slug: "eng_viewer", displayName: "Guest (External)" },
+  { slug: "firm_admin", displayName: "Firm Administrator", description: "Manages a specific firm within the platform. Can manage firm members, clients, engagements, and firm-level settings." },
+  { slug: "firm_member", displayName: "Firm Member", description: "Full-time internal member of the firm with access to firm resources and projects they are assigned to." },
+  { slug: "eng_admin", displayName: "Engagement Lead", description: "Responsible for managing a specific engagement. Can manage engagement members, documents, and settings." },
+  { slug: "eng_member", displayName: "Contributor (Internal)", description: "Internal team member contributing to engagement work. Can create and edit documents within assigned engagements." },
+  { slug: "eng_ext_collaborator", displayName: "Contributor (External)", description: "External collaborator invited to contribute to an engagement. Can create and edit documents they have been granted access to." },
+  { slug: "eng_viewer", displayName: "Viewer (External)", description: "External stakeholder with read-only access to engagement content. Cannot create or edit documents." },
 ] as const
 
 type ViewAsContextValue = {
@@ -37,7 +37,7 @@ type ViewAsContextValue = {
   setViewAsPersonaSlug: (slug: string | null) => void
   effectivePermissions: EffectivePermissions | null
   isViewAsActive: boolean
-  personas: readonly { slug: string; displayName: string }[]
+  personas: readonly { slug: string; displayName: string; description?: string }[]
 }
 
 const ViewAsContext = createContext<ViewAsContextValue | null>(null)

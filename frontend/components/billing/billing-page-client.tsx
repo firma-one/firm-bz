@@ -31,17 +31,13 @@ const trustItems = [
     },
 ] as const
 
-/** Profile / profile-billing card elevation */
 const cardSurface = cn(
-    'rounded-2xl border border-slate-200/90 bg-white',
-    'shadow-[0_2px_8px_rgba(15,23,42,0.04),0_16px_40px_-12px_rgba(15,23,42,0.12)]',
-    'ring-1 ring-slate-900/[0.04]'
+    'rounded-[2px] border border-[#e5e7eb] bg-white shadow-sm'
 )
 
-/** Trust row icon — matches /d dashboard cards (slate, neutral). */
 const trustIconTileClass = cn(
-    'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl',
-    'border border-slate-200 bg-white text-slate-600 shadow-sm'
+    'flex h-10 w-10 shrink-0 items-center justify-center rounded-[2px]',
+    'border border-[#e5e7eb] bg-[#f9f9fb] text-[#45474c]'
 )
 
 export type BillingPageClientProps = {
@@ -233,7 +229,7 @@ export function BillingPageClient({
         }
         return (
             <div className="relative mx-auto max-w-5xl space-y-6 pb-10 px-4 sm:px-5 md:px-6">
-                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+                <div className="rounded-[2px] border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-950">
                     <p className="font-medium">Billing isn&apos;t available for your role on this workspace.</p>
                     <p className="mt-1 text-amber-900/90">
                         Ask an owner to assign billing access, or continue onboarding to connect Google Drive.
@@ -244,7 +240,7 @@ export function BillingPageClient({
                         <button
                             type="button"
                             onClick={() => void onSkipToConnectDrive()}
-                            className="inline-flex h-10 items-center rounded-md border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                            className="inline-flex h-8 items-center rounded-[2px] border border-[#e5e7eb] bg-white px-3 text-xs font-medium text-[#45474c] transition hover:bg-[#f9f9fb] hover:text-[#1b1b1d]"
                         >
                             Skip to Google Drive
                         </button>
@@ -288,7 +284,7 @@ export function BillingPageClient({
 
             <header className="space-y-4">
                 <div className="flex flex-wrap items-start justify-between gap-4">
-                    <h1 className="min-w-0 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+                    <h1 className="min-w-0 font-headline text-2xl font-bold text-[#1b1b1d]">
                         {upgradeCopy.billingPageTitle}
                     </h1>
                     {isOnboardingSubscribe && onSkipToConnectDrive ? (
@@ -297,9 +293,7 @@ export function BillingPageClient({
                             data-onboarding-billing-skip-tour
                             onClick={() => void onSkipToConnectDrive()}
                             className={cn(
-                                'inline-flex shrink-0 items-center justify-center rounded-lg px-6 py-3 text-base font-semibold shadow-md transition',
-                                'bg-slate-900 text-white hover:bg-slate-800',
-                                'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400'
+                                'h-auto px-4 py-1.5 rounded-[2px] bg-[#069668] text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-[#069668] hover:brightness-105 shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(6,150,104,0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex shrink-0 items-center justify-center'
                             )}
                             aria-label="Skip subscribing for now and continue to connect Google Drive"
                         >
@@ -317,20 +311,20 @@ export function BillingPageClient({
 
                 {showFreeTierUpgradeCopy ? (
                     <>
-                        <p className="text-lg font-semibold tracking-tight text-slate-800 sm:text-xl">
+                        <p className="text-[0.8125rem] font-bold text-[#1b1b1d]">
                             {upgradeCopy.billingHeadline}
                         </p>
-                        <p className="text-sm font-medium text-slate-600">{upgradeCopy.billingTitle}</p>
-                        <p className="max-w-2xl text-sm leading-relaxed text-slate-600">{upgradeCopy.billingBody}</p>
+                        <p className="text-xs font-medium text-[#45474c]">{upgradeCopy.billingTitle}</p>
+                        <p className="max-w-2xl text-xs leading-relaxed text-[#45474c]">{upgradeCopy.billingBody}</p>
                     </>
                 ) : null}
                 {paidPlanIntent && (
-                    <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+                    <div className="mt-3 rounded-[2px] border border-[#069668]/25 bg-[#069668]/8 px-3 py-2 text-xs text-[#1b1b1d]">
                         You currently have an active Free plan. You can upgrade now, or skip and continue.
                     </div>
                 )}
                 {skipMessage && (
-                    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                    <div className="rounded-[2px] border border-[#e5e7eb] bg-[#f9f9fb] px-3 py-2 text-xs text-[#45474c]">
                         {skipMessage}
                     </div>
                 )}
@@ -343,25 +337,25 @@ export function BillingPageClient({
                             <Icon className="h-5 w-5" aria-hidden />
                         </span>
                         <div className="min-w-0">
-                            <p className="text-sm font-semibold text-slate-900">{title}</p>
-                            <p className="mt-0.5 text-xs leading-relaxed text-slate-600">{detail}</p>
+                            <p className="text-[0.8125rem] font-bold text-[#1b1b1d]">{title}</p>
+                            <p className="mt-0.5 text-xs leading-relaxed text-[#45474c]">{detail}</p>
                         </div>
                     </li>
                 ))}
             </ul>
 
             <section className={cn('overflow-hidden', cardSurface)}>
-                <div className="border-b border-slate-100 bg-slate-50/40 px-5 py-5 sm:px-7 sm:py-6">
+                <div className="border-b border-[#e5e7eb] bg-[#f9f9fb] px-5 py-5 sm:px-7 sm:py-6">
                     <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between sm:gap-6 lg:gap-8">
                         <div className="flex min-w-0 flex-1 items-start gap-3.5">
                             <span className={trustIconTileClass}>
                                 <CreditCard className="h-5 w-5" aria-hidden />
                             </span>
                             <div className="min-w-0">
-                                <h2 className="text-lg font-semibold tracking-tight text-slate-900">
+                                <h2 className="text-[0.8125rem] font-bold text-[#1b1b1d]">
                                     {upgradeCopy.billingCardWorkspaceHeading}
                                 </h2>
-                                <p className="mt-1 text-xs font-medium uppercase tracking-wider text-slate-400">
+                                <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.2em] text-[#45474c]">
                                     Workspace
                                 </p>
                                 {loadError ? (
@@ -371,9 +365,9 @@ export function BillingPageClient({
                                         No workspaces found. Open the app from a firm first.
                                     </p>
                                 ) : selectedFirm ? (
-                                    <p className="mt-0.5 text-sm text-slate-700">
-                                        <span className="font-medium">{selectedFirm.name}</span>
-                                        <span className="font-mono text-xs text-slate-400">
+                                    <p className="mt-0.5 text-[0.8125rem] text-[#1b1b1d]">
+                                        <span className="font-bold">{selectedFirm.name}</span>
+                                        <span className="font-mono text-xs text-[#45474c]">
                                             {' '}
                                             /{selectedFirm.slug}
                                         </span>
@@ -417,7 +411,7 @@ export function BillingPageClient({
                         type="button"
                         onClick={handleSkipUpgrade}
                         disabled={skipSubmitting}
-                        className="inline-flex h-10 items-center rounded-md border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                        className="inline-flex h-8 items-center rounded-[2px] border border-[#e5e7eb] bg-white px-3 text-xs font-medium text-[#45474c] transition hover:bg-[#f9f9fb] hover:text-[#1b1b1d] disabled:opacity-60"
                     >
                         {skipSubmitting ? 'Saving…' : 'Skip for now'}
                     </button>

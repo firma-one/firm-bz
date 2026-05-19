@@ -232,7 +232,7 @@ export class SearchService {
             queryParams.push(limit)
 
             const results = await prisma.$queryRawUnsafe<any[]>(`
-        SELECT 
+        SELECT
           "externalId",
           "fileName",
           "updatedAt",
@@ -241,6 +241,8 @@ export class SearchService {
           1 - (embedding <=> $1::vector) as score
         FROM platform.engagement_documents
         WHERE ${scopeFilter}
+          AND (settings->>'locked') IS DISTINCT FROM 'private'
+          AND (settings->'lock'->>'type') IS NULL
         ORDER BY embedding <=> $1::vector
         LIMIT $${queryParams.length}
       `, ...queryParams)
@@ -309,6 +311,8 @@ export class SearchService {
         FROM platform.engagement_documents
         WHERE ${scopeFilter}
           AND "fileName" ILIKE $2
+          AND (settings->>'locked') IS DISTINCT FROM 'private'
+          AND (settings->'lock'->>'type') IS NULL
         ORDER BY "updatedAt" DESC
         LIMIT $${queryParams.length}
       `, ...queryParams)
@@ -369,6 +373,8 @@ export class SearchService {
         FROM platform.engagement_documents
         WHERE ${scopeFilter}
           AND (${ilikeConditions.join(' OR ')})
+          AND (settings->>'locked') IS DISTINCT FROM 'private'
+          AND (settings->'lock'->>'type') IS NULL
         ORDER BY "updatedAt" DESC
         LIMIT $${queryParams.length}
       `, ...queryParams)

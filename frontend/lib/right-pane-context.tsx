@@ -1,12 +1,15 @@
 'use client'
 
-import React, { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
+import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
 
 /** Current search root (scope) when Search pane is open; updated by file list when breadcrumb root changes. */
 export type SearchRootValue = {
   searchRootFolderId: string | null
   searchRootLabel: string | null
 } | null
+
+/** Four display sizes for the right pane. */
+export type PaneSize = 'small' | 'medium' | 'large'
 
 /**
  * Reusable right sidebar context. Any part of the app can set content + title to show
@@ -33,9 +36,12 @@ type RightPaneContextValue = {
   /** Current search root (scope) for Search pane; file list keeps this in sync with FILES breadcrumb. */
   searchRoot: SearchRootValue
   setSearchRoot: (v: SearchRootValue) => void
-  /** Whether the right pane is expanded to full-screen overlay. */
+  /** Current size state of the right pane. */
+  paneSize: PaneSize
+  setPaneSize: (size: PaneSize) => void
+  /** Backwards-compat: true when paneSize === 'large'. */
   isExpanded: boolean
-  /** Set expanded/collapsed state for the right pane. */
+  /** Backwards-compat: setExpanded(true) → 'large', setExpanded(false) → 'small'. */
   setExpanded: (v: boolean) => void
 }
 
@@ -48,54 +54,43 @@ export function RightPaneProvider({ children }: { children: ReactNode }) {
   const [headerSubtitle, setHeaderSubtitleState] = useState<string>('')
   const [headerActions, setHeaderActionsState] = useState<ReactNode>(null)
   const [searchRoot, setSearchRootState] = useState<SearchRootValue>(null)
-  const [isExpanded, setExpandedState] = useState(false)
-  const setContent = useCallback((node: ReactNode) => {
-    setContentState(node)
-  }, [])
-  const setTitle = useCallback((t: string) => {
-    setTitleState(t)
-  }, [])
-  const setHeaderIcon = useCallback((node: ReactNode) => {
-    setHeaderIconState(node)
-  }, [])
-  const setHeaderSubtitle = useCallback((t: string) => {
-    setHeaderSubtitleState(t)
-  }, [])
-  const setHeaderActions = useCallback((node: ReactNode) => {
-    setHeaderActionsState(node)
-  }, [])
-  const setSearchRoot = useCallback((v: SearchRootValue) => {
-    setSearchRootState(v)
-  }, [])
+  const [paneSize, setPaneSizeState] = useState<PaneSize>('small')
+
+  const setContent = useCallback((node: ReactNode) => setContentState(node), [])
+  const setTitle = useCallback((t: string) => setTitleState(t), [])
+  const setHeaderIcon = useCallback((node: ReactNode) => setHeaderIconState(node), [])
+  const setHeaderSubtitle = useCallback((t: string) => setHeaderSubtitleState(t), [])
+  const setHeaderActions = useCallback((node: ReactNode) => setHeaderActionsState(node), [])
+  const setSearchRoot = useCallback((v: SearchRootValue) => setSearchRootState(v), [])
+  const setPaneSize = useCallback((size: PaneSize) => setPaneSizeState(size), [])
+
   const clearPane = useCallback(() => {
     setContentState(null)
     setTitleState('')
     setHeaderIconState(null)
     setHeaderSubtitleState('')
     setHeaderActionsState(null)
+    setPaneSizeState('small')
   }, [])
+
+  // Backwards compat
+  const isExpanded = paneSize === 'large'
   const setExpanded = useCallback((v: boolean) => {
-    setExpandedState(v)
+    setPaneSizeState(v ? 'large' : 'small')
   }, [])
+
   return (
     <RightPaneContext.Provider
       value={{
-        content,
-        title,
-        setContent,
-        setTitle,
-        headerIcon,
-        setHeaderIcon,
-        headerSubtitle,
-        setHeaderSubtitle,
+        content, title, setContent, setTitle,
+        headerIcon, setHeaderIcon,
+        headerSubtitle, setHeaderSubtitle,
         clearPane,
-        headerActions,
-        setHeaderActions,
+        headerActions, setHeaderActions,
         hasRightPane: true,
-        searchRoot,
-        setSearchRoot,
-        isExpanded,
-        setExpanded,
+        searchRoot, setSearchRoot,
+        paneSize, setPaneSize,
+        isExpanded, setExpanded,
       }}
     >
       {children}
@@ -107,22 +102,16 @@ export function useRightPane(): RightPaneContextValue {
   const ctx = useContext(RightPaneContext)
   if (!ctx) {
     return {
-      content: null,
-      title: '',
-      setContent: () => {},
-      setTitle: () => {},
-      headerIcon: null,
-      setHeaderIcon: () => {},
-      headerSubtitle: '',
-      setHeaderSubtitle: () => {},
+      content: null, title: '',
+      setContent: () => {}, setTitle: () => {},
+      headerIcon: null, setHeaderIcon: () => {},
+      headerSubtitle: '', setHeaderSubtitle: () => {},
       clearPane: () => {},
-      headerActions: null,
-      setHeaderActions: () => {},
+      headerActions: null, setHeaderActions: () => {},
       hasRightPane: false,
-      searchRoot: null,
-      setSearchRoot: () => {},
-      isExpanded: false,
-      setExpanded: () => {},
+      searchRoot: null, setSearchRoot: () => {},
+      paneSize: 'small', setPaneSize: () => {},
+      isExpanded: false, setExpanded: () => {},
     }
   }
   return ctx

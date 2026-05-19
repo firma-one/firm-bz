@@ -72,6 +72,7 @@ export interface OrganizationSettings {
       themeColor?: string
       subtext?: string
     }
+    enableBetaFeatures?: boolean
   }
 }
 
@@ -287,7 +288,8 @@ class UserSettingsPlusCache {
           brandColor: firmSettings.branding?.brandColor ?? firmSettings.branding?.themeColor,
           themeColor: firmSettings.branding?.themeColor ?? firmSettings.branding?.brandColor,
           subtext: firmSettings.branding?.subtext
-        }
+        },
+        enableBetaFeatures: firmSettings.enableBetaFeatures === true,
       }
     }
     return settings

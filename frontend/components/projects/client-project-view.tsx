@@ -6,7 +6,7 @@ import { getProjectMemberSummaries, type ProjectMemberSummary } from '@/lib/acti
 import { ProjectList } from './project-list'
 import { ClientSettingsForm } from './client-settings-form'
 import type { LwCrmClientStatus } from '@/lib/actions/client'
-import { SquarePlus, ChevronRight, Building2, Users, Briefcase, LayoutGrid, List, Home, Settings, UserCog, CalendarClock } from 'lucide-react'
+import { SquarePlus, ChevronRight, Building2, Users, Briefcase, LayoutGrid, List, Home, Settings, UserCog, CalendarClock, Lock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { AddEngagementModal } from './add-engagement-modal'
@@ -107,167 +107,172 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
 
     return (
         <div className="flex flex-col h-full">
-            {/* Breadcrumbs */}
-            <div className="d-body flex items-center text-stone-500 mb-2">
-                <span className="flex items-center gap-2 text-stone-500" title="Home">
-                    <Home className="h-4 w-4" />
-                </span>
-                <ChevronRight className="h-4 w-4 mx-1 text-slate-300" />
-                <Link 
+            {/* Breadcrumbs — monospace architectural style */}
+            <nav className="flex items-center gap-1.5 mb-4">
+                <Home className="h-4 w-4 text-[#45474c] opacity-60" />
+                <ChevronRight className="h-3.5 w-3.5 text-[#d1d5db]" />
+                <Building2 className="h-4 w-4 text-[#45474c] opacity-60" />
+                <Link
                     href={`/d/f/${firmSlug}`}
-                    className="flex items-center gap-2 hover:text-slate-900 transition-colors cursor-pointer"
+                    className="font-mono text-[11px] text-[#45474c] opacity-60 uppercase tracking-tighter hover:opacity-100 transition-opacity"
                 >
-                    <Building2 className="h-4 w-4" />
-                    <span className="font-medium">{firmName || 'Firm'}</span>
+                    {firmName || 'Firm'}
                 </Link>
-                {selectedClient && (
-                    <>
-                        <ChevronRight className="h-4 w-4 mx-1 text-slate-300" />
-                        <button
-                            onClick={() => setIsClientDetailsOpen(true)}
-                            className="flex items-center gap-2 text-slate-900 bg-slate-100 px-2 py-1 rounded-md hover:bg-slate-200 transition-colors cursor-pointer"
-                        >
-                            <Users className="h-4 w-4" />
-                            <span className="font-semibold">{selectedClient.name}</span>
-                        </button>
-                    </>
-                )}
-            </div>
+                <ChevronRight className="h-3.5 w-3.5 text-[#d1d5db]" />
+                <Users className="h-4 w-4 text-[#069668]" />
+                <span className="font-mono text-[11px] font-bold text-[#1b1b1d] uppercase tracking-tighter">
+                    {selectedClient ? selectedClient.name : 'Client'}
+                </span>
+            </nav>
 
             {/* Main Content Area */}
             <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
                 {selectedClient ? (
                     <>
-                        {/* Title (same style as project workspace) */}
-                        <div className="bg-white border border-stone-200 rounded-xl p-5 mb-4 shadow-sm">
-                            <div className="min-w-0 flex-1">
-                                <h1 className="d-title flex items-center gap-2.5">
-                                    <Users className="h-6 w-6 text-stone-500" />
-                                    {selectedClient.name}
-                                </h1>
-                                <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                    <p className="d-subtitle">Manage projects and client settings.</p>
-                                    {(() => {
-                                        const fud = selectedClient.followUpDate
-                                        if (!fud) return null
-                                        const today = new Date(); today.setHours(0, 0, 0, 0)
-                                        const d = new Date(fud); d.setHours(0, 0, 0, 0)
-                                        const delta = Math.round((d.getTime() - today.getTime()) / 86400000)
-                                        if (delta > 2 || delta < -2) return null
-                                        const chips: Record<number, { label: string; cls: string }> = {
-                                            2:  { label: 'Follow up · in 2 days', cls: 'bg-indigo-50 text-indigo-600 border-indigo-200' },
-                                            1:  { label: 'Follow up · tomorrow',  cls: 'bg-indigo-50 text-indigo-600 border-indigo-200' },
-                                            0:  { label: 'Follow up today',        cls: 'bg-amber-50 text-amber-700 border-amber-200'  },
-                                            [-1]: { label: 'Follow up · 1 day late', cls: 'bg-orange-50 text-orange-700 border-orange-200' },
-                                            [-2]: { label: 'Follow up · 2 days late', cls: 'bg-red-50 text-red-700 border-red-200' },
-                                        }
-                                        const chip = chips[delta]
-                                        if (!chip) return null
-                                        return (
-                                            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${chip.cls}`}>
-                                                <CalendarClock className="h-3 w-3" />
-                                                {chip.label}
-                                            </span>
-                                        )
-                                    })()}
+                        {/* Client Identity Header — sits directly on pearl bg */}
+                        <div className="flex items-start justify-between gap-6 mb-6">
+                            <div className="flex items-center gap-6">
+                                <div className="w-16 h-16 bg-white border border-[#e5e7eb] flex items-center justify-center rounded shadow-sm shrink-0">
+                                    <Users className="h-10 w-10 text-[#1b1b1d]" />
+                                </div>
+                                <div>
+                                    <div className="flex items-center gap-3 flex-wrap">
+                                        <h1 className="font-headline text-3xl md:text-4xl font-bold tracking-tight text-[#1b1b1d]">
+                                            {selectedClient.name}
+                                        </h1>
+                                    </div>
+                                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                        <p className="text-sm text-[#45474c]">Manage engagements and client settings.</p>
+                                        {(() => {
+                                            const fud = selectedClient.followUpDate
+                                            if (!fud) return null
+                                            const today = new Date(); today.setHours(0, 0, 0, 0)
+                                            const d = new Date(fud); d.setHours(0, 0, 0, 0)
+                                            const delta = Math.round((d.getTime() - today.getTime()) / 86400000)
+                                            if (delta > 2 || delta < -2) return null
+                                            const chips: Record<number, { label: string; cls: string }> = {
+                                                2:  { label: 'Follow up · in 2 days', cls: 'bg-indigo-50 text-indigo-600 border-indigo-200' },
+                                                1:  { label: 'Follow up · tomorrow',  cls: 'bg-indigo-50 text-indigo-600 border-indigo-200' },
+                                                0:  { label: 'Follow up today',        cls: 'bg-amber-50 text-amber-700 border-amber-200'  },
+                                                [-1]: { label: 'Follow up · 1 day late', cls: 'bg-orange-50 text-orange-700 border-orange-200' },
+                                                [-2]: { label: 'Follow up · 2 days late', cls: 'bg-red-50 text-red-700 border-red-200' },
+                                            }
+                                            const chip = chips[delta]
+                                            if (!chip) return null
+                                            return (
+                                                <span className={`inline-flex items-center gap-1 rounded-sm border px-2 py-0.5 text-[11px] font-semibold ${chip.cls}`}>
+                                                    <CalendarClock className="h-3 w-3" />
+                                                    {chip.label}
+                                                </span>
+                                            )
+                                        })()}
+                                    </div>
                                 </div>
                             </div>
                         </div>
 
                         <Tabs value={currentTab} onValueChange={handleTabChange} className="flex-1 flex flex-col min-h-0">
-                            <div className="mb-6">
-                                <TabsList className="h-10 p-1 bg-slate-100 rounded-lg inline-flex justify-start flex-wrap gap-1">
-                                    <AddEngagementModal
-                                        firmSlug={firmSlug}
-                                        clientSlug={selectedClient.slug}
-                                        firmSandboxOnly={firmSandboxOnly}
-                                        onSaved={() => startRefresh(() => router.refresh())}
-                                        trigger={
-                                            <Button
-                                                variant="blackCta"
-                                                type="button"
-                                                className="h-full px-3 rounded-md text-sm font-medium inline-flex items-center gap-1.5"
-                                            >
-                                                <SquarePlus className="h-3.5 w-3.5" />
-                                                New Engagement
-                                            </Button>
-                                        }
-                                    />
-                                    <TabsTrigger
-                                        value="projects"
-                                        className="h-full px-4 rounded-md font-medium text-slate-500 hover:bg-white hover:text-slate-900 hover:shadow-sm data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all"
-                                    >
-                                        <Briefcase className="w-4 h-4 mr-2" />
-                                        Engagements
-                                        {selectedClient && selectedClient.engagements.length > 0 && (
-                                            <span className="ml-2 rounded-full bg-slate-900 px-1.5 py-0.5 text-xs font-medium text-white tabular-nums leading-none">
-                                                {selectedClient.engagements.length}
-                                            </span>
-                                        )}
-                                    </TabsTrigger>
-                                    <TabsTrigger
-                                        value="contacts"
-                                        className="h-full px-4 rounded-md font-medium text-slate-500 hover:bg-white hover:text-slate-900 hover:shadow-sm data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all"
-                                    >
-                                        <Users className="w-4 h-4 mr-2" />
-                                        Contacts
-                                        {contactCount !== undefined && contactCount > 0 && (
-                                            <span className="ml-2 rounded-full bg-slate-900 px-1.5 py-0.5 text-xs font-medium text-white tabular-nums leading-none">
-                                                {contactCount}
-                                            </span>
-                                        )}
-                                    </TabsTrigger>
-                                    {canManageClient && (
+                            {/* Tab strip — full-width white with border-b */}
+                            <div className="bg-white border border-[#e5e7eb] rounded mb-6 shrink-0">
+                                <div className="flex items-center h-14 pr-4">
+                                    <TabsList className="h-full p-0 bg-transparent rounded-none inline-flex justify-start gap-0 border-0">
                                         <TabsTrigger
-                                            value="members"
-                                            className="h-full px-4 rounded-md font-medium text-slate-500 hover:bg-white hover:text-slate-900 hover:shadow-sm data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all"
+                                            value="projects"
+                                            className="h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                                         >
-                                            <UserCog className="w-4 h-4 mr-2" />
-                                            Members
-                                            {memberCount !== undefined && memberCount > 0 && (
-                                                <span className="ml-2 rounded-full bg-slate-900 px-1.5 py-0.5 text-xs font-medium text-white tabular-nums leading-none">
-                                                    {memberCount}
+                                            <Briefcase className="w-4 h-4 mr-2" />
+                                            Engagements
+                                            {selectedClient && selectedClient.engagements.length > 0 && (
+                                                <span className="ml-2 font-mono text-[10px] font-bold bg-[#069668] text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
+                                                    {selectedClient.engagements.length}
                                                 </span>
                                             )}
                                         </TabsTrigger>
-                                    )}
-                                    {canManageClient && (
                                         <TabsTrigger
-                                            value="settings"
-                                            className="h-full px-4 rounded-md font-medium text-slate-500 hover:bg-white hover:text-slate-900 hover:shadow-sm data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all"
+                                            value="contacts"
+                                            className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                                         >
-                                            <Settings className="w-4 h-4 mr-2" />
-                                            Settings
+                                            <Users className="w-4 h-4 mr-2" />
+                                            Contacts
+                                            <span title="Firm administrators only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
+                                            {contactCount !== undefined && contactCount > 0 && (
+                                                <span className="ml-2 font-mono text-[10px] font-bold bg-[#069668] text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
+                                                    {contactCount}
+                                                </span>
+                                            )}
                                         </TabsTrigger>
-                                    )}
-                                </TabsList>
+                                        {canManageClient && (
+                                            <TabsTrigger
+                                                value="members"
+                                                className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                            >
+                                                <UserCog className="w-4 h-4 mr-2" />
+                                                Members
+                                                <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
+                                                {memberCount !== undefined && memberCount > 0 && (
+                                                    <span className="ml-2 font-mono text-[10px] font-bold bg-[#069668] text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
+                                                        {memberCount}
+                                                    </span>
+                                                )}
+                                            </TabsTrigger>
+                                        )}
+                                        {canManageClient && (
+                                            <TabsTrigger
+                                                value="settings"
+                                                className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                            >
+                                                <Settings className="w-4 h-4 mr-2" />
+                                                Settings
+                                                <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
+                                            </TabsTrigger>
+                                        )}
+                                    </TabsList>
+                                    <div className="flex items-center gap-3 ml-auto">
+                                        {currentTab === 'projects' && (
+                                            <div className="flex items-center bg-[#f3f4f6] p-0.5 rounded border border-[#e5e7eb]">
+                                                <button
+                                                    onClick={() => handleViewModeChange('grid')}
+                                                    className={`px-1.5 py-1 rounded transition-all ${viewMode === 'grid' ? 'bg-white shadow-sm text-[#069668]' : 'text-[#45474c] hover:text-[#1b1b1d] hover:bg-[#f0edee]'}`}
+                                                    title="Grid View"
+                                                >
+                                                    <LayoutGrid className="h-3 w-3" />
+                                                </button>
+                                                <button
+                                                    onClick={() => handleViewModeChange('list')}
+                                                    className={`px-1.5 py-1 rounded transition-all ${viewMode === 'list' ? 'bg-white shadow-sm text-[#069668]' : 'text-[#45474c] hover:text-[#1b1b1d] hover:bg-[#f0edee]'}`}
+                                                    title="List View"
+                                                >
+                                                    <List className="h-3 w-3" />
+                                                </button>
+                                            </div>
+                                        )}
+                                        {currentTab === 'projects' && (
+                                            <AddEngagementModal
+                                                firmSlug={firmSlug}
+                                                clientSlug={selectedClient.slug}
+                                                firmSandboxOnly={firmSandboxOnly}
+                                                onSaved={() => startRefresh(() => router.refresh())}
+                                                trigger={
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        type="button"
+                                                        className="h-auto px-4 py-1.5 rounded-[2px] bg-[#069668] text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-[#069668] hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(6,150,104,0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1.5"
+                                                    >
+                                                        <SquarePlus className="h-3.5 w-3.5" />
+                                                        New Engagement
+                                                    </Button>
+                                                }
+                                            />
+                                        )}
+                                    </div>
+                                </div>
                             </div>
 
-                            <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
+                            <div className="flex-1 overflow-y-auto custom-scrollbar">
                                 <TabsContent value="projects" className="m-0 h-full">
                                     <div className="py-1">
                                         <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-                                            <div className="flex items-center gap-4 mb-4">
-                                                <span className="px-3 py-1 bg-slate-100 rounded-full text-sm font-medium text-slate-600">
-                                                    {selectedClient.engagements.length} Engagements
-                                                </span>
-                                                <div className="flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200">
-                                                    <button
-                                                        onClick={() => handleViewModeChange('grid')}
-                                                        className={`px-3 py-2 rounded-md transition-all ${viewMode === 'grid' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-200/60'}`}
-                                                        title="Grid View"
-                                                    >
-                                                        <LayoutGrid className="h-4 w-4" />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleViewModeChange('list')}
-                                                        className={`px-3 py-2 rounded-md transition-all ${viewMode === 'list' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-200/60'}`}
-                                                        title="List View"
-                                                    >
-                                                        <List className="h-4 w-4" />
-                                                    </button>
-                                                </div>
-                                            </div>
                                             <ProjectList
                                                 projects={selectedClient.engagements}
                                                 orgSlug={firmSlug}

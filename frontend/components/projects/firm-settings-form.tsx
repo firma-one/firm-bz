@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
-import { updateFirm, deleteFirm, type FirmCurrency } from '@/lib/actions/firms'
+import { updateFirm, deleteFirm } from '@/lib/actions/firms'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/components/ui/toast'
 import {
@@ -15,7 +15,8 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog'
-import { FileText, AlertTriangle, ImageIcon, Palette, Trash2, ImagePlus, ChevronDown, Check } from 'lucide-react'
+import { AlertTriangle, ImageIcon, Palette, Trash2, ImagePlus, ChevronDown, Check, FlaskConical } from 'lucide-react'
+import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { supabase } from '@/lib/supabase'
@@ -53,14 +54,13 @@ const WORLD_CURRENCIES: { code: string; symbol: string; label: string }[] = [
     { code: 'KES', symbol: 'KSh',  label: 'KES (KSh)' },
 ]
 
-const MAX_LOGO_SIZE = 5 * 1024 * 1024 // 5 MB
+const MAX_LOGO_SIZE = 5 * 1024 * 1024
 const ALLOWED_LOGO_TYPES = ['image/jpeg', 'image/png', 'image/svg+xml', 'image/jpg']
 
- export interface FirmSettingsFormProps {
+export interface FirmSettingsFormProps {
     orgSlug: string
     orgId?: string | null
     initialName: string
-    /** Server-known sandbox flag (optional; combined with client hook). */
     firmSandboxOnly?: boolean
     onSaved?: () => void
 }
@@ -91,17 +91,17 @@ export function FirmSettingsForm({
     const [logoScale, setLogoScale] = useState(1)
     const [logoX, setLogoX] = useState(0)
     const [logoY, setLogoY] = useState(0)
+    const [enableBetaFeatures, setEnableBetaFeatures] = useState(false)
     const [saving, setSaving] = useState(false)
     const [deleting, setDeleting] = useState(false)
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+    const [dangerOpen, setDangerOpen] = useState(false)
     const [brandingLoaded, setBrandingLoaded] = useState(false)
     const fileInputRef = useRef<HTMLInputElement>(null)
     const dragRef = useRef({ isDragging: false, startX: 0, startY: 0, startLogoX: 0, startLogoY: 0 })
     const previewSize = 160
 
-    useEffect(() => {
-        setName(initialName)
-    }, [initialName])
+    useEffect(() => { setName(initialName) }, [initialName])
 
     useEffect(() => {
         let cancelled = false
@@ -123,6 +123,7 @@ export function FirmSettingsForm({
                     setLogoUrl((firm?.logoUrl as string) ?? b.logoUrl ?? '')
                     setSubtext((firm?.brandingSubtext as string) ?? b.subtext ?? '')
                     setThemeColor((firm?.themeColorHex as string) ?? b.themeColor ?? b.brandColor ?? '#6366f1')
+                    setEnableBetaFeatures(settings.enableBetaFeatures === true)
                     const savedCode = c.code ?? ''
                     const savedSymbol = c.symbol ?? ''
                     const knownMatch = WORLD_CURRENCIES.find((cur) => cur.code === savedCode)
@@ -136,9 +137,7 @@ export function FirmSettingsForm({
                         setCurrencyCustom(savedSymbol)
                     }
                 }
-            } catch {
-                // ignore
-            } finally {
+            } catch { /* ignore */ } finally {
                 if (!cancelled) setBrandingLoaded(true)
             }
         }
@@ -155,10 +154,7 @@ export function FirmSettingsForm({
 
     const handleLogoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
-        if (!file) {
-            setLogoFile(null)
-            return
-        }
+        if (!file) { setLogoFile(null); return }
         const type = file.type?.toLowerCase()
         if (!ALLOWED_LOGO_TYPES.includes(type)) {
             addToast({ type: 'error', title: 'Invalid file', message: 'Use JPG, PNG, or SVG.' })
@@ -193,7 +189,6 @@ export function FirmSettingsForm({
         dragRef.current.isDragging = false
     }
 
-    /** Export current logo view to a square PNG blob (for raster only). */
     const exportLogoToSquareBlob = (): Promise<Blob | null> => {
         if (!logoPreviewUrl || !isRasterLogo) return Promise.resolve(null)
         return new Promise((resolve) => {
@@ -211,9 +206,7 @@ export function FirmSettingsForm({
                 const h = img.naturalHeight * scaleToFit
                 const scale = size / previewSize
                 ctx.save()
-                // Pan in output pixels (same ratio as preview)
                 ctx.translate(logoX * scale, logoY * scale)
-                // Scale around canvas center so zoom matches preview
                 ctx.translate(size / 2, size / 2)
                 ctx.scale(logoScale, logoScale)
                 ctx.translate(-size / 2, -size / 2)
@@ -274,6 +267,7 @@ export function FirmSettingsForm({
                     : currencyCode
                         ? { symbol: WORLD_CURRENCIES.find((c) => c.code === currencyCode)?.symbol ?? null, code: currencyCode }
                         : { symbol: null, code: null },
+                enableBetaFeatures,
             })
             addToast({ type: 'success', title: 'Saved', message: 'Firm details updated.' })
             onSaved?.()
@@ -290,8 +284,7 @@ export function FirmSettingsForm({
     }
 
     const handleRemoveLogo = async () => {
-        if (isSandboxFirm) return
-        if (!orgId) return
+        if (isSandboxFirm || !orgId) return
         try {
             const { data: { session } } = await supabase.auth.getSession()
             if (!session?.access_token) throw new Error('Not authenticated')
@@ -311,11 +304,7 @@ export function FirmSettingsForm({
             setLogoY(0)
             addToast({ type: 'success', title: 'Logo removed', message: 'Organization logo has been removed.' })
         } catch (e: unknown) {
-            addToast({
-                type: 'error',
-                title: 'Remove logo failed',
-                message: e instanceof Error ? e.message : 'Could not remove logo.',
-            })
+            addToast({ type: 'error', title: 'Remove logo failed', message: e instanceof Error ? e.message : 'Could not remove logo.' })
         }
     }
 
@@ -329,311 +318,272 @@ export function FirmSettingsForm({
             onSaved?.()
             router.push('/d')
         } catch (e: unknown) {
-            addToast({
-                type: 'error',
-                title: 'Delete failed',
-                message: e instanceof Error ? e.message : 'Could not delete firm.',
-            })
+            addToast({ type: 'error', title: 'Delete failed', message: e instanceof Error ? e.message : 'Could not delete firm.' })
         } finally {
             setDeleting(false)
         }
     }
 
-    const buttonClass = 'min-w-[11rem] sm:w-[11rem]'
+    const fieldLabel = 'text-xs font-semibold text-[#45474c] uppercase tracking-widest'
+    const fieldInput = 'bg-white border-[#e5e7eb] text-[#1b1b1d] placeholder:text-[#9a9ba0] focus-visible:ring-[#069668]/30 rounded disabled:cursor-not-allowed disabled:opacity-60'
 
     return (
-        <div className="space-y-0">
-            <div className="mb-8">
-                <h2 className="text-lg font-semibold text-gray-900 tracking-tight">Firm settings</h2>
-                <p className="text-sm text-gray-500 mt-1">Edit details or remove the firm.</p>
-            </div>
+        <div className="flex flex-col gap-4">
+            {isSandboxFirm && <SandboxInfoBanner />}
 
-            {isSandboxFirm && (
-                <div className="mb-6">
-                    <SandboxInfoBanner />
-                </div>
-            )}
+                {/* Tile grid */}
+                <div className="grid grid-cols-3 gap-3">
 
-            <section className="rounded-lg border border-gray-200 bg-white p-6 mb-12">
-                <div className="flex items-center gap-2 mb-1">
-                    <FileText className="h-4 w-4 text-gray-500" aria-hidden />
-                    <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">Details</h3>
-                </div>
-                <p className="text-sm text-gray-500 mb-4">Only firm name is required. Logo, tagline, and theme are optional and shown in the top bar when set.</p>
-                <div className="space-y-4 w-full">
-                    <div className="space-y-2">
-                        <Label htmlFor="org-name" className="text-gray-700 font-medium">Firm name <span className="text-red-500">*</span></Label>
-                        <Input
-                            id="org-name"
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            placeholder="Firm name"
-                            disabled={isSandboxFirm}
-                            className="bg-white border-gray-200 text-gray-900 placeholder:text-gray-400 focus-visible:ring-gray-400 disabled:cursor-not-allowed disabled:opacity-60"
-                        />
+                    {/* IDENTITY — col-span-2 */}
+                    <div className="col-span-2 bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
+                        <p className="font-mono text-[9px] font-bold uppercase tracking-widest text-[#9a9ba0]">Identity</p>
+                        <div className="space-y-1.5">
+                            <Label htmlFor="org-name" className={fieldLabel}>
+                                Firm name <span className="text-red-500 normal-case tracking-normal">*</span>
+                            </Label>
+                            <Input
+                                id="org-name"
+                                value={name}
+                                onChange={(e) => setName(e.target.value)}
+                                placeholder="Firm name"
+                                disabled={isSandboxFirm}
+                                className={fieldInput}
+                            />
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label htmlFor="org-subtext" className={fieldLabel}>
+                                Brand Tagline <span className="text-[#9a9ba0] normal-case tracking-normal font-normal">(optional)</span>
+                            </Label>
+                            <Input
+                                id="org-subtext"
+                                value={subtext}
+                                onChange={(e) => setSubtext(e.target.value)}
+                                placeholder="Optional tagline or subtext"
+                                disabled={isSandboxFirm}
+                                className={fieldInput}
+                            />
+                        </div>
                     </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="org-subtext" className="text-gray-700 font-medium">Brand Tagline <span className="text-gray-400 font-normal">(optional)</span></Label>
-                        <Input
-                            id="org-subtext"
-                            value={subtext}
-                            onChange={(e) => setSubtext(e.target.value)}
-                            placeholder="Optional tagline or subtext"
-                            disabled={isSandboxFirm}
-                            className="bg-white border-gray-200 text-gray-900 placeholder:text-gray-400 focus-visible:ring-gray-400 disabled:cursor-not-allowed disabled:opacity-60"
-                        />
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="org-logo" className="text-gray-700 font-medium flex items-center gap-2">
-                            <ImageIcon className="h-4 w-4" />
-                            Brand Logo <span className="text-gray-400 font-normal">(optional)</span>
-                        </Label>
-                        <p className="text-xs text-gray-500">JPG, PNG or SVG. Recommended 200×200 px, max 5 MB. Shown in the top bar when set.</p>
-                        <input
-                            ref={fileInputRef}
-                            id="org-logo"
-                            type="file"
-                            accept=".jpg,.jpeg,.png,.svg,image/jpeg,image/png,image/svg+xml"
-                            onChange={handleLogoFileChange}
-                            className="sr-only"
-                            aria-hidden
-                        />
-                        <TooltipProvider delayDuration={300}>
-                            <div className="flex flex-col gap-2 w-full">
+
+                    {/* BRANDING — col-span-1 */}
+                    <div className="bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
+                        <p className="font-mono text-[9px] font-bold uppercase tracking-widest text-[#9a9ba0]">Branding</p>
+                        <div className="space-y-1.5">
+                            <Label htmlFor="org-logo" className={`${fieldLabel} flex items-center gap-1.5`}>
+                                <ImageIcon className="h-3 w-3" />
+                                Logo <span className="text-[#9a9ba0] normal-case tracking-normal font-normal">(optional)</span>
+                            </Label>
+                            <p className="text-xs text-[#9a9ba0]">JPG, PNG or SVG. 200×200 px, max 5 MB.</p>
+                            <input
+                                ref={fileInputRef}
+                                id="org-logo"
+                                type="file"
+                                accept=".jpg,.jpeg,.png,.svg,image/jpeg,image/png,image/svg+xml"
+                                onChange={handleLogoFileChange}
+                                className="sr-only"
+                                aria-hidden
+                            />
+                            <TooltipProvider delayDuration={300}>
                                 {!(logoPreviewUrl || logoUrl) ? (
                                     <button
                                         type="button"
                                         onClick={() => fileInputRef.current?.click()}
-                                        className="flex shrink-0 items-center justify-center rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 hover:border-gray-400 hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-offset-1"
+                                        className="flex shrink-0 items-center justify-center rounded border-2 border-dashed border-[#e5e7eb] bg-[#f9f9fb] hover:border-[#069668]/40 hover:bg-[#f0fdf7] transition-colors text-[#9a9ba0] hover:text-[#069668] focus:outline-none"
                                         style={{ width: previewSize, height: previewSize }}
                                     >
-                                        <ImagePlus className="h-10 w-10" />
+                                        <ImagePlus className="h-8 w-8" />
                                     </button>
                                 ) : (
                                     <div className="flex flex-col gap-2">
                                         <div
-                                            className={`relative flex shrink-0 rounded-xl border border-gray-200 bg-gray-50 overflow-hidden select-none group ${logoFile ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                                            className={`relative flex shrink-0 rounded border border-[#e5e7eb] bg-[#f9f9fb] overflow-hidden select-none group ${logoFile ? 'cursor-grab active:cursor-grabbing' : ''}`}
                                             style={{ width: previewSize, height: previewSize }}
-                                            title={logoFile ? 'Drag to move, use slider to zoom. This view is saved as the logo.' : 'Shown in portal header (top left)'}
+                                            title={logoFile ? 'Drag to move, use slider to zoom.' : 'Shown in portal header'}
                                             {...(logoFile && !isSandboxFirm
-                                                ? {
-                                                    onPointerDown: onPreviewPointerDown,
-                                                    onPointerMove: onPreviewPointerMove,
-                                                    onPointerUp: onPreviewPointerUp,
-                                                    onPointerLeave: onPreviewPointerUp,
-                                                }
+                                                ? { onPointerDown: onPreviewPointerDown, onPointerMove: onPreviewPointerMove, onPointerUp: onPreviewPointerUp, onPointerLeave: onPreviewPointerUp }
                                                 : {})}
                                         >
-                                            <div
-                                                className="absolute inset-0 flex items-center justify-center"
-                                                style={{
-                                                    transform: `translate(${logoX}px, ${logoY}px) scale(${logoScale})`,
-                                                }}
-                                            >
-                                                <img
-                                                    src={logoPreviewUrl || logoUrl}
-                                                    alt="Logo preview"
+                                            <div className="absolute inset-0 flex items-center justify-center"
+                                                style={{ transform: `translate(${logoX}px, ${logoY}px) scale(${logoScale})` }}>
+                                                <img src={logoPreviewUrl || logoUrl} alt="Logo preview"
                                                     className="max-w-full max-h-full object-contain pointer-events-none"
-                                                    style={{ width: previewSize, height: previewSize }}
-                                                    draggable={false}
-                                                />
+                                                    style={{ width: previewSize, height: previewSize }} draggable={false} />
                                             </div>
-                                            <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-xl">
+                                            <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded">
                                                 <Tooltip>
                                                     <TooltipTrigger asChild>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => !isSandboxFirm && fileInputRef.current?.click()}
-                                                            disabled={isSandboxFirm}
-                                                            className="p-2 rounded-lg bg-white text-gray-700 hover:bg-gray-100 shadow-sm disabled:opacity-50"
-                                                            aria-label="Replace logo"
-                                                        >
-                                                            <ImagePlus className="h-5 w-5" />
+                                                        <button type="button" onClick={() => !isSandboxFirm && fileInputRef.current?.click()}
+                                                            disabled={isSandboxFirm} className="p-2 rounded bg-white text-[#1b1b1d] hover:bg-[#f9f9fb] shadow-sm disabled:opacity-50" aria-label="Replace logo">
+                                                            <ImagePlus className="h-4 w-4" />
                                                         </button>
                                                     </TooltipTrigger>
-                                                    <TooltipContent>Replace logo</TooltipContent>
+                                                    <TooltipContent>Replace</TooltipContent>
                                                 </Tooltip>
                                                 {orgId && (
                                                     <Tooltip>
                                                         <TooltipTrigger asChild>
-                                                            <button
-                                                                type="button"
-                                                                onClick={handleRemoveLogo}
-                                                                disabled={isSandboxFirm}
-                                                                className="p-2 rounded-lg bg-white text-red-600 hover:bg-red-50 shadow-sm disabled:opacity-50"
-                                                                aria-label="Remove logo"
-                                                            >
-                                                                <Trash2 className="h-5 w-5" />
+                                                            <button type="button" onClick={handleRemoveLogo} disabled={isSandboxFirm}
+                                                                className="p-2 rounded bg-white text-red-600 hover:bg-red-50 shadow-sm disabled:opacity-50" aria-label="Remove logo">
+                                                                <Trash2 className="h-4 w-4" />
                                                             </button>
                                                         </TooltipTrigger>
-                                                        <TooltipContent>Remove logo</TooltipContent>
+                                                        <TooltipContent>Remove</TooltipContent>
                                                     </Tooltip>
                                                 )}
                                             </div>
                                         </div>
                                         {logoFile && (
-                                            <div className="flex flex-col gap-1" style={{ width: previewSize }}>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-xs text-gray-500 whitespace-nowrap">Zoom</span>
-                                                    <input
-                                                        type="range"
-                                                        min={0.5}
-                                                        max={3}
-                                                        step={0.1}
-                                                        value={logoScale}
-                                                        onChange={(e) => setLogoScale(Number(e.target.value))}
-                                                        disabled={isSandboxFirm}
-                                                        className="flex-1 h-2 rounded-lg appearance-none bg-gray-200 accent-gray-700 disabled:opacity-60"
-                                                    />
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => { setLogoScale(1); setLogoX(0); setLogoY(0) }}
-                                                        disabled={isSandboxFirm}
-                                                        className="text-xs text-gray-600 hover:text-gray-900 underline disabled:opacity-50"
-                                                    >
-                                                        Reset
-                                                    </button>
-                                                </div>
-                                                <p className="text-xs text-gray-500">Drag logo to position. Save to apply.</p>
+                                            <div className="flex items-center gap-2" style={{ width: previewSize }}>
+                                                <span className="text-xs text-[#45474c] whitespace-nowrap">Zoom</span>
+                                                <input type="range" min={0.5} max={3} step={0.1} value={logoScale}
+                                                    onChange={(e) => setLogoScale(Number(e.target.value))} disabled={isSandboxFirm}
+                                                    className="flex-1 h-1.5 rounded appearance-none bg-[#e5e7eb] accent-[#069668] disabled:opacity-60" />
+                                                <button type="button" onClick={() => { setLogoScale(1); setLogoX(0); setLogoY(0) }}
+                                                    disabled={isSandboxFirm} className="text-xs text-[#45474c] hover:text-[#1b1b1d] underline disabled:opacity-50">
+                                                    Reset
+                                                </button>
                                             </div>
                                         )}
                                     </div>
                                 )}
+                            </TooltipProvider>
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label htmlFor="org-theme" className={`${fieldLabel} flex items-center gap-1.5`}>
+                                <Palette className="h-3 w-3" />
+                                Theme color
+                            </Label>
+                            <div className="flex items-center gap-2">
+                                <input id="org-theme" type="color" value={themeColor}
+                                    onChange={(e) => setThemeColor(e.target.value)} disabled={isSandboxFirm}
+                                    className="h-9 w-10 rounded border border-[#e5e7eb] cursor-pointer bg-white disabled:cursor-not-allowed disabled:opacity-60 shrink-0" />
+                                <Input value={themeColor} onChange={(e) => setThemeColor(e.target.value)}
+                                    placeholder="#6366f1" disabled={isSandboxFirm}
+                                    className={`font-mono text-sm ${fieldInput}`} />
                             </div>
-                        </TooltipProvider>
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="org-theme" className="text-gray-700 font-medium flex items-center gap-2">
-                            <Palette className="h-4 w-4" />
-                            Brand Theme color
-                        </Label>
-                        <div className="flex items-center gap-3">
-                            <input
-                                id="org-theme"
-                                type="color"
-                                value={themeColor}
-                                onChange={(e) => setThemeColor(e.target.value)}
-                                disabled={isSandboxFirm}
-                                className="h-10 w-14 rounded border border-gray-200 cursor-pointer bg-white disabled:cursor-not-allowed disabled:opacity-60"
-                            />
-                            <Input
-                                value={themeColor}
-                                onChange={(e) => setThemeColor(e.target.value)}
-                                placeholder="#6366f1"
-                                disabled={isSandboxFirm}
-                                className="max-w-[8rem] font-mono text-sm bg-white border-gray-200 text-gray-900 focus-visible:ring-gray-400 disabled:cursor-not-allowed disabled:opacity-60"
-                            />
                         </div>
                     </div>
-                    <div className="space-y-2">
-                        <Label className="text-gray-700 font-medium">
-                            Currency <span className="text-gray-400 font-normal">(optional)</span>
-                        </Label>
-                        <DropdownMenu open={currencyOpen} onOpenChange={setCurrencyOpen}>
-                            <DropdownMenuTrigger asChild disabled={isSandboxFirm}>
-                                <button className="w-full h-10 flex items-center justify-between rounded-md border border-gray-200 bg-white px-3 text-sm disabled:cursor-not-allowed disabled:opacity-60">
-                                    <span className={currencyCode || (currencyIsCustom && currencyCustom) ? 'text-gray-900' : 'text-gray-400'}>
-                                        {currencyCode
-                                            ? WORLD_CURRENCIES.find((c) => c.code === currencyCode)?.label ?? currencyCode
-                                            : currencyIsCustom && currencyCustom
-                                                ? `Other: ${currencyCustom}`
-                                                : 'Select currency…'}
-                                    </span>
-                                    <ChevronDown className="h-4 w-4 text-gray-500 shrink-0" />
-                                </button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent
-                                className="w-[var(--radix-dropdown-menu-trigger-width)] p-1 max-h-72 overflow-y-auto"
-                                onCloseAutoFocus={(e) => e.preventDefault()}
-                            >
-                                {WORLD_CURRENCIES.map((cur) => (
-                                    <DropdownMenuItem
-                                        key={cur.code}
-                                        className="flex items-center justify-between cursor-pointer"
-                                        onSelect={() => {
-                                            setCurrencyCode(cur.code)
-                                            setCurrencyIsCustom(false)
-                                            setCurrencyCustom('')
-                                            setCurrencyOpen(false)
-                                        }}
-                                    >
-                                        {cur.label}
-                                        {currencyCode === cur.code && !currencyIsCustom && (
-                                            <Check className="h-4 w-4 text-gray-700 shrink-0" />
-                                        )}
-                                    </DropdownMenuItem>
-                                ))}
-                                <DropdownMenuSeparator />
-                                <div className="px-2 py-1.5 flex items-center gap-2">
-                                    <input
-                                        value={currencyIsCustom ? currencyCustom : ''}
-                                        onChange={(e) => {
-                                            setCurrencyCustom(e.target.value)
-                                            setCurrencyIsCustom(true)
-                                            setCurrencyCode('')
-                                        }}
-                                        onKeyDown={(e) => {
-                                            e.stopPropagation()
-                                            if (e.key === 'Enter') setCurrencyOpen(false)
-                                        }}
-                                        onClick={(e) => e.stopPropagation()}
-                                        placeholder="Other (enter symbol)…"
-                                        className="flex-1 text-sm text-gray-900 placeholder:text-gray-400 outline-none bg-transparent"
-                                    />
-                                    {currencyIsCustom && currencyCustom && (
-                                        <Check className="h-4 w-4 text-gray-700 shrink-0" />
+
+                    {/* REGIONAL — col-span-1 */}
+                    <div className="bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
+                        <p className="font-mono text-[9px] font-bold uppercase tracking-widest text-[#9a9ba0]">Regional</p>
+                        <div className="space-y-1.5">
+                            <Label className={fieldLabel}>
+                                Currency <span className="text-[#9a9ba0] normal-case tracking-normal font-normal">(optional)</span>
+                            </Label>
+                            <DropdownMenu open={currencyOpen} onOpenChange={setCurrencyOpen}>
+                                <DropdownMenuTrigger asChild disabled={isSandboxFirm}>
+                                    <button className="w-full h-9 flex items-center justify-between rounded border border-[#e5e7eb] bg-white px-3 text-sm text-[#1b1b1d] disabled:cursor-not-allowed disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-[#069668]/20">
+                                        <span className={currencyCode || (currencyIsCustom && currencyCustom) ? 'text-[#1b1b1d]' : 'text-[#9a9ba0]'}>
+                                            {currencyCode
+                                                ? WORLD_CURRENCIES.find((c) => c.code === currencyCode)?.label ?? currencyCode
+                                                : currencyIsCustom && currencyCustom ? `Other: ${currencyCustom}` : 'Select…'}
+                                        </span>
+                                        <ChevronDown className="h-4 w-4 text-[#45474c] shrink-0" />
+                                    </button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent className="w-[var(--radix-dropdown-menu-trigger-width)] p-1 max-h-72 overflow-y-auto rounded" onCloseAutoFocus={(e) => e.preventDefault()}>
+                                    {(currencyCode || currencyIsCustom) && (
+                                        <>
+                                            <DropdownMenuItem className="flex items-center gap-2 cursor-pointer text-sm rounded text-[#45474c] hover:text-red-600"
+                                                onSelect={() => { setCurrencyCode(''); setCurrencyIsCustom(false); setCurrencyCustom(''); setCurrencyOpen(false) }}>
+                                                <span className="text-[#9a9ba0]">×</span> Clear selection
+                                            </DropdownMenuItem>
+                                            <DropdownMenuSeparator />
+                                        </>
                                     )}
+                                    {WORLD_CURRENCIES.map((cur) => (
+                                        <DropdownMenuItem key={cur.code} className="flex items-center justify-between cursor-pointer text-sm rounded"
+                                            onSelect={() => { setCurrencyCode(cur.code); setCurrencyIsCustom(false); setCurrencyCustom(''); setCurrencyOpen(false) }}>
+                                            {cur.label}
+                                            {currencyCode === cur.code && !currencyIsCustom && <Check className="h-4 w-4 text-[#069668] shrink-0" />}
+                                        </DropdownMenuItem>
+                                    ))}
+                                    <DropdownMenuSeparator />
+                                    <div className="px-2 py-1.5 flex items-center gap-2">
+                                        <input value={currencyIsCustom ? currencyCustom : ''}
+                                            onChange={(e) => { setCurrencyCustom(e.target.value); setCurrencyIsCustom(true); setCurrencyCode('') }}
+                                            onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') setCurrencyOpen(false) }}
+                                            onClick={(e) => e.stopPropagation()}
+                                            placeholder="Other (enter symbol)…"
+                                            className="flex-1 text-sm text-[#1b1b1d] placeholder:text-[#9a9ba0] outline-none bg-transparent" />
+                                        {currencyIsCustom && currencyCustom && <Check className="h-4 w-4 text-[#069668] shrink-0" />}
+                                    </div>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                            <p className="text-xs text-[#9a9ba0]">Prefix on contract values.</p>
+                        </div>
+                    </div>
+
+                    {/* FEATURES — col-span-2 */}
+                    <div className="col-span-2 bg-white rounded border border-[#e5e7eb] p-4">
+                        <p className="font-mono text-[9px] font-bold uppercase tracking-widest text-[#9a9ba0] mb-3">Features</p>
+                        <div className="flex items-center justify-between gap-4">
+                            <div className="flex items-start gap-2.5">
+                                <FlaskConical className="h-4 w-4 text-[#45474c] mt-0.5 shrink-0" />
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-sm font-semibold text-[#1b1b1d]">Beta features</span>
+                                        <span className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 leading-none">Beta</span>
+                                    </div>
+                                    <p className="text-xs text-[#45474c] mt-0.5">Enables <strong>Dossier</strong> and <strong>Board</strong>. Internal personas only.</p>
                                 </div>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                        <p className="text-xs text-gray-400">Symbol shown as prefix on all contract values.</p>
+                            </div>
+                            <Switch checked={enableBetaFeatures} onCheckedChange={setEnableBetaFeatures}
+                                disabled={isSandboxFirm || !brandingLoaded} aria-label="Enable beta features" />
+                        </div>
                     </div>
-                    <div className="flex flex-wrap gap-3">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            className={buttonClass}
-                            onClick={() => router.push(`/d/f/${orgSlug}?tab=clients`)}
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            type="button"
-                            onClick={handleSave}
-                            disabled={isSandboxFirm || saving || !brandingLoaded}
-                            className={`${buttonClass} bg-gray-900 text-white hover:bg-black`}
-                        >
-                            {saving ? 'Saving...' : 'Save changes'}
-                        </Button>
-                    </div>
+
                 </div>
+
+                {/* Actions */}
+                <div className="flex items-center gap-3">
+                    <Button type="button" variant="outline" className="rounded-[2px]"
+                        onClick={() => router.push(`/d/f/${orgSlug}?tab=clients`)}>
+                        Cancel
+                    </Button>
+                    <Button type="button" variant="greenCta" onClick={handleSave}
+                        disabled={isSandboxFirm || saving || !brandingLoaded}
+                        className="rounded-[2px] min-w-[8rem] text-[10px] font-headline font-bold tracking-widest uppercase">
+                        {saving ? 'Saving…' : 'Save'}
+                    </Button>
+                </div>
+
+            {/* Danger zone — collapsed by default */}
+            <section className="border border-red-200 rounded overflow-hidden">
+                <button
+                    type="button"
+                    onClick={() => setDangerOpen((v) => !v)}
+                    className="w-full px-5 py-3 flex items-center justify-between gap-2 bg-red-50/60 hover:bg-red-50 transition-colors"
+                >
+                    <div className="flex items-center gap-2">
+                        <AlertTriangle className="h-3.5 w-3.5 text-red-700" />
+                        <span className="font-mono text-[10px] font-bold uppercase tracking-widest text-red-800">Danger zone</span>
+                    </div>
+                    <ChevronDown className={`h-3.5 w-3.5 text-red-500 transition-transform duration-200 ${dangerOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {dangerOpen && (
+                    <div className="p-5 border-t border-red-200 bg-red-50/40">
+                        <p className="text-sm text-[#45474c] mb-4">
+                            Permanently delete this firm. All clients, projects, and members will be removed. This cannot be undone.
+                        </p>
+                        <Button
+                            type="button"
+                            onClick={() => setDeleteConfirmOpen(true)}
+                            disabled={isSandboxFirm || deleting}
+                            className="rounded-[2px] bg-red-700 text-white hover:bg-red-800 border-0 shadow-sm hover:shadow-[0_4px_12px_-2px_rgba(185,28,28,0.35)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all"
+                        >
+                            {deleting ? 'Deleting…' : 'Delete firm'}
+                        </Button>
+                    </div>
+                )}
             </section>
 
-            <div className="py-4">
-                <section className="rounded-lg border border-red-200 bg-red-50/50 p-6">
-                    <div className="flex items-center gap-2 mb-1">
-                        <AlertTriangle className="h-4 w-4 text-red-700" aria-hidden />
-                        <h3 className="text-sm font-semibold text-red-800 uppercase tracking-wide">Danger zone</h3>
-                    </div>
-                    <p className="text-sm text-gray-600 mb-4">
-                        Permanently delete this firm. All clients, projects, and members will be removed. This cannot be undone.
-                    </p>
-                    <Button
-                        type="button"
-                        onClick={() => setDeleteConfirmOpen(true)}
-                        disabled={isSandboxFirm || deleting}
-                        className={`${buttonClass} bg-red-800 text-white hover:bg-red-900 border-0`}
-                    >
-                        {deleting ? 'Deleting...' : 'Delete firm'}
-                    </Button>
-                </section>
-            </div>
-
             <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
-                <DialogContent className="sm:max-w-[440px]">
+                <DialogContent className="sm:max-w-[440px] rounded">
                     <DialogHeader>
                         <DialogTitle>Delete firm?</DialogTitle>
-                        <DialogDescription className="text-slate-600">
+                        <DialogDescription className="text-[#45474c]">
                             Permanently delete this organization? All clients, projects, and members will be removed. This cannot be undone.
                         </DialogDescription>
                     </DialogHeader>
@@ -641,7 +591,7 @@ export function FirmSettingsForm({
                         <Button
                             type="button"
                             variant="outline"
-                            className="border-gray-200 text-gray-700 hover:bg-gray-50"
+                            className="rounded border-[#e5e7eb]"
                             disabled={deleting}
                             onClick={() => setDeleteConfirmOpen(false)}
                         >
@@ -653,7 +603,7 @@ export function FirmSettingsForm({
                             disabled={isSandboxFirm || deleting}
                             onClick={() => void performDeleteFirm()}
                         >
-                            {deleting ? 'Deleting...' : 'Delete firm'}
+                            {deleting ? 'Deleting…' : 'Delete firm'}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

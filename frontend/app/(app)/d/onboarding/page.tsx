@@ -202,10 +202,10 @@ const FinalizeProvisioningLine = ({ steps, activeStepIndex }: { steps: string[];
 function StepRequirementBadge({ kind }: { kind: 'mandatory' | 'optional' }) {
     return (
         <span
-            className={`inline-flex shrink-0 items-center rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+            className={`font-mono inline-flex shrink-0 items-center rounded-sm px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide tabular-nums leading-none ${
                 kind === 'mandatory'
-                    ? 'bg-slate-200 text-slate-800'
-                    : 'border border-slate-200 bg-slate-100 text-slate-700'
+                    ? 'bg-[#1b1b1d]/10 text-[#1b1b1d]'
+                    : 'border border-amber-200/80 bg-amber-50 text-amber-900'
             }`}
         >
             {kind === 'mandatory' ? 'Mandatory' : 'Optional'}
@@ -240,19 +240,19 @@ const AlreadyCompletedScreen = ({ onGoToDashboard }: { onGoToDashboard: () => vo
 
     return (
         <div className="animate-in fade-in duration-500 text-center py-16">
-            <div className="h-20 w-20 rounded-2xl bg-purple-50 border border-purple-200 flex items-center justify-center mb-6 mx-auto">
-                <CheckCircle2 className="h-10 w-10 text-purple-600" />
+            <div className="h-20 w-20 rounded-[2px] bg-[#069668]/10 border border-[#069668]/20 flex items-center justify-center mb-6 mx-auto">
+                <CheckCircle2 className="h-10 w-10 text-[#069668]" />
             </div>
-            <h1 className="text-3xl font-bold text-slate-900 mb-3">You're all set!</h1>
-            <p className="text-slate-500 mb-2">
+            <h1 className="font-headline text-2xl font-bold text-[#1b1b1d] mb-3">You're all set!</h1>
+            <p className="text-[#45474c] mb-2 text-[0.8125rem]">
                 Onboarding has already been completed for your account.
             </p>
-            <p className="text-sm text-slate-400 mb-8">
-                Redirecting to your dashboard in <span className="font-semibold text-slate-600">{countdown}s</span>…
+            <p className="text-xs text-[#45474c]/60 mb-8">
+                Redirecting to your dashboard in <span className="font-bold text-[#45474c]">{countdown}s</span>…
             </p>
             <button
                 onClick={onGoToDashboard}
-                className="inline-flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-xl font-semibold hover:bg-slate-800 transition-colors"
+                className="inline-flex items-center gap-2 h-auto px-4 py-1.5 rounded-[2px] bg-[#069668] text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-[#069668] hover:brightness-105 shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(6,150,104,0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0"
             >
                 Go to Dashboard <ArrowRight className="h-4 w-4" />
             </button>
@@ -1355,18 +1355,18 @@ const OnboardingContent = () => {
                         {step === 0 && domainOptions && (
                             <div className="animate-in fade-in slide-in-from-right-4 duration-300">
                                 <div className="mb-4">
-                                    <h1 className="text-4xl font-bold text-slate-900 mb-2">Choose your workspace</h1>
-                                    <p className="text-lg text-slate-600">
+                                    <h1 className="font-headline text-3xl font-bold text-[#1b1b1d] mb-2">Choose your workspace</h1>
+                                    <p className="text-[0.8125rem] text-[#45474c]">
                                         Your email is part of an organization that uses {BRAND_NAME}
                                     </p>
                                 </div>
 
                                 {user?.email && (
-                                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 mb-8 flex items-center gap-3">
-                                        <div className="h-10 w-10 rounded-full bg-slate-200 flex items-center justify-center flex-shrink-0 text-slate-800 font-bold">
+                                    <div className="bg-[#f9f9fb] border border-[#e5e7eb] rounded-[2px] p-4 mb-8 flex items-center gap-3">
+                                        <div className="h-10 w-10 rounded-[2px] bg-white border border-[#e5e7eb] flex items-center justify-center flex-shrink-0 text-[#1b1b1d] font-bold text-sm">
                                             {user.email.charAt(0).toUpperCase()}
                                         </div>
-                                        <p className="text-sm font-medium text-slate-900">{user.email}</p>
+                                        <p className="text-[0.8125rem] font-bold text-[#1b1b1d]">{user.email}</p>
                                     </div>
                                 )}
 
@@ -1375,17 +1375,17 @@ const OnboardingContent = () => {
                                         <button
                                             key={org.id}
                                             type="button"
-                                            className="w-full flex items-center gap-4 p-4 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 text-left transition-colors group"
+                                            className="w-full flex items-center gap-4 p-4 rounded-[2px] border border-[#e5e7eb] bg-white hover:bg-[#f9f9fb] hover:border-[#069668]/30 text-left transition-colors group"
                                             onClick={() => router.push(`/d/f/${org.slug}`)}
                                         >
-                                            <div className="h-10 w-10 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0 group-hover:bg-slate-200">
-                                                <Building2 className="h-5 w-5 text-slate-700" />
+                                            <div className="h-10 w-10 rounded-[2px] bg-[#f9f9fb] border border-[#e5e7eb] flex items-center justify-center flex-shrink-0">
+                                                <Building2 className="h-5 w-5 text-[#45474c]" />
                                             </div>
                                             <div className="flex-1">
-                                                <p className="font-semibold text-slate-900">Continue to {org.name}</p>
-                                                <p className="text-xs text-slate-500">You're already a member</p>
+                                                <p className="font-bold text-[#1b1b1d]">Continue to {org.name}</p>
+                                                <p className="text-xs text-[#45474c]">You're already a member</p>
                                             </div>
-                                            <ArrowRight className="h-5 w-5 text-slate-400 group-hover:text-slate-600" />
+                                            <ArrowRight className="h-5 w-5 text-[#45474c]/40 group-hover:text-[#45474c]" />
                                         </button>
                                     ))}
                                 </div>
@@ -1394,10 +1394,10 @@ const OnboardingContent = () => {
                                     <>
                                         <div className="relative mb-6">
                                             <div className="absolute inset-0 flex items-center">
-                                                <div className="w-full border-t border-slate-200" />
+                                                <div className="w-full border-t border-[#e5e7eb]" />
                                             </div>
                                             <div className="relative flex justify-center text-xs">
-                                                <span className="px-2 bg-white text-slate-500">or</span>
+                                                <span className="px-2 bg-white text-[#45474c] text-xs">or</span>
                                             </div>
                                         </div>
 
@@ -1407,7 +1407,7 @@ const OnboardingContent = () => {
                                                     key={org.id}
                                                     type="button"
                                                     disabled={domainJoiningId !== null}
-                                                    className="w-full flex items-center gap-4 p-4 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 hover:border-slate-400 text-left transition-colors disabled:opacity-50 group"
+                                                    className="w-full flex items-center gap-4 p-4 rounded-[2px] border border-[#e5e7eb] bg-white hover:bg-[#f9f9fb] hover:border-[#069668]/30 text-left transition-colors disabled:opacity-50 group"
                                                     onClick={async () => {
                                                         setDomainJoiningId(org.id)
                                                         setDomainError(null)
@@ -1420,18 +1420,18 @@ const OnboardingContent = () => {
                                                         }
                                                     }}
                                                 >
-                                                    <div className="h-10 w-10 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0 group-hover:bg-slate-200">
+                                                    <div className="h-10 w-10 rounded-[2px] bg-[#f9f9fb] border border-[#e5e7eb] flex items-center justify-center flex-shrink-0">
                                                         {domainJoiningId === org.id ? (
                                                             <LoadingSpinner size="sm" />
                                                         ) : (
-                                                            <LogIn className="h-5 w-5 text-slate-700" />
+                                                            <LogIn className="h-5 w-5 text-[#45474c]" />
                                                         )}
                                                     </div>
                                                     <div className="flex-1">
-                                                        <p className="font-semibold text-slate-900">Join {org.name}</p>
-                                                        <p className="text-xs text-slate-500">Request access</p>
+                                                        <p className="font-bold text-[#1b1b1d]">Join {org.name}</p>
+                                                        <p className="text-xs text-[#45474c]">Request access</p>
                                                     </div>
-                                                    <ArrowRight className="h-5 w-5 text-slate-400 group-hover:text-slate-600" />
+                                                    <ArrowRight className="h-5 w-5 text-[#45474c]/40 group-hover:text-[#45474c]" />
                                                 </button>
                                             ))}
                                         </div>
@@ -1441,15 +1441,15 @@ const OnboardingContent = () => {
                                 <button
                                     type="button"
                                     disabled={domainJoiningId !== null}
-                                    className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 hover:bg-slate-100 text-slate-700 font-medium transition-colors disabled:opacity-50"
+                                    className="group w-full flex items-center justify-center gap-2 px-4 py-3 rounded-[2px] bg-[#1a5c3a] hover:bg-[#164f32] text-white font-medium text-[0.8125rem] transition-all shadow-[0_1px_2px_rgba(0,0,0,0.25),inset_0_1px_0_rgba(255,255,255,0.08)] hover:shadow-[0_4px_8px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.08)] hover:-translate-y-px active:translate-y-0 active:shadow-[0_1px_2px_rgba(0,0,0,0.25),inset_0_1px_0_rgba(255,255,255,0.06)] disabled:opacity-50"
                                     onClick={() => setStep(1)}
                                 >
-                                    <SquarePlus className="h-4 w-4" />
-                                    Create a new workspace
+                                    <Building2 className="h-4 w-4" />
+                                    Create a new Firm workspace
                                 </button>
 
                                 {domainError && (
-                                    <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                                    <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-[2px] text-xs text-red-700">
                                         {domainError}
                                     </div>
                                 )}

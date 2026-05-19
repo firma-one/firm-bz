@@ -136,6 +136,7 @@ export async function PATCH(
     audit(AUDIT_EVENT.DOCUMENT_FINALIZED)
       .scope(AUDIT_SCOPE.DOCUMENT)
       .firm(fileInfo.organizationId)
+      .client(existing.clientId ?? undefined)
       .engagement(projectId)
       .document(existing.id)
       .actor(user.id)

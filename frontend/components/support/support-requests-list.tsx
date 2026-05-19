@@ -19,9 +19,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { ViewSupportRequestModal } from './view-support-request-modal'
+import { SupportTicketDetailsPane } from './support-ticket-details-pane'
 import { SupportTicketCommentsPane } from './support-ticket-comments-pane'
 import { useRightPane } from '@/lib/right-pane-context'
 
@@ -68,9 +67,8 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
   const [requests, setRequests] = useState<SupportRequest[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
-  const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null)
+  const [activeDetailsTicketId, setActiveDetailsTicketId] = useState<string | null>(null)
   const [activeCommentTicketId, setActiveCommentTicketId] = useState<string | null>(null)
-  const [detailsOpen, setDetailsOpen] = useState(false)
   const [copiedTicketId, setCopiedTicketId] = useState<string | null>(null)
 
   // Search
@@ -86,7 +84,30 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
   const [sortField, setSortField] = useState<SortField>('createdAt')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
 
-  const selectedRequest = requests.find(r => r.id === selectedRequestId)
+  const openDetailsPane = useCallback((request: SupportRequest) => {
+    if (activeDetailsTicketId === request.ticketNumber) {
+      rightPane.clearPane()
+      setActiveDetailsTicketId(null)
+      return
+    }
+    setActiveDetailsTicketId(request.ticketNumber)
+    setActiveCommentTicketId(null)
+    rightPane.setTitle(request.ticketNumber)
+    rightPane.setHeaderIcon(<Eye className="h-4 w-4" />)
+    rightPane.setHeaderSubtitle(
+      request.type === 'BUG' ? 'Bug Report' :
+      request.type === 'REQUEST' ? 'Feature Request' : 'General Enquiry'
+    )
+    rightPane.setContent(
+      <SupportTicketDetailsPane
+        firmSlug={firmSlug}
+        ticket={request}
+        onStatusUpdate={(newStatus) => {
+          setRequests(prev => prev.map(r => r.id === request.id ? { ...r, status: newStatus } : r))
+        }}
+      />
+    )
+  }, [activeDetailsTicketId, rightPane, firmSlug])
 
   const openCommentsPane = useCallback((request: SupportRequest) => {
     if (activeCommentTicketId === request.ticketNumber) {
@@ -95,9 +116,10 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
       return
     }
     setActiveCommentTicketId(request.ticketNumber)
+    setActiveDetailsTicketId(null)
     rightPane.setTitle('Comments')
     rightPane.setHeaderIcon(<MessageCircle className="h-4 w-4" />)
-    rightPane.setHeaderSubtitle('Append-only. Visible to all support members.')
+    rightPane.setHeaderSubtitle('Append-only. Visible to Firm Administrators.')
     rightPane.setContent(
       <SupportTicketCommentsPane
         ticketNumber={request.ticketNumber}
@@ -111,10 +133,11 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
     )
   }, [activeCommentTicketId, rightPane])
 
-  // When the right pane is closed externally (X button), clear the active ticket
+  // When the right pane is closed externally (X button), clear active states
   useEffect(() => {
     if (!rightPane.content) {
       setActiveCommentTicketId(null)
+      setActiveDetailsTicketId(null)
     }
   }, [rightPane.content])
 
@@ -140,6 +163,12 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
   }
 
   useEffect(() => { fetchRequests() }, [firmSlug])
+
+  useEffect(() => {
+    const handler = () => fetchRequests(true)
+    window.addEventListener('support-requests-updated', handler)
+    return () => window.removeEventListener('support-requests-updated', handler)
+  }, [firmSlug])
 
   // Open search and focus input
   const openSearch = () => {
@@ -198,12 +227,12 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
 
   if (requests.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 px-4">
-        <div className="h-12 w-12 rounded-lg bg-slate-100 flex items-center justify-center mb-4">
-          <HelpCircle className="h-6 w-6 text-slate-400" />
+      <div className="flex flex-col items-center justify-center py-16 px-4 bg-white border border-[#e5e7eb] rounded">
+        <div className="h-12 w-12 rounded bg-[#f3f4f6] border border-[#e5e7eb] flex items-center justify-center mb-4">
+          <HelpCircle className="h-6 w-6 text-[#45474c]" />
         </div>
-        <h3 className="text-lg font-medium text-slate-900">No requests yet</h3>
-        <p className="text-slate-500 text-sm mt-1">Create your first support request to get started.</p>
+        <h3 className="font-headline text-base font-bold text-[#1b1b1d]">No requests yet</h3>
+        <p className="text-[#45474c] text-sm mt-1">Create your first support request to get started.</p>
       </div>
     )
   }
@@ -217,29 +246,28 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
           {/* Type filter */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
+              <button
+                type="button"
                 className={cn(
-                  "h-8 gap-1.5 text-xs bg-white rounded-md border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors",
-                  filterTypes.length > 0 && "border-slate-400 ring-1 ring-slate-300"
+                  "rounded-md border border-[#e5e7eb] px-2.5 py-1.5 text-xs bg-white flex items-center gap-1.5 text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] transition-colors",
+                  filterTypes.length > 0 && "border-[#069668] text-[#069668]"
                 )}
               >
                 Type
                 {filterTypes.length > 0 && (
-                  <span className="ml-0.5 bg-slate-200 text-slate-800 px-1.5 rounded-full text-[10px] font-medium">
+                  <span className="font-mono text-[10px] font-bold bg-[#069668] text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
                     {filterTypes.length}
                   </span>
                 )}
                 <ChevronDown className="h-3 w-3 opacity-50" />
-              </Button>
+              </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-[200px] py-1 text-xs">
-              <div className="flex items-center justify-between px-2 py-1.5 border-b border-slate-100">
-                <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 p-0 font-medium">Type</DropdownMenuLabel>
+              <div className="flex items-center justify-between px-2 py-1.5 border-b border-[#e5e7eb]">
+                <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-[#45474c] p-0 font-medium">Type</DropdownMenuLabel>
                 {filterTypes.length > 0 && (
                   <button
-                    className="text-xs rounded-md bg-slate-900 text-white hover:bg-slate-800 px-2 py-1"
+                    className="text-xs rounded-[2px] bg-[#1b1b1d] text-white hover:bg-[#333] px-2 py-1"
                     onClick={() => setFilterTypes([])}
                   >
                     Clear
@@ -262,29 +290,28 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
           {/* Status filter */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
+              <button
+                type="button"
                 className={cn(
-                  "h-8 gap-1.5 text-xs bg-white rounded-md border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors",
-                  filterStatuses.length > 0 && "border-slate-400 ring-1 ring-slate-300"
+                  "rounded-md border border-[#e5e7eb] px-2.5 py-1.5 text-xs bg-white flex items-center gap-1.5 text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] transition-colors",
+                  filterStatuses.length > 0 && "border-[#069668] text-[#069668]"
                 )}
               >
                 Status
                 {filterStatuses.length > 0 && (
-                  <span className="ml-0.5 bg-slate-200 text-slate-800 px-1.5 rounded-full text-[10px] font-medium">
+                  <span className="font-mono text-[10px] font-bold bg-[#069668] text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
                     {filterStatuses.length}
                   </span>
                 )}
                 <ChevronDown className="h-3 w-3 opacity-50" />
-              </Button>
+              </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-[190px] py-1 text-xs">
-              <div className="flex items-center justify-between px-2 py-1.5 border-b border-slate-100">
-                <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 p-0 font-medium">Status</DropdownMenuLabel>
+              <div className="flex items-center justify-between px-2 py-1.5 border-b border-[#e5e7eb]">
+                <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-[#45474c] p-0 font-medium">Status</DropdownMenuLabel>
                 {filterStatuses.length > 0 && (
                   <button
-                    className="text-xs rounded-md bg-slate-900 text-white hover:bg-slate-800 px-2 py-1"
+                    className="text-xs rounded-[2px] bg-[#1b1b1d] text-white hover:bg-[#333] px-2 py-1"
                     onClick={() => setFilterStatuses([])}
                   >
                     Clear
@@ -317,27 +344,24 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
                 className="h-8 w-52 text-xs"
                 onKeyDown={e => e.key === 'Escape' && closeSearch()}
               />
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 w-8 p-0 text-slate-500"
+              <button
+                className="h-8 w-8 flex items-center justify-center rounded hover:bg-[#f3f4f6] text-[#45474c] transition-colors"
                 onClick={closeSearch}
               >
                 <X className="h-3.5 w-3.5" />
-              </Button>
+              </button>
             </div>
           ) : (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
+                  <button
+                    type="button"
                     onClick={openSearch}
-                    className="h-9 w-9 p-0 rounded-full border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                    className="h-8 w-8 flex items-center justify-center rounded border border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] transition-colors"
                   >
-                    <Search className="h-4 w-4" />
-                  </Button>
+                    <Search className="h-3.5 w-3.5" />
+                  </button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom" className="text-xs">Search tickets</TooltipContent>
               </Tooltip>
@@ -347,15 +371,14 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
+                <button
+                  type="button"
                   disabled={isRefreshing}
                   onClick={() => fetchRequests(true)}
-                  className="h-9 w-9 p-0 rounded-full border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                  className="h-8 w-8 flex items-center justify-center rounded border border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] transition-colors disabled:opacity-50"
                 >
-                  <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
-                </Button>
+                  <RefreshCw className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin")} />
+                </button>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="text-xs">Refresh list</TooltipContent>
             </Tooltip>
@@ -364,30 +387,32 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
       </div>
 
       {/* Table */}
-      <div className="border border-slate-200 rounded-lg overflow-hidden">
+      <div className="bg-white border border-[#e5e7eb] rounded overflow-hidden">
         <table className="w-full table-fixed text-sm">
-          <thead>
-            <tr className="border-b border-slate-200 bg-slate-50">
-              <th className="px-3 py-2 text-left font-semibold text-slate-900 text-xs" style={{ width: '160px' }}>Type</th>
-              <th className="px-3 py-2 text-left font-semibold text-slate-900 text-xs" style={{ width: '130px' }}>Ticket ID</th>
-              <th className="px-3 py-2 text-center font-semibold text-slate-900 text-xs" style={{ width: '70px' }}>Actions</th>
-              <th className="px-3 py-2 text-left font-semibold text-slate-900 text-xs">Description</th>
-              <th className="px-3 py-2 text-left font-semibold text-slate-900 text-xs" style={{ width: '125px' }}>Status</th>
-              <th className="px-3 py-2 text-left font-semibold text-slate-900 text-xs" style={{ width: '150px' }}>Created</th>
-              <th className="px-3 py-2 text-left font-semibold text-slate-900 text-xs" style={{ width: '150px' }}>Modified</th>
-              {/* Sort in header */}
-              <th className="px-3 py-2 text-right" style={{ width: '80px' }}>
+          <thead className="bg-white border-b border-[#e5e7eb] sticky top-0">
+            <tr>
+              <th className="px-3 py-2.5 text-left text-[0.8125rem] font-medium text-[#45474c]" style={{ width: '160px' }}>Type</th>
+              <th className="px-3 py-2.5 text-left text-[0.8125rem] font-medium text-[#45474c]" style={{ width: '130px' }}>Ticket ID</th>
+              <th className="px-3 py-2.5 text-center text-[0.8125rem] font-medium text-[#45474c]" style={{ width: '70px' }}>Actions</th>
+              <th className="px-3 py-2.5 text-left text-[0.8125rem] font-medium text-[#45474c]">Description</th>
+              <th className="px-3 py-2.5 text-left text-[0.8125rem] font-medium text-[#45474c]" style={{ width: '125px' }}>Status</th>
+              <th className="px-3 py-2.5 text-left text-[0.8125rem] font-medium text-[#45474c]" style={{ width: '150px' }}>Created</th>
+              <th className="px-3 py-2.5 text-left text-[0.8125rem] font-medium text-[#45474c]" style={{ width: '150px' }}>Modified</th>
+              <th className="px-2 py-2.5 text-right" style={{ width: '80px' }}>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-7 gap-1.5 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700 -mr-1">
-                      <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24" fill="currentColor" className="h-3.5 w-3.5">
-                        <path d="M120-240v-80h240v80H120Zm0-200v-80h480v80H120Zm0-200v-80h720v80H120Z" />
+                    <button
+                      type="button"
+                      className="inline-flex items-center justify-center h-6 w-6 rounded hover:bg-[#f3f4f6] text-[#45474c] transition-colors"
+                      title="Sort"
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                        <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="14" y2="12" /><line x1="3" y1="18" x2="8" y2="18" />
                       </svg>
-                      Sort
-                    </Button>
+                    </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-[200px] py-1 text-xs">
-                    <DropdownMenuLabel className="text-xs uppercase tracking-wider text-slate-400">Sort by</DropdownMenuLabel>
+                    <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-[#45474c] py-1">Sort by</DropdownMenuLabel>
                     <DropdownMenuCheckboxItem className="text-xs" checked={sortField === 'createdAt'} onCheckedChange={() => setSortField('createdAt')}>
                       Created
                     </DropdownMenuCheckboxItem>
@@ -395,7 +420,7 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
                       Modified
                     </DropdownMenuCheckboxItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuLabel className="text-xs uppercase tracking-wider text-slate-400">Direction</DropdownMenuLabel>
+                    <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-[#45474c] py-1">Direction</DropdownMenuLabel>
                     <DropdownMenuCheckboxItem className="text-xs" checked={sortDir === 'desc'} onCheckedChange={() => setSortDir('desc')}>
                       Newest first
                     </DropdownMenuCheckboxItem>
@@ -407,10 +432,10 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
               </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-[#e5e7eb]">
             {filteredAndSorted.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-3 py-8 text-center text-xs text-slate-400">
+                <td colSpan={8} className="px-3 py-8 text-center text-xs text-[#45474c]">
                   {searchQuery || filterStatuses.length > 0 || filterTypes.length > 0
                     ? 'No requests match the current filters.'
                     : 'No requests yet.'}
@@ -423,9 +448,11 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
               const statusColor = STATUS_COLORS[request.status || 'NEW']
 
               const isCommentActive = request.ticketNumber === activeCommentTicketId
+              const isDetailsActive = request.ticketNumber === activeDetailsTicketId
+              const isRowActive = isCommentActive || isDetailsActive
 
               return (
-                <tr key={request.id} className={cn("border-b border-slate-100 hover:bg-slate-50 transition-colors", isCommentActive && "bg-slate-50")}>
+                <tr key={request.id} className={cn("hover:bg-[#f9f9fb] transition-colors", isRowActive && "bg-[#f9f9fb]")}>
                   {/* Type */}
                   <td className="px-3 py-2 overflow-hidden" style={{ width: '160px' }}>
                     <div className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium whitespace-nowrap ${config.bgColor} ${config.color}`}>
@@ -461,10 +488,16 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <button
-                              onClick={() => { setSelectedRequestId(request.id); setDetailsOpen(true) }}
-                              className="p-1 hover:bg-slate-200 rounded transition-colors"
+                              onClick={() => openDetailsPane(request)}
+                              className={cn(
+                                "p-1 rounded transition-colors",
+                                isDetailsActive
+                                  ? "bg-slate-200 text-slate-800"
+                                  : "hover:bg-slate-200 text-slate-600"
+                              )}
+                              aria-pressed={isDetailsActive}
                             >
-                              <Eye className="h-4 w-4 text-slate-600" />
+                              <Eye className="h-4 w-4" />
                             </button>
                           </TooltipTrigger>
                           <TooltipContent side="bottom" className="text-xs">View Details</TooltipContent>
@@ -496,8 +529,8 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
                   <td className="px-3 py-2 min-w-0">
                     <div className="flex items-center gap-2 min-w-0">
                       <p className="text-slate-700 truncate text-xs flex-1 min-w-0" title={request.description}>{request.description}</p>
-                      {isCommentActive && (
-                        <CircleChevronLeft className="h-3.5 w-3.5 shrink-0 text-slate-500 animate-pulse" aria-label="Comments open" />
+                      {isRowActive && (
+                        <CircleChevronLeft className="h-3.5 w-3.5 shrink-0 text-slate-500 animate-pulse" aria-label="Pane open" />
                       )}
                     </div>
                   </td>
@@ -552,15 +585,6 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
         </table>
       </div>
 
-      {/* View Details Modal */}
-      {selectedRequest && (
-        <ViewSupportRequestModal
-          open={detailsOpen}
-          onOpenChange={setDetailsOpen}
-          firmSlug={firmSlug}
-          ticket={selectedRequest}
-        />
-      )}
     </>
   )
 }

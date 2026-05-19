@@ -215,7 +215,7 @@ export function ClientDetailsModal({ client, open, onOpenChange }: ClientDetails
                                 <Calendar className="h-4 w-4 text-slate-600" />
                             </div>
                             <div className="flex-1">
-                                <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Client Since</div>
+                                <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Onboarding Date</div>
                                 <div className="text-sm font-medium text-slate-900">
                                     {format(new Date(client.clientSinceDate), 'd MMM yyyy')}
                                 </div>

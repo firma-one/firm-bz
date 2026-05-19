@@ -38,7 +38,8 @@ export function SharedFolderIcon({
       width={size}
       height={size}
       viewBox="0 0 24 24"
-      className={cn('text-purple-600 flex-shrink-0 block', className)}
+      className={cn('flex-shrink-0 block', className)}
+      style={{ color: '#069668' }}
       aria-hidden
     >
       <path d="M0 0h24v24H0z" fill="none" />
@@ -54,12 +55,12 @@ export function SharedFolderIcon({
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <span className="inline-flex items-center justify-center w-4 h-4">{icon}</span>
+          <span className="inline-flex items-center justify-center" style={{ width: size, height: size }}>{icon}</span>
         </TooltipTrigger>
         <TooltipContent side="top">{tooltipText}</TooltipContent>
       </Tooltip>
     )
   }
 
-  return <span className="inline-flex items-center justify-center w-4 h-4">{icon}</span>
+  return <span className="inline-flex items-center justify-center" style={{ width: size, height: size }}>{icon}</span>
 }

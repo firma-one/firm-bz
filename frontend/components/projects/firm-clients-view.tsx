@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useTransition } from 'react'
 import { ClientSummary, getFirmName } from '@/lib/actions/hierarchy'
-import { UserPlus, Building2, LayoutGrid, List, Home, ChevronRight, Settings, Users, ClipboardList, UserCog, LayoutDashboard } from 'lucide-react'
+import { UserPlus, Building2, LayoutGrid, List, Home, ChevronRight, Settings, Users, ClipboardList, UserCog, LayoutDashboard, Lock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ClientList } from './client-list'
 import { AddClientModal } from './add-client-modal'
@@ -38,7 +38,7 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
     const [canViewOrgSettings, setCanViewOrgSettings] = useState(false)
     const [canViewOrgAudit, setCanViewOrgAudit] = useState(false)
 
-    const tabParam = searchParams.get('tab') || 'clients'
+    const tabParam = searchParams.get('tab') || 'analytics'
     const currentTab =
         tabParam === 'settings' && canViewOrgSettings
             ? 'settings'
@@ -46,8 +46,8 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                 ? 'audit'
                 : tabParam === 'members' && canViewOrgAudit
                     ? 'members'
-                    : tabParam === 'insights' && canViewOrgAudit
-                        ? 'insights'
+                    : tabParam === 'analytics' && canViewOrgAudit
+                        ? 'analytics'
                         : 'clients'
 
     const handleTabChange = (value: string) => {
@@ -93,6 +93,16 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
             })
     }, [orgId, clients])
 
+    // When permissions finish loading and user can't view Analytics, correct the URL to avoid tab/URL mismatch
+    useEffect(() => {
+        const tab = searchParams.get('tab')
+        if (tab === 'analytics' && !canViewOrgAudit) {
+            const params = new URLSearchParams(searchParams.toString())
+            params.set('tab', 'clients')
+            router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+        }
+    }, [canViewOrgAudit])
+
     const handleViewModeChange = (mode: 'grid' | 'list') => {
         setViewMode(mode)
         localStorage.setItem('fm-client-view-mode', mode)
@@ -100,33 +110,120 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
 
     return (
         <div className="flex flex-col h-full">
-            {/* Breadcrumbs */}
-            <div className="d-body flex items-center text-stone-500 mb-2">
-                <span className="flex items-center gap-2 text-stone-500" title="Home">
-                    <Home className="h-4 w-4" />
-                </span>
-                <ChevronRight className="h-4 w-4 mx-1 text-slate-300" />
-                <div className="flex items-center gap-2 text-slate-900 bg-slate-100 px-2 py-1 rounded-md">
-                    <Building2 className="h-4 w-4" />
-                    <span className="font-semibold">{orgName || 'Firm'}</span>
-                </div>
-            </div>
+            {/* Breadcrumbs — monospace architectural style */}
+            <nav className="flex items-center gap-1.5 mb-4">
+                <Home className="h-4 w-4 text-[#45474c] opacity-60" />
+                <ChevronRight className="h-3.5 w-3.5 text-[#d1d5db]" />
+                <Building2 className="h-4 w-4 text-[#069668]" />
+                <span className="font-mono text-[11px] font-bold text-[#1b1b1d] uppercase tracking-tighter">{orgName || 'Firm'}</span>
+            </nav>
 
-            {/* Title / Tabs header (same style as project workspace) */}
-            <div className="bg-white border border-stone-200 rounded-xl p-5 mb-4 shadow-sm">
-                <div className="min-w-0 flex-1">
-                    <h1 className="d-title flex items-center gap-2.5">
-                        <Building2 className="h-6 w-6 text-stone-500" />
-                        {orgName || 'Firm'}
-                    </h1>
-                    <p className="d-subtitle mt-1">Manage clients and firm settings.</p>
+            {/* Firm Identity Header — architectural style, sits directly on pearl bg */}
+            <div className="flex items-start justify-between gap-6 mb-6">
+                <div className="flex items-center gap-6">
+                    <div className="w-16 h-16 bg-white border border-[#e5e7eb] flex items-center justify-center rounded shadow-sm shrink-0">
+                        <Building2 className="h-10 w-10 text-[#1b1b1d]" />
+                    </div>
+                    <div>
+                        <div className="flex items-center gap-3 flex-wrap">
+                            <h1 className="font-headline text-3xl md:text-4xl font-bold tracking-tight text-[#1b1b1d]">
+                                {orgName || 'Firm'}
+                            </h1>
+                        </div>
+                        <p className="text-sm text-[#45474c] mt-1">Manage organization-wide client records and operational parameters for this firm.</p>
+                    </div>
                 </div>
             </div>
 
             <Tabs value={currentTab} onValueChange={handleTabChange} className="flex-1 flex flex-col min-h-0">
-                <div className="mb-6">
-                    <TabsList className="h-10 p-1 bg-slate-100 rounded-lg inline-flex justify-start flex-wrap gap-1">
-                        {(canCreateClient || firmSandboxOnly) && (
+                {/* Tab navigation — full-width white strip with border-b, matching HTML sub-header */}
+                <div className="bg-white border border-[#e5e7eb] rounded mb-6 shrink-0">
+                    <div className="flex items-center justify-between h-14 pr-4">
+                        <TabsList className="h-full p-0 bg-transparent rounded-none inline-flex justify-start gap-0 border-0">
+                            {canViewOrgAudit && (
+                                <TabsTrigger
+                                    value="analytics"
+                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                >
+                                    <LayoutDashboard className="w-4 h-4 mr-2" />
+                                    Analytics
+                                    <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
+                                </TabsTrigger>
+                            )}
+                            <TabsTrigger
+                                value="clients"
+                                className="h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                            >
+                                <Users className="w-4 h-4 mr-2" />
+                                Clients
+                                {clients.length > 0 && (
+                                    <span className="ml-2 font-mono text-[10px] font-bold bg-[#069668] text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
+                                        {clients.length}
+                                    </span>
+                                )}
+                            </TabsTrigger>
+                            {canViewOrgAudit && (
+                                <TabsTrigger
+                                    value="members"
+                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                >
+                                    <UserCog className="w-4 h-4 mr-2" />
+                                    Members
+                                    <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
+                                    {memberCount !== undefined && memberCount > 0 && (
+                                        <span className="ml-2 font-mono text-[10px] font-bold bg-[#069668] text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
+                                            {memberCount}
+                                        </span>
+                                    )}
+                                </TabsTrigger>
+                            )}
+                            {canViewOrgAudit && (
+                                <TabsTrigger
+                                    value="audit"
+                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                >
+                                    <ClipboardList className="w-4 h-4 mr-2" />
+                                    Audit
+                                    <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
+                                    {auditCount !== undefined && auditCount > 0 && (
+                                        <span className="ml-2 font-mono text-[10px] font-bold bg-[#069668] text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
+                                            {auditCount}
+                                        </span>
+                                    )}
+                                </TabsTrigger>
+                            )}
+                            {canViewOrgSettings && (
+                                <TabsTrigger
+                                    value="settings"
+                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                >
+                                    <Settings className="w-4 h-4 mr-2" />
+                                    Settings
+                                    <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
+                                </TabsTrigger>
+                            )}
+                        </TabsList>
+                        <div className="flex items-center gap-3 ml-auto">
+                            {currentTab === 'clients' && (
+                                <div className="flex items-center bg-[#f3f4f6] p-0.5 rounded border border-[#e5e7eb]">
+                                    <button
+                                        onClick={() => handleViewModeChange('grid')}
+                                        className={`px-1.5 py-1 rounded transition-all ${viewMode === 'grid' ? 'bg-white shadow-sm text-[#069668]' : 'text-[#45474c] hover:text-[#1b1b1d] hover:bg-[#f0edee]'}`}
+                                        title="Grid View"
+                                    >
+                                        <LayoutGrid className="h-3 w-3" />
+                                    </button>
+                                    <button
+                                        onClick={() => handleViewModeChange('list')}
+                                        className={`px-1.5 py-1 rounded transition-all ${viewMode === 'list' ? 'bg-white shadow-sm text-[#069668]' : 'text-[#45474c] hover:text-[#1b1b1d] hover:bg-[#f0edee]'}`}
+                                        title="List View"
+                                    >
+                                        <List className="h-3 w-3" />
+                                    </button>
+                                </div>
+                            )}
+                            {/* New Client CTA — emerald, uppercase, tracking-widest */}
+                            {currentTab === 'clients' && (canCreateClient || firmSandboxOnly) && (
                             <AddClientModal
                                 orgSlug={orgSlug}
                                 firmId={orgId}
@@ -134,9 +231,10 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                                 onSaved={() => startRefresh(() => router.refresh())}
                                 trigger={
                                     <Button
-                                        variant="blackCta"
+                                        variant="ghost"
+                                        size="sm"
                                         type="button"
-                                        className="h-full px-3 rounded-md text-sm font-medium inline-flex items-center gap-1.5"
+                                        className="h-auto px-4 py-1.5 rounded-[2px] bg-[#069668] text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-[#069668] hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(6,150,104,0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1.5"
                                     >
                                         <UserPlus className="h-3.5 w-3.5" />
                                         New Client
@@ -144,92 +242,14 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                                 }
                             />
                         )}
-                        <TabsTrigger
-                            value="clients"
-                            className="h-full px-4 rounded-md font-medium text-slate-500 hover:bg-white hover:text-slate-900 hover:shadow-sm data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all"
-                        >
-                            <Users className="w-4 h-4 mr-2" />
-                            Clients
-                            {clients.length > 0 && (
-                                <span className="ml-2 rounded-full bg-slate-900 px-1.5 py-0.5 text-xs font-medium text-white tabular-nums leading-none">
-                                    {clients.length}
-                                </span>
-                            )}
-                        </TabsTrigger>
-                        {canViewOrgAudit && (
-                            <TabsTrigger
-                                value="members"
-                                className="h-full px-4 rounded-md font-medium text-slate-500 hover:bg-white hover:text-slate-900 hover:shadow-sm data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all"
-                            >
-                                <UserCog className="w-4 h-4 mr-2" />
-                                Members
-                                {memberCount !== undefined && memberCount > 0 && (
-                                    <span className="ml-2 rounded-full bg-slate-900 px-1.5 py-0.5 text-xs font-medium text-white tabular-nums leading-none">
-                                        {memberCount}
-                                    </span>
-                                )}
-                            </TabsTrigger>
-                        )}
-                        {canViewOrgAudit && (
-                            <TabsTrigger
-                                value="audit"
-                                className="h-full px-4 rounded-md font-medium text-slate-500 hover:bg-white hover:text-slate-900 hover:shadow-sm data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all"
-                            >
-                                <ClipboardList className="w-4 h-4 mr-2" />
-                                Audit
-                                {auditCount !== undefined && auditCount > 0 && (
-                                    <span className="ml-2 rounded-full bg-slate-900 px-1.5 py-0.5 text-xs font-medium text-white tabular-nums leading-none">
-                                        {auditCount}
-                                    </span>
-                                )}
-                            </TabsTrigger>
-                        )}
-                        {canViewOrgAudit && (
-                            <TabsTrigger
-                                value="insights"
-                                className="h-full px-4 rounded-md font-medium text-slate-500 hover:bg-white hover:text-slate-900 hover:shadow-sm data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all"
-                            >
-                                <LayoutDashboard className="w-4 h-4 mr-2" />
-                                Insights
-                            </TabsTrigger>
-                        )}
-                        {canViewOrgSettings && (
-                            <TabsTrigger
-                                value="settings"
-                                className="h-full px-4 rounded-md font-medium text-slate-500 hover:bg-white hover:text-slate-900 hover:shadow-sm data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all"
-                            >
-                                <Settings className="w-4 h-4 mr-2" />
-                                Settings
-                            </TabsTrigger>
-                        )}
-                    </TabsList>
+                    </div>
+                </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
+                <div className="flex-1 overflow-y-auto custom-scrollbar">
                     <TabsContent value="clients" className="m-0 h-full">
-                        <div className="py-1">
+                        <div className="py-2">
                             <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-                                <div className="flex items-center gap-4 mb-4">
-                                    <span className="px-3 py-1 bg-slate-100 rounded-full text-sm font-medium text-slate-600">
-                                        {clients.length} {clients.length === 1 ? 'Client' : 'Clients'}
-                                    </span>
-                                    <div className="flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200">
-                                        <button
-                                            onClick={() => handleViewModeChange('grid')}
-                                            className={`px-3 py-2 rounded-md transition-all ${viewMode === 'grid' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-200/60'}`}
-                                            title="Grid View"
-                                        >
-                                            <LayoutGrid className="h-4 w-4" />
-                                        </button>
-                                        <button
-                                            onClick={() => handleViewModeChange('list')}
-                                            className={`px-3 py-2 rounded-md transition-all ${viewMode === 'list' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-200/60'}`}
-                                            title="List View"
-                                        >
-                                            <List className="h-4 w-4" />
-                                        </button>
-                                    </div>
-                                </div>
                                 <ClientList
                                     clients={clients}
                                     orgSlug={orgSlug}
@@ -266,7 +286,7 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                     )}
 
                     {canViewOrgAudit && (orgId ?? (clients[0]?.firmId ?? clients[0]?.firmId)) && (
-                        <TabsContent value="insights" className="m-0">
+                        <TabsContent value="analytics" className="m-0">
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 22rem', gap: '1.5rem', paddingTop: '0.5rem', paddingBottom: '1.5rem' }}>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', minWidth: 0 }}>
                                     <ErrorBoundary context="FirmInsightsTab">

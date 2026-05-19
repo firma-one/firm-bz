@@ -408,82 +408,86 @@ export default function ConnectorsPage({ params }: { params: Promise<{ slug: str
         {/* Horizontal tab bar — matches project/engagement style */}
         <div className="mb-6 min-w-0 w-full overflow-x-auto">
           {isLoadingData ? (
-            <div className="flex gap-2">
-              {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-9 w-28 rounded-lg" />)}
+            <div className="bg-white border border-[#e5e7eb] rounded h-14 flex items-center px-4 gap-4">
+              {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-4 w-24 rounded-[2px]" />)}
             </div>
           ) : (
-            <TabsList className="h-10 p-1 bg-slate-100 rounded-lg inline-flex justify-start flex-nowrap gap-1 shrink-0">
-              {connectors.map(connector => (
-                <TabsTrigger
-                  key={connector.id}
-                  value={connector.id}
-                  disabled={connector.disabled}
-                  className="h-full px-4 rounded-md font-medium text-slate-500 data-[state=active]:text-slate-900 data-[state=active]:shadow-sm disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
-                >
-                  <span className="flex items-center justify-center w-4 h-4 shrink-0">
-                    {connector.icon ?? connector.activeIcon}
-                  </span>
-                  {connector.name}
-                  {connector.comingLater && (
-                    <span className="rounded-full bg-slate-200 px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-slate-500">
-                      Soon
-                    </span>
-                  )}
-                  {connector.id === 'google-drive' && existingConnections.some(c => c.status === 'ACTIVE') && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                  )}
-                </TabsTrigger>
-              ))}
-            </TabsList>
+            <div className="bg-white border border-[#e5e7eb] rounded shrink-0">
+              <div className="flex items-center h-14 min-w-0 overflow-x-auto">
+                <TabsList className="h-full p-0 bg-transparent rounded-none inline-flex justify-start gap-0 border-0 shrink-0">
+                  {connectors.map(connector => (
+                    <TabsTrigger
+                      key={connector.id}
+                      value={connector.id}
+                      disabled={connector.disabled}
+                      className="h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent transition-all shadow-none bg-transparent disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                      <span className="flex items-center justify-center w-4 h-4 shrink-0">
+                        {connector.icon ?? connector.activeIcon}
+                      </span>
+                      {connector.name}
+                      {connector.comingLater && (
+                        <span className="font-mono rounded-sm bg-[#e5e7eb] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#45474c] tabular-nums leading-none">
+                          Soon
+                        </span>
+                      )}
+                      {connector.id === 'google-drive' && existingConnections.some(c => c.status === 'ACTIVE') && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#069668] shrink-0" />
+                      )}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </div>
+            </div>
           )}
         </div>
 
         {/* Google Drive tab — single unified card with sections */}
         <TabsContent value="google-drive" className="mt-0">
           {isLoadingData ? (
-            <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-              <div className="flex items-center gap-4 px-5 py-4 border-b border-gray-100">
+            <div className="rounded-[2px] border border-[#e5e7eb] bg-white shadow-sm overflow-hidden">
+              <div className="flex items-center gap-4 px-5 py-4 border-b border-[#e5e7eb]">
                 <Skeleton className="h-10 w-10 rounded-xl flex-shrink-0" />
                 <div className="space-y-2 flex-1"><Skeleton className="h-4 w-32" /><Skeleton className="h-3 w-56" /></div>
               </div>
-              <div className="px-5 py-4 border-b border-gray-100 space-y-3"><Skeleton className="h-3 w-14" /><Skeleton className="h-14 w-full rounded-lg" /></div>
-              <div className="px-5 py-4 space-y-3"><Skeleton className="h-3 w-20" /><Skeleton className="h-14 w-full rounded-lg" /></div>
+              <div className="px-5 py-4 border-b border-[#e5e7eb] space-y-3"><Skeleton className="h-3 w-14" /><Skeleton className="h-14 w-full rounded-[2px]" /></div>
+              <div className="px-5 py-4 space-y-3"><Skeleton className="h-3 w-20" /><Skeleton className="h-14 w-full rounded-[2px]" /></div>
             </div>
           ) : (
             <TooltipProvider delayDuration={300}>
               <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
-                <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                <div className="rounded-[2px] border border-[#e5e7eb] bg-white shadow-sm overflow-hidden">
 
                   {/* Header */}
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between px-5 py-4">
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="h-10 w-10 shrink-0 bg-white border border-gray-100 rounded-xl flex items-center justify-center p-2 shadow-sm">
+                      <div className="h-10 w-10 shrink-0 bg-white border border-[#e5e7eb] rounded-[2px] flex items-center justify-center p-2 shadow-sm">
                         <GoogleDriveProductMark width={24} height={24} />
                       </div>
                       <div className="min-w-0">
-                        <h2 className="text-sm font-semibold text-gray-900 leading-snug">Google Drive</h2>
-                        <p className="text-xs text-gray-500 mt-0.5 leading-snug">Link a Google account and set a workspace folder as root.</p>
+                        <h2 className="text-[0.8125rem] font-bold text-[#1b1b1d] leading-snug">Google Drive</h2>
+                        <p className="text-xs text-[#45474c] mt-0.5 leading-snug">Link a Google account and set a workspace folder as root.</p>
                       </div>
                     </div>
                     {existingConnections.length === 0 && (
-                      <Button onClick={handleConnectGoogleDrive} disabled={loading} className="shrink-0 bg-gray-900 text-white hover:bg-gray-800 rounded-lg shadow-sm">
-                        <SquarePlus className="w-4 h-4 mr-2" />
+                      <Button onClick={handleConnectGoogleDrive} disabled={loading} className="shrink-0 h-auto px-4 py-1.5 rounded-[2px] bg-[#069668] text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-[#069668] hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(6,150,104,0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1.5">
+                        <SquarePlus className="w-3.5 h-3.5" />
                         {loading ? 'Connecting...' : 'Connect'}
                       </Button>
                     )}
                   </div>
 
                   {/* Google Workspace tip */}
-                  <div className="border-t border-gray-100 px-5 py-3">
-                    <div className="flex gap-2.5 rounded-lg border border-blue-100 bg-blue-50 px-3.5 py-3 text-xs text-blue-800">
-                      <Info className="h-3.5 w-3.5 shrink-0 mt-0.5 text-blue-500" />
+                  <div className="border-t border-[#e5e7eb] px-5 py-3">
+                    <div className="flex gap-2.5 rounded-[2px] border border-[#069668]/25 bg-[#069668]/8 px-3.5 py-3 text-xs text-[#1b1b1d]">
+                      <Info className="h-3.5 w-3.5 shrink-0 mt-0.5 text-[#069668]" />
                       <p className="leading-relaxed">
-                        <span className="font-semibold">Google Workspace?</span> We recommend connecting with a dedicated service account not tied to any individual user — so your firm&apos;s Drive access isn&apos;t disrupted if someone leaves.{' '}
+                        <span className="font-bold text-[#069668]">Google Workspace?</span> We recommend connecting with a dedicated service account not tied to any individual user — so your firm&apos;s Drive access isn&apos;t disrupted if someone leaves.{' '}
                         <a
                           href="https://support.google.com/a/answer/7378726"
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="underline underline-offset-2 hover:text-blue-900 transition-colors"
+                          className="underline underline-offset-2 text-[#069668] hover:text-[#047a53] transition-colors font-medium"
                         >
                           How to create a service account →
                         </a>
@@ -493,15 +497,15 @@ export default function ConnectorsPage({ params }: { params: Promise<{ slug: str
 
                   {/* Multi-account switcher */}
                   {existingConnections.length > 1 && (
-                    <div className="border-t border-gray-100 px-5 py-3 bg-gray-50/50">
-                      <div className="flex flex-wrap bg-gray-100/70 p-1 rounded-lg gap-1">
+                    <div className="border-t border-[#e5e7eb] px-5 py-3 bg-gray-50/50">
+                      <div className="flex flex-wrap bg-[#f9f9fb] border border-[#e5e7eb] p-1 rounded-[2px] gap-1">
                         {existingConnections.map(c => {
                           const isActive = activeAccountId === c.id
                           const isConnected = c.status === 'ACTIVE'
                           return (
                             <button key={c.id} type="button" onClick={() => setActiveAccountId(c.id)}
-                              className={`flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${isActive ? 'bg-white shadow-sm ring-1 ring-gray-200 text-gray-900' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-200/50'}`}>
-                              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isConnected ? 'bg-emerald-500' : 'bg-red-400'}`} />
+                              className={`flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-[2px] transition-all ${isActive ? 'bg-white shadow-sm border border-[#e5e7eb] text-[#1b1b1d]' : 'text-[#45474c] hover:text-[#1b1b1d] hover:bg-white/60'}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isConnected ? 'bg-[#069668]' : 'bg-red-400'}`} />
                               <span className="truncate max-w-[200px]">{c.email}</span>
                             </button>
                           )
@@ -514,24 +518,24 @@ export default function ConnectorsPage({ params }: { params: Promise<{ slug: str
                     <div className="animate-in fade-in zoom-in-95 duration-200">
 
                       {/* Account section */}
-                      <div className="border-t border-gray-100">
+                      <div className="border-t border-[#e5e7eb]">
                         <div className="px-5 pt-4 pb-1">
-                          <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Account</p>
+                          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#45474c]">Account</p>
                         </div>
                         <div className={`flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between px-5 py-3.5 ${activeConnection.status !== 'ACTIVE' ? 'bg-amber-50/30' : ''}`}>
                           <div className="flex items-center gap-3 min-w-0">
-                            <Avatar className="h-9 w-9 rounded-lg shrink-0">
-                              <AvatarFallback className="rounded-lg bg-gray-100 text-sm font-semibold text-gray-600 uppercase select-none">
+                            <Avatar className="h-9 w-9 rounded-[2px] shrink-0">
+                              <AvatarFallback className="rounded-[2px] bg-[#f9f9fb] border border-[#e5e7eb] text-sm font-bold text-[#45474c] uppercase select-none">
                                 {(activeConnection.name || activeConnection.email || 'G').charAt(0)}
                               </AvatarFallback>
                             </Avatar>
                             <div className="min-w-0">
-                              <p className="text-sm font-semibold text-gray-900 truncate leading-snug">
+                              <p className="text-[0.8125rem] font-bold text-[#1b1b1d] truncate leading-snug">
                                 {activeConnection.name || activeConnection.email || 'Google account'}
                               </p>
                               <div className="flex items-center gap-1.5 mt-0.5">
-                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${activeConnection.status === 'ACTIVE' ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-                                <p className={`text-xs ${activeConnection.status === 'ACTIVE' ? 'text-gray-400' : 'text-amber-700'}`}>
+                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${activeConnection.status === 'ACTIVE' ? 'bg-[#069668]' : 'bg-amber-400'}`} />
+                                <p className={`text-xs ${activeConnection.status === 'ACTIVE' ? 'text-[#45474c]' : 'text-amber-700'}`}>
                                   {activeConnection.status === 'ACTIVE' ? (activeConnection.email || 'Connected') : 'Disconnected'}
                                 </p>
                               </div>
@@ -543,7 +547,7 @@ export default function ConnectorsPage({ params }: { params: Promise<{ slug: str
                                 <Tooltip>
                                   <TooltipTrigger asChild>
                                     <Button type="button" variant="outline" size="sm"
-                                      className="h-8 px-3 text-xs border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+                                      className="h-8 px-3 text-xs border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] rounded-[2px]"
                                       onClick={() => handleTestConnection(activeConnection.id)}
                                       disabled={testingConnection === activeConnection.id}>
                                       {testingConnection === activeConnection.id
@@ -557,7 +561,7 @@ export default function ConnectorsPage({ params }: { params: Promise<{ slug: str
                                 <Tooltip>
                                   <TooltipTrigger asChild>
                                     <Button type="button" variant="outline" size="sm"
-                                      className="h-8 px-3 text-xs bg-gray-900 text-white border-gray-900 hover:bg-gray-800"
+                                      className="h-8 px-3 text-xs bg-[#069668] text-white border-[#069668] hover:bg-[#069668] hover:brightness-105 hover:text-white rounded-[2px]"
                                       onClick={() => handleDisconnect(activeConnection.id)}>
                                       <Unlink className="w-3.5 h-3.5 mr-1.5" />Disconnect
                                     </Button>
@@ -569,7 +573,7 @@ export default function ConnectorsPage({ params }: { params: Promise<{ slug: str
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <Button type="button" size="sm"
-                                    className="h-8 px-3 text-xs bg-gray-900 text-white hover:bg-gray-800"
+                                    className="h-8 px-3 text-xs bg-[#069668] text-white hover:bg-[#069668] hover:brightness-105 hover:text-white rounded-[2px] border-0"
                                     onClick={() => handleConnectGoogleDrive()}>
                                     <Link className="w-3.5 h-3.5 mr-1.5" />Reconnect
                                   </Button>
@@ -582,9 +586,9 @@ export default function ConnectorsPage({ params }: { params: Promise<{ slug: str
                       </div>
 
                       {/* Workspace section */}
-                      <div className="border-t border-gray-100">
+                      <div className="border-t border-[#e5e7eb]">
                         <div className="px-5 pt-4 pb-1">
-                          <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">Workspace</p>
+                          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#45474c]">Workspace</p>
                         </div>
                         {activeConnection.status === 'ACTIVE' ? (
                           <div className="px-5 pb-5">
@@ -612,7 +616,7 @@ export default function ConnectorsPage({ params }: { params: Promise<{ slug: str
                             />
                           </div>
                         ) : (
-                          <div className="mx-5 mb-5 rounded-lg border border-dashed border-amber-200 bg-amber-50/40 px-4 py-5 text-center text-sm text-amber-950/90">
+                          <div className="mx-5 mb-5 rounded-[2px] border border-dashed border-amber-200 bg-amber-50/40 px-4 py-5 text-center text-sm text-amber-950/90">
                             <span className="font-medium">Reconnect</span> Google Drive above to view or change your workspace folder.
                           </div>
                         )}
@@ -639,16 +643,16 @@ export default function ConnectorsPage({ params }: { params: Promise<{ slug: str
                       )}
                     </div>
                   ) : existingConnections.length === 0 ? (
-                    <div className="border-t border-gray-100 text-center py-14 px-4">
-                      <div className="h-10 w-10 mx-auto mb-3 bg-white rounded-xl shadow-sm ring-1 ring-gray-100 flex items-center justify-center">
+                    <div className="border-t border-[#e5e7eb] text-center py-14 px-4">
+                      <div className="h-10 w-10 mx-auto mb-3 bg-white rounded-xl border border-[#e5e7eb] shadow-sm flex items-center justify-center">
                         <GoogleDriveIcon size={20} />
                       </div>
-                      <p className="text-gray-800 text-sm font-semibold">No account linked yet</p>
-                      <p className="text-gray-500 text-sm mt-1 max-w-sm mx-auto">Connect Google Drive to link an account and set your workspace folder.</p>
+                      <p className="text-[#1b1b1d] text-[0.8125rem] font-bold">No account linked yet</p>
+                      <p className="text-[#45474c] text-xs mt-1 max-w-sm mx-auto">Connect Google Drive to link an account and set your workspace folder.</p>
                     </div>
                   ) : (
-                    <div className="border-t border-gray-100 text-center py-12">
-                      <p className="text-gray-500 text-sm">Select an account above to view details</p>
+                    <div className="border-t border-[#e5e7eb] text-center py-12">
+                      <p className="text-[#45474c] text-xs">Select an account above to view details</p>
                     </div>
                   )}
                 </div>
@@ -660,12 +664,12 @@ export default function ConnectorsPage({ params }: { params: Promise<{ slug: str
         {/* Coming soon tabs */}
         {['onedrive', 'dropbox', 'box'].map(id => (
           <TabsContent key={id} value={id} className="mt-0">
-            <div className="flex flex-col items-center justify-center h-[400px] border border-dashed border-gray-200 rounded-xl bg-gray-50/60">
-              <div className="h-12 w-12 bg-white rounded-xl shadow-sm flex items-center justify-center mb-4 ring-1 ring-gray-100">
-                <Settings className="h-6 w-6 text-gray-400" />
+            <div className="flex flex-col items-center justify-center h-[400px] border border-dashed border-[#e5e7eb] rounded-[2px] bg-[#f9f9fb]">
+              <div className="h-12 w-12 bg-white rounded-xl border border-[#e5e7eb] shadow-sm flex items-center justify-center mb-4">
+                <Settings className="h-6 w-6 text-[#45474c]" />
               </div>
-              <h3 className="text-gray-900 font-semibold text-sm">Coming Soon</h3>
-              <p className="text-gray-500 text-sm mt-1">This integration is under development.</p>
+              <h3 className="text-[#1b1b1d] font-bold text-[0.8125rem]">Coming Soon</h3>
+              <p className="text-[#45474c] text-xs mt-1">This integration is under development.</p>
             </div>
           </TabsContent>
         ))}

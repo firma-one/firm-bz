@@ -13,6 +13,8 @@ interface DocumentBreadcrumbProps {
   iconSize?: string
   /** Text size class. Defaults to text-[10px]. */
   textSize?: string
+  /** Shown as a non-clickable placeholder when parentName is null/undefined. */
+  fallback?: string
 }
 
 export function DocumentBreadcrumb({
@@ -22,8 +24,17 @@ export function DocumentBreadcrumb({
   className,
   iconSize = 'h-3 w-3',
   textSize = 'text-[10px]',
+  fallback,
 }: DocumentBreadcrumbProps) {
-  if (!parentName) return null
+  if (!parentName) {
+    if (!fallback) return null
+    return (
+      <div className={cn('flex items-center gap-1 min-w-0 mt-0.5', className)}>
+        <Folder className={cn(iconSize, 'shrink-0 stroke-slate-300 stroke-[1.5] fill-slate-100')} aria-hidden />
+        <span className={cn(textSize, 'text-slate-400 truncate italic')}>{fallback}</span>
+      </div>
+    )
+  }
 
   const isClickable = !!(onFolderClick && parentId)
 
@@ -40,10 +51,10 @@ export function DocumentBreadcrumb({
         className={cn('flex items-center gap-1 min-w-0 mt-0.5 group/bc', className)}
       >
         <Folder
-          className={cn(iconSize, 'shrink-0 stroke-slate-400 stroke-[1.5] fill-slate-200 group-hover/bc:stroke-indigo-500 group-hover/bc:fill-indigo-100 transition-colors')}
+          className={cn(iconSize, 'shrink-0 stroke-slate-400 stroke-[1.5] fill-slate-200 group-hover/bc:stroke-[#069668] group-hover/bc:fill-[#069668]/20 transition-colors')}
           aria-hidden
         />
-        <span className={cn(textSize, 'text-slate-500 truncate group-hover/bc:text-indigo-600 group-hover/bc:underline transition-colors')}>
+        <span className={cn(textSize, 'text-slate-500 truncate group-hover/bc:text-[#069668] group-hover/bc:underline transition-colors')}>
           {parentName}
         </span>
       </button>
