@@ -355,6 +355,21 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
         ],
     },
     {
+        name: "SUPPORT",
+        rows: [
+            {
+                feature: "Dedicated Support Portal",
+                tooltip: "Submit bug reports, feature requests, and general enquiries directly from your workspace. Track status, upload attachments, and exchange comments with our team — all in one place.",
+                values: { Sandbox: false, Standard: true, Pro: true, Business: true, Enterprise: true },
+            },
+            {
+                feature: "SLA-based Priority support",
+                tooltip: "Enterprise customers get guaranteed response times under a dedicated SLA, a named support contact, and priority routing through the in-app support portal.",
+                values: { Sandbox: false, Standard: false, Pro: false, Business: false, Enterprise: true },
+            },
+        ],
+    },
+    {
         name: "ADVANCED",
         rows: [
             {

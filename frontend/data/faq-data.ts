@@ -1,4 +1,6 @@
 import { BRAND_NAME, brandNameInlineHtml } from "@/config/brand"
+import { platformEmail } from "@/config/platform-domain"
+import { PLATFORM_SUPPORT_EMAIL } from "@/config/platform-emails"
 
 export interface FAQItem {
   question: string;
@@ -73,6 +75,79 @@ export const FAQ_DATA: FAQItem[] = [
     answer: `Yes. Create a separate Engagement for each client, map the right Drive folders, and manage permissions per relationship. The Audit Log shows which external domains touched which files—ideal for agencies and fractional leaders running parallel accounts.`,
     displayAnswer: `Yes. Create a separate <strong>Engagement</strong> for each client, map the right Drive folders, and manage permissions per relationship. The <strong>Audit Log</strong> shows which external domains touched which files—ideal for agencies and fractional leaders running parallel accounts.`,
     category: "Marketing",
+  },
+  {
+    question: `What counts as an "active engagement"?`,
+    answer: "An active engagement is any engagement that is not deleted or closed. You can have unlimited closed or deleted engagements without counting toward your limit. Each subscription covers one firm; the cap applies to that firm's engagements.",
+    category: "Billing",
+  },
+  {
+    question: "Can I add more engagements?",
+    answer: "Standard includes 10 active engagements per firm, Pro 25, Business 50, and Enterprise typically up to 100 (negotiated). Need more? Contact us for custom capacity.",
+    displayAnswer: "Standard includes <strong>10</strong> active engagements per firm, Pro <strong>25</strong>, Business <strong>50</strong>, and Enterprise typically up to <strong>100</strong> (negotiated). Need more? Contact us for custom capacity.",
+    category: "Billing",
+  },
+  {
+    question: "What if I need more than one firm?",
+    answer: "Standard, Pro, and Business each cover one firm workspace. For an additional legal entity or a completely separate firm, add another subscription—or talk to us about Enterprise for multiple firms under one agreement and consolidated billing.",
+    category: "Billing",
+  },
+  {
+    question: "Are there per-user charges?",
+    answer: "No. All plans include unlimited members. Add as many team members, clients, and collaborators as you need without additional charges.",
+    displayAnswer: "<strong>No.</strong> All plans include <strong>unlimited members</strong>. Add as many team members, clients, and collaborators as you need without additional charges.",
+    category: "Billing",
+  },
+  {
+    question: "What happens if I exceed my engagement limit?",
+    answer: "Your plan includes a set number of active engagements per firm (Standard 10, Pro 25, Business 50, Enterprise per contract). Close engagements you no longer need to free up slots, upgrade tiers, or contact us for higher capacity.",
+    category: "Billing",
+  },
+  {
+    question: "Can I upgrade, downgrade or cancel my plan?",
+    answer: `Yes. Plan changes and cancellations are managed in our Polar billing portal. Upgrade, downgrade, and cancellation options are shown based on your current subscription and portal settings. Effective dates and billing adjustments are displayed in checkout/portal before you confirm any change. If you need a billing exception, contact ${PLATFORM_SUPPORT_EMAIL} and we'll help review it.`,
+    displayAnswer: `Yes. Plan changes and cancellations are managed in our <strong>Polar billing portal</strong>. Upgrade, downgrade, and cancellation options are shown based on your current subscription and portal settings. Effective dates and billing adjustments are displayed in checkout/portal before you confirm any change. If you need a billing exception, contact <a href="mailto:${PLATFORM_SUPPORT_EMAIL}" class="underline">${PLATFORM_SUPPORT_EMAIL}</a> and we'll help review it.`,
+    category: "Billing",
+  },
+  {
+    question: "Is there a free trial?",
+    answer: `Yes. You can explore ${BRAND_NAME} with a limited sandbox account — no credit card required. When you're ready to unlock full features, you can start a 30-day trial of the Standard plan. A credit card is required to begin the paid plan trial, though you won't be charged until the trial period ends. All checkout details are shown in Polar before you confirm.`,
+    displayAnswer: `Yes. You can explore ${brandNameInlineHtml()} with a <strong>limited sandbox account</strong> — no credit card required. When you're ready to unlock full features, you can start a <strong>30-day trial of the Standard plan</strong>. A credit card is required to begin the paid plan trial, though <strong>you won't be charged until the trial period ends</strong>. All checkout details are shown in [[POLAR_LINK]] before you confirm.`,
+    category: "Billing",
+  },
+  {
+    question: `What does "bring your own Google Drive" mean?`,
+    answer: `Your files stay in your Google Drive—we don't host a second copy of your documents for standard workflows. ${BRAND_NAME} adds the client portal, engagement structure, and permissions on top. There's no bulk migration to a new storage product: you keep working from Drive with a professional delivery layer.`,
+    displayAnswer: `Your files stay in your <strong>Google Drive</strong>—we don't host a second copy of your documents. ${brandNameInlineHtml()} adds the client portal, engagement structure, and permissions on top. <strong>No bulk migration</strong>: you keep working from Drive with a professional delivery layer.`,
+    category: "Billing",
+  },
+  {
+    question: "How does the free sandbox differ from paid plans?",
+    answer: "The sandbox lets you explore the product with no credit card. Core engagement and portal capabilities align with what we show for Standard in the comparison matrix; higher tiers add Pro/Business/Enterprise features such as templates, automation, custom DNS, or SSO. When you're ready for production billing, start a Standard trial or choose a paid tier.",
+    category: "Billing",
+  },
+  {
+    question: "Where do I manage subscriptions and invoices?",
+    answer: "Paid subscriptions are handled through our Polar billing integration. After checkout you'll use the Polar customer portal to update payment methods, view invoices, and start upgrades, downgrades, or cancellations—subject to what your subscription allows.",
+    displayAnswer: "Paid subscriptions are handled through our <strong>Polar billing integration</strong>. After checkout you'll use the Polar customer portal to update payment methods, view invoices, and start upgrades, downgrades, or cancellations.",
+    category: "Billing",
+  },
+  {
+    question: "When should I choose Enterprise over Business?",
+    answer: `Enterprise is for organizations that need custom DNS for the client portal, SSO/SAML, stricter controls (for example download restrictions and advanced auditing), multi-firm arrangements, or negotiated engagement limits. If that sounds like you, contact ${platformEmail("sales")} and we'll scope options.`,
+    displayAnswer: `Enterprise is for organizations that need <strong>custom DNS</strong> for the client portal, <strong>SSO/SAML</strong>, stricter controls, multi-firm arrangements, or negotiated engagement limits. If that sounds like you, contact <a href="mailto:${platformEmail("sales")}" class="underline">${platformEmail("sales")}</a> and we'll scope options.`,
+    category: "Billing",
+  },
+  {
+    question: `How does the in-app Support Portal work?`,
+    answer: `All paid plans (Standard and above) include a dedicated Support Portal built directly into your ${BRAND_NAME} workspace. You can submit bug reports, feature requests, or general enquiries, attach files or screenshots, track the status of each request, and exchange threaded comments with our team—without leaving the app.\n\nFor runtime errors, the portal goes a step further: if ${BRAND_NAME} detects an error during your session, the Bug Report form opens automatically with the relevant error context captured in the background. You can add any additional details you'd like to share and submit — our team receives the full technical information needed to investigate.`,
+    category: "Billing",
+  },
+  {
+    question: "What is SLA-based Priority support on Enterprise?",
+    answer: `Enterprise subscribers receive a guaranteed response-time SLA, a named support contact, and priority routing for all requests submitted through the in-app portal. SLA terms are agreed as part of your Enterprise contract. Contact ${platformEmail("sales")} to discuss specifics.`,
+    displayAnswer: `Enterprise subscribers receive a <strong>guaranteed response-time SLA</strong>, a named support contact, and priority routing for all requests submitted through the in-app portal. SLA terms are agreed as part of your Enterprise contract. Contact <a href="mailto:${platformEmail("sales")}" class="underline">${platformEmail("sales")}</a> to discuss specifics.`,
+    category: "Billing",
   },
   {
     question: "What is your refund policy?",
