@@ -361,7 +361,7 @@ function ShareCardContent({
           </div>
           <div className="min-w-0 flex-1">
             <div
-              className="text-sm font-semibold text-slate-800 truncate cursor-pointer hover:text-indigo-600 transition-colors"
+              className="text-sm font-semibold text-slate-800 truncate cursor-pointer hover:text-[#069668] transition-colors"
               title={share.documentName}
               onClick={onClickTitle}
             >
@@ -453,7 +453,7 @@ function ShareCardContent({
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <div className="h-5 w-5 rounded-lg bg-violet-100 text-violet-800 flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EC</div>
+                      <div className="h-5 w-5 rounded-lg bg-[#ecfdf5] text-[#065f46] flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EC</div>
                     </TooltipTrigger>
                     <TooltipContent side="top" className="text-xs">{extCollaboratorLabel}</TooltipContent>
                   </Tooltip>
@@ -463,7 +463,7 @@ function ShareCardContent({
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <div className="h-5 w-5 rounded-lg bg-sky-100 text-sky-800 flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EV</div>
+                      <div className="h-5 w-5 rounded-lg bg-[#f3f4f6] text-[#45474c] flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EV</div>
                     </TooltipTrigger>
                     <TooltipContent side="top" className="text-xs">{viewerLabel}</TooltipContent>
                   </Tooltip>
@@ -750,7 +750,7 @@ function SharesListView({
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <div className="h-6 w-6 rounded-lg bg-violet-100 text-violet-800 flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EC</div>
+                                <div className="h-6 w-6 rounded-lg bg-[#ecfdf5] text-[#065f46] flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EC</div>
                               </TooltipTrigger>
                               <TooltipContent side="top" className="bg-slate-50 border border-slate-200 text-slate-700 text-xs p-2 shadow-md">{extCollaboratorLabel}</TooltipContent>
                             </Tooltip>
@@ -760,7 +760,7 @@ function SharesListView({
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <div className="h-6 w-6 rounded-lg bg-sky-100 text-sky-800 flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EV</div>
+                                <div className="h-6 w-6 rounded-lg bg-[#f3f4f6] text-[#45474c] flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EV</div>
                               </TooltipTrigger>
                               <TooltipContent side="top" className="bg-slate-50 border border-slate-200 text-slate-700 text-xs p-2 shadow-md">{viewerLabel}</TooltipContent>
                             </Tooltip>
@@ -908,14 +908,14 @@ function ShareCard({
             <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-60 group-hover:opacity-40 transition-opacity duration-500" />
           </div>
         ) : isFolder ? (
-          <div className="w-full h-full bg-[#5A78FF]/5 flex items-center justify-center relative group-hover:bg-[#5A78FF]/10 transition-colors duration-500">
+          <div className="w-full h-full bg-[#ecfdf5] flex items-center justify-center relative group-hover:bg-[#d1fae5] transition-colors duration-500">
             <div className="transform group-hover:scale-110 transition-transform duration-700 ease-out">
               <SharedFolderIcon fillLevel={1} tooltip="shared" className="h-24 w-24 opacity-40" />
             </div>
-            <div className="absolute inset-0 bg-gradient-to-tr from-[#5A78FF]/8 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-tr from-[#069668]/8 to-transparent" />
           </div>
         ) : (
-          <div className="w-full h-full bg-slate-50 flex items-center justify-center relative group-hover:bg-indigo-50/30 transition-colors duration-700">
+          <div className="w-full h-full bg-slate-50 flex items-center justify-center relative group-hover:bg-[#ecfdf5]/40 transition-colors duration-700">
             {/* Subtle Background Pattern/Gradient */}
             <div
               className="absolute inset-0 opacity-[0.03] pointer-events-none"
@@ -929,7 +929,7 @@ function ShareCard({
                 initial={{ top: '-10%' }}
                 animate={{ top: '110%' }}
                 transition={{ duration: 4, repeat: Infinity, ease: 'linear' }}
-                className="absolute left-0 right-0 h-0.5 bg-indigo-500/50 blur-[1px] z-10"
+                className="absolute left-0 right-0 h-0.5 bg-[#069668]/40 blur-[1px] z-10"
               />
             </div>
 
@@ -1060,7 +1060,7 @@ function ShareCard({
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <div className="h-6 w-6 rounded-lg bg-violet-100 text-violet-800 flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EC</div>
+                        <div className="h-6 w-6 rounded-lg bg-[#ecfdf5] text-[#065f46] flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EC</div>
                       </TooltipTrigger>
                       <TooltipContent side="top" className="text-xs">{extCollaboratorLabel}</TooltipContent>
                     </Tooltip>
@@ -1070,7 +1070,7 @@ function ShareCard({
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <div className="h-6 w-6 rounded-lg bg-sky-100 text-sky-800 flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EV</div>
+                        <div className="h-6 w-6 rounded-lg bg-[#f3f4f6] text-[#45474c] flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EV</div>
                       </TooltipTrigger>
                       <TooltipContent side="top" className="text-xs">{viewerLabel}</TooltipContent>
                     </Tooltip>
@@ -1376,7 +1376,7 @@ export function ProjectSharesTab({
   )
 
   return (
-    <div className="flex flex-col h-full bg-[#fafafa] rounded-2xl border border-slate-200/80 shadow-[0_1px_3px_rgba(0,0,0,0.06)] overflow-hidden">
+    <div className="flex flex-col h-full bg-white overflow-hidden">
       <div className="px-6 py-4 border-b border-slate-200/60 bg-white shrink-0">
         <div>
           <h2 className="text-lg font-semibold text-slate-800 flex items-center gap-2">

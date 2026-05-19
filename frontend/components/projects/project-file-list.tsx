@@ -3277,7 +3277,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                             tooltip={directShared ? 'shared' : 'contains-shared'}
                                                         />
                                                     ) : isFolder ? (
-                                                        <Folder className="h-4 w-4 fill-[#5A78FF]/20 flex-shrink-0" style={{ color: '#5A78FF' }} />
+                                                        <Folder className="h-4 w-4 fill-[#069668]/20 flex-shrink-0" style={{ color: '#069668' }} />
                                                     ) : (
                                                         <DocumentIcon mimeType={file.mimeType} className="h-4 w-4" />
                                                     )}
@@ -3353,15 +3353,15 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                                 <button
                                                                     type="button"
                                                                     onClick={(e) => { e.stopPropagation(); setUnshareConfirmFile(file) }}
-                                                                    className={`inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium border bg-[#5A78FF]/10 text-[#5A78FF] border-[#5A78FF]/30 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors`}
+                                                                    className={`inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium border bg-[#069668]/10 text-[#069668] border-[#069668]/30 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors`}
                                                                 >
                                                                     <Share2 className="h-3 w-3" />
                                                                 </button>
                                                             ) : (
                                                                 <span className={`inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium border ${
                                                                     isFolder && !directShared
-                                                                        ? 'bg-[#5A78FF]/5 text-[#5A78FF]/50 border-[#5A78FF]/20'
-                                                                        : 'bg-[#5A78FF]/10 text-[#5A78FF] border-[#5A78FF]/30'
+                                                                        ? 'bg-[#069668]/5 text-[#069668]/50 border-[#069668]/20'
+                                                                        : 'bg-[#069668]/10 text-[#069668] border-[#069668]/30'
                                                                 }`}>
                                                                     <Share2 className="h-3 w-3" />
                                                                 </span>
