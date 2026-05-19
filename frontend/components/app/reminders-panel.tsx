@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import { usePathname } from "next/navigation"
-import { BellOff, Building2, CalendarClock, CheckCircle2, ChevronRight, Clock, Eye, EyeOff, FileText, Undo2, Users, X } from "lucide-react"
+import { ArrowUpRight, BellOff, Building2, CalendarClock, CheckCircle2, ChevronRight, Clock, Eye, EyeOff, FileText, Undo2, Users, X } from "lucide-react"
+import Link from "next/link"
 import {
     getUserReminders,
     markReminderDone,
@@ -173,10 +174,17 @@ export function RemindersPanel({ onCountChange }: Props) {
     const mountedRef = useRef(false)
 
     const isHidden = (r: ReminderWithContext) => r.hiddenAt !== null
-    const sorted = [...reminders]
+    const sorted = [...reminders].sort((a, b) => {
+      // Overdue (most overdue first) → due today → upcoming (soonest first) → no date
+      const aPriority = a.delta === null ? 3 : a.delta < 0 ? 0 : a.delta === 0 ? 1 : 2
+      const bPriority = b.delta === null ? 3 : b.delta < 0 ? 0 : b.delta === 0 ? 1 : 2
+      if (aPriority !== bPriority) return aPriority - bPriority
+      if (a.delta !== null && b.delta !== null) return a.delta - b.delta
+      return 0
+    })
     const visible = sorted.filter((r) => !isHidden(r))
     const hidden = sorted.filter((r) => isHidden(r))
-    const displayed = showHidden ? sorted : visible
+    const displayed = (showHidden ? sorted : visible).slice(0, 5)
     const urgentCount = visible.filter((r) => r.delta !== null && r.delta <= 0).length
 
     const load = useCallback(async () => {
@@ -313,6 +321,20 @@ export function RemindersPanel({ onCountChange }: Props) {
                             ))
                         )}
                     </div>
+                    {!loading && displayed.length > 0 && (
+                        <div className="sticky bottom-0 bg-white border-t border-[#e5e7eb] px-3 py-2 flex items-center justify-between">
+                            <span className="text-[11px] text-[#45474c]">
+                                {displayed.length} {displayed.length === 1 ? 'reminder' : 'reminders'}
+                            </span>
+                            <Link
+                                href="/d/u/reminders"
+                                onClick={() => setOpen(false)}
+                                className="flex items-center gap-0.5 text-[11px] font-semibold text-[#069668] hover:text-[#065f46]"
+                            >
+                                View all <ArrowUpRight className="h-3 w-3" />
+                            </Link>
+                        </div>
+                    )}
                 </div>
             ) : null}
         </div>

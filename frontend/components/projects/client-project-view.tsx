@@ -88,6 +88,13 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
     }, [firmSlug])
 
     useEffect(() => {
+        if (!selectedClient?.slug || !selectedClient?.name) return
+        window.dispatchEvent(new CustomEvent('firma-page-context', {
+            detail: { type: 'client', name: selectedClient.name, slug: selectedClient.slug },
+        }))
+    }, [selectedClient?.slug, selectedClient?.name])
+
+    useEffect(() => {
         if (!selectedClient?.engagements?.length) {
             setMemberSummaries({})
             return

@@ -93,7 +93,14 @@ export async function POST(request: NextRequest) {
     documentId: bookmark.documentId,
     createdAt: new Date().toISOString(),
   }
-  const updated = [next, ...existing].slice(0, 200)
+  if (existing.length >= 50) {
+    return NextResponse.json(
+      { error: 'Bookmarks are capped at 50. Remove older or unused ones to add more.' },
+      { status: 409 }
+    )
+  }
+
+  const updated = [next, ...existing].slice(0, 50)
   await prisma.userPersonalization.update({ where: { userId: user.id }, data: { bookmarks: updated as any } })
 
   return NextResponse.json({ success: true, bookmark: next })

@@ -106,7 +106,7 @@ export function StandardCheckoutIntentBanner() {
         if (!defaultFirm) return null
         const slug = defaultFirm.slug
         const returnTo =
-            validateCheckoutReturnTo(pathname) ?? (slug ? `/d/f/${slug}` : '/d/profile')
+            validateCheckoutReturnTo(pathname) ?? (slug ? `/d/f/${slug}` : '/d/u/profile')
         const productId = resolveStandardProductId(intent?.interval ?? 'annual')
         if (!productId) {
             return buildBillingPageHref({ firmSlug: slug, pathname })

@@ -1,28 +1,29 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { useSidebar } from "@/lib/sidebar-context"
 import {
-  Settings,
   Users,
   ChevronDown,
   Briefcase,
-  Folder,
-  Share2,
   BarChart3,
+  Building2,
   Eye,
   Shield,
-  ClipboardList,
-  MessageCircle,
-  PenTool,
-  Lock,
-  Info,
   HelpCircle,
+  BookOpen,
   ArrowUpRight,
-  LayoutGrid,
+  Info,
+  LifeBuoy,
+  Bell,
+  Clock,
+  CheckCircle2,
+  History,
+  CornerDownRight,
+  Settings,
 } from "lucide-react"
 import { FirmSelector, type FirmOption } from "@/components/projects/firm-selector"
 import { getUserFirms } from "@/lib/actions/firms"
@@ -38,10 +39,13 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useViewAs, RBAC_PERSONAS } from "@/lib/view-as-context"
 import { useSidebarFirms } from "@/lib/sidebar-firms-context"
+import { getUserReminders, markReminderDone, type ReminderWithContext } from "@/lib/actions/user-reminders"
 
 interface AppSidebarProps {
   /** When "inline", sidebar fills its container (no fixed positioning). Used in 3-pane card layout. */
   variant?: 'fixed' | 'inline'
+  /** Passed from server layout after checking SYSTEM_ADMIN_EMAILS env var. */
+  isSystemAdmin?: boolean
 }
 
 /** Widen to `Set<string>` so `.has(unknown)` accepts normalized API/cookie values. */
@@ -73,7 +77,119 @@ function resolveViewAsSelectSlug(
   )
 }
 
-export function AppSidebar({ variant = 'fixed' }: AppSidebarProps = {}) {
+// --- Recents ---
+
+const MAX_RECENTS = 10
+const MAX_SIDEBAR_RECENTS = 3
+
+type RecentItem = {
+  type: 'client' | 'engagement'
+  name: string
+  slug: string
+  href: string
+  visitedAt: number
+}
+
+function toLabel(slug: string) {
+  return slug.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+const ENGAGEMENT_TABS = new Set(['files', 'shares', 'comments', 'members', 'analytics', 'sources', 'audit', 'settings', 'wiki'])
+
+function parseRecentFromPath(pathname: string, firmSlug: string): RecentItem | null {
+  const engMatch = pathname.match(/\/d\/f\/[^/]+\/c\/([^/]+)\/e\/([^/]+)(?:\/([^/]+))?/)
+  if (engMatch) {
+    const clientSlug = engMatch[1]
+    const engSlug = engMatch[2]
+    const tab = engMatch[3] && ENGAGEMENT_TABS.has(engMatch[3]) ? engMatch[3] : null
+    const base = `/d/f/${firmSlug}/c/${clientSlug}/e/${engSlug}`
+    return {
+      type: 'engagement',
+      name: toLabel(engSlug),
+      slug: engSlug,
+      href: tab ? `${base}/${tab}` : base,
+      visitedAt: Date.now(),
+    }
+  }
+  // Client detail pages only — not firm-level sub-routes like /insights, /audit, /connectors
+  const clientMatch = pathname.match(/\/d\/f\/[^/]+\/c\/([^/]+)(?:\/|$)/)
+  if (clientMatch) {
+    return {
+      type: 'client',
+      name: toLabel(clientMatch[1]),
+      slug: clientMatch[1],
+      href: `/d/f/${firmSlug}/c/${clientMatch[1]}`,
+      visitedAt: Date.now(),
+    }
+  }
+  return null
+}
+
+function useRecentNavItems(firmSlug: string | null, pathname: string): RecentItem[] {
+  const storageKey = firmSlug ? `fm_nav_recents_${firmSlug}` : null
+  const [recents, setRecents] = useState<RecentItem[]>([])
+
+  useEffect(() => {
+    if (!storageKey) return
+    try {
+      const raw = localStorage.getItem(storageKey)
+      if (raw) {
+        const parsed: any[] = JSON.parse(raw)
+        setRecents(parsed.map((item) => ({
+          ...item,
+          // backfill slug from href for items stored before slug field existed
+          slug: item.slug || item.href?.split('/').filter(Boolean).pop() || '',
+        })))
+      }
+    } catch { /* ignore */ }
+  }, [storageKey])
+
+  useEffect(() => {
+    if (!firmSlug || !storageKey) return
+    const item = parseRecentFromPath(pathname, firmSlug)
+    if (!item) return
+    setRecents((prev) => {
+      const deduped = prev.filter((r) => r.href !== item.href)
+      const updated = [item, ...deduped].slice(0, MAX_RECENTS)
+      try { localStorage.setItem(storageKey, JSON.stringify(updated)) } catch { /* ignore */ }
+      return updated
+    })
+  }, [pathname, firmSlug, storageKey])
+
+  // Patch stored names when a page broadcasts its real entity names
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { type: string; name?: string; slug: string } | undefined
+      if (!detail?.name || !detail?.slug || !storageKey) return
+      setRecents((prev) => {
+        const next = prev.map((item) =>
+          item.type === detail.type && item.slug === detail.slug && item.name !== detail.name
+            ? { ...item, name: detail.name! }
+            : item
+        )
+        const changed = next.some((item, i) => item.name !== prev[i].name)
+        if (changed) try { localStorage.setItem(storageKey, JSON.stringify(next)) } catch { /* ignore */ }
+        return changed ? next : prev
+      })
+    }
+    window.addEventListener('firma-page-context', handler)
+    return () => window.removeEventListener('firma-page-context', handler)
+  }, [storageKey])
+
+  return recents
+}
+
+// --- Reminder label color ---
+function reminderLabelColor(style: ReminderWithContext['labelStyle']): string {
+  switch (style) {
+    case 'amber': return '#C4572B'
+    case 'orange': return '#A33D1E'
+    case 'red':    return '#7A2414'
+    default:       return '#45474c'
+  }
+}
+
+export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSidebarProps = {}) {
   const { user, signOut } = useAuth()
   const { isCollapsed, toggleSidebar } = useSidebar()
   const { viewAsPersonaSlug, setViewAsPersonaSlug, effectivePermissions, isViewAsActive, personas } = useViewAs()
@@ -82,15 +198,13 @@ export function AppSidebar({ variant = 'fixed' }: AppSidebarProps = {}) {
   const initialFirms = useSidebarFirms()
   const [viewAsSelectOpen, setViewAsSelectOpen] = useState(false)
   const [role, setRole] = useState<string | null>(null)
-  // Initial loading should only be true if we don't have initialFirms and need to fetch them
   const [isLoading, setIsLoading] = useState(!initialFirms || initialFirms.length === 0)
-
 
   // Firm selector state
   const [firms, setFirms] = useState<FirmOption[]>(initialFirms as FirmOption[] || [])
   const [selectedFirmSlug, setSelectedFirmSlug] = useState<string>('')
 
-  // Permissions State
+  // Permissions state
   const [orgPermissions, setOrgPermissions] = useState<{
     canView: boolean
     canEdit: boolean
@@ -102,44 +216,29 @@ export function AppSidebar({ variant = 'fixed' }: AppSidebarProps = {}) {
     enableBetaFeatures?: boolean
   } | null>(null)
 
-  // View As: show dropdown based on persona (can use RBAC admin), not page location
   const [canUseViewAs, setCanUseViewAs] = useState(false)
 
-  // Projects Collapse State
-  const [isProjectsOpen, setIsProjectsOpen] = useState(true)
-  // Project tab visibility (Comments, Members, Shares, Insights, Settings) when in an engagement
-  const [projectTabPermissions, setProjectTabPermissions] = useState<{
-    canViewInternalTabs: boolean
-    canViewSettings: boolean
-    canViewAudit?: boolean
-  } | null>(null)
+  // Reminders state
+  const [isRemindersOpen, setIsRemindersOpen] = useState(false)
+  const [reminders, setReminders] = useState<ReminderWithContext[]>([])
+  const [remindersLoading, setRemindersLoading] = useState(false)
+
+  // Recents section collapse
+  const [isRecentsOpen, setIsRecentsOpen] = useState(true)
+  // Collapsed recents popover
+  const [recentsPopoverOpen, setRecentsPopoverOpen] = useState(false)
 
   const [billingPlanState, setBillingPlanState] = useState<BillingCurrentPlanState | null>(null)
   const [billingPlanLoading, setBillingPlanLoading] = useState(false)
 
-  // Extract firm slug (from /d/f/[slug])
+  // Extract firm slug from URL
   const getSlug = () => {
     const match = pathname.match(/\/(?:d\/)?f\/([^\/]+)/)
     return match ? match[1] : null
   }
   const slug = getSlug()
 
-  // Extract client slug from URL
-  const getClientSlug = () => {
-    const match = pathname.match(/\/c\/([^\/]+)/)
-    return match ? match[1] : null
-  }
-  const clientSlug = getClientSlug()
-
-  // Extract engagement/project slug
-  const getProjectSlug = () => {
-    const match = pathname.match(/\/(?:e|p)\/([^\/]+)/)
-    return match ? match[1] : null
-  }
-  const projectSlug = getProjectSlug()
-
   const baseUrl = slug ? `/d/f/${slug}` : '/d'
-  /** Firm-scoped routes (connectors, insights) only exist under /d/f/[slug]/… — not under bare /d/… */
   const firmScopedNavBase =
     slug != null
       ? `/d/f/${slug}`
@@ -151,18 +250,39 @@ export function AppSidebar({ variant = 'fixed' }: AppSidebarProps = {}) {
           return s ? `/d/f/${s}` : '/d'
         })()
 
-  // Fetch Data (Firms — always fetch fresh so dropdown has complete list for switching)
+  const recents = useRecentNavItems(slug || selectedFirmSlug || null, pathname)
+
+  // Load reminders on mount and when event fires
+  const loadReminders = useCallback(async () => {
+    setRemindersLoading(true)
+    try { setReminders(await getUserReminders()) }
+    finally { setRemindersLoading(false) }
+  }, [])
+
+  useEffect(() => { loadReminders() }, [loadReminders])
+  useEffect(() => {
+    const h = () => loadReminders()
+    window.addEventListener('firma-reminders-updated', h)
+    return () => window.removeEventListener('firma-reminders-updated', h)
+  }, [loadReminders])
+
+  async function handleReminderDone(id: string) {
+    try {
+      await markReminderDone(id)
+      window.dispatchEvent(new Event('firma-reminders-updated'))
+    } catch { /* ignore */ }
+  }
+
+  const visibleReminders = reminders.filter((r) => r.hiddenAt === null)
+  const remindersUrgentCount = visibleReminders.filter((r) => r.delta !== null && r.delta <= 0).length
+
+  // Fetch firms + permissions
   const fetchData = async () => {
     const hasCachedData = firms.length > 0 && (slug ? firms.some(o => o.slug === slug) : true)
-    if (!hasCachedData) {
-      setIsLoading(true)
-    }
-
+    if (!hasCachedData) setIsLoading(true)
     try {
-      // Always fetch fresh firm list so Custom/Sandbox/Import firms all appear in dropdown after switching
       const orgs = await getUserFirms()
       setFirms(orgs)
-
       if (slug) {
         setSelectedFirmSlug(slug)
         const currentOrg = orgs.find(o => o.slug === slug)
@@ -176,16 +296,13 @@ export function AppSidebar({ variant = 'fixed' }: AppSidebarProps = {}) {
             try {
               const permData = await permResponse.json()
               setOrgPermissions(permData)
-            } catch (error) {
-              console.error("Failed to fetch firm permissions", error)
-            }
+            } catch { /* ignore */ }
           }
         }
       } else if (orgs.length > 0) {
         const defaultOrg = orgs.find(org => org.isDefault) || orgs[0]
         const selectedSlug = defaultOrg?.slug || orgs[0].slug
         setSelectedFirmSlug(selectedSlug)
-        // Fetch permissions for default firm on /d so Settings, View As, Add Client etc. show correctly
         if (defaultOrg) {
           const [roleData, permResponse] = await Promise.all([
             getFirmRole(defaultOrg.slug),
@@ -196,70 +313,30 @@ export function AppSidebar({ variant = 'fixed' }: AppSidebarProps = {}) {
             try {
               const permData = await permResponse.json()
               setOrgPermissions(permData)
-            } catch (error) {
-              console.error("Failed to fetch firm permissions", error)
-            }
+            } catch { /* ignore */ }
           }
         }
       }
-    } catch (error) {
-      console.error("Failed to fetch sidebar data", error)
-    } finally {
-      setIsLoading(false)
-    }
+    } catch { /* ignore */ }
+    finally { setIsLoading(false) }
   }
 
   useEffect(() => {
     fetchData()
-
     const handleRefresh = () => fetchData()
     window.addEventListener('pockett:refresh-firms', handleRefresh)
-
-    return () => {
-      window.removeEventListener('pockett:refresh-firms', handleRefresh)
-    }
+    return () => window.removeEventListener('pockett:refresh-firms', handleRefresh)
   }, [slug])
 
-  // Fetch project tab permissions when in project context (for sidebar sub-menu visibility)
-  useEffect(() => {
-    if (!slug || !clientSlug || !projectSlug) {
-      setProjectTabPermissions(null)
-      return
-    }
-    const url = `/api/permissions/project-tabs?orgSlug=${encodeURIComponent(slug)}&clientSlug=${encodeURIComponent(clientSlug)}&projectSlug=${encodeURIComponent(projectSlug)}`
-    fetch(url)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (
-          data &&
-          typeof data.canViewInternalTabs === 'boolean' &&
-          typeof data.canViewSettings === 'boolean'
-        ) {
-          setProjectTabPermissions({
-            canViewInternalTabs: data.canViewInternalTabs,
-            canViewSettings: data.canViewSettings,
-            canViewAudit: typeof data.canViewAudit === 'boolean' ? data.canViewAudit : undefined,
-          })
-        } else {
-          setProjectTabPermissions(null)
-        }
-      })
-      .catch(() => setProjectTabPermissions(null))
-  }, [slug, clientSlug, projectSlug])
-
-  // Determine active firm from URL or default
   useEffect(() => {
     if (slug) {
       setSelectedFirmSlug(slug)
     } else if (firms.length > 0) {
-      // If no slug in URL, select the default firm (isDefault: true)
-      // or fallback to the first one if no default is set
       const defaultOrg = firms.find(org => org.isDefault)
       setSelectedFirmSlug(defaultOrg?.slug || firms[0].slug)
     }
   }, [pathname, slug, firms])
 
-  // Fetch "can use View As" (persona-based) so dropdown is shown on /d/ and legacy /o/ dashboard routes
   const isDashboardPath = pathname?.startsWith('/d') || pathname?.startsWith('/o/')
   useEffect(() => {
     if (!user || !isDashboardPath) {
@@ -272,34 +349,29 @@ export function AppSidebar({ variant = 'fixed' }: AppSidebarProps = {}) {
       .catch(() => setCanUseViewAs(false))
   }, [user, isDashboardPath])
 
-  // --- RBAC HELPER ---
-  // When "View As" is active, use effective permissions for nav visibility; otherwise use real firm permissions.
+  // Permissions — use effective (View As) when active, else real org permissions
   const effective = isViewAsActive ? effectivePermissions : null
   const canManageOrg = effective ? effective.canManage : (orgPermissions?.canManage ?? false)
   const canEditOrg = effective ? effective.canEdit : (orgPermissions?.canEdit ?? false)
   const canViewOrg = effective ? effective.canView : (orgPermissions?.canView ?? true)
-  // Keep left sub-menu aligned with middle-pane tabs even if project tab API lags/stales.
-  const canShowProjectInternalTabs = Boolean(projectTabPermissions?.canViewInternalTabs || canManageOrg || canEditOrg || canViewOrg)
-  const canShowProjectAuditTab = Boolean(projectTabPermissions?.canViewAudit || canManageOrg)
-  const canShowProjectSettingsTab = Boolean(projectTabPermissions?.canViewSettings || canManageOrg)
-  const enableBetaFeatures = orgPermissions?.enableBetaFeatures === true
-
-
-  // View As dropdown: show when user has RBAC admin (real role), regardless of currently assumed persona
+  const canShowInsights = canManageOrg || canEditOrg || canViewOrg
   const canShowViewAsDropdown = canUseViewAs
 
-  // Rules - use permission checks when available, fallback to role checks
-  const showDashboard = true
-  const showResources = true
-  const isSystemAdmin = (user?.app_metadata?.role as string) === 'SYS_ADMIN'
-  const showSystemSection = isSystemAdmin
+  // Active state helpers
+  const isInsightsActive = pathname.includes('/insights')
+  const isSettingsActive = pathname.includes('/connectors')
+  const isSupportActive = pathname.startsWith('/d/support')
+  const isRemindersPageActive = pathname.startsWith('/d/u/reminders')
+  const isClientsActive =
+    Boolean(slug) &&
+    !isInsightsActive &&
+    !isSupportActive &&
+    !isRemindersPageActive &&
+    !pathname.startsWith('/d/u/') &&
+    (pathname === baseUrl || (pathname.startsWith(`${baseUrl}/c`) && !pathname.includes('/e/')))
 
   const billingFirmSlug =
-    slug ||
-    selectedFirmSlug ||
-    firms.find((o) => o.isDefault)?.slug ||
-    firms[0]?.slug ||
-    null
+    slug || selectedFirmSlug || firms.find((o) => o.isDefault)?.slug || firms[0]?.slug || null
 
   const billingFirmId = useMemo(() => {
     if (!billingFirmSlug) return null
@@ -320,21 +392,9 @@ export function AppSidebar({ variant = 'fixed' }: AppSidebarProps = {}) {
     let cancelled = false
     setBillingPlanLoading(true)
     fetchBillingCurrentPlan(billingFirmId)
-      .then((s) => {
-        if (!cancelled) {
-          setBillingPlanState(s)
-          setBillingPlanLoading(false)
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setBillingPlanState(null)
-          setBillingPlanLoading(false)
-        }
-      })
-    return () => {
-      cancelled = true
-    }
+      .then((s) => { if (!cancelled) { setBillingPlanState(s); setBillingPlanLoading(false) } })
+      .catch(() => { if (!cancelled) { setBillingPlanState(null); setBillingPlanLoading(false) } })
+    return () => { cancelled = true }
   }, [billingFirmId])
 
   useEffect(() => {
@@ -356,7 +416,6 @@ export function AppSidebar({ variant = 'fixed' }: AppSidebarProps = {}) {
     return planNameForSummary(billingPlanState)
   }, [billingPlanState, billingSandboxOnly])
 
-  // One spacing rule: compact for laptop view (avoid vertical scroll). Title-to-content within each section.
   const spaceTitle = 'mb-2'
   const SeparatorLine = () => <div className="-mx-3 border-b border-[#e5e7eb] my-4" aria-hidden />
 
@@ -364,6 +423,17 @@ export function AppSidebar({ variant = 'fixed' }: AppSidebarProps = {}) {
   const outerClass = isInline
     ? 'h-full w-full flex flex-col bg-white overflow-visible'
     : `fixed inset-y-0 left-0 z-40 bg-white border-r border-[#e5e7eb] transition-all duration-300 pt-16 overflow-visible ${isCollapsed ? 'w-16' : 'w-64'}`
+
+  // Shared nav link + icon class helpers
+  const navLinkClass = (active: boolean) =>
+    `flex items-center d-sidebar-nav rounded-r transition-colors py-2 ${
+      active
+        ? 'bg-[#ecfdf5] border-l-2 border-[#069668] text-[#065f46] font-semibold'
+        : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'
+    } ${isCollapsed ? 'px-0 justify-center' : 'px-3'}`
+
+  const navIconClass = (active: boolean) =>
+    `h-4 w-4 shrink-0 ${isCollapsed ? 'mx-auto' : 'mr-3'} ${active ? 'text-[#069668]' : 'text-[#45474c]'}`
 
   return (
     <div className={outerClass}>
@@ -388,341 +458,462 @@ export function AppSidebar({ variant = 'fixed' }: AppSidebarProps = {}) {
           )}
         </div>
       ) : (
-      <>
-      {/* Sidebar Content */}
-      <div className="flex flex-col h-full">
-        {/* Workspace Selector at the very top (prominent) */}
-        {!isCollapsed && (slug || firms.length > 0) && (
-          <div className="shrink-0 border-b border-[#e5e7eb] bg-white px-3 pt-3 pb-0">
-            <FirmSelector
-              firms={firms}
-              selectedFirmSlug={selectedFirmSlug}
-              onFirmChange={(firmSlug) => {
-                setSelectedFirmSlug(firmSlug)
-                router.push(`/d/f/${firmSlug}`)
-              }}
-            />
-          </div>
-        )}
-
-        <button
-          type="button"
-          onClick={toggleSidebar}
-          className="absolute right-0 top-4 translate-x-1/2 z-[500] w-8 h-8 rounded-full bg-white text-[#45474c] hover:bg-[#f3f4f6] flex items-center justify-center shadow-sm border border-[#e5e7eb] cursor-pointer"
-          aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        >
-          {isCollapsed ? (
-            /* menu / hamburger — sidebar is closed, click to open */
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-              <path d="M3 18h18v-2H3zm0-5h18v-2H3zm0-7v2h18V6z"/>
-            </svg>
-          ) : (
-            /* menu_open — sidebar is open, click to close */
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-              <path d="M3 18h13v-2H3zm0-5h10v-2H3zm0-7v2h13V6zm18 9.59L17.42 12 21 8.41 19.59 7l-5 5 5 5z"/>
-            </svg>
-          )}
-        </button>
-        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-          {/* Scrollable: view as, nav — space-y-6 between sections */}
-          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden custom-scrollbar px-3 space-y-4 pt-3 pb-3">
-            <div className="space-y-4">
-
-              {canShowViewAsDropdown && !isCollapsed && (
-                <>
-                  <div className="pt-1">
-                    <label className={`d-section ${spaceTitle} block px-1`}>View as</label>
-                    <Select
-                      value={resolveViewAsSelectSlug(
-                        viewAsPersonaSlug,
-                        (user?.app_metadata as any)?.active_persona,
-                        role,
-                      )}
-                      onValueChange={(newSlug) => {
-                        const naturalSlug = resolveViewAsSelectSlug(
-                          null,
-                          (user?.app_metadata as any)?.active_persona,
-                          role,
-                        )
-                        setViewAsPersonaSlug(newSlug === naturalSlug ? null : newSlug)
-                        window.location.reload()
-                      }}
-                      open={viewAsSelectOpen}
-                      onOpenChange={setViewAsSelectOpen}
-                    >
-                      <SelectTrigger
-                        className={`flex h-9 w-full items-center gap-2 rounded-[2px] border border-[#e5e7eb] bg-white px-3 text-[0.8125rem] text-[#1b1b1d] shadow-none transition-colors hover:bg-[#f3f4f6] focus:ring-1 focus:ring-[#069668] [&>svg]:ml-0 [&>svg:last-child]:transition-transform [&>svg:last-child]:duration-200 ${viewAsSelectOpen ? '[&>svg:last-child]:rotate-180' : ''}`}
-                      >
-                        <Eye className="h-4 w-4 shrink-0 text-[#45474c]" />
-                        <SelectValue placeholder="View as..." />
-                      </SelectTrigger>
-                      <SelectContent
-                        className="rounded-[2px] border border-[#e5e7eb] bg-white shadow-md py-1 min-w-[var(--radix-select-trigger-width)] max-h-[var(--radix-select-content-available-height)]"
-                        data-view-as-select
-                      >
-                        {personas.map((p) => (
-                          <SelectItem
-                            key={p.slug}
-                            value={p.slug}
-                            className="cursor-pointer rounded py-2 px-3 text-[0.8125rem] text-[#45474c] outline-none focus:bg-transparent data-[state=checked]:text-[#069668] data-[state=checked]:font-medium data-[highlighted]:bg-transparent"
-                            endAdornment={p.description ? (
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Info className="h-3.5 w-3.5 text-[#9ca3af] hover:text-[#45474c]" aria-hidden />
-                                </TooltipTrigger>
-                                <TooltipContent side="right" className="max-w-[220px] text-xs leading-snug">
-                                  {p.description}
-                                </TooltipContent>
-                              </Tooltip>
-                            ) : undefined}
-                          >
-                            {p.displayName}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <SeparatorLine />
-                </>
+        <>
+          <div className="flex flex-col h-full">
+            {/* Collapse toggle */}
+            <button
+              type="button"
+              onClick={toggleSidebar}
+              className="absolute right-0 top-4 translate-x-1/2 z-[500] w-8 h-8 rounded-full bg-white text-[#45474c] hover:bg-[#f3f4f6] flex items-center justify-center shadow-sm border border-[#e5e7eb] cursor-pointer"
+              aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              {isCollapsed ? (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                  <path d="M3 18h18v-2H3zm0-5h18v-2H3zm0-7v2h18V6z"/>
+                </svg>
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                  <path d="M3 18h13v-2H3zm0-5h10v-2H3zm0-7v2h13V6zm18 9.59L17.42 12 21 8.41 19.59 7l-5 5 5 5z"/>
+                </svg>
               )}
+            </button>
 
-            </div>
+            <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+              <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden custom-scrollbar px-3 space-y-4 pt-3 pb-3">
+                <nav className="space-y-1">
 
-            <nav className="space-y-1">
-
-              {/* DASHBOARD */}
-              {showDashboard && (
-                <>
-                  <div className={isCollapsed ? 'w-full' : ''}>
-
-                    <div className="flex flex-col gap-0.5">
-                      <div className="flex items-center gap-0.5">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Link
-                              href={clientSlug ? `${baseUrl}/c/${clientSlug}` : baseUrl}
-                              className={`flex-1 flex items-center d-sidebar-nav rounded-r transition-colors ${isCollapsed ? 'px-0 justify-center' : 'px-3'} py-2 ${(pathname.includes('/c/') || pathname.endsWith('/c')) && !projectSlug
-                                ? 'bg-[#ecfdf5] border-l-2 border-[#069668] text-[#065f46] font-semibold'
-                                : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'
-                                }`}
-                            >
-                              <Briefcase className={`h-4 w-4 ${isCollapsed ? 'mx-auto' : 'mr-3'} ${(pathname.includes('/c/') || pathname.endsWith('/c')) && !projectSlug ? 'text-[#069668]' : 'text-[#45474c]'}`} />
-                              {!isCollapsed && <span>Engagements</span>}
-                            </Link>
-                          </TooltipTrigger>
-                          {isCollapsed && <TooltipContent side="right">Engagements</TooltipContent>}
-                        </Tooltip>
-
-                        {!isCollapsed && projectSlug && (
-                          <button
-                            onClick={() => setIsProjectsOpen(!isProjectsOpen)}
-                            className="p-1.5 hover:bg-[#f0edee] rounded text-[#45474c] hover:text-[#1b1b1d] transition-colors"
-                          >
-                            <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${isProjectsOpen ? 'rotate-180' : ''}`} />
-                          </button>
+                  {/* FIRM SWITCHER — compact when expanded, icon when collapsed */}
+                  {!isCollapsed && (slug || firms.length > 0) && (
+                    <>
+                      <FirmSelector
+                        firms={firms}
+                        selectedFirmSlug={selectedFirmSlug}
+                        onFirmChange={(firmSlug) => {
+                          setSelectedFirmSlug(firmSlug)
+                          router.push(`/d/f/${firmSlug}`)
+                        }}
+                        compact
+                      />
+                      {/* Tree sub-items: Clients + Analytics + Settings */}
+                      <div className="ml-1 space-y-0.5">
+                        <Link href={baseUrl} className={`flex items-center rounded-r transition-colors pl-2 pr-2 py-1.5 text-[0.8125rem] ${isClientsActive ? 'bg-[#ecfdf5] text-[#065f46] font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}>
+                          <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-1.5" />
+                          <Users className={`h-3.5 w-3.5 mr-2 shrink-0 ${isClientsActive ? 'text-[#069668]' : 'text-[#45474c]'}`} />
+                          <span>Clients</span>
+                        </Link>
+                        {canShowInsights && (
+                          <Link href={`${firmScopedNavBase}/insights`} className={`flex items-center rounded-r transition-colors pl-2 pr-2 py-1.5 text-[0.8125rem] ${isInsightsActive ? 'bg-[#ecfdf5] text-[#065f46] font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}>
+                            <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-1.5" />
+                            <BarChart3 className={`h-3.5 w-3.5 mr-2 shrink-0 ${isInsightsActive ? 'text-[#069668]' : 'text-[#45474c]'}`} />
+                            <span>Analytics</span>
+                          </Link>
+                        )}
+                        {canManageOrg && (
+                          <Link href={`${firmScopedNavBase}/connectors`} className={`flex items-center rounded-r transition-colors pl-2 pr-2 py-1.5 text-[0.8125rem] ${isSettingsActive ? 'bg-[#ecfdf5] text-[#065f46] font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}>
+                            <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-1.5" />
+                            <Settings className={`h-3.5 w-3.5 mr-2 shrink-0 ${isSettingsActive ? 'text-[#069668]' : 'text-[#45474c]'}`} />
+                            <span>Settings</span>
+                          </Link>
                         )}
                       </div>
+                    </>
+                  )}
 
-                      {/* Project sub-menus - tree-like hierarchy with connector line */}
-                      {!isCollapsed && projectSlug && isProjectsOpen && (
-                        <div className="flex flex-col gap-0.5 mt-0.5 mb-2 pl-4 ml-3 animate-in slide-in-from-top-1 fade-in duration-200">
-                          {canShowProjectInternalTabs && (
-                            <Link
-                              href={`${baseUrl}/c/${clientSlug}/e/${projectSlug}/analytics`}
-                              className={`group flex items-center d-sidebar-nav d-tree-link rounded-r py-1.5 px-2.5 transition-colors ${pathname.includes('/analytics')
-                                ? 'bg-[#ecfdf5] border-l-2 border-[#069668] text-[#065f46] font-semibold'
-                                : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}
-                            >
-                              <BarChart3 className={`h-3.5 w-3.5 mr-2.5 ${pathname.includes('/analytics') ? 'text-[#069668]' : 'text-[#45474c]'}`} />
-                              Analytics
-                              <span title="Internal only" className="ml-auto shrink-0"><Lock className="w-2.5 h-2.5 text-[#d1d5db] group-hover:text-[#45474c] transition-colors" /></span>
-                            </Link>
-                          )}
-
-                          <Link
-                            href={`${baseUrl}/c/${clientSlug}/e/${projectSlug}/files`}
-                            className={`flex items-center d-sidebar-nav d-tree-link rounded-r py-1.5 px-2.5 transition-colors ${pathname.includes(projectSlug) && (pathname.endsWith('/files') || pathname.match(/\/(?:e|p)\/[^/]+\/files(\/|$)/))
-                              ? 'bg-[#ecfdf5] border-l-2 border-[#069668] text-[#065f46] font-semibold'
-                              : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}
-                          >
-                            <Folder className={`h-3.5 w-3.5 mr-2.5 ${pathname.includes(projectSlug) && (pathname.endsWith('/files') || pathname.match(/\/(?:e|p)\/[^/]+\/files(\/|$)/)) ? 'text-[#069668]' : 'text-[#45474c]'}`} />
-                            Files
+                  {/* Collapsed: firm icon + clients + analytics icons */}
+                  {isCollapsed && (
+                    <>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Link href={firmScopedNavBase} className={navLinkClass(false)}>
+                            <Building2 className={navIconClass(false)} />
                           </Link>
-                          <Link
-                            href={`${baseUrl}/c/${clientSlug}/e/${projectSlug}/shares`}
-                            className={`flex items-center d-sidebar-nav d-tree-link rounded-r py-1.5 px-2.5 transition-colors ${pathname.includes('/shares') && !pathname.includes('/shares/board')
-                              ? 'bg-[#ecfdf5] border-l-2 border-[#069668] text-[#065f46] font-semibold'
-                              : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}
-                          >
-                            <Share2 className={`h-3.5 w-3.5 mr-2.5 ${pathname.includes('/shares') && !pathname.includes('/shares/board') ? 'text-[#069668]' : 'text-[#45474c]'}`} />
-                            Shares
+                        </TooltipTrigger>
+                        <TooltipContent side="right">{firms.find(f => f.slug === selectedFirmSlug)?.name ?? 'Workspace'}</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Link href={baseUrl} className={navLinkClass(isClientsActive)}>
+                            <Users className={navIconClass(isClientsActive)} />
                           </Link>
-
-                          {canShowProjectInternalTabs && enableBetaFeatures && (
-                            <Link
-                              href={`${baseUrl}/c/${clientSlug}/e/${projectSlug}/board`}
-                              className={`group flex items-center d-sidebar-nav d-tree-link rounded-r py-1.5 px-2.5 transition-colors ${pathname.endsWith('/board')
-                                ? 'bg-[#ecfdf5] border-l-2 border-[#069668] text-[#065f46] font-semibold'
-                                : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}
-                            >
-                              <LayoutGrid className={`h-3.5 w-3.5 mr-2.5 ${pathname.endsWith('/board') ? 'text-[#069668]' : 'text-[#45474c]'}`} />
-                              Board
-                              <span className="ml-auto shrink-0 flex items-center gap-1">
-                                <span className="text-[9px] font-semibold uppercase tracking-wide px-1 py-0.5 rounded bg-amber-100 text-amber-700 leading-none">Beta</span>
-                                <Lock className="w-2.5 h-2.5 text-[#d1d5db] group-hover:text-[#45474c] transition-colors" />
-                              </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="right">Clients</TooltipContent>
+                      </Tooltip>
+                      {canShowInsights && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Link href={`${firmScopedNavBase}/insights`} className={navLinkClass(isInsightsActive)}>
+                              <BarChart3 className={navIconClass(isInsightsActive)} />
                             </Link>
-                          )}
+                          </TooltipTrigger>
+                          <TooltipContent side="right">Analytics</TooltipContent>
+                        </Tooltip>
+                      )}
+                      {canManageOrg && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Link href={`${firmScopedNavBase}/connectors`} className={navLinkClass(isSettingsActive)}>
+                              <Settings className={navIconClass(isSettingsActive)} />
+                            </Link>
+                          </TooltipTrigger>
+                          <TooltipContent side="right">Settings</TooltipContent>
+                        </Tooltip>
+                      )}
+                    </>
+                  )}
 
-                          <Link
-                            href={`${baseUrl}/c/${clientSlug}/e/${projectSlug}/comments`}
-                            className={`flex items-center d-sidebar-nav d-tree-link rounded-r py-1.5 px-2.5 transition-colors ${pathname.includes('/comments')
-                              ? 'bg-[#ecfdf5] border-l-2 border-[#069668] text-[#065f46] font-semibold'
-                              : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}
+                  {/* SUPPORT */}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Link
+                        href={slug ? `/d/support?firmSlug=${slug}` : '/d/support'}
+                        className={navLinkClass(isSupportActive)}
+                      >
+                        <LifeBuoy className={navIconClass(isSupportActive)} />
+                        {!isCollapsed && <span>Support</span>}
+                      </Link>
+                    </TooltipTrigger>
+                    {isCollapsed && <TooltipContent side="right">Support</TooltipContent>}
+                  </Tooltip>
+
+                  <SeparatorLine />
+
+                  {/* RECENTS — expanded: collapsible inline list; collapsed: hover popover (only when items exist) */}
+                  {!isCollapsed && (
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setIsRecentsOpen((v) => !v)}
+                        className={`d-sidebar-section flex items-center w-full px-3 ${spaceTitle} hover:opacity-80 transition-opacity`}
+                      >
+                        <History className="h-3 w-3 shrink-0 mr-1.5 text-[#45474c]" />
+                        <span className="flex-1 text-left">Recent</span>
+                        {recents.length > 0 && (
+                          <span
+                            className="mr-1.5 min-w-[14px] h-3.5 px-1 text-white text-[8px] font-bold rounded-full flex items-center justify-center leading-none"
+                            style={{ background: '#069668' }}
                           >
-                            <MessageCircle className={`h-3.5 w-3.5 mr-2.5 ${pathname.includes('/comments') ? 'text-[#069668]' : 'text-[#45474c]'}`} />
-                            Comments
-                          </Link>
-
-                          {canShowProjectInternalTabs && enableBetaFeatures && (
-                            <Link
-                              href={`${baseUrl}/c/${clientSlug}/e/${projectSlug}/wiki`}
-                              className={`group flex items-center d-sidebar-nav d-tree-link rounded-r py-1.5 px-2.5 transition-colors ${pathname.includes('/wiki')
-                                ? 'bg-[#ecfdf5] border-l-2 border-[#069668] text-[#065f46] font-semibold'
-                                : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}
-                            >
-                              <PenTool className={`h-3.5 w-3.5 mr-2.5 ${pathname.includes('/wiki') ? 'text-[#069668]' : 'text-[#45474c]'}`} />
-                              Dossier
-                              <span className="ml-auto shrink-0 flex items-center gap-1">
-                                <span className="text-[9px] font-semibold uppercase tracking-wide px-1 py-0.5 rounded bg-amber-100 text-amber-700 leading-none">Beta</span>
-                                <Lock className="w-2.5 h-2.5 text-[#d1d5db] group-hover:text-[#45474c] transition-colors" />
-                              </span>
-                            </Link>
+                            {recents.length}
+                          </span>
+                        )}
+                        <ChevronDown className={`h-3 w-3 text-[#9ca3af] transition-transform duration-200 ${isRecentsOpen ? 'rotate-180' : ''}`} />
+                      </button>
+                      {isRecentsOpen && (
+                        <div className="space-y-1.5">
+                          {recents.length === 0 ? (
+                            <p className="px-3 py-2.5 text-[0.75rem] text-[#9ca3af]">No recent pages yet</p>
+                          ) : (
+                            <>
+                              {recents.slice(0, MAX_SIDEBAR_RECENTS).map((item) => {
+                                const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+                                const iconLabel = item.type === 'client' ? 'Client' : 'Engagement'
+                                return (
+                                  <Link
+                                    key={item.href}
+                                    href={item.href}
+                                    className={`flex items-center rounded-r transition-colors pl-2 pr-3 py-2.5 ${
+                                      isActive
+                                        ? 'bg-[#ecfdf5] text-[#065f46] font-semibold'
+                                        : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'
+                                    }`}
+                                  >
+                                    <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-1.5" />
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <span className="flex items-center gap-2 min-w-0 flex-1">
+                                          {item.type === 'client' ? (
+                                            <Users className={`h-3.5 w-3.5 shrink-0 ${isActive ? 'text-[#069668]' : 'text-[#45474c]'}`} />
+                                          ) : (
+                                            <Briefcase className={`h-3.5 w-3.5 shrink-0 ${isActive ? 'text-[#069668]' : 'text-[#45474c]'}`} />
+                                          )}
+                                          <span className="flex-1 min-w-0 text-[0.8125rem] truncate">{item.name}</span>
+                                        </span>
+                                      </TooltipTrigger>
+                                      <TooltipContent side="right">{iconLabel}: {item.name}</TooltipContent>
+                                    </Tooltip>
+                                  </Link>
+                                )
+                              })}
+                              {recents.length > MAX_SIDEBAR_RECENTS && (
+                                <Link
+                                  href="/d/u/recent"
+                                  className="block pl-7 py-1.5 text-[0.75rem] text-[#069668] hover:text-[#065f46] font-medium"
+                                >
+                                  View all ({recents.length}) →
+                                </Link>
+                              )}
+                            </>
                           )}
-
-                          {canShowProjectAuditTab && (
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {isCollapsed && recents.length > 0 && (
+                    <div
+                      className="relative"
+                      onMouseEnter={() => setRecentsPopoverOpen(true)}
+                      onMouseLeave={() => setRecentsPopoverOpen(false)}
+                    >
+                      <button
+                        type="button"
+                        className="flex items-center d-sidebar-nav rounded-r transition-colors px-0 justify-center py-2 w-full text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d]"
+                        aria-label="Recent pages"
+                      >
+                        <History className="h-4 w-4 mx-auto" />
+                      </button>
+                      {recentsPopoverOpen && (
+                        <div className="absolute left-full top-0 ml-2 w-56 bg-white border border-[#e5e7eb] rounded-[2px] shadow-md z-50 py-1.5">
+                          <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#9ca3af]">Recent</div>
+                          {recents.slice(0, MAX_SIDEBAR_RECENTS).map((item) => (
                             <Link
-                              href={`${baseUrl}/c/${clientSlug}/e/${projectSlug}/audit`}
-                              className={`group flex items-center d-sidebar-nav d-tree-link rounded-r py-1.5 px-2.5 transition-colors ${pathname.includes('/audit')
-                                ? 'bg-[#ecfdf5] border-l-2 border-[#069668] text-[#065f46] font-semibold'
-                                : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}
+                              key={item.href}
+                              href={item.href}
+                              title={item.name}
+                              className="flex items-center gap-2 px-3 py-2 hover:bg-[#f9f9fb] transition-colors"
                             >
-                              <ClipboardList className={`h-3.5 w-3.5 mr-2.5 ${pathname.includes('/audit') ? 'text-[#069668]' : 'text-[#45474c]'}`} />
-                              Audit
-                              <span title="Internal only" className="ml-auto shrink-0"><Lock className="w-2.5 h-2.5 text-[#d1d5db] group-hover:text-[#45474c] transition-colors" /></span>
+                              {item.type === 'client' ? (
+                                <Users className="h-3.5 w-3.5 shrink-0 text-[#45474c]" />
+                              ) : (
+                                <Briefcase className="h-3.5 w-3.5 shrink-0 text-[#45474c]" />
+                              )}
+                              <span className="flex-1 min-w-0 text-[0.8125rem] text-[#1b1b1d] font-medium truncate" title={item.name}>{item.name}</span>
                             </Link>
-                          )}
-
-                          {canShowProjectInternalTabs && (
+                          ))}
+                          {recents.length > MAX_SIDEBAR_RECENTS && (
                             <Link
-                              href={`${baseUrl}/c/${clientSlug}/e/${projectSlug}/members`}
-                              className={`group flex items-center d-sidebar-nav d-tree-link rounded-r py-1.5 px-2.5 transition-colors ${pathname.includes('/members')
-                                ? 'bg-[#ecfdf5] border-l-2 border-[#069668] text-[#065f46] font-semibold'
-                                : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}
+                              href="/d/u/recent"
+                              className="block px-3 py-1.5 text-[0.75rem] text-[#069668] hover:text-[#065f46] font-medium"
                             >
-                              <Users className={`h-3.5 w-3.5 mr-2.5 ${pathname.includes('/members') ? 'text-[#069668]' : 'text-[#45474c]'}`} />
-                              Members
-                              <span title="Internal only" className="ml-auto shrink-0"><Lock className="w-2.5 h-2.5 text-[#d1d5db] group-hover:text-[#45474c] transition-colors" /></span>
-                            </Link>
-                          )}
-
-                          {canShowProjectSettingsTab && (
-                            <Link
-                              href={`${baseUrl}/c/${clientSlug}/e/${projectSlug}/settings`}
-                              className={`group flex items-center d-sidebar-nav d-tree-link rounded-r py-1.5 px-2.5 transition-colors ${pathname.includes('/settings')
-                                ? 'bg-[#ecfdf5] border-l-2 border-[#069668] text-[#065f46] font-semibold'
-                                : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}
-                            >
-                              <Settings className={`h-3.5 w-3.5 mr-2.5 ${pathname.includes('/settings') ? 'text-[#069668]' : 'text-[#45474c]'}`} />
-                              Settings
-                              <span title="Internal only" className="ml-auto shrink-0"><Lock className="w-2.5 h-2.5 text-[#d1d5db] group-hover:text-[#45474c] transition-colors" /></span>
+                              View all ({recents.length}) →
                             </Link>
                           )}
                         </div>
                       )}
                     </div>
-                  </div>
-                  {!isCollapsed && <SeparatorLine />}
-                </>
-              )}
+                  )}
 
-              {/* RESOURCES */}
-              {showResources && (
-                <>
-                  <div className={isCollapsed ? 'w-full flex items-center gap-0.5' : 'pt-2'}>
-                    {!isCollapsed && <h3 className={`d-sidebar-section px-3 ${spaceTitle}`}>Resources</h3>}
+                  {!isCollapsed && <SeparatorLine />}
+
+                  {/* REMINDERS — expanded: inline accordion; collapsed: icon navigates to /d/u/reminders */}
+                  {!isCollapsed ? (
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setIsRemindersOpen((v) => !v)}
+                        className={`d-sidebar-section w-full flex items-center px-3 ${spaceTitle} hover:opacity-80 transition-opacity`}
+                      >
+                        <Bell
+                          className="h-3 w-3 mr-1.5 shrink-0"
+                          style={{ color: remindersUrgentCount > 0 ? '#C4572B' : undefined }}
+                        />
+                        <span className="flex-1 text-left">Reminders</span>
+                        {visibleReminders.length > 0 && (
+                          <span
+                            className="mr-1.5 min-w-[14px] h-3.5 px-1 text-white text-[8px] font-bold rounded-full flex items-center justify-center leading-none"
+                            style={{ background: '#C4572B' }}
+                          >
+                            {visibleReminders.length}
+                          </span>
+                        )}
+                        <ChevronDown className={`h-3 w-3 shrink-0 text-[#9ca3af] transition-transform duration-200 ${isRemindersOpen ? 'rotate-180' : ''}`} />
+                      </button>
+
+                      {isRemindersOpen && (
+                        <div className="ml-1 space-y-0.5 animate-in slide-in-from-top-1 fade-in duration-200">
+                          {remindersLoading ? (
+                            <div className="pl-3 py-2 text-[0.75rem] text-[#9ca3af]">Loading…</div>
+                          ) : visibleReminders.length === 0 ? (
+                            <div className="pl-3 py-2 text-[0.75rem] text-[#9ca3af]">No reminders</div>
+                          ) : (
+                            <>
+                              {visibleReminders.slice(0, 3).map((r) => (
+                                <div
+                                  key={r.id}
+                                  className="flex items-center gap-1 pl-2 pr-1 py-1.5 rounded-r hover:bg-[#f9f9fb] group"
+                                >
+                                  <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-0.5" />
+                                  <a href={r.ctaUrl ?? '#'} className="flex-1 min-w-0">
+                                    <div className="text-[0.75rem] font-medium text-[#1b1b1d] truncate">{r.entityName}</div>
+                                    <div className="flex items-center gap-1 mt-0.5">
+                                      <Clock
+                                        className="h-2.5 w-2.5 shrink-0"
+                                        style={{ color: reminderLabelColor(r.labelStyle) }}
+                                      />
+                                      <span
+                                        className="text-[10px] font-medium"
+                                        style={{ color: reminderLabelColor(r.labelStyle) }}
+                                      >
+                                        {r.label}
+                                      </span>
+                                    </div>
+                                  </a>
+                                  <button
+                                    type="button"
+                                    title="Mark done"
+                                    onClick={() => handleReminderDone(r.id)}
+                                    className="shrink-0 h-5 w-5 flex items-center justify-center rounded border border-[#e5e7eb] bg-white text-[#45474c]/40 hover:text-emerald-600 hover:border-emerald-300 transition-colors"
+                                  >
+                                    <CheckCircle2 className="h-3 w-3" />
+                                  </button>
+                                </div>
+                              ))}
+                              <Link
+                                href="/d/u/reminders"
+                                className="block pl-7 py-1.5 text-[0.75rem] text-[#069668] hover:text-[#065f46] font-medium"
+                              >
+                                {visibleReminders.length > 3
+                                  ? `View all (${visibleReminders.length}) →`
+                                  : 'View all →'}
+                              </Link>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Link
-                          href="/resources/faq"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className={`flex items-center d-sidebar-nav rounded-r transition-colors ${isCollapsed ? 'flex-1 px-0 justify-center' : 'px-3'} py-2 ${pathname?.startsWith('/resources/faq') ? 'bg-[#ecfdf5] border-l-2 border-[#069668] text-[#065f46] font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}
+                          href="/d/u/reminders"
+                          className="relative flex items-center d-sidebar-nav rounded-r transition-colors px-0 justify-center py-2 text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d]"
                         >
-                          <HelpCircle className={`h-4 w-4 shrink-0 ${isCollapsed ? 'mx-auto' : 'mr-3'} ${pathname?.startsWith('/resources/faq') ? 'text-[#069668]' : 'text-[#45474c]'}`} />
-                          {!isCollapsed && (
-                            <>
-                              <span className="flex-1">FAQs</span>
-                              <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-[#45474c]/50" />
-                            </>
+                          <Bell
+                            className="h-4 w-4 mx-auto"
+                            style={{ color: remindersUrgentCount > 0 ? '#C4572B' : undefined }}
+                          />
+                          {visibleReminders.length > 0 && (
+                            <span
+                              className="absolute top-0.5 right-1 min-w-[14px] h-3.5 px-0.5 text-white text-[9px] font-bold rounded-full flex items-center justify-center leading-none"
+                              style={{ background: '#C4572B' }}
+                            >
+                              {visibleReminders.length}
+                            </span>
                           )}
                         </Link>
                       </TooltipTrigger>
-                      {isCollapsed && <TooltipContent side="right">FAQs</TooltipContent>}
+                      <TooltipContent side="right">Reminders</TooltipContent>
                     </Tooltip>
-                  </div>
-                  {!isCollapsed && <SeparatorLine />}
-                </>
-              )}
+                  )}
 
+                  <SeparatorLine />
 
-              {/* SYSTEM - Administration (SYS_ADMIN only) */}
-              {showSystemSection && (
-                <>
+                  {/* RESOURCES */}
                   <div className={isCollapsed ? 'w-full flex items-center gap-0.5' : 'pt-2'}>
-                    {!isCollapsed && <h3 className={`d-sidebar-section px-3 ${spaceTitle}`}>System</h3>}
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Link
-                          href="/system"
-                          className={`flex items-center d-sidebar-nav rounded-r transition-colors ${isCollapsed ? 'flex-1 px-0 justify-center' : 'px-3'} py-2 ${pathname.startsWith('/system')
-                            ? 'bg-[#ecfdf5] border-l-2 border-[#069668] text-[#065f46] font-semibold'
-                            : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'
-                            }`}
-                        >
-                          <Shield className={`h-4 w-4 shrink-0 ${isCollapsed ? 'mx-auto' : 'mr-3'} ${pathname.startsWith('/system') ? 'text-[#069668]' : 'text-[#45474c]'}`} />
-                          {!isCollapsed && <span>Administration</span>}
-                        </Link>
-                      </TooltipTrigger>
-                      {isCollapsed && <TooltipContent side="right">Administration</TooltipContent>}
-                    </Tooltip>
+                    {!isCollapsed && (
+                      <>
+                        <h3 className={`d-sidebar-section flex items-center px-3 ${spaceTitle}`}>
+                          <BookOpen className="h-3 w-3 shrink-0 mr-1.5 text-[#45474c]" />
+                          Resources
+                        </h3>
+                        <div className="ml-1 space-y-0.5">
+                          <Link
+                            href="/resources/faq"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={`flex items-center rounded-r transition-colors pl-2 pr-2 py-1.5 text-[0.6875rem] ${pathname?.startsWith('/resources/faq') ? 'bg-[#ecfdf5] text-[#065f46] font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}
+                          >
+                            <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-1.5" />
+                            <HelpCircle className={`h-3.5 w-3.5 mr-2 shrink-0 ${pathname?.startsWith('/resources/faq') ? 'text-[#069668]' : 'text-[#45474c]'}`} />
+                            <span className="flex-1">FAQs</span>
+                            <ArrowUpRight className="h-3 w-3 shrink-0 text-[#45474c]/40" />
+                          </Link>
+                        </div>
+                      </>
+                    )}
+                    {isCollapsed && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Link
+                            href="/resources/faq"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={`flex-1 flex items-center d-sidebar-nav rounded-r transition-colors px-0 justify-center py-2 ${pathname?.startsWith('/resources/faq') ? 'text-[#069668]' : 'text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}
+                          >
+                            <HelpCircle className="h-4 w-4 mx-auto" />
+                          </Link>
+                        </TooltipTrigger>
+                        <TooltipContent side="right">FAQs</TooltipContent>
+                      </Tooltip>
+                    )}
                   </div>
+
                   {!isCollapsed && <SeparatorLine />}
-                </>
+
+
+                </nav>
+              </div>
+            </div>
+
+            {/* View As + Profile — pinned to bottom, visually grouped */}
+            <div className="border-t border-[#e5e7eb]/50">
+              {canShowViewAsDropdown && !isCollapsed && (
+                <div className="px-3 pt-2 pb-1 border-b border-[#e5e7eb]/50">
+                  <label className="text-[0.6875rem] font-semibold uppercase tracking-wide text-[#9ca3af] block px-1 mb-1.5">View as</label>
+                  <Select
+                    value={resolveViewAsSelectSlug(
+                      viewAsPersonaSlug,
+                      (user?.app_metadata as any)?.active_persona,
+                      role,
+                    )}
+                    onValueChange={(newSlug) => {
+                      const naturalSlug = resolveViewAsSelectSlug(
+                        null,
+                        (user?.app_metadata as any)?.active_persona,
+                        role,
+                      )
+                      setViewAsPersonaSlug(newSlug === naturalSlug ? null : newSlug)
+                      window.location.reload()
+                    }}
+                    open={viewAsSelectOpen}
+                    onOpenChange={setViewAsSelectOpen}
+                  >
+                    <SelectTrigger
+                      className={`flex h-9 w-full items-center gap-2 rounded-[2px] border border-[#e5e7eb] bg-white px-3 text-[0.8125rem] text-[#1b1b1d] shadow-none transition-colors hover:bg-[#f3f4f6] focus:ring-1 focus:ring-[#069668] [&>svg]:ml-0 [&>svg:last-child]:transition-transform [&>svg:last-child]:duration-200 ${viewAsSelectOpen ? '[&>svg:last-child]:rotate-180' : ''}`}
+                    >
+                      <Eye className="h-4 w-4 shrink-0 text-[#45474c]" />
+                      <SelectValue placeholder="View as..." />
+                    </SelectTrigger>
+                    <SelectContent
+                      className="rounded-[2px] border border-[#e5e7eb] bg-white shadow-md py-1 min-w-[var(--radix-select-trigger-width)] max-h-[var(--radix-select-content-available-height)]"
+                      data-view-as-select
+                    >
+                      {personas.map((p) => (
+                        <SelectItem
+                          key={p.slug}
+                          value={p.slug}
+                          className="cursor-pointer rounded py-2 px-3 text-[0.8125rem] text-[#45474c] outline-none focus:bg-transparent data-[state=checked]:text-[#069668] data-[state=checked]:font-medium data-[highlighted]:bg-transparent"
+                          endAdornment={p.description ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="h-3.5 w-3.5 text-[#9ca3af] hover:text-[#45474c]" aria-hidden />
+                              </TooltipTrigger>
+                              <TooltipContent side="right" className="max-w-[220px] text-xs leading-snug">
+                                {p.description}
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : undefined}
+                        >
+                          {p.displayName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               )}
-
-            </nav>
-
-
+              <ProfileSection
+                user={user}
+                signOut={signOut}
+                isCollapsed={isCollapsed}
+                showBillingLink={canManageOrg}
+                billingHref={buildBillingPageHref({ firmSlug: billingFirmSlug, pathname })}
+                connectorsHref={canManageOrg && firmScopedNavBase ? `${firmScopedNavBase}/connectors` : undefined}
+                isSystemAdmin={isSystemAdmin}
+                {...(firms.length > 0 && billingFirmId
+                  ? { planSubtitle: profilePlanSubtitle, planSubtitleLoading: billingPlanLoading }
+                  : {})}
+              />
+            </div>
           </div>
-        </div>
-        {/* Profile: fixed to bottom, with border-t separator */}
-        <div className="border-t border-[#e5e7eb]/50">
-          <ProfileSection
-            user={user}
-            signOut={signOut}
-            isCollapsed={isCollapsed}
-            showBillingLink={canManageOrg}
-            billingHref={buildBillingPageHref({ firmSlug: billingFirmSlug, pathname })}
-            connectorsHref={canManageOrg && firmScopedNavBase ? `${firmScopedNavBase}/connectors` : undefined}
-            supportHref={canManageOrg && slug ? `/d/support?firmSlug=${slug}` : undefined}
-            {...(firms.length > 0 && billingFirmId
-              ? { planSubtitle: profilePlanSubtitle, planSubtitleLoading: billingPlanLoading }
-              : {})}
-          />
-        </div>
-      </div>
-      </>
+        </>
       )}
     </div>
   )

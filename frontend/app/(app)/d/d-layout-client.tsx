@@ -27,7 +27,7 @@ import { Megaphone } from 'lucide-react'
 
 const TOP_BAR_HEIGHT = 64
 
-function AppLayoutContent({ children }: { children: React.ReactNode }) {
+function AppLayoutContent({ children, isSystemAdmin }: { children: React.ReactNode; isSystemAdmin?: boolean }) {
     const pathname = usePathname()
     const { isCollapsed } = useSidebar()
     const { content: rightPaneContent, title: rightPaneTitle, clearPane, headerActions: rightPaneHeaderActions, headerIcon, headerSubtitle, paneSize } = useRightPane()
@@ -107,7 +107,7 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
                         className="bg-white border-r border-[#e5e7eb] flex flex-col shrink-0 overflow-visible transition-all duration-300 relative z-20"
                         style={{ width: sidebarWidth }}
                     >
-                        {showOnboardingSidebar ? <OnboardingSidebar /> : <AppSidebar variant="inline" />}
+                        {showOnboardingSidebar ? <OnboardingSidebar /> : <AppSidebar variant="inline" isSystemAdmin={isSystemAdmin} />}
                     </div>
 
                     {/* ── Main content: pearl bg, architectural dot pattern ── */}
@@ -176,9 +176,11 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
 export function DLayoutClient({
     children,
     initialFirms,
+    isSystemAdmin,
 }: {
     children: React.ReactNode
     initialFirms: { id: string; name: string; slug: string; isDefault: boolean; createdAt: string }[]
+    isSystemAdmin?: boolean
 }) {
     return (
         <OnboardingProvider>
@@ -188,7 +190,7 @@ export function DLayoutClient({
                         <RightPaneProvider>
                             <DownloadProgressProvider>
                                 <TooltipProvider delayDuration={400}>
-                                    <AppLayoutContent>
+                                    <AppLayoutContent isSystemAdmin={isSystemAdmin}>
                                         {children}
                                     </AppLayoutContent>
                                     <DownloadProgressPanel />

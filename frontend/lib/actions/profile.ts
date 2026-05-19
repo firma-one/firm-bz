@@ -79,6 +79,6 @@ export async function updateProfileNames(
         }
     }
 
-    revalidatePath('/d/profile')
+    revalidatePath('/d/u/profile')
     return { ok: true }
 }

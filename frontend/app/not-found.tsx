@@ -1,7 +1,19 @@
+"use client"
+
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { KINETIC_COLORS } from '@/config/kinetic-institution'
 
+function resolveHomeHref(pathname: string | null): { href: string; label: string } {
+    if (pathname?.startsWith('/d')) return { href: '/d', label: 'Go to Dashboard' }
+    if (pathname?.startsWith('/resources')) return { href: '/resources', label: 'Go to Resources' }
+    return { href: '/', label: 'Back to Home' }
+}
+
 export default function RootNotFound() {
+    const pathname = usePathname()
+    const { href, label } = resolveHomeHref(pathname)
+
     return (
         <div
             className="relative min-h-screen overflow-hidden flex items-center justify-center [font-family:var(--font-kinetic-body),system-ui,sans-serif]"
@@ -36,14 +48,14 @@ export default function RootNotFound() {
                 </p>
 
                 <Link
-                    href="/"
+                    href={href}
                     className="inline-flex items-center justify-center gap-2 rounded-full px-6 py-2.5 text-sm font-medium transition-opacity hover:opacity-80"
                     style={{
                         backgroundColor: KINETIC_COLORS.onSurface,
                         color: KINETIC_COLORS.surface,
                     }}
                 >
-                    Back to Home
+                    {label}
                 </Link>
             </div>
         </div>

@@ -3,7 +3,7 @@
 import { useState, useRef, useLayoutEffect, useEffect } from "react"
 import { createPortal } from "react-dom"
 import Link from "next/link"
-import { LogOut, ChevronDown, ChevronUp, Building2, CreditCard, UserCircle, LifeBuoy, Plug } from "lucide-react"
+import { LogOut, ChevronDown, ChevronUp, Building2, CreditCard, UserCircle, LifeBuoy, Plug, MonitorCheck } from "lucide-react"
 import { ProfileBubble, ProfileBubblePopupContent } from "@/components/ui/profile-bubble-popup"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
@@ -33,6 +33,8 @@ interface ProfileSectionProps {
   connectorsHref?: string
   /** Link to the Support page (firm-scoped). When provided, shows a Support item in the menu. */
   supportHref?: string
+  /** When true, shows an Administration link to /system (SYS_ADMIN only). */
+  isSystemAdmin?: boolean
 }
 
 export function ProfileSection({
@@ -45,6 +47,7 @@ export function ProfileSection({
   planSubtitle,
   planSubtitleLoading = false,
   supportHref,
+  isSystemAdmin = false,
 }: ProfileSectionProps) {
   const [isProfileOpen, setIsProfileOpen] = useState(false)
   const profileRef = useRef<HTMLDivElement>(null)
@@ -199,7 +202,7 @@ export function ProfileSection({
               footer={
                 <div className="space-y-0.5">
                   <Link
-                    href="/d/profile"
+                    href="/d/u/profile"
                     onClick={() => setIsProfileOpen(false)}
                     className="d-sidebar-nav flex w-full items-center gap-2 rounded px-3 py-2 text-[#45474c] transition-colors hover:bg-[#f3f4f6] hover:text-[#1b1b1d]"
                   >
@@ -234,6 +237,16 @@ export function ProfileSection({
                     >
                       <LifeBuoy className="h-4 w-4 shrink-0" />
                       Support
+                    </Link>
+                  )}
+                  {isSystemAdmin && (
+                    <Link
+                      href="/system"
+                      onClick={() => setIsProfileOpen(false)}
+                      className="d-sidebar-nav flex w-full items-center gap-2 rounded px-3 py-2 text-[#45474c] transition-colors hover:bg-[#f3f4f6] hover:text-[#1b1b1d]"
+                    >
+                      <MonitorCheck className="h-4 w-4 shrink-0" />
+                      Sys Admin
                     </Link>
                   )}
                   <Link

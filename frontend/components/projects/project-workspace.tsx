@@ -135,6 +135,14 @@ export function ProjectWorkspace({
     const base = projectBase(orgSlug, clientSlug, projectSlug, useEngagement)
     const currentTab = pathSegments?.tab ?? 'files'
 
+    // Broadcast real names so the sidebar Recents hook can replace slug-derived labels
+    useEffect(() => {
+        if (!projectSlug) return
+        window.dispatchEvent(new CustomEvent('firma-page-context', {
+            detail: { type: 'engagement', name: projectName, slug: projectSlug, clientName, clientSlug },
+        }))
+    }, [projectSlug, projectName, clientName, clientSlug])
+
     // Deeplinks for docs/comments should always land in Files tab so the file list can
     // resolve and highlight the target item.
     useEffect(() => {

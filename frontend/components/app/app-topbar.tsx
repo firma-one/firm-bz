@@ -6,9 +6,11 @@ import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react
 import { usePathname } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { supabase } from "@/lib/supabase"
-import { Bell, Bookmark, ChevronDown, ChevronUp, Info, Megaphone, Search, Send, Trash2, X } from "lucide-react"
+import { Bell, Bookmark, ChevronDown, ChevronUp, Info, Megaphone, Search, Send, Trash2, X, ArrowUpRight } from "lucide-react"
+import Link from "next/link"
 import { Tip } from "@/components/ui/tip"
 import { RemindersPanel } from "@/components/app/reminders-panel"
+import { CommandPalette } from "@/components/app/command-palette"
 
 // Cache firm branding by slug (in-memory for session)
 const brandingCache = new Map<string, { branding: OrganizationBranding | null; firmId?: string }>()
@@ -79,8 +81,8 @@ export function AppTopbar() {
   const [bookmarks, setBookmarks] = useState<BookmarkItem[]>([])
   const [canBroadcast, setCanBroadcast] = useState(false)
 
-  const [visibleNotificationsCount, setVisibleNotificationsCount] = useState(10)
-  const [visibleBookmarksCount, setVisibleBookmarksCount] = useState(10)
+  const [visibleNotificationsCount] = useState(5)
+  const [visibleBookmarksCount] = useState(5)
   const [bookmarkQuery, setBookmarkQuery] = useState('')
 
   const [showBroadcastComposer, setShowBroadcastComposer] = useState(false)
@@ -356,20 +358,22 @@ export function AppTopbar() {
         />
       </div>
 
-      {/* Center: Prominent Search — flex-1, constrained max-width */}
+      {/* Center: Command palette trigger */}
       <div className="flex-1 flex justify-center px-12">
-        <div className="relative w-full max-w-2xl">
-          <span className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-[#45474c]/50">
-            <Search className="h-4 w-4" />
-          </span>
-          <input
-            className="w-full bg-[#f9f9fb] border border-[#e5e7eb] rounded-sm pl-9 pr-4 py-2 text-sm text-[#1b1b1d] placeholder:text-[#45474c]/60 focus:ring-1 focus:ring-[#069668] focus:border-[#069668] outline-none transition-all"
-            placeholder="Search clients, engagements, documents…"
-            type="text"
-            aria-label="Global search"
-          />
-        </div>
+        <button
+          type="button"
+          onClick={() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true, bubbles: true }))}
+          className="flex items-center gap-2.5 w-full max-w-sm bg-[#f9f9fb] border border-[#e5e7eb] rounded-sm px-3 py-2 text-sm text-[#45474c]/60 hover:border-[#069668]/40 hover:bg-white transition-colors group"
+          aria-label="Open command palette"
+        >
+          <Search className="h-4 w-4 shrink-0" />
+          <span className="flex-1 text-left">Go to…</span>
+          <kbd className="hidden sm:inline-flex items-center gap-0.5 rounded border border-[#e5e7eb] bg-white px-1.5 py-0.5 text-[10px] font-mono text-[#45474c]/50 group-hover:border-[#069668]/30">
+            ⌘K
+          </kbd>
+        </button>
       </div>
+      <CommandPalette />
 
       {/* Right: Utility actions — w-64, justify-end */}
       <div className="w-64 shrink-0 flex items-center justify-end gap-1 pr-4">
@@ -382,7 +386,6 @@ export function AppTopbar() {
             aria-label="Bookmarks"
             onClick={() => {
               setShowBookmarksDropdown((v) => !v)
-              setVisibleBookmarksCount(10)
               setBookmarkQuery('')
             }}
           >
@@ -412,7 +415,7 @@ export function AppTopbar() {
                 <div className="mt-2">
                   <input
                     value={bookmarkQuery}
-                    onChange={(e) => { setBookmarkQuery(e.target.value); setVisibleBookmarksCount(10) }}
+                    onChange={(e) => { setBookmarkQuery(e.target.value) }}
                     placeholder="Search bookmarks…"
                     className="w-full h-8 rounded-[2px] border border-[#e5e7eb] bg-white px-2.5 text-[0.8125rem] text-[#1b1b1d] placeholder:text-[#45474c] focus:outline-none focus:ring-1 focus:ring-[#069668] focus:border-[#069668]"
                   />
@@ -484,20 +487,16 @@ export function AppTopbar() {
                       ))}
                       <div className="sticky bottom-0 pt-2 bg-white">
                         <div className="flex items-center justify-between border-t border-[#e5e7eb] pt-2">
-                          <div className="text-[11px] text-[#45474c]">
-                            Showing {Math.min(visibleBookmarksCount, filtered.length)} of {filtered.length}
-                          </div>
-                          {visibleBookmarksCount < filtered.length ? (
-                            <button
-                              type="button"
-                              className="text-[11px] font-semibold text-[#1b1b1d] hover:text-[#069668]"
-                              onClick={() => setVisibleBookmarksCount((c) => c + 10)}
-                            >
-                              Show 10 more
-                            </button>
-                          ) : (
-                            <div className="text-[11px] text-[#45474c]">All shown</div>
-                          )}
+                          <span className="text-[11px] text-[#45474c]">
+                            {filtered.length} {filtered.length === 1 ? 'bookmark' : 'bookmarks'}
+                          </span>
+                          <Link
+                            href="/d/u/bookmarks"
+                            className="flex items-center gap-0.5 text-[11px] font-semibold text-[#069668] hover:text-[#065f46]"
+                            onClick={() => setShowBookmarksDropdown(false)}
+                          >
+                            View all <ArrowUpRight className="h-3 w-3" />
+                          </Link>
                         </div>
                       </div>
                     </>
@@ -814,20 +813,16 @@ export function AppTopbar() {
                 {notifications.length > 0 ? (
                   <div className="sticky bottom-0 pt-2 bg-white">
                     <div className="flex items-center justify-between border-t border-[#e5e7eb] pt-2">
-                      <div className="text-[11px] text-[#45474c]">
-                        Showing {Math.min(visibleNotificationsCount, notifications.length)} of {notifications.length}
-                      </div>
-                      {visibleNotificationsCount < notifications.length ? (
-                        <button
-                          type="button"
-                          className="text-[11px] font-semibold text-[#1b1b1d] hover:text-[#069668]"
-                          onClick={() => setVisibleNotificationsCount((c) => c + 10)}
-                        >
-                          Show 10 more
-                        </button>
-                      ) : (
-                        <div className="text-[11px] text-[#45474c]">All shown</div>
-                      )}
+                      <span className="text-[11px] text-[#45474c]">
+                        {notifications.length} {notifications.length === 1 ? 'notification' : 'notifications'}
+                      </span>
+                      <Link
+                        href="/d/u/notifications"
+                        className="flex items-center gap-0.5 text-[11px] font-semibold text-[#069668] hover:text-[#065f46]"
+                        onClick={() => setShowNotificationsDropdown(false)}
+                      >
+                        View all <ArrowUpRight className="h-3 w-3" />
+                      </Link>
                     </div>
                   </div>
                 ) : null}
