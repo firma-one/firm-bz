@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { AuthGuard } from '@/components/auth/auth-guard'
 import { AppSidebar } from '@/components/app/app-sidebar'
 import { AppTopbar } from '@/components/app/app-topbar'
-import { LayoutRightPanel, RIGHT_PANEL_DOCKED_WIDTH_PX } from '@/components/app/layout-right-panel'
+import { LayoutRightPanel, RIGHT_PANEL_DOCKED_WIDTH_PX, RIGHT_PANEL_MEDIUM_WIDTH_PX } from '@/components/app/layout-right-panel'
 import { SidebarProvider, useSidebar } from '@/lib/sidebar-context'
 import { ViewAsProvider } from '@/lib/view-as-context'
 import { RightPaneProvider, useRightPane } from '@/lib/right-pane-context'
@@ -30,7 +30,7 @@ const TOP_BAR_HEIGHT = 64
 function AppLayoutContent({ children }: { children: React.ReactNode }) {
     const pathname = usePathname()
     const { isCollapsed } = useSidebar()
-    const { content: rightPaneContent, title: rightPaneTitle, clearPane, headerActions: rightPaneHeaderActions, headerIcon, headerSubtitle } = useRightPane()
+    const { content: rightPaneContent, title: rightPaneTitle, clearPane, headerActions: rightPaneHeaderActions, headerIcon, headerSubtitle, paneSize } = useRightPane()
     const { session } = useAuth()
     const { addToast } = useToast()
     const accessToken = session?.access_token ?? null
@@ -148,8 +148,8 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
                     {/* ── Right pane: m-4 rounded-xl shadow-xl (matches code.html) ── */}
                     {rightPaneContent ? (
                         <div
-                            className="shrink-0 my-4 mr-4"
-                            style={{ width: RIGHT_PANEL_DOCKED_WIDTH_PX }}
+                            className="shrink-0 my-4 mr-4 transition-all duration-300"
+                            style={{ width: paneSize === 'medium' ? '50vw' : RIGHT_PANEL_DOCKED_WIDTH_PX }}
                         >
                             <LayoutRightPanel
                                 title={rightPaneTitle || 'Document'}

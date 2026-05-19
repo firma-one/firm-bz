@@ -32,11 +32,11 @@ export const PROJECT_GATES: GateConfig[] = [
     tabValue: 'shares',
   },
   {
-    id: 'project.insights',
-    label: 'Insights',
+    id: 'project.analytics',
+    label: 'Analytics',
     scope: 'project',
     requiredCapabilities: ['project:can_view_internal'],
-    tabValue: 'insights',
+    tabValue: 'analytics',
   },
   {
     id: 'project.sources',

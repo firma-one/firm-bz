@@ -567,13 +567,13 @@ export function AppSidebar({ variant = 'fixed' }: AppSidebarProps = {}) {
 
                           {canShowProjectInternalTabs && (
                             <Link
-                              href={`${baseUrl}/c/${clientSlug}/e/${projectSlug}/insights`}
-                              className={`group flex items-center d-sidebar-nav d-tree-link rounded-r py-1.5 px-2.5 transition-colors ${pathname.includes('/insights')
+                              href={`${baseUrl}/c/${clientSlug}/e/${projectSlug}/analytics`}
+                              className={`group flex items-center d-sidebar-nav d-tree-link rounded-r py-1.5 px-2.5 transition-colors ${pathname.includes('/analytics')
                                 ? 'bg-[#ecfdf5] border-l-2 border-[#069668] text-[#065f46] font-semibold'
                                 : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}
                             >
-                              <BarChart3 className={`h-3.5 w-3.5 mr-2.5 ${pathname.includes('/insights') ? 'text-[#069668]' : 'text-[#45474c]'}`} />
-                              Insights
+                              <BarChart3 className={`h-3.5 w-3.5 mr-2.5 ${pathname.includes('/analytics') ? 'text-[#069668]' : 'text-[#45474c]'}`} />
+                              Analytics
                               <span title="Internal only" className="ml-auto shrink-0"><Lock className="w-2.5 h-2.5 text-[#d1d5db] group-hover:text-[#45474c] transition-colors" /></span>
                             </Link>
                           )}

@@ -55,6 +55,7 @@ export async function GET(
         if (!fileInfo) {
             return NextResponse.json({ error: 'Document not found' }, { status: 404 })
         }
+        const engagementClientId = await prisma.engagement.findUnique({ where: { id: projectId }, select: { clientId: true } }).then((e) => e?.clientId ?? undefined)
 
         // 2. Permission check — user must belong to the organisation
         const membership = await prisma.firmMember.findFirst({
@@ -192,6 +193,7 @@ export async function GET(
         audit(AUDIT_EVENT.DOCUMENT_OPENED)
             .scope(AUDIT_SCOPE.DOCUMENT)
             .firm(fileInfo.organizationId)
+            .client(engagementClientId)
             .engagement(projectId)
             .actor(user.id)
             .meta({ externalId: fileInfo.externalId, mimeType: contentType })

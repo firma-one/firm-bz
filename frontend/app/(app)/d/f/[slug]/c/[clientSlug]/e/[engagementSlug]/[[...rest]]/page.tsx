@@ -15,7 +15,7 @@ import { ErrorBoundary } from "@/components/error-boundary"
 import type { ProjectPathSegments } from "@/components/projects/project-workspace"
 import { getAccessibleFileCountForPersona } from "@/lib/project-sharing-ids"
 
-const VALID_TABS = new Set(['files', 'shares', 'comments', 'members', 'insights', 'sources', 'audit', 'settings', 'wiki'])
+const VALID_TABS = new Set(['files', 'shares', 'comments', 'members', 'analytics', 'sources', 'audit', 'settings', 'wiki'])
 
 function parseRest(rest: string[] | undefined): ProjectPathSegments {
   const tab = rest?.[0] && VALID_TABS.has(rest[0]) ? rest[0] : 'files'
@@ -37,10 +37,6 @@ interface PageProps {
 export default async function EngagementPage({ params }: PageProps) {
   const { slug, clientSlug, engagementSlug, rest } = await params
   const pathSegments = parseRest(rest)
-
-  if (!rest || rest.length === 0) {
-    redirect(`/d/f/${slug}/c/${clientSlug}/e/${engagementSlug}/files`)
-  }
 
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -101,13 +97,18 @@ export default async function EngagementPage({ params }: PageProps) {
       : null
 
   const basePath = `/d/f/${slug}/c/${clientSlug}/e/${engagementSlug}`
+
+  if (!rest || rest.length === 0) {
+    redirect(`${basePath}/${canViewInternalTabs ? 'analytics' : 'files'}`)
+  }
+
   if (pathSegments.tab === 'settings' && !canViewSettings) {
     redirect(`${basePath}/files`)
   }
   if (pathSegments.tab === 'audit' && !canManage) {
     redirect(`${basePath}/files`)
   }
-  if (['members', 'insights', 'sources', 'wiki'].includes(pathSegments.tab) && !canViewInternalTabs) {
+  if (['members', 'analytics', 'sources', 'wiki'].includes(pathSegments.tab) && !canViewInternalTabs) {
     redirect(`${basePath}/files`)
   }
 

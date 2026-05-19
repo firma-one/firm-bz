@@ -248,7 +248,7 @@ export function ProjectSearchPanel({
       return (
         <div
           className={cn(
-            'w-full text-left px-3 py-2.5 rounded-xl transition-colors flex items-start gap-3 group border border-transparent',
+            'w-full text-left px-3 py-2.5 rounded transition-colors flex items-start gap-3 group border border-transparent',
             highlightedIndex === index
               ? 'bg-slate-50 shadow-sm border-slate-200'
               : 'hover:bg-slate-50 hover:shadow-sm hover:border-slate-200'
@@ -417,7 +417,7 @@ export function ProjectSearchPanel({
           <label htmlFor="project-search-panel-input" className="sr-only">
             Search engagement files
           </label>
-          <div className="flex rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden focus-within:ring-1 focus-within:ring-slate-300 focus-within:border-slate-300">
+          <div className="flex rounded border border-slate-200 bg-white shadow-sm overflow-hidden focus-within:ring-1 focus-within:ring-slate-300 focus-within:border-slate-300">
             {/* Left strip: chat icon with tooltip (click to toggle) */}
             <div className="flex flex-col justify-center py-2 pl-2.5 pr-1.5 border-r border-slate-100 bg-slate-50/80 shrink-0">
               <Tooltip open={openTooltipId === `chat-${projectId}`}>

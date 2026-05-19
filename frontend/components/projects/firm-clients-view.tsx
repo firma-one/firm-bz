@@ -38,7 +38,7 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
     const [canViewOrgSettings, setCanViewOrgSettings] = useState(false)
     const [canViewOrgAudit, setCanViewOrgAudit] = useState(false)
 
-    const tabParam = searchParams.get('tab') || 'clients'
+    const tabParam = searchParams.get('tab') || 'analytics'
     const currentTab =
         tabParam === 'settings' && canViewOrgSettings
             ? 'settings'
@@ -46,8 +46,8 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                 ? 'audit'
                 : tabParam === 'members' && canViewOrgAudit
                     ? 'members'
-                    : tabParam === 'insights' && canViewOrgAudit
-                        ? 'insights'
+                    : tabParam === 'analytics' && canViewOrgAudit
+                        ? 'analytics'
                         : 'clients'
 
     const handleTabChange = (value: string) => {
@@ -93,6 +93,16 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
             })
     }, [orgId, clients])
 
+    // When permissions finish loading and user can't view Analytics, correct the URL to avoid tab/URL mismatch
+    useEffect(() => {
+        const tab = searchParams.get('tab')
+        if (tab === 'analytics' && !canViewOrgAudit) {
+            const params = new URLSearchParams(searchParams.toString())
+            params.set('tab', 'clients')
+            router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+        }
+    }, [canViewOrgAudit])
+
     const handleViewModeChange = (mode: 'grid' | 'list') => {
         setViewMode(mode)
         localStorage.setItem('fm-client-view-mode', mode)
@@ -130,6 +140,16 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                 <div className="bg-white border border-[#e5e7eb] rounded mb-6 shrink-0">
                     <div className="flex items-center justify-between h-14 pr-4">
                         <TabsList className="h-full p-0 bg-transparent rounded-none inline-flex justify-start gap-0 border-0">
+                            {canViewOrgAudit && (
+                                <TabsTrigger
+                                    value="analytics"
+                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent transition-all shadow-none bg-transparent"
+                                >
+                                    <LayoutDashboard className="w-4 h-4 mr-2" />
+                                    Analytics
+                                    <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
+                                </TabsTrigger>
+                            )}
                             <TabsTrigger
                                 value="clients"
                                 className="h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent transition-all shadow-none bg-transparent"
@@ -170,16 +190,6 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                                             {auditCount}
                                         </span>
                                     )}
-                                </TabsTrigger>
-                            )}
-                            {canViewOrgAudit && (
-                                <TabsTrigger
-                                    value="insights"
-                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent transition-all shadow-none bg-transparent"
-                                >
-                                    <LayoutDashboard className="w-4 h-4 mr-2" />
-                                    Insights
-                                    <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
                                 </TabsTrigger>
                             )}
                             {canViewOrgSettings && (
@@ -276,7 +286,7 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                     )}
 
                     {canViewOrgAudit && (orgId ?? (clients[0]?.firmId ?? clients[0]?.firmId)) && (
-                        <TabsContent value="insights" className="m-0">
+                        <TabsContent value="analytics" className="m-0">
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 22rem', gap: '1.5rem', paddingTop: '0.5rem', paddingBottom: '1.5rem' }}>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', minWidth: 0 }}>
                                     <ErrorBoundary context="FirmInsightsTab">

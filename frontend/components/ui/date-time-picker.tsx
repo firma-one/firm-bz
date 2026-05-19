@@ -458,10 +458,10 @@ export function DateTimePicker({
         variant="outline"
         onClick={() => setIsOpen(!isOpen)}
         disabled={disabled}
-        className="w-full justify-start text-left font-normal text-xs"
+        className="w-full justify-start text-left font-normal !text-xs !h-auto !py-1.5 !px-2"
       >
         <Calendar className="mr-1.5 h-3 w-3 shrink-0" />
-        <span className="flex-1">{formatDisplayValue()}</span>
+        <span className="flex-1 whitespace-nowrap overflow-hidden text-ellipsis">{formatDisplayValue()}</span>
         {selectedDate && (
           <span
             title={getUtcOffsetLabel()}

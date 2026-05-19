@@ -42,6 +42,7 @@ import {
 } from '@/components/ui/tooltip'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import { DateTimePicker } from '@/components/ui/date-time-picker'
+import { UserAvatarWithTooltip } from '@/components/ui/user-avatar-with-tooltip'
 
 export type AuditWithFiltersMode = 'project' | 'org'
 
@@ -51,6 +52,7 @@ export type AuditEventRow = {
   eventAt: string
   actorUserId: string | null
   actorEmail: string | null
+  actorName?: string | null
   projectDocumentId: string | null
   metadata: Record<string, unknown>
   clientName?: string | null
@@ -58,7 +60,6 @@ export type AuditEventRow = {
 }
 
 type FilterOption = { id: string; name: string; clientId?: string }
-type EventTypeOption = { value: string; label: string }
 
 const EVENT_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: '', label: 'All types' },
@@ -97,28 +98,28 @@ const EVENT_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: 'ENGAGEMENT_MEMBER_REMOVED', label: 'Engagement member removed' },
   { value: 'ENGAGEMENT_MEMBER_ROLE_CHANGED', label: 'Engagement member role changed' },
   { value: 'ENGAGEMENT_FOLDER_ATTACHED', label: 'Engagement folder linked' },
-  // Document
+  // File
   { value: 'DOCUMENT_CREATED', label: 'File uploaded' },
   { value: 'DOCUMENT_CHANGED', label: 'File updated' },
-  { value: 'DOCUMENT_DELETED', label: 'File removed' },
+  { value: 'DOCUMENT_DELETED', label: 'File deleted' },
   { value: 'DOCUMENT_MOVED', label: 'File moved' },
-  { value: 'DOCUMENT_VERSIONED', label: 'New version uploaded' },
-  { value: 'DOCUMENT_OPENED', label: 'Document opened' },
-  { value: 'DOCUMENT_DOWNLOADED', label: 'Document downloaded' },
-  { value: 'DOCUMENT_INDEXED', label: 'Document indexed' },
-  { value: 'DOCUMENT_FINALIZED', label: 'Document finalized' },
-  { value: 'DOCUMENT_UNLOCKED', label: 'Document unlocked' },
-  { value: 'DOCUMENT_STATUS_CHANGED', label: 'Status changed' },
-  { value: 'DOCUMENT_COMMENT_CREATED', label: 'Comment added' },
-  { value: 'DOCUMENT_COMMENT_CHANGED', label: 'Comment updated' },
-  { value: 'DOCUMENT_COMMENT_DELETED', label: 'Comment deleted' },
-  // Document sharing
-  { value: 'DOCUMENT_SHARE_CREATED', label: 'Share created' },
-  { value: 'DOCUMENT_SHARE_CHANGED', label: 'Share updated' },
-  { value: 'DOCUMENT_SHARE_DELETED', label: 'Share revoked' },
-  { value: 'DOCUMENT_SHARE_VIEWED', label: 'Share viewed' },
-  { value: 'DOCUMENT_SHARE_DOWNLOADED', label: 'Share downloaded' },
-  { value: 'DOCUMENT_SHARE_REGRANTED', label: 'Share re-granted' },
+  { value: 'DOCUMENT_VERSIONED', label: 'File new version' },
+  { value: 'DOCUMENT_OPENED', label: 'File opened' },
+  { value: 'DOCUMENT_DOWNLOADED', label: 'File downloaded' },
+  { value: 'DOCUMENT_INDEXED', label: 'File indexed' },
+  { value: 'DOCUMENT_FINALIZED', label: 'File finalized' },
+  { value: 'DOCUMENT_UNLOCKED', label: 'File unlocked' },
+  { value: 'DOCUMENT_STATUS_CHANGED', label: 'File status changed' },
+  { value: 'DOCUMENT_COMMENT_CREATED', label: 'File comment added' },
+  { value: 'DOCUMENT_COMMENT_CHANGED', label: 'File comment updated' },
+  { value: 'DOCUMENT_COMMENT_DELETED', label: 'File comment deleted' },
+  // File sharing
+  { value: 'DOCUMENT_SHARE_CREATED', label: 'File shared' },
+  { value: 'DOCUMENT_SHARE_CHANGED', label: 'File share updated' },
+  { value: 'DOCUMENT_SHARE_DELETED', label: 'File share revoked' },
+  { value: 'DOCUMENT_SHARE_VIEWED', label: 'File share viewed' },
+  { value: 'DOCUMENT_SHARE_DOWNLOADED', label: 'File share downloaded' },
+  { value: 'DOCUMENT_SHARE_REGRANTED', label: 'File share re-granted' },
   // Onboarding
   { value: 'ONBOARDING_WORKSPACE_INITIALIZED', label: 'Workspace initialized' },
   { value: 'ONBOARDING_SUBSCRIBE_COMPLETED', label: 'Subscription completed' },
@@ -131,9 +132,123 @@ const EVENT_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: 'AUDIT_LOG_EXPORTED', label: 'Audit log exported' },
 ]
 
+const SCOPE_OPTIONS = [
+  { value: 'FIRM', label: 'Firm' },
+  { value: 'CLIENT', label: 'Client' },
+  { value: 'ENGAGEMENT', label: 'Engagement' },
+  { value: 'FILE', label: 'File' },
+] as const
+
+const SCOPE_TO_EVENT_TYPES: Record<string, string[]> = {
+  FIRM: [
+    'FIRM_CREATED', 'FIRM_CHANGED', 'FIRM_DELETED', 'FIRM_SETTINGS_CHANGED',
+    'FIRM_BRANDING_CHANGED', 'FIRM_MEMBER_INVITED', 'FIRM_MEMBER_ADDED',
+    'FIRM_MEMBER_REMOVED', 'FIRM_MEMBER_ROLE_CHANGED', 'FIRM_CONNECTOR_ATTACHED',
+    'FIRM_CONNECTOR_DETACHED', 'ONBOARDING_WORKSPACE_INITIALIZED',
+    'ONBOARDING_SUBSCRIBE_COMPLETED', 'ONBOARDING_SUBSCRIBE_SKIPPED',
+    'ONBOARDING_DRIVE_CONNECTED', 'ONBOARDING_PROVISIONING_STARTED',
+    'ONBOARDING_COMPLETED', 'ONBOARDING_DOMAIN_JOINED', 'AUDIT_LOG_EXPORTED',
+  ],
+  CLIENT: [
+    'CLIENT_CREATED', 'CLIENT_CHANGED', 'CLIENT_DELETED', 'CLIENT_SETTINGS_CHANGED',
+    'CLIENT_CONTACT_CREATED', 'CLIENT_CONTACT_CHANGED', 'CLIENT_CONTACT_DELETED',
+    'CLIENT_MEMBER_ADDED', 'CLIENT_MEMBER_REMOVED', 'CLIENT_MEMBER_ROLE_CHANGED',
+  ],
+  ENGAGEMENT: [
+    'ENGAGEMENT_CREATED', 'ENGAGEMENT_CHANGED', 'ENGAGEMENT_DELETED',
+    'ENGAGEMENT_CLOSED', 'ENGAGEMENT_REOPENED', 'ENGAGEMENT_LOCKED',
+    'ENGAGEMENT_SETTINGS_CHANGED', 'ENGAGEMENT_MEMBER_ADDED',
+    'ENGAGEMENT_MEMBER_REMOVED', 'ENGAGEMENT_MEMBER_ROLE_CHANGED',
+    'ENGAGEMENT_FOLDER_ATTACHED',
+  ],
+  FILE: [
+    'DOCUMENT_CREATED', 'DOCUMENT_CHANGED', 'DOCUMENT_DELETED', 'DOCUMENT_MOVED',
+    'DOCUMENT_VERSIONED', 'DOCUMENT_OPENED', 'DOCUMENT_DOWNLOADED',
+    'DOCUMENT_INDEXED', 'DOCUMENT_FINALIZED', 'DOCUMENT_UNLOCKED',
+    'DOCUMENT_STATUS_CHANGED', 'DOCUMENT_COMMENT_CREATED',
+    'DOCUMENT_COMMENT_CHANGED', 'DOCUMENT_COMMENT_DELETED',
+    'DOCUMENT_SHARE_CREATED', 'DOCUMENT_SHARE_CHANGED', 'DOCUMENT_SHARE_DELETED',
+    'DOCUMENT_SHARE_VIEWED', 'DOCUMENT_SHARE_DOWNLOADED', 'DOCUMENT_SHARE_REGRANTED',
+  ],
+}
+
+const EVENT_ACTION_OPTIONS = [
+  {
+    value: 'CREATED', label: 'Created',
+    eventTypes: ['FIRM_CREATED', 'CLIENT_CREATED', 'ENGAGEMENT_CREATED', 'DOCUMENT_CREATED', 'CLIENT_CONTACT_CREATED', 'DOCUMENT_COMMENT_CREATED'],
+  },
+  {
+    value: 'MODIFIED', label: 'Modified',
+    eventTypes: [
+      'FIRM_CHANGED', 'FIRM_SETTINGS_CHANGED', 'FIRM_BRANDING_CHANGED',
+      'CLIENT_CHANGED', 'CLIENT_SETTINGS_CHANGED', 'CLIENT_CONTACT_CHANGED',
+      'ENGAGEMENT_CHANGED', 'ENGAGEMENT_SETTINGS_CHANGED',
+      'DOCUMENT_CHANGED', 'DOCUMENT_MOVED', 'DOCUMENT_VERSIONED',
+      'DOCUMENT_STATUS_CHANGED', 'DOCUMENT_COMMENT_CHANGED', 'DOCUMENT_SHARE_CHANGED',
+    ],
+  },
+  {
+    value: 'DELETED', label: 'Deleted',
+    eventTypes: [
+      'FIRM_DELETED', 'CLIENT_DELETED', 'ENGAGEMENT_DELETED', 'DOCUMENT_DELETED',
+      'CLIENT_CONTACT_DELETED', 'DOCUMENT_COMMENT_DELETED', 'DOCUMENT_SHARE_DELETED',
+    ],
+  },
+  {
+    value: 'OPENED', label: 'Opened',
+    eventTypes: ['DOCUMENT_OPENED'],
+  },
+  {
+    value: 'DOWNLOADED', label: 'Downloaded',
+    eventTypes: ['DOCUMENT_DOWNLOADED', 'DOCUMENT_SHARE_DOWNLOADED'],
+  },
+  {
+    value: 'SHARED', label: 'Shared',
+    eventTypes: ['DOCUMENT_SHARE_CREATED', 'DOCUMENT_SHARE_REGRANTED', 'DOCUMENT_SHARE_VIEWED'],
+  },
+  {
+    value: 'FINALIZED', label: 'Finalized',
+    eventTypes: ['DOCUMENT_FINALIZED'],
+  },
+  {
+    value: 'UNLOCKED', label: 'Unlocked',
+    eventTypes: ['DOCUMENT_UNLOCKED'],
+  },
+  {
+    value: 'COMMENTED', label: 'Commented',
+    eventTypes: ['DOCUMENT_COMMENT_CREATED', 'DOCUMENT_COMMENT_CHANGED', 'DOCUMENT_COMMENT_DELETED'],
+  },
+  {
+    value: 'MEMBER', label: 'Member change',
+    eventTypes: [
+      'FIRM_MEMBER_INVITED', 'FIRM_MEMBER_ADDED', 'FIRM_MEMBER_REMOVED', 'FIRM_MEMBER_ROLE_CHANGED',
+      'CLIENT_MEMBER_ADDED', 'CLIENT_MEMBER_REMOVED', 'CLIENT_MEMBER_ROLE_CHANGED',
+      'ENGAGEMENT_MEMBER_ADDED', 'ENGAGEMENT_MEMBER_REMOVED', 'ENGAGEMENT_MEMBER_ROLE_CHANGED',
+    ],
+  },
+  {
+    value: 'INDEXED', label: 'Indexed',
+    eventTypes: ['DOCUMENT_INDEXED'],
+  },
+] as const
+
 function eventTypeLabel(eventType: string): string {
   const found = EVENT_TYPE_OPTIONS.find((o) => o.value === eventType)
   return found ? found.label : eventType.replace(/_/g, ' ').toLowerCase()
+}
+
+function eventScope(eventType: string): string {
+  if (eventType.startsWith('FIRM_') || eventType.startsWith('ONBOARDING_') || eventType === 'AUDIT_LOG_EXPORTED') return 'Firm'
+  if (eventType.startsWith('CLIENT_')) return 'Client'
+  if (eventType.startsWith('ENGAGEMENT_')) return 'Engagement'
+  if (eventType.startsWith('DOCUMENT_')) return 'File'
+  return '—'
+}
+
+function eventAction(eventType: string): string {
+  const found = EVENT_ACTION_OPTIONS.find((a) => (a.eventTypes as readonly string[]).includes(eventType))
+  if (found) return found.label
+  return EVENT_TYPE_OPTIONS.find((o) => o.value === eventType)?.label ?? eventType.replace(/_/g, ' ').toLowerCase()
 }
 
 function eventDetails(ev: AuditEventRow): string {
@@ -250,18 +365,19 @@ function buildAuditUrl(
 
 function exportToCsv(events: AuditEventRow[], title: string, includeClientProject: boolean) {
   const headers = includeClientProject
-    ? ['Date', 'Client', 'Engagement', 'Event type', 'Details', 'Actor email']
-    : ['Date', 'Event type', 'Details', 'Actor email']
+    ? ['Date', 'Client', 'Engagement', 'Event scope', 'Event type', 'Details', 'Actor email']
+    : ['Date', 'Event scope', 'Event type', 'Details', 'Actor email']
   const rows = events.map((ev) => {
     const date = formatSmartDateTime(ev.eventAt)
     const client = (ev.clientName ?? '').replace(/"/g, '""')
     const project = (ev.projectName ?? '').replace(/"/g, '""')
-    const type = eventTypeLabel(ev.eventType)
+    const scope = eventScope(ev.eventType)
+    const action = eventAction(ev.eventType)
     const details = eventDetails(ev).replace(/"/g, '""')
     const email = (ev.actorEmail ?? (ev.actorUserId ? 'User' : 'System')).replace(/"/g, '""')
     const cells = includeClientProject
-      ? [date, client, project, type, details, email]
-      : [date, type, details, email]
+      ? [date, client, project, scope, action, details, email]
+      : [date, scope, action, details, email]
     return cells.map((c) => `"${c}"`).join(',')
   })
   const csv = [headers.join(','), ...rows].join('\n')
@@ -273,13 +389,14 @@ function exportToCsv(events: AuditEventRow[], title: string, includeClientProjec
   URL.revokeObjectURL(link.href)
 }
 
-type SortCol = 'date' | 'client' | 'project' | 'eventType' | 'actor'
+type SortCol = 'date' | 'client' | 'project' | 'eventScope' | 'eventAction' | 'actor'
 
 const SORT_COLS: { value: SortCol; label: string }[] = [
   { value: 'date', label: 'Date' },
   { value: 'client', label: 'Client' },
   { value: 'project', label: 'Engagement' },
-  { value: 'eventType', label: 'Event type' },
+  { value: 'eventScope', label: 'Event scope' },
+  { value: 'eventAction', label: 'Event type' },
   { value: 'actor', label: 'Actor' },
 ]
 
@@ -309,9 +426,10 @@ export function AuditWithFilters({
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
 
-  const [eventTypesFilter, setEventTypesFilter] = useState<string[]>([])
-  const [eventTypeSearch, setEventTypeSearch] = useState('')
-  const [eventTypeMenuOpen, setEventTypeMenuOpen] = useState(false)
+  const [scopeFilter, setScopeFilter] = useState<string[]>([])
+  const [actionFilter, setActionFilter] = useState<string[]>([])
+  const [scopeMenuOpen, setScopeMenuOpen] = useState(false)
+  const [actionMenuOpen, setActionMenuOpen] = useState(false)
 
   const [clientIdsFilter, setClientIdsFilter] = useState<string[]>([])
   const [projectIdsFilter, setProjectIdsFilter] = useState<string[]>([])
@@ -329,18 +447,25 @@ export function AuditWithFilters({
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
 
   const [pickerResetKey, setPickerResetKey] = useState(0)
-  const [actorFilter, setActorFilter] = useState('')
+  const [actorFilter, setActorFilter] = useState<string[]>([])
+  const [actorMenuOpen, setActorMenuOpen] = useState(false)
+  const [actorSearch, setActorSearch] = useState('')
   const sentinelRef = useRef<HTMLDivElement>(null)
 
   const toggleId = (list: string[], id: string) =>
     list.includes(id) ? list.filter((x) => x !== id) : [...list, id]
 
-  const filteredEventTypes = useMemo(() => {
-    const q = eventTypeSearch.trim().toLowerCase()
-    const opts = EVENT_TYPE_OPTIONS.filter((o) => o.value !== '') as EventTypeOption[]
-    if (!q) return opts
-    return opts.filter((o) => o.label.toLowerCase().includes(q))
-  }, [eventTypeSearch])
+  const resolvedEventTypes = useMemo(() => {
+    const scopeTypes = scopeFilter.flatMap((s) => SCOPE_TO_EVENT_TYPES[s] ?? [])
+    const actionTypes = actionFilter.flatMap((a) => {
+      const opt = EVENT_ACTION_OPTIONS.find((o) => o.value === a)
+      return opt ? [...opt.eventTypes] : []
+    })
+    if (!scopeFilter.length && !actionFilter.length) return []
+    if (!scopeFilter.length) return actionTypes
+    if (!actionFilter.length) return scopeTypes
+    return scopeTypes.filter((t) => (actionTypes as string[]).includes(t))
+  }, [scopeFilter, actionFilter])
 
   const filteredClients = useMemo(() => {
     const q = clientSearch.trim().toLowerCase()
@@ -366,11 +491,17 @@ export function AuditWithFilters({
     return `${projectIdsFilter.length} projects`
   }, [projectIdsFilter, projects])
 
-  const selectedEventTypeLabel = useMemo(() => {
-    if (eventTypesFilter.length === 0) return 'All types'
-    if (eventTypesFilter.length === 1) return EVENT_TYPE_OPTIONS.find((o) => o.value === eventTypesFilter[0])?.label ?? '1 type'
-    return `${eventTypesFilter.length} types`
-  }, [eventTypesFilter])
+  const selectedScopeLabel = useMemo(() => {
+    if (scopeFilter.length === 0) return 'All scopes'
+    if (scopeFilter.length === 1) return SCOPE_OPTIONS.find((o) => o.value === scopeFilter[0])?.label ?? '1 scope'
+    return `${scopeFilter.length} scopes`
+  }, [scopeFilter])
+
+  const selectedActionLabel = useMemo(() => {
+    if (actionFilter.length === 0) return 'All types'
+    if (actionFilter.length === 1) return EVENT_ACTION_OPTIONS.find((o) => o.value === actionFilter[0])?.label ?? '1 type'
+    return `${actionFilter.length} types`
+  }, [actionFilter])
 
   // Load dropdown options for firm mode
   useEffect(() => {
@@ -398,7 +529,7 @@ export function AuditWithFilters({
         cursor,
         fromDate: fromDate || undefined,
         toDate: toDate || undefined,
-        eventTypes: eventTypesFilter.length ? eventTypesFilter : undefined,
+        eventTypes: resolvedEventTypes.length ? resolvedEventTypes : undefined,
         clientIds: showClientProjectFilters && clientIdsFilter.length ? clientIdsFilter : undefined,
         projectIds: showClientProjectFilters && projectIdsFilter.length ? projectIdsFilter : undefined,
       })
@@ -414,7 +545,7 @@ export function AuditWithFilters({
       resourceId,
       fromDate,
       toDate,
-      eventTypesFilter,
+      resolvedEventTypes,
       showClientProjectFilters,
       clientIdsFilter,
       projectIdsFilter,
@@ -458,7 +589,7 @@ export function AuditWithFilters({
       await load()
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fromDate, toDate, eventTypesFilter, clientIdsFilter, projectIdsFilter, showClientProjectFilters, dateRangeError])
+  }, [fromDate, toDate, scopeFilter, actionFilter, clientIdsFilter, projectIdsFilter, showClientProjectFilters, dateRangeError])
 
   useEffect(() => {
     if (clearThenReload) {
@@ -483,11 +614,41 @@ export function AuditWithFilters({
     return () => observer.disconnect()
   }, [nextCursor, loadingMore, load])
 
+  const uniqueActors = useMemo(() => {
+    const seen = new Set<string>()
+    const actors: { id: string; name: string; email: string }[] = []
+    for (const ev of events) {
+      if (ev.actorUserId && !seen.has(ev.actorUserId)) {
+        seen.add(ev.actorUserId)
+        actors.push({
+          id: ev.actorUserId,
+          name: ev.actorName || ev.actorEmail || 'Unknown',
+          email: ev.actorEmail ?? '',
+        })
+      }
+    }
+    return actors.sort((a, b) => a.name.localeCompare(b.name))
+  }, [events])
+
+  const filteredActors = useMemo(() => {
+    const q = actorSearch.trim().toLowerCase()
+    if (!q) return uniqueActors
+    return uniqueActors.filter((a) => a.name.toLowerCase().includes(q) || a.email.toLowerCase().includes(q))
+  }, [uniqueActors, actorSearch])
+
+  const selectedActorLabel = useMemo(() => {
+    if (actorFilter.length === 0) return 'All actors'
+    if (actorFilter.length === 1) {
+      const a = uniqueActors.find((a) => a.id === actorFilter[0])
+      return a?.name ?? '1 actor'
+    }
+    return `${actorFilter.length} actors`
+  }, [actorFilter, uniqueActors])
+
   const visibleEvents = useMemo(() => {
     let list = events
-    if (actorFilter.trim()) {
-      const q = actorFilter.trim().toLowerCase()
-      list = list.filter((ev) => ev.actorEmail?.toLowerCase().includes(q))
+    if (actorFilter.length > 0) {
+      list = list.filter((ev) => ev.actorUserId && actorFilter.includes(ev.actorUserId))
     }
     return [...list].sort((a, b) => {
       let va: string
@@ -498,10 +659,12 @@ export function AuditWithFilters({
         va = a.clientName ?? ''; vb = b.clientName ?? ''
       } else if (sortCol === 'project') {
         va = a.projectName ?? ''; vb = b.projectName ?? ''
-      } else if (sortCol === 'eventType') {
-        va = eventTypeLabel(a.eventType); vb = eventTypeLabel(b.eventType)
+      } else if (sortCol === 'eventScope') {
+        va = eventScope(a.eventType); vb = eventScope(b.eventType)
+      } else if (sortCol === 'eventAction') {
+        va = eventAction(a.eventType); vb = eventAction(b.eventType)
       } else {
-        va = a.actorEmail ?? ''; vb = b.actorEmail ?? ''
+        va = a.actorName ?? a.actorEmail ?? ''; vb = b.actorName ?? b.actorEmail ?? ''
       }
       const cmp = va < vb ? -1 : va > vb ? 1 : 0
       return sortDir === 'asc' ? cmp : -cmp
@@ -512,7 +675,7 @@ export function AuditWithFilters({
     <div className="flex flex-col h-full min-h-0">
       <p className="text-xs text-gray-500 mb-3">Audit history is permanent and cannot be edited.</p>
 
-      <div className="flex flex-wrap items-end gap-3 mb-4">
+      <div className="flex flex-wrap items-end gap-2 mb-4">
         <div className="flex flex-col gap-1">
           <label className="text-xs font-medium text-gray-600">From date</label>
           <DateTimePicker
@@ -521,7 +684,7 @@ export function AuditWithFilters({
             defaultTime="23:59"
             allowFutureDateTimes={false}
             placeholder="From date"
-            className="w-[210px]"
+            className="w-[190px]"
             onChange={(iso) => {
               setFromDate(iso)
               if (iso && toDate && new Date(iso) > new Date(toDate)) {
@@ -540,7 +703,7 @@ export function AuditWithFilters({
             value={toDate}
             defaultTime="23:59"
             placeholder="To date"
-            className="w-[210px]"
+            className="w-[190px]"
             onChange={(iso) => {
               if (iso && fromDate && new Date(iso) < new Date(fromDate)) {
                 setDateRangeError('To must be after From')
@@ -557,70 +720,90 @@ export function AuditWithFilters({
         )}
 
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-gray-600">Event type</label>
-          <DropdownMenu open={eventTypeMenuOpen} onOpenChange={setEventTypeMenuOpen}>
+          <label className="text-xs font-medium text-gray-600">Event scope</label>
+          <DropdownMenu open={scopeMenuOpen} onOpenChange={setScopeMenuOpen}>
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="rounded-md border border-gray-200 px-2 py-1.5 text-xs min-w-[150px] bg-white flex items-center justify-between gap-2"
+                className="rounded border border-slate-300/80 px-2 py-1.5 text-xs w-[130px] bg-white flex items-center justify-between gap-2"
               >
-                <span className="truncate">{selectedEventTypeLabel}</span>
+                <span className="truncate">{selectedScopeLabel}</span>
                 <ChevronDown className="h-4 w-4 text-gray-500 shrink-0" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-[280px] p-0">
-              <div className="px-2 py-2 flex items-center gap-2 border-b border-gray-100">
-                <input
-                  value={eventTypeSearch}
-                  onChange={(e) => setEventTypeSearch(e.target.value)}
-                  onKeyDown={(e) => e.stopPropagation()}
-                  placeholder="Search types…"
-                  className="flex-1 rounded-md border border-gray-200 px-2 py-1.5 text-xs"
-                />
-                <Button
-                  size="sm"
-                  className="bg-slate-900 hover:bg-slate-800 text-white"
-                  onClick={(e) => {
-                    e.preventDefault()
-                    setEventTypeMenuOpen(false)
-                  }}
+            <DropdownMenuContent className="w-[200px] p-0">
+              <div className="max-h-[280px] overflow-y-auto py-1">
+                <button
+                  type="button"
+                  className="w-full px-2 py-1 text-xs flex items-center gap-2 hover:bg-gray-50"
+                  onClick={(e) => { e.preventDefault(); setScopeFilter([]) }}
                 >
-                  Done
-                </Button>
+                  <span className="h-4 w-4 rounded border border-slate-300 bg-white flex items-center justify-center">
+                    <Check className={`h-3 w-3 ${scopeFilter.length === 0 ? 'text-slate-800' : 'text-slate-300'}`} strokeWidth={2.5} />
+                  </span>
+                  All scopes
+                </button>
+                {SCOPE_OPTIONS.map((o) => {
+                  const checked = scopeFilter.includes(o.value)
+                  return (
+                    <button
+                      key={o.value}
+                      type="button"
+                      className="w-full px-2 py-1 text-xs flex items-center gap-2 hover:bg-gray-50"
+                      onClick={(e) => { e.preventDefault(); setScopeFilter(toggleId(scopeFilter, o.value)) }}
+                    >
+                      <span className="h-4 w-4 rounded border border-slate-300 bg-white flex items-center justify-center">
+                        <Check className={`h-3 w-3 ${checked ? 'text-slate-800' : 'text-slate-300'}`} strokeWidth={2.5} />
+                      </span>
+                      <span>{o.label}</span>
+                    </button>
+                  )
+                })}
               </div>
-              <div className="max-h-[280px] overflow-y-auto">
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-medium text-gray-600">Event type</label>
+          <DropdownMenu open={actionMenuOpen} onOpenChange={setActionMenuOpen}>
+            <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="w-full px-2 py-1 text-xs flex items-center gap-2 hover:bg-gray-50"
-                onClick={(e) => {
-                  e.preventDefault()
-                  setEventTypesFilter([])
-                }}
+                className="rounded border border-slate-300/80 px-2 py-1.5 text-xs w-[130px] bg-white flex items-center justify-between gap-2"
               >
-                <span className="h-4 w-4 rounded border border-slate-300 bg-white flex items-center justify-center">
-                  <Check className={`h-3 w-3 ${eventTypesFilter.length === 0 ? 'text-slate-800' : 'text-slate-300'}`} strokeWidth={2.5} />
-                </span>
-                All types
+                <span className="truncate">{selectedActionLabel}</span>
+                <ChevronDown className="h-4 w-4 text-gray-500 shrink-0" />
               </button>
-              {filteredEventTypes.map((o) => {
-                const checked = eventTypesFilter.includes(o.value)
-                return (
-                  <button
-                    key={o.value}
-                    type="button"
-                    className="w-full px-2 py-1 text-xs flex items-center gap-2 hover:bg-gray-50"
-                    onClick={(e) => {
-                      e.preventDefault()
-                      setEventTypesFilter(toggleId(eventTypesFilter, o.value))
-                    }}
-                  >
-                    <span className="h-4 w-4 rounded border border-slate-300 bg-white flex items-center justify-center">
-                      <Check className={`h-3 w-3 ${checked ? 'text-slate-800' : 'text-slate-300'}`} strokeWidth={2.5} />
-                    </span>
-                    <span className="truncate">{o.label}</span>
-                  </button>
-                )
-              })}
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-[200px] p-0">
+              <div className="max-h-[280px] overflow-y-auto py-1">
+                <button
+                  type="button"
+                  className="w-full px-2 py-1 text-xs flex items-center gap-2 hover:bg-gray-50"
+                  onClick={(e) => { e.preventDefault(); setActionFilter([]) }}
+                >
+                  <span className="h-4 w-4 rounded border border-slate-300 bg-white flex items-center justify-center">
+                    <Check className={`h-3 w-3 ${actionFilter.length === 0 ? 'text-slate-800' : 'text-slate-300'}`} strokeWidth={2.5} />
+                  </span>
+                  All types
+                </button>
+                {EVENT_ACTION_OPTIONS.map((o) => {
+                  const checked = actionFilter.includes(o.value)
+                  return (
+                    <button
+                      key={o.value}
+                      type="button"
+                      className="w-full px-2 py-1 text-xs flex items-center gap-2 hover:bg-gray-50"
+                      onClick={(e) => { e.preventDefault(); setActionFilter(toggleId(actionFilter, o.value)) }}
+                    >
+                      <span className="h-4 w-4 rounded border border-slate-300 bg-white flex items-center justify-center">
+                        <Check className={`h-3 w-3 ${checked ? 'text-slate-800' : 'text-slate-300'}`} strokeWidth={2.5} />
+                      </span>
+                      <span>{o.label}</span>
+                    </button>
+                  )
+                })}
               </div>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -634,7 +817,7 @@ export function AuditWithFilters({
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                    className="rounded-md border border-gray-200 px-2 py-1.5 text-xs min-w-[150px] bg-white flex items-center justify-between gap-2"
+                    className="rounded border border-slate-300/80 px-2 py-1.5 text-xs w-[130px] bg-white flex items-center justify-between gap-2"
                   >
                     <span className="truncate">{selectedClientLabel}</span>
                     <ChevronDown className="h-4 w-4 text-gray-500 shrink-0" />
@@ -647,7 +830,7 @@ export function AuditWithFilters({
                       onChange={(e) => setClientSearch(e.target.value)}
                       onKeyDown={(e) => e.stopPropagation()}
                       placeholder="Search clients…"
-                      className="flex-1 rounded-md border border-gray-200 px-2 py-1.5 text-xs"
+                      className="flex-1 rounded border border-slate-300/80 px-2 py-1.5 text-xs"
                     />
                     <Button
                       size="sm"
@@ -708,7 +891,7 @@ export function AuditWithFilters({
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                    className="rounded-md border border-gray-200 px-2 py-1.5 text-xs min-w-[150px] bg-white flex items-center justify-between gap-2"
+                    className="rounded border border-slate-300/80 px-2 py-1.5 text-xs w-[130px] bg-white flex items-center justify-between gap-2"
                   >
                     <span className="truncate">{selectedProjectLabel}</span>
                     <ChevronDown className="h-4 w-4 text-gray-500 shrink-0" />
@@ -721,7 +904,7 @@ export function AuditWithFilters({
                       onChange={(e) => setProjectSearch(e.target.value)}
                       onKeyDown={(e) => e.stopPropagation()}
                       placeholder="Search projects…"
-                      className="flex-1 rounded-md border border-gray-200 px-2 py-1.5 text-xs"
+                      className="flex-1 rounded border border-slate-300/80 px-2 py-1.5 text-xs"
                     />
                     <Button
                       size="sm"
@@ -774,13 +957,81 @@ export function AuditWithFilters({
 
         <div className="flex flex-col gap-1">
           <label className="text-xs font-medium text-gray-600">Actor</label>
-          <input
-            type="text"
-            value={actorFilter}
-            onChange={(e) => setActorFilter(e.target.value)}
-            placeholder="Filter by email…"
-            className="rounded-md border border-gray-200 px-2 py-1.5 text-xs w-[160px] bg-white"
-          />
+          <DropdownMenu open={actorMenuOpen} onOpenChange={setActorMenuOpen}>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="rounded border border-slate-300/80 px-2 py-1.5 text-xs w-[130px] bg-white flex items-center justify-between gap-2"
+              >
+                <span className="truncate">{selectedActorLabel}</span>
+                <ChevronDown className="h-4 w-4 text-gray-500 shrink-0" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-[280px] p-0">
+              <div className="px-2 py-2 flex items-center gap-2 border-b border-gray-100">
+                <input
+                  value={actorSearch}
+                  onChange={(e) => setActorSearch(e.target.value)}
+                  onKeyDown={(e) => e.stopPropagation()}
+                  placeholder="Search actors…"
+                  className="flex-1 rounded border border-slate-300/80 px-2 py-1.5 text-xs"
+                />
+                <Button
+                  size="sm"
+                  className="bg-slate-900 hover:bg-slate-800 text-white"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    setActorMenuOpen(false)
+                  }}
+                >
+                  Done
+                </Button>
+              </div>
+              <div className="max-h-[280px] overflow-y-auto">
+                <button
+                  type="button"
+                  className="w-full px-2 py-1 text-xs flex items-center gap-2 hover:bg-gray-50"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    setActorFilter([])
+                  }}
+                >
+                  <span className="h-4 w-4 rounded border border-slate-300 bg-white flex items-center justify-center">
+                    <Check className={`h-3 w-3 ${actorFilter.length === 0 ? 'text-slate-800' : 'text-slate-300'}`} strokeWidth={2.5} />
+                  </span>
+                  All actors
+                </button>
+                {filteredActors.length === 0 && (
+                  <p className="px-3 py-2 text-xs text-gray-400 italic">No actors in loaded events</p>
+                )}
+                {filteredActors.map((actor) => {
+                  const checked = actorFilter.includes(actor.id)
+                  return (
+                    <button
+                      key={actor.id}
+                      type="button"
+                      className="w-full px-2 py-1 text-xs flex items-center gap-2 hover:bg-gray-50"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        setActorFilter(toggleId(actorFilter, actor.id))
+                      }}
+                    >
+                      <span className="h-4 w-4 rounded border border-slate-300 bg-white flex items-center justify-center shrink-0">
+                        <Check className={`h-3 w-3 ${checked ? 'text-slate-800' : 'text-slate-300'}`} strokeWidth={2.5} />
+                      </span>
+                      <UserAvatarWithTooltip
+                        displayName={actor.name}
+                        email={actor.email}
+                        avatarSize="sm"
+                        showRole={false}
+                      />
+                      <span className="truncate">{actor.name}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         <div className="flex items-end gap-1.5 ml-auto">
@@ -796,11 +1047,12 @@ export function AuditWithFilters({
                     setToDate('')
                     setDateRangeError(null)
                     setPickerResetKey((k) => k + 1)
-                    setEventTypesFilter([])
+                    setScopeFilter([])
+                    setActionFilter([])
                     setClientIdsFilter([])
                     setProjectIdsFilter([])
-                    setActorFilter('')
-                    setEventTypeSearch('')
+                    setActorFilter([])
+                    setActorSearch('')
                     setClientSearch('')
                     setProjectSearch('')
                     setNextCursor(null)
@@ -901,7 +1153,8 @@ export function AuditWithFilters({
                 </th>
                 <th className="text-left py-2.5 px-3 text-[0.8125rem] font-medium text-[#45474c] w-[120px]">Client</th>
                 <th className="text-left py-2.5 px-3 text-[0.8125rem] font-medium text-[#45474c] w-[120px]">Engagement</th>
-                <th className="text-left py-2.5 px-3 text-[0.8125rem] font-medium text-[#45474c] w-[210px]">Event type</th>
+                <th className="text-left py-2.5 px-3 text-[0.8125rem] font-medium text-[#45474c] w-[130px]">Event scope</th>
+                <th className="text-left py-2.5 px-3 text-[0.8125rem] font-medium text-[#45474c] w-[130px]">Event type</th>
                 <th className="text-left py-2.5 px-3 text-[0.8125rem] font-medium text-[#45474c] min-w-[80px]">Details</th>
                 <th className="text-left py-2.5 px-3 text-[0.8125rem] font-medium text-[#45474c] w-[200px]">Actor</th>
                 <th className="py-2.5 px-2 w-8 text-right">
@@ -972,13 +1225,29 @@ export function AuditWithFilters({
                   <td className="py-2.5 px-3">
                     <div className="flex items-center gap-2">
                       <EventIcon eventType={ev.eventType} />
-                      <span className="font-medium text-[#1b1b1d] text-[0.8125rem]">{eventTypeLabel(ev.eventType)}</span>
+                      <span className="text-[#45474c] text-[0.8125rem]">{eventScope(ev.eventType)}</span>
                     </div>
+                  </td>
+                  <td className="py-2.5 px-3">
+                    <span className="font-medium text-[#1b1b1d] text-[0.8125rem]">{eventAction(ev.eventType)}</span>
                   </td>
                   <td className="py-2.5 px-3 text-[0.8125rem]">
                     <DetailCell ev={ev} />
                   </td>
-                  <td className="py-2.5 px-3 text-[#45474c] text-[0.8125rem]">{ev.actorEmail ?? (ev.actorUserId ? 'User' : 'System')}</td>
+                  <td className="py-2.5 px-3 text-[0.8125rem]">
+                    {ev.actorUserId ? (
+                      <div className="flex items-center gap-1.5">
+                        <UserAvatarWithTooltip
+                          displayName={ev.actorName || ev.actorEmail || 'Unknown'}
+                          email={ev.actorEmail ?? undefined}
+                          avatarSize="sm"
+                        />
+                        <span className="text-[#45474c] truncate max-w-[160px]">{ev.actorName || ev.actorEmail || 'Unknown'}</span>
+                      </div>
+                    ) : (
+                      <span className="text-gray-400 italic">System</span>
+                    )}
+                  </td>
                   <td className="py-2.5 px-2" />
                 </tr>
               ))}

@@ -70,6 +70,7 @@ export async function PATCH(
     audit(AUDIT_EVENT.DOCUMENT_STATUS_CHANGED)
       .scope(AUDIT_SCOPE.DOCUMENT)
       .firm(fileInfo.organizationId)
+      .client(ctx.clientId)
       .engagement(projectId)
       .document(existing.id)
       .actor(user.id)

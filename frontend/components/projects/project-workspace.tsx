@@ -256,6 +256,16 @@ export function ProjectWorkspace({
                             </TabsTrigger>
                             {canViewInternalTabs && (
                                 <TabsTrigger
+                                    value="analytics"
+                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent transition-all shadow-none bg-transparent"
+                                >
+                                    <BarChart3 className="w-4 h-4 mr-2" />
+                                    Analytics
+                                    <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
+                                </TabsTrigger>
+                            )}
+                            {canViewInternalTabs && (
+                                <TabsTrigger
                                     value="wiki"
                                     className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent transition-all shadow-none bg-transparent"
                                 >
@@ -268,16 +278,6 @@ export function ProjectWorkspace({
                                             {wikiPageCount}
                                         </span>
                                     )}
-                                </TabsTrigger>
-                            )}
-                            {canViewInternalTabs && (
-                                <TabsTrigger
-                                    value="insights"
-                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent transition-all shadow-none bg-transparent"
-                                >
-                                    <BarChart3 className="w-4 h-4 mr-2" />
-                                    Insights
-                                    <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
                                 </TabsTrigger>
                             )}
                             {canManage && (
@@ -381,7 +381,7 @@ export function ProjectWorkspace({
                             </ErrorBoundary>
                         </div>
                     )}
-                    {canViewInternalTabs && currentTab === 'insights' && (
+                    {canViewInternalTabs && currentTab === 'analytics' && (
                         <div className="p-4">
                             <ErrorBoundary context="ProjectInsights">
                                 <ProjectInsightsDashboard

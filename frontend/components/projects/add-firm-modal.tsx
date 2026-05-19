@@ -151,7 +151,7 @@ export function AddFirmModal({ trigger, open: controlledOpen, onOpenChange: cont
                         <span>Create New Firm</span>
                     </DialogTitle>
                     <DialogDescription className="text-slate-600">
-                        Create a new firm workspace. You will be set as the firm administrator.
+                        Create a new Firm workspace. You will be set as the Firm Administrator.
                     </DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleSubmit}>

@@ -1441,11 +1441,11 @@ const OnboardingContent = () => {
                                 <button
                                     type="button"
                                     disabled={domainJoiningId !== null}
-                                    className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-[2px] border border-dashed border-[#e5e7eb] bg-white hover:bg-[#f9f9fb] text-[#45474c] font-medium text-[0.8125rem] transition-colors disabled:opacity-50"
+                                    className="group w-full flex items-center justify-center gap-2 px-4 py-3 rounded-[2px] bg-[#1a5c3a] hover:bg-[#164f32] text-white font-medium text-[0.8125rem] transition-all shadow-[0_1px_2px_rgba(0,0,0,0.25),inset_0_1px_0_rgba(255,255,255,0.08)] hover:shadow-[0_4px_8px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.08)] hover:-translate-y-px active:translate-y-0 active:shadow-[0_1px_2px_rgba(0,0,0,0.25),inset_0_1px_0_rgba(255,255,255,0.06)] disabled:opacity-50"
                                     onClick={() => setStep(1)}
                                 >
-                                    <SquarePlus className="h-4 w-4" />
-                                    Create a new workspace
+                                    <Building2 className="h-4 w-4" />
+                                    Create a new Firm workspace
                                 </button>
 
                                 {domainError && (
