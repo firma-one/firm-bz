@@ -16,6 +16,7 @@ import {
     CalendarClock,
     ArrowRight,
     LogIn,
+    Sparkles,
 } from "lucide-react"
 import { useState } from "react"
 import { cn } from "@/lib/utils"
@@ -220,7 +221,8 @@ export function Header({ onOpenModal: _onOpenModal }: HeaderProps) {
                                     className={cn(
                                         "h-3.5 w-3.5 shrink-0 text-current opacity-70 transition-transform duration-200 group-hover:rotate-180",
                                         (pathname?.startsWith(BLOG_BASE_PATH) ||
-                                            pathname?.startsWith("/resources/faq")) &&
+                                            pathname?.startsWith("/resources/faq") ||
+                                            pathname?.startsWith("/resources/changelog")) &&
                                             "opacity-100",
                                     )}
                                     aria-hidden
@@ -238,6 +240,12 @@ export function Header({ onOpenModal: _onOpenModal }: HeaderProps) {
                                         <div className={megaMenuTitleClass}>Blog</div>
                                         <div className={megaMenuDescClass}>
                                             Insights, guides, and best practices for client portals.
+                                        </div>
+                                    </Link>
+                                    <Link href="/resources/changelog" className={megaMenuLinkClass}>
+                                        <div className={megaMenuTitleClass}>Changelog</div>
+                                        <div className={megaMenuDescClass}>
+                                            New features, fixes, and improvements in every release.
                                         </div>
                                     </Link>
                                 </div>
@@ -511,6 +519,31 @@ export function Header({ onOpenModal: _onOpenModal }: HeaderProps) {
                                         )}
                                     >
                                         Blog
+                                    </span>
+                                </Link>
+                                <Link
+                                    href="/resources/changelog"
+                                    className={cn(
+                                        "flex items-center gap-3 px-3 py-3 transition-colors first:pt-2.5 last:pb-2.5 hover:bg-slate-50 active:bg-slate-100",
+                                        pathname?.startsWith("/resources/changelog") ? "bg-slate-100" : "",
+                                    )}
+                                    onClick={closeMobileMenu}
+                                >
+                                    <Sparkles
+                                        className={cn(
+                                            "h-4 w-4 shrink-0",
+                                            pathname?.startsWith("/resources/changelog") ? "text-slate-900" : "text-slate-700",
+                                        )}
+                                    />
+                                    <span
+                                        className={cn(
+                                            "text-sm",
+                                            pathname?.startsWith("/resources/changelog")
+                                                ? "font-semibold text-slate-900"
+                                                : "font-medium text-slate-900",
+                                        )}
+                                    >
+                                        Changelog
                                     </span>
                                 </Link>
                             </div>

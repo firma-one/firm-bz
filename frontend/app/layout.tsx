@@ -121,7 +121,7 @@ export default async function RootLayout({
         suppressHydrationWarning
       >
         {/* Inject firm brand CSS vars before first paint to prevent FOUC on dashboard routes */}
-        <script dangerouslySetInnerHTML={{ __html: `try{var m=location.pathname.match(/^\\/d\\/(?:o|f)\\/([^/]+)/);if(m){var b=JSON.parse(sessionStorage.getItem('fm_firm_branding_'+m[1])||'null');if(b&&b.primaryHsl){document.documentElement.style.setProperty('--primary',b.primaryHsl);document.documentElement.style.setProperty('--primary-foreground',b.primaryFgHsl);if(b.primaryRgb)document.documentElement.style.setProperty('--primary-rgb',b.primaryRgb);}if(b&&b.accentHsl){document.documentElement.style.setProperty('--brand-accent',b.accentHsl);document.documentElement.style.setProperty('--brand-accent-foreground',b.accentFgHsl);}}}catch(e){}` }} />
+        <Script id="fm-brand-css-vars" strategy="beforeInteractive" dangerouslySetInnerHTML={{ __html: `try{var m=location.pathname.match(/^\\/d\\/(?:o|f)\\/([^/]+)/);if(m){var b=JSON.parse(sessionStorage.getItem('fm_firm_branding_'+m[1])||'null');if(b&&b.primaryHsl){document.documentElement.style.setProperty('--primary',b.primaryHsl);document.documentElement.style.setProperty('--primary-foreground',b.primaryFgHsl);if(b.primaryRgb)document.documentElement.style.setProperty('--primary-rgb',b.primaryRgb);}if(b&&b.accentHsl){document.documentElement.style.setProperty('--brand-accent',b.accentHsl);document.documentElement.style.setProperty('--brand-accent-foreground',b.accentFgHsl);}}}catch(e){}` }} />
         {/* GA is loaded client-side only when analytics consent is granted (see ConsentAwareGoogleAnalytics). */}
         {/* JSON-LD for Search/Answer Engines */}
         {/* JSON-LD for Search/Answer Engines */}
