@@ -120,7 +120,7 @@ export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className,
             <Select value={selectedFirmSlug} onValueChange={handleValueChange} open={isSelectOpen} onOpenChange={setIsSelectOpen}>
                 {compact ? (
                     <SelectTrigger className="flex h-8 w-full items-center gap-2 rounded border-none bg-transparent px-3 py-1 text-[#1b1b1d] shadow-none transition-colors hover:bg-[#f3f4f6] focus:ring-0 [&>svg]:hidden">
-                        <Building2 className="h-4 w-4 shrink-0 text-[#45474c]" />
+                        <span className="shrink-0 flex items-center"><Building2 className="h-4 w-4 text-[#45474c]" /></span>
                         <span className="d-sidebar-section truncate flex-1 text-left">
                             {selectedOrg?.name || 'Select Workspace...'}
                         </span>

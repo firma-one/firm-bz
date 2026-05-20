@@ -24,6 +24,7 @@ type CommandItem = {
   href: string
   group: string
   adminOnly?: boolean
+  iconColor?: string
 }
 
 function getSlugFromPath(pathname: string): string | null {
@@ -98,6 +99,7 @@ function buildItems(firmSlug: string | null, canManageOrg: boolean): CommandItem
       icon: <Bookmark className="h-4 w-4" />,
       href: "/d/u/bookmarks",
       group: "Personal",
+      iconColor: "#5A78FF",
     },
     {
       id: "notifications",
@@ -106,6 +108,7 @@ function buildItems(firmSlug: string | null, canManageOrg: boolean): CommandItem
       icon: <Bell className="h-4 w-4" />,
       href: "/d/u/notifications",
       group: "Personal",
+      iconColor: "#069668",
     },
     {
       id: "recent",
@@ -114,6 +117,7 @@ function buildItems(firmSlug: string | null, canManageOrg: boolean): CommandItem
       icon: <Clock className="h-4 w-4" />,
       href: "/d/u/recent",
       group: "Personal",
+      iconColor: "#069668",
     },
     {
       id: "profile",
@@ -122,6 +126,7 @@ function buildItems(firmSlug: string | null, canManageOrg: boolean): CommandItem
       icon: <UserCircle className="h-4 w-4" />,
       href: "/d/u/profile",
       group: "Account",
+      iconColor: "#069668",
     },
   )
 
@@ -140,7 +145,7 @@ function buildItems(firmSlug: string | null, canManageOrg: boolean): CommandItem
   return items
 }
 
-export function CommandPalette() {
+export function CommandPalette({ onOpenChange }: { onOpenChange?: (open: boolean) => void } = {}) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState("")
   const [activeIndex, setActiveIndex] = useState(0)
@@ -202,12 +207,13 @@ export function CommandPalette() {
   }, [])
 
   useEffect(() => {
+    onOpenChange?.(open)
     if (open) {
       setQuery("")
       setActiveIndex(0)
       setTimeout(() => inputRef.current?.focus(), 10)
     }
-  }, [open])
+  }, [open, onOpenChange])
 
   const navigate = (href: string) => {
     setOpen(false)
@@ -239,7 +245,7 @@ export function CommandPalette() {
 
   return (
     <div
-      className="fixed inset-0 z-[200] flex items-start justify-center pt-[15vh]"
+      className="fixed inset-0 z-[2000000] flex items-start justify-center pt-[15vh]"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) setOpen(false)
       }}
@@ -293,6 +299,7 @@ export function CommandPalette() {
                     >
                       <span
                         className={`shrink-0 ${isActive && !item.adminOnly ? "text-[#069668]" : ""}`}
+                        style={!isActive && item.iconColor ? { color: item.iconColor } : undefined}
                       >
                         {item.icon}
                       </span>
@@ -313,16 +320,26 @@ export function CommandPalette() {
         </div>
 
         {/* Footer hint */}
-        <div className="flex items-center gap-3 px-4 py-2 border-t border-[#e5e7eb] bg-[#f9f9fb]">
-          <span className="text-[10px] text-[#45474c]/70">
-            <kbd className="font-mono">↑↓</kbd> navigate
-          </span>
-          <span className="text-[10px] text-[#45474c]/70">
-            <kbd className="font-mono">↵</kbd> open
-          </span>
-          <span className="text-[10px] text-[#45474c]/70">
-            <kbd className="font-mono">esc</kbd> close
-          </span>
+        <div className="flex items-center gap-4 px-4 py-2.5 border-t border-[#e5e7eb] bg-[#f9f9fb]">
+          {[
+            { keys: ['↑', '↓'], label: 'navigate' },
+            { keys: ['↵'], label: 'open' },
+            { keys: ['esc'], label: 'close' },
+          ].map(({ keys, label }) => (
+            <span key={label} className="inline-flex items-center gap-1.5">
+              <span className="inline-flex items-center gap-0.5">
+                {keys.map((k) => (
+                  <kbd
+                    key={k}
+                    className="inline-flex items-center justify-center rounded border border-[#d1d5db] bg-white px-1.5 py-0.5 text-[11px] font-semibold font-mono text-[#1b1b1d] shadow-[0_1px_0_0_#d1d5db] leading-none"
+                  >
+                    {k}
+                  </kbd>
+                ))}
+              </span>
+              <span className="text-[11px] text-[#45474c] font-medium">{label}</span>
+            </span>
+          ))}
         </div>
       </div>
     </div>

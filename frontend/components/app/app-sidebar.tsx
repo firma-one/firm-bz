@@ -24,6 +24,7 @@ import {
   History,
   CornerDownRight,
   Settings,
+  Lock,
 } from "lucide-react"
 import { FirmSelector, type FirmOption } from "@/components/projects/firm-selector"
 import { getUserFirms } from "@/lib/actions/firms"
@@ -354,7 +355,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
   const canManageOrg = effective ? effective.canManage : (orgPermissions?.canManage ?? false)
   const canEditOrg = effective ? effective.canEdit : (orgPermissions?.canEdit ?? false)
   const canViewOrg = effective ? effective.canView : (orgPermissions?.canView ?? true)
-  const canShowInsights = canManageOrg || canEditOrg || canViewOrg
+
   const canShowViewAsDropdown = canUseViewAs
 
   // Active state helpers
@@ -501,18 +502,20 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                           <Users className={`h-3.5 w-3.5 mr-2 shrink-0 ${isClientsActive ? 'text-[#069668]' : 'text-[#45474c]'}`} />
                           <span>Clients</span>
                         </Link>
-                        {canShowInsights && (
-                          <Link href={`${firmScopedNavBase}/insights`} className={`flex items-center rounded-r transition-colors pl-2 pr-2 py-1.5 text-[0.8125rem] ${isInsightsActive ? 'bg-[#ecfdf5] text-[#065f46] font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}>
+                        {canManageOrg && (
+                          <Link href={`${firmScopedNavBase}/insights`} className={`group/lock flex w-full items-center rounded-r transition-colors pl-2 pr-3 py-1.5 text-[0.8125rem] ${isInsightsActive ? 'bg-[#ecfdf5] text-[#065f46] font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}>
                             <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-1.5" />
                             <BarChart3 className={`h-3.5 w-3.5 mr-2 shrink-0 ${isInsightsActive ? 'text-[#069668]' : 'text-[#45474c]'}`} />
                             <span>Analytics</span>
+                            <span title="Internal only" className="ml-auto flex items-center"><Lock className="w-2.5 h-2.5 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
                           </Link>
                         )}
                         {canManageOrg && (
-                          <Link href={`${firmScopedNavBase}/connectors`} className={`flex items-center rounded-r transition-colors pl-2 pr-2 py-1.5 text-[0.8125rem] ${isSettingsActive ? 'bg-[#ecfdf5] text-[#065f46] font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}>
+                          <Link href={`${firmScopedNavBase}/connectors`} className={`group/lock flex w-full items-center rounded-r transition-colors pl-2 pr-3 py-1.5 text-[0.8125rem] ${isSettingsActive ? 'bg-[#ecfdf5] text-[#065f46] font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}>
                             <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-1.5" />
                             <Settings className={`h-3.5 w-3.5 mr-2 shrink-0 ${isSettingsActive ? 'text-[#069668]' : 'text-[#45474c]'}`} />
                             <span>Settings</span>
+                            <span title="Internal only" className="ml-auto flex items-center"><Lock className="w-2.5 h-2.5 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
                           </Link>
                         )}
                       </div>
@@ -538,7 +541,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                         </TooltipTrigger>
                         <TooltipContent side="right">Clients</TooltipContent>
                       </Tooltip>
-                      {canShowInsights && (
+                      {canManageOrg && (
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Link href={`${firmScopedNavBase}/insights`} className={navLinkClass(isInsightsActive)}>
@@ -562,18 +565,24 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                   )}
 
                   {/* SUPPORT */}
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Link
-                        href={slug ? `/d/support?firmSlug=${slug}` : '/d/support'}
-                        className={navLinkClass(isSupportActive)}
-                      >
+                  {canManageOrg && (
+                    isCollapsed ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Link href={slug ? `/d/support?firmSlug=${slug}` : '/d/support'} className={navLinkClass(isSupportActive)}>
+                            <LifeBuoy className={navIconClass(isSupportActive)} />
+                          </Link>
+                        </TooltipTrigger>
+                        <TooltipContent side="right">Support</TooltipContent>
+                      </Tooltip>
+                    ) : (
+                      <Link href={slug ? `/d/support?firmSlug=${slug}` : '/d/support'} className={`group/lock ${navLinkClass(isSupportActive)}`}>
                         <LifeBuoy className={navIconClass(isSupportActive)} />
-                        {!isCollapsed && <span>Support</span>}
+                        <span className="flex-1">Support</span>
+                        <span title="Internal only" className="flex items-center"><Lock className="w-2.5 h-2.5 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
                       </Link>
-                    </TooltipTrigger>
-                    {isCollapsed && <TooltipContent side="right">Support</TooltipContent>}
-                  </Tooltip>
+                    )
+                  )}
 
                   <SeparatorLine />
 
@@ -844,9 +853,10 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                   {/* VIEW AS */}
                   {canShowViewAsDropdown && !isCollapsed && (
                     <div className="pt-2 pb-2">
-                      <h3 className={`d-sidebar-section flex items-center px-3 ${spaceTitle}`}>
+                      <h3 className={`d-sidebar-section flex w-full items-center px-3 ${spaceTitle}`}>
                         <Eye className="h-3 w-3 shrink-0 mr-1.5 text-[#45474c]" />
-                        Viewing As
+                        <span className="flex-1">Viewing As</span>
+                        <span title="Internal only" className="flex items-center"><Lock className="w-2.5 h-2.5 text-[#45474c]/40 shrink-0" /></span>
                       </h3>
                       <div className="ml-1 space-y-0.5">
                         <Select
