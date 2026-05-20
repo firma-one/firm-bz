@@ -2,7 +2,7 @@
 /**
  * Release script — bumps version, generates MDX release notes using Gemma 4, tags git.
  *
- * Usage: npm run release --type=major|minor|patch
+ * Usage: npm run release --bump=major|minor|patch
  *
  * On first run: downloads onnx-community/gemma-4-E2B-it-ONNX (~500MB) to
  * ~/.cache/huggingface/ — cached forever after.
@@ -20,9 +20,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
 
 // --- 1. Validate bump type
-const bumpType = process.env.npm_config_type;
+const bumpType = process.env.npm_config_bump;
 if (!['major', 'minor', 'patch'].includes(bumpType)) {
-  console.error('❌  Usage: npm run release --type=major|minor|patch');
+  console.error('❌  Usage: npm run release --bump=major|minor|patch');
   process.exit(1);
 }
 
