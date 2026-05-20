@@ -488,7 +488,7 @@ export function AppTopbar() {
       <div className="w-60 shrink-0 flex items-center pl-1">
         {branding && (
           <Logo
-            size="md"
+            size="lg"
             showText
             branding={branding}
             wordmarkClassName="font-headline text-2xl font-bold tracking-tighter text-[#1b1b1d]"

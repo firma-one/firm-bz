@@ -2453,7 +2453,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                             )}
                                                             title={`Switch root: ${currentRootLabel}`}
                                                         >
-                                                            {currentFolderType === 'general' && <Folder className="h-3.5 w-3.5 mr-1.5 text-green-600 flex-shrink-0" />}
+                                                            {currentFolderType === 'general' && <Folder className="h-3.5 w-3.5 mr-1.5 text-primary flex-shrink-0" />}
                                                             {currentFolderType === 'confidential' && <FolderLock className="h-3.5 w-3.5 mr-1.5 text-red-500 flex-shrink-0" />}
                                                             {currentFolderType === 'staging' && <Inbox className="h-3.5 w-3.5 mr-1.5 text-amber-500 flex-shrink-0" />}
                                                             {!currentFolderType && <Folder className="h-3.5 w-3.5 mr-1.5 text-slate-400 flex-shrink-0" />}
@@ -2468,7 +2468,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                                 onClick={() => handleSwitchToRoot(type)}
                                                                 className={cn("capitalize", currentFolderType === type && "bg-slate-50")}
                                                             >
-                                                                {type === 'general' && <Folder className="h-3.5 w-3.5 mr-2 text-green-600" />}
+                                                                {type === 'general' && <Folder className="h-3.5 w-3.5 mr-2 text-primary" />}
                                                                 {type === 'confidential' && <FolderLock className="h-3.5 w-3.5 mr-2 text-red-500" />}
                                                                 {type === 'staging' && <Inbox className="h-3.5 w-3.5 mr-2 text-amber-500" />}
                                                                 {label}
@@ -2486,7 +2486,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                     )}
                                                     title={item.name}
                                                 >
-                                                    <Folder className="h-3.5 w-3.5 mr-1.5 text-green-600 flex-shrink-0" />
+                                                    <Folder className="h-3.5 w-3.5 mr-1.5 text-primary flex-shrink-0" />
                                                     <span className="truncate capitalize">{item.name}</span>
                                                 </button>
                                             ) : isEllipsis ? (

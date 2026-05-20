@@ -951,7 +951,7 @@ function ShareCard({
             <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-60 group-hover:opacity-40 transition-opacity duration-500" />
           </div>
         ) : isFolder ? (
-          <div className="w-full h-full bg-primary/10 flex items-center justify-center relative group-hover:bg-[#d1fae5] transition-colors duration-500">
+          <div className="w-full h-full bg-primary/10 flex items-center justify-center relative group-hover:bg-primary/20 transition-colors duration-500">
             <div className="transform group-hover:scale-110 transition-transform duration-700 ease-out">
               <SharedFolderIcon fillLevel={1} tooltip="shared" size={96} className="opacity-40" />
             </div>
