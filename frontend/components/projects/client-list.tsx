@@ -37,7 +37,7 @@ function clientStatusBadgeClass(status: string | null | undefined): string {
             return 'bg-zinc-50 text-zinc-400 ring-1 ring-zinc-200'
         case 'ACTIVE':
         default:
-            return 'bg-[#ecfdf5] text-[#069668] ring-1 ring-[#069668]/25'
+            return 'bg-primary/10 text-primary ring-1 ring-primary/25'
     }
 }
 
@@ -154,10 +154,10 @@ export function ClientList({ clients, orgSlug, viewMode = 'grid', isRefreshing =
                 <Link
                     key={client.id}
                     href={`/d/f/${orgSlug}/c/${client.slug}`}
-                    className="group relative bg-white border border-[#e5e7eb] rounded p-5 hover:shadow-lg hover:border-[#069668]/50 transition-all duration-200 flex flex-col h-48"
+                    className="group relative bg-white border border-[#e5e7eb] rounded p-5 hover:shadow-lg hover:border-primary/50 transition-all duration-200 flex flex-col h-48"
                 >
                     <div className="flex items-start justify-between mb-3">
-                        <div className="h-10 w-10 bg-[#f3f4f6] text-[#45474c] rounded flex items-center justify-center group-hover:bg-[#ecfdf5] group-hover:text-[#069668] transition-colors shrink-0">
+                        <div className="h-10 w-10 bg-[#f3f4f6] text-[#45474c] rounded flex items-center justify-center group-hover:bg-primary/10 group-hover:text-primary transition-colors shrink-0">
                             <Users className="h-5 w-5" />
                         </div>
                         <span className={`shrink-0 px-2 py-0.5 rounded-sm text-xs font-medium ${clientStatusBadgeClass(client.status)}`}>

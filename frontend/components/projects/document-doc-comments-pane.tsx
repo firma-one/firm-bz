@@ -977,7 +977,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                           tooltipSide="top"
                         />
                         {isLatest ? (
-                          <span className="ml-1 font-mono text-[10px] font-bold bg-[#069668] text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
+                          <span className="ml-1 font-mono text-[10px] font-bold bg-primary text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
                             Latest
                           </span>
                         ) : null}

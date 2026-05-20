@@ -224,7 +224,7 @@ export function CreateSupportRequestModal({ firmSlug, trigger }: CreateSupportRe
       {wrapTrigger(trigger || (
         <button
           type="button"
-          className="h-auto px-4 py-1.5 rounded-[2px] bg-[#069668] text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:brightness-105 shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(6,150,104,0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all inline-flex items-center gap-1.5"
+          className="h-auto px-4 py-1.5 rounded-[2px] bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:brightness-105 shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all inline-flex items-center gap-1.5"
         >
           <LifeBuoy className="h-3.5 w-3.5" />
           New Request
@@ -317,7 +317,7 @@ export function CreateSupportRequestModal({ firmSlug, trigger }: CreateSupportRe
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder={placeholders[selectedType]}
-                  className="border-[#e5e7eb] rounded-[2px] text-[0.8125rem] text-[#1b1b1d] placeholder:text-[#45474c]/50 focus:border-[#069668] focus:ring-[#069668]/20 disabled:opacity-60 min-h-32 resize-none"
+                  className="border-[#e5e7eb] rounded-[2px] text-[0.8125rem] text-[#1b1b1d] placeholder:text-[#45474c]/50 focus:border-primary focus:ring-primary/20 disabled:opacity-60 min-h-32 resize-none"
                   disabled={isLoading}
                   required
                 />
@@ -334,7 +334,7 @@ export function CreateSupportRequestModal({ firmSlug, trigger }: CreateSupportRe
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={isLoading}
-                    className="inline-flex items-center gap-1 text-[0.8125rem] text-[#069668] hover:text-[#047a55] font-medium transition-colors disabled:opacity-50"
+                    className="inline-flex items-center gap-1 text-[0.8125rem] text-primary hover:text-[#047a55] font-medium transition-colors disabled:opacity-50"
                   >
                     <Paperclip className="h-3.5 w-3.5" />
                     Add files
@@ -357,8 +357,8 @@ export function CreateSupportRequestModal({ firmSlug, trigger }: CreateSupportRe
                   className={cn(
                     "border border-dashed rounded-[2px] px-4 py-5 text-center transition-colors cursor-pointer",
                     isDragOver
-                      ? "border-[#069668] bg-[#f0faf6]"
-                      : "border-[#d1d5db] bg-[#f9f9fb] hover:border-[#069668]/50 hover:bg-[#f9f9fb]"
+                      ? "border-primary bg-[#f0faf6]"
+                      : "border-[#d1d5db] bg-[#f9f9fb] hover:border-primary/50 hover:bg-[#f9f9fb]"
                   )}
                   onClick={() => fileInputRef.current?.click()}
                 >
@@ -381,13 +381,13 @@ export function CreateSupportRequestModal({ firmSlug, trigger }: CreateSupportRe
                           {a.status === 'uploading' && (
                             <div className="flex items-center gap-2 mt-1">
                               <div className="flex-1 h-0.5 bg-[#e5e7eb] rounded overflow-hidden">
-                                <div className="h-full bg-[#069668] transition-all" style={{ width: `${a.progress}%` }} />
+                                <div className="h-full bg-primary transition-all" style={{ width: `${a.progress}%` }} />
                               </div>
                               <span className="text-[10px] text-[#45474c] tabular-nums">{a.progress}%</span>
                             </div>
                           )}
                           {a.status === 'done' && (
-                            <p className="text-[10px] text-[#069668] flex items-center gap-1 mt-0.5 font-medium">
+                            <p className="text-[10px] text-primary flex items-center gap-1 mt-0.5 font-medium">
                               <CheckCircle2 className="h-3 w-3" /> Uploaded
                             </p>
                           )}

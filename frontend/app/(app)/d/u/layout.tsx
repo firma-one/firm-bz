@@ -31,7 +31,7 @@ export default function UserLayout({ children }: { children: ReactNode }) {
         <nav className="flex items-center gap-1.5 mb-4">
           <Home className="h-4 w-4 text-[#45474c] opacity-60" />
           <ChevronRight className="h-3.5 w-3.5 text-[#d1d5db]" />
-          <User className="h-4 w-4 text-[#069668]" />
+          <User className="h-4 w-4 text-primary" />
           <span className="font-mono text-[11px] font-bold text-[#1b1b1d] uppercase tracking-tighter">
             Personalization
           </span>
@@ -67,14 +67,14 @@ export default function UserLayout({ children }: { children: ReactNode }) {
                   href={tab.href}
                   className={`inline-flex items-center gap-2 h-full px-4 rounded-none font-medium text-sm border-b-2 transition-all ${
                     isActive
-                      ? 'border-[#069668] text-[#1b1b1d] font-bold opacity-100'
+                      ? 'border-primary text-[#1b1b1d] font-bold opacity-100'
                       : 'border-transparent text-[#45474c] opacity-60 hover:opacity-100'
                   }`}
                 >
                   <Icon className="w-4 h-4" />
                   {tab.label}
                   {count != null && count > 0 && (
-                    <span className="ml-1 font-mono text-[10px] font-bold bg-[#069668] text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
+                    <span className="ml-1 font-mono text-[10px] font-bold bg-primary text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
                       {count}
                     </span>
                   )}

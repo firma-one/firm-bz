@@ -190,7 +190,7 @@ export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className,
                                             firmSlug: firmForBilling?.slug ?? null,
                                             pathname: pathname ?? null,
                                         })}
-                                        className="mt-2 inline-block text-xs font-semibold text-[#069668] hover:text-[#065f46] underline-offset-2 hover:underline text-left"
+                                        className="mt-2 inline-block text-xs font-semibold text-primary hover:text-primary underline-offset-2 hover:underline text-left"
                                     >
                                         {upgradeCopy.dropdownAction}
                                     </Link>
@@ -201,11 +201,11 @@ export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className,
                         <SelectItem
                             value={ADD_FIRM_VALUE}
                             disabled={addFirmDisabled}
-                            className="w-full cursor-pointer items-stretch rounded-none border-0 bg-[#ecfdf5] px-3 py-3 text-left text-[0.8125rem] text-[#069668] outline-none ring-0 ring-offset-0 focus:bg-[#d1fae5] focus:text-[#065f46] focus-visible:ring-0 data-[highlighted]:bg-[#d1fae5] data-[highlighted]:text-[#065f46] data-[disabled]:pointer-events-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 [&>span:last-child]:block [&>span:last-child]:min-w-0 [&>span:last-child]:w-full"
+                            className="w-full cursor-pointer items-stretch rounded-none border-0 bg-primary/10 px-3 py-3 text-left text-[0.8125rem] text-primary outline-none ring-0 ring-offset-0 focus:bg-[#d1fae5] focus:text-primary focus-visible:ring-0 data-[highlighted]:bg-[#d1fae5] data-[highlighted]:text-primary data-[disabled]:pointer-events-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 [&>span:last-child]:block [&>span:last-child]:min-w-0 [&>span:last-child]:w-full"
                         >
                             <div className="flex w-full min-w-0 items-center gap-2.5">
-                                <SquarePlus className="h-4 w-4 shrink-0 text-[#069668]" aria-hidden />
-                                <span className="font-semibold text-[#069668]">Add Firm</span>
+                                <SquarePlus className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+                                <span className="font-semibold text-primary">Add Firm</span>
                             </div>
                         </SelectItem>
                     )}
@@ -218,7 +218,7 @@ export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className,
                             <SelectItem
                                 value={org.slug}
                                 textValue={org.name}
-                                className="min-w-0 w-full cursor-pointer items-stretch rounded-none border-0 px-3 py-2.5 text-left text-[0.8125rem] text-[#45474c] outline-none ring-0 ring-offset-0 focus:bg-[#f9f9fb] focus:text-[#1b1b1d] focus-visible:ring-0 data-[highlighted]:bg-[#f9f9fb] data-[highlighted]:text-[#1b1b1d] data-[state=checked]:text-[#069668] [&>span:last-child]:block [&>span:last-child]:min-w-0 [&>span:last-child]:w-full"
+                                className="min-w-0 w-full cursor-pointer items-stretch rounded-none border-0 px-3 py-2.5 text-left text-[0.8125rem] text-[#45474c] outline-none ring-0 ring-offset-0 focus:bg-[#f9f9fb] focus:text-[#1b1b1d] focus-visible:ring-0 data-[highlighted]:bg-[#f9f9fb] data-[highlighted]:text-[#1b1b1d] data-[state=checked]:text-primary [&>span:last-child]:block [&>span:last-child]:min-w-0 [&>span:last-child]:w-full"
                             >
                                 <div className="flex w-full min-w-0 flex-col items-start gap-0.5 text-left">
                                     <div className="flex min-w-0 w-full items-center gap-2">

@@ -36,7 +36,7 @@ interface AddClientModalProps {
 }
 
 const fieldLabel = 'font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] block mb-1'
-const inputCls = 'border-[#e5e7eb] text-[#1b1b1d] text-sm placeholder:text-[#9a9ba0] rounded focus-visible:ring-1 focus-visible:ring-[#069668] focus-visible:border-[#069668] disabled:opacity-50 disabled:cursor-not-allowed'
+const inputCls = 'border-[#e5e7eb] text-[#1b1b1d] text-sm placeholder:text-[#9a9ba0] rounded focus-visible:ring-1 focus-visible:ring-primary focus-visible:border-primary disabled:opacity-50 disabled:cursor-not-allowed'
 
 export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigger, onSaved }: AddClientModalProps) {
     const [open, setOpen] = useState(false)
@@ -178,8 +178,8 @@ export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigg
 
                     {/* Header */}
                     <div className="px-5 py-4 border-b border-[#e5e7eb] bg-[#f9f9fb] flex items-start gap-3">
-                        <div className="mt-0.5 h-7 w-7 rounded bg-[#ecfdf5] flex items-center justify-center shrink-0">
-                            <UserPlus className="h-3.5 w-3.5 text-[#069668]" />
+                        <div className="mt-0.5 h-7 w-7 rounded bg-primary/10 flex items-center justify-center shrink-0">
+                            <UserPlus className="h-3.5 w-3.5 text-primary" />
                         </div>
                         <div>
                             <p className="text-sm font-semibold text-[#1b1b1d] leading-tight">New Client</p>
@@ -332,7 +332,7 @@ export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigg
                                     className={`flex flex-wrap gap-1.5 min-h-[36px] w-full rounded border px-3 py-2 text-sm transition-colors cursor-text
                                         ${isSandboxFirm || isLoading
                                             ? 'border-[#e5e7eb] bg-[#f9f9fb] opacity-50 cursor-not-allowed'
-                                            : 'border-[#e5e7eb] bg-white focus-within:ring-1 focus-within:ring-[#069668] focus-within:border-[#069668]'
+                                            : 'border-[#e5e7eb] bg-white focus-within:ring-1 focus-within:ring-primary focus-within:border-primary'
                                         }`}
                                     onClick={() => tagInputRef.current?.focus()}
                                 >
@@ -357,7 +357,7 @@ export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigg
                                         disabled={isSandboxFirm || isLoading}
                                         className="flex-1 min-w-[120px] bg-transparent outline-none placeholder:text-[#9a9ba0] text-[#1b1b1d] text-xs disabled:cursor-not-allowed"
                                     />
-                                    <CornerDownLeft className="h-3 w-3 text-[#069668] shrink-0 self-center ml-1" />
+                                    <CornerDownLeft className="h-3 w-3 text-primary shrink-0 self-center ml-1" />
                                 </div>
                             </div>
 
@@ -392,14 +392,14 @@ export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigg
 
                         {/* Footer */}
                         <div className="px-5 py-3 border-t border-[#e5e7eb] flex items-center justify-end gap-3">
-                            <Button type="button" variant="outline" className="rounded-[2px]" onClick={() => setOpen(false)} disabled={isLoading}>
+                            <Button type="button" variant="outline" className="rounded-[2px] text-[10px] font-headline font-bold tracking-widest uppercase" onClick={() => setOpen(false)} disabled={isLoading}>
                                 Cancel
                             </Button>
                             <Button
                                 variant="greenCta"
                                 type="submit"
                                 disabled={isSandboxFirm || isLoading || !name.trim()}
-                                className="rounded-[2px] min-w-[8rem] text-[10px] font-headline font-bold tracking-widest uppercase"
+                                className="rounded-[2px] min-w-[8rem] text-[10px] font-headline font-bold tracking-widest uppercase text-white"
                             >
                                 {isLoading ? <LoadingSpinner size="sm" /> : 'Create'}
                             </Button>

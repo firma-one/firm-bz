@@ -1,6 +1,7 @@
 "use client"
 
 import Logo, { type OrganizationBranding } from "@/components/Logo"
+import { hexToHsl, hexToRgbStr, getContrastForegroundHsl } from "@/lib/color-utils"
 
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react"
 import { usePathname } from "next/navigation"
@@ -142,14 +143,53 @@ function getBrandingFromSession(slug: string | null): OrganizationBranding | nul
   }
 }
 
-function setBrandingInSession(slug: string, branding: OrganizationBranding | null): void {
+type SessionBrandingPayload = OrganizationBranding & {
+  primaryHsl?: string
+  primaryFgHsl?: string
+  primaryRgb?: string
+  accentHsl?: string
+  accentFgHsl?: string
+}
+
+function setBrandingInSession(slug: string, payload: SessionBrandingPayload | null): void {
   if (typeof window === 'undefined' || !slug) return
   try {
-    if (branding) sessionStorage.setItem(SESSION_STORAGE_KEY(slug), JSON.stringify(branding))
+    if (payload) sessionStorage.setItem(SESSION_STORAGE_KEY(slug), JSON.stringify(payload))
     else sessionStorage.removeItem(SESSION_STORAGE_KEY(slug))
   } catch {
     // ignore
   }
+}
+
+function injectBrandCssVars(branding: OrganizationBranding | null): SessionBrandingPayload {
+  const payload: SessionBrandingPayload = { ...branding }
+
+  if (branding?.themeColor) {
+    const [h, s, l] = hexToHsl(branding.themeColor)
+    payload.primaryHsl = `${h} ${s}% ${l}%`
+    payload.primaryFgHsl = getContrastForegroundHsl(h, s, l)
+    payload.primaryRgb = hexToRgbStr(branding.themeColor)
+    document.documentElement.style.setProperty('--primary', payload.primaryHsl)
+    document.documentElement.style.setProperty('--primary-foreground', payload.primaryFgHsl)
+    document.documentElement.style.setProperty('--primary-rgb', payload.primaryRgb)
+  } else {
+    document.documentElement.style.removeProperty('--primary')
+    document.documentElement.style.removeProperty('--primary-foreground')
+    document.documentElement.style.removeProperty('--primary-rgb')
+  }
+
+  if (branding?.secondaryColor) {
+    const [h, s, l] = hexToHsl(branding.secondaryColor)
+    payload.accentHsl = `${h} ${s}% ${l}%`
+    payload.accentFgHsl = getContrastForegroundHsl(h, s, l)
+    document.documentElement.style.setProperty('--brand-accent', payload.accentHsl)
+    document.documentElement.style.setProperty('--brand-accent-foreground', payload.accentFgHsl)
+  } else {
+    document.documentElement.style.removeProperty('--brand-accent')
+    document.documentElement.style.removeProperty('--brand-accent-foreground')
+  }
+
+  return payload
 }
 
 export function AppTopbar() {
@@ -187,18 +227,18 @@ export function AppTopbar() {
 
   const parsePathContext = useCallback(() => {
     const path = pathname ?? ''
-    const orgMatch = path.match(/^\/d\/o\/([^/]+)/)
+    const orgMatch = path.match(/^\/d\/(?:o|f)\/([^/]+)/)
     const orgSlug = orgMatch?.[1] ?? null
-    const clientMatch = path.match(/^\/d\/o\/[^/]+\/c\/([^/]+)/)
+    const clientMatch = path.match(/^\/d\/(?:o|f)\/[^/]+\/c\/([^/]+)/)
     const clientSlug = clientMatch?.[1] ?? null
-    const projectMatch = path.match(/^\/d\/o\/[^/]+\/c\/[^/]+\/p\/([^/]+)/)
+    const projectMatch = path.match(/^\/d\/(?:o|f)\/[^/]+\/c\/[^/]+\/p\/([^/]+)/)
     const projectSlug = projectMatch?.[1] ?? null
     return { orgSlug, clientSlug, projectSlug }
   }, [pathname])
 
-  // Extract firm slug from pathname
+  // Extract firm slug from pathname — handles both /d/o/{slug} and /d/f/{slug}
   const getSlug = () => {
-    const match = pathname?.match(/^\/d\/o\/([^/]+)/)
+    const match = pathname?.match(/^\/d\/(?:o|f)\/([^/]+)/)
     return match ? match[1] : null
   }
   const slug = getSlug()
@@ -218,6 +258,11 @@ export function AppTopbar() {
         setBranding(null)
         setLoading(false)
         currentSlugRef.current = null
+        // Clear any injected brand CSS vars when leaving the dashboard
+        document.documentElement.style.removeProperty('--primary')
+        document.documentElement.style.removeProperty('--primary-foreground')
+        document.documentElement.style.removeProperty('--brand-accent')
+        document.documentElement.style.removeProperty('--brand-accent-foreground')
         return
       }
 
@@ -231,6 +276,7 @@ export function AppTopbar() {
       if (slug && currentSlugRef.current === slug && brandingCache.has(slug)) {
         const cached = brandingCache.get(slug)!
         setBranding(cached.branding)
+        if (pathname?.startsWith('/d')) injectBrandCssVars(cached.branding)
         setLoading(false)
         return
       }
@@ -254,30 +300,32 @@ export function AppTopbar() {
 
         if (response.ok) {
           const data = await response.json()
-          const org = data.organization || data
+          const org = data.organization || data.firm || data
           if (org?.name) setFirmName(org.name)
           const settings = (org?.settings as Record<string, unknown>) || {}
           const b = (settings.branding as Record<string, string | undefined>) || {}
-          // Prefer org-level branding columns (logoUrl, themeColorHex, brandingSubtext), then settings.branding
-          const logoUrl = (org?.logoUrl as string) ?? b.logoUrl ?? null
-          const themeColor = (org?.themeColorHex as string) ?? b.themeColor ?? b.brandColor ?? null
-          const subtext = (org?.brandingSubtext as string) ?? b.subtext ?? null
-          const brandingData: OrganizationBranding | null = (logoUrl || themeColor || b.brandColor || org?.name || b.name)
+
+          // Read exclusively from settings.branding — no column fallbacks
+          const brandingData: OrganizationBranding | null = (b.logoUrl || b.primaryColor || org?.name)
             ? {
-              logoUrl: logoUrl ?? null,
-              name: org?.name ?? b.name ?? null,
-              subtext: subtext ?? null,
-              themeColor: themeColor ?? null,
+              logoUrl: b.logoUrl ?? null,
+              name: org?.name ?? null,
+              subtext: b.subtext ?? null,
+              themeColor: b.primaryColor ?? null,
+              secondaryColor: b.secondaryColor ?? null,
             }
             : null
 
           setBranding(brandingData)
 
-          // Cache by slug (in-memory + sessionStorage so cache is built on every fetch, including after Firm Settings Save)
+          // Inject CSS vars + cache (in-memory + sessionStorage)
           if (slug) {
+            const payload = pathname?.startsWith('/d')
+              ? injectBrandCssVars(brandingData)
+              : brandingData ?? {}
             brandingCache.set(slug, { branding: brandingData, firmId: org?.id })
             currentSlugRef.current = slug
-            setBrandingInSession(slug, brandingData)
+            setBrandingInSession(slug, payload as SessionBrandingPayload)
           }
         }
       } catch {
@@ -436,14 +484,16 @@ export function AppTopbar() {
       className={`flex h-full w-full items-center px-4 gap-4 ${!mounted ? 'invisible pointer-events-none' : ''}`}
       aria-hidden={!mounted}
     >
-      {/* Left: Branding — w-60 matches HTML mockup, aligns with sidebar */}
+      {/* Left: Org branding — only shown when org branding is loaded; Firma logo lives in the profile menu */}
       <div className="w-60 shrink-0 flex items-center pl-1">
-        <Logo
-          size="md"
-          showText
-          branding={branding ?? undefined}
-          wordmarkClassName="font-headline text-2xl font-bold tracking-tighter text-[#1b1b1d]"
-        />
+        {branding && (
+          <Logo
+            size="md"
+            showText
+            branding={branding}
+            wordmarkClassName="font-headline text-2xl font-bold tracking-tighter text-[#1b1b1d]"
+          />
+        )}
       </div>
 
       {/* Center: Command palette trigger */}
@@ -455,7 +505,7 @@ export function AppTopbar() {
             <button
               type="button"
               onClick={() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true, bubbles: true }))}
-              className="flex items-center gap-2.5 w-full max-w-sm bg-[#f9f9fb] border border-[#e5e7eb] rounded-sm px-3 py-2 text-sm text-[#45474c]/60 hover:border-[#069668]/40 hover:bg-white transition-colors group"
+              className="flex items-center gap-2.5 w-full max-w-sm bg-[#f9f9fb] border border-[#e5e7eb] rounded-sm px-3 py-2 text-sm text-[#45474c]/60 hover:border-primary/40 hover:bg-white transition-colors group"
               aria-label="Open command palette"
             >
               <Search className="h-4 w-4 shrink-0" />
@@ -502,7 +552,7 @@ export function AppTopbar() {
                   <div className="flex items-center gap-2">
                     <span className="text-[0.8125rem] font-bold text-[#1b1b1d] tracking-tight">Bookmarks</span>
                     {bookmarks.length > 0 ? (
-                      <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded-sm tabular-nums leading-none bg-[#069668] text-white">{bookmarks.length}</span>
+                      <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded-sm tabular-nums leading-none bg-[#5A78FF] text-white">{bookmarks.length}</span>
                     ) : null}
                   </div>
                   <button type="button" onClick={() => setShowBookmarksDropdown(false)} aria-label="Close"
@@ -515,7 +565,7 @@ export function AppTopbar() {
                     value={bookmarkQuery}
                     onChange={(e) => { setBookmarkQuery(e.target.value) }}
                     placeholder="Search bookmarks…"
-                    className="w-full h-8 rounded-[2px] border border-[#e5e7eb] bg-white px-2.5 text-[0.8125rem] text-[#1b1b1d] placeholder:text-[#45474c] focus:outline-none focus:ring-1 focus:ring-[#069668] focus:border-[#069668]"
+                    className="w-full h-8 rounded-[2px] border border-[#e5e7eb] bg-white px-2.5 text-[0.8125rem] text-[#1b1b1d] placeholder:text-[#45474c] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
                   />
                 </div>
               </div>
@@ -579,7 +629,7 @@ export function AppTopbar() {
                               }
                             }}
                           >
-                            <X className="h-4 w-4" />
+                            <Trash2 className="h-4 w-4" />
                           </button>
                         </div>
                       ))}
@@ -590,7 +640,7 @@ export function AppTopbar() {
                           </span>
                           <Link
                             href="/d/u/bookmarks"
-                            className="flex items-center gap-0.5 text-[11px] font-semibold text-[#069668] hover:text-[#065f46]"
+                            className="flex items-center gap-0.5 text-[11px] font-semibold text-firma hover:text-firma/80"
                             onClick={() => setShowBookmarksDropdown(false)}
                           >
                             View all <ArrowUpRight className="h-3 w-3" />
@@ -609,17 +659,17 @@ export function AppTopbar() {
           <Tip label="Notifications" position="bottom-right">
           <button
             type="button"
-            className="w-10 h-10 flex items-center justify-center rounded-xl text-[#069668] hover:bg-[#069668]/10 transition-colors relative"
+            className="w-10 h-10 flex items-center justify-center rounded-xl text-firma hover:bg-firma/10 transition-colors relative"
             aria-label="Notifications"
             onClick={() => setShowNotificationsDropdown((v) => !v)}
           >
             <Bell className="h-5 w-5" />
             {unreadCount > 0 ? (
-              <span className="absolute top-1 right-1 min-w-[14px] h-3.5 px-1 bg-[#069668] text-white text-[9px] font-bold rounded-full border border-white flex items-center justify-center leading-none">
+              <span className="absolute top-1 right-1 min-w-[14px] h-3.5 px-1 bg-firma text-firma-foreground text-[9px] font-bold rounded-full border border-white flex items-center justify-center leading-none">
                 {unreadCount}
               </span>
             ) : (
-              <span className="absolute top-1 right-1 h-2 w-2 bg-[#069668] rounded-full border border-white" />
+              <span className="absolute top-1 right-1 h-2 w-2 bg-firma rounded-full border border-white" />
             )}
           </button>
           </Tip>
@@ -630,7 +680,7 @@ export function AppTopbar() {
                   <div className="flex items-center gap-2">
                     <span className="text-[0.8125rem] font-bold text-[#1b1b1d] tracking-tight">Notifications</span>
                     {unreadCount > 0 ? (
-                      <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded-sm tabular-nums leading-none bg-rose-600 text-white">{unreadCount}</span>
+                      <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded-sm tabular-nums leading-none bg-firma text-firma-foreground">{unreadCount}</span>
                     ) : null}
                   </div>
                   <div className="flex items-center gap-1">
@@ -643,7 +693,7 @@ export function AppTopbar() {
                 <div className="mt-2 grid grid-cols-2 gap-2">
                   <button
                     type="button"
-                    className="h-9 rounded-[2px] border border-[#e5e7eb] bg-white px-2 text-xs font-semibold text-[#1b1b1d] hover:border-[#069668]/50 hover:bg-[#f9f9fb] whitespace-nowrap"
+                    className="h-9 rounded-[2px] border border-[#e5e7eb] bg-white px-2 text-xs font-semibold text-[#1b1b1d] hover:border-primary/50 hover:bg-[#f9f9fb] whitespace-nowrap"
                     title="Clear all notifications"
                     onClick={async () => {
                       try {
@@ -672,7 +722,7 @@ export function AppTopbar() {
                   </button>
                   <button
                     type="button"
-                    className="h-9 rounded-[2px] border border-[#e5e7eb] bg-white px-2 text-xs font-semibold text-[#1b1b1d] hover:border-[#069668]/50 hover:bg-[#f9f9fb] whitespace-nowrap disabled:opacity-50"
+                    className="h-9 rounded-[2px] border border-[#e5e7eb] bg-white px-2 text-xs font-semibold text-[#1b1b1d] hover:border-primary/50 hover:bg-[#f9f9fb] whitespace-nowrap disabled:opacity-50"
                     onClick={() => setShowBroadcastComposer((v) => !v)}
                     disabled={!canBroadcast}
                     title={canBroadcast ? 'Send a broadcast to a team' : 'Broadcasts are available to admins'}
@@ -715,7 +765,7 @@ export function AppTopbar() {
                                 ? 'border-[#e5e7eb] bg-[#f9f9fb] text-[#45474c] cursor-not-allowed'
                                 : isActive
                                   ? 'border-rose-300 bg-white text-[#1b1b1d] shadow-sm'
-                                  : 'border-[#e5e7eb] bg-white text-[#1b1b1d] hover:border-[#069668]/50 hover:bg-[#f9f9fb]'
+                                  : 'border-[#e5e7eb] bg-white text-[#1b1b1d] hover:border-primary/50 hover:bg-[#f9f9fb]'
                             }`}
                             title={enabled ? label : `${label} (coming soon)`}
                             onClick={() => enabled && setBroadcastScope(s)}
@@ -729,14 +779,14 @@ export function AppTopbar() {
                       value={broadcastTitle}
                       onChange={(e) => setBroadcastTitle(e.target.value)}
                       placeholder="Title (optional)"
-                      className="w-full h-8 rounded-[2px] border border-[#e5e7eb] bg-white px-2.5 text-xs text-[#1b1b1d] placeholder:text-[#45474c] focus:outline-none focus:ring-1 focus:ring-[#069668] focus:border-[#069668]"
+                      className="w-full h-8 rounded-[2px] border border-[#e5e7eb] bg-white px-2.5 text-xs text-[#1b1b1d] placeholder:text-[#45474c] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
                     />
                     <textarea
                       value={broadcastText}
                       onChange={(e) => setBroadcastText(e.target.value.slice(0, 1000))}
                       placeholder="Broadcast message (max 1000 chars)…"
                       rows={4}
-                      className="mt-2 w-full rounded-[2px] border border-[#e5e7eb] bg-white px-2.5 py-2 text-xs text-[#1b1b1d] placeholder:text-[#45474c] focus:outline-none focus:ring-1 focus:ring-[#069668] focus:border-[#069668] resize-none"
+                      className="mt-2 w-full rounded-[2px] border border-[#e5e7eb] bg-white px-2.5 py-2 text-xs text-[#1b1b1d] placeholder:text-[#45474c] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary resize-none"
                     />
                     <div className="mt-2 flex items-center justify-between">
                       <div className="text-[11px] text-[#45474c]">{broadcastText.length}/1000</div>
@@ -756,7 +806,7 @@ export function AppTopbar() {
                         </button>
                         <button
                           type="button"
-                          className="h-9 w-9 inline-flex items-center justify-center rounded-[2px] bg-[#069668] text-white hover:bg-[#057a54] disabled:opacity-60"
+                          className="h-9 w-9 inline-flex items-center justify-center rounded-[2px] bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
                           disabled={broadcastSending || broadcastText.trim().length === 0}
                           onClick={async () => {
                             try {
@@ -916,7 +966,7 @@ export function AppTopbar() {
                       </span>
                       <Link
                         href="/d/u/notifications"
-                        className="flex items-center gap-0.5 text-[11px] font-semibold text-[#069668] hover:text-[#065f46]"
+                        className="flex items-center gap-0.5 text-[11px] font-semibold text-firma hover:text-firma/80"
                         onClick={() => setShowNotificationsDropdown(false)}
                       >
                         View all <ArrowUpRight className="h-3 w-3" />

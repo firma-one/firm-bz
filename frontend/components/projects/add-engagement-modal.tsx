@@ -28,7 +28,7 @@ interface AddEngagementModalProps {
 }
 
 const fieldLabel = 'font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] block mb-1'
-const inputCls = 'border-[#e5e7eb] text-[#1b1b1d] text-sm placeholder:text-[#9a9ba0] rounded focus-visible:ring-1 focus-visible:ring-[#069668] focus-visible:border-[#069668] disabled:opacity-50 disabled:cursor-not-allowed'
+const inputCls = 'border-[#e5e7eb] text-[#1b1b1d] text-sm placeholder:text-[#9a9ba0] rounded focus-visible:ring-1 focus-visible:ring-primary focus-visible:border-primary disabled:opacity-50 disabled:cursor-not-allowed'
 
 export function AddEngagementModal({ firmSlug, clientSlug, firmSandboxOnly = false, trigger, onSaved }: AddEngagementModalProps) {
     const [open, setOpen] = useState(false)
@@ -194,8 +194,8 @@ export function AddEngagementModal({ firmSlug, clientSlug, firmSandboxOnly = fal
 
                     {/* Header */}
                     <div className="px-5 py-4 border-b border-[#e5e7eb] bg-[#f9f9fb] flex items-start gap-3">
-                        <div className="mt-0.5 h-7 w-7 rounded bg-[#ecfdf5] flex items-center justify-center shrink-0">
-                            <SquarePlus className="h-3.5 w-3.5 text-[#069668]" />
+                        <div className="mt-0.5 h-7 w-7 rounded bg-primary/10 flex items-center justify-center shrink-0">
+                            <SquarePlus className="h-3.5 w-3.5 text-primary" />
                         </div>
                         <div>
                             <p className="text-sm font-semibold text-[#1b1b1d] leading-tight">New Engagement</p>
@@ -229,7 +229,7 @@ export function AddEngagementModal({ firmSlug, clientSlug, firmSandboxOnly = fal
                                     placeholder="e.g. Q1 Audit"
                                     required={!isSandboxFirm}
                                     disabled={isDisabled}
-                                    className={`flex h-9 w-full rounded border border-[#e5e7eb] bg-white px-3 py-2 text-sm text-[#1b1b1d] placeholder:text-[#9a9ba0] focus:outline-none focus:ring-1 focus:ring-[#069668] focus:border-[#069668] disabled:opacity-50 disabled:cursor-not-allowed`}
+                                    className={`flex h-9 w-full rounded border border-[#e5e7eb] bg-white px-3 py-2 text-sm text-[#1b1b1d] placeholder:text-[#9a9ba0] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed`}
                                 />
                             </div>
 
@@ -269,7 +269,7 @@ export function AddEngagementModal({ firmSlug, clientSlug, firmSandboxOnly = fal
                                     placeholder="Brief engagement description"
                                     rows={2}
                                     disabled={isDisabled}
-                                    className="flex w-full rounded border border-[#e5e7eb] bg-white px-3 py-2 text-sm text-[#1b1b1d] placeholder:text-[#9a9ba0] focus:outline-none focus:ring-1 focus:ring-[#069668] focus:border-[#069668] disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="flex w-full rounded border border-[#e5e7eb] bg-white px-3 py-2 text-sm text-[#1b1b1d] placeholder:text-[#9a9ba0] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
                                 />
                             </div>
 
@@ -281,7 +281,7 @@ export function AddEngagementModal({ firmSlug, clientSlug, firmSandboxOnly = fal
                                         <DropdownMenuTrigger asChild disabled={isDisabled}>
                                             <button
                                                 id="ctype"
-                                                className="w-full h-9 flex items-center justify-between rounded border border-[#e5e7eb] bg-white px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus:ring-1 focus:ring-[#069668]"
+                                                className="w-full h-9 flex items-center justify-between rounded border border-[#e5e7eb] bg-white px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus:ring-1 focus:ring-primary"
                                             >
                                                 <span className={contractType ? 'text-[#1b1b1d]' : 'text-[#9a9ba0]'}>
                                                     {contractType || 'Select type…'}
@@ -297,7 +297,7 @@ export function AddEngagementModal({ firmSlug, clientSlug, firmSandboxOnly = fal
                                                     onSelect={() => { setContractType(label); setContractTypeIsCustom(false); setContractTypeOpen(false) }}
                                                 >
                                                     {label}
-                                                    {contractType === label && !contractTypeIsCustom && <Check className="h-3.5 w-3.5 text-[#069668]" />}
+                                                    {contractType === label && !contractTypeIsCustom && <Check className="h-3.5 w-3.5 text-primary" />}
                                                 </DropdownMenuItem>
                                             ))}
                                             <DropdownMenuSeparator />
@@ -310,14 +310,14 @@ export function AddEngagementModal({ firmSlug, clientSlug, firmSandboxOnly = fal
                                                     placeholder="Other…"
                                                     className="flex-1 text-sm text-[#1b1b1d] placeholder:text-[#9a9ba0] outline-none bg-transparent"
                                                 />
-                                                {contractTypeIsCustom && contractType && <Check className="h-3.5 w-3.5 text-[#069668] shrink-0" />}
+                                                {contractTypeIsCustom && contractType && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
                                             </div>
                                         </DropdownMenuContent>
                                     </DropdownMenu>
                                 </div>
                                 <div>
                                     <label htmlFor="eng-rate" className={fieldLabel}>Contract value <span className="normal-case tracking-normal font-sans text-[#9a9ba0]">(optional)</span></label>
-                                    <div className={`flex items-center rounded border border-[#e5e7eb] bg-white focus-within:ring-1 focus-within:ring-[#069668] focus-within:border-[#069668] ${isDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                                    <div className={`flex items-center rounded border border-[#e5e7eb] bg-white focus-within:ring-1 focus-within:ring-primary focus-within:border-primary ${isDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
                                         {currencySymbol && (
                                             <span className="pl-3 pr-1 text-sm text-[#45474c] shrink-0 select-none">{currencySymbol}</span>
                                         )}
@@ -361,7 +361,7 @@ export function AddEngagementModal({ firmSlug, clientSlug, firmSandboxOnly = fal
                                     className={`flex flex-wrap gap-1.5 min-h-[36px] w-full rounded border px-3 py-2 text-sm transition-colors cursor-text
                                         ${isDisabled
                                             ? 'border-[#e5e7eb] bg-[#f9f9fb] opacity-50 cursor-not-allowed'
-                                            : 'border-[#e5e7eb] bg-white focus-within:ring-1 focus-within:ring-[#069668] focus-within:border-[#069668]'
+                                            : 'border-[#e5e7eb] bg-white focus-within:ring-1 focus-within:ring-primary focus-within:border-primary'
                                         }`}
                                     onClick={() => tagInputRef.current?.focus()}
                                 >
@@ -386,21 +386,21 @@ export function AddEngagementModal({ firmSlug, clientSlug, firmSandboxOnly = fal
                                         disabled={isDisabled}
                                         className="flex-1 min-w-[120px] bg-transparent outline-none placeholder:text-[#9a9ba0] text-[#1b1b1d] text-xs disabled:cursor-not-allowed"
                                     />
-                                    <CornerDownLeft className="h-3 w-3 text-[#069668] shrink-0 self-center ml-1" />
+                                    <CornerDownLeft className="h-3 w-3 text-primary shrink-0 self-center ml-1" />
                                 </div>
                             </div>
                         </div>
 
                         {/* Footer */}
                         <div className="px-5 py-3 border-t border-[#e5e7eb] flex items-center justify-end gap-3">
-                            <Button type="button" variant="outline" className="rounded-[2px]" onClick={() => setOpen(false)} disabled={isLoading}>
+                            <Button type="button" variant="outline" className="rounded-[2px] text-[10px] font-headline font-bold tracking-widest uppercase" onClick={() => setOpen(false)} disabled={isLoading}>
                                 Cancel
                             </Button>
                             <Button
                                 variant="greenCta"
                                 type="submit"
                                 disabled={isDisabled || !name.trim()}
-                                className="rounded-[2px] min-w-[8rem] text-[10px] font-headline font-bold tracking-widest uppercase"
+                                className="rounded-[2px] min-w-[8rem] text-[10px] font-headline font-bold tracking-widest uppercase text-white"
                             >
                                 {isLoading ? <LoadingSpinner size="sm" /> : 'Create'}
                             </Button>

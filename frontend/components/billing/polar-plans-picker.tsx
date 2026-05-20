@@ -71,20 +71,20 @@ function billingToggleTrackClass(peachAccent: boolean) {
         'inline-flex w-max max-w-[calc(100%-4.5rem)] shrink-0 items-stretch gap-0.5 rounded-[2px] p-0.5',
         peachAccent
             ? 'border border-[#c49a82]/55 bg-gradient-to-b from-[#ECC0AA]/38 to-[#ECC0AA]/14 shadow-[inset_0_1px_3px_rgba(61,42,34,0.09)]'
-            : 'border border-[#069668]/30 bg-[#069668]/10 shadow-[inset_0_1px_2px_rgba(6,150,104,0.08)]'
+            : 'border border-primary/30 bg-primary/10 shadow-[inset_0_1px_2px_rgba(var(--primary-rgb),0.08)]'
     )
 }
 
 function billingToggleSegmentActive(peachAccent: boolean) {
     return peachAccent
         ? 'bg-white text-[#3d2a22] shadow-[0_2px_10px_rgba(236,192,170,0.45)] ring-1 ring-[#c49a82]/50'
-        : 'bg-white text-[#1b1b1d] shadow-[0_2px_8px_rgba(6,150,104,0.12),0_0_0_1px_rgba(6,150,104,0.1)]'
+        : 'bg-white text-[#1b1b1d] shadow-[0_2px_8px_rgba(var(--primary-rgb),0.12),0_0_0_1px_rgba(var(--primary-rgb),0.1)]'
 }
 
 function billingToggleSegmentInactive(peachAccent: boolean) {
     return peachAccent
         ? 'text-[#7a5343]/88 hover:bg-white/40 hover:text-[#3d2a22]'
-        : 'text-[#069668]/80 hover:bg-white/40 hover:text-[#069668]'
+        : 'text-primary/80 hover:bg-white/40 hover:text-primary'
 }
 
 function planCardHeadingClass(compact: boolean) {
@@ -245,8 +245,8 @@ const billingTrustPanelClass = (compact: boolean, blueAccentTrial?: boolean) =>
 /** Green CTA (Manage Subscription & plan checkout CTAs). */
 const polarBillingCtaButtonClass = cn(
     'text-sm font-semibold rounded-[2px]',
-    'bg-[#069668] text-white hover:bg-[#069668] hover:brightness-105 hover:text-white',
-    'shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(6,150,104,0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all'
+    'bg-primary text-white hover:bg-primary hover:brightness-105 hover:text-white',
+    'shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all'
 )
 
 /** Billing page trial: primary checkout filled with #ECC0AA */

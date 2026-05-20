@@ -57,7 +57,7 @@ const KIND_FILTER_LABELS: Record<KindFilter, string> = {
 
 const KIND_BADGE: Record<string, string> = {
   document: 'bg-blue-50 text-blue-700',
-  project:  'bg-[#ecfdf5] text-[#065f46]',
+  project:  'bg-primary/10 text-primary',
   comment:  'bg-purple-50 text-purple-700',
   url:      'bg-[#f3f4f6] text-[#45474c]',
 }
@@ -146,8 +146,8 @@ export function BookmarksTable({ initialBookmarks, atCap }: Props) {
   function SortIcon({ field }: { field: SortField }) {
     if (sortField !== field) return <ChevronsUpDown className="h-3 w-3 text-[#9ca3af]" />
     return sortDir === 'asc'
-      ? <ChevronUp className="h-3 w-3 text-[#069668]" />
-      : <ChevronDown className="h-3 w-3 text-[#069668]" />
+      ? <ChevronUp className="h-3 w-3 text-primary" />
+      : <ChevronDown className="h-3 w-3 text-primary" />
   }
 
   return (
@@ -261,11 +261,11 @@ export function BookmarksTable({ initialBookmarks, atCap }: Props) {
                   className="flex items-center gap-2 min-w-0 group"
                 >
                   <Icon className="h-3.5 w-3.5 shrink-0 text-[#45474c]" />
-                  <span className="text-[0.8125rem] font-medium text-[#1b1b1d] truncate group-hover:text-[#069668] transition-colors">
+                  <span className="text-[0.8125rem] font-medium text-[#1b1b1d] truncate group-hover:text-primary transition-colors">
                     {label}
                   </span>
                   {isExternal && (
-                    <ExternalLink className="h-3 w-3 shrink-0 text-[#9ca3af] group-hover:text-[#069668]" />
+                    <ExternalLink className="h-3 w-3 shrink-0 text-[#9ca3af] group-hover:text-primary" />
                   )}
                 </a>
                 <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-semibold leading-none w-fit ${KIND_BADGE[b.kind] ?? KIND_BADGE.url}`}>

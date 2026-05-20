@@ -142,8 +142,8 @@ const LANES: {
     {
       status: 'done',
       label: 'Done',
-      icon: <CheckCircle className="h-3.5 w-3.5 text-[#069668]" />,
-      iconBg: 'bg-[#ecfdf5]',
+      icon: <CheckCircle className="h-3.5 w-3.5 text-primary" />,
+      iconBg: 'bg-primary/10',
     },
   ]
 
@@ -172,7 +172,7 @@ function DroppableLane({
 }) {
   const { setNodeRef, isOver } = useDroppable({ id })
   return (
-    <div ref={setNodeRef} className={cn(className, isOver && 'bg-[#069668]/5 rounded')}>
+    <div ref={setNodeRef} className={cn(className, isOver && 'bg-primary/5 rounded')}>
       {children}
     </div>
   )
@@ -182,7 +182,7 @@ const CARD_ACCENT: Record<ActivityStatus, { iconPillBg: string }> = {
   to_do: { iconPillBg: 'bg-[#f3f4f6]' },
   in_progress: { iconPillBg: 'bg-[#eff2ff]' },
   in_review: { iconPillBg: 'bg-[#fff7ed]' },
-  done: { iconPillBg: 'bg-[#ecfdf5]' },
+  done: { iconPillBg: 'bg-primary/10' },
 }
 
 function DraggableCard({
@@ -258,7 +258,7 @@ function DraggableCard({
         'rounded overflow-hidden select-none border border-[#e5e7eb] transition-shadow duration-200',
         'bg-white shadow-sm',
         isDragging && 'opacity-60 shadow-md z-10 scale-[1.02]',
-        isOver && !isDragging && 'ring-1 ring-[#069668]/30 ring-inset'
+        isOver && !isDragging && 'ring-1 ring-primary/30 ring-inset'
       )}
     >
       <div className="flex items-center gap-1 px-2.5 py-1 bg-[#f9f9fb] border-b border-[#e5e7eb]" {...listeners} {...attributes}>
@@ -354,7 +354,7 @@ function ShareCardContent({
           </div>
           <div className="min-w-0 flex-1">
             <div
-              className="text-[13px] font-semibold text-[#1b1b1d] truncate cursor-pointer hover:text-[#069668] transition-colors"
+              className="text-[13px] font-semibold text-[#1b1b1d] truncate cursor-pointer hover:text-primary transition-colors"
               title={share.documentName}
               onClick={onClickTitle}
             >
@@ -446,7 +446,7 @@ function ShareCardContent({
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <div className="h-5 w-5 rounded-lg bg-[#ecfdf5] text-[#065f46] flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EC</div>
+                      <div className="h-5 w-5 rounded-lg bg-primary/10 text-primary flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EC</div>
                     </TooltipTrigger>
                     <TooltipContent side="top" className="text-xs">{extCollaboratorLabel}</TooltipContent>
                   </Tooltip>
@@ -501,7 +501,7 @@ const STATUS_PILL_CLASS: Record<ActivityStatus, string> = {
   to_do: 'bg-[#ede9fe]/90 text-[#5b21b6]',
   in_progress: 'bg-[#eff2ff]/90 text-[#5A78FF]',
   in_review: 'bg-[#fff7ed]/90 text-[#c2410c]',
-  done: 'bg-[#ecfdf5]/90 text-[#069668]',
+  done: 'bg-primary/10/90 text-primary',
 }
 
 
@@ -670,7 +670,7 @@ function SharesListView({
                 </div>
                 <div className="flex flex-col min-w-0 flex-1">
                   <span
-                    className="text-[0.8125rem] font-medium truncate text-[#1b1b1d] hover:text-[#069668] cursor-pointer transition-colors"
+                    className="text-[0.8125rem] font-medium truncate text-[#1b1b1d] hover:text-primary cursor-pointer transition-colors"
                     title={share.documentName}
                     onClick={() => handleSecureOpen(share)}
                   >
@@ -690,7 +690,7 @@ function SharesListView({
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <div className="h-5 px-1.5 rounded bg-[#ecfdf5] text-[#065f46] flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EC</div>
+                        <div className="h-5 px-1.5 rounded bg-primary/10 text-primary flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EC</div>
                       </TooltipTrigger>
                       <TooltipContent side="top" className="text-xs">{extCollaboratorLabel}</TooltipContent>
                     </Tooltip>
@@ -759,7 +759,7 @@ function SharesListView({
                         }}
                         disabled={!deeplinkBase || !share.documentId}
                       >
-                        {linkCopiedId === share.id ? <Check className="h-4 w-4 text-[#069668]" /> : <Link2 className="h-4 w-4" />}
+                        {linkCopiedId === share.id ? <Check className="h-4 w-4 text-primary" /> : <Link2 className="h-4 w-4" />}
                       </button>
                     </TooltipTrigger>
                     <TooltipContent side="top" className="text-xs">{deeplinkBase && share.documentId ? 'Copy link' : 'No link'}</TooltipContent>
@@ -951,14 +951,14 @@ function ShareCard({
             <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-60 group-hover:opacity-40 transition-opacity duration-500" />
           </div>
         ) : isFolder ? (
-          <div className="w-full h-full bg-[#ecfdf5] flex items-center justify-center relative group-hover:bg-[#d1fae5] transition-colors duration-500">
+          <div className="w-full h-full bg-primary/10 flex items-center justify-center relative group-hover:bg-[#d1fae5] transition-colors duration-500">
             <div className="transform group-hover:scale-110 transition-transform duration-700 ease-out">
               <SharedFolderIcon fillLevel={1} tooltip="shared" size={96} className="opacity-40" />
             </div>
-            <div className="absolute inset-0 bg-gradient-to-tr from-[#069668]/8 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-tr from-primary/8 to-transparent" />
           </div>
         ) : (
-          <div className="w-full h-full bg-slate-50 flex items-center justify-center relative group-hover:bg-[#ecfdf5]/40 transition-colors duration-700">
+          <div className="w-full h-full bg-slate-50 flex items-center justify-center relative group-hover:bg-primary/10/40 transition-colors duration-700">
             {/* Subtle Background Pattern/Gradient */}
             <div
               className="absolute inset-0 opacity-[0.03] pointer-events-none"
@@ -988,7 +988,7 @@ function ShareCard({
           <DocumentIcon mimeType={share.documentMimeType ?? undefined} className="w-7 h-7 shrink-0 mt-0.5" />
           <div className="flex flex-col min-w-0 flex-1">
             <h3
-              className="font-semibold text-[#1b1b1d] text-[13px] leading-tight truncate cursor-pointer hover:text-[#069668] transition-colors"
+              className="font-semibold text-[#1b1b1d] text-[13px] leading-tight truncate cursor-pointer hover:text-primary transition-colors"
               title={share.documentName}
               onClick={handleOpenPreview}
             >
@@ -1089,7 +1089,7 @@ function ShareCard({
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <div className="h-6 w-6 rounded-lg bg-[#ecfdf5] text-[#065f46] flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EC</div>
+                        <div className="h-6 w-6 rounded-lg bg-primary/10 text-primary flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EC</div>
                       </TooltipTrigger>
                       <TooltipContent side="top" className="text-xs">{extCollaboratorLabel}</TooltipContent>
                     </Tooltip>

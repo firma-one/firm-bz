@@ -14,7 +14,7 @@ import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/toast'
 
 const fieldLabel = 'font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] block mb-1'
-const inputCls = 'border-[#e5e7eb] text-[#1b1b1d] text-sm placeholder:text-[#9a9ba0] rounded focus-visible:ring-1 focus-visible:ring-[#069668] focus-visible:border-[#069668] disabled:opacity-50'
+const inputCls = 'border-[#e5e7eb] text-[#1b1b1d] text-sm placeholder:text-[#9a9ba0] rounded focus-visible:ring-1 focus-visible:ring-primary focus-visible:border-primary disabled:opacity-50'
 export function ProfilePageClient({
     displayName,
     firstName: initialFirstName,
@@ -192,8 +192,8 @@ export function ProfilePageClient({
                                 // eslint-disable-next-line @next/next/no-img-element
                                 <img src={avatarUrl} alt={displayName} className="h-14 w-14 rounded-full object-cover border border-[#e5e7eb]" />
                             ) : (
-                                <div className="h-14 w-14 rounded-full bg-[#ecfdf5] border border-[#e5e7eb] flex items-center justify-center">
-                                    <span className="font-headline text-lg font-bold text-[#069668]">{initials || <User className="h-6 w-6" />}</span>
+                                <div className="h-14 w-14 rounded-full bg-primary/10 border border-[#e5e7eb] flex items-center justify-center">
+                                    <span className="font-headline text-lg font-bold text-primary">{initials || <User className="h-6 w-6" />}</span>
                                 </div>
                             )}
                             <div className="text-center">

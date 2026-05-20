@@ -250,12 +250,12 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
                 type="button"
                 className={cn(
                   "rounded-md border border-[#e5e7eb] px-2.5 py-1.5 text-xs bg-white flex items-center gap-1.5 text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] transition-colors",
-                  filterTypes.length > 0 && "border-[#069668] text-[#069668]"
+                  filterTypes.length > 0 && "border-primary text-primary"
                 )}
               >
                 Type
                 {filterTypes.length > 0 && (
-                  <span className="font-mono text-[10px] font-bold bg-[#069668] text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
+                  <span className="font-mono text-[10px] font-bold bg-primary text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
                     {filterTypes.length}
                   </span>
                 )}
@@ -294,12 +294,12 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
                 type="button"
                 className={cn(
                   "rounded-md border border-[#e5e7eb] px-2.5 py-1.5 text-xs bg-white flex items-center gap-1.5 text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] transition-colors",
-                  filterStatuses.length > 0 && "border-[#069668] text-[#069668]"
+                  filterStatuses.length > 0 && "border-primary text-primary"
                 )}
               >
                 Status
                 {filterStatuses.length > 0 && (
-                  <span className="font-mono text-[10px] font-bold bg-[#069668] text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
+                  <span className="font-mono text-[10px] font-bold bg-primary text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
                     {filterStatuses.length}
                   </span>
                 )}

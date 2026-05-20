@@ -129,7 +129,7 @@ export function ClientContactsTab({
   }
 
   const fieldLabel = 'font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] block mb-1'
-  const inputCls = 'border-[#e5e7eb] text-[#1b1b1d] text-sm placeholder:text-[#9a9ba0] rounded focus-visible:ring-1 focus-visible:ring-[#069668] focus-visible:border-[#069668] disabled:opacity-50 disabled:cursor-not-allowed'
+  const inputCls = 'border-[#e5e7eb] text-[#1b1b1d] text-sm placeholder:text-[#9a9ba0] rounded focus-visible:ring-1 focus-visible:ring-primary focus-visible:border-primary disabled:opacity-50 disabled:cursor-not-allowed'
 
   return (
     <div className="space-y-4">
@@ -140,7 +140,7 @@ export function ClientContactsTab({
             <UserPlus className="h-4 w-4 text-slate-500" />
             <span className="text-sm font-semibold text-slate-800">Client contacts</span>
             {!loading && (
-              <span className="font-mono text-[10px] font-bold bg-[#069668] text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
+              <span className="font-mono text-[10px] font-bold bg-primary text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
                 {filtered.length}
               </span>
             )}
@@ -166,7 +166,7 @@ export function ClientContactsTab({
               disabled={!canManage && !isSandboxFirm}
               variant="ghost"
               size="sm"
-              className="h-auto px-4 py-1.5 rounded-[2px] bg-[#069668] text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-[#069668] hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(6,150,104,0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1.5"
+              className="h-auto px-4 py-1.5 rounded-[2px] bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-primary hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1.5"
               onClick={() => {
                 setNewContactDraft({ name: '', email: '', phone: '', title: '', notes: '', tags: '' })
                 setNewContactModalOpen(true)
@@ -347,8 +347,8 @@ export function ClientContactsTab({
 
           {/* Header */}
           <div className="px-5 py-4 border-b border-[#e5e7eb] bg-[#f9f9fb] flex items-start gap-3">
-            <div className="mt-0.5 h-7 w-7 rounded bg-[#ecfdf5] flex items-center justify-center shrink-0">
-              <UserPlus className="h-3.5 w-3.5 text-[#069668]" />
+            <div className="mt-0.5 h-7 w-7 rounded bg-primary/10 flex items-center justify-center shrink-0">
+              <UserPlus className="h-3.5 w-3.5 text-primary" />
             </div>
             <div>
               <p className="text-sm font-semibold text-[#1b1b1d] leading-tight">New Client Contact</p>
@@ -390,7 +390,7 @@ export function ClientContactsTab({
                 className={`flex flex-wrap gap-1.5 min-h-[36px] w-full rounded border px-3 py-2 text-sm transition-colors cursor-text
                   ${isSandboxFirm
                     ? 'border-[#e5e7eb] bg-[#f9f9fb] opacity-50 cursor-not-allowed'
-                    : 'border-[#e5e7eb] bg-white focus-within:ring-1 focus-within:ring-[#069668] focus-within:border-[#069668]'
+                    : 'border-[#e5e7eb] bg-white focus-within:ring-1 focus-within:ring-primary focus-within:border-primary'
                   }`}
                 onClick={() => newContactTagInputRef.current?.focus()}
               >
@@ -414,7 +414,7 @@ export function ClientContactsTab({
                   disabled={isSandboxFirm}
                   className="flex-1 min-w-[120px] bg-transparent outline-none placeholder:text-[#9a9ba0] text-[#1b1b1d] text-xs disabled:cursor-not-allowed"
                 />
-                <CornerDownLeft className="h-3 w-3 text-[#069668] shrink-0 self-center ml-1" />
+                <CornerDownLeft className="h-3 w-3 text-primary shrink-0 self-center ml-1" />
               </div>
             </div>
 
@@ -427,20 +427,20 @@ export function ClientContactsTab({
                 placeholder="Any notes about this contact"
                 rows={2}
                 disabled={isSandboxFirm}
-                className="flex w-full rounded border border-[#e5e7eb] bg-white px-3 py-2 text-sm text-[#1b1b1d] placeholder:text-[#9a9ba0] focus:outline-none focus:ring-1 focus:ring-[#069668] focus:border-[#069668] disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex w-full rounded border border-[#e5e7eb] bg-white px-3 py-2 text-sm text-[#1b1b1d] placeholder:text-[#9a9ba0] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
               />
             </div>
           </div>
 
           {/* Footer */}
           <div className="px-5 py-3 border-t border-[#e5e7eb] flex items-center justify-end gap-3">
-            <Button variant="outline" className="rounded-[2px]" disabled={isPending} onClick={() => { setNewContactModalOpen(false); resetNewContact() }}>
+            <Button variant="outline" className="rounded-[2px] text-[10px] font-headline font-bold tracking-widest uppercase" disabled={isPending} onClick={() => { setNewContactModalOpen(false); resetNewContact() }}>
               Cancel
             </Button>
             <Button
               variant="greenCta"
               disabled={isSandboxFirm || !canManage || isPending || !newContactDraft.name.trim()}
-              className="rounded-[2px] min-w-[8rem] text-[10px] font-headline font-bold tracking-widest uppercase"
+              className="rounded-[2px] min-w-[8rem] text-[10px] font-headline font-bold tracking-widest uppercase text-white"
               onClick={() => {
                 if (isSandboxFirm) return
                 const finalTags = newContactTagInput.trim()

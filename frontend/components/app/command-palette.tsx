@@ -108,7 +108,6 @@ function buildItems(firmSlug: string | null, canManageOrg: boolean): CommandItem
       icon: <Bell className="h-4 w-4" />,
       href: "/d/u/notifications",
       group: "Personal",
-      iconColor: "#069668",
     },
     {
       id: "recent",
@@ -117,7 +116,6 @@ function buildItems(firmSlug: string | null, canManageOrg: boolean): CommandItem
       icon: <Clock className="h-4 w-4" />,
       href: "/d/u/recent",
       group: "Personal",
-      iconColor: "#069668",
     },
     {
       id: "profile",
@@ -126,7 +124,6 @@ function buildItems(firmSlug: string | null, canManageOrg: boolean): CommandItem
       icon: <UserCircle className="h-4 w-4" />,
       href: "/d/u/profile",
       group: "Account",
-      iconColor: "#069668",
     },
   )
 
@@ -291,14 +288,14 @@ export function CommandPalette({ onOpenChange }: { onOpenChange?: (open: boolean
                       type="button"
                       className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
                         isActive
-                          ? "bg-[#ecfdf5] text-[#065f46]"
+                          ? "bg-firma/10 text-firma"
                           : "text-[#1b1b1d] hover:bg-[#f9f9fb]"
                       }`}
                       onMouseEnter={() => setActiveIndex(idx)}
                       onClick={() => navigate(item.href)}
                     >
                       <span
-                        className={`shrink-0 ${isActive && !item.adminOnly ? "text-[#069668]" : ""}`}
+                        className={`shrink-0 ${isActive && !item.adminOnly ? "text-firma" : ""}`}
                         style={!isActive && item.iconColor ? { color: item.iconColor } : undefined}
                       >
                         {item.icon}

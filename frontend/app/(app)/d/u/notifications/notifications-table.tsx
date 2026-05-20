@@ -161,8 +161,8 @@ export function NotificationsTable({ initialNotifications, onRefresh }: Props) {
   function SortIcon({ field }: { field: SortField }) {
     if (sortField !== field) return <ChevronsUpDown className="h-3 w-3 text-[#9ca3af]" />
     return sortDir === 'asc'
-      ? <ChevronUp className="h-3 w-3 text-[#069668]" />
-      : <ChevronDown className="h-3 w-3 text-[#069668]" />
+      ? <ChevronUp className="h-3 w-3 text-primary" />
+      : <ChevronDown className="h-3 w-3 text-primary" />
   }
 
   function FilterDropdown<T extends string>({
@@ -295,7 +295,7 @@ export function NotificationsTable({ initialNotifications, onRefresh }: Props) {
                 {/* Actions */}
                 <div className="flex items-center justify-end gap-1">
                   {n.ctaUrl && (
-                    <a href={n.ctaUrl} className="inline-flex items-center justify-center h-7 w-7 rounded-[2px] border border-[#e5e7eb] bg-white text-[#45474c] hover:text-[#069668] hover:border-[#069668]/40 transition-colors" title="Open link">
+                    <a href={n.ctaUrl} className="inline-flex items-center justify-center h-7 w-7 rounded-[2px] border border-[#e5e7eb] bg-white text-[#45474c] hover:text-primary hover:border-primary/40 transition-colors" title="Open link">
                       <ExternalLink className="h-3.5 w-3.5" />
                     </a>
                   )}

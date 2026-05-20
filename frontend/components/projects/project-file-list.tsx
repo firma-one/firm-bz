@@ -2533,7 +2533,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                     !isAtProjectRoot && (canEdit || (restrictToSharedOnly && currentFolderType === 'general')) ? (
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button disabled={loading || isLoadingFolders} className="h-auto px-4 py-1.5 rounded-[2px] bg-[#069668] text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-[#069668] hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(6,150,104,0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1.5">
+                                <Button disabled={loading || isLoadingFolders} className="h-auto px-4 py-1.5 rounded-[2px] bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-primary hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1.5">
                                     <Upload className="h-3.5 w-3.5" />
                                     New Document
                                 </Button>
@@ -3298,7 +3298,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                             tooltip={directShared ? 'shared' : 'contains-shared'}
                                                         />
                                                     ) : isFolder ? (
-                                                        <Folder className="h-4 w-4 fill-[#069668]/20 flex-shrink-0" style={{ color: '#069668' }} />
+                                                        <Folder className="h-4 w-4 fill-primary/20 text-primary flex-shrink-0" />
                                                     ) : (
                                                         <DocumentIcon mimeType={file.mimeType} className="h-4 w-4" />
                                                     )}
@@ -3374,15 +3374,15 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                                 <button
                                                                     type="button"
                                                                     onClick={(e) => { e.stopPropagation(); setUnshareConfirmFile(file) }}
-                                                                    className={`inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium border bg-[#069668]/10 text-[#069668] border-[#069668]/30 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors`}
+                                                                    className={`inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium border bg-primary/10 text-primary border-primary/30 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors`}
                                                                 >
                                                                     <Share2 className="h-3 w-3" />
                                                                 </button>
                                                             ) : (
                                                                 <span className={`inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium border ${
                                                                     isFolder && !directShared
-                                                                        ? 'bg-[#069668]/5 text-[#069668]/50 border-[#069668]/20'
-                                                                        : 'bg-[#069668]/10 text-[#069668] border-[#069668]/30'
+                                                                        ? 'bg-primary/5 text-primary/50 border-primary/20'
+                                                                        : 'bg-primary/10 text-primary border-primary/30'
                                                                 }`}>
                                                                     <Share2 className="h-3 w-3" />
                                                                 </span>

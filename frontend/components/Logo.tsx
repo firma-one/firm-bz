@@ -15,6 +15,7 @@ export interface OrganizationBranding {
   name?: string | null;
   subtext?: string | null;
   themeColor?: string | null;
+  secondaryColor?: string | null;
 }
 
 interface LogoProps {

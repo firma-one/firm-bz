@@ -146,8 +146,8 @@ export function RemindersTable({ initialReminders }: Props) {
   function SortIcon({ field }: { field: SortField }) {
     if (sortField !== field) return <ChevronsUpDown className="h-3 w-3 text-[#9ca3af]" />
     return sortDir === 'asc'
-      ? <ChevronUp className="h-3 w-3 text-[#069668]" />
-      : <ChevronDown className="h-3 w-3 text-[#069668]" />
+      ? <ChevronUp className="h-3 w-3 text-primary" />
+      : <ChevronDown className="h-3 w-3 text-primary" />
   }
 
   return (
@@ -280,7 +280,7 @@ export function RemindersTable({ initialReminders }: Props) {
               >
                 <a href={r.ctaUrl ?? '#'} className="flex items-center gap-2 min-w-0 group">
                   <Icon className="h-3.5 w-3.5 shrink-0 text-[#45474c]" />
-                  <span className="text-[0.8125rem] font-medium text-[#1b1b1d] truncate group-hover:text-[#069668] transition-colors">
+                  <span className="text-[0.8125rem] font-medium text-[#1b1b1d] truncate group-hover:text-primary transition-colors">
                     {r.entityName}
                   </span>
                 </a>

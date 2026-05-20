@@ -73,9 +73,16 @@ module.exports = {
 				'ds-kinetic-lime': 'var(--ds-kinetic-lime)',
 				'ds-on-kinetic-lime': 'var(--ds-on-kinetic-lime)',
 				'ds-kinetic-lime-icon': 'var(--ds-kinetic-lime-icon)',
-				/** Kinetic Institution — Emerald Refinement dashboard palette */
-				'ki-primary': '#069668',
-				'ki-on-primary': '#ffffff',
+				/** Firm brand accent — injected per-firm via JS; falls back to --primary */
+				'brand-accent': 'hsl(var(--brand-accent))',
+				'brand-accent-foreground': 'hsl(var(--brand-accent-foreground))',
+				/** Firma platform chrome — fixed, never overridden by firm brand */
+				'firma': {
+					DEFAULT: '#069668',
+					foreground: '#ffffff',
+					light: '#F0FDF4',
+				},
+				/** Dashboard surface colors (not brand — intentional design tokens) */
 				'ki-bg': '#f9f9fb',
 				'ki-surface': '#ffffff',
 				'ki-surface-low': '#f3f4f6',
@@ -84,8 +91,6 @@ module.exports = {
 				'ki-on-surface-variant': '#45474c',
 				'ki-outline': '#e5e7eb',
 				'ki-outline-variant': '#d1d5db',
-				'ki-active-bg': '#ecfdf5',
-				'ki-active-text': '#065f46',
 				'ki-primary-glow': 'rgba(6,150,104,0.15)'
 			}
 		}

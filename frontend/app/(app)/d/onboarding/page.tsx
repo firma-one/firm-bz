@@ -240,8 +240,8 @@ const AlreadyCompletedScreen = ({ onGoToDashboard }: { onGoToDashboard: () => vo
 
     return (
         <div className="animate-in fade-in duration-500 text-center py-16">
-            <div className="h-20 w-20 rounded-[2px] bg-[#069668]/10 border border-[#069668]/20 flex items-center justify-center mb-6 mx-auto">
-                <CheckCircle2 className="h-10 w-10 text-[#069668]" />
+            <div className="h-20 w-20 rounded-[2px] bg-primary/10 border border-primary/20 flex items-center justify-center mb-6 mx-auto">
+                <CheckCircle2 className="h-10 w-10 text-primary" />
             </div>
             <h1 className="font-headline text-2xl font-bold text-[#1b1b1d] mb-3">You're all set!</h1>
             <p className="text-[#45474c] mb-2 text-[0.8125rem]">
@@ -252,7 +252,7 @@ const AlreadyCompletedScreen = ({ onGoToDashboard }: { onGoToDashboard: () => vo
             </p>
             <button
                 onClick={onGoToDashboard}
-                className="inline-flex items-center gap-2 h-auto px-4 py-1.5 rounded-[2px] bg-[#069668] text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-[#069668] hover:brightness-105 shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(6,150,104,0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0"
+                className="inline-flex items-center gap-2 h-auto px-4 py-1.5 rounded-[2px] bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-primary hover:brightness-105 shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0"
             >
                 Go to Dashboard <ArrowRight className="h-4 w-4" />
             </button>
@@ -1375,7 +1375,7 @@ const OnboardingContent = () => {
                                         <button
                                             key={org.id}
                                             type="button"
-                                            className="w-full flex items-center gap-4 p-4 rounded-[2px] border border-[#e5e7eb] bg-white hover:bg-[#f9f9fb] hover:border-[#069668]/30 text-left transition-colors group"
+                                            className="w-full flex items-center gap-4 p-4 rounded-[2px] border border-[#e5e7eb] bg-white hover:bg-[#f9f9fb] hover:border-primary/30 text-left transition-colors group"
                                             onClick={() => router.push(`/d/f/${org.slug}`)}
                                         >
                                             <div className="h-10 w-10 rounded-[2px] bg-[#f9f9fb] border border-[#e5e7eb] flex items-center justify-center flex-shrink-0">
@@ -1407,7 +1407,7 @@ const OnboardingContent = () => {
                                                     key={org.id}
                                                     type="button"
                                                     disabled={domainJoiningId !== null}
-                                                    className="w-full flex items-center gap-4 p-4 rounded-[2px] border border-[#e5e7eb] bg-white hover:bg-[#f9f9fb] hover:border-[#069668]/30 text-left transition-colors disabled:opacity-50 group"
+                                                    className="w-full flex items-center gap-4 p-4 rounded-[2px] border border-[#e5e7eb] bg-white hover:bg-[#f9f9fb] hover:border-primary/30 text-left transition-colors disabled:opacity-50 group"
                                                     onClick={async () => {
                                                         setDomainJoiningId(org.id)
                                                         setDomainError(null)

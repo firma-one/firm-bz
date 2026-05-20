@@ -6,6 +6,7 @@ import Link from "next/link"
 import { LogOut, ChevronDown, ChevronUp, Building2, CreditCard, UserCircle, LifeBuoy, Plug, MonitorCheck } from "lucide-react"
 import { ProfileBubble, ProfileBubblePopupContent } from "@/components/ui/profile-bubble-popup"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import Logo from "@/components/Logo"
 
 interface ProfileSectionProps {
   user: {
@@ -200,11 +201,11 @@ export function ProfileSection({
               bubbleSize={isCollapsed ? 'default' : 'lg'}
               avatarUrl={(user?.user_metadata?.avatar_url as string | null | undefined) ?? ((user?.user_metadata as Record<string, unknown>)?.picture as string | null | undefined) ?? null}
               footer={
-                <div className="space-y-0.5">
+                <div className="space-y-1">
                   <Link
                     href="/d/u/profile"
                     onClick={() => setIsProfileOpen(false)}
-                    className="d-sidebar-nav flex w-full items-center gap-2 rounded px-3 py-2 text-[#45474c] transition-colors hover:bg-[#f3f4f6] hover:text-[#1b1b1d]"
+                    className="d-sidebar-nav flex w-full items-center gap-2 rounded px-3 py-2.5 text-[#45474c] transition-colors hover:bg-[#f3f4f6] hover:text-[#1b1b1d]"
                   >
                     <UserCircle className="h-4 w-4 shrink-0" />
                     Profile
@@ -213,7 +214,7 @@ export function ProfileSection({
                     <Link
                       href={connectorsHref}
                       onClick={() => setIsProfileOpen(false)}
-                      className="d-sidebar-nav flex w-full items-center gap-2 rounded px-3 py-2 text-[#45474c] transition-colors hover:bg-[#f3f4f6] hover:text-[#1b1b1d]"
+                      className="d-sidebar-nav flex w-full items-center gap-2 rounded px-3 py-2.5 text-[#45474c] transition-colors hover:bg-[#f3f4f6] hover:text-[#1b1b1d]"
                     >
                       <Plug className="h-4 w-4 shrink-0" />
                       Connectors
@@ -223,7 +224,7 @@ export function ProfileSection({
                     <Link
                       href={billingHref}
                       onClick={() => setIsProfileOpen(false)}
-                      className="d-sidebar-nav flex w-full items-center gap-2 rounded px-3 py-2 text-[#45474c] transition-colors hover:bg-[#f3f4f6] hover:text-[#1b1b1d]"
+                      className="d-sidebar-nav flex w-full items-center gap-2 rounded px-3 py-2.5 text-[#45474c] transition-colors hover:bg-[#f3f4f6] hover:text-[#1b1b1d]"
                     >
                       <CreditCard className="h-4 w-4 shrink-0" />
                       Billing
@@ -233,7 +234,7 @@ export function ProfileSection({
                     <Link
                       href={supportHref}
                       onClick={() => setIsProfileOpen(false)}
-                      className="d-sidebar-nav flex w-full items-center gap-2 rounded px-3 py-2 text-[#45474c] transition-colors hover:bg-[#f3f4f6] hover:text-[#1b1b1d]"
+                      className="d-sidebar-nav flex w-full items-center gap-2 rounded px-3 py-2.5 text-[#45474c] transition-colors hover:bg-[#f3f4f6] hover:text-[#1b1b1d]"
                     >
                       <LifeBuoy className="h-4 w-4 shrink-0" />
                       Support
@@ -243,7 +244,7 @@ export function ProfileSection({
                     <Link
                       href="/system"
                       onClick={() => setIsProfileOpen(false)}
-                      className="d-sidebar-nav flex w-full items-center gap-2 rounded px-3 py-2 text-[#45474c] transition-colors hover:bg-[#f3f4f6] hover:text-[#1b1b1d]"
+                      className="d-sidebar-nav flex w-full items-center gap-2 rounded px-3 py-2.5 text-[#45474c] transition-colors hover:bg-[#f3f4f6] hover:text-[#1b1b1d]"
                     >
                       <MonitorCheck className="h-4 w-4 shrink-0" />
                       Sys Admin
@@ -252,7 +253,7 @@ export function ProfileSection({
                   <Link
                     href="/d/onboarding"
                     onClick={() => setIsProfileOpen(false)}
-                    className="d-sidebar-nav flex w-full items-center gap-2 rounded px-3 py-2 text-[#45474c] transition-colors hover:bg-[#f3f4f6] hover:text-[#1b1b1d]"
+                    className="d-sidebar-nav flex w-full items-center gap-2 rounded px-3 py-2.5 text-[#45474c] transition-colors hover:bg-[#f3f4f6] hover:text-[#1b1b1d]"
                   >
                     <Building2 className="h-4 w-4 shrink-0" aria-hidden />
                     Switch Workspace
@@ -260,11 +261,18 @@ export function ProfileSection({
                   <button
                     type="button"
                     onClick={() => signOut()}
-                    className="d-sidebar-nav flex w-full items-center gap-2 rounded px-3 py-2 text-left text-red-600 transition-colors hover:bg-[#f3f4f6] hover:text-red-700"
+                    className="d-sidebar-nav flex w-full items-center gap-2 rounded px-3 py-2.5 text-left text-red-600 transition-colors hover:bg-[#f3f4f6] hover:text-red-700"
                   >
                     <LogOut className="h-4 w-4 shrink-0" />
                     Sign Out
                   </button>
+                  <div className="-mx-3 mt-2 border-t border-[#e5e7eb]" />
+                  <div className="flex items-center justify-center gap-1.5 pt-3 pb-1">
+                    <span className="text-xs text-[#9a9ba0]">Powered by</span>
+                    <a href="https://www.firma.bz" target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
+                      <Logo size="sm" showText={false} />
+                    </a>
+                  </div>
                 </div>
               }
             />

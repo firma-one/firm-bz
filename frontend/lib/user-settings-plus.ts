@@ -68,8 +68,8 @@ export interface OrganizationSettings {
   [orgId: string]: {
     branding?: {
       logoUrl?: string
-      brandColor?: string
-      themeColor?: string
+      primaryColor?: string
+      secondaryColor?: string
       subtext?: string
     }
     enableBetaFeatures?: boolean
@@ -285,8 +285,8 @@ class UserSettingsPlusCache {
       settings[membership.firmId] = {
         branding: {
           logoUrl: firmSettings.branding?.logoUrl,
-          brandColor: firmSettings.branding?.brandColor ?? firmSettings.branding?.themeColor,
-          themeColor: firmSettings.branding?.themeColor ?? firmSettings.branding?.brandColor,
+          primaryColor: firmSettings.branding?.primaryColor,
+          secondaryColor: firmSettings.branding?.secondaryColor,
           subtext: firmSettings.branding?.subtext
         },
         enableBetaFeatures: firmSettings.enableBetaFeatures === true,

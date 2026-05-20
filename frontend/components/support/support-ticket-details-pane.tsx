@@ -305,7 +305,7 @@ export function SupportTicketDetailsPane({
               onDragLeave={() => setIsDragOver(false)}
               onDrop={e => { e.preventDefault(); setIsDragOver(false); const f = Array.from(e.dataTransfer.files); if (f.length) addFiles(f) }}
               onClick={() => fileInputRef.current?.click()}
-              className={`border-2 border-dashed rounded py-5 text-center cursor-pointer transition-colors ${isDragOver ? 'border-[#069668] bg-[#f0faf6]' : 'border-[#e5e7eb] bg-[#f9f9fb] hover:border-[#d1d5db]'}`}
+              className={`border-2 border-dashed rounded py-5 text-center cursor-pointer transition-colors ${isDragOver ? 'border-primary bg-[#f0faf6]' : 'border-[#e5e7eb] bg-[#f9f9fb] hover:border-[#d1d5db]'}`}
             >
               <Paperclip className="h-4 w-4 text-[#45474c] mx-auto mb-1.5" />
               <p className="text-xs text-[#45474c]">Drop files or click to browse</p>
@@ -351,13 +351,13 @@ export function SupportTicketDetailsPane({
                       {a.status === 'uploading' && (
                         <div className="flex items-center gap-1.5 mt-1">
                           <div className="flex-1 h-1 bg-[#e5e7eb] rounded overflow-hidden">
-                            <div className="h-full bg-[#069668] transition-all" style={{ width: `${a.progress}%` }} />
+                            <div className="h-full bg-primary transition-all" style={{ width: `${a.progress}%` }} />
                           </div>
                           <span className="text-[10px] text-[#45474c]">{a.progress}%</span>
                         </div>
                       )}
                       {a.status === 'done' && (
-                        <p className="text-[10px] text-[#069668] flex items-center gap-1 mt-1"><CheckCircle2 className="h-3 w-3" /> Uploaded</p>
+                        <p className="text-[10px] text-primary flex items-center gap-1 mt-1"><CheckCircle2 className="h-3 w-3" /> Uploaded</p>
                       )}
                       {a.status === 'error' && (
                         <p className="text-[10px] text-rose-600 mt-1">{a.error}</p>

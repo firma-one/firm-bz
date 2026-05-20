@@ -293,7 +293,7 @@ export function BillingPageClient({
                             data-onboarding-billing-skip-tour
                             onClick={() => void onSkipToConnectDrive()}
                             className={cn(
-                                'h-auto px-4 py-1.5 rounded-[2px] bg-[#069668] text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-[#069668] hover:brightness-105 shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(6,150,104,0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex shrink-0 items-center justify-center'
+                                'h-auto px-4 py-1.5 rounded-[2px] bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-primary hover:brightness-105 shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex shrink-0 items-center justify-center'
                             )}
                             aria-label="Skip subscribing for now and continue to connect Google Drive"
                         >
@@ -319,7 +319,7 @@ export function BillingPageClient({
                     </>
                 ) : null}
                 {paidPlanIntent && (
-                    <div className="mt-3 rounded-[2px] border border-[#069668]/25 bg-[#069668]/8 px-3 py-2 text-xs text-[#1b1b1d]">
+                    <div className="mt-3 rounded-[2px] border border-primary/25 bg-primary/8 px-3 py-2 text-xs text-[#1b1b1d]">
                         You currently have an active Free plan. You can upgrade now, or skip and continue.
                     </div>
                 )}

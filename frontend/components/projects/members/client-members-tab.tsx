@@ -113,7 +113,7 @@ export function ClientMembersTab({ firmId, clientId, orgSlug, clientSlug, canMan
                         <h2 className="text-xl font-semibold tracking-tight text-slate-900 flex items-center gap-2">
                             Client Members
                             {!isLoading && (members.length > 0 || invitations.length > 0) && (
-                                <span className="font-mono text-[10px] font-bold bg-[#069668] text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
+                                <span className="font-mono text-[10px] font-bold bg-primary text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
                                     {members.length + invitations.length}
                                 </span>
                             )}
@@ -126,7 +126,7 @@ export function ClientMembersTab({ firmId, clientId, orgSlug, clientSlug, canMan
                         onClick={() => setIsInviteModalOpen(true)}
                         variant="ghost"
                         size="sm"
-                        className="h-auto px-4 py-1.5 rounded-[2px] bg-[#069668] text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-[#069668] hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(6,150,104,0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1.5"
+                        className="h-auto px-4 py-1.5 rounded-[2px] bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-primary hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1.5"
                     >
                         <UserPlus className="h-4 w-4" />
                         Invite
