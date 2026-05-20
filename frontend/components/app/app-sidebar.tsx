@@ -25,7 +25,12 @@ import {
   CornerDownRight,
   Settings,
   Lock,
+  Megaphone,
 } from "lucide-react"
+import { WhatsNewModal } from "@/components/ui/whats-new-modal"
+import { useWhatsNew, type ReleaseMeta } from "@/lib/use-whats-new"
+import _releasesMetaData from "@/content/releases-meta.json"
+const releasesMetaData = _releasesMetaData as ReleaseMeta[]
 import { FirmSelector, type FirmOption } from "@/components/projects/firm-selector"
 import { getUserFirms } from "@/lib/actions/firms"
 import { getFirmRole } from "@/lib/actions/firm"
@@ -232,6 +237,9 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
 
   const [billingPlanState, setBillingPlanState] = useState<BillingCurrentPlanState | null>(null)
   const [billingPlanLoading, setBillingPlanLoading] = useState(false)
+
+  const [isWhatsNewOpen, setIsWhatsNewOpen] = useState(false)
+  const { hasUnread, markAsRead } = useWhatsNew(releasesMetaData)
 
   // Extract firm slug from URL
   const getSlug = () => {
@@ -833,23 +841,52 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                             <span className="flex-1">FAQs</span>
                             <ArrowUpRight className="h-3 w-3 shrink-0 text-[#45474c]/40" />
                           </Link>
+                          <button
+                            type="button"
+                            onClick={() => setIsWhatsNewOpen(true)}
+                            className="relative flex items-center w-full transition-colors pl-2 pr-2 py-1.5 text-[0.8125rem] text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]"
+                          >
+                            <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-1.5" />
+                            <Megaphone className="h-3.5 w-3.5 mr-2 shrink-0 text-[#45474c]" />
+                            <span className="flex-1 text-left">What&apos;s New</span>
+                            {hasUnread && (
+                              <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
+                            )}
+                          </button>
                         </div>
                       </>
                     )}
                     {isCollapsed && (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Link
-                            href="/resources/faq"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className={`flex-1 flex items-center d-sidebar-nav transition-colors px-0 justify-center py-2 ${pathname?.startsWith('/resources/faq') ? 'text-primary' : 'text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}
-                          >
-                            <HelpCircle className="h-4 w-4 mx-auto" />
-                          </Link>
-                        </TooltipTrigger>
-                        <TooltipContent side="right">FAQs</TooltipContent>
-                      </Tooltip>
+                      <>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Link
+                              href="/resources/faq"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={`flex-1 flex items-center d-sidebar-nav transition-colors px-0 justify-center py-2 ${pathname?.startsWith('/resources/faq') ? 'text-primary' : 'text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}
+                            >
+                              <HelpCircle className="h-4 w-4 mx-auto" />
+                            </Link>
+                          </TooltipTrigger>
+                          <TooltipContent side="right">FAQs</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              onClick={() => setIsWhatsNewOpen(true)}
+                              className="relative flex-1 flex items-center d-sidebar-nav transition-colors px-0 justify-center py-2 text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d]"
+                            >
+                              <Megaphone className="h-4 w-4 mx-auto" />
+                              {hasUnread && (
+                                <span className="absolute top-1.5 right-1 w-2 h-2 rounded-full bg-blue-500" />
+                              )}
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="right">What&apos;s New</TooltipContent>
+                        </Tooltip>
+                      </>
                     )}
                   </div>
 
@@ -921,6 +958,13 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                 </nav>
               </div>
             </div>
+
+            <WhatsNewModal
+              isOpen={isWhatsNewOpen}
+              onClose={() => setIsWhatsNewOpen(false)}
+              onRead={markAsRead}
+              releases={releasesMetaData}
+            />
 
             {/* Profile — pinned to bottom */}
             <div className="border-t border-[#e5e7eb]/50">
