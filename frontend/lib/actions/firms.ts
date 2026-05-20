@@ -362,7 +362,8 @@ export async function switchFirm(firmSlug: string): Promise<void> {
 export interface FirmBranding {
     logoUrl?: string | null
     subtext?: string | null
-    themeColor?: string | null
+    primaryColor?: string | null
+    secondaryColor?: string | null
 }
 
 export interface FirmCurrency {
@@ -393,13 +394,13 @@ export async function updateFirm(
     if (data.branding !== undefined || data.currency !== undefined || data.enableBetaFeatures !== undefined) {
         const current = (firm.settings as Record<string, unknown>) || {}
         if (data.branding !== undefined) {
+            // Construct branding from scratch — do not spread existing to avoid persisting legacy keys
             const branding = {
-                ...(current.branding as Record<string, unknown>),
-                ...(data.branding.logoUrl !== undefined && { logoUrl: data.branding.logoUrl ?? null }),
-                ...(data.branding.subtext !== undefined && { subtext: data.branding.subtext ?? null }),
-                ...(data.branding.themeColor !== undefined && { themeColor: data.branding.themeColor ?? null }),
+                logoUrl: data.branding.logoUrl ?? null,
+                subtext: data.branding.subtext ?? null,
+                primaryColor: data.branding.primaryColor ?? null,
+                secondaryColor: data.branding.secondaryColor ?? null,
             }
-            if (data.branding.themeColor !== undefined) (branding as any).brandColor = data.branding.themeColor ?? undefined
             payload.settings = { ...(payload.settings ?? current), branding }
         }
         if (data.currency !== undefined) {

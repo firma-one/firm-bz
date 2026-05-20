@@ -51,10 +51,10 @@ export function DocumentBreadcrumb({
         className={cn('flex items-center gap-1 min-w-0 mt-0.5 group/bc', className)}
       >
         <Folder
-          className={cn(iconSize, 'shrink-0 stroke-slate-400 stroke-[1.5] fill-slate-200 group-hover/bc:stroke-[#069668] group-hover/bc:fill-[#069668]/20 transition-colors')}
+          className={cn(iconSize, 'shrink-0 stroke-slate-400 stroke-[1.5] fill-slate-200 group-hover/bc:stroke-primary group-hover/bc:fill-primary/20 transition-colors')}
           aria-hidden
         />
-        <span className={cn(textSize, 'text-slate-500 truncate group-hover/bc:text-[#069668] group-hover/bc:underline transition-colors')}>
+        <span className={cn(textSize, 'text-slate-500 truncate group-hover/bc:text-primary group-hover/bc:underline transition-colors')}>
           {parentName}
         </span>
       </button>

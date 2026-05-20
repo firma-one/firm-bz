@@ -147,8 +147,8 @@ export function OnboardingSidebar() {
                         const iconForStep = () => {
                             if (isCompleted) {
                                 if (s.id === 3) return <GoogleDriveIcon size={20} />
-                                if (s.id === 4) return <Building2 className="h-4 w-4 text-[#069668]" />
-                                return <StepIcon className="h-4 w-4 text-[#069668]" />
+                                if (s.id === 4) return <Building2 className="h-4 w-4 text-primary" />
+                                return <StepIcon className="h-4 w-4 text-primary" />
                             }
                             if (isSkipped) {
                                 return <Minus className="h-4 w-4 text-[#45474c]/50" strokeWidth={2.5} />
@@ -168,11 +168,11 @@ export function OnboardingSidebar() {
                                 <div className="flex w-10 shrink-0 flex-col items-center self-stretch">
                                     <div
                                         className={`relative z-[1] flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 bg-white transition-all ${isCompleted
-                                            ? 'border-[#069668]'
+                                            ? 'border-primary'
                                             : isSkipped
                                               ? 'border-[#e5e7eb] bg-[#f9f9fb]'
                                               : isActive
-                                                ? 'border-[#069668]/40 bg-[#f9f9fb]'
+                                                ? 'border-primary/40 bg-[#f9f9fb]'
                                                 : 'border-[#e5e7eb] bg-[#f9f9fb]'
                                             }`}
                                     >
@@ -180,7 +180,7 @@ export function OnboardingSidebar() {
                                     </div>
                                     {!isLast ? (
                                         <div
-                                            className={`relative z-0 -mt-px w-0.5 flex-1 min-h-[0.75rem] rounded-none ${segmentPast ? 'bg-[#069668]/30' : 'bg-[#e5e7eb]'}`}
+                                            className={`relative z-0 -mt-px w-0.5 flex-1 min-h-[0.75rem] rounded-none ${segmentPast ? 'bg-primary/30' : 'bg-[#e5e7eb]'}`}
                                             aria-hidden
                                         />
                                     ) : null}
@@ -204,7 +204,7 @@ export function OnboardingSidebar() {
                                     {/* Same min-height so “Completed” vs description rows align across steps */}
                                     <div className="mt-0.5 min-h-[2.75rem]">
                                         {isCompleted ? (
-                                            <p className="text-xs font-medium text-[#069668]">Completed</p>
+                                            <p className="text-xs font-medium text-primary">Completed</p>
                                         ) : isSkipped ? (
                                             <p className="flex items-center gap-0.5 text-xs text-[#45474c]/50">
                                                 <Minus className="h-3 w-3" />

@@ -198,7 +198,7 @@ export function ProjectWorkspace({
                 {projectName && (
                     <>
                         <ChevronRight className="h-3.5 w-3.5 text-[#d1d5db]" />
-                        <Briefcase className="h-4 w-4 text-[#069668]" />
+                        <Briefcase className="h-4 w-4 text-primary" />
                         <span className="font-mono text-[11px] font-bold text-[#1b1b1d] uppercase tracking-tighter">
                             {projectName}
                         </span>
@@ -235,7 +235,7 @@ export function ProjectWorkspace({
                             })()}
                             {projectPersonaDisplayName && (
                                 <span
-                                    className="shrink-0 bg-[#ecfdf5] text-[#065f46] border border-[#069668]/20 rounded font-mono text-[10px] px-2 py-0.5"
+                                    className="shrink-0 bg-primary/10 text-primary border border-primary/20 rounded font-mono text-[10px] px-2 py-0.5"
                                     title="Your role in this project"
                                 >
                                     {projectPersonaDisplayName}
@@ -257,8 +257,8 @@ export function ProjectWorkspace({
                             className="absolute left-0 top-0 z-10 h-full w-14 flex items-center justify-center bg-gradient-to-r from-white from-70% to-transparent text-[#45474c] hover:text-[#1b1b1d] transition-colors"
                             aria-label="Scroll tabs left"
                         >
-                            <span className="w-5 h-5 rounded-full border border-[#069668] bg-white flex items-center justify-center shadow-sm">
-                                <ChevronLeft className="w-3 h-3 text-[#069668]" />
+                            <span className="w-5 h-5 rounded-full border border-primary bg-white flex items-center justify-center shadow-sm">
+                                <ChevronLeft className="w-3 h-3 text-primary" />
                             </span>
                         </button>
                     )}
@@ -269,8 +269,8 @@ export function ProjectWorkspace({
                             className="absolute right-0 top-0 z-10 h-full w-14 flex items-center justify-center bg-gradient-to-l from-white from-70% to-transparent text-[#45474c] hover:text-[#1b1b1d] transition-colors"
                             aria-label="Scroll tabs right"
                         >
-                            <span className="w-5 h-5 rounded-full border border-[#069668] bg-white flex items-center justify-center shadow-sm">
-                                <ChevronRight className="w-3 h-3 text-[#069668]" />
+                            <span className="w-5 h-5 rounded-full border border-primary bg-white flex items-center justify-center shadow-sm">
+                                <ChevronRight className="w-3 h-3 text-primary" />
                             </span>
                         </button>
                     )}
@@ -280,7 +280,7 @@ export function ProjectWorkspace({
                             {canViewInternalTabs && (
                                 <TabsTrigger
                                     value="analytics"
-                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                                 >
                                     <BarChart3 className="w-4 h-4 mr-2" />
                                     Analytics
@@ -289,24 +289,24 @@ export function ProjectWorkspace({
                             )}
                             <TabsTrigger
                                 value="files"
-                                className="h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                className="h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                             >
                                 <Folder className="w-4 h-4 mr-2" />
                                 Files
                                 {fileCount !== undefined && fileCount > 0 && (
-                                    <span className="ml-2 font-mono text-[10px] font-bold bg-[#069668] text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
+                                    <span className="ml-2 font-mono text-[10px] font-bold bg-primary text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
                                         {fileCount}
                                     </span>
                                 )}
                             </TabsTrigger>
                             <TabsTrigger
                                 value="shares"
-                                className="h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                className="h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                             >
                                 <Share2 className="w-4 h-4 mr-2" />
                                 Shares
                                 {sharesCount !== undefined && sharesCount > 0 && (
-                                    <span className="ml-2 font-mono text-[10px] font-bold bg-[#069668] text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
+                                    <span className="ml-2 font-mono text-[10px] font-bold bg-primary text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
                                         {sharesCount}
                                     </span>
                                 )}
@@ -314,7 +314,7 @@ export function ProjectWorkspace({
                             {enableBetaFeatures && canViewInternalTabs && (
                                 <TabsTrigger
                                     value="board"
-                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                                 >
                                     <LayoutGrid className="w-4 h-4 mr-2" />
                                     Board
@@ -324,12 +324,12 @@ export function ProjectWorkspace({
                             )}
                             <TabsTrigger
                                 value="comments"
-                                className="h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                className="h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                             >
                                 <MessageCircle className="w-4 h-4 mr-2" />
                                 Comments
                                 {commentsCount !== undefined && commentsCount > 0 && (
-                                    <span className="ml-2 font-mono text-[10px] font-bold bg-[#069668] text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
+                                    <span className="ml-2 font-mono text-[10px] font-bold bg-primary text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
                                         {commentsCount}
                                     </span>
                                 )}
@@ -337,14 +337,14 @@ export function ProjectWorkspace({
                             {enableBetaFeatures && canViewInternalTabs && (
                                 <TabsTrigger
                                     value="wiki"
-                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                                 >
                                     <PenTool className="w-4 h-4 mr-2" />
                                     Dossier
                                     <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
                                     <span className="ml-2 rounded px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 leading-none">Beta</span>
                                     {wikiPageCount !== undefined && wikiPageCount > 0 && (
-                                        <span className="ml-1 font-mono text-[10px] font-bold bg-[#069668] text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
+                                        <span className="ml-1 font-mono text-[10px] font-bold bg-primary text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
                                             {wikiPageCount}
                                         </span>
                                     )}
@@ -353,13 +353,13 @@ export function ProjectWorkspace({
                             {canManage && (
                                 <TabsTrigger
                                     value="audit"
-                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                                 >
                                     <ClipboardList className="w-4 h-4 mr-2" />
                                     Audit
                                     <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
                                     {auditCount !== undefined && auditCount > 0 && (
-                                        <span className="ml-2 font-mono text-[10px] font-bold bg-[#069668] text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
+                                        <span className="ml-2 font-mono text-[10px] font-bold bg-primary text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
                                             {auditCount}
                                         </span>
                                     )}
@@ -368,13 +368,13 @@ export function ProjectWorkspace({
                             {canViewInternalTabs && (
                                 <TabsTrigger
                                     value="members"
-                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                                 >
                                     <Users className="w-4 h-4 mr-2" />
                                     Members
                                     <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
                                     {memberCount !== undefined && memberCount > 0 && (
-                                        <span className="ml-2 font-mono text-[10px] font-bold bg-[#069668] text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
+                                        <span className="ml-2 font-mono text-[10px] font-bold bg-primary text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
                                             {memberCount}
                                         </span>
                                     )}
@@ -383,7 +383,7 @@ export function ProjectWorkspace({
                             {canViewSettings && (
                                 <TabsTrigger
                                     value="settings"
-                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                                 >
                                     <Settings className="w-4 h-4 mr-2" />
                                     Settings
@@ -409,7 +409,7 @@ export function ProjectWorkspace({
                                         type="button"
                                         title="Grid view"
                                         onClick={() => router.push(`${sharesBase}/grid`)}
-                                        className={`px-1.5 py-1 rounded transition-all ${sharesViewMode === 'grid' ? 'bg-white shadow-sm text-[#069668]' : 'text-[#45474c] hover:text-[#1b1b1d] hover:bg-[#f0edee]'}`}
+                                        className={`px-1.5 py-1 rounded transition-all ${sharesViewMode === 'grid' ? 'bg-white shadow-sm text-primary' : 'text-[#45474c] hover:text-[#1b1b1d] hover:bg-[#f0edee]'}`}
                                     >
                                         <LayoutGrid className="h-3 w-3" />
                                     </button>
@@ -417,7 +417,7 @@ export function ProjectWorkspace({
                                         type="button"
                                         title="List view"
                                         onClick={() => router.push(`${sharesBase}/list`)}
-                                        className={`px-1.5 py-1 rounded transition-all ${sharesViewMode === 'list' ? 'bg-white shadow-sm text-[#069668]' : 'text-[#45474c] hover:text-[#1b1b1d] hover:bg-[#f0edee]'}`}
+                                        className={`px-1.5 py-1 rounded transition-all ${sharesViewMode === 'list' ? 'bg-white shadow-sm text-primary' : 'text-[#45474c] hover:text-[#1b1b1d] hover:bg-[#f0edee]'}`}
                                     >
                                         <List className="h-3 w-3" />
                                     </button>

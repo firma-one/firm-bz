@@ -329,7 +329,7 @@ export function RemindersPanel({ onCountChange }: Props) {
                             <Link
                                 href="/d/u/reminders"
                                 onClick={() => setOpen(false)}
-                                className="flex items-center gap-0.5 text-[11px] font-semibold text-[#069668] hover:text-[#065f46]"
+                                className="flex items-center gap-0.5 text-[11px] font-semibold text-firma hover:text-firma/80"
                             >
                                 View all <ArrowUpRight className="h-3 w-3" />
                             </Link>

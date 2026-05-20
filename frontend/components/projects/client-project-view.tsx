@@ -126,7 +126,7 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                     {firmName || 'Firm'}
                 </Link>
                 <ChevronRight className="h-3.5 w-3.5 text-[#d1d5db]" />
-                <Users className="h-4 w-4 text-[#069668]" />
+                <Users className="h-4 w-4 text-primary" />
                 <span className="font-mono text-[11px] font-bold text-[#1b1b1d] uppercase tracking-tighter">
                     {selectedClient ? selectedClient.name : 'Client'}
                 </span>
@@ -185,25 +185,25 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                                     <TabsList className="h-full p-0 bg-transparent rounded-none inline-flex justify-start gap-0 border-0">
                                         <TabsTrigger
                                             value="projects"
-                                            className="h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                            className="h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                                         >
                                             <Briefcase className="w-4 h-4 mr-2" />
                                             Engagements
                                             {selectedClient && selectedClient.engagements.length > 0 && (
-                                                <span className="ml-2 font-mono text-[10px] font-bold bg-[#069668] text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
+                                                <span className="ml-2 font-mono text-[10px] font-bold bg-primary text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
                                                     {selectedClient.engagements.length}
                                                 </span>
                                             )}
                                         </TabsTrigger>
                                         <TabsTrigger
                                             value="contacts"
-                                            className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                            className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                                         >
                                             <Users className="w-4 h-4 mr-2" />
                                             Contacts
                                             <span title="Firm administrators only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
                                             {contactCount !== undefined && contactCount > 0 && (
-                                                <span className="ml-2 font-mono text-[10px] font-bold bg-[#069668] text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
+                                                <span className="ml-2 font-mono text-[10px] font-bold bg-primary text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
                                                     {contactCount}
                                                 </span>
                                             )}
@@ -211,13 +211,13 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                                         {canManageClient && (
                                             <TabsTrigger
                                                 value="members"
-                                                className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                                className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                                             >
                                                 <UserCog className="w-4 h-4 mr-2" />
                                                 Members
                                                 <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
                                                 {memberCount !== undefined && memberCount > 0 && (
-                                                    <span className="ml-2 font-mono text-[10px] font-bold bg-[#069668] text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
+                                                    <span className="ml-2 font-mono text-[10px] font-bold bg-primary text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
                                                         {memberCount}
                                                     </span>
                                                 )}
@@ -226,7 +226,7 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                                         {canManageClient && (
                                             <TabsTrigger
                                                 value="settings"
-                                                className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                                className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                                             >
                                                 <Settings className="w-4 h-4 mr-2" />
                                                 Settings
@@ -239,14 +239,14 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                                             <div className="flex items-center bg-[#f3f4f6] p-0.5 rounded border border-[#e5e7eb]">
                                                 <button
                                                     onClick={() => handleViewModeChange('grid')}
-                                                    className={`px-1.5 py-1 rounded transition-all ${viewMode === 'grid' ? 'bg-white shadow-sm text-[#069668]' : 'text-[#45474c] hover:text-[#1b1b1d] hover:bg-[#f0edee]'}`}
+                                                    className={`px-1.5 py-1 rounded transition-all ${viewMode === 'grid' ? 'bg-white shadow-sm text-primary' : 'text-[#45474c] hover:text-[#1b1b1d] hover:bg-[#f0edee]'}`}
                                                     title="Grid View"
                                                 >
                                                     <LayoutGrid className="h-3 w-3" />
                                                 </button>
                                                 <button
                                                     onClick={() => handleViewModeChange('list')}
-                                                    className={`px-1.5 py-1 rounded transition-all ${viewMode === 'list' ? 'bg-white shadow-sm text-[#069668]' : 'text-[#45474c] hover:text-[#1b1b1d] hover:bg-[#f0edee]'}`}
+                                                    className={`px-1.5 py-1 rounded transition-all ${viewMode === 'list' ? 'bg-white shadow-sm text-primary' : 'text-[#45474c] hover:text-[#1b1b1d] hover:bg-[#f0edee]'}`}
                                                     title="List View"
                                                 >
                                                     <List className="h-3 w-3" />
@@ -264,7 +264,7 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                                                         variant="ghost"
                                                         size="sm"
                                                         type="button"
-                                                        className="h-auto px-4 py-1.5 rounded-[2px] bg-[#069668] text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-[#069668] hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(6,150,104,0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1.5"
+                                                        className="h-auto px-4 py-1.5 rounded-[2px] bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-primary hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1.5"
                                                     >
                                                         <SquarePlus className="h-3.5 w-3.5" />
                                                         New Engagement

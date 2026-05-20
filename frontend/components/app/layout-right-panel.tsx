@@ -142,7 +142,7 @@ export function LayoutRightPanel({
           >
             <div className="flex items-center gap-2.5 min-w-0 flex-1">
               {icon ? (
-                <div className="h-8 w-8 rounded-sm bg-[#ecfdf5] flex items-center justify-center text-[#069668] shrink-0">
+                <div className="h-8 w-8 rounded-sm bg-primary/10 flex items-center justify-center text-primary shrink-0">
                   {icon}
                 </div>
               ) : null}

@@ -17,8 +17,8 @@ import { getAccessibleFileCountForPersona } from "@/lib/project-sharing-ids"
 
 const VALID_TABS = new Set(['files', 'shares', 'comments', 'members', 'analytics', 'sources', 'audit', 'settings', 'wiki'])
 
-function parseRest(rest: string[] | undefined): ProjectPathSegments {
-  const tab = rest?.[0] && VALID_TABS.has(rest[0]) ? rest[0] : 'files'
+function parseRest(rest: string[] | undefined, defaultTab: string): ProjectPathSegments {
+  const tab = rest?.[0] && VALID_TABS.has(rest[0]) ? rest[0] : defaultTab
   if (tab === 'shares') {
     const viewMode = (rest?.[1] === 'board' ? 'board' : (rest?.[1] === 'list' ? 'list' : 'grid')) as 'list' | 'board' | 'grid'
     return { tab, viewMode, wikiPageSlug: null }
@@ -36,7 +36,6 @@ interface PageProps {
 /** Canonical engagement (project) page under /e/. */
 export default async function EngagementPage({ params }: PageProps) {
   const { slug, clientSlug, engagementSlug, rest } = await params
-  const pathSegments = parseRest(rest)
 
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -88,20 +87,10 @@ export default async function EngagementPage({ params }: PageProps) {
   const canManage = canViewSettings
   const enableBetaFeatures = (org.settings as Record<string, unknown> | null)?.enableBetaFeatures === true
 
-  const projectRole = applyViewAs ? viewAsSlug : await getProjectPersona(org.id, client.id, project.id)
-  const restrictToSharedOnly = projectRole ? !['eng_admin', 'eng_member'].includes(projectRole) : false
-
-  const projectPersonas = await getProjectPersonas()
-  const projectPersonaDisplayName =
-    projectRole && typeof projectRole === 'string' && projectRole.startsWith('proj_')
-      ? (projectPersonas as { slug: string; displayName: string }[]).find((p) => p.slug === projectRole)?.displayName ?? null
-      : null
+  const defaultTab = canViewInternalTabs ? 'analytics' : 'files'
+  const pathSegments = parseRest(rest, defaultTab)
 
   const basePath = `/d/f/${slug}/c/${clientSlug}/e/${engagementSlug}`
-
-  if (!rest || rest.length === 0) {
-    redirect(`${basePath}/${canViewInternalTabs ? 'analytics' : 'files'}`)
-  }
 
   if (pathSegments.tab === 'settings' && !canViewSettings) {
     redirect(`${basePath}/files`)
@@ -115,6 +104,15 @@ export default async function EngagementPage({ params }: PageProps) {
   if (pathSegments.tab === 'wiki' && (!enableBetaFeatures || !canViewInternalTabs)) {
     redirect(`${basePath}/files`)
   }
+
+  const projectRole = applyViewAs ? viewAsSlug : await getProjectPersona(org.id, client.id, project.id)
+  const restrictToSharedOnly = projectRole ? !['eng_admin', 'eng_member'].includes(projectRole) : false
+
+  const projectPersonas = await getProjectPersonas()
+  const projectPersonaDisplayName =
+    projectRole && typeof projectRole === 'string' && projectRole.startsWith('proj_')
+      ? (projectPersonas as { slug: string; displayName: string }[]).find((p) => p.slug === projectRole)?.displayName ?? null
+      : null
 
   const ecGuestPersona = (projectRole === 'eng_ext_collaborator' || projectRole === 'eng_viewer') ? projectRole : null
 

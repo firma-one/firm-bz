@@ -43,13 +43,13 @@ function engagementStatusBadgeClass(status: string | null | undefined): string {
         case 'PLANNED':
             return 'bg-blue-50 text-blue-600 ring-1 ring-blue-200/60'
         case 'ACTIVE':
-            return 'bg-[#ecfdf5] text-[#069668] ring-1 ring-[#069668]/25'
+            return 'bg-primary/10 text-primary ring-1 ring-primary/25'
         case 'COMPLETED':
             return 'bg-[#f3f4f6] text-[#45474c] ring-1 ring-[#e5e7eb]'
         case 'PAUSED':
             return 'bg-amber-50 text-amber-600 ring-1 ring-amber-200'
         default:
-            return 'bg-[#ecfdf5] text-[#069668] ring-1 ring-[#069668]/25'
+            return 'bg-primary/10 text-primary ring-1 ring-primary/25'
     }
 }
 
@@ -306,10 +306,10 @@ export function ProjectList({ projects, orgSlug, clientSlug, viewMode = 'grid', 
                         <Link
                             key={project.id}
                             href={`/d/f/${orgSlug}/c/${clientSlug}/e/${project.slug}/${isOrgInternal ? 'analytics' : 'files'}`}
-                            className="group relative bg-white border border-[#e5e7eb] rounded p-5 hover:shadow-lg hover:border-[#069668]/50 transition-all duration-200 flex flex-col h-48"
+                            className="group relative bg-white border border-[#e5e7eb] rounded p-5 hover:shadow-lg hover:border-primary/50 transition-all duration-200 flex flex-col h-48"
                         >
                             <div className="flex items-start justify-between mb-3">
-                                <div className="h-10 w-10 bg-[#f3f4f6] text-[#45474c] rounded flex items-center justify-center group-hover:bg-[#ecfdf5] group-hover:text-[#069668] transition-all shrink-0">
+                                <div className="h-10 w-10 bg-[#f3f4f6] text-[#45474c] rounded flex items-center justify-center group-hover:bg-primary/10 group-hover:text-primary transition-all shrink-0">
                                     <Briefcase className="h-5 w-5" />
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0">

@@ -39,7 +39,7 @@ export function useFirmBranding(): OrganizationBranding | null {
   const [branding, setBranding] = useState<OrganizationBranding | null>(null)
   const currentSlugRef = useRef<string | null>(null)
 
-  const slug = pathname?.match(/^\/d\/o\/([^/]+)/)?.[1] ?? null
+  const slug = pathname?.match(/^\/d\/(?:o|f)\/([^/]+)/)?.[1] ?? null
 
   useLayoutEffect(() => {
     if (!pathname?.startsWith('/d') || !slug) return
@@ -72,19 +72,19 @@ export function useFirmBranding(): OrganizationBranding | null {
         })
         if (!res.ok) return
         const data = await res.json()
-        const org = data.organization || data
+        const org = data.organization || data.firm || data
         const settings = (org?.settings as Record<string, unknown>) || {}
         const b = (settings.branding as Record<string, string | undefined>) || {}
-        const logoUrl = (org?.logoUrl as string) ?? b.logoUrl ?? null
-        const themeColor = (org?.themeColorHex as string) ?? b.themeColor ?? b.brandColor ?? null
-        const subtext = (org?.brandingSubtext as string) ?? b.subtext ?? null
+
+        // Read exclusively from settings.branding
         const brandingData: OrganizationBranding | null =
-          logoUrl || themeColor || b.brandColor || org?.name || b.name
+          (b.logoUrl || b.primaryColor || org?.name)
             ? {
-                logoUrl: logoUrl ?? null,
-                name: (org?.name as string) ?? b.name ?? null,
-                subtext: subtext ?? null,
-                themeColor: themeColor ?? null,
+                logoUrl: b.logoUrl ?? null,
+                name: (org?.name as string) ?? null,
+                subtext: b.subtext ?? null,
+                themeColor: b.primaryColor ?? null,
+                secondaryColor: b.secondaryColor ?? null,
               }
             : null
         setBranding(brandingData)

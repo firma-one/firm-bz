@@ -15,6 +15,7 @@ export interface OrganizationBranding {
   name?: string | null;
   subtext?: string | null;
   themeColor?: string | null;
+  secondaryColor?: string | null;
 }
 
 interface LogoProps {
@@ -182,7 +183,7 @@ export default function Logo({
               className={`${brandNameClass} leading-tight`}
               style={useBranding ? { color: brandNameColor } : (themeHex ? { color: themeHex } : undefined)}
             />
-            <span className="mt-0.5 text-[11px] leading-tight text-gray-500">
+            <span className="mt-0.5 text-[11px] leading-tight text-gray-500 truncate" title={branding!.subtext ?? undefined}>
               {branding!.subtext}
             </span>
           </div>

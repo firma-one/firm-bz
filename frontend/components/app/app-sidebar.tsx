@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react"
 import Link from "next/link"
-import { usePathname, useRouter } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { useSidebar } from "@/lib/sidebar-context"
 import {
@@ -108,7 +108,7 @@ function parseRecentFromPath(pathname: string, firmSlug: string): RecentItem | n
       type: 'engagement',
       name: toLabel(engSlug),
       slug: engSlug,
-      href: tab ? `${base}/${tab}` : base,
+      href: base,
       visitedAt: Date.now(),
     }
   }
@@ -150,7 +150,7 @@ function useRecentNavItems(firmSlug: string | null, pathname: string): RecentIte
     const item = parseRecentFromPath(pathname, firmSlug)
     if (!item) return
     setRecents((prev) => {
-      const deduped = prev.filter((r) => r.href !== item.href)
+      const deduped = prev.filter((r) => !(r.type === item.type && r.slug === item.slug))
       const updated = [item, ...deduped].slice(0, MAX_RECENTS)
       try { localStorage.setItem(storageKey, JSON.stringify(updated)) } catch { /* ignore */ }
       return updated
@@ -195,6 +195,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
   const { isCollapsed, toggleSidebar } = useSidebar()
   const { viewAsPersonaSlug, setViewAsPersonaSlug, effectivePermissions, isViewAsActive, personas } = useViewAs()
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const router = useRouter()
   const initialFirms = useSidebarFirms()
   const [viewAsSelectOpen, setViewAsSelectOpen] = useState(false)
@@ -360,12 +361,13 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
 
   // Active state helpers
   const isInsightsActive = pathname.includes('/insights')
-  const isSettingsActive = pathname.includes('/connectors')
+  const isSettingsActive = !pathname.includes('/insights') && !pathname.includes('/connectors') && searchParams.get('tab') === 'settings'
   const isSupportActive = pathname.startsWith('/d/support')
   const isRemindersPageActive = pathname.startsWith('/d/u/reminders')
   const isClientsActive =
     Boolean(slug) &&
     !isInsightsActive &&
+    !isSettingsActive &&
     !isSupportActive &&
     !isRemindersPageActive &&
     !pathname.startsWith('/d/u/') &&
@@ -418,7 +420,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
   }, [billingPlanState, billingSandboxOnly])
 
   const spaceTitle = 'mb-2'
-  const SeparatorLine = () => <div className="-mx-3 border-b border-[#e5e7eb] my-4" aria-hidden />
+  const SeparatorLine = () => <div className="-mx-3 border-b border-[#e5e7eb] my-8" aria-hidden />
 
   const isInline = variant === 'inline'
   const outerClass = isInline
@@ -427,14 +429,14 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
 
   // Shared nav link + icon class helpers
   const navLinkClass = (active: boolean) =>
-    `flex items-center d-sidebar-nav rounded-r transition-colors py-2 ${
+    `flex items-center d-sidebar-nav transition-colors py-2 ${
       active
-        ? 'bg-[#ecfdf5] border-l-2 border-[#069668] text-[#065f46] font-semibold'
+        ? 'bg-primary/10 border-l-2 border-brand-accent text-primary font-semibold'
         : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'
     } ${isCollapsed ? 'px-0 justify-center' : 'px-3'}`
 
   const navIconClass = (active: boolean) =>
-    `h-4 w-4 shrink-0 ${isCollapsed ? 'mx-auto' : 'mr-3'} ${active ? 'text-[#069668]' : 'text-[#45474c]'}`
+    `h-4 w-4 shrink-0 ${isCollapsed ? 'mx-auto' : 'mr-3'} ${active ? 'text-primary' : 'text-[#45474c]'}`
 
   return (
     <div className={outerClass}>
@@ -497,23 +499,23 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                       />
                       {/* Tree sub-items: Clients + Analytics + Settings */}
                       <div className="ml-1 space-y-0.5">
-                        <Link href={baseUrl} className={`flex items-center rounded-r transition-colors pl-2 pr-2 py-1.5 text-[0.8125rem] ${isClientsActive ? 'bg-[#ecfdf5] text-[#065f46] font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}>
+                        <Link href={baseUrl} className={`flex items-center transition-colors pl-2 pr-2 py-1.5 text-[0.8125rem] ${isClientsActive ? 'bg-primary/10 border-l-2 border-brand-accent text-primary font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}>
                           <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-1.5" />
-                          <Users className={`h-3.5 w-3.5 mr-2 shrink-0 ${isClientsActive ? 'text-[#069668]' : 'text-[#45474c]'}`} />
+                          <Users className={`h-3.5 w-3.5 mr-2 shrink-0 ${isClientsActive ? 'text-primary' : 'text-[#45474c]'}`} />
                           <span>Clients</span>
                         </Link>
                         {canManageOrg && (
-                          <Link href={`${firmScopedNavBase}/insights`} className={`group/lock flex w-full items-center rounded-r transition-colors pl-2 pr-3 py-1.5 text-[0.8125rem] ${isInsightsActive ? 'bg-[#ecfdf5] text-[#065f46] font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}>
+                          <Link href={`${firmScopedNavBase}/insights`} className={`group/lock flex w-full items-center transition-colors pl-2 pr-3 py-1.5 text-[0.8125rem] ${isInsightsActive ? 'bg-primary/10 border-l-2 border-brand-accent text-primary font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}>
                             <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-1.5" />
-                            <BarChart3 className={`h-3.5 w-3.5 mr-2 shrink-0 ${isInsightsActive ? 'text-[#069668]' : 'text-[#45474c]'}`} />
+                            <BarChart3 className={`h-3.5 w-3.5 mr-2 shrink-0 ${isInsightsActive ? 'text-primary' : 'text-[#45474c]'}`} />
                             <span>Analytics</span>
                             <span title="Internal only" className="ml-auto flex items-center"><Lock className="w-2.5 h-2.5 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
                           </Link>
                         )}
                         {canManageOrg && (
-                          <Link href={`${firmScopedNavBase}/connectors`} className={`group/lock flex w-full items-center rounded-r transition-colors pl-2 pr-3 py-1.5 text-[0.8125rem] ${isSettingsActive ? 'bg-[#ecfdf5] text-[#065f46] font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}>
+                          <Link href={`${firmScopedNavBase}?tab=settings`} className={`group/lock flex w-full items-center transition-colors pl-2 pr-3 py-1.5 text-[0.8125rem] ${isSettingsActive ? 'bg-primary/10 border-l-2 border-brand-accent text-primary font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}>
                             <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-1.5" />
-                            <Settings className={`h-3.5 w-3.5 mr-2 shrink-0 ${isSettingsActive ? 'text-[#069668]' : 'text-[#45474c]'}`} />
+                            <Settings className={`h-3.5 w-3.5 mr-2 shrink-0 ${isSettingsActive ? 'text-primary' : 'text-[#45474c]'}`} />
                             <span>Settings</span>
                             <span title="Internal only" className="ml-auto flex items-center"><Lock className="w-2.5 h-2.5 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
                           </Link>
@@ -554,7 +556,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                       {canManageOrg && (
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <Link href={`${firmScopedNavBase}/connectors`} className={navLinkClass(isSettingsActive)}>
+                            <Link href={`${firmScopedNavBase}?tab=settings`} className={navLinkClass(isSettingsActive)}>
                               <Settings className={navIconClass(isSettingsActive)} />
                             </Link>
                           </TooltipTrigger>
@@ -598,62 +600,63 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                         <span className="flex-1 text-left">Recent</span>
                         {recents.length > 0 && (
                           <span
-                            className="mr-1.5 min-w-[14px] h-3.5 px-1 text-white text-[8px] font-bold rounded-full flex items-center justify-center leading-none"
-                            style={{ background: '#069668' }}
+                            className="mr-1.5 min-w-[14px] h-3.5 px-1 text-white text-[8px] font-bold rounded-full flex items-center justify-center leading-none bg-primary"
                           >
                             {recents.length}
                           </span>
                         )}
                         <ChevronDown className={`h-3 w-3 text-[#9ca3af] transition-transform duration-200 ${isRecentsOpen ? 'rotate-180' : ''}`} />
                       </button>
-                      {isRecentsOpen && (
-                        <div className="space-y-1.5">
-                          {recents.length === 0 ? (
-                            <p className="px-3 py-2.5 text-[0.75rem] text-[#9ca3af]">No recent pages yet</p>
-                          ) : (
-                            <>
-                              {recents.slice(0, MAX_SIDEBAR_RECENTS).map((item) => {
-                                const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
-                                const iconLabel = item.type === 'client' ? 'Client' : 'Engagement'
-                                return (
+                      <div className={`grid transition-all duration-200 ease-out ${isRecentsOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
+                        <div className="overflow-hidden">
+                          <div className="space-y-1.5 pt-0.5">
+                            {recents.length === 0 ? (
+                              <p className="px-3 py-2.5 text-[0.75rem] text-[#9ca3af]">No recent pages yet</p>
+                            ) : (
+                              <>
+                                {recents.slice(0, MAX_SIDEBAR_RECENTS).map((item) => {
+                                  const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+                                  const iconLabel = item.type === 'client' ? 'Client' : 'Engagement'
+                                  return (
+                                    <Link
+                                      key={item.href}
+                                      href={item.href}
+                                      className={`flex items-center transition-colors pl-2 pr-3 py-1.5 ${
+                                        isActive
+                                          ? 'bg-primary/10 border-l-2 border-brand-accent text-primary font-semibold'
+                                          : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'
+                                      }`}
+                                    >
+                                      <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-1.5" />
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <span className="flex items-center gap-2 min-w-0 flex-1">
+                                            {item.type === 'client' ? (
+                                              <Users className={`h-3.5 w-3.5 shrink-0 ${isActive ? 'text-primary' : 'text-[#45474c]'}`} />
+                                            ) : (
+                                              <Briefcase className={`h-3.5 w-3.5 shrink-0 ${isActive ? 'text-primary' : 'text-[#45474c]'}`} />
+                                            )}
+                                            <span className="flex-1 min-w-0 text-[0.8125rem] truncate">{item.name}</span>
+                                          </span>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="right">{iconLabel}: {item.name}</TooltipContent>
+                                      </Tooltip>
+                                    </Link>
+                                  )
+                                })}
+                                {recents.length > MAX_SIDEBAR_RECENTS && (
                                   <Link
-                                    key={item.href}
-                                    href={item.href}
-                                    className={`flex items-center rounded-r transition-colors pl-2 pr-3 py-2.5 ${
-                                      isActive
-                                        ? 'bg-[#ecfdf5] text-[#065f46] font-semibold'
-                                        : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'
-                                    }`}
+                                    href="/d/u/recent"
+                                    className="block pl-7 py-1.5 text-[0.75rem] text-primary hover:text-primary/80 font-medium"
                                   >
-                                    <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-1.5" />
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <span className="flex items-center gap-2 min-w-0 flex-1">
-                                          {item.type === 'client' ? (
-                                            <Users className={`h-3.5 w-3.5 shrink-0 ${isActive ? 'text-[#069668]' : 'text-[#45474c]'}`} />
-                                          ) : (
-                                            <Briefcase className={`h-3.5 w-3.5 shrink-0 ${isActive ? 'text-[#069668]' : 'text-[#45474c]'}`} />
-                                          )}
-                                          <span className="flex-1 min-w-0 text-[0.8125rem] truncate">{item.name}</span>
-                                        </span>
-                                      </TooltipTrigger>
-                                      <TooltipContent side="right">{iconLabel}: {item.name}</TooltipContent>
-                                    </Tooltip>
+                                    View all ({recents.length}) →
                                   </Link>
-                                )
-                              })}
-                              {recents.length > MAX_SIDEBAR_RECENTS && (
-                                <Link
-                                  href="/d/u/recent"
-                                  className="block pl-7 py-1.5 text-[0.75rem] text-[#069668] hover:text-[#065f46] font-medium"
-                                >
-                                  View all ({recents.length}) →
-                                </Link>
-                              )}
-                            </>
-                          )}
+                                )}
+                              </>
+                            )}
+                          </div>
                         </div>
-                      )}
+                      </div>
                     </div>
                   )}
                   {isCollapsed && recents.length > 0 && (
@@ -664,7 +667,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                     >
                       <button
                         type="button"
-                        className="flex items-center d-sidebar-nav rounded-r transition-colors px-0 justify-center py-2 w-full text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d]"
+                        className="flex items-center d-sidebar-nav transition-colors px-0 justify-center py-2 w-full text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d]"
                         aria-label="Recent pages"
                       >
                         <History className="h-4 w-4 mx-auto" />
@@ -690,7 +693,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                           {recents.length > MAX_SIDEBAR_RECENTS && (
                             <Link
                               href="/d/u/recent"
-                              className="block px-3 py-1.5 text-[0.75rem] text-[#069668] hover:text-[#065f46] font-medium"
+                              className="block px-3 py-1.5 text-[0.75rem] text-primary hover:text-primary/80 font-medium"
                             >
                               View all ({recents.length}) →
                             </Link>
@@ -726,67 +729,69 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                         <ChevronDown className={`h-3 w-3 shrink-0 text-[#9ca3af] transition-transform duration-200 ${isRemindersOpen ? 'rotate-180' : ''}`} />
                       </button>
 
-                      {isRemindersOpen && (
-                        <div className="ml-1 space-y-0.5 animate-in slide-in-from-top-1 fade-in duration-200">
-                          {remindersLoading ? (
-                            <div className="pl-3 py-2 text-[0.75rem] text-[#9ca3af]">Loading…</div>
-                          ) : visibleReminders.length === 0 ? (
-                            <div className="pl-3 py-2 text-[0.75rem] text-[#9ca3af]">No reminders</div>
-                          ) : (
-                            <>
-                              {visibleReminders.slice(0, 3).map((r) => (
-                                <div
-                                  key={r.id}
-                                  className="flex items-center gap-1 pl-2 pr-1 py-1.5 rounded-r hover:bg-[#f9f9fb] group"
-                                >
-                                  <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-0.5" />
-                                  <a href={r.ctaUrl ?? '#'} className="flex-1 min-w-0 flex items-center gap-1.5">
+                      <div className={`grid transition-all duration-200 ease-out ${isRemindersOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
+                        <div className="overflow-hidden">
+                          <div className="ml-1 space-y-0.5 pt-0.5">
+                            {remindersLoading ? (
+                              <div className="pl-3 py-2 text-[0.75rem] text-[#9ca3af]">Loading…</div>
+                            ) : visibleReminders.length === 0 ? (
+                              <div className="pl-3 py-2 text-[0.75rem] text-[#9ca3af]">No reminders</div>
+                            ) : (
+                              <>
+                                {visibleReminders.slice(0, 3).map((r) => (
+                                  <div
+                                    key={r.id}
+                                    className="flex items-center gap-1 pl-2 pr-1 py-1.5 hover:bg-[#f9f9fb] group"
+                                  >
+                                    <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-0.5" />
+                                    <a href={r.ctaUrl ?? '#'} className="flex-1 min-w-0 flex items-center gap-1.5">
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Clock
+                                            className="h-3 w-3 shrink-0"
+                                            style={{ color: reminderLabelColor(r.labelStyle) }}
+                                          />
+                                        </TooltipTrigger>
+                                        <TooltipContent side="right" className="text-xs">
+                                          {r.label}
+                                        </TooltipContent>
+                                      </Tooltip>
+                                      <span className="text-[0.8125rem] font-medium text-[#45474c] truncate">{r.entityName}</span>
+                                    </a>
                                     <Tooltip>
                                       <TooltipTrigger asChild>
-                                        <Clock
-                                          className="h-3 w-3 shrink-0"
-                                          style={{ color: reminderLabelColor(r.labelStyle) }}
-                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => handleReminderDone(r.id)}
+                                          className="shrink-0 h-5 w-5 flex items-center justify-center rounded border border-[#e5e7eb] bg-white text-[#45474c]/40 hover:text-emerald-600 hover:border-emerald-300 transition-colors"
+                                        >
+                                          <CheckCircle2 className="h-3 w-3" />
+                                        </button>
                                       </TooltipTrigger>
-                                      <TooltipContent side="right" className="text-xs">
-                                        {r.label}
-                                      </TooltipContent>
+                                      <TooltipContent side="right" className="text-xs">Mark as done</TooltipContent>
                                     </Tooltip>
-                                    <span className="text-[0.8125rem] font-medium text-[#45474c] truncate">{r.entityName}</span>
-                                  </a>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleReminderDone(r.id)}
-                                        className="shrink-0 h-5 w-5 flex items-center justify-center rounded border border-[#e5e7eb] bg-white text-[#45474c]/40 hover:text-emerald-600 hover:border-emerald-300 transition-colors"
-                                      >
-                                        <CheckCircle2 className="h-3 w-3" />
-                                      </button>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="right" className="text-xs">Mark as done</TooltipContent>
-                                  </Tooltip>
-                                </div>
-                              ))}
-                              <Link
-                                href="/d/u/reminders"
-                                className="block pl-7 py-1.5 text-[0.75rem] text-[#069668] hover:text-[#065f46] font-medium"
-                              >
-                                {visibleReminders.length > 3
-                                  ? `View all (${visibleReminders.length}) →`
-                                  : 'View all →'}
-                              </Link>
-                            </>
-                          )}
+                                  </div>
+                                ))}
+                                <Link
+                                  href="/d/u/reminders"
+                                  className="block pl-7 py-1.5 text-[0.75rem] text-primary hover:text-primary/80 font-medium"
+                                >
+                                  {visibleReminders.length > 3
+                                    ? `View all (${visibleReminders.length}) →`
+                                    : 'View all →'}
+                                </Link>
+                              </>
+                            )}
+                          </div>
                         </div>
-                      )}
+                      </div>
                     </div>
                   ) : (
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Link
                           href="/d/u/reminders"
-                          className="relative flex items-center d-sidebar-nav rounded-r transition-colors px-0 justify-center py-2 text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d]"
+                          className="relative flex items-center d-sidebar-nav transition-colors px-0 justify-center py-2 text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d]"
                         >
                           <Bell
                             className="h-4 w-4 mx-auto"
@@ -821,10 +826,10 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                             href="/resources/faq"
                             target="_blank"
                             rel="noopener noreferrer"
-                            className={`flex items-center rounded-r transition-colors pl-2 pr-2 py-1.5 text-[0.8125rem] ${pathname?.startsWith('/resources/faq') ? 'bg-[#ecfdf5] text-[#065f46] font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}
+                            className={`flex items-center transition-colors pl-2 pr-2 py-1.5 text-[0.8125rem] ${pathname?.startsWith('/resources/faq') ? 'bg-primary/10 border-l-2 border-brand-accent text-primary font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}
                           >
                             <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-1.5" />
-                            <HelpCircle className={`h-3.5 w-3.5 mr-2 shrink-0 ${pathname?.startsWith('/resources/faq') ? 'text-[#069668]' : 'text-[#45474c]'}`} />
+                            <HelpCircle className={`h-3.5 w-3.5 mr-2 shrink-0 ${pathname?.startsWith('/resources/faq') ? 'text-primary' : 'text-[#45474c]'}`} />
                             <span className="flex-1">FAQs</span>
                             <ArrowUpRight className="h-3 w-3 shrink-0 text-[#45474c]/40" />
                           </Link>
@@ -838,7 +843,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                             href="/resources/faq"
                             target="_blank"
                             rel="noopener noreferrer"
-                            className={`flex-1 flex items-center d-sidebar-nav rounded-r transition-colors px-0 justify-center py-2 ${pathname?.startsWith('/resources/faq') ? 'text-[#069668]' : 'text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}
+                            className={`flex-1 flex items-center d-sidebar-nav transition-colors px-0 justify-center py-2 ${pathname?.startsWith('/resources/faq') ? 'text-primary' : 'text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}
                           >
                             <HelpCircle className="h-4 w-4 mx-auto" />
                           </Link>
@@ -878,7 +883,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                           onOpenChange={setViewAsSelectOpen}
                         >
                           <SelectTrigger
-                            className={`flex h-auto w-full items-center gap-0 rounded-r border-0 bg-transparent px-0 pr-2 py-1.5 !text-[0.8125rem] text-[#45474c] font-medium shadow-none transition-colors hover:bg-[#f9f9fb] hover:text-[#1b1b1d] focus:ring-0 [&>svg:last-child]:ml-auto [&>svg:last-child]:h-3 [&>svg:last-child]:w-3 [&>svg:last-child]:shrink-0 [&>svg:last-child]:text-[#45474c] [&>svg:last-child]:transition-transform [&>svg:last-child]:duration-200 ${viewAsSelectOpen ? '[&>svg:last-child]:rotate-180' : ''}`}
+                            className={`flex h-auto w-full items-center gap-0 rounded border-0 bg-transparent px-0 pr-2 py-1.5 !text-[0.8125rem] text-[#45474c] font-medium shadow-none transition-colors hover:bg-[#f9f9fb] hover:text-[#1b1b1d] focus:ring-0 [&>svg:last-child]:ml-auto [&>svg:last-child]:h-3 [&>svg:last-child]:w-3 [&>svg:last-child]:shrink-0 [&>svg:last-child]:text-[#45474c] [&>svg:last-child]:transition-transform [&>svg:last-child]:duration-200 ${viewAsSelectOpen ? '[&>svg:last-child]:rotate-180' : ''}`}
                           >
                             <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-1.5 ml-2" />
                             <Eye className="h-3.5 w-3.5 mr-2 shrink-0 text-[#45474c]" />
@@ -892,7 +897,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                               <SelectItem
                                 key={p.slug}
                                 value={p.slug}
-                                className="cursor-pointer rounded py-1 px-2.5 !text-[0.8125rem] text-[#45474c] outline-none focus:bg-transparent data-[state=checked]:text-[#069668] data-[state=checked]:font-medium data-[highlighted]:bg-transparent"
+                                className="cursor-pointer rounded-none py-1 px-2.5 !text-[0.8125rem] text-[#45474c] outline-none focus:bg-[#f9f9fb] data-[state=checked]:bg-primary/10 data-[state=checked]:border-l-2 data-[state=checked]:border-brand-accent data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-[#f9f9fb]"
                                 endAdornment={p.description ? (
                                   <Tooltip>
                                     <TooltipTrigger asChild>

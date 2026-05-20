@@ -70,10 +70,17 @@
     --card-foreground: 0 0% 3.9%;
     --popover: 0 0% 100%;
     --popover-foreground: 0 0% 3.9%;
-    --primary: 0 0% 0%;
+    /* Firma brand — overridden per-firm via JS injection on /d/ routes */
+    --primary: 161 93% 31%;           /* #069668 */
     --primary-foreground: 0 0% 98%;
-    --secondary: 0 0% 96.1%;
-    --secondary-foreground: 0 0% 9%;
+    --primary-rgb: 6, 150, 104;       /* RGB components for rgba(var(--primary-rgb), alpha) */
+    --secondary: 138 76% 97%;         /* #F0FDF4 */
+    --secondary-foreground: 161 40% 15%;
+
+    /* Firm brand accent — falls back to primary when no firm accent is set */
+    --brand-accent: var(--primary);
+    --brand-accent-foreground: var(--primary-foreground);
+
     --muted: 0 0% 96.1%;
     --muted-foreground: 0 0% 45.1%;
     --accent: 0 0% 96.1%;
@@ -82,7 +89,7 @@
     --destructive-foreground: 0 0% 98%;
     --border: 0 0% 89.8%;
     --input: 0 0% 89.8%;
-    --ring: 0 0% 3.9%;
+    --ring: 161 93% 31%;
     --chart-1: 12 76% 61%;
     --chart-2: 173 58% 39%;
     --chart-3: 197 37% 24%;
@@ -97,10 +104,13 @@
     --card-foreground: 0 0% 98%;
     --popover: 0 0% 3.9%;
     --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
+    /* Dark mode brand colors deferred — revisit when dark mode is introduced */
+    --primary: 161 70% 45%;
     --primary-foreground: 0 0% 9%;
-    --secondary: 0 0% 14.9%;
+    --secondary: 161 30% 15%;
     --secondary-foreground: 0 0% 98%;
+    --brand-accent: var(--primary);
+    --brand-accent-foreground: var(--primary-foreground);
     --muted: 0 0% 14.9%;
     --muted-foreground: 0 0% 63.9%;
     --accent: 0 0% 14.9%;
@@ -199,11 +209,11 @@
     background-color: #f9f9fb !important;
     color: #1b1b1d !important;
   }
-  /* Add Firm CTA item stays green on hover */
+  /* Add Firm CTA item uses brand primary on hover */
   [data-firm-selector] [data-value="__create__"][data-highlighted],
   [data-firm-selector] [data-value="__create__"]:focus {
-    background-color: #d1fae5 !important;
-    color: #065f46 !important;
+    background-color: hsl(var(--primary) / 0.1) !important;
+    color: hsl(var(--primary)) !important;
   }
 
   /* Tree branch L-connector on each sub-nav item */
@@ -281,27 +291,11 @@
     background-color: #f0edee !important;
   }
 
-  /* Under /d/, remap slate-100 → outline #e5e7eb */
-  .d-app .bg-slate-100 {
-    background-color: #ecfdf5 !important;
-  }
-  .d-app .bg-slate-100\/50 {
-    background-color: rgba(236, 253, 245, 0.5) !important;
-  }
-  .d-app .bg-slate-100\/80 {
-    background-color: rgba(236, 253, 245, 0.8) !important;
-  }
-  .d-app .bg-slate-100\/90 {
-    background-color: rgba(236, 253, 245, 0.9) !important;
-  }
   .d-app .border-slate-100 {
     border-color: #e5e7eb !important;
   }
   .d-app .divide-slate-100 > * + * {
     border-color: #e5e7eb !important;
-  }
-  .d-app .hover\:bg-slate-100:hover {
-    background-color: #ecfdf5 !important;
   }
   .d-app .text-slate-100 {
     color: #e5e7eb !important;
@@ -312,7 +306,7 @@
     color: #1b1b1d;
   }
   .d-app .bg-slate-100.text-slate-900 {
-    color: #065f46 !important;
+    color: hsl(var(--primary)) !important;
   }
 
   /* View As dropdown hover — matches sidebar nav hover color */

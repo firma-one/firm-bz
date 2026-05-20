@@ -3,13 +3,14 @@
 import React, { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Building2, SquarePlus, ChevronDown, ChevronUp } from 'lucide-react'
+import { Building2, SquarePlus, ChevronDown, ChevronUp, Info, Box } from 'lucide-react'
 import {
     Select,
     SelectContent,
     SelectItem,
     SelectTrigger,
 } from "@/components/ui/select"
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { FirmSwitchDialog } from './firm-switch-dialog'
 import { AddFirmModal } from './add-firm-modal'
 import { useAuth } from '@/lib/auth-context'
@@ -125,7 +126,7 @@ export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className,
                             {selectedOrg?.name || 'Select Workspace...'}
                         </span>
                         {selectedOrg?.sandboxOnly && (
-                            <span className="inline-flex items-center rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20 whitespace-nowrap shrink-0">
+                            <span className="inline-flex items-center rounded bg-[#f3f4f6] px-1.5 py-0.5 text-[10px] font-medium text-[#6b7280] ring-1 ring-inset ring-[#e5e7eb] whitespace-nowrap shrink-0">
                                 Sandbox
                             </span>
                         )}
@@ -150,7 +151,7 @@ export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className,
                                     {selectedOrg ? `/${selectedOrg.slug}` : '/—'}
                                 </span>
                                 {selectedOrg?.sandboxOnly && (
-                                    <span className="inline-flex items-center rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20 whitespace-nowrap shrink-0">
+                                    <span className="inline-flex items-center rounded bg-[#f3f4f6] px-1.5 py-0.5 text-[10px] font-medium text-[#6b7280] ring-1 ring-inset ring-[#e5e7eb] whitespace-nowrap shrink-0">
                                         Sandbox
                                     </span>
                                 )}
@@ -166,8 +167,8 @@ export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className,
                 )}
                 <SelectContent
                     sideOffset={4}
-                    className="d-app max-h-[min(70vh,24rem)] min-w-[var(--radix-select-trigger-width)] max-w-[min(100vw-1.5rem,18rem)] overflow-y-auto overflow-x-hidden rounded border border-[#e5e7eb] bg-white p-0 shadow-md"
-                    viewportClassName="space-y-0 px-0 pb-2 pt-0"
+                    className="d-app max-h-[min(70vh,24rem)] min-w-[var(--radix-select-trigger-width)] max-w-[min(100vw-1.5rem,18rem)] overflow-y-auto overflow-x-hidden rounded-none border border-[#e5e7eb] bg-white py-0.5 shadow-md"
+                    viewportClassName="p-1"
                     data-firm-selector
                 >
                     {showAddFirmUpgradeHint ? (
@@ -190,7 +191,7 @@ export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className,
                                             firmSlug: firmForBilling?.slug ?? null,
                                             pathname: pathname ?? null,
                                         })}
-                                        className="mt-2 inline-block text-xs font-semibold text-[#069668] hover:text-[#065f46] underline-offset-2 hover:underline text-left"
+                                        className="mt-2 inline-block text-xs font-semibold text-primary hover:text-primary underline-offset-2 hover:underline text-left"
                                     >
                                         {upgradeCopy.dropdownAction}
                                     </Link>
@@ -198,48 +199,67 @@ export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className,
                             </div>
                         </div>
                     ) : (
-                        <SelectItem
-                            value={ADD_FIRM_VALUE}
-                            disabled={addFirmDisabled}
-                            className="w-full cursor-pointer items-stretch rounded-none border-0 bg-[#ecfdf5] px-3 py-3 text-left text-[0.8125rem] text-[#069668] outline-none ring-0 ring-offset-0 focus:bg-[#d1fae5] focus:text-[#065f46] focus-visible:ring-0 data-[highlighted]:bg-[#d1fae5] data-[highlighted]:text-[#065f46] data-[disabled]:pointer-events-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 [&>span:last-child]:block [&>span:last-child]:min-w-0 [&>span:last-child]:w-full"
+                        <div
+                            className="px-2.5 py-2 border-b border-[#e5e7eb]"
+                            onPointerDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+                            role="presentation"
                         >
-                            <div className="flex w-full min-w-0 items-center gap-2.5">
-                                <SquarePlus className="h-4 w-4 shrink-0 text-[#069668]" aria-hidden />
-                                <span className="font-semibold text-[#069668]">Add Firm</span>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setIsSelectOpen(false)
+                                    if (addFirmDisabled) {
+                                        window.location.assign(buildBillingPageHref({
+                                            firmSlug: firmForBilling?.slug ?? null,
+                                            pathname: pathname ?? null,
+                                        }))
+                                    } else {
+                                        setAddOrgModalOpen(true)
+                                    }
+                                }}
+                                className="flex w-full items-center justify-center gap-2 rounded-[2px] border-0 bg-primary px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition-all hover:brightness-110 hover:shadow-[0_6px_16px_-4px_rgba(0,0,0,0.20),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 active:shadow-sm"
+                            >
+                                <SquarePlus className="h-4 w-4" aria-hidden />
+                                Add Firm
+                            </button>
+                        </div>
+                    )}
+                    {firms.map((org) => (
+                        <SelectItem
+                            key={org.id}
+                            value={org.slug}
+                            textValue={org.name}
+                            className="rounded-none cursor-pointer py-1.5 px-2.5 !text-[0.8125rem] text-[#45474c] outline-none focus:bg-[#f9f9fb] data-[state=checked]:bg-primary/10 data-[state=checked]:border-l-2 data-[state=checked]:border-brand-accent data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-[#f9f9fb] data-[highlighted]:text-[#1b1b1d] [&>span:last-child]:block [&>span:last-child]:min-w-0 [&>span:last-child]:w-full"
+                            endAdornment={
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <span className="flex items-center" onClick={(e) => e.stopPropagation()}>
+                                            <Info className="h-3.5 w-3.5 text-[#9ca3af] hover:text-[#45474c]" />
+                                        </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="right" className="font-mono text-xs">
+                                        /{org.slug}
+                                    </TooltipContent>
+                                </Tooltip>
+                            }
+                        >
+                            <div className="flex w-full min-w-0 items-center gap-2 text-left">
+                                <Building2 className="h-4 w-4 shrink-0 text-[#45474c]" aria-hidden />
+                                <span className="line-clamp-1 min-w-0 font-medium text-[#1b1b1d]" title={org.name}>
+                                    {org.name}
+                                </span>
+                                {org.sandboxOnly && (
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Box className="h-3.5 w-3.5 shrink-0 text-[#9ca3af]" aria-label="Sandbox firm" />
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top" className="text-xs">
+                                            Sandbox Firm — no real client data
+                                        </TooltipContent>
+                                    </Tooltip>
+                                )}
                             </div>
                         </SelectItem>
-                    )}
-                    <div className="h-px w-full shrink-0 bg-[#e5e7eb]" role="separator" aria-hidden />
-                    {firms.map((org, index) => (
-                        <React.Fragment key={org.id}>
-                            {index > 0 ? (
-                                <div className="h-px w-full shrink-0 bg-[#e5e7eb]" role="separator" aria-hidden />
-                            ) : null}
-                            <SelectItem
-                                value={org.slug}
-                                textValue={org.name}
-                                className="min-w-0 w-full cursor-pointer items-stretch rounded-none border-0 px-3 py-2.5 text-left text-[0.8125rem] text-[#45474c] outline-none ring-0 ring-offset-0 focus:bg-[#f9f9fb] focus:text-[#1b1b1d] focus-visible:ring-0 data-[highlighted]:bg-[#f9f9fb] data-[highlighted]:text-[#1b1b1d] data-[state=checked]:text-[#069668] [&>span:last-child]:block [&>span:last-child]:min-w-0 [&>span:last-child]:w-full"
-                            >
-                                <div className="flex w-full min-w-0 flex-col items-start gap-0.5 text-left">
-                                    <div className="flex min-w-0 w-full items-center gap-2">
-                                        <Building2 className="h-4 w-4 shrink-0 text-[#45474c]" aria-hidden />
-                                        <span className="line-clamp-1 min-w-0 flex-1 font-medium text-[#1b1b1d]" title={org.name}>
-                                            {org.name}
-                                        </span>
-                                    </div>
-                                    <div className="flex w-full items-center justify-between gap-2 pl-6">
-                                        <span className="truncate font-mono text-[10px] text-[#45474c]">
-                                            /{org.slug}
-                                        </span>
-                                        {org.sandboxOnly && (
-                                            <span className="inline-flex shrink-0 items-center rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap text-amber-700 ring-1 ring-inset ring-amber-600/20">
-                                                Sandbox
-                                            </span>
-                                        )}
-                                    </div>
-                                </div>
-                            </SelectItem>
-                        </React.Fragment>
                     ))}
                 </SelectContent>
             </Select>

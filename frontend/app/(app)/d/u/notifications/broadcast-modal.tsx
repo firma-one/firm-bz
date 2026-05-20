@@ -77,8 +77,8 @@ export function BroadcastModal({ open, onOpenChange, broadcastScopes, onSent }: 
 
         {/* Header */}
         <div className="px-5 py-4 border-b border-[#e5e7eb] bg-[#f9f9fb] flex items-start gap-3">
-          <div className="mt-0.5 h-7 w-7 rounded bg-[#ecfdf5] flex items-center justify-center shrink-0">
-            <Megaphone className="h-3.5 w-3.5 text-[#069668]" />
+          <div className="mt-0.5 h-7 w-7 rounded bg-primary/10 flex items-center justify-center shrink-0">
+            <Megaphone className="h-3.5 w-3.5 text-primary" />
           </div>
           <div>
             <p className="text-sm font-semibold text-[#1b1b1d] leading-tight">New Broadcast</p>
@@ -113,8 +113,8 @@ export function BroadcastModal({ open, onOpenChange, broadcastScopes, onSent }: 
                       !enabled
                         ? 'border-[#e5e7eb] bg-[#f9f9fb] text-[#45474c] cursor-not-allowed opacity-40'
                         : isActive
-                          ? 'border-[#069668] bg-[#ecfdf5] text-[#065f46]'
-                          : 'border-[#e5e7eb] bg-white text-[#1b1b1d] hover:border-[#069668]/50 hover:bg-[#f9f9fb]'
+                          ? 'border-primary bg-primary/10 text-primary'
+                          : 'border-[#e5e7eb] bg-white text-[#1b1b1d] hover:border-primary/50 hover:bg-[#f9f9fb]'
                     }`}
                   >
                     {SCOPE_LABELS[s]}
@@ -133,7 +133,7 @@ export function BroadcastModal({ open, onOpenChange, broadcastScopes, onSent }: 
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g. System maintenance tonight"
-              className="w-full h-9 rounded-[2px] border border-[#e5e7eb] bg-white px-2.5 text-sm text-[#1b1b1d] placeholder:text-[#9ca3af] focus:outline-none focus:ring-1 focus:ring-[#069668] focus:border-[#069668]"
+              className="w-full h-9 rounded-[2px] border border-[#e5e7eb] bg-white px-2.5 text-sm text-[#1b1b1d] placeholder:text-[#9ca3af] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
             />
           </div>
 
@@ -147,7 +147,7 @@ export function BroadcastModal({ open, onOpenChange, broadcastScopes, onSent }: 
               onChange={(e) => setMessage(e.target.value.slice(0, 1000))}
               placeholder="Broadcast message (max 1000 chars)…"
               rows={5}
-              className="w-full rounded-[2px] border border-[#e5e7eb] bg-white px-2.5 py-2 text-sm text-[#1b1b1d] placeholder:text-[#9ca3af] focus:outline-none focus:ring-1 focus:ring-[#069668] focus:border-[#069668] resize-none"
+              className="w-full rounded-[2px] border border-[#e5e7eb] bg-white px-2.5 py-2 text-sm text-[#1b1b1d] placeholder:text-[#9ca3af] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary resize-none"
             />
             <p className="text-[11px] text-[#9ca3af] mt-1 text-right">{message.length}/1000</p>
           </div>
@@ -167,7 +167,7 @@ export function BroadcastModal({ open, onOpenChange, broadcastScopes, onSent }: 
             type="button"
             disabled={sending || message.trim().length === 0}
             onClick={handleSend}
-            className="h-9 px-4 rounded-[2px] bg-[#069668] text-white text-sm font-semibold hover:bg-[#057a54] disabled:opacity-50 transition-colors"
+            className="h-9 px-4 rounded-[2px] bg-primary text-white text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 transition-colors"
           >
             {sending ? 'Sending…' : 'Send'}
           </button>

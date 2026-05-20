@@ -12,7 +12,7 @@ function requestHeadersWithInvokePath(request: NextRequest): Headers {
     return headers;
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
     let response = NextResponse.next({
         request: {
             headers: requestHeadersWithInvokePath(request),

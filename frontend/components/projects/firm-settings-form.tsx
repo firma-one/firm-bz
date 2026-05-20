@@ -15,7 +15,8 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog'
-import { AlertTriangle, ImageIcon, Palette, Trash2, ImagePlus, ChevronDown, Check, FlaskConical } from 'lucide-react'
+import { AlertTriangle, ImageIcon, Palette, Trash2, ImagePlus, ChevronDown, Check, FlaskConical, Info } from 'lucide-react'
+import { contrastRatioAgainstWhite } from '@/lib/color-utils'
 import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -81,7 +82,8 @@ export function FirmSettingsForm({
     const [name, setName] = useState(initialName)
     const [logoUrl, setLogoUrl] = useState('')
     const [subtext, setSubtext] = useState('')
-    const [themeColor, setThemeColor] = useState('#6366f1')
+    const [themeColor, setThemeColor] = useState('')
+    const [secondaryColor, setSecondaryColor] = useState('')
     const [currencyOpen, setCurrencyOpen] = useState(false)
     const [currencyCode, setCurrencyCode] = useState('')
     const [currencyIsCustom, setCurrencyIsCustom] = useState(false)
@@ -120,9 +122,11 @@ export function FirmSettingsForm({
                 const b = (settings.branding as Record<string, string | undefined>) ?? {}
                 const c = (settings.currency as Record<string, string | undefined>) ?? {}
                 if (!cancelled) {
-                    setLogoUrl((firm?.logoUrl as string) ?? b.logoUrl ?? '')
-                    setSubtext((firm?.brandingSubtext as string) ?? b.subtext ?? '')
-                    setThemeColor((firm?.themeColorHex as string) ?? b.themeColor ?? b.brandColor ?? '#6366f1')
+                    // Read exclusively from settings.branding
+                    setLogoUrl(b.logoUrl ?? '')
+                    setSubtext(b.subtext ?? '')
+                    setThemeColor(b.primaryColor ?? '')
+                    setSecondaryColor(b.secondaryColor ?? '')
                     setEnableBetaFeatures(settings.enableBetaFeatures === true)
                     const savedCode = c.code ?? ''
                     const savedSymbol = c.symbol ?? ''
@@ -260,7 +264,8 @@ export function FirmSettingsForm({
                 branding: {
                     logoUrl: resolvedLogoUrl || null,
                     subtext: subtext || null,
-                    themeColor: themeColor || null,
+                    primaryColor: themeColor || null,
+                    secondaryColor: secondaryColor || null,
                 },
                 currency: currencyIsCustom
                     ? { symbol: currencyCustom.trim() || null, code: null }
@@ -325,7 +330,7 @@ export function FirmSettingsForm({
     }
 
     const fieldLabel = 'text-xs font-semibold text-[#45474c] uppercase tracking-widest'
-    const fieldInput = 'bg-white border-[#e5e7eb] text-[#1b1b1d] placeholder:text-[#9a9ba0] focus-visible:ring-[#069668]/30 rounded disabled:cursor-not-allowed disabled:opacity-60'
+    const fieldInput = 'bg-white border-[#e5e7eb] text-[#1b1b1d] placeholder:text-[#9a9ba0] focus-visible:ring-primary/30 rounded disabled:cursor-not-allowed disabled:opacity-60'
 
     return (
         <div className="flex flex-col gap-4">
@@ -388,10 +393,17 @@ export function FirmSettingsForm({
                                     <button
                                         type="button"
                                         onClick={() => fileInputRef.current?.click()}
-                                        className="flex shrink-0 items-center justify-center rounded border-2 border-dashed border-[#e5e7eb] bg-[#f9f9fb] hover:border-[#069668]/40 hover:bg-[#f0fdf7] transition-colors text-[#9a9ba0] hover:text-[#069668] focus:outline-none"
+                                        className="relative flex shrink-0 items-center justify-center rounded border-2 border-dashed border-[#e5e7eb] bg-slate-50 hover:border-primary/40 transition-colors focus:outline-none group"
                                         style={{ width: previewSize, height: previewSize }}
+                                        aria-label="Upload logo"
                                     >
-                                        <ImagePlus className="h-8 w-8" />
+                                        <span className="text-5xl font-semibold text-slate-300 select-none group-hover:opacity-30 transition-opacity">
+                                            {name.trim().charAt(0).toUpperCase() || '?'}
+                                        </span>
+                                        <span className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <ImagePlus className="h-6 w-6 text-primary" />
+                                            <span className="text-[10px] font-semibold text-primary uppercase tracking-wider">Upload logo</span>
+                                        </span>
                                     </button>
                                 ) : (
                                     <div className="flex flex-col gap-2">
@@ -437,7 +449,7 @@ export function FirmSettingsForm({
                                                 <span className="text-xs text-[#45474c] whitespace-nowrap">Zoom</span>
                                                 <input type="range" min={0.5} max={3} step={0.1} value={logoScale}
                                                     onChange={(e) => setLogoScale(Number(e.target.value))} disabled={isSandboxFirm}
-                                                    className="flex-1 h-1.5 rounded appearance-none bg-[#e5e7eb] accent-[#069668] disabled:opacity-60" />
+                                                    className="flex-1 h-1.5 rounded appearance-none bg-[#e5e7eb] accent-primary disabled:opacity-60" />
                                                 <button type="button" onClick={() => { setLogoScale(1); setLogoX(0); setLogoY(0) }}
                                                     disabled={isSandboxFirm} className="text-xs text-[#45474c] hover:text-[#1b1b1d] underline disabled:opacity-50">
                                                     Reset
@@ -448,20 +460,73 @@ export function FirmSettingsForm({
                                 )}
                             </TooltipProvider>
                         </div>
+                        {/* Reset to Firma theme */}
+                        {(themeColor || secondaryColor) && !isSandboxFirm && (
+                            <div className="flex items-center justify-between py-1 border-b border-[#f3f4f6]">
+                                <span className="text-[11px] text-[#9a9ba0]">Custom colors active</span>
+                                <button
+                                    type="button"
+                                    onClick={() => { setThemeColor(''); setSecondaryColor('') }}
+                                    className="text-[11px] font-medium text-firma hover:text-firma/80 transition-colors"
+                                >
+                                    ↺ Reset to Firma theme
+                                </button>
+                            </div>
+                        )}
+
+                        {/* Brand Primary Color */}
                         <div className="space-y-1.5">
-                            <Label htmlFor="org-theme" className={`${fieldLabel} flex items-center gap-1.5`}>
+                            <Label htmlFor="org-primary-color" className={`${fieldLabel} flex items-center gap-1.5`}>
                                 <Palette className="h-3 w-3" />
-                                Theme color
+                                Brand Primary Color
+                                <span className="text-[#9a9ba0] normal-case tracking-normal font-normal">(optional)</span>
                             </Label>
                             <div className="flex items-center gap-2">
-                                <input id="org-theme" type="color" value={themeColor}
+                                <input id="org-primary-color" type="color"
+                                    value={themeColor || '#069668'}
                                     onChange={(e) => setThemeColor(e.target.value)} disabled={isSandboxFirm}
                                     className="h-9 w-10 rounded border border-[#e5e7eb] cursor-pointer bg-white disabled:cursor-not-allowed disabled:opacity-60 shrink-0" />
                                 <Input value={themeColor} onChange={(e) => setThemeColor(e.target.value)}
-                                    placeholder="#6366f1" disabled={isSandboxFirm}
+                                    placeholder="Leave empty to use Firma default (#069668)"
+                                    disabled={isSandboxFirm}
                                     className={`font-mono text-sm ${fieldInput}`} />
+                                {themeColor && (
+                                    <button type="button" onClick={() => setThemeColor('')}
+                                        className="text-[#9a9ba0] hover:text-[#45474c] text-xs shrink-0">Reset</button>
+                                )}
+                            </div>
+                            {themeColor && /^#[0-9A-Fa-f]{6}$/.test(themeColor) && contrastRatioAgainstWhite(themeColor) < 3 && (
+                                <p className="flex items-center gap-1 text-xs text-amber-600">
+                                    <Info className="h-3 w-3 shrink-0" />
+                                    Low contrast against white ({contrastRatioAgainstWhite(themeColor)}:1). Text may be hard to read.
+                                </p>
+                            )}
+                        </div>
+
+                        {/* Brand Accent Color */}
+                        <div className="space-y-1.5">
+                            <Label htmlFor="org-accent-color" className={`${fieldLabel} flex items-center gap-1.5`}>
+                                <Palette className="h-3 w-3" />
+                                Brand Accent Color
+                                <span className="text-[#9a9ba0] normal-case tracking-normal font-normal">(optional)</span>
+                            </Label>
+                            <p className="text-[11px] text-[#9a9ba0]">Used for nav stripe &amp; tab underlines. Leave empty to match primary.</p>
+                            <div className="flex items-center gap-2">
+                                <input id="org-accent-color" type="color"
+                                    value={secondaryColor || themeColor || '#069668'}
+                                    onChange={(e) => setSecondaryColor(e.target.value)} disabled={isSandboxFirm}
+                                    className="h-9 w-10 rounded border border-[#e5e7eb] cursor-pointer bg-white disabled:cursor-not-allowed disabled:opacity-60 shrink-0" />
+                                <Input value={secondaryColor} onChange={(e) => setSecondaryColor(e.target.value)}
+                                    placeholder="Leave empty to match primary color"
+                                    disabled={isSandboxFirm}
+                                    className={`font-mono text-sm ${fieldInput}`} />
+                                {secondaryColor && (
+                                    <button type="button" onClick={() => setSecondaryColor('')}
+                                        className="text-[#9a9ba0] hover:text-[#45474c] text-xs shrink-0">Clear</button>
+                                )}
                             </div>
                         </div>
+
                     </div>
 
                     {/* REGIONAL — col-span-1 */}
@@ -473,7 +538,7 @@ export function FirmSettingsForm({
                             </Label>
                             <DropdownMenu open={currencyOpen} onOpenChange={setCurrencyOpen}>
                                 <DropdownMenuTrigger asChild disabled={isSandboxFirm}>
-                                    <button className="w-full h-9 flex items-center justify-between rounded border border-[#e5e7eb] bg-white px-3 text-sm text-[#1b1b1d] disabled:cursor-not-allowed disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-[#069668]/20">
+                                    <button className="w-full h-9 flex items-center justify-between rounded border border-[#e5e7eb] bg-white px-3 text-sm text-[#1b1b1d] disabled:cursor-not-allowed disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-primary/20">
                                         <span className={currencyCode || (currencyIsCustom && currencyCustom) ? 'text-[#1b1b1d]' : 'text-[#9a9ba0]'}>
                                             {currencyCode
                                                 ? WORLD_CURRENCIES.find((c) => c.code === currencyCode)?.label ?? currencyCode
@@ -496,7 +561,7 @@ export function FirmSettingsForm({
                                         <DropdownMenuItem key={cur.code} className="flex items-center justify-between cursor-pointer text-sm rounded"
                                             onSelect={() => { setCurrencyCode(cur.code); setCurrencyIsCustom(false); setCurrencyCustom(''); setCurrencyOpen(false) }}>
                                             {cur.label}
-                                            {currencyCode === cur.code && !currencyIsCustom && <Check className="h-4 w-4 text-[#069668] shrink-0" />}
+                                            {currencyCode === cur.code && !currencyIsCustom && <Check className="h-4 w-4 text-primary shrink-0" />}
                                         </DropdownMenuItem>
                                     ))}
                                     <DropdownMenuSeparator />
@@ -507,7 +572,7 @@ export function FirmSettingsForm({
                                             onClick={(e) => e.stopPropagation()}
                                             placeholder="Other (enter symbol)…"
                                             className="flex-1 text-sm text-[#1b1b1d] placeholder:text-[#9a9ba0] outline-none bg-transparent" />
-                                        {currencyIsCustom && currencyCustom && <Check className="h-4 w-4 text-[#069668] shrink-0" />}
+                                        {currencyIsCustom && currencyCustom && <Check className="h-4 w-4 text-primary shrink-0" />}
                                     </div>
                                 </DropdownMenuContent>
                             </DropdownMenu>
@@ -538,13 +603,13 @@ export function FirmSettingsForm({
 
                 {/* Actions */}
                 <div className="flex items-center gap-3">
-                    <Button type="button" variant="outline" className="rounded-[2px]"
+                    <Button type="button" variant="outline" className="rounded-[2px] text-[10px] font-headline font-bold tracking-widest uppercase"
                         onClick={() => router.push(`/d/f/${orgSlug}?tab=clients`)}>
                         Cancel
                     </Button>
                     <Button type="button" variant="greenCta" onClick={handleSave}
                         disabled={isSandboxFirm || saving || !brandingLoaded}
-                        className="rounded-[2px] min-w-[8rem] text-[10px] font-headline font-bold tracking-widest uppercase">
+                        className="rounded-[2px] min-w-[8rem] text-[10px] font-headline font-bold tracking-widest uppercase text-white">
                         {saving ? 'Saving…' : 'Save'}
                     </Button>
                 </div>

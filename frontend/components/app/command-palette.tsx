@@ -7,6 +7,7 @@ import {
   BarChart3,
   Bell,
   Bookmark,
+  Briefcase,
   CalendarClock,
   Search,
   UserCircle,
@@ -15,6 +16,14 @@ import {
   Clock,
 } from "lucide-react"
 import { getFirmRole } from "@/lib/actions/firm"
+
+type RecentItem = {
+  type: "client" | "engagement"
+  name: string
+  slug: string
+  href: string
+  visitedAt: number
+}
 
 type CommandItem = {
   id: string
@@ -158,6 +167,7 @@ export function CommandPalette({ onOpenChange }: { onOpenChange?: (open: boolean
   const [firmSlug, setFirmSlug] = useState<string | null>(() =>
     typeof window !== "undefined" ? getLastKnownSlug(pathname ?? "") : getSlugFromPath(pathname ?? "")
   )
+  const [recentItems, setRecentItems] = useState<RecentItem[]>([])
 
   // Keep firm slug in sync with navigation; fall back to sessionStorage on user-scoped pages
   useEffect(() => {
@@ -172,7 +182,28 @@ export function CommandPalette({ onOpenChange }: { onOpenChange?: (open: boolean
     })
   }, [firmSlug])
 
-  const allItems = buildItems(firmSlug, canManageOrg)
+  // Load recent items from localStorage when palette opens
+  useEffect(() => {
+    if (!open || !firmSlug) return
+    try {
+      const raw = localStorage.getItem(`fm_nav_recents_${firmSlug}`)
+      const items: RecentItem[] = raw ? JSON.parse(raw) : []
+      setRecentItems(items.slice(0, 3))
+    } catch {
+      setRecentItems([])
+    }
+  }, [open, firmSlug])
+
+  const recentCommandItems: CommandItem[] = recentItems.map((r) => ({
+    id: `recent-${r.type}-${r.slug}`,
+    label: r.name,
+    description: r.type === "client" ? "Client" : "Engagement",
+    icon: r.type === "client" ? <Users className="h-4 w-4" /> : <Briefcase className="h-4 w-4" />,
+    href: r.href,
+    group: "Recent",
+  }))
+
+  const allItems = [...recentCommandItems, ...buildItems(firmSlug, canManageOrg)]
 
   const filtered = query.trim()
     ? allItems.filter(
@@ -291,14 +322,14 @@ export function CommandPalette({ onOpenChange }: { onOpenChange?: (open: boolean
                       type="button"
                       className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
                         isActive
-                          ? "bg-[#ecfdf5] text-[#065f46]"
+                          ? "bg-primary/10 text-primary"
                           : "text-[#1b1b1d] hover:bg-[#f9f9fb]"
                       }`}
                       onMouseEnter={() => setActiveIndex(idx)}
                       onClick={() => navigate(item.href)}
                     >
                       <span
-                        className={`shrink-0 ${isActive && !item.adminOnly ? "text-[#069668]" : ""}`}
+                        className={`shrink-0 ${isActive && !item.adminOnly ? "text-primary" : ""}`}
                         style={!isActive && item.iconColor ? { color: item.iconColor } : undefined}
                       >
                         {item.icon}

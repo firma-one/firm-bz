@@ -6,17 +6,15 @@ import Link from 'next/link'
 import {
     Dialog,
     DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
     DialogTitle,
     DialogTrigger,
 } from "@/components/ui/dialog"
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
-import { SquarePlus, Building2 } from "lucide-react"
+import { Building2, SquarePlus } from "lucide-react"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { createFirm } from '@/lib/actions/firms'
 import { useAuth } from '@/lib/auth-context'
@@ -143,94 +141,110 @@ export function AddFirmModal({ trigger, open: controlledOpen, onOpenChange: cont
                         {renderTrigger()}
                     </DialogTrigger>
                 )}
-            <DialogContent className="sm:max-w-[425px] border-slate-200">
-                <DialogHeader>
-                    <DialogTitle className="text-slate-900 flex items-center gap-2">
-                        <SquarePlus className="h-4 w-4 text-slate-600" />
-                        <Building2 className="h-4 w-4 text-slate-600" />
-                        <span>Create New Firm</span>
-                    </DialogTitle>
-                    <DialogDescription className="text-slate-600">
-                        Create a new Firm workspace. You will be set as the Firm Administrator.
-                    </DialogDescription>
-                </DialogHeader>
-                <form onSubmit={handleSubmit}>
-                    <div className="grid gap-4 py-4">
-                        <div className="grid gap-2">
-                            <Label htmlFor="name" className='text-slate-900'>Firm Name</Label>
-                            <Input
-                                id="name"
-                                value={name}
-                                onChange={(e) => setName(e.target.value)}
-                                placeholder="e.g., Acme Consulting"
-                                disabled={isLoading}
-                                required
-                                autoFocus
-                                className="border-slate-200 bg-white text-slate-900 shadow-sm placeholder:text-slate-400 selection:bg-slate-200 selection:text-slate-900 focus-visible:border-slate-300 focus-visible:ring-slate-300 disabled:cursor-not-allowed disabled:opacity-60 [&:-webkit-autofill]:[-webkit-text-fill-color:#0f172a] [&:-webkit-autofill]:shadow-[inset_0_0_0_1000px_rgb(255,255,255)]"
-                            />
+            <DialogContent className="sm:max-w-[440px] border-[#e5e7eb] p-0 gap-0 rounded-[2px]">
+
+                    <VisuallyHidden><DialogTitle>Create New Firm</DialogTitle></VisuallyHidden>
+
+                    {/* Header */}
+                    <div className="px-5 py-4 border-b border-[#e5e7eb] bg-[#f9f9fb] flex items-start gap-3">
+                        <div className="mt-0.5 h-7 w-7 rounded bg-primary/10 flex items-center justify-center shrink-0">
+                            <Building2 className="h-3.5 w-3.5 text-primary" />
                         </div>
-                        <div className="grid gap-3 border-t border-slate-200 pt-4">
-                            <h4 className="font-semibold text-slate-900">Allow domain access</h4>
-                            <p className="text-sm text-slate-600">
-                                Enabling access allows users with email address with this domain to join the workspace without an invitation.
-                            </p>
-                            <div className="flex items-center justify-between gap-4">
-                                <Label htmlFor="allow-domain" className="text-sm font-normal text-slate-900 cursor-pointer flex-1">
-                                    Enable access for {allowedEmailDomain || 'your domain'}
-                                </Label>
-                                <Switch
-                                    id="allow-domain"
-                                    checked={allowDomainAccess}
-                                    onCheckedChange={setAllowDomainAccess}
-                                    disabled={isLoading}
-                                />
-                            </div>
-                            {allowDomainAccess && (
-                                <div className="grid gap-2">
-                                    <Label htmlFor="domain" className="text-sm text-slate-700">Email domain</Label>
-                                    <Input
-                                        id="domain"
-                                        value={allowedEmailDomain}
-                                        onChange={(e) => setAllowedEmailDomain(e.target.value)}
-                                        placeholder="e.g., acme.com"
-                                        disabled={isLoading}
-                                        className="font-mono text-sm border-slate-200 bg-white text-slate-900 shadow-sm selection:bg-slate-200 selection:text-slate-900 focus-visible:border-slate-300 focus-visible:ring-slate-300 disabled:cursor-not-allowed disabled:opacity-60 [&:-webkit-autofill]:[-webkit-text-fill-color:#0f172a] [&:-webkit-autofill]:shadow-[inset_0_0_0_1000px_rgb(255,255,255)]"
-                                    />
-                                    {isPublicDomain && (
-                                        <p className="text-xs text-slate-500">
-                                            Public email domains (e.g. gmail.com) are not recommended for firm access.
-                                        </p>
-                                    )}
+                        <div>
+                            <p className="text-sm font-semibold text-[#1b1b1d] leading-tight">Create New Firm</p>
+                            <p className="text-xs text-[#45474c] mt-0.5">Create a new Firm workspace. You will be set as the Firm Administrator.</p>
+                        </div>
+                    </div>
+
+                    <form onSubmit={handleSubmit}>
+                        <div className="p-5 space-y-5">
+                            {error && (
+                                <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs px-3 py-2 rounded">
+                                    {error}
                                 </div>
                             )}
+
+                            {/* Firm Name */}
+                            <div className="space-y-1.5">
+                                <label className="font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] block">
+                                    Firm Name <span className="text-rose-500">*</span>
+                                </label>
+                                <Input
+                                    id="name"
+                                    value={name}
+                                    onChange={(e) => setName(e.target.value)}
+                                    placeholder="e.g., Acme Consulting"
+                                    disabled={isLoading}
+                                    required
+                                    autoFocus
+                                    className="border-[#e5e7eb] text-[#1b1b1d] text-sm placeholder:text-[#9a9ba0] rounded focus-visible:ring-1 focus-visible:ring-primary focus-visible:border-primary"
+                                />
+                            </div>
+
+                            {/* Domain Access */}
+                            <div className="space-y-3 border-t border-[#e5e7eb] pt-5">
+                                <div>
+                                    <p className="font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c]">Allow Domain Access</p>
+                                    <p className="text-xs text-[#9a9ba0] mt-1">
+                                        Users with this email domain can join the workspace without an invitation.
+                                    </p>
+                                </div>
+                                <div className="flex items-center justify-between gap-4">
+                                    <Label htmlFor="allow-domain" className="text-xs text-[#1b1b1d] cursor-pointer flex-1">
+                                        Enable access for <span className="font-semibold">{allowedEmailDomain || 'your domain'}</span>
+                                    </Label>
+                                    <Switch
+                                        id="allow-domain"
+                                        checked={allowDomainAccess}
+                                        onCheckedChange={setAllowDomainAccess}
+                                        disabled={isLoading}
+                                    />
+                                </div>
+                                {allowDomainAccess && (
+                                    <div className="space-y-1.5">
+                                        <label className="font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] block">
+                                            Email Domain
+                                        </label>
+                                        <Input
+                                            id="domain"
+                                            value={allowedEmailDomain}
+                                            onChange={(e) => setAllowedEmailDomain(e.target.value)}
+                                            placeholder="e.g., acme.com"
+                                            disabled={isLoading}
+                                            className="font-mono border-[#e5e7eb] text-[#1b1b1d] text-sm placeholder:text-[#9a9ba0] rounded focus-visible:ring-1 focus-visible:ring-primary focus-visible:border-primary"
+                                        />
+                                        {isPublicDomain && (
+                                            <p className="text-xs text-[#9a9ba0]">
+                                                Public email domains (e.g. gmail.com) are not recommended for firm access.
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                        {error && (
-                            <p className="text-sm text-red-600">{error}</p>
-                        )}
-                    </div>
-                    <DialogFooter>
-                        <Button
-                            type="button"
-                            variant="outline"
-                            className="border-slate-200 text-slate-700 hover:bg-slate-50"
-                            onClick={() => handleOpenChange(false)}
-                            disabled={isLoading}
-                        >
-                            Cancel
-                        </Button>
-                        <Button variant="blackCta" type="submit" disabled={isLoading || !name.trim()}>
-                            {isLoading ? (
-                                <>
-                                    <LoadingSpinner size="sm" className="mr-2" />
-                                    Creating...
-                                </>
-                            ) : (
-                                'Create Firm'
-                            )}
-                        </Button>
-                    </DialogFooter>
-                </form>
-            </DialogContent>
+
+                        {/* Footer */}
+                        <div className="px-5 py-3 border-t border-[#e5e7eb] flex items-center justify-end gap-3">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                className="!rounded-[2px] text-[10px] font-headline font-bold tracking-widest uppercase border-gray-300"
+                                onClick={() => handleOpenChange(false)}
+                                disabled={isLoading}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                variant="greenCta"
+                                type="submit"
+                                disabled={isLoading || !name.trim()}
+                                className="min-w-[8rem] text-[10px] font-headline font-bold tracking-widest uppercase"
+                            >
+                                {isLoading ? <LoadingSpinner size="sm" /> : 'Create Firm'}
+                            </Button>
+                        </div>
+                    </form>
+                </DialogContent>
             </Dialog>
             {!isControlled && showUpgradeHint && (
                 <p className="text-xs text-slate-600 text-right max-w-[240px] leading-snug ml-auto">

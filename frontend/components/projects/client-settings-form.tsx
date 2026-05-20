@@ -46,8 +46,8 @@ export interface ClientSettingsFormProps {
 }
 
 const fieldLabel = 'font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] block mb-1'
-const inputCls = 'border-[#e5e7eb] text-[#1b1b1d] text-sm placeholder:text-[#9a9ba0] rounded focus-visible:ring-1 focus-visible:ring-[#069668] focus-visible:border-[#069668] disabled:opacity-50 disabled:cursor-not-allowed'
-const textareaCls = 'flex w-full rounded border border-[#e5e7eb] bg-white px-3 py-2 text-sm text-[#1b1b1d] placeholder:text-[#9a9ba0] focus:outline-none focus:ring-1 focus:ring-[#069668] focus:border-[#069668] disabled:opacity-50 disabled:cursor-not-allowed'
+const inputCls = 'border-[#e5e7eb] text-[#1b1b1d] text-sm placeholder:text-[#9a9ba0] rounded focus-visible:ring-1 focus-visible:ring-primary focus-visible:border-primary disabled:opacity-50 disabled:cursor-not-allowed'
+const textareaCls = 'flex w-full rounded border border-[#e5e7eb] bg-white px-3 py-2 text-sm text-[#1b1b1d] placeholder:text-[#9a9ba0] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed'
 
 export function ClientSettingsForm({
     orgSlug,
@@ -251,7 +251,7 @@ export function ClientSettingsForm({
                     <div>
                         <label htmlFor="client-tags" className={fieldLabel}>Tags <span className="normal-case tracking-normal font-sans text-[#9a9ba0]">(optional)</span></label>
                         <div
-                            className={`flex flex-wrap gap-1.5 min-h-[36px] w-full rounded border px-3 py-2 text-sm transition-colors cursor-text ${isSandboxFirm ? 'border-[#e5e7eb] bg-[#f9f9fb] opacity-50 cursor-not-allowed' : 'border-[#e5e7eb] bg-white focus-within:ring-1 focus-within:ring-[#069668] focus-within:border-[#069668]'}`}
+                            className={`flex flex-wrap gap-1.5 min-h-[36px] w-full rounded border px-3 py-2 text-sm transition-colors cursor-text ${isSandboxFirm ? 'border-[#e5e7eb] bg-[#f9f9fb] opacity-50 cursor-not-allowed' : 'border-[#e5e7eb] bg-white focus-within:ring-1 focus-within:ring-primary focus-within:border-primary'}`}
                             onClick={() => tagInputRef.current?.focus()}
                         >
                             {tags.map((tag) => (
@@ -265,7 +265,7 @@ export function ClientSettingsForm({
                                 </span>
                             ))}
                             <input ref={tagInputRef} id="client-tags" value={tagInput} onChange={handleTagChange} onKeyDown={handleTagKeyDown} onBlur={() => { if (tagInput.trim()) commitTag(tagInput) }} placeholder={tags.length === 0 ? 'Type a tag, press Enter or comma…' : ''} disabled={isSandboxFirm} className="flex-1 min-w-[120px] bg-transparent outline-none placeholder:text-[#9a9ba0] text-[#1b1b1d] text-xs disabled:cursor-not-allowed" />
-                            <CornerDownLeft className="h-3 w-3 text-[#069668] shrink-0 self-center ml-1" />
+                            <CornerDownLeft className="h-3 w-3 text-primary shrink-0 self-center ml-1" />
                         </div>
                     </div>
                 </div>
@@ -337,10 +337,10 @@ export function ClientSettingsForm({
 
             {/* Actions bar */}
             <div className="flex items-center gap-3">
-                <Button type="button" variant="outline" className="rounded-[2px]" onClick={() => router.push(`/d/f/${orgSlug}/c/${clientSlug}?tab=projects`)}>
+                <Button type="button" variant="outline" className="rounded-[2px] text-[10px] font-headline font-bold tracking-widest uppercase" onClick={() => router.push(`/d/f/${orgSlug}/c/${clientSlug}?tab=projects`)}>
                     Cancel
                 </Button>
-                <Button onClick={handleSave} disabled={isSandboxFirm || saving} variant="greenCta" className="rounded-[2px] min-w-[8rem] text-[10px] font-headline font-bold tracking-widest uppercase">
+                <Button onClick={handleSave} disabled={isSandboxFirm || saving} variant="greenCta" className="rounded-[2px] min-w-[8rem] text-[10px] font-headline font-bold tracking-widest uppercase text-white">
                     {saving ? 'Saving…' : 'Save'}
                 </Button>
             </div>

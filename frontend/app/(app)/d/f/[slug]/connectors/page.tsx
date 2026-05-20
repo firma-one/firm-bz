@@ -420,7 +420,7 @@ export default function ConnectorsPage({ params }: { params: Promise<{ slug: str
                       key={connector.id}
                       value={connector.id}
                       disabled={connector.disabled}
-                      className="h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent transition-all shadow-none bg-transparent disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+                      className="h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent transition-all shadow-none bg-transparent disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
                     >
                       <span className="flex items-center justify-center w-4 h-4 shrink-0">
                         {connector.icon ?? connector.activeIcon}
@@ -432,7 +432,7 @@ export default function ConnectorsPage({ params }: { params: Promise<{ slug: str
                         </span>
                       )}
                       {connector.id === 'google-drive' && existingConnections.some(c => c.status === 'ACTIVE') && (
-                        <span className="w-1.5 h-1.5 rounded-full bg-[#069668] shrink-0" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
                       )}
                     </TabsTrigger>
                   ))}
@@ -470,7 +470,7 @@ export default function ConnectorsPage({ params }: { params: Promise<{ slug: str
                       </div>
                     </div>
                     {existingConnections.length === 0 && (
-                      <Button onClick={handleConnectGoogleDrive} disabled={loading} className="shrink-0 h-auto px-4 py-1.5 rounded-[2px] bg-[#069668] text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-[#069668] hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(6,150,104,0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1.5">
+                      <Button onClick={handleConnectGoogleDrive} disabled={loading} className="shrink-0 h-auto px-4 py-1.5 rounded-[2px] bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-primary hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1.5">
                         <SquarePlus className="w-3.5 h-3.5" />
                         {loading ? 'Connecting...' : 'Connect'}
                       </Button>
@@ -479,15 +479,15 @@ export default function ConnectorsPage({ params }: { params: Promise<{ slug: str
 
                   {/* Google Workspace tip */}
                   <div className="border-t border-[#e5e7eb] px-5 py-3">
-                    <div className="flex gap-2.5 rounded-[2px] border border-[#069668]/25 bg-[#069668]/8 px-3.5 py-3 text-xs text-[#1b1b1d]">
-                      <Info className="h-3.5 w-3.5 shrink-0 mt-0.5 text-[#069668]" />
+                    <div className="flex gap-2.5 rounded-[2px] border border-primary/25 bg-primary/8 px-3.5 py-3 text-xs text-[#1b1b1d]">
+                      <Info className="h-3.5 w-3.5 shrink-0 mt-0.5 text-primary" />
                       <p className="leading-relaxed">
-                        <span className="font-bold text-[#069668]">Google Workspace?</span> We recommend connecting with a dedicated service account not tied to any individual user — so your firm&apos;s Drive access isn&apos;t disrupted if someone leaves.{' '}
+                        <span className="font-bold text-primary">Google Workspace?</span> We recommend connecting with a dedicated service account not tied to any individual user — so your firm&apos;s Drive access isn&apos;t disrupted if someone leaves.{' '}
                         <a
                           href="https://support.google.com/a/answer/7378726"
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="underline underline-offset-2 text-[#069668] hover:text-[#047a53] transition-colors font-medium"
+                          className="underline underline-offset-2 text-primary hover:text-primary/80 transition-colors font-medium"
                         >
                           How to create a service account →
                         </a>
@@ -505,7 +505,7 @@ export default function ConnectorsPage({ params }: { params: Promise<{ slug: str
                           return (
                             <button key={c.id} type="button" onClick={() => setActiveAccountId(c.id)}
                               className={`flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-[2px] transition-all ${isActive ? 'bg-white shadow-sm border border-[#e5e7eb] text-[#1b1b1d]' : 'text-[#45474c] hover:text-[#1b1b1d] hover:bg-white/60'}`}>
-                              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isConnected ? 'bg-[#069668]' : 'bg-red-400'}`} />
+                              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isConnected ? 'bg-primary' : 'bg-red-400'}`} />
                               <span className="truncate max-w-[200px]">{c.email}</span>
                             </button>
                           )
@@ -534,7 +534,7 @@ export default function ConnectorsPage({ params }: { params: Promise<{ slug: str
                                 {activeConnection.name || activeConnection.email || 'Google account'}
                               </p>
                               <div className="flex items-center gap-1.5 mt-0.5">
-                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${activeConnection.status === 'ACTIVE' ? 'bg-[#069668]' : 'bg-amber-400'}`} />
+                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${activeConnection.status === 'ACTIVE' ? 'bg-primary' : 'bg-amber-400'}`} />
                                 <p className={`text-xs ${activeConnection.status === 'ACTIVE' ? 'text-[#45474c]' : 'text-amber-700'}`}>
                                   {activeConnection.status === 'ACTIVE' ? (activeConnection.email || 'Connected') : 'Disconnected'}
                                 </p>
@@ -561,7 +561,7 @@ export default function ConnectorsPage({ params }: { params: Promise<{ slug: str
                                 <Tooltip>
                                   <TooltipTrigger asChild>
                                     <Button type="button" variant="outline" size="sm"
-                                      className="h-8 px-3 text-xs bg-[#069668] text-white border-[#069668] hover:bg-[#069668] hover:brightness-105 hover:text-white rounded-[2px]"
+                                      className="h-8 px-3 text-xs bg-primary text-white border-primary hover:bg-primary hover:brightness-105 hover:text-white rounded-[2px]"
                                       onClick={() => handleDisconnect(activeConnection.id)}>
                                       <Unlink className="w-3.5 h-3.5 mr-1.5" />Disconnect
                                     </Button>
@@ -573,7 +573,7 @@ export default function ConnectorsPage({ params }: { params: Promise<{ slug: str
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <Button type="button" size="sm"
-                                    className="h-8 px-3 text-xs bg-[#069668] text-white hover:bg-[#069668] hover:brightness-105 hover:text-white rounded-[2px] border-0"
+                                    className="h-8 px-3 text-xs bg-primary text-white hover:bg-primary hover:brightness-105 hover:text-white rounded-[2px] border-0"
                                     onClick={() => handleConnectGoogleDrive()}>
                                     <Link className="w-3.5 h-3.5 mr-1.5" />Reconnect
                                   </Button>

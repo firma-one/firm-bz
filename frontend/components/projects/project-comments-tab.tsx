@@ -62,7 +62,7 @@ export function ProjectCommentsTab({
           <MessageCircle className="h-4 w-4 text-[#45474c]" />
           <span className="text-sm font-semibold text-[#1b1b1d]">Comments</span>
           {!loading && (
-            <span className="font-mono text-[10px] font-bold bg-[#069668] text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
+            <span className="font-mono text-[10px] font-bold bg-primary text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
               {rows.length}
             </span>
           )}

@@ -168,7 +168,13 @@ export async function POST(
       select: { settings: true },
     })
     const current = (firmWithSettings?.settings as Record<string, unknown>) ?? {}
-    const branding = { ...(current.branding as Record<string, unknown>), logoUrl: pockettLogoUrl }
+    const existingBranding = (current.branding as Record<string, unknown>) ?? {}
+    const branding = {
+      logoUrl: pockettLogoUrl,
+      subtext: existingBranding.subtext ?? null,
+      primaryColor: existingBranding.primaryColor ?? null,
+      secondaryColor: existingBranding.secondaryColor ?? null,
+    }
     await prisma.firm.update({
       where: { id: firmId },
       data: { logoUrl: pockettLogoUrl, settings: { ...current, branding } },
@@ -237,7 +243,13 @@ export async function DELETE(
     }
 
     const current = (firm.settings as Record<string, unknown>) ?? {}
-    const branding = { ...(current.branding as Record<string, unknown>), logoUrl: null }
+    const existingBranding = (current.branding as Record<string, unknown>) ?? {}
+    const branding = {
+      logoUrl: null,
+      subtext: existingBranding.subtext ?? null,
+      primaryColor: existingBranding.primaryColor ?? null,
+      secondaryColor: existingBranding.secondaryColor ?? null,
+    }
     await prisma.firm.update({
       where: { id: firmId },
       data: { logoUrl: null, settings: { ...current, branding } },

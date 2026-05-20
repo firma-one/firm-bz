@@ -64,7 +64,7 @@ export default function NotificationsPage() {
       <button
         type="button"
         onClick={() => setBroadcastOpen(true)}
-        className="inline-flex items-center gap-1.5 h-8 px-3 rounded-[2px] bg-[#069668] text-white text-xs font-semibold hover:bg-[#057a54] transition-colors"
+        className="inline-flex items-center gap-1.5 h-8 px-3 rounded-[2px] bg-primary text-white text-xs font-semibold hover:bg-primary/90 transition-colors"
       >
         <Megaphone className="h-3.5 w-3.5" />
         New Broadcast

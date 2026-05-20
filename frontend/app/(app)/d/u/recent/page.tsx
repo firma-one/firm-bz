@@ -157,7 +157,7 @@ export default function RecentPage() {
                 <Link href={item.href} className="flex items-center gap-2 min-w-0 group">
                   <Icon className="h-3.5 w-3.5 shrink-0 text-[#45474c]" />
                   <span className="flex items-baseline gap-2 min-w-0 flex-1 truncate">
-                    <span className="text-[0.8125rem] font-medium text-[#1b1b1d] shrink-0 group-hover:text-[#069668] transition-colors">{item.name}</span>
+                    <span className="text-[0.8125rem] font-medium text-[#1b1b1d] shrink-0 group-hover:text-primary transition-colors">{item.name}</span>
                     <span className="text-[11px] font-mono text-[#9ca3af] truncate">/{item.slug}</span>
                   </span>
                 </Link>
