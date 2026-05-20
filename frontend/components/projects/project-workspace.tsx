@@ -513,6 +513,17 @@ export function ProjectWorkspace({
                             />
                         )}
                     </div>
+                ) : (canViewInternalTabs && currentTab === 'analytics') ? (
+                    <div className="flex-1 overflow-y-auto custom-scrollbar pt-3">
+                        <ErrorBoundary context="ProjectInsights">
+                            <ProjectInsightsDashboard
+                                projectId={projectId}
+                                orgSlug={orgSlug}
+                                clientSlug={clientSlug}
+                                engagementSlug={engagementSlug}
+                            />
+                        </ErrorBoundary>
+                    </div>
                 ) : (
                 <div className="flex-1 overflow-y-auto custom-scrollbar bg-white border border-[#e5e7eb] rounded">
                     {currentTab === 'comments' && (
@@ -526,18 +537,6 @@ export function ProjectWorkspace({
                         <div className="py-1 h-full">
                             <ErrorBoundary context="ProjectMembers">
                                 <ProjectMembersTab projectId={projectId} orgSlug={orgSlug} canManage={canManage} />
-                            </ErrorBoundary>
-                        </div>
-                    )}
-                    {canViewInternalTabs && currentTab === 'analytics' && (
-                        <div className="p-4">
-                            <ErrorBoundary context="ProjectInsights">
-                                <ProjectInsightsDashboard
-                                    projectId={projectId}
-                                    orgSlug={orgSlug}
-                                    clientSlug={clientSlug}
-                                    engagementSlug={engagementSlug}
-                                />
                             </ErrorBoundary>
                         </div>
                     )}

@@ -262,7 +262,7 @@ function ACRow({ href, isExternal, children }: { href: string; isExternal?: bool
             href={href}
             target={isExternal ? '_blank' : undefined}
             rel={isExternal ? 'noopener noreferrer' : undefined}
-            className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-[#f3f4f6] transition-colors rounded border border-[#e5e7eb] bg-white"
+            className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-[#f3f4f6] transition-colors rounded border border-[#d1d5db] bg-white shadow-sm"
         >
             {children}
         </Link>
@@ -349,7 +349,7 @@ function ACSensitiveRow({ item, engagementBase, onDismiss }: { item: SensitiveFi
 
 function ACStorageRow({ label, sub }: { label: string; sub: string }) {
     return (
-        <div className="flex items-center justify-between gap-2 px-4 py-3 rounded border border-[#e5e7eb] bg-white">
+        <div className="flex items-center justify-between gap-2 px-4 py-3 rounded border border-[#d1d5db] bg-white shadow-sm">
             <p className="text-sm font-semibold text-gray-900 truncate flex-1">{label}</p>
             <span className="text-xs text-gray-400 shrink-0">{sub}</span>
         </div>
@@ -444,11 +444,31 @@ function EngagementActionCenter({ data, loading, engagementBase, projectId, setR
     }
 
     return (
-        <div className="flex flex-col gap-3 border border-[#e5e7eb] rounded p-4 bg-[#f9f9fb]">
+        <div
+            className="flex flex-col gap-3 border border-[#e5e7eb] rounded p-4"
+            style={{
+                backgroundColor: '#ffffff',
+                background: [
+                    'linear-gradient(135deg, rgba(243,244,246,0.3) 25%, transparent 25%) -10px 0 / 20px 20px',
+                    'linear-gradient(225deg, rgba(243,244,246,0.5) 25%, transparent 25%) -10px 0 / 20px 20px',
+                    'linear-gradient(315deg, rgba(243,244,246,0.3) 25%, transparent 25%) 0px 0 / 20px 20px',
+                    'linear-gradient(45deg, rgba(243,244,246,0.5) 25%, #ffffff 25%) 0px 0 / 20px 20px',
+                ].join(', '),
+            }}
+        >
             {/* Header */}
             <div className="flex items-center justify-between">
                 {acView === 'summary' ? (
-                    <h3 className="text-sm font-bold text-gray-900 animate-in fade-in duration-150">Action Center</h3>
+                    <>
+                        <h3 className="text-sm font-bold text-gray-900 animate-in fade-in duration-150">Action Center</h3>
+                        <button
+                            onClick={() => setRefreshTick((t: number) => t + 1)}
+                            className="p-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors"
+                            title="Refresh"
+                        >
+                            <RefreshCw className={`h-3.5 w-3.5 text-gray-700 ${loading ? 'animate-spin' : ''}`} />
+                        </button>
+                    </>
                 ) : (
                     <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2 duration-200">
                         <button
@@ -488,7 +508,7 @@ function EngagementActionCenter({ data, loading, engagementBase, projectId, setR
                                 {overdueCount > 0 && (
                                     <button
                                         onClick={() => setAcView('overdue')}
-                                        className="w-full flex items-center justify-between p-3 bg-white rounded border border-red-100 hover:bg-red-50 hover:scale-[1.01] active:scale-[0.99] transition-all duration-150"
+                                        className="w-full flex items-center justify-between p-3 bg-white rounded border border-[#d1d5db] shadow-sm hover:bg-red-50 hover:scale-[1.01] active:scale-[0.99] transition-all duration-150"
                                     >
                                         <div className="flex items-center gap-3">
                                             <div className="p-2 rounded-lg bg-red-50"><AlertCircle className="h-4 w-4 text-red-600" /></div>
@@ -506,7 +526,7 @@ function EngagementActionCenter({ data, loading, engagementBase, projectId, setR
                                 {upcomingCount > 0 && (
                                     <button
                                         onClick={() => setAcView('upcoming')}
-                                        className="w-full flex items-center justify-between p-3 bg-white rounded border border-amber-100 hover:bg-amber-50 hover:scale-[1.01] active:scale-[0.99] transition-all duration-150"
+                                        className="w-full flex items-center justify-between p-3 bg-white rounded border border-[#d1d5db] shadow-sm hover:bg-amber-50 hover:scale-[1.01] active:scale-[0.99] transition-all duration-150"
                                     >
                                         <div className="flex items-center gap-3">
                                             <div className="p-2 rounded-lg bg-amber-50"><Clock className="h-4 w-4 text-amber-600" /></div>
@@ -532,24 +552,24 @@ function EngagementActionCenter({ data, loading, engagementBase, projectId, setR
                             </div>
                             <div className="flex flex-col gap-2">
                                 {([
-                                    { key: 'threads' as const, icon: MessageCircle, label: 'Threads', count: threadCount, sub: threadCount > 0 ? `${threadCount} unanswered thread${threadCount > 1 ? 's' : ''}` : 'No unanswered threads', active: { border: 'border-blue-100', hover: 'hover:bg-blue-50', text: 'text-blue-700', iconBg: 'bg-blue-50', iconText: 'text-blue-600', chevron: 'text-blue-400', num: 'text-blue-600' } },
-                                    { key: 'sharing' as const, icon: Share2, label: 'Sharing', count: sharingCount, sub: sharingCount > 0 ? `${sharingCount} invitation${sharingCount > 1 ? 's' : ''} pending` : 'No pending invites', active: { border: 'border-indigo-100', hover: 'hover:bg-indigo-50', text: 'text-indigo-700', iconBg: 'bg-indigo-50', iconText: 'text-indigo-600', chevron: 'text-indigo-400', num: 'text-indigo-600' } },
-                                    { key: 'sensitive' as const, icon: FileWarning, label: 'Sensitive', count: sensitiveCount, sub: sensitiveCount > 0 ? `${sensitiveCount} file${sensitiveCount > 1 ? 's' : ''} flagged` : 'No sensitive files', active: { border: 'border-orange-100', hover: 'hover:bg-orange-50', text: 'text-orange-700', iconBg: 'bg-orange-50', iconText: 'text-orange-600', chevron: 'text-orange-400', num: 'text-orange-600' } },
-                                    { key: 'storage' as const, icon: HardDrive, label: 'Storage', count: storageCount, sub: storageCount > 0 ? [data?.storageHealth.staleCount ? `${data.storageHealth.staleCount} stale` : '', data?.storageHealth.largeCount ? `${data.storageHealth.largeCount} large` : '', duplicateCount ? `${duplicateCount} duplicate${duplicateCount > 1 ? 's' : ''}` : ''].filter(Boolean).join(' · ') : 'Storage looks healthy', active: { border: 'border-[#5A78FF]/20', hover: 'hover:bg-[#5A78FF]/5', text: 'text-[#5A78FF]', iconBg: 'bg-[#5A78FF]/5', iconText: 'text-[#5A78FF]', chevron: 'text-[#5A78FF]/50', num: 'text-[#5A78FF]' } },
+                                    { key: 'threads' as const, icon: MessageCircle, label: 'Threads', count: threadCount, sub: threadCount > 0 ? `${threadCount} unanswered thread${threadCount > 1 ? 's' : ''}` : 'No unanswered threads', active: { border: 'border-[#d1d5db]', hover: 'hover:bg-blue-50', text: 'text-blue-700', iconBg: 'bg-blue-50', iconText: 'text-blue-600', chevron: 'text-blue-400', num: 'text-blue-600' } },
+                                    { key: 'sharing' as const, icon: Share2, label: 'Sharing', count: sharingCount, sub: sharingCount > 0 ? `${sharingCount} invitation${sharingCount > 1 ? 's' : ''} pending` : 'No pending invites', active: { border: 'border-[#d1d5db]', hover: 'hover:bg-indigo-50', text: 'text-indigo-700', iconBg: 'bg-indigo-50', iconText: 'text-indigo-600', chevron: 'text-indigo-400', num: 'text-indigo-600' } },
+                                    { key: 'sensitive' as const, icon: FileWarning, label: 'Sensitive', count: sensitiveCount, sub: sensitiveCount > 0 ? `${sensitiveCount} file${sensitiveCount > 1 ? 's' : ''} flagged` : 'No sensitive files', active: { border: 'border-[#d1d5db]', hover: 'hover:bg-orange-50', text: 'text-orange-700', iconBg: 'bg-orange-50', iconText: 'text-orange-600', chevron: 'text-orange-400', num: 'text-orange-600' } },
+                                    { key: 'storage' as const, icon: HardDrive, label: 'Storage', count: storageCount, sub: storageCount > 0 ? [data?.storageHealth.staleCount ? `${data.storageHealth.staleCount} stale` : '', data?.storageHealth.largeCount ? `${data.storageHealth.largeCount} large` : '', duplicateCount ? `${duplicateCount} duplicate${duplicateCount > 1 ? 's' : ''}` : ''].filter(Boolean).join(' · ') : 'Storage looks healthy', active: { border: 'border-[#d1d5db]', hover: 'hover:bg-blue-50', text: 'text-[#5A78FF]', iconBg: 'bg-blue-50', iconText: 'text-[#5A78FF]', chevron: 'text-[#5A78FF]/50', num: 'text-[#5A78FF]' } },
                                 ] as const).map(({ key, icon: Icon, label, count, sub, active }) => {
                                     const isAlert = count > 0
-                                    const border = isAlert ? active.border : 'border-green-100'
+                                    const border = isAlert ? active.border : 'border-[#d1d5db]'
                                     const hover = isAlert ? active.hover : 'hover:bg-green-50'
-                                    const textColor = isAlert ? active.text : 'text-green-700'
+                                    const textColor = isAlert ? active.text : 'text-gray-700'
                                     const iconBg = isAlert ? active.iconBg : 'bg-green-50'
                                     const iconText = isAlert ? active.iconText : 'text-green-600'
-                                    const chevronColor = isAlert ? active.chevron : 'text-green-400'
-                                    const numColor = isAlert ? active.num : 'text-green-600'
+                                    const chevronColor = isAlert ? active.chevron : 'text-gray-400'
+                                    const numColor = isAlert ? active.num : 'text-gray-500'
                                     return (
                                         <button
                                             key={key}
                                             onClick={() => setAcView(key)}
-                                            className={`w-full flex items-center justify-between p-3 bg-white rounded border ${border} ${hover} hover:scale-[1.01] active:scale-[0.99] transition-all duration-150`}
+                                            className={`w-full flex items-center justify-between p-3 bg-white rounded border ${border} shadow-sm ${hover} hover:scale-[1.01] active:scale-[0.99] transition-all duration-150`}
                                         >
                                             <div className="flex items-center gap-3">
                                                 <div className={`p-2 rounded-lg ${iconBg}`}><Icon className={`h-4 w-4 ${iconText}`} /></div>
@@ -589,7 +609,7 @@ function EngagementActionCenter({ data, loading, engagementBase, projectId, setR
                     <div className="flex flex-col gap-4">
                         {engagementDueSoon > 0 && data && (
                             <SectionBlock title="Engagement End Date" icon={CalendarClock}>
-                                <div className="flex items-center justify-between gap-2 px-4 py-3 rounded border border-[#e5e7eb] bg-white">
+                                <div className="flex items-center justify-between gap-2 px-4 py-3 rounded border border-[#d1d5db] bg-white shadow-sm">
                                     <p className="text-sm font-semibold text-gray-900 flex-1 truncate">
                                         {data.engagementDueDate
                                             ? new Date(data.engagementDueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -678,7 +698,7 @@ function EngagementActionCenter({ data, loading, engagementBase, projectId, setR
                                         >
                                             <div className="space-y-2">
                                                 {(showAllDuplicates ? duplicateGroups : duplicateGroups.slice(0, 5)).map(g => (
-                                                    <div key={g.baseKey} className="px-4 py-3 rounded border border-[#e5e7eb] bg-white">
+                                                    <div key={g.baseKey} className="px-4 py-3 rounded border border-[#d1d5db] bg-white shadow-sm">
                                                         <p className="text-xs font-semibold text-gray-500 mb-1.5">
                                                             {g.type === 'exact' ? 'Exact size match' : `"${g.baseKey}"`}
                                                             <span className="ml-1.5 font-normal text-gray-400">· {g.files.length} files</span>
@@ -1023,9 +1043,9 @@ export function ProjectInsightsDashboard({
         : ''
 
     return (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 22rem', gap: '1.5rem', alignItems: 'start' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 22rem', gap: '1.5rem', paddingBottom: '1.5rem', alignItems: 'stretch' }}>
             {/* Left: outer card — all informational content */}
-            <div className="p-6 flex flex-col gap-6">
+            <div className="bg-white border border-[#e5e7eb] rounded p-6 flex flex-col gap-6">
                 {/* Header */}
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -1165,32 +1185,18 @@ export function ProjectInsightsDashboard({
                             const hasOverdue = (overdue ?? 0) > 0
                             const hasUpcoming = (upcoming ?? 0) > 0
                             const iconClass = hasOverdue ? 'bg-red-50 text-red-600' : hasUpcoming ? 'bg-amber-50 text-amber-600' : 'bg-green-50 text-green-600'
+                            const countVal = loading ? '—' : hasOverdue ? overdue : hasUpcoming ? upcoming : 0
+                            const countColor = loading ? 'text-gray-900' : hasOverdue ? 'text-red-600' : hasUpcoming ? 'text-amber-600' : 'text-gray-900'
+                            const sub = loading ? undefined : hasOverdue && hasUpcoming ? `+${upcoming} due soon` : hasOverdue ? 'overdue' : hasUpcoming ? 'due soon' : 'all clear'
                             return (
-                                <div className="bg-white rounded p-4 border border-[#e5e7eb] shadow-sm flex items-center gap-3 h-full">
+                                <div className="bg-white rounded p-4 border border-[#e5e7eb] shadow-sm flex items-center gap-3">
                                     <div className={`p-2.5 rounded shrink-0 ${iconClass}`}>
                                         <CalendarClock className="h-4 w-4" />
                                     </div>
-                                    <div className="min-w-0 flex-1">
-                                        <p className="text-xs text-gray-500 font-medium mb-1">Doc Deadlines</p>
-                                        {loading ? (
-                                            <p className="text-2xl font-bold text-gray-900 leading-none">—</p>
-                                        ) : overdue === 0 && upcoming === 0 ? (
-                                            <p className="text-xs text-green-600 font-medium">All clear</p>
-                                        ) : (
-                                            <div className="flex items-baseline gap-2">
-                                                {hasOverdue && (
-                                                    <span className="text-xl font-bold text-red-600 leading-none tabular-nums">
-                                                        {overdue} <span className="text-xs font-semibold">overdue</span>
-                                                    </span>
-                                                )}
-                                                {hasOverdue && hasUpcoming && <span className="text-gray-300 text-sm">·</span>}
-                                                {hasUpcoming && (
-                                                    <span className={`${hasOverdue ? 'text-base' : 'text-xl'} font-bold text-amber-600 leading-none tabular-nums`}>
-                                                        {upcoming} <span className="text-xs font-semibold">due soon</span>
-                                                    </span>
-                                                )}
-                                            </div>
-                                        )}
+                                    <p className={`text-2xl font-bold leading-none shrink-0 ${countColor}`}>{countVal}</p>
+                                    <div className="min-w-0">
+                                        <p className="text-xs text-gray-500 font-medium leading-snug">Doc Deadlines</p>
+                                        {sub && <p className="text-[10px] text-gray-400 leading-snug">{sub}</p>}
                                     </div>
                                 </div>
                             )

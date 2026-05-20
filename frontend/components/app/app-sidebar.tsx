@@ -731,29 +731,32 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                                   className="flex items-center gap-1 pl-2 pr-1 py-1.5 rounded-r hover:bg-[#f9f9fb] group"
                                 >
                                   <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-0.5" />
-                                  <a href={r.ctaUrl ?? '#'} className="flex-1 min-w-0">
-                                    <div className="text-[0.75rem] font-medium text-[#1b1b1d] truncate">{r.entityName}</div>
-                                    <div className="flex items-center gap-1 mt-0.5">
-                                      <Clock
-                                        className="h-2.5 w-2.5 shrink-0"
-                                        style={{ color: reminderLabelColor(r.labelStyle) }}
-                                      />
-                                      <span
-                                        className="text-[10px] font-medium"
-                                        style={{ color: reminderLabelColor(r.labelStyle) }}
-                                      >
+                                  <a href={r.ctaUrl ?? '#'} className="flex-1 min-w-0 flex items-center gap-1.5">
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Clock
+                                          className="h-3 w-3 shrink-0"
+                                          style={{ color: reminderLabelColor(r.labelStyle) }}
+                                        />
+                                      </TooltipTrigger>
+                                      <TooltipContent side="right" className="text-xs">
                                         {r.label}
-                                      </span>
-                                    </div>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                    <span className="text-[0.8125rem] font-medium text-[#45474c] truncate">{r.entityName}</span>
                                   </a>
-                                  <button
-                                    type="button"
-                                    title="Mark done"
-                                    onClick={() => handleReminderDone(r.id)}
-                                    className="shrink-0 h-5 w-5 flex items-center justify-center rounded border border-[#e5e7eb] bg-white text-[#45474c]/40 hover:text-emerald-600 hover:border-emerald-300 transition-colors"
-                                  >
-                                    <CheckCircle2 className="h-3 w-3" />
-                                  </button>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleReminderDone(r.id)}
+                                        className="shrink-0 h-5 w-5 flex items-center justify-center rounded border border-[#e5e7eb] bg-white text-[#45474c]/40 hover:text-emerald-600 hover:border-emerald-300 transition-colors"
+                                      >
+                                        <CheckCircle2 className="h-3 w-3" />
+                                      </button>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="right" className="text-xs">Mark as done</TooltipContent>
+                                  </Tooltip>
                                 </div>
                               ))}
                               <Link
@@ -809,7 +812,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                             href="/resources/faq"
                             target="_blank"
                             rel="noopener noreferrer"
-                            className={`flex items-center rounded-r transition-colors pl-2 pr-2 py-1.5 text-[0.6875rem] ${pathname?.startsWith('/resources/faq') ? 'bg-[#ecfdf5] text-[#065f46] font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}
+                            className={`flex items-center rounded-r transition-colors pl-2 pr-2 py-1.5 text-[0.8125rem] ${pathname?.startsWith('/resources/faq') ? 'bg-[#ecfdf5] text-[#065f46] font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}
                           >
                             <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-1.5" />
                             <HelpCircle className={`h-3.5 w-3.5 mr-2 shrink-0 ${pathname?.startsWith('/resources/faq') ? 'text-[#069668]' : 'text-[#45474c]'}`} />
@@ -838,67 +841,74 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
 
                   {!isCollapsed && <SeparatorLine />}
 
+                  {/* VIEW AS */}
+                  {canShowViewAsDropdown && !isCollapsed && (
+                    <div className="pt-2 pb-2">
+                      <h3 className={`d-sidebar-section flex items-center px-3 ${spaceTitle}`}>
+                        <Eye className="h-3 w-3 shrink-0 mr-1.5 text-[#45474c]" />
+                        Viewing As
+                      </h3>
+                      <div className="ml-1 space-y-0.5">
+                        <Select
+                          value={resolveViewAsSelectSlug(
+                            viewAsPersonaSlug,
+                            (user?.app_metadata as any)?.active_persona,
+                            role,
+                          )}
+                          onValueChange={(newSlug) => {
+                            const naturalSlug = resolveViewAsSelectSlug(
+                              null,
+                              (user?.app_metadata as any)?.active_persona,
+                              role,
+                            )
+                            setViewAsPersonaSlug(newSlug === naturalSlug ? null : newSlug)
+                            window.location.reload()
+                          }}
+                          open={viewAsSelectOpen}
+                          onOpenChange={setViewAsSelectOpen}
+                        >
+                          <SelectTrigger
+                            className={`flex h-auto w-full items-center gap-0 rounded-r border-0 bg-transparent px-0 pr-2 py-1.5 !text-[0.8125rem] text-[#45474c] font-medium shadow-none transition-colors hover:bg-[#f9f9fb] hover:text-[#1b1b1d] focus:ring-0 [&>svg:last-child]:ml-auto [&>svg:last-child]:h-3 [&>svg:last-child]:w-3 [&>svg:last-child]:shrink-0 [&>svg:last-child]:text-[#45474c] [&>svg:last-child]:transition-transform [&>svg:last-child]:duration-200 ${viewAsSelectOpen ? '[&>svg:last-child]:rotate-180' : ''}`}
+                          >
+                            <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-1.5 ml-2" />
+                            <Eye className="h-3.5 w-3.5 mr-2 shrink-0 text-[#45474c]" />
+                            <SelectValue placeholder="View as..." />
+                          </SelectTrigger>
+                          <SelectContent
+                            className="rounded-[2px] border border-[#e5e7eb] bg-white shadow-md py-0.5 min-w-[var(--radix-select-trigger-width)] max-h-[var(--radix-select-content-available-height)]"
+                            data-view-as-select
+                          >
+                            {personas.map((p) => (
+                              <SelectItem
+                                key={p.slug}
+                                value={p.slug}
+                                className="cursor-pointer rounded py-1 px-2.5 !text-[0.8125rem] text-[#45474c] outline-none focus:bg-transparent data-[state=checked]:text-[#069668] data-[state=checked]:font-medium data-[highlighted]:bg-transparent"
+                                endAdornment={p.description ? (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Info className="h-3 w-3 text-[#9ca3af] hover:text-[#45474c]" aria-hidden />
+                                    </TooltipTrigger>
+                                    <TooltipContent side="right" className="max-w-[220px] text-xs leading-snug">
+                                      {p.description}
+                                    </TooltipContent>
+                                  </Tooltip>
+                                ) : undefined}
+                              >
+                                {p.displayName}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  )}
 
                 </nav>
               </div>
             </div>
 
-            {/* View As + Profile — pinned to bottom, visually grouped */}
+            {/* Profile — pinned to bottom */}
             <div className="border-t border-[#e5e7eb]/50">
-              {canShowViewAsDropdown && !isCollapsed && (
-                <div className="px-3 pt-2 pb-1 border-b border-[#e5e7eb]/50">
-                  <label className="text-[0.6875rem] font-semibold uppercase tracking-wide text-[#9ca3af] block px-1 mb-1.5">View as</label>
-                  <Select
-                    value={resolveViewAsSelectSlug(
-                      viewAsPersonaSlug,
-                      (user?.app_metadata as any)?.active_persona,
-                      role,
-                    )}
-                    onValueChange={(newSlug) => {
-                      const naturalSlug = resolveViewAsSelectSlug(
-                        null,
-                        (user?.app_metadata as any)?.active_persona,
-                        role,
-                      )
-                      setViewAsPersonaSlug(newSlug === naturalSlug ? null : newSlug)
-                      window.location.reload()
-                    }}
-                    open={viewAsSelectOpen}
-                    onOpenChange={setViewAsSelectOpen}
-                  >
-                    <SelectTrigger
-                      className={`flex h-9 w-full items-center gap-2 rounded-[2px] border border-[#e5e7eb] bg-white px-3 text-[0.8125rem] text-[#1b1b1d] shadow-none transition-colors hover:bg-[#f3f4f6] focus:ring-1 focus:ring-[#069668] [&>svg]:ml-0 [&>svg:last-child]:transition-transform [&>svg:last-child]:duration-200 ${viewAsSelectOpen ? '[&>svg:last-child]:rotate-180' : ''}`}
-                    >
-                      <Eye className="h-4 w-4 shrink-0 text-[#45474c]" />
-                      <SelectValue placeholder="View as..." />
-                    </SelectTrigger>
-                    <SelectContent
-                      className="rounded-[2px] border border-[#e5e7eb] bg-white shadow-md py-1 min-w-[var(--radix-select-trigger-width)] max-h-[var(--radix-select-content-available-height)]"
-                      data-view-as-select
-                    >
-                      {personas.map((p) => (
-                        <SelectItem
-                          key={p.slug}
-                          value={p.slug}
-                          className="cursor-pointer rounded py-2 px-3 text-[0.8125rem] text-[#45474c] outline-none focus:bg-transparent data-[state=checked]:text-[#069668] data-[state=checked]:font-medium data-[highlighted]:bg-transparent"
-                          endAdornment={p.description ? (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Info className="h-3.5 w-3.5 text-[#9ca3af] hover:text-[#45474c]" aria-hidden />
-                              </TooltipTrigger>
-                              <TooltipContent side="right" className="max-w-[220px] text-xs leading-snug">
-                                {p.description}
-                              </TooltipContent>
-                            </Tooltip>
-                          ) : undefined}
-                        >
-                          {p.displayName}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
               <ProfileSection
                 user={user}
                 signOut={signOut}
