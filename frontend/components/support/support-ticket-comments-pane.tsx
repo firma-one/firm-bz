@@ -94,7 +94,7 @@ export function SupportTicketCommentsPane({
             return (
               <div
                 key={comment.id}
-                className="group rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-[0_1px_2px_rgba(0,0,0,0.04)] hover:bg-slate-50/80 transition-colors"
+                className="group rounded border border-slate-200 bg-white px-4 py-3 text-sm shadow-[0_1px_2px_rgba(0,0,0,0.04)] hover:bg-slate-50/80 transition-colors"
               >
                 <div className="flex items-center gap-2 mb-1.5">
                   <span className="text-xs font-medium text-slate-700 truncate">{label}</span>
@@ -126,7 +126,7 @@ export function SupportTicketCommentsPane({
           onKeyDown={handleKeyDown}
           placeholder="Add a comment… (⌘↵ to post)"
           rows={3}
-          className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 resize-none transition-colors"
+          className="w-full px-3 py-2.5 rounded border border-slate-200 bg-white text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 resize-none transition-colors"
           disabled={isSubmitting}
         />
         <div className="flex justify-end mt-2">

@@ -171,7 +171,7 @@ export function ProfileBubblePopupContent({
                     )}
                 </div>
             </div>
-            {footer && <div className="border-t border-slate-200 px-3 pb-3 pt-2">{footer}</div>}
+            {footer && <div className="border-t border-[#e5e7eb] px-3 pb-3 pt-2">{footer}</div>}
         </div>
     )
 }

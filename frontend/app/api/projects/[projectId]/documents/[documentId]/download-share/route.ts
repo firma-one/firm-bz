@@ -42,6 +42,7 @@ export async function GET(
           externalId: fileInfo.externalId,
         },
       },
+      select: { id: true, clientId: true, connectorId: true, fileName: true, settings: true, status: true },
     })
     if (!document) return NextResponse.json({ error: 'Document not found' }, { status: 404 })
 
@@ -92,6 +93,7 @@ export async function GET(
         audit(AUDIT_EVENT.DOCUMENT_DOWNLOADED)
           .scope(AUDIT_SCOPE.DOCUMENT)
           .firm(fileInfo.organizationId)
+          .client(document.clientId ?? undefined)
           .engagement(projectId)
           .document(document.id)
           .actor(user.id)

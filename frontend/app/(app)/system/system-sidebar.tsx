@@ -10,7 +10,7 @@ import {
     Home,
     LayoutDashboard,
     ChevronDown,
-    Wrench,
+    MonitorCheck,
     ExternalLink,
 } from "lucide-react"
 import { useSidebar } from "@/lib/sidebar-context"
@@ -54,7 +54,7 @@ export function SystemSidebar() {
     const navigation = [
         { name: 'Home', href: '/', icon: Home, external: true },
         { name: 'Dashboard', href: '/d', icon: LayoutDashboard, external: true },
-        { name: 'Admin', href: '/system', icon: Wrench, external: false },
+        { name: 'Admin', href: '/system', icon: MonitorCheck, external: false },
     ]
 
     return (

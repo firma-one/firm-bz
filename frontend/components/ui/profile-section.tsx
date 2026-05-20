@@ -3,7 +3,7 @@
 import { useState, useRef, useLayoutEffect, useEffect } from "react"
 import { createPortal } from "react-dom"
 import Link from "next/link"
-import { LogOut, ChevronDown, ChevronUp, Building2, CreditCard, UserCircle, LifeBuoy, Plug } from "lucide-react"
+import { LogOut, ChevronDown, ChevronUp, Building2, CreditCard, UserCircle, LifeBuoy, Plug, MonitorCheck } from "lucide-react"
 import { ProfileBubble, ProfileBubblePopupContent } from "@/components/ui/profile-bubble-popup"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
@@ -33,6 +33,8 @@ interface ProfileSectionProps {
   connectorsHref?: string
   /** Link to the Support page (firm-scoped). When provided, shows a Support item in the menu. */
   supportHref?: string
+  /** When true, shows an Administration link to /system (SYS_ADMIN only). */
+  isSystemAdmin?: boolean
 }
 
 export function ProfileSection({
@@ -45,6 +47,7 @@ export function ProfileSection({
   planSubtitle,
   planSubtitleLoading = false,
   supportHref,
+  isSystemAdmin = false,
 }: ProfileSectionProps) {
   const [isProfileOpen, setIsProfileOpen] = useState(false)
   const profileRef = useRef<HTMLDivElement>(null)
@@ -116,7 +119,7 @@ export function ProfileSection({
   }, [])
 
   return (
-    <div className={`shrink-0 border-t border-slate-100 ${isCollapsed ? 'py-2 px-3' : 'py-2 pl-2 pr-3'}`} ref={profileRef}>
+    <div className={`shrink-0 border-t border-[#e5e7eb] ${isCollapsed ? 'py-2 px-3' : 'py-2 pl-2 pr-3'}`} ref={profileRef}>
       <div className="relative w-full flex justify-center">
         {isCollapsed ? (
           <Tooltip>
@@ -127,7 +130,7 @@ export function ProfileSection({
                 aria-expanded={isProfileOpen}
                 aria-haspopup="menu"
                 onClick={() => setIsProfileOpen(!isProfileOpen)}
-                className="flex w-full min-w-0 max-w-full items-center justify-center rounded-lg px-0 py-2 text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
+                className="flex w-full min-w-0 max-w-full items-center justify-center rounded px-0 py-2 text-[#45474c] transition-colors hover:bg-[#f3f4f6] hover:text-[#1b1b1d]"
               >
                 <ProfileBubble
                   name={getUserDisplayName()}
@@ -148,7 +151,7 @@ export function ProfileSection({
             aria-expanded={isProfileOpen}
             aria-haspopup="menu"
             onClick={() => setIsProfileOpen(!isProfileOpen)}
-            className="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg hover:bg-slate-50 transition-colors text-left"
+            className="flex items-center gap-2 w-full px-2 py-1.5 rounded hover:bg-[#f3f4f6] transition-colors text-left"
           >
             <ProfileBubble
               name={getUserDisplayName()}
@@ -156,17 +159,17 @@ export function ProfileSection({
               size="lg"
             />
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-slate-900 truncate">
+              <p className="text-sm font-semibold text-[#1b1b1d] truncate">
                 {getUserDisplayName()}
               </p>
-              <p className="text-xs text-slate-500 truncate" title={secondaryLine()}>
+              <p className="text-xs text-[#45474c] truncate" title={secondaryLine()}>
                 {secondaryLine()}
               </p>
             </div>
             {isProfileOpen ? (
-              <ChevronDown className="h-4 w-4 text-slate-400 shrink-0" aria-hidden />
+              <ChevronDown className="h-4 w-4 text-[#45474c] shrink-0" aria-hidden />
             ) : (
-              <ChevronUp className="h-4 w-4 text-slate-400 shrink-0" aria-hidden />
+              <ChevronUp className="h-4 w-4 text-[#45474c] shrink-0" aria-hidden />
             )}
           </button>
         )}
@@ -175,7 +178,7 @@ export function ProfileSection({
         {isProfileOpen && popupPosition && typeof document !== 'undefined' && createPortal(
           <div
             data-profile-popup=""
-            className="d-app fixed bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-200 z-[200]"
+            className="d-app fixed bg-white rounded shadow-lg border border-[#e5e7eb] overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-200 z-[200]"
             style={{
               top: popupPosition.top,
               left: popupPosition.left,
@@ -199,9 +202,9 @@ export function ProfileSection({
               footer={
                 <div className="space-y-0.5">
                   <Link
-                    href="/d/profile"
+                    href="/d/u/profile"
                     onClick={() => setIsProfileOpen(false)}
-                    className="d-sidebar-nav flex w-full items-center gap-2 rounded-lg px-3 py-2 text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
+                    className="d-sidebar-nav flex w-full items-center gap-2 rounded px-3 py-2 text-[#45474c] transition-colors hover:bg-[#f3f4f6] hover:text-[#1b1b1d]"
                   >
                     <UserCircle className="h-4 w-4 shrink-0" />
                     Profile
@@ -210,7 +213,7 @@ export function ProfileSection({
                     <Link
                       href={connectorsHref}
                       onClick={() => setIsProfileOpen(false)}
-                      className="d-sidebar-nav flex w-full items-center gap-2 rounded-lg px-3 py-2 text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
+                      className="d-sidebar-nav flex w-full items-center gap-2 rounded px-3 py-2 text-[#45474c] transition-colors hover:bg-[#f3f4f6] hover:text-[#1b1b1d]"
                     >
                       <Plug className="h-4 w-4 shrink-0" />
                       Connectors
@@ -220,7 +223,7 @@ export function ProfileSection({
                     <Link
                       href={billingHref}
                       onClick={() => setIsProfileOpen(false)}
-                      className="d-sidebar-nav flex w-full items-center gap-2 rounded-lg px-3 py-2 text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
+                      className="d-sidebar-nav flex w-full items-center gap-2 rounded px-3 py-2 text-[#45474c] transition-colors hover:bg-[#f3f4f6] hover:text-[#1b1b1d]"
                     >
                       <CreditCard className="h-4 w-4 shrink-0" />
                       Billing
@@ -230,16 +233,26 @@ export function ProfileSection({
                     <Link
                       href={supportHref}
                       onClick={() => setIsProfileOpen(false)}
-                      className="d-sidebar-nav flex w-full items-center gap-2 rounded-lg px-3 py-2 text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
+                      className="d-sidebar-nav flex w-full items-center gap-2 rounded px-3 py-2 text-[#45474c] transition-colors hover:bg-[#f3f4f6] hover:text-[#1b1b1d]"
                     >
                       <LifeBuoy className="h-4 w-4 shrink-0" />
                       Support
                     </Link>
                   )}
+                  {isSystemAdmin && (
+                    <Link
+                      href="/system"
+                      onClick={() => setIsProfileOpen(false)}
+                      className="d-sidebar-nav flex w-full items-center gap-2 rounded px-3 py-2 text-[#45474c] transition-colors hover:bg-[#f3f4f6] hover:text-[#1b1b1d]"
+                    >
+                      <MonitorCheck className="h-4 w-4 shrink-0" />
+                      Sys Admin
+                    </Link>
+                  )}
                   <Link
                     href="/d/onboarding"
                     onClick={() => setIsProfileOpen(false)}
-                    className="d-sidebar-nav flex w-full items-center gap-2 rounded-lg px-3 py-2 text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
+                    className="d-sidebar-nav flex w-full items-center gap-2 rounded px-3 py-2 text-[#45474c] transition-colors hover:bg-[#f3f4f6] hover:text-[#1b1b1d]"
                   >
                     <Building2 className="h-4 w-4 shrink-0" aria-hidden />
                     Switch Workspace
@@ -247,7 +260,7 @@ export function ProfileSection({
                   <button
                     type="button"
                     onClick={() => signOut()}
-                    className="d-sidebar-nav flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-red-600 transition-colors hover:bg-slate-50 hover:text-red-700"
+                    className="d-sidebar-nav flex w-full items-center gap-2 rounded px-3 py-2 text-left text-red-600 transition-colors hover:bg-[#f3f4f6] hover:text-red-700"
                   >
                     <LogOut className="h-4 w-4 shrink-0" />
                     Sign Out

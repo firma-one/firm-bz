@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useMemo, useState, useTransition } from 'react'
+import React, { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -13,11 +13,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
 import { createClientContact, deleteClientContact, listClientContacts, setClientContactPrimary, updateClientContact, type ClientContactRecord } from '@/lib/actions/client'
 import { SandboxInfoBanner } from '@/components/ui/sandbox-info-banner'
 import { useOrgSandbox } from '@/lib/use-org-sandbox'
 import { cn } from '@/lib/utils'
-import { UserPlus, Trash2, Pencil, X, Save, Star } from 'lucide-react'
+import { UserPlus, Trash2, Pencil, X, Save, Star, CornerDownLeft } from 'lucide-react'
 
 type Draft = { name: string; email: string; phone: string; title: string; notes: string; tags: string }
 
@@ -53,6 +54,9 @@ export function ClientContactsTab({
 
   const [newContactModalOpen, setNewContactModalOpen] = useState(false)
   const [newContactDraft, setNewContactDraft] = useState<Draft>({ name: '', email: '', phone: '', title: '', notes: '', tags: '' })
+  const [newContactTags, setNewContactTags] = useState<string[]>([])
+  const [newContactTagInput, setNewContactTagInput] = useState('')
+  const newContactTagInputRef = useRef<HTMLInputElement>(null)
 
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editDraft, setEditDraft] = useState<Draft>({ name: '', email: '', phone: '', title: '', notes: '', tags: '' })
@@ -103,21 +107,40 @@ export function ClientContactsTab({
     setEditDraft({ name: '', email: '', phone: '', title: '', notes: '', tags: '' })
   }
 
-  return (
-    <div className="space-y-6">
-      <div className="space-y-1">
-        <h2 className="text-lg font-semibold text-slate-900">Contacts</h2>
-        <p className="text-sm text-slate-500">Keep track of key people for this client (external contacts).</p>
-      </div>
+  const commitNewTag = (raw: string) => {
+    const value = raw.trim().toLowerCase().replace(/\s+/g, '-')
+    if (value && !newContactTags.includes(value)) setNewContactTags((prev) => [...prev, value])
+    setNewContactTagInput('')
+  }
+  const handleNewTagKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') { e.preventDefault(); commitNewTag(newContactTagInput) }
+    else if (e.key === ',') { e.preventDefault(); commitNewTag(newContactTagInput) }
+    else if (e.key === 'Backspace' && newContactTagInput === '' && newContactTags.length > 0) setNewContactTags((prev) => prev.slice(0, -1))
+  }
+  const handleNewTagChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value
+    if (val.endsWith(',')) commitNewTag(val.slice(0, -1))
+    else setNewContactTagInput(val)
+  }
+  const resetNewContact = () => {
+    setNewContactDraft({ name: '', email: '', phone: '', title: '', notes: '', tags: '' })
+    setNewContactTags([])
+    setNewContactTagInput('')
+  }
 
+  const fieldLabel = 'font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] block mb-1'
+  const inputCls = 'border-[#e5e7eb] text-[#1b1b1d] text-sm placeholder:text-[#9a9ba0] rounded focus-visible:ring-1 focus-visible:ring-[#069668] focus-visible:border-[#069668] disabled:opacity-50 disabled:cursor-not-allowed'
+
+  return (
+    <div className="space-y-4">
       {/* Table */}
-      <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between gap-3">
+      <div className="rounded border border-[#e5e7eb] bg-white overflow-hidden">
+        <div className="px-4 py-3 border-b border-[#e5e7eb] flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <UserPlus className="h-4 w-4 text-slate-500" />
             <span className="text-sm font-semibold text-slate-800">Client contacts</span>
             {!loading && (
-              <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-lg">
+              <span className="font-mono text-[10px] font-bold bg-[#069668] text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
                 {filtered.length}
               </span>
             )}
@@ -141,15 +164,16 @@ export function ClientContactsTab({
             </div>
             <Button
               disabled={!canManage && !isSandboxFirm}
+              variant="ghost"
               size="sm"
-              className="h-8 px-3 bg-slate-900 text-white hover:bg-slate-800"
+              className="h-auto px-4 py-1.5 rounded-[2px] bg-[#069668] text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-[#069668] hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(6,150,104,0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1.5"
               onClick={() => {
                 setNewContactDraft({ name: '', email: '', phone: '', title: '', notes: '', tags: '' })
                 setNewContactModalOpen(true)
               }}
             >
-              <UserPlus className="h-3.5 w-3.5 mr-1.5" />
-              <span className="text-xs font-medium">New contact</span>
+              <UserPlus className="h-4 w-4" />
+              New contact
             </Button>
           </div>
         </div>
@@ -159,11 +183,11 @@ export function ClientContactsTab({
         ) : filtered.length === 0 ? (
           <div className="p-6 text-sm text-slate-500">No contacts yet.</div>
         ) : (
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-[#e5e7eb]">
             {filtered.map((c) => {
               const isEditing = editingId === c.id
               return (
-                <div key={c.id} className={cn('p-5 flex flex-col gap-3', isEditing && 'bg-slate-50/60')}>
+                <div key={c.id} className={cn('p-4 flex flex-col gap-3 hover:bg-[#f3f4f6] transition-colors', isEditing && 'bg-[#f3f4f6]')}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
@@ -195,9 +219,9 @@ export function ClientContactsTab({
                       {isEditing ? (
                         <>
                           <Button
+                            variant="greenCta"
                             size="sm"
                             disabled={!canManage || isPending}
-                            className="bg-slate-900 text-white hover:bg-slate-800"
                             onClick={() => {
                               const clean = normalizeDraft(editDraft)
                               startTransition(async () => {
@@ -316,83 +340,134 @@ export function ClientContactsTab({
 
       <Dialog open={newContactModalOpen} onOpenChange={(open) => {
         setNewContactModalOpen(open)
-        if (!open) setNewContactDraft({ name: '', email: '', phone: '', title: '', notes: '', tags: '' })
+        if (!open) resetNewContact()
       }}>
-        <DialogContent className="sm:max-w-[480px]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-lg">New contact</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 mt-2">
+        <DialogContent className="sm:max-w-[560px] border-[#e5e7eb] max-h-[90vh] overflow-y-auto p-0 gap-0 rounded-[2px]">
+          <VisuallyHidden><DialogTitle>New Client Contact</DialogTitle></VisuallyHidden>
+
+          {/* Header */}
+          <div className="px-5 py-4 border-b border-[#e5e7eb] bg-[#f9f9fb] flex items-start gap-3">
+            <div className="mt-0.5 h-7 w-7 rounded bg-[#ecfdf5] flex items-center justify-center shrink-0">
+              <UserPlus className="h-3.5 w-3.5 text-[#069668]" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-[#1b1b1d] leading-tight">New Client Contact</p>
+              <p className="text-xs text-[#45474c] mt-0.5">Add a contact person for this client.</p>
+            </div>
+          </div>
+
+          <div className="p-5 space-y-4">
             {isSandboxFirm && <SandboxInfoBanner />}
-            <div className="grid grid-cols-1 gap-4">
-              <div className="space-y-2">
-                <Label className={isSandboxFirm ? 'text-slate-500' : 'text-slate-700'}>Name</Label>
-                <Input value={newContactDraft.name} onChange={(e) => setNewContactDraft((d) => ({ ...d, name: e.target.value }))} className="border-slate-200 disabled:cursor-not-allowed disabled:opacity-60" disabled={isSandboxFirm} />
+
+            {/* Name */}
+            <div>
+              <label className={fieldLabel}>Name <span className="text-red-500 normal-case tracking-normal font-sans">*</span></label>
+              <Input value={newContactDraft.name} onChange={(e) => setNewContactDraft((d) => ({ ...d, name: e.target.value }))} placeholder="Full name" className={inputCls} disabled={isSandboxFirm} />
+            </div>
+
+            {/* Email + Phone — 2 col */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={fieldLabel}>Email <span className="normal-case tracking-normal font-sans text-[#9a9ba0]">(optional)</span></label>
+                <Input value={newContactDraft.email} onChange={(e) => setNewContactDraft((d) => ({ ...d, email: e.target.value }))} placeholder="name@company.com" type="email" className={inputCls} disabled={isSandboxFirm} />
               </div>
-              <div className="space-y-2">
-                <Label className={isSandboxFirm ? 'text-slate-500' : 'text-slate-700'}>Email (optional)</Label>
-                <Input value={newContactDraft.email} onChange={(e) => setNewContactDraft((d) => ({ ...d, email: e.target.value }))} className="border-slate-200 disabled:cursor-not-allowed disabled:opacity-60" disabled={isSandboxFirm} />
-              </div>
-              <div className="space-y-2">
-                <Label className={isSandboxFirm ? 'text-slate-500' : 'text-slate-700'}>Phone (optional)</Label>
-                <Input value={newContactDraft.phone} onChange={(e) => setNewContactDraft((d) => ({ ...d, phone: e.target.value }))} className="border-slate-200 disabled:cursor-not-allowed disabled:opacity-60" disabled={isSandboxFirm} />
-              </div>
-              <div className="space-y-2">
-                <Label className={isSandboxFirm ? 'text-slate-500' : 'text-slate-700'}>Title (optional)</Label>
-                <Input value={newContactDraft.title} onChange={(e) => setNewContactDraft((d) => ({ ...d, title: e.target.value }))} className="border-slate-200 disabled:cursor-not-allowed disabled:opacity-60" disabled={isSandboxFirm} />
-              </div>
-              <div className="space-y-2">
-                <Label className={isSandboxFirm ? 'text-slate-500' : 'text-slate-700'}>Tags (optional, comma-separated)</Label>
-                <Input value={newContactDraft.tags} onChange={(e) => setNewContactDraft((d) => ({ ...d, tags: e.target.value }))} placeholder="e.g. billing, primary" className="border-slate-200 disabled:cursor-not-allowed disabled:opacity-60" disabled={isSandboxFirm} />
-              </div>
-              <div className="space-y-2">
-                <Label className={isSandboxFirm ? 'text-slate-500' : 'text-slate-700'}>Notes (optional)</Label>
-                <Input value={newContactDraft.notes} onChange={(e) => setNewContactDraft((d) => ({ ...d, notes: e.target.value }))} className="border-slate-200 disabled:cursor-not-allowed disabled:opacity-60" disabled={isSandboxFirm} />
+              <div>
+                <label className={fieldLabel}>Phone <span className="normal-case tracking-normal font-sans text-[#9a9ba0]">(optional)</span></label>
+                <Input value={newContactDraft.phone} onChange={(e) => setNewContactDraft((d) => ({ ...d, phone: e.target.value }))} placeholder="+1 (555) 000-0000" type="tel" className={inputCls} disabled={isSandboxFirm} />
               </div>
             </div>
-            <div className="flex items-center gap-2 justify-end pt-2">
-              <Button
-                variant="outline"
-                className="border-slate-200 text-slate-700 hover:bg-slate-50"
-                disabled={isPending}
-                onClick={() => {
-                  setNewContactModalOpen(false)
-                  setNewContactDraft({ name: '', email: '', phone: '', title: '', notes: '', tags: '' })
-                }}
-              >
-                <X className="h-4 w-4 mr-2" />
-                Cancel
-              </Button>
-              <Button
-                disabled={isSandboxFirm || !canManage || isPending}
-                className="bg-slate-900 text-white hover:bg-slate-800"
-                onClick={() => {
-                  if (isSandboxFirm) return
-                  const clean = normalizeDraft(newContactDraft)
-                  startTransition(async () => {
-                    try {
-                      await createClientContact(orgSlug, clientSlug, {
-                        name: clean.name,
-                        email: clean.email || undefined,
-                        phone: clean.phone || undefined,
-                        title: clean.title || undefined,
-                        notes: clean.notes || undefined,
-                        tags: clean.tags.length ? clean.tags : undefined,
-                      })
-                      addToast({ type: 'success', title: 'Added', message: 'Contact added.' })
-                      setNewContactModalOpen(false)
-                      setNewContactDraft({ name: '', email: '', phone: '', title: '', notes: '', tags: '' })
-                      await refresh()
-                    } catch (e) {
-                      addToast({ type: 'error', title: 'Failed', message: e instanceof Error ? e.message : 'Could not add contact.' })
-                    }
-                  })
-                }}
-              >
-                <Save className="h-4 w-4 mr-2" />
-                Save
-              </Button>
+
+            {/* Title */}
+            <div>
+              <label className={fieldLabel}>Job title <span className="normal-case tracking-normal font-sans text-[#9a9ba0]">(optional)</span></label>
+              <Input value={newContactDraft.title} onChange={(e) => setNewContactDraft((d) => ({ ...d, title: e.target.value }))} placeholder="e.g. CFO, Legal Counsel" className={inputCls} disabled={isSandboxFirm} />
             </div>
+
+            {/* Tags — pill control */}
+            <div>
+              <label className={fieldLabel}>Tags <span className="normal-case tracking-normal font-sans text-[#9a9ba0]">(optional)</span></label>
+              <div
+                className={`flex flex-wrap gap-1.5 min-h-[36px] w-full rounded border px-3 py-2 text-sm transition-colors cursor-text
+                  ${isSandboxFirm
+                    ? 'border-[#e5e7eb] bg-[#f9f9fb] opacity-50 cursor-not-allowed'
+                    : 'border-[#e5e7eb] bg-white focus-within:ring-1 focus-within:ring-[#069668] focus-within:border-[#069668]'
+                  }`}
+                onClick={() => newContactTagInputRef.current?.focus()}
+              >
+                {newContactTags.map((tag) => (
+                  <span key={tag} className="inline-flex items-center gap-1 rounded bg-[#f3f4f6] border border-[#e5e7eb] px-2 py-0.5 text-[11px] font-medium text-[#45474c]">
+                    {tag}
+                    {!isSandboxFirm && (
+                      <button type="button" onClick={(e) => { e.stopPropagation(); setNewContactTags((prev) => prev.filter((t) => t !== tag)); newContactTagInputRef.current?.focus() }} className="text-[#9a9ba0] hover:text-[#1b1b1d] transition-colors" aria-label={`Remove ${tag}`}>
+                        <X className="h-3 w-3" />
+                      </button>
+                    )}
+                  </span>
+                ))}
+                <input
+                  ref={newContactTagInputRef}
+                  value={newContactTagInput}
+                  onChange={handleNewTagChange}
+                  onKeyDown={handleNewTagKeyDown}
+                  onBlur={() => { if (newContactTagInput.trim()) commitNewTag(newContactTagInput) }}
+                  placeholder={newContactTags.length === 0 ? 'e.g. billing, primary…' : ''}
+                  disabled={isSandboxFirm}
+                  className="flex-1 min-w-[120px] bg-transparent outline-none placeholder:text-[#9a9ba0] text-[#1b1b1d] text-xs disabled:cursor-not-allowed"
+                />
+                <CornerDownLeft className="h-3 w-3 text-[#069668] shrink-0 self-center ml-1" />
+              </div>
+            </div>
+
+            {/* Notes */}
+            <div>
+              <label className={fieldLabel}>Notes <span className="normal-case tracking-normal font-sans text-[#9a9ba0]">(optional)</span></label>
+              <textarea
+                value={newContactDraft.notes}
+                onChange={(e) => setNewContactDraft((d) => ({ ...d, notes: e.target.value }))}
+                placeholder="Any notes about this contact"
+                rows={2}
+                disabled={isSandboxFirm}
+                className="flex w-full rounded border border-[#e5e7eb] bg-white px-3 py-2 text-sm text-[#1b1b1d] placeholder:text-[#9a9ba0] focus:outline-none focus:ring-1 focus:ring-[#069668] focus:border-[#069668] disabled:opacity-50 disabled:cursor-not-allowed"
+              />
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="px-5 py-3 border-t border-[#e5e7eb] flex items-center justify-end gap-3">
+            <Button variant="outline" className="rounded-[2px]" disabled={isPending} onClick={() => { setNewContactModalOpen(false); resetNewContact() }}>
+              Cancel
+            </Button>
+            <Button
+              variant="greenCta"
+              disabled={isSandboxFirm || !canManage || isPending || !newContactDraft.name.trim()}
+              className="rounded-[2px] min-w-[8rem] text-[10px] font-headline font-bold tracking-widest uppercase"
+              onClick={() => {
+                if (isSandboxFirm) return
+                const finalTags = newContactTagInput.trim()
+                  ? [...newContactTags, newContactTagInput.trim().toLowerCase().replace(/\s+/g, '-')]
+                  : newContactTags
+                startTransition(async () => {
+                  try {
+                    await createClientContact(orgSlug, clientSlug, {
+                      name: newContactDraft.name.trim(),
+                      email: newContactDraft.email.trim() || undefined,
+                      phone: newContactDraft.phone.trim() || undefined,
+                      title: newContactDraft.title.trim() || undefined,
+                      notes: newContactDraft.notes.trim() || undefined,
+                      tags: finalTags.length ? finalTags : undefined,
+                    })
+                    addToast({ type: 'success', title: 'Added', message: 'Contact added.' })
+                    setNewContactModalOpen(false)
+                    resetNewContact()
+                    await refresh()
+                  } catch (e) {
+                    addToast({ type: 'error', title: 'Failed', message: e instanceof Error ? e.message : 'Could not add contact.' })
+                  }
+                })
+              }}
+            >
+              {isPending ? 'Saving…' : 'Create'}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

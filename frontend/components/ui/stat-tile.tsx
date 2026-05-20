@@ -10,8 +10,8 @@ interface StatTileProps {
 
 export function StatTile({ icon: Icon, count, label, sub, colorClass }: StatTileProps) {
     return (
-        <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex items-center gap-3">
-            <div className={`p-2.5 rounded-xl shrink-0 ${colorClass}`}>
+        <div className="bg-white rounded p-4 border border-[#e5e7eb] shadow-sm flex items-center gap-3">
+            <div className={`p-2.5 rounded shrink-0 ${colorClass}`}>
                 <Icon className="h-4 w-4" />
             </div>
             <p className="text-2xl font-bold text-gray-900 leading-none shrink-0">{count}</p>

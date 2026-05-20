@@ -1,5 +1,6 @@
-/* Font import must be first (before @tailwind) so @import precedes all other rules */
+/* Font imports must be first (before @tailwind) so @import precedes all other rules */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Work+Sans:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@500&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -124,131 +125,209 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
-  /* Dashboard (/d) typography – reference: smaller, neat sans-serif hierarchy */
+  /* Dashboard (/d) typography — Kinetic Institution design system */
   .d-app {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: 'Work Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     font-feature-settings: 'kern' 1, 'liga' 1;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     font-size: 14px;
     line-height: 1.5;
+    color: #1b1b1d;
+  }
+  .d-app .font-headline,
+  .d-app .d-headline {
+    font-family: 'Space Grotesk', system-ui, sans-serif;
   }
   .d-app .d-title {
+    font-family: 'Space Grotesk', system-ui, sans-serif;
     font-size: 1.25rem;
     font-weight: 700;
     letter-spacing: -0.025em;
     line-height: 1.3;
-    color: rgb(28 25 23);
+    color: #1b1b1d;
   }
   .d-app .d-subtitle {
     font-size: 0.8125rem;
     font-weight: 400;
-    color: rgb(120 113 108);
+    color: #45474c;
   }
   .d-app .d-section {
+    font-family: 'Space Grotesk', system-ui, sans-serif;
     font-size: 0.625rem;
-    font-weight: 600;
-    letter-spacing: 0.08em;
+    font-weight: 700;
+    letter-spacing: 0.15em;
     text-transform: uppercase;
-    color: rgb(120 113 108);
+    color: #45474c;
   }
   .d-app .d-body {
     font-size: 0.8125rem;
     font-weight: 400;
-    color: rgb(87 83 78);
+    color: #45474c;
   }
   .d-app .d-body-strong {
     font-size: 0.8125rem;
     font-weight: 600;
-    color: rgb(41 37 36);
+    color: #1b1b1d;
   }
-  /* Sidebar nav: smaller, neat */
+  /* JetBrains Mono for all monospace text in the dashboard */
+  .d-app .font-mono,
+  .d-app [class*="font-mono"] {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace !important;
+  }
+
+  /* Sidebar nav */
   .d-app .d-sidebar-section {
-    font-size: 0.625rem;
-    font-weight: 600;
-    letter-spacing: 0.08em;
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.15em;
     text-transform: uppercase;
-    color: rgb(120 113 108);
+    color: #45474c;
   }
   .d-app .d-sidebar-nav {
     font-size: 0.8125rem;
-    font-weight: 500;
+  }
+
+  /* View As + Firm Selector dropdowns — match font size to sidebar nav */
+  [data-view-as-select] [role="option"],
+  [data-firm-selector] [role="option"] {
+    font-size: 0.8125rem;
+  }
+  [data-firm-selector] [role="option"][data-highlighted],
+  [data-firm-selector] [role="option"]:focus {
+    background-color: #f9f9fb !important;
+    color: #1b1b1d !important;
+  }
+  /* Add Firm CTA item stays green on hover */
+  [data-firm-selector] [data-value="__create__"][data-highlighted],
+  [data-firm-selector] [data-value="__create__"]:focus {
+    background-color: #d1fae5 !important;
+    color: #065f46 !important;
+  }
+
+  /* Tree branch L-connector on each sub-nav item */
+  .d-app .d-tree-link {
+    position: relative;
+  }
+  .d-app .d-tree-link::before {
+    content: '';
+    position: absolute;
+    left: -12px;
+    top: 0;
+    width: 8px;
+    height: 60%;
+    border-left: 1.5px solid #e5e7eb;
+    border-bottom: 1.5px solid #e5e7eb;
+    border-bottom-left-radius: 2px;
+    pointer-events: none;
+  }
+  /* Active: border-l-2 shifts the padding box 2px right, dragging ::before with it.
+     Compensate by moving ::before 2px further left so it stays aligned with inactive Ls. */
+  .d-app .d-tree-link.border-l-2::before {
+    left: -14px;
+  }
+
+
+  /* Sub-header navigation strip — used inside content pages (e.g. client view tab nav) */
+  .d-app .ki-subnav {
+    background: white;
+    border-bottom: 1px solid #e5e7eb;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 56px;
+    padding: 0 24px;
   }
 
   /*
-   * Dashboard (/d) color palette – 4 colors only.
-   * Use only these under .d-app for backgrounds, borders, and surfaces:
-   *   black   → #000000  (text, primary buttons, active states)
-   *   white   → #FFFFFF  (cards, panels, primary background)
-   *   slate-100 → #E7E5E4 (page background, secondary surfaces)
-   *   slate-50  → #F7F7F7 (inputs, subtle fills e.g. org selector)
+   * Kinetic Institution dashboard palette — Emerald Refinement
+   *   Primary      → #069668  (emerald CTA, active states)
+   *   Background   → #f9f9fb  (warm pearl page bg)
+   *   Surface      → #ffffff  (cards, panels)
+   *   Surface low  → #f3f4f6  (inputs, subtle fills)
+   *   Surface mid  → #f0edee  (secondary surface)
+   *   On-surface   → #1b1b1d  (primary text)
+   *   Variant text → #45474c
+   *   Outline      → #e5e7eb  (borders)
+   *   Active bg    → #ecfdf5  (active nav background)
+   *   Active text  → #065f46
    */
 
-  /* Under /d/, slate-100 = #E7E5E4 */
-  .d-app .bg-slate-100 {
-    background-color: #E7E5E4 !important;
-  }
-  .d-app .bg-slate-100\/50 {
-    background-color: rgba(231, 229, 228, 0.5) !important;
-  }
-  .d-app .bg-slate-100\/80 {
-    background-color: rgba(231, 229, 228, 0.8) !important;
-  }
-  .d-app .bg-slate-100\/90 {
-    background-color: rgba(231, 229, 228, 0.9) !important;
-  }
-  .d-app .border-slate-100 {
-    border-color: #E7E5E4 !important;
-  }
-  .d-app .divide-slate-100 > * + * {
-    border-color: #E7E5E4 !important;
-  }
-  .d-app .hover\:bg-slate-100:hover {
-    background-color: #E7E5E4 !important;
-  }
-  .d-app .text-slate-100 {
-    color: #E7E5E4 !important;
-  }
-  .d-app .ring-slate-100 {
-    --tw-ring-color: #E7E5E4 !important;
-  }
-
-  /* View As dropdown: hover/highlight = slate-50 (dashboard palette) */
-  [data-view-as-select] [role="option"]:hover,
-  [data-view-as-select] [role="option"][data-highlighted] {
-    background-color: #F7F7F7 !important;
-    color: rgb(15 23 42) !important;
-  }
-
-  /* Under /d/, slate-50 = #F7F7F7 (including page root .d-app.bg-slate-50) */
+  /* Under /d/, remap slate-50 → pearl #f9f9fb */
   .d-app.bg-slate-50,
   .d-app .bg-slate-50 {
-    background-color: #F7F7F7 !important;
+    background-color: #f9f9fb !important;
+  }
+
+  /* Universal row/item hover — remap #f3f4f6 hover to lighter #f9f9fb across all tables and lists */
+  .d-app .hover\:bg-\[#f3f4f6\]:hover,
+  .d-app .hover\:bg-\[\#f3f4f6\]:hover {
+    background-color: #f9f9fb !important;
   }
   .d-app .bg-slate-50\/50 {
-    background-color: rgba(247, 247, 247, 0.5) !important;
+    background-color: rgba(249, 249, 251, 0.5) !important;
   }
   .d-app .bg-slate-50\/80 {
-    background-color: rgba(247, 247, 247, 0.8) !important;
+    background-color: rgba(249, 249, 251, 0.8) !important;
   }
   .d-app .bg-slate-50\/90 {
-    background-color: rgba(247, 247, 247, 0.9) !important;
+    background-color: rgba(249, 249, 251, 0.9) !important;
   }
   .d-app .border-slate-50 {
-    border-color: #F7F7F7 !important;
-  }
-  .d-app .divide-slate-50 > * + * {
-    border-color: #F7F7F7 !important;
+    border-color: #f9f9fb !important;
   }
   .d-app .hover\:bg-slate-50:hover {
-    background-color: #F7F7F7 !important;
+    background-color: #f0edee !important;
   }
-  .d-app .text-slate-50 {
-    color: #F7F7F7 !important;
+
+  /* Under /d/, remap slate-100 → outline #e5e7eb */
+  .d-app .bg-slate-100 {
+    background-color: #ecfdf5 !important;
   }
-  .d-app .ring-slate-50 {
-    --tw-ring-color: #F7F7F7 !important;
+  .d-app .bg-slate-100\/50 {
+    background-color: rgba(236, 253, 245, 0.5) !important;
   }
+  .d-app .bg-slate-100\/80 {
+    background-color: rgba(236, 253, 245, 0.8) !important;
+  }
+  .d-app .bg-slate-100\/90 {
+    background-color: rgba(236, 253, 245, 0.9) !important;
+  }
+  .d-app .border-slate-100 {
+    border-color: #e5e7eb !important;
+  }
+  .d-app .divide-slate-100 > * + * {
+    border-color: #e5e7eb !important;
+  }
+  .d-app .hover\:bg-slate-100:hover {
+    background-color: #ecfdf5 !important;
+  }
+  .d-app .text-slate-100 {
+    color: #e5e7eb !important;
+  }
+
+  /* Active nav: text color override — slate-900 active becomes emerald dark */
+  .d-app .text-slate-900 {
+    color: #1b1b1d;
+  }
+  .d-app .bg-slate-100.text-slate-900 {
+    color: #065f46 !important;
+  }
+
+  /* View As dropdown hover — matches sidebar nav hover color */
+  [data-view-as-select] [role="option"]:hover,
+  [data-view-as-select] [role="option"]:focus,
+  [data-view-as-select] [role="option"][data-highlighted] {
+    background-color: #f9f9fb !important;
+    color: #1b1b1d !important;
+  }
+}
+
+/* Kinetic Institution — architectural dot pattern background */
+.architectural-dot {
+  background-image: radial-gradient(#d1d5db 0.75px, transparent 0.75px);
+  background-size: 16px 16px;
 }
 
 /* Recharts specific styles for better appearance */

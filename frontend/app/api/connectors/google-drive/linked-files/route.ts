@@ -478,7 +478,6 @@ export async function POST(request: NextRequest) {
 
                     const internalByExternal = new Map<string, string>(enrichRows.map((r: any) => [r.externalId, r.id]))
                     const lockByExternal = new Map<string, any>(enrichRows.map((r: any) => [r.externalId, getLock(r.settings)]))
-const privateByExternal = new Map<string, boolean>(enrichRows.map((r: any) => [r.externalId, isDocumentPrivate(r.settings)]))
                     const sharedExternalByExternal = new Map<string, boolean>(enrichRows.map((r: any) => {
                         const s = (r.settings as Record<string, any>) || {}
                         const share = s.share
@@ -507,7 +506,7 @@ const privateByExternal = new Map<string, boolean>(enrichRows.map((r: any) => [r
                         ...f,
                         projectDocumentId: internalByExternal.get(f.id) ?? undefined,
                         lock: lockByExternal.get(f.id) ?? null,
-                        isPrivate: privateByExternal.get(f.id) ?? false,
+                        isPrivate: lockByExternal.get(f.id)?.type === 'private',
                         isSharedWithExternal: sharedExternalByExternal.get(f.id) ?? false,
                         ownerRole: (() => {
                             const ownerEmail = f.owners?.[0]?.emailAddress ?? f.actorEmail ?? null

@@ -16,10 +16,8 @@ export default async function SupportPage({
 }) {
   const { firmSlug } = await searchParams
 
-  // Require a firmSlug — only Firm Admins reach this page via Profile menu
   if (!firmSlug) redirect('/d')
 
-  // Resolve firm ID then verify can_manage (ACL gate)
   const firm = await prisma.firm.findUnique({ where: { slug: firmSlug }, select: { id: true } })
   if (!firm) redirect('/d')
 
@@ -34,81 +32,82 @@ export default async function SupportPage({
   return (
     <div className="flex flex-col h-full">
       {/* Breadcrumbs */}
-      <div className="d-body flex items-center text-stone-500 mb-2 px-4 pt-4">
-        <span className="flex items-center gap-2 text-stone-500" title="Home">
-          <Home className="h-4 w-4" />
-        </span>
-        <ChevronRight className="h-4 w-4 mx-1 text-slate-300" />
+      <nav className="flex items-center gap-1.5 mb-4">
+        <Home className="h-4 w-4 text-[#45474c] opacity-60" />
+        <ChevronRight className="h-3.5 w-3.5 text-[#d1d5db]" />
+        <Building2 className="h-4 w-4 text-[#069668]" />
         <Link
           href={`/d/f/${firmSlug}`}
-          className="flex items-center gap-2 hover:text-slate-900 transition-colors cursor-pointer"
+          className="font-mono text-[11px] font-bold text-[#1b1b1d] uppercase tracking-tighter hover:text-[#069668] transition-colors"
         >
-          <Building2 className="h-4 w-4" />
-          <span className="font-medium">{firmName || 'Organization'}</span>
+          {firmName || 'Organization'}
         </Link>
-        <ChevronRight className="h-4 w-4 mx-1 text-slate-300" />
-        <span className="flex items-center gap-2 text-slate-900">
-          <LifeBuoy className="h-4 w-4" />
-          <span className="font-semibold">Contact Support</span>
-        </span>
-      </div>
+        <ChevronRight className="h-3.5 w-3.5 text-[#d1d5db]" />
+        <LifeBuoy className="h-4 w-4 text-[#45474c] opacity-60" />
+        <span className="font-mono text-[11px] font-bold text-[#1b1b1d] uppercase tracking-tighter">Support</span>
+      </nav>
 
-      {/* Main Content Area */}
-      <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-        {/* Title Card */}
-        <div className="bg-white border border-stone-200 rounded-xl p-5 m-4 shadow-sm">
-          <h1 className="d-title flex items-center gap-2.5">
-            <LifeBuoy className="h-6 w-6 text-stone-500" />
+      {/* Page Identity Header */}
+      <div className="flex items-start gap-6 mb-6">
+        <div className="w-16 h-16 bg-white border border-[#e5e7eb] flex items-center justify-center rounded shadow-sm shrink-0">
+          <LifeBuoy className="h-10 w-10 text-[#1b1b1d]" />
+        </div>
+        <div>
+          <h1 className="font-headline text-3xl md:text-4xl font-bold tracking-tight text-[#1b1b1d]">
             Contact Support
           </h1>
-          <p className="d-subtitle mt-1">Submit requests, report issues, and get help from our support team.</p>
-        </div>
-
-        {/* Tabs Section */}
-        <div className="flex-1 min-h-0 overflow-hidden flex flex-col m-4">
-          <Tabs defaultValue="requests" className="flex-1 flex flex-col min-h-0">
-            {/* Tab List */}
-            <div className="mb-6">
-              <TabsList className="h-10 p-1 bg-slate-100 rounded-lg inline-flex justify-start flex-wrap gap-1">
-                <CreateSupportRequestModal
-                  firmSlug={firmSlug}
-                  trigger={
-                    <Button
-                      variant="blackCta"
-                      type="button"
-                      className="h-full px-3 rounded-md text-sm font-medium inline-flex items-center gap-1.5"
-                    >
-                      <span>✨</span>
-                      New Request
-                    </Button>
-                  }
-                />
-                <TabsTrigger
-                  value="requests"
-                  className="h-full px-4 rounded-md font-medium text-slate-500 data-[state=active]:text-slate-900 data-[state=active]:shadow-sm"
-                >
-                  <LifeBuoy className="w-4 h-4 mr-2" />
-                  Requests
-                  {ticketCount > 0 && (
-                    <span className="ml-2 rounded-full bg-slate-900 px-1.5 py-0.5 text-xs font-medium text-white tabular-nums leading-none">
-                      {ticketCount}
-                    </span>
-                  )}
-                </TabsTrigger>
-              </TabsList>
-            </div>
-
-            {/* Content */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
-              <TabsContent value="requests" className="m-0 h-full">
-                <div className="py-1 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                  <SupportRequestsList firmSlug={firmSlug} />
-                </div>
-              </TabsContent>
-            </div>
-          </Tabs>
+          <p className="text-sm text-[#45474c] mt-1">
+            Submit requests, report issues, and get help from our support team.
+          </p>
         </div>
       </div>
+
+      {/* Tabs */}
+      <Tabs defaultValue="requests" className="flex-1 flex flex-col min-h-0">
+        {/* Tab strip — full-width white bar matching Firm pages */}
+        <div className="bg-white border border-[#e5e7eb] rounded mb-6 shrink-0">
+          <div className="flex items-center justify-between h-14 pr-4">
+            <TabsList className="h-full p-0 bg-transparent rounded-none inline-flex justify-start gap-0 border-0">
+              <TabsTrigger
+                value="requests"
+                className="h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+              >
+                <LifeBuoy className="w-4 h-4 mr-2" />
+                Requests
+                {ticketCount > 0 && (
+                  <span className="ml-2 font-mono text-[10px] font-bold bg-[#069668] text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
+                    {ticketCount}
+                  </span>
+                )}
+              </TabsTrigger>
+            </TabsList>
+
+            {/* Right-aligned CTA */}
+            <CreateSupportRequestModal
+              firmSlug={firmSlug}
+              trigger={
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  type="button"
+                  className="h-auto px-4 py-1.5 rounded-[2px] bg-[#069668] text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-[#069668] hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(6,150,104,0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1.5"
+                >
+                  <LifeBuoy className="h-3.5 w-3.5" />
+                  New Request
+                </Button>
+              }
+            />
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto custom-scrollbar">
+          <TabsContent value="requests" className="m-0">
+            <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <SupportRequestsList firmSlug={firmSlug} />
+            </div>
+          </TabsContent>
+        </div>
+      </Tabs>
     </div>
   )
 }

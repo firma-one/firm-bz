@@ -7,7 +7,7 @@ import { canManageProject } from '@/lib/permission-helpers'
 
 /**
  * PUT /api/projects/[projectId]/shares/order
- * Reorder shares across swimlanes (and within). Body: { to_do: shareId[], in_progress: shareId[], done: shareId[] }
+ * Reorder shares across swimlanes (and within). Body: { to_do: shareId[], in_progress: shareId[], in_review: shareId[], done: shareId[] }
  * RBAC: User must have project:can_manage.
  */
 export async function PUT(
@@ -28,11 +28,13 @@ export async function PUT(
     const body = await request.json().catch(() => ({}))
     const toDo = Array.isArray(body.to_do) ? body.to_do : []
     const inProgress = Array.isArray(body.in_progress) ? body.in_progress : []
+    const inReview = Array.isArray(body.in_review) ? body.in_review : []
     const done = Array.isArray(body.done) ? body.done : []
 
     const updates: { shareId: string; status: ActivityStatus; orderIndex: number }[] = []
     toDo.forEach((id: string, i: number) => { updates.push({ shareId: id, status: 'to_do', orderIndex: i }) })
     inProgress.forEach((id: string, i: number) => { updates.push({ shareId: id, status: 'in_progress', orderIndex: i }) })
+    inReview.forEach((id: string, i: number) => { updates.push({ shareId: id, status: 'in_review', orderIndex: i }) })
     done.forEach((id: string, i: number) => { updates.push({ shareId: id, status: 'done', orderIndex: i }) })
 
     const now = new Date().toISOString()

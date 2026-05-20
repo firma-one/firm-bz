@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { AuthGuard } from '@/components/auth/auth-guard'
 import { AppSidebar } from '@/components/app/app-sidebar'
 import { AppTopbar } from '@/components/app/app-topbar'
-import { LayoutRightPanel, RIGHT_PANEL_DOCKED_WIDTH_PX } from '@/components/app/layout-right-panel'
+import { LayoutRightPanel, RIGHT_PANEL_DOCKED_WIDTH_PX, RIGHT_PANEL_MEDIUM_WIDTH_PX } from '@/components/app/layout-right-panel'
 import { SidebarProvider, useSidebar } from '@/lib/sidebar-context'
 import { ViewAsProvider } from '@/lib/view-as-context'
 import { RightPaneProvider, useRightPane } from '@/lib/right-pane-context'
@@ -26,41 +26,23 @@ import { useToast } from '@/components/ui/toast'
 import { Megaphone } from 'lucide-react'
 
 const TOP_BAR_HEIGHT = 64
-/** Matches Tailwind `spacing-3` (`mx-3` / `ml-3` on the fixed rails). */
-const SIDE_INSET_PX = 12
-/**
- * Gap between top bar and the row below, and between left rail and middle pane.
- * (Horizontal gap = paddingLeft − side inset − sidebar width — keep formula in sync.)
- */
-const PANE_GUTTER_PX = 8
-const BOTTOM_INSET_PX = 10
-const RIGHT_PANEL_GAP_PX = 6
 
-function AppLayoutContent({
-    children,
-}: {
-    children: React.ReactNode
-}) {
+function AppLayoutContent({ children, isSystemAdmin }: { children: React.ReactNode; isSystemAdmin?: boolean }) {
     const pathname = usePathname()
     const { isCollapsed } = useSidebar()
-    const { content: rightPaneContent, title: rightPaneTitle, clearPane, headerActions: rightPaneHeaderActions, headerIcon, headerSubtitle } = useRightPane()
+    const { content: rightPaneContent, title: rightPaneTitle, clearPane, headerActions: rightPaneHeaderActions, headerIcon, headerSubtitle, paneSize } = useRightPane()
     const { session } = useAuth()
     const { addToast } = useToast()
     const accessToken = session?.access_token ?? null
     const firms = useSidebarFirms()
 
-    // Slim onboarding rail for the whole flow; full AppSidebar only after navigation away (e.g. to /d/f/...).
     const showOnboardingSidebar =
         pathname === '/d/onboarding' || (pathname?.startsWith('/d/onboarding/') ?? false)
 
-    // Reset right pane on navigation or reload so state is not persisted
-    useEffect(() => {
-        clearPane()
-    }, [pathname, clearPane])
+    useEffect(() => { clearPane() }, [pathname, clearPane])
 
     const sidebarWidth = isCollapsed ? 64 : 256
 
-    // Resolve current firm id from slug in pathname (e.g. /d/f/<slug>/...)
     const slugMatch = pathname?.match(/^\/d\/f\/([^/]+)/)
     const currentSlug = slugMatch?.[1] ?? null
     const currentFirmId = currentSlug
@@ -73,42 +55,26 @@ function AppLayoutContent({
     useEffect(() => {
         const isActive = maintenanceStatus?.active === true
         if (prevActiveRef.current === true && !isActive && maintenanceStatus !== null) {
-            addToast({
-                title: 'Workspace ready',
-                message: 'Migration complete — workspace is back online.',
-                type: 'success',
-            })
+            addToast({ title: 'Workspace ready', message: 'Migration complete — workspace is back online.', type: 'success' })
             window.location.reload()
         }
-        if (maintenanceStatus !== null) {
-            prevActiveRef.current = isActive
-        }
+        if (maintenanceStatus !== null) prevActiveRef.current = isActive
     }, [maintenanceStatus, addToast])
 
-    // Platform-wide maintenance: poll every 20s. Redirect on full activation.
-    // Also show a grace-period countdown banner ("maintenance in X:XX") before sessions are killed.
     const platformStatus = usePlatformMaintenanceStatus(20_000)
     const [graceCountdown, setGraceCountdown] = useState<string | null>(null)
 
     useEffect(() => {
-        if (platformStatus?.active === true) {
-            window.location.href = '/platform-maintenance'
-        }
+        if (platformStatus?.active === true) window.location.href = '/platform-maintenance'
     }, [platformStatus])
 
-    // Live countdown ticker during grace period
     useEffect(() => {
-        if (!platformStatus?.pendingGrace || !platformStatus.graceEndsAt) {
-            setGraceCountdown(null)
-            return
-        }
+        if (!platformStatus?.pendingGrace || !platformStatus.graceEndsAt) { setGraceCountdown(null); return }
         function tick() {
             const ms = new Date(platformStatus!.graceEndsAt!).getTime() - Date.now()
             if (ms <= 0) { setGraceCountdown('0:00'); return }
             const totalSecs = Math.ceil(ms / 1000)
-            const m = Math.floor(totalSecs / 60)
-            const s = totalSecs % 60
-            setGraceCountdown(`${m}:${String(s).padStart(2, '0')}`)
+            setGraceCountdown(`${Math.floor(totalSecs / 60)}:${String(totalSecs % 60).padStart(2, '0')}`)
         }
         tick()
         const id = setInterval(tick, 1000)
@@ -117,49 +83,38 @@ function AppLayoutContent({
 
     return (
         <AuthGuard>
-            {/* Page background: slate-50 (#F7F7F7 under .d-app). h-screen + min-h-0 + overflow-hidden so only <main> scrolls — content cannot scroll behind the fixed top bar. */}
-            <div className="d-app flex h-screen min-h-0 flex-col overflow-hidden bg-slate-50">
-                {/* Top bar - Branding + Alerts (white card) */}
-                <div
-                    className="fixed top-0 left-0 right-0 z-50 mx-3 rounded-b-xl border border-slate-200/80 border-b-slate-200 bg-white shadow-sm flex items-center"
+            {/*
+              Kinetic Institution layout — matches code.html structure:
+              flex-col → [full-width header] + [flex-row → sidebar | main | right-pane]
+              No floating cards on the chrome. Header: border-b. Sidebar: border-r.
+              Main content: pearl bg-[#f9f9fb]. Right pane: m-4 rounded-xl shadow-xl.
+            */}
+            <div className="d-app h-screen flex flex-col overflow-hidden bg-[#f9f9fb]">
+
+                {/* ── Header: full-width, border-b only ── */}
+                <header
+                    className="w-full bg-white border-b border-[#e5e7eb] flex items-center shrink-0 z-50"
                     style={{ height: TOP_BAR_HEIGHT }}
                 >
                     <AppTopbar />
-                </div>
+                </header>
 
-                {/* Left app bar - menu (white card), fixed; same width; overflow-visible so expand/collapse button is not clipped */}
-                <div
-                    className="fixed left-0 z-40 mt-0 ml-3 rounded-xl border border-slate-200/80 bg-white shadow-sm overflow-visible transition-all duration-300 flex flex-col"
-                    style={{
-                        top: TOP_BAR_HEIGHT + PANE_GUTTER_PX,
-                        bottom: BOTTOM_INSET_PX,
-                        width: sidebarWidth,
-                    }}
-                >
-                    {showOnboardingSidebar ? (
-                        <OnboardingSidebar />
-                    ) : (
-                        <AppSidebar variant="inline" />
-                    )}
-                </div>
+                {/* ── Body row: sidebar | main | right pane ── */}
+                <div className="flex flex-1 overflow-hidden">
 
-                {/* Middle pane + Right bar row - flex-1 min-h-0 so <main> can shrink and scroll internally. When right pane open, reserve space via padding so fixed panel doesn't overlap. */}
-                <div
-                    className="flex min-h-0 flex-1 gap-2"
-                    style={{
-                        paddingLeft: sidebarWidth + SIDE_INSET_PX + PANE_GUTTER_PX,
-                        paddingTop: TOP_BAR_HEIGHT + PANE_GUTTER_PX,
-                        paddingBottom: BOTTOM_INSET_PX,
-                        paddingRight: rightPaneContent ? RIGHT_PANEL_DOCKED_WIDTH_PX + RIGHT_PANEL_GAP_PX + BOTTOM_INSET_PX : BOTTOM_INSET_PX,
-                    }}
-                >
-                    {/*
-                      Middle pane: flex column — scroll area first, then bottom strips (e.g. checkout hint)
-                      so hints span the white card only, not the fixed sidebar.
-                    */}
-                    <main className="z-0 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-sm">
-                        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-                            <div className="w-full px-7 pt-3 pb-4 sm:px-10 md:px-12">{children}</div>
+                    {/* ── Left sidebar: border-r only, animates width ── */}
+                    <div
+                        className="bg-white border-r border-[#e5e7eb] flex flex-col shrink-0 overflow-visible transition-all duration-300 relative z-20"
+                        style={{ width: sidebarWidth }}
+                    >
+                        {showOnboardingSidebar ? <OnboardingSidebar /> : <AppSidebar variant="inline" isSystemAdmin={isSystemAdmin} />}
+                    </div>
+
+                    {/* ── Main content: pearl bg, architectural dot pattern ── */}
+                    <main className="flex-1 min-w-0 flex flex-col overflow-hidden bg-[#f9f9fb] relative">
+                        <div className="absolute inset-0 architectural-dot opacity-[0.15] pointer-events-none" />
+                        <div className="relative z-10 flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+                            <div className="w-full px-6 pt-6 pb-6 min-h-full flex flex-col">{children}</div>
                         </div>
                         <StandardCheckoutIntentBanner />
                         {platformStatus?.pendingGrace && graceCountdown !== null && (
@@ -189,22 +144,28 @@ function AppLayoutContent({
                             />
                         )}
                     </main>
+
+                    {/* ── Right pane: m-4 rounded-xl shadow-xl (matches code.html) ── */}
+                    {rightPaneContent ? (
+                        <div
+                            className="shrink-0 my-4 mr-4 transition-all duration-300"
+                            style={{ width: paneSize === 'medium' ? '50vw' : RIGHT_PANEL_DOCKED_WIDTH_PX }}
+                        >
+                            <LayoutRightPanel
+                                title={rightPaneTitle || 'Document'}
+                                icon={headerIcon}
+                                subtitle={headerSubtitle || undefined}
+                                onClose={clearPane}
+                                headerActions={rightPaneHeaderActions}
+                                embedContent={true}
+                            >
+                                {rightPaneContent}
+                            </LayoutRightPanel>
+                        </div>
+                    ) : null}
+
                 </div>
 
-                {/* Right panel - fixed position so width cannot be shrunk by flex; always 320px visible */}
-                {rightPaneContent ? (
-                    <LayoutRightPanel
-                        title={rightPaneTitle || 'Document'}
-                        icon={headerIcon}
-                        subtitle={headerSubtitle || undefined}
-                        onClose={clearPane}
-                        headerActions={rightPaneHeaderActions}
-                        embedContent={true}
-                        dockedPosition={{ top: TOP_BAR_HEIGHT + PANE_GUTTER_PX, bottom: BOTTOM_INSET_PX, right: BOTTOM_INSET_PX, widthPx: RIGHT_PANEL_DOCKED_WIDTH_PX }}
-                    >
-                        {rightPaneContent}
-                    </LayoutRightPanel>
-                ) : null}
                 <OnboardingExitGuardBanner />
                 <DebugFloatingTrigger />
             </div>
@@ -215,9 +176,11 @@ function AppLayoutContent({
 export function DLayoutClient({
     children,
     initialFirms,
+    isSystemAdmin,
 }: {
     children: React.ReactNode
     initialFirms: { id: string; name: string; slug: string; isDefault: boolean; createdAt: string }[]
+    isSystemAdmin?: boolean
 }) {
     return (
         <OnboardingProvider>
@@ -227,7 +190,7 @@ export function DLayoutClient({
                         <RightPaneProvider>
                             <DownloadProgressProvider>
                                 <TooltipProvider delayDuration={400}>
-                                    <AppLayoutContent>
+                                    <AppLayoutContent isSystemAdmin={isSystemAdmin}>
                                         {children}
                                     </AppLayoutContent>
                                     <DownloadProgressPanel />

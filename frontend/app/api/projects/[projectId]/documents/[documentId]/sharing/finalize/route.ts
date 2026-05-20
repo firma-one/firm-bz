@@ -39,6 +39,7 @@ export async function PATCH(
 
     const existing = await prisma.engagementDocument.findUnique({
       where: { engagementId_firmId_externalId: compound },
+      select: { id: true, clientId: true, connectorId: true, fileName: true, settings: true, isFolder: true },
     })
     if (!existing)
       return NextResponse.json({ error: 'Share record not found' }, { status: 404 })
@@ -103,6 +104,7 @@ export async function PATCH(
     audit(AUDIT_EVENT.DOCUMENT_FINALIZED)
       .scope(AUDIT_SCOPE.DOCUMENT)
       .firm(fileInfo.organizationId)
+      .client(existing.clientId ?? undefined)
       .engagement(projectId)
       .document(existing.id)
       .actor(user.id)

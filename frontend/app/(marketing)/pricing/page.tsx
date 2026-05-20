@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowRight, CalendarDays, Check, ChevronDown, HelpCircle, MessageSquareMore, SquareFunction } from "lucide-react"
+import { ArrowRight, CalendarDays, Check, HelpCircle, MessageSquareMore, SquareFunction } from "lucide-react"
 import Link from "next/link"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import {
@@ -17,8 +17,6 @@ import { cn } from "@/lib/utils"
 import type { PlanValue, PricingPlan, PricingPlanColumnId } from "@/config/pricing"
 import { platformEmail } from "@/config/platform-domain"
 import { BRAND_NAME } from "@/config/brand"
-import { EmailInline } from "@/components/ui/email-inline"
-import { PLATFORM_SUPPORT_EMAIL } from "@/config/platform-emails"
 import { CONTACT_HREF_SALES_INQUIRY } from "@/lib/marketing/contact-inquiry"
 import { persistCheckoutIntent, type CheckoutPlanName } from "@/lib/marketing/checkout-intent"
 import { CALENDLY_DEMO_URL, MARKETING_PAGE_SHELL } from "@/lib/marketing/target-audience-nav"
@@ -26,6 +24,7 @@ import { MarketingBreadcrumb } from "@/components/marketing/marketing-breadcrumb
 import { PricingEngagementPersonasTooltip } from "@/components/marketing/pricing-engagement-personas-tooltip"
 import { PricingFirmClientEngagementHierarchyVisual } from "@/components/marketing/pricing-firm-client-engagement-hierarchy-visual"
 import { KineticMarketingBadge, kineticSectionLeadClassName } from "@/components/kinetic/kinetic-section-intro"
+import { FaqGrid } from "@/components/faq/FaqGrid"
 
 const H = "[font-family:var(--font-kinetic-headline),system-ui,sans-serif]"
 const B = "[font-family:var(--font-kinetic-body),system-ui,sans-serif]"
@@ -117,9 +116,9 @@ function getDisplayPrice(plan: PricingPlan, billingPeriod: "monthly" | "annual")
 
 export default function PricingPage() {
     const [billingPeriod, setBillingPeriod] = useState<"monthly" | "annual">("annual")
+    const [activeTab, setActiveTab] = useState<"pricing" | "faq">("pricing")
     /** Last plan the visitor expressed interest in — Title Case in localStorage via {@link persistCheckoutIntent}. */
     const [checkoutPlanFocus, setCheckoutPlanFocus] = useState<CheckoutPlanName>("Standard")
-    const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0)
     const [mobileMatrixColumn, setMobileMatrixColumn] = useState<MobileMatrixColumnId>("Standard")
 
     useEffect(() => {
@@ -131,88 +130,6 @@ export default function PricingPage() {
             setCheckoutPlanFocus(checkoutPlanFromPricingPlanId(mobileMatrixColumn))
         }
     }, [mobileMatrixColumn])
-
-    const faqs = [
-        {
-            q: "What counts as an \"active engagement\"?",
-            a: "An active engagement is any engagement that is not deleted or closed. You can have unlimited closed or deleted engagements without counting toward your limit. Each subscription covers one firm; the cap applies to that firm’s engagements.",
-        },
-        {
-            q: "Can I add more engagements?",
-            a: "Standard includes 10 active engagements per firm, Pro 25, Business 50, and Enterprise typically up to 100 (negotiated). Need more? Contact us for custom capacity.",
-        },
-        {
-            q: "What if I need more than one firm?",
-            a: "Standard, Pro, and Business each cover one firm workspace. For an additional legal entity or a completely separate firm, add another subscription—or talk to us about Enterprise for multiple firms under one agreement and consolidated billing.",
-        },
-        {
-            q: "Are there per-user charges?",
-            a: "No. All plans include unlimited members. Add as many team members, clients, and collaborators as you need without additional charges.",
-        },
-        {
-            q: "What happens if I exceed my engagement limit?",
-            a: "Your plan includes a set number of active engagements per firm (Standard 10, Pro 25, Business 50, Enterprise per contract). Close engagements you no longer need to free up slots, upgrade tiers, or contact us for higher capacity.",
-        },
-        {
-            q: "Can I upgrade, downgrade or cancel my plan?",
-            a: (
-                <>
-                    <span>
-                        Yes. Plan changes and cancellations are managed in our Polar billing portal.
-                        {"\n"}- Upgrade, downgrade, and cancellation options are shown based on your current
-                        subscription and portal settings.
-                        {"\n"}- Effective dates and billing adjustments are displayed in checkout/portal before you
-                        confirm any change.
-                        {"\n"}- If you need a billing exception, contact{" "}
-                    </span>
-                    <EmailInline email={PLATFORM_SUPPORT_EMAIL} className="mx-1" />
-                    <span> and we’ll help review it.</span>
-                </>
-            ),
-        },
-        {
-            q: "Is there a free trial?",
-            a: `Yes. You can explore ${BRAND_NAME} with a limited sandbox account — no credit card required.\nWhen you're ready to unlock full features, you can start a 30-day trial of the Standard plan.\nCheckout requirements (including whether payment details are needed to start trial) are shown in Polar before confirmation, and you can manage your subscription from the billing portal.`,
-        },
-        {
-            q: "What does “bring your own Google Drive” mean?",
-            a: `Your files stay in your Google Drive—we don’t host a second copy of your documents for standard workflows. ${BRAND_NAME} adds the client portal, engagement structure, and permissions on top. There’s no bulk migration to a new storage product: you keep working from Drive with a professional delivery layer.`,
-        },
-        {
-            q: "How does the free sandbox differ from paid plans?",
-            a: "The sandbox lets you explore the product with no credit card. Core engagement and portal capabilities align with what we show for Standard in the comparison matrix; higher tiers add Pro/Business/Enterprise features such as templates, automation, custom DNS, or SSO. When you’re ready for production billing, start a Standard trial or choose a paid tier.",
-        },
-        {
-            q: "Where do I manage subscriptions and invoices?",
-            a: "Paid subscriptions are handled through our Polar billing integration. After checkout you’ll use the Polar customer portal to update payment methods, view invoices, and start upgrades, downgrades, or cancellations—subject to what your subscription allows.",
-        },
-        {
-            q: "When should I choose Enterprise over Business?",
-            a: `Enterprise is for organizations that need custom DNS for the client portal, SSO/SAML, stricter controls (for example download restrictions and advanced auditing), multi-firm arrangements, or negotiated engagement limits. If that sounds like you, contact ${platformEmail("sales")} and we’ll scope options.`,
-        },
-        {
-            q: "What is your refund policy?",
-            a: "Valid subscription orders cannot be refunded per Firma’s billing policy. However, if you experience any billing issues—such as accidental duplicate charges or payment errors—please contact our support team and we’ll investigate and process a refund promptly.",
-        },
-        {
-            q: "What if I experience a billing issue or duplicate charge?",
-            a: (
-                <>
-                    <span>
-                        Contact us at{" "}
-                    </span>
-                    <EmailInline email={PLATFORM_SUPPORT_EMAIL} className="mx-1" />
-                    <span>
-                        and describe the issue. We’ll verify the charge and process a refund if a genuine billing error occurred. Our team reviews all billing disputes within 48 hours.
-                    </span>
-                </>
-            ),
-        },
-        {
-            q: "Can I pause or downgrade my subscription instead of canceling?",
-            a: "You can downgrade to a lower-tier plan at any time through the Polar billing portal. Downgrades take effect at your next billing date. If you need to temporarily pause your account, contact our support team to discuss options.",
-        },
-    ] as const
 
     const highlightPlanId = "Standard"
 
@@ -314,6 +231,40 @@ export default function PricingPage() {
                         </div>
                     </div>
                 </section>
+
+                {/* PRICING / FAQs toggle */}
+                <div className={cn(MARKETING_PAGE_SHELL, "mb-10 flex justify-center")}>
+                    <div className="inline-flex items-center gap-1 rounded border border-[#c6c6cc]/40 bg-white p-1 shadow-sm">
+                        <button
+                            type="button"
+                            onClick={() => setActiveTab("pricing")}
+                            className={cn(
+                                "px-6 py-2 rounded-sm text-xs font-bold uppercase tracking-widest transition-all duration-150 min-h-[36px]",
+                                H,
+                                activeTab === "pricing"
+                                    ? "bg-[#1b1b1d] text-white shadow-sm"
+                                    : "text-[#45474c] hover:text-[#1b1b1d]",
+                            )}
+                        >
+                            Pricing
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setActiveTab("faq")}
+                            className={cn(
+                                "px-6 py-2 rounded-sm text-xs font-bold uppercase tracking-widest transition-all duration-150 min-h-[36px]",
+                                H,
+                                activeTab === "faq"
+                                    ? "bg-[#1b1b1d] text-white shadow-sm"
+                                    : "text-[#45474c] hover:text-[#1b1b1d]",
+                            )}
+                        >
+                            FAQs
+                        </button>
+                    </div>
+                </div>
+
+                {activeTab === "pricing" && <>
 
                 {/* Plan cards — sandbox first, then paid tiers */}
                 <section className={cn(MARKETING_PAGE_SHELL, "mb-20 md:mb-28")}>
@@ -725,71 +676,16 @@ export default function PricingPage() {
                     </TooltipProvider>
                 </section>
 
-                {/* FAQ */}
-                <section
-                    id="faq"
-                    className="scroll-mt-32 border-t border-[#c6c6cc]/20 bg-[#f6f3f4] py-14 md:py-20"
-                >
-                    <div className={MARKETING_PAGE_SHELL}>
-                        <div className="mx-auto max-w-3xl">
-                            <h2
-                                className={cn(
-                                    "text-3xl font-bold tracking-tight text-[#1b1b1d] md:text-4xl",
-                                    H,
-                                )}
-                            >
-                                Frequently asked questions
-                            </h2>
-                            <p className="mt-3 text-[#45474c]">
-                                Answers on limits, billing, trials, and how subscriptions apply to your firm.
-                            </p>
+                </>}
 
-                            <div className="mt-10 space-y-4">
-                                {faqs.map((faq, i) => {
-                                    const open = openFaqIndex === i
-                                    return (
-                                        <div
-                                            key={i}
-                                            className="rounded-none bg-[#fcf8fa] p-6 shadow-[0_8px_24px_rgba(27,27,29,0.05)] md:p-8"
-                                        >
-                                            <button
-                                                type="button"
-                                                className={cn(
-                                                    "flex w-full items-start justify-between gap-4 text-left",
-                                                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5a78ff] focus-visible:ring-offset-2 focus-visible:ring-offset-[#fcf8fa]",
-                                                )}
-                                                aria-expanded={open}
-                                                aria-controls={`faq-panel-${i}`}
-                                                onClick={() => setOpenFaqIndex(open ? null : i)}
-                                            >
-                                                <h3 className={cn("text-lg font-bold text-[#1b1b1d] md:text-xl", H)}>
-                                                    {faq.q}
-                                                </h3>
-                                                <span
-                                                    className={cn(
-                                                        "flex h-8 w-8 shrink-0 items-center justify-center rounded-none border border-[#c6c6cc]/30 bg-white text-[#45474c] transition-transform duration-200",
-                                                        open && "rotate-180",
-                                                    )}
-                                                    aria-hidden
-                                                >
-                                                    <ChevronDown className="h-4 w-4" />
-                                                </span>
-                                            </button>
-                                            <div
-                                                id={`faq-panel-${i}`}
-                                                className={cn("overflow-hidden transition-[max-height] duration-200", open ? "mt-4 block" : "hidden")}
-                                            >
-                                                <p className="text-[15px] leading-relaxed text-[#45474c] whitespace-pre-line">
-                                                    {faq.a}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    )
-                                })}
-                            </div>
+                {/* FAQ tab view */}
+                {activeTab === "faq" && (
+                    <section className="border-t border-[#c6c6cc]/20 bg-[#f6f3f4] py-14 md:py-20">
+                        <div className={MARKETING_PAGE_SHELL}>
+                            <FaqGrid defaultFilter="Billing" />
                         </div>
-                    </div>
-                </section>
+                    </section>
+                )}
 
                 {/* CTA band */}
                 <section className={cn(MARKETING_PAGE_SHELL, "mt-16 md:mt-20")}>

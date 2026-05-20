@@ -15,6 +15,10 @@ module.exports = {
 				md: 'calc(var(--radius) - 2px)',
 				sm: 'calc(var(--radius) - 4px)'
 			},
+			fontFamily: {
+				headline: ['Space Grotesk', 'system-ui', 'sans-serif'],
+				'work-sans': ['Work Sans', 'system-ui', 'sans-serif'],
+			},
 			keyframes: {
 				'indeterminate-progress': {
 					'0%': { transform: 'translateX(-100%)' },
@@ -68,7 +72,21 @@ module.exports = {
 				/** Kinetic marketing accent — see `app/globals.css` :root */
 				'ds-kinetic-lime': 'var(--ds-kinetic-lime)',
 				'ds-on-kinetic-lime': 'var(--ds-on-kinetic-lime)',
-				'ds-kinetic-lime-icon': 'var(--ds-kinetic-lime-icon)'
+				'ds-kinetic-lime-icon': 'var(--ds-kinetic-lime-icon)',
+				/** Kinetic Institution — Emerald Refinement dashboard palette */
+				'ki-primary': '#069668',
+				'ki-on-primary': '#ffffff',
+				'ki-bg': '#f9f9fb',
+				'ki-surface': '#ffffff',
+				'ki-surface-low': '#f3f4f6',
+				'ki-surface-mid': '#f0edee',
+				'ki-on-surface': '#1b1b1d',
+				'ki-on-surface-variant': '#45474c',
+				'ki-outline': '#e5e7eb',
+				'ki-outline-variant': '#d1d5db',
+				'ki-active-bg': '#ecfdf5',
+				'ki-active-text': '#065f46',
+				'ki-primary-glow': 'rgba(6,150,104,0.15)'
 			}
 		}
 	},

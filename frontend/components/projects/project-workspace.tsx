@@ -1,12 +1,13 @@
 'use client'
 
-import { useEffect, useCallback } from 'react'
+import { useEffect, useCallback, useState, useRef } from 'react'
+import { cn } from '@/lib/utils'
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ProjectInsightsDashboard } from './project-insights-dashboard'
 import { ProjectFileList } from './project-file-list'
 import { setSavedFolderState, type BreadcrumbItem } from '@/lib/files-folder-session'
 import { ProjectSettingsForm } from './project-settings-form'
-import { Folder, BarChart3, Building2, PenTool, ChevronRight, Users, Briefcase, Share2, Settings, Home, ClipboardList, MessageCircle, Lock } from 'lucide-react'
+import { Folder, BarChart3, Building2, PenTool, ChevronRight, ChevronLeft, Users, Briefcase, Share2, Settings, Home, ClipboardList, MessageCircle, Lock, LayoutGrid, List } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { ProjectMembersTab } from './members/project-members-tab'
@@ -58,6 +59,7 @@ interface ProjectWorkspaceProps {
     /** When set, use /e/ (engagement) routes instead of /p/ (project). */
     engagementSlug?: string
     firmSandboxOnly?: boolean
+    enableBetaFeatures?: boolean
     fileCount?: number
     sharesCount?: number
     commentsCount?: number
@@ -95,6 +97,7 @@ export function ProjectWorkspace({
     projectPersonaDisplayName,
     engagementSlug,
     firmSandboxOnly = false,
+    enableBetaFeatures = false,
     fileCount,
     sharesCount,
     commentsCount,
@@ -105,11 +108,40 @@ export function ProjectWorkspace({
     const pathname = usePathname()
     const router = useRouter()
     const { viewAsPersonaSlug } = useViewAs()
+    const [filesNavSlot, setFilesNavSlot] = useState<HTMLDivElement | null>(null)
+    const tabsScrollRef = useRef<HTMLDivElement>(null)
+    const [canScrollLeft, setCanScrollLeft] = useState(false)
+    const [canScrollRight, setCanScrollRight] = useState(false)
+
+    const updateScrollState = useCallback(() => {
+        const el = tabsScrollRef.current
+        if (!el) return
+        setCanScrollLeft(el.scrollLeft > 0)
+        setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1)
+    }, [])
+
+    useEffect(() => {
+        const el = tabsScrollRef.current
+        if (!el) return
+        updateScrollState()
+        el.addEventListener('scroll', updateScrollState)
+        const ro = new ResizeObserver(updateScrollState)
+        ro.observe(el)
+        return () => { el.removeEventListener('scroll', updateScrollState); ro.disconnect() }
+    }, [updateScrollState])
     const slugFromPath = pathname?.split('/e/')[1]?.split('/')[0] ?? pathname?.split('/p/')[1]?.split('/')[0] ?? ''
     const projectSlug = engagementSlug ?? slugFromPath
     const useEngagement = Boolean(engagementSlug)
     const base = projectBase(orgSlug, clientSlug, projectSlug, useEngagement)
     const currentTab = pathSegments?.tab ?? 'files'
+
+    // Broadcast real names so the sidebar Recents hook can replace slug-derived labels
+    useEffect(() => {
+        if (!projectSlug) return
+        window.dispatchEvent(new CustomEvent('firma-page-context', {
+            detail: { type: 'engagement', name: projectName, slug: projectSlug, clientName, clientSlug },
+        }))
+    }, [projectSlug, projectName, clientName, clientSlug])
 
     // Deeplinks for docs/comments should always land in Files tab so the file list can
     // resolve and highlight the target item.
@@ -128,6 +160,7 @@ export function ProjectWorkspace({
     }, [base, currentTab, router])
 
     const handleTabChange = useCallback((value: string) => {
+        if (value === 'board') { router.push(`${base}/board`); return }
         const suffix = value === 'shares' ? '/grid' : ''
         router.push(`${base}/${value}${suffix}`)
     }, [base, router])
@@ -138,60 +171,71 @@ export function ProjectWorkspace({
     }, [projectId, base, router])
 
     return (
-        <div className="flex flex-col h-full">
-            {/* Breadcrumbs */}
-            <div className="d-body flex items-center text-stone-500 mb-2">
-                <span className="flex items-center gap-2 text-stone-500" title="Home">
-                    <Home className="h-4 w-4" />
-                </span>
-                <ChevronRight className="h-4 w-4 mx-1 text-slate-300" />
+        <div className="flex flex-col flex-1 min-h-0">
+            {/* Breadcrumbs — monospace architectural style */}
+            <nav className="flex items-center gap-1.5 mb-4">
+                <Home className="h-4 w-4 text-[#45474c] opacity-60" />
+                <ChevronRight className="h-3.5 w-3.5 text-[#d1d5db]" />
+                <Building2 className="h-4 w-4 text-[#45474c] opacity-60" />
                 <Link
                     href={`/d/f/${orgSlug}`}
-                    className="flex items-center gap-2 hover:text-slate-900 transition-colors cursor-pointer"
+                    className="font-mono text-[11px] text-[#45474c] opacity-60 uppercase tracking-tighter hover:opacity-100 transition-opacity"
                 >
-                    <Building2 className="h-4 w-4" />
-                    <span className="font-medium">{orgName || 'Organization'}</span>
+                    {orgName || 'Organization'}
                 </Link>
                 {clientName && (
                     <>
-                        <ChevronRight className="h-4 w-4 mx-1 text-slate-300" />
-                        <Link href={`/d/f/${orgSlug}/c/${clientSlug}`} className="flex items-center gap-2 hover:text-slate-900 transition-colors cursor-pointer">
-                            <Users className="h-4 w-4" />
-                            <span className="font-medium">{clientName}</span>
+                        <ChevronRight className="h-3.5 w-3.5 text-[#d1d5db]" />
+                        <Users className="h-4 w-4 text-[#45474c] opacity-60" />
+                        <Link
+                            href={`/d/f/${orgSlug}/c/${clientSlug}`}
+                            className="font-mono text-[11px] text-[#45474c] opacity-60 uppercase tracking-tighter hover:opacity-100 transition-opacity"
+                        >
+                            {clientName}
                         </Link>
                     </>
                 )}
                 {projectName && (
                     <>
-                        <ChevronRight className="h-4 w-4 mx-1 text-slate-300" />
-                        <div className="flex items-center gap-2 text-slate-900 bg-slate-100 px-2 py-1 rounded-md">
-                            <Briefcase className="h-4 w-4" />
-                            <span className="font-semibold">{projectName}</span>
-                        </div>
+                        <ChevronRight className="h-3.5 w-3.5 text-[#d1d5db]" />
+                        <Briefcase className="h-4 w-4 text-[#069668]" />
+                        <span className="font-mono text-[11px] font-bold text-[#1b1b1d] uppercase tracking-tighter">
+                            {projectName}
+                        </span>
                     </>
                 )}
-            </div>
+            </nav>
 
-            {/* Title section – no gear; Settings is a tab when canViewSettings. Persona badge from JWT / project settings plus. */}
-            <div className="bg-white border border-stone-200 rounded-xl p-5 mb-4 shadow-sm">
-                <div className="min-w-0 flex-1 flex flex-col gap-1">
-                    <div className="flex items-center justify-between gap-4">
-                        <h1 className="d-title flex items-center gap-2.5 min-w-0">
-                            <Briefcase className="h-6 w-6 text-stone-500 shrink-0" />
-                            <span className="truncate">{projectName || 'Engagement Workspace'}</span>
-                        </h1>
-                        <div className="shrink-0 flex items-center gap-2">
+            {/* Project Identity Header — sits directly on pearl bg, no card wrapper */}
+            <div className="flex items-start justify-between gap-6 mb-6">
+                <div className="flex items-center gap-6">
+                    <div className="w-16 h-16 bg-white border border-[#e5e7eb] flex items-center justify-center rounded shadow-sm shrink-0">
+                        <Briefcase className="h-10 w-10 text-[#1b1b1d]" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-3 flex-wrap">
+                            <h1 className="font-headline text-3xl md:text-4xl font-bold tracking-tight text-[#1b1b1d] truncate">
+                                {projectName || 'Engagement Workspace'}
+                            </h1>
+                            {engagementStatus && (
+                                <span className="bg-[#f0edee] text-[#45474c] border border-[#e5e7eb] px-2 py-0.5 rounded font-mono text-[10px] tracking-tight uppercase shrink-0">
+                                    {engagementStatus}
+                                </span>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                            <p className="text-sm text-[#45474c]">Manage files, sharing and collaboration for this engagement.</p>
                             {engagementDueDate && (() => {
                                 const today = new Date(); today.setHours(0, 0, 0, 0)
                                 const due = new Date(engagementDueDate); due.setHours(0, 0, 0, 0)
                                 const days = Math.round((due.getTime() - today.getTime()) / 86400000)
                                 const label = days < 0 ? `${Math.abs(days)}d overdue` : days === 0 ? 'Due today' : days === 1 ? 'Due tomorrow' : `Due in ${days}d`
-                                const color = days < 0 ? 'bg-red-50 text-red-700 border-red-200' : days <= 7 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-slate-100 text-slate-600 border-slate-200'
-                                return <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium border ${color}`}>{label}</span>
+                                const color = days < 0 ? 'bg-red-50 text-red-700 border-red-200' : days <= 7 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-[#f0edee] text-[#45474c] border-[#e5e7eb]'
+                                return <span className={`shrink-0 rounded font-mono text-[10px] border px-2 py-0.5 ${color}`}>{label}</span>
                             })()}
                             {projectPersonaDisplayName && (
                                 <span
-                                    className="shrink-0 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700 border border-slate-200"
+                                    className="shrink-0 bg-[#ecfdf5] text-[#065f46] border border-[#069668]/20 rounded font-mono text-[10px] px-2 py-0.5"
                                     title="Your role in this project"
                                 >
                                     {projectPersonaDisplayName}
@@ -199,122 +243,196 @@ export function ProjectWorkspace({
                             )}
                         </div>
                     </div>
-                    <p className="d-subtitle mt-1">Manage insights, collaboration, and files for this engagement.</p>
                 </div>
             </div>
 
             <Tabs value={currentTab} onValueChange={handleTabChange} className="flex-1 flex flex-col min-h-0">
-                <div className="mb-6 min-w-0 w-full overflow-x-auto custom-scrollbar">
-                    <TabsList className="h-10 p-1 bg-slate-100 rounded-lg inline-flex justify-start flex-nowrap gap-1 shrink-0">
-                        <TabsTrigger
-                            value="files"
-                            className="h-full px-4 rounded-md font-medium text-slate-500 hover:bg-white hover:text-slate-900 hover:shadow-sm data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all"
+                {/* Tab strip — full-width white with border-b, scrollable for many tabs */}
+                <div className="bg-white border border-[#e5e7eb] rounded mb-3 shrink-0 flex items-center h-14">
+                    <div className="flex-1 min-w-0 relative h-full">
+                    {canScrollLeft && (
+                        <button
+                            type="button"
+                            onClick={() => tabsScrollRef.current?.scrollBy({ left: -160, behavior: 'smooth' })}
+                            className="absolute left-0 top-0 z-10 h-full w-14 flex items-center justify-center bg-gradient-to-r from-white from-70% to-transparent text-[#45474c] hover:text-[#1b1b1d] transition-colors"
+                            aria-label="Scroll tabs left"
                         >
-                            <Folder className="w-4 h-4 mr-2" />
-                            Files
-                            {fileCount !== undefined && fileCount > 0 && (
-                                <span className="ml-2 rounded-full bg-slate-900 px-1.5 py-0.5 text-xs font-medium text-white tabular-nums leading-none">
-                                    {fileCount}
-                                </span>
-                            )}
-                        </TabsTrigger>
-                        <TabsTrigger
-                            value="shares"
-                            className="h-full px-4 rounded-md font-medium text-slate-500 hover:bg-white hover:text-slate-900 hover:shadow-sm data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all"
+                            <span className="w-5 h-5 rounded-full border border-[#069668] bg-white flex items-center justify-center shadow-sm">
+                                <ChevronLeft className="w-3 h-3 text-[#069668]" />
+                            </span>
+                        </button>
+                    )}
+                    {canScrollRight && (
+                        <button
+                            type="button"
+                            onClick={() => tabsScrollRef.current?.scrollBy({ left: 160, behavior: 'smooth' })}
+                            className="absolute right-0 top-0 z-10 h-full w-14 flex items-center justify-center bg-gradient-to-l from-white from-70% to-transparent text-[#45474c] hover:text-[#1b1b1d] transition-colors"
+                            aria-label="Scroll tabs right"
                         >
-                            <Share2 className="w-4 h-4 mr-2" />
-                            Shares
-                            {sharesCount !== undefined && sharesCount > 0 && (
-                                <span className="ml-2 rounded-full bg-slate-900 px-1.5 py-0.5 text-xs font-medium text-white tabular-nums leading-none">
-                                    {sharesCount}
-                                </span>
+                            <span className="w-5 h-5 rounded-full border border-[#069668] bg-white flex items-center justify-center shadow-sm">
+                                <ChevronRight className="w-3 h-3 text-[#069668]" />
+                            </span>
+                        </button>
+                    )}
+                    <div ref={tabsScrollRef} className="overflow-x-auto h-full [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" style={{ scrollPaddingLeft: canScrollLeft ? 40 : 0, scrollPaddingRight: canScrollRight ? 40 : 0 }}>
+                    <div className="flex items-center h-full min-w-max" style={{ paddingLeft: canScrollLeft ? 56 : 0, paddingRight: canScrollRight ? 56 : 0 }}>
+                        <TabsList className="h-full p-0 bg-transparent rounded-none inline-flex justify-start gap-0 border-0">
+                            {canViewInternalTabs && (
+                                <TabsTrigger
+                                    value="analytics"
+                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                >
+                                    <BarChart3 className="w-4 h-4 mr-2" />
+                                    Analytics
+                                    <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
+                                </TabsTrigger>
                             )}
-                        </TabsTrigger>
-                        <TabsTrigger
-                            value="comments"
-                            className="h-full px-4 rounded-md font-medium text-slate-500 hover:bg-white hover:text-slate-900 hover:shadow-sm data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all"
-                        >
-                            <MessageCircle className="w-4 h-4 mr-2" />
-                            Comments
-                            {commentsCount !== undefined && commentsCount > 0 && (
-                                <span className="ml-2 rounded-full bg-slate-900 px-1.5 py-0.5 text-xs font-medium text-white tabular-nums leading-none">
-                                    {commentsCount}
-                                </span>
-                            )}
-                        </TabsTrigger>
-                        {canViewInternalTabs && (
                             <TabsTrigger
-                                value="wiki"
-                                className="group/lock h-full px-4 rounded-md font-medium text-slate-500 hover:bg-white hover:text-slate-900 hover:shadow-sm data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all"
+                                value="files"
+                                className="h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                             >
-                                <PenTool className="w-4 h-4 mr-2" />
-                                Dossier
-                                <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-slate-400 group-hover/lock:text-slate-600 transition-colors shrink-0" /></span>
-                                <span className="ml-2 rounded px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-violet-100 text-violet-600 leading-none">Beta</span>
-                                {wikiPageCount !== undefined && wikiPageCount > 0 && (
-                                    <span className="ml-1 rounded-full bg-slate-900 px-1.5 py-0.5 text-xs font-medium text-white tabular-nums leading-none">
-                                        {wikiPageCount}
+                                <Folder className="w-4 h-4 mr-2" />
+                                Files
+                                {fileCount !== undefined && fileCount > 0 && (
+                                    <span className="ml-2 font-mono text-[10px] font-bold bg-[#069668] text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
+                                        {fileCount}
                                     </span>
                                 )}
                             </TabsTrigger>
-                        )}
-                        {canViewInternalTabs && (
                             <TabsTrigger
-                                value="insights"
-                                className="group/lock h-full px-4 rounded-md font-medium text-slate-500 hover:bg-white hover:text-slate-900 hover:shadow-sm data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all"
+                                value="shares"
+                                className="h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                             >
-                                <BarChart3 className="w-4 h-4 mr-2" />
-                                Insights
-                                <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-slate-400 group-hover/lock:text-slate-600 transition-colors shrink-0" /></span>
-                            </TabsTrigger>
-                        )}
-                        {canManage && (
-                            <TabsTrigger
-                                value="audit"
-                                className="group/lock h-full px-4 rounded-md font-medium text-slate-500 hover:bg-white hover:text-slate-900 hover:shadow-sm data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all"
-                            >
-                                <ClipboardList className="w-4 h-4 mr-2" />
-                                Audit
-                                <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-slate-400 group-hover/lock:text-slate-600 transition-colors shrink-0" /></span>
-                                {auditCount !== undefined && auditCount > 0 && (
-                                    <span className="ml-2 rounded-full bg-slate-900 px-1.5 py-0.5 text-xs font-medium text-white tabular-nums leading-none">
-                                        {auditCount}
+                                <Share2 className="w-4 h-4 mr-2" />
+                                Shares
+                                {sharesCount !== undefined && sharesCount > 0 && (
+                                    <span className="ml-2 font-mono text-[10px] font-bold bg-[#069668] text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
+                                        {sharesCount}
                                     </span>
                                 )}
                             </TabsTrigger>
-                        )}
-                        {canViewInternalTabs && (
+                            {enableBetaFeatures && canViewInternalTabs && (
+                                <TabsTrigger
+                                    value="board"
+                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                >
+                                    <LayoutGrid className="w-4 h-4 mr-2" />
+                                    Board
+                                    <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
+                                    <span className="ml-2 rounded px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 leading-none">Beta</span>
+                                </TabsTrigger>
+                            )}
                             <TabsTrigger
-                                value="members"
-                                className="group/lock h-full px-4 rounded-md font-medium text-slate-500 hover:bg-white hover:text-slate-900 hover:shadow-sm data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all"
+                                value="comments"
+                                className="h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                             >
-                                <Users className="w-4 h-4 mr-2" />
-                                Members
-                                <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-slate-400 group-hover/lock:text-slate-600 transition-colors shrink-0" /></span>
-                                {memberCount !== undefined && memberCount > 0 && (
-                                    <span className="ml-2 rounded-full bg-slate-900 px-1.5 py-0.5 text-xs font-medium text-white tabular-nums leading-none">
-                                        {memberCount}
+                                <MessageCircle className="w-4 h-4 mr-2" />
+                                Comments
+                                {commentsCount !== undefined && commentsCount > 0 && (
+                                    <span className="ml-2 font-mono text-[10px] font-bold bg-[#069668] text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
+                                        {commentsCount}
                                     </span>
                                 )}
                             </TabsTrigger>
-                        )}
-                        {canViewSettings && (
-                            <TabsTrigger
-                                value="settings"
-                                className="group/lock h-full px-4 rounded-md font-medium text-slate-500 hover:bg-white hover:text-slate-900 hover:shadow-sm data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm transition-all"
-                            >
-                                <Settings className="w-4 h-4 mr-2" />
-                                Settings
-                                <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-slate-400 group-hover/lock:text-slate-600 transition-colors shrink-0" /></span>
-                            </TabsTrigger>
-                        )}
-                    </TabsList>
+                            {enableBetaFeatures && canViewInternalTabs && (
+                                <TabsTrigger
+                                    value="wiki"
+                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                >
+                                    <PenTool className="w-4 h-4 mr-2" />
+                                    Dossier
+                                    <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
+                                    <span className="ml-2 rounded px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 leading-none">Beta</span>
+                                    {wikiPageCount !== undefined && wikiPageCount > 0 && (
+                                        <span className="ml-1 font-mono text-[10px] font-bold bg-[#069668] text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
+                                            {wikiPageCount}
+                                        </span>
+                                    )}
+                                </TabsTrigger>
+                            )}
+                            {canManage && (
+                                <TabsTrigger
+                                    value="audit"
+                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                >
+                                    <ClipboardList className="w-4 h-4 mr-2" />
+                                    Audit
+                                    <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
+                                    {auditCount !== undefined && auditCount > 0 && (
+                                        <span className="ml-2 font-mono text-[10px] font-bold bg-[#069668] text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
+                                            {auditCount}
+                                        </span>
+                                    )}
+                                </TabsTrigger>
+                            )}
+                            {canViewInternalTabs && (
+                                <TabsTrigger
+                                    value="members"
+                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                >
+                                    <Users className="w-4 h-4 mr-2" />
+                                    Members
+                                    <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
+                                    {memberCount !== undefined && memberCount > 0 && (
+                                        <span className="ml-2 font-mono text-[10px] font-bold bg-[#069668] text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
+                                            {memberCount}
+                                        </span>
+                                    )}
+                                </TabsTrigger>
+                            )}
+                            {canViewSettings && (
+                                <TabsTrigger
+                                    value="settings"
+                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-[#069668] data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                >
+                                    <Settings className="w-4 h-4 mr-2" />
+                                    Settings
+                                    <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
+                                </TabsTrigger>
+                            )}
+                        </TabsList>
+                    </div>
+                    </div>
+                    </div>
+                    {/* New Document button slot — ProjectFileList portals into this when Files is active */}
+                    {currentTab === 'files' && (
+                        <div ref={setFilesNavSlot} className="shrink-0 px-3 border-l border-[#e5e7eb] flex items-center" />
+                    )}
+                    {/* Grid / List toggle — only when Shares tab is active */}
+                    {currentTab === 'shares' && (() => {
+                        const sharesBase = `${projectBase(orgSlug, clientSlug, projectSlug, useEngagement)}/shares`
+                        const sharesViewMode = pathSegments?.viewMode ?? 'grid'
+                        return (
+                            <div className="shrink-0 px-3 border-l border-[#e5e7eb] flex items-center">
+                                <div className="flex items-center bg-[#f3f4f6] p-0.5 rounded border border-[#e5e7eb]">
+                                    <button
+                                        type="button"
+                                        title="Grid view"
+                                        onClick={() => router.push(`${sharesBase}/grid`)}
+                                        className={`px-1.5 py-1 rounded transition-all ${sharesViewMode === 'grid' ? 'bg-white shadow-sm text-[#069668]' : 'text-[#45474c] hover:text-[#1b1b1d] hover:bg-[#f0edee]'}`}
+                                    >
+                                        <LayoutGrid className="h-3 w-3" />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        title="List view"
+                                        onClick={() => router.push(`${sharesBase}/list`)}
+                                        className={`px-1.5 py-1 rounded transition-all ${sharesViewMode === 'list' ? 'bg-white shadow-sm text-[#069668]' : 'text-[#45474c] hover:text-[#1b1b1d] hover:bg-[#f0edee]'}`}
+                                    >
+                                        <List className="h-3 w-3" />
+                                    </button>
+                                </div>
+                            </div>
+                        )
+                    })()}
                 </div>
 
-                {/* Only mount the active tab’s content so Files tree is not rendered when on Shares/others (performance). */}
-                <div className="flex-1 overflow-y-auto custom-scrollbar">
-                    {currentTab === 'files' && (
-                        <div className="py-1 h-full">
+                {/* Only mount the active tab's content so Files tree is not rendered when on Shares/others (performance). */}
+                {/* Shares gets its own layout (toolbar on bg + content card); all other tabs share the card wrapper */}
+                {/* Files and Shares render breadcrumb/toolbar on bg; content card is owned by the component */}
+                {(currentTab === 'files' || currentTab === 'shares' || currentTab === 'board') ? (
+                    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                        {currentTab === 'files' && (
                             <ErrorBoundary context="ProjectFileList">
                                 <ProjectSearchProvider projectId={projectId} viewAsPersonaSlug={viewAsPersonaSlug}>
                                     <ProjectFileList
@@ -329,13 +447,12 @@ export function ProjectWorkspace({
                                         restrictToSharedOnly={restrictToSharedOnly}
                                         firmId={firmId}
                                         firmSandboxOnly={firmSandboxOnly}
+                                        navSlot={filesNavSlot}
                                     />
                                 </ProjectSearchProvider>
                             </ErrorBoundary>
-                        </div>
-                    )}
-                    {currentTab === 'shares' && (
-                        <div className="py-1 h-full">
+                        )}
+                        {currentTab === 'shares' && (
                             <ErrorBoundary context="ProjectShares">
                                 <ProjectSharesTab
                                     projectId={projectId}
@@ -352,56 +469,29 @@ export function ProjectWorkspace({
                                     deeplinkBase={typeof window !== 'undefined' ? `${window.location.origin}${projectBase(orgSlug, clientSlug, projectSlug, useEngagement)}/files` : undefined}
                                 />
                             </ErrorBoundary>
-                        </div>
-                    )}
-                    {currentTab === 'comments' && (
-                        <div className="py-1 h-full">
-                            <ErrorBoundary context="ProjectComments">
-                                <ProjectCommentsTab projectId={projectId} />
-                            </ErrorBoundary>
-                        </div>
-                    )}
-                    {canViewInternalTabs && currentTab === 'members' && (
-                        <div className="py-1 h-full">
-                            <ErrorBoundary context="ProjectMembers">
-                                <ProjectMembersTab projectId={projectId} orgSlug={orgSlug} canManage={canManage} />
-                            </ErrorBoundary>
-                        </div>
-                    )}
-                    {canViewInternalTabs && currentTab === 'insights' && (
-                        <div className="py-1">
-                            <ErrorBoundary context="ProjectInsights">
-                                <ProjectInsightsDashboard
+                        )}
+                        {currentTab === 'board' && (
+                            <ErrorBoundary context="ProjectBoard">
+                                <ProjectSharesTab
                                     projectId={projectId}
-                                    orgSlug={orgSlug}
-                                    clientSlug={clientSlug}
-                                    engagementSlug={engagementSlug}
+                                    canManage={canManage}
+                                    restrictToSharedOnly={restrictToSharedOnly}
+                                    isExternalViewer={isExternalViewer}
+                                    connectorRootFolderId={connectorRootFolderId ?? undefined}
+                                    orgName={orgName}
+                                    clientName={clientName}
+                                    projectName={projectName}
+                                    onOpenInFiles={handleOpenInFiles}
+                                    sharesBasePath={`${projectBase(orgSlug, clientSlug, projectSlug, useEngagement)}/shares`}
+                                    pathViewMode="board"
+                                    deeplinkBase={typeof window !== 'undefined' ? `${window.location.origin}${projectBase(orgSlug, clientSlug, projectSlug, useEngagement)}/files` : undefined}
                                 />
                             </ErrorBoundary>
-                        </div>
-                    )}
-                    {canManage && currentTab === 'audit' && (
-                        <div className="py-1 h-full">
-                            <ErrorBoundary context="ProjectAudit">
-                                <ProjectAuditPane projectId={projectId} projectName={projectName} />
-                            </ErrorBoundary>
-                        </div>
-                    )}
-                    {currentTab === 'wiki' && canViewInternalTabs && (
-                        <div className="h-full">
-                            <ErrorBoundary context="ProjectDossier">
-                                <ProjectWikiTab
-                                    engagementId={projectId}
-                                    firmId={firmId ?? ''}
-                                    canEdit={canEdit}
-                                    initialPageSlug={pathSegments?.wikiPageSlug ?? null}
-                                    base={base}
-                                />
-                            </ErrorBoundary>
-                        </div>
-                    )}
-                    {canViewSettings && currentTab === 'settings' && (
-                        <div className="w-full py-2">
+                        )}
+                    </div>
+                ) : (currentTab === 'settings') ? (
+                    <div className="flex-1 overflow-y-auto custom-scrollbar py-4">
+                        {canViewSettings && (
                             <ProjectSettingsForm
                                 projectId={projectId}
                                 orgSlug={orgSlug}
@@ -421,10 +511,59 @@ export function ProjectWorkspace({
                                     router.refresh()
                                 }}
                             />
+                        )}
+                    </div>
+                ) : (
+                <div className="flex-1 overflow-y-auto custom-scrollbar bg-white border border-[#e5e7eb] rounded">
+                    {currentTab === 'comments' && (
+                        <div className="py-1 h-full">
+                            <ErrorBoundary context="ProjectComments">
+                                <ProjectCommentsTab projectId={projectId} />
+                            </ErrorBoundary>
+                        </div>
+                    )}
+                    {canViewInternalTabs && currentTab === 'members' && (
+                        <div className="py-1 h-full">
+                            <ErrorBoundary context="ProjectMembers">
+                                <ProjectMembersTab projectId={projectId} orgSlug={orgSlug} canManage={canManage} />
+                            </ErrorBoundary>
+                        </div>
+                    )}
+                    {canViewInternalTabs && currentTab === 'analytics' && (
+                        <div className="p-4">
+                            <ErrorBoundary context="ProjectInsights">
+                                <ProjectInsightsDashboard
+                                    projectId={projectId}
+                                    orgSlug={orgSlug}
+                                    clientSlug={clientSlug}
+                                    engagementSlug={engagementSlug}
+                                />
+                            </ErrorBoundary>
+                        </div>
+                    )}
+                    {canManage && currentTab === 'audit' && (
+                        <div className="p-4 h-full">
+                            <ErrorBoundary context="ProjectAudit">
+                                <ProjectAuditPane projectId={projectId} projectName={projectName} />
+                            </ErrorBoundary>
+                        </div>
+                    )}
+                    {currentTab === 'wiki' && canViewInternalTabs && (
+                        <div className="h-full">
+                            <ErrorBoundary context="ProjectDossier">
+                                <ProjectWikiTab
+                                    engagementId={projectId}
+                                    firmId={firmId ?? ''}
+                                    canEdit={canEdit}
+                                    initialPageSlug={pathSegments?.wikiPageSlug ?? null}
+                                    base={base}
+                                />
+                            </ErrorBoundary>
                         </div>
                     )}
                 </div>
+                )}
             </Tabs>
-        </div >
+        </div>
     )
 }

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { googleDriveConnector } from "@/lib/google-drive-connector"
 import { logger } from '@/lib/logger'
 import { requireProjectView } from '@/lib/api/project-auth'
+import { getLock } from '@/lib/sharing-settings'
 
 export async function GET(
     request: NextRequest,
@@ -190,6 +191,32 @@ export async function GET(
                 finalFiles = [...finalFiles, ...scoredIndexedFiles]
             } catch (e) {
                 logger.warn('Failed to fetch metadata for indexed search results', { error: e })
+            }
+        }
+
+        // Filter out any locked documents (intake, finalize, private) from all result sources.
+        // The indexed DB queries already exclude these via SQL, but Drive-direct results need
+        // a post-filter since Drive has no knowledge of our lock state.
+        if (finalFiles.length > 0) {
+            try {
+                const allExternalIds = finalFiles.map((f: any) => f.id).filter(Boolean)
+                const lockedRows = await (prisma as any).$queryRawUnsafe(
+                    `SELECT "externalId" FROM platform.engagement_documents
+                     WHERE "engagementId" = $1::uuid
+                       AND "externalId" = ANY($2::text[])
+                       AND (
+                         (settings->>'locked') = 'private'
+                         OR (settings->'lock'->>'type') IS NOT NULL
+                       )`,
+                    projectId,
+                    allExternalIds
+                )
+                if (lockedRows.length > 0) {
+                    const lockedSet = new Set(lockedRows.map((r: any) => r.externalId))
+                    finalFiles = finalFiles.filter((f: any) => !lockedSet.has(f.id))
+                }
+            } catch (e) {
+                logger.warn('Lock filter for search results failed', { error: e })
             }
         }
 

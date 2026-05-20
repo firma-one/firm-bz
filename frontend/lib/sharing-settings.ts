@@ -3,7 +3,7 @@
  * Supports both legacy (flat) and new (nested share/activity/comments) shapes.
  */
 
-export type ActivityStatus = 'to_do' | 'in_progress' | 'done'
+export type ActivityStatus = 'to_do' | 'in_progress' | 'in_review' | 'done'
 
 export interface ShareGuestOptions {
   publish?: boolean
@@ -152,7 +152,7 @@ export function parseSettingsFromDb(settings: unknown): ProjectDocumentSharingSe
 
   const activityBlock: ActivityBlock = activity
     ? {
-        status: activity.status === 'in_progress' || activity.status === 'done' ? activity.status : 'to_do',
+        status: (['to_do', 'in_progress', 'in_review', 'done'] as ActivityStatus[]).includes(activity.status) ? activity.status : 'to_do',
         updatedAt: activity.updatedAt || new Date().toISOString(),
         orderIndex: typeof activity.orderIndex === 'number' ? activity.orderIndex : 0,
       }
@@ -236,11 +236,11 @@ export function buildSettingsForDb(
 }
 
 // ---------------------------------------------------------------------------
-// Document Lock (intake pending / finalize)
+// Document Lock (intake pending / finalize / private)
 // ---------------------------------------------------------------------------
 
 export interface LockBlock {
-  type: 'intake' | 'finalize'
+  type: 'intake' | 'finalize' | 'private'
   uploadedBy?: string
   uploadedAt?: string
   finalizedBy?: string
@@ -252,10 +252,15 @@ export interface LockBlock {
 
 export function getLock(settings: unknown): LockBlock | null {
   if (!settings || typeof settings !== 'object') return null
-  const lock = (settings as Record<string, unknown>).lock
+  const s = settings as Record<string, unknown>
+
+  // Legacy format: settings.locked === 'private' (read-only compat — new writes use lock.type)
+  if (s.locked === 'private') return { type: 'private' }
+
+  const lock = s.lock
   if (!lock || typeof lock !== 'object') return null
   const l = lock as Record<string, unknown>
-  if (l.type !== 'intake' && l.type !== 'finalize') return null
+  if (l.type !== 'intake' && l.type !== 'finalize' && l.type !== 'private') return null
   const downgraded = Array.isArray(l.downgraded)
     ? (l.downgraded as unknown[]).filter(
         (x): x is { permissionId: string; previousRole: string } =>
@@ -266,7 +271,7 @@ export function getLock(settings: unknown): LockBlock | null {
       )
     : undefined
   return {
-    type: l.type as 'intake' | 'finalize',
+    type: l.type as 'intake' | 'finalize' | 'private',
     uploadedBy: typeof l.uploadedBy === 'string' ? l.uploadedBy : undefined,
     uploadedAt: typeof l.uploadedAt === 'string' ? l.uploadedAt : undefined,
     finalizedBy: typeof l.finalizedBy === 'string' ? l.finalizedBy : undefined,
@@ -287,8 +292,12 @@ export function isDocumentFinalized(settings: unknown): boolean {
 
 /** Returns true when the document has been marked private (hidden from EC/EV users). */
 export function isDocumentPrivate(settings: unknown): boolean {
-  if (!settings || typeof settings !== 'object') return false
-  return (settings as Record<string, unknown>).locked === 'private'
+  return getLock(settings)?.type === 'private'
+}
+
+/** Returns true when the document has any lock type (intake, finalize, or private). */
+export function isDocumentLocked(settings: unknown): boolean {
+  return getLock(settings) !== null
 }
 
 /** Flatten for UI that still expects legacy keys (e.g. Shares list response). */

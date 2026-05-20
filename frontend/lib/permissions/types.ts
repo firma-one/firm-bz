@@ -23,7 +23,7 @@ export type ProjectGateId =
   | 'project.files'
   | 'project.members'
   | 'project.shares'
-  | 'project.insights'
+  | 'project.analytics'
   | 'project.sources'
   | 'project.settings'
 
