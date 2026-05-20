@@ -607,54 +607,56 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                         )}
                         <ChevronDown className={`h-3 w-3 text-[#9ca3af] transition-transform duration-200 ${isRecentsOpen ? 'rotate-180' : ''}`} />
                       </button>
-                      {isRecentsOpen && (
-                        <div className="space-y-1.5">
-                          {recents.length === 0 ? (
-                            <p className="px-3 py-2.5 text-[0.75rem] text-[#9ca3af]">No recent pages yet</p>
-                          ) : (
-                            <>
-                              {recents.slice(0, MAX_SIDEBAR_RECENTS).map((item) => {
-                                const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
-                                const iconLabel = item.type === 'client' ? 'Client' : 'Engagement'
-                                return (
+                      <div className={`grid transition-all duration-200 ease-out ${isRecentsOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
+                        <div className="overflow-hidden">
+                          <div className="space-y-1.5 pt-0.5">
+                            {recents.length === 0 ? (
+                              <p className="px-3 py-2.5 text-[0.75rem] text-[#9ca3af]">No recent pages yet</p>
+                            ) : (
+                              <>
+                                {recents.slice(0, MAX_SIDEBAR_RECENTS).map((item) => {
+                                  const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+                                  const iconLabel = item.type === 'client' ? 'Client' : 'Engagement'
+                                  return (
+                                    <Link
+                                      key={item.href}
+                                      href={item.href}
+                                      className={`flex items-center transition-colors pl-2 pr-3 py-1.5 ${
+                                        isActive
+                                          ? 'bg-primary/10 border-l-2 border-brand-accent text-primary font-semibold'
+                                          : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'
+                                      }`}
+                                    >
+                                      <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-1.5" />
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <span className="flex items-center gap-2 min-w-0 flex-1">
+                                            {item.type === 'client' ? (
+                                              <Users className={`h-3.5 w-3.5 shrink-0 ${isActive ? 'text-primary' : 'text-[#45474c]'}`} />
+                                            ) : (
+                                              <Briefcase className={`h-3.5 w-3.5 shrink-0 ${isActive ? 'text-primary' : 'text-[#45474c]'}`} />
+                                            )}
+                                            <span className="flex-1 min-w-0 text-[0.8125rem] truncate">{item.name}</span>
+                                          </span>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="right">{iconLabel}: {item.name}</TooltipContent>
+                                      </Tooltip>
+                                    </Link>
+                                  )
+                                })}
+                                {recents.length > MAX_SIDEBAR_RECENTS && (
                                   <Link
-                                    key={item.href}
-                                    href={item.href}
-                                    className={`flex items-center transition-colors pl-2 pr-3 py-1.5 ${
-                                      isActive
-                                        ? 'bg-primary/10 border-l-2 border-brand-accent text-primary font-semibold'
-                                        : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'
-                                    }`}
+                                    href="/d/u/recent"
+                                    className="block pl-7 py-1.5 text-[0.75rem] text-primary hover:text-primary/80 font-medium"
                                   >
-                                    <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-1.5" />
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <span className="flex items-center gap-2 min-w-0 flex-1">
-                                          {item.type === 'client' ? (
-                                            <Users className={`h-3.5 w-3.5 shrink-0 ${isActive ? 'text-primary' : 'text-[#45474c]'}`} />
-                                          ) : (
-                                            <Briefcase className={`h-3.5 w-3.5 shrink-0 ${isActive ? 'text-primary' : 'text-[#45474c]'}`} />
-                                          )}
-                                          <span className="flex-1 min-w-0 text-[0.8125rem] truncate">{item.name}</span>
-                                        </span>
-                                      </TooltipTrigger>
-                                      <TooltipContent side="right">{iconLabel}: {item.name}</TooltipContent>
-                                    </Tooltip>
+                                    View all ({recents.length}) →
                                   </Link>
-                                )
-                              })}
-                              {recents.length > MAX_SIDEBAR_RECENTS && (
-                                <Link
-                                  href="/d/u/recent"
-                                  className="block pl-7 py-1.5 text-[0.75rem] text-primary hover:text-primary/80 font-medium"
-                                >
-                                  View all ({recents.length}) →
-                                </Link>
-                              )}
-                            </>
-                          )}
+                                )}
+                              </>
+                            )}
+                          </div>
                         </div>
-                      )}
+                      </div>
                     </div>
                   )}
                   {isCollapsed && recents.length > 0 && (
@@ -727,60 +729,62 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                         <ChevronDown className={`h-3 w-3 shrink-0 text-[#9ca3af] transition-transform duration-200 ${isRemindersOpen ? 'rotate-180' : ''}`} />
                       </button>
 
-                      {isRemindersOpen && (
-                        <div className="ml-1 space-y-0.5 animate-in slide-in-from-top-1 fade-in duration-200">
-                          {remindersLoading ? (
-                            <div className="pl-3 py-2 text-[0.75rem] text-[#9ca3af]">Loading…</div>
-                          ) : visibleReminders.length === 0 ? (
-                            <div className="pl-3 py-2 text-[0.75rem] text-[#9ca3af]">No reminders</div>
-                          ) : (
-                            <>
-                              {visibleReminders.slice(0, 3).map((r) => (
-                                <div
-                                  key={r.id}
-                                  className="flex items-center gap-1 pl-2 pr-1 py-1.5 hover:bg-[#f9f9fb] group"
-                                >
-                                  <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-0.5" />
-                                  <a href={r.ctaUrl ?? '#'} className="flex-1 min-w-0 flex items-center gap-1.5">
+                      <div className={`grid transition-all duration-200 ease-out ${isRemindersOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
+                        <div className="overflow-hidden">
+                          <div className="ml-1 space-y-0.5 pt-0.5">
+                            {remindersLoading ? (
+                              <div className="pl-3 py-2 text-[0.75rem] text-[#9ca3af]">Loading…</div>
+                            ) : visibleReminders.length === 0 ? (
+                              <div className="pl-3 py-2 text-[0.75rem] text-[#9ca3af]">No reminders</div>
+                            ) : (
+                              <>
+                                {visibleReminders.slice(0, 3).map((r) => (
+                                  <div
+                                    key={r.id}
+                                    className="flex items-center gap-1 pl-2 pr-1 py-1.5 hover:bg-[#f9f9fb] group"
+                                  >
+                                    <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-0.5" />
+                                    <a href={r.ctaUrl ?? '#'} className="flex-1 min-w-0 flex items-center gap-1.5">
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Clock
+                                            className="h-3 w-3 shrink-0"
+                                            style={{ color: reminderLabelColor(r.labelStyle) }}
+                                          />
+                                        </TooltipTrigger>
+                                        <TooltipContent side="right" className="text-xs">
+                                          {r.label}
+                                        </TooltipContent>
+                                      </Tooltip>
+                                      <span className="text-[0.8125rem] font-medium text-[#45474c] truncate">{r.entityName}</span>
+                                    </a>
                                     <Tooltip>
                                       <TooltipTrigger asChild>
-                                        <Clock
-                                          className="h-3 w-3 shrink-0"
-                                          style={{ color: reminderLabelColor(r.labelStyle) }}
-                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => handleReminderDone(r.id)}
+                                          className="shrink-0 h-5 w-5 flex items-center justify-center rounded border border-[#e5e7eb] bg-white text-[#45474c]/40 hover:text-emerald-600 hover:border-emerald-300 transition-colors"
+                                        >
+                                          <CheckCircle2 className="h-3 w-3" />
+                                        </button>
                                       </TooltipTrigger>
-                                      <TooltipContent side="right" className="text-xs">
-                                        {r.label}
-                                      </TooltipContent>
+                                      <TooltipContent side="right" className="text-xs">Mark as done</TooltipContent>
                                     </Tooltip>
-                                    <span className="text-[0.8125rem] font-medium text-[#45474c] truncate">{r.entityName}</span>
-                                  </a>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleReminderDone(r.id)}
-                                        className="shrink-0 h-5 w-5 flex items-center justify-center rounded border border-[#e5e7eb] bg-white text-[#45474c]/40 hover:text-emerald-600 hover:border-emerald-300 transition-colors"
-                                      >
-                                        <CheckCircle2 className="h-3 w-3" />
-                                      </button>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="right" className="text-xs">Mark as done</TooltipContent>
-                                  </Tooltip>
-                                </div>
-                              ))}
-                              <Link
-                                href="/d/u/reminders"
-                                className="block pl-7 py-1.5 text-[0.75rem] text-primary hover:text-primary/80 font-medium"
-                              >
-                                {visibleReminders.length > 3
-                                  ? `View all (${visibleReminders.length}) →`
-                                  : 'View all →'}
-                              </Link>
-                            </>
-                          )}
+                                  </div>
+                                ))}
+                                <Link
+                                  href="/d/u/reminders"
+                                  className="block pl-7 py-1.5 text-[0.75rem] text-primary hover:text-primary/80 font-medium"
+                                >
+                                  {visibleReminders.length > 3
+                                    ? `View all (${visibleReminders.length}) →`
+                                    : 'View all →'}
+                                </Link>
+                              </>
+                            )}
+                          </div>
                         </div>
-                      )}
+                      </div>
                     </div>
                   ) : (
                     <Tooltip>

@@ -288,14 +288,14 @@ export function CommandPalette({ onOpenChange }: { onOpenChange?: (open: boolean
                       type="button"
                       className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
                         isActive
-                          ? "bg-firma/10 text-firma"
+                          ? "bg-primary/10 text-primary"
                           : "text-[#1b1b1d] hover:bg-[#f9f9fb]"
                       }`}
                       onMouseEnter={() => setActiveIndex(idx)}
                       onClick={() => navigate(item.href)}
                     >
                       <span
-                        className={`shrink-0 ${isActive && !item.adminOnly ? "text-firma" : ""}`}
+                        className={`shrink-0 ${isActive && !item.adminOnly ? "text-primary" : ""}`}
                         style={!isActive && item.iconColor ? { color: item.iconColor } : undefined}
                       >
                         {item.icon}

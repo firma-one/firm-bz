@@ -1354,7 +1354,7 @@ const OnboardingContent = () => {
                         {/* Domain Choice Screen (Step 0) */}
                         {step === 0 && domainOptions && (
                             <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-                                <div className="mb-4">
+                                <div className="mb-6">
                                     <h1 className="font-headline text-3xl font-bold text-[#1b1b1d] mb-2">Choose your workspace</h1>
                                     <p className="text-[0.8125rem] text-[#45474c]">
                                         Your email is part of an organization that uses {BRAND_NAME}
@@ -1362,52 +1362,62 @@ const OnboardingContent = () => {
                                 </div>
 
                                 {user?.email && (
-                                    <div className="bg-[#f9f9fb] border border-[#e5e7eb] rounded-[2px] p-4 mb-8 flex items-center gap-3">
-                                        <div className="h-10 w-10 rounded-[2px] bg-white border border-[#e5e7eb] flex items-center justify-center flex-shrink-0 text-[#1b1b1d] font-bold text-sm">
+                                    <div className="bg-[#f9f9fb] border border-[#e5e7eb] rounded-[2px] px-4 py-3 mb-8 flex items-center gap-3">
+                                        <div className="h-8 w-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0 text-primary font-bold text-xs">
                                             {user.email.charAt(0).toUpperCase()}
                                         </div>
-                                        <p className="text-[0.8125rem] font-bold text-[#1b1b1d]">{user.email}</p>
+                                        <p className="text-[0.8125rem] text-[#45474c]">{user.email}</p>
                                     </div>
                                 )}
 
-                                <div className="space-y-3 mb-6">
-                                    {domainOptions.orgsAlreadyIn.map((org: DomainOrgOption) => (
-                                        <button
-                                            key={org.id}
-                                            type="button"
-                                            className="w-full flex items-center gap-4 p-4 rounded-[2px] border border-[#e5e7eb] bg-white hover:bg-[#f9f9fb] hover:border-primary/30 text-left transition-colors group"
-                                            onClick={() => router.push(`/d/f/${org.slug}`)}
-                                        >
-                                            <div className="h-10 w-10 rounded-[2px] bg-[#f9f9fb] border border-[#e5e7eb] flex items-center justify-center flex-shrink-0">
-                                                <Building2 className="h-5 w-5 text-[#45474c]" />
-                                            </div>
-                                            <div className="flex-1">
-                                                <p className="font-bold text-[#1b1b1d]">Continue to {org.name}</p>
-                                                <p className="text-xs text-[#45474c]">You're already a member</p>
-                                            </div>
-                                            <ArrowRight className="h-5 w-5 text-[#45474c]/40 group-hover:text-[#45474c]" />
-                                        </button>
-                                    ))}
-                                </div>
+                                {/* Already-in orgs as cards */}
+                                {domainOptions.orgsAlreadyIn.length > 0 && (
+                                    <div className="grid grid-cols-1 gap-3 mb-6 sm:grid-cols-2">
+                                        {domainOptions.orgsAlreadyIn.map((org: DomainOrgOption) => (
+                                            <button
+                                                key={org.id}
+                                                type="button"
+                                                className="group relative flex flex-col gap-4 p-5 rounded-[2px] border border-[#e5e7eb] bg-white hover:border-primary/40 hover:shadow-md text-left transition-all"
+                                                onClick={() => router.push(`/d/f/${org.slug}`)}
+                                            >
+                                                <div className="flex items-start justify-between">
+                                                    <div className="h-12 w-12 rounded-[2px] bg-[#f9f9fb] border border-[#e5e7eb] flex items-center justify-center flex-shrink-0">
+                                                        <Building2 className="h-6 w-6 text-[#45474c]" />
+                                                    </div>
+                                                    <ArrowRight className="h-4 w-4 text-[#45474c]/30 group-hover:text-primary transition-colors mt-1" />
+                                                </div>
+                                                <div>
+                                                    <p className="font-bold text-[#1b1b1d] text-base leading-tight mb-1">{org.name}</p>
+                                                    <p className="text-xs text-[#45474c]/70">You're already a member</p>
+                                                </div>
+                                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-primary bg-primary/10 px-2 py-0.5 rounded-sm w-fit">
+                                                    Continue <ArrowRight className="h-2.5 w-2.5" />
+                                                </span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
 
                                 {domainOptions.orgsToJoin.length > 0 && (
                                     <>
-                                        <div className="relative mb-6">
-                                            <div className="absolute inset-0 flex items-center">
-                                                <div className="w-full border-t border-[#e5e7eb]" />
+                                        {domainOptions.orgsAlreadyIn.length > 0 && (
+                                            <div className="relative mb-6">
+                                                <div className="absolute inset-0 flex items-center">
+                                                    <div className="w-full border-t border-[#e5e7eb]" />
+                                                </div>
+                                                <div className="relative flex justify-center text-xs">
+                                                    <span className="px-2 bg-white text-[#45474c] text-xs">or join</span>
+                                                </div>
                                             </div>
-                                            <div className="relative flex justify-center text-xs">
-                                                <span className="px-2 bg-white text-[#45474c] text-xs">or</span>
-                                            </div>
-                                        </div>
+                                        )}
 
-                                        <div className="space-y-3 mb-6">
+                                        <div className="grid grid-cols-1 gap-3 mb-6 sm:grid-cols-2">
                                             {domainOptions.orgsToJoin.map((org: DomainOrgOption) => (
                                                 <button
                                                     key={org.id}
                                                     type="button"
                                                     disabled={domainJoiningId !== null}
-                                                    className="w-full flex items-center gap-4 p-4 rounded-[2px] border border-[#e5e7eb] bg-white hover:bg-[#f9f9fb] hover:border-primary/30 text-left transition-colors disabled:opacity-50 group"
+                                                    className="group relative flex flex-col gap-4 p-5 rounded-[2px] border border-[#e5e7eb] bg-white hover:border-primary/40 hover:shadow-md text-left transition-all disabled:opacity-50"
                                                     onClick={async () => {
                                                         setDomainJoiningId(org.id)
                                                         setDomainError(null)
@@ -1420,23 +1430,37 @@ const OnboardingContent = () => {
                                                         }
                                                     }}
                                                 >
-                                                    <div className="h-10 w-10 rounded-[2px] bg-[#f9f9fb] border border-[#e5e7eb] flex items-center justify-center flex-shrink-0">
-                                                        {domainJoiningId === org.id ? (
-                                                            <LoadingSpinner size="sm" />
-                                                        ) : (
-                                                            <LogIn className="h-5 w-5 text-[#45474c]" />
-                                                        )}
+                                                    <div className="flex items-start justify-between">
+                                                        <div className="h-12 w-12 rounded-[2px] bg-[#f9f9fb] border border-[#e5e7eb] flex items-center justify-center flex-shrink-0">
+                                                            {domainJoiningId === org.id ? (
+                                                                <LoadingSpinner size="sm" />
+                                                            ) : (
+                                                                <LogIn className="h-6 w-6 text-[#45474c]" />
+                                                            )}
+                                                        </div>
+                                                        <ArrowRight className="h-4 w-4 text-[#45474c]/30 group-hover:text-primary transition-colors mt-1" />
                                                     </div>
-                                                    <div className="flex-1">
-                                                        <p className="font-bold text-[#1b1b1d]">Join {org.name}</p>
-                                                        <p className="text-xs text-[#45474c]">Request access</p>
+                                                    <div>
+                                                        <p className="font-bold text-[#1b1b1d] text-base leading-tight mb-1">{org.name}</p>
+                                                        <p className="text-xs text-[#45474c]/70">Request access to join</p>
                                                     </div>
-                                                    <ArrowRight className="h-5 w-5 text-[#45474c]/40 group-hover:text-[#45474c]" />
+                                                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-[#45474c] bg-[#f9f9fb] border border-[#e5e7eb] px-2 py-0.5 rounded-sm w-fit">
+                                                        Join workspace
+                                                    </span>
                                                 </button>
                                             ))}
                                         </div>
                                     </>
                                 )}
+
+                                <div className="relative mb-6">
+                                    <div className="absolute inset-0 flex items-center">
+                                        <div className="w-full border-t border-[#e5e7eb]" />
+                                    </div>
+                                    <div className="relative flex justify-center text-xs">
+                                        <span className="px-2 bg-white text-[#45474c] text-xs">or</span>
+                                    </div>
+                                </div>
 
                                 <button
                                     type="button"

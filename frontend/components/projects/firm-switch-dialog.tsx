@@ -5,13 +5,11 @@ import { useRouter } from 'next/navigation'
 import {
     Dialog,
     DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden"
 import { Button } from "@/components/ui/button"
-import { Building2, AlertCircle } from "lucide-react"
+import { Building2 } from "lucide-react"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { switchFirm } from '@/lib/actions/firms'
 
@@ -77,64 +75,64 @@ export function FirmSwitchDialog({
 
     return (
         <Dialog open={open} onOpenChange={handleCancel}>
-            <DialogContent className="sm:max-w-[425px] border-slate-200">
-                <DialogHeader>
-                    <div className="flex items-center gap-3 mb-2">
-                        <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center">
-                            <AlertCircle className="h-5 w-5 text-slate-600" />
-                        </div>
-                        <DialogTitle className="text-slate-900">Switch Firm</DialogTitle>
+            <DialogContent className="sm:max-w-[420px] border-[#e5e7eb] p-0 gap-0 rounded-[2px]">
+
+                <VisuallyHidden><DialogTitle>Switch Firm</DialogTitle></VisuallyHidden>
+
+                {/* Header */}
+                <div className="px-5 py-4 border-b border-[#e5e7eb] bg-[#f9f9fb] flex items-start gap-3">
+                    <div className="mt-0.5 h-7 w-7 rounded bg-primary/10 flex items-center justify-center shrink-0">
+                        <Building2 className="h-3.5 w-3.5 text-primary" />
                     </div>
-                    <DialogDescription className="pt-2 text-slate-600">
+                    <div>
+                        <p className="text-sm font-semibold text-[#1b1b1d] leading-tight">Switch Firm</p>
+                        <p className="text-xs text-[#45474c] mt-0.5">You are switching to a different firm workspace.</p>
+                    </div>
+                </div>
+
+                {/* Body */}
+                <div className="p-5 space-y-4">
+                    {error && (
+                        <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs px-3 py-2 rounded">
+                            {error}
+                        </div>
+                    )}
+                    <p className="text-sm text-[#45474c]">
                         {currentFirmName ? (
                             <>
-                                You are about to switch from <strong>{currentFirmName}</strong> to <strong>{targetFirmName}</strong>.
+                                You are about to switch from <span className="font-semibold text-[#1b1b1d]">{currentFirmName}</span> to <span className="font-semibold text-[#1b1b1d]">{targetFirmName}</span>.
                             </>
                         ) : (
                             <>
-                                You are about to switch to <strong>{targetFirmName}</strong>.
+                                You are about to switch to <span className="font-semibold text-[#1b1b1d]">{targetFirmName}</span>.
                             </>
                         )}
-                        <br />
-                        <br />
+                    </p>
+                    <p className="text-xs text-[#9a9ba0]">
                         Your permissions will be refreshed for this firm workspace.
-                    </DialogDescription>
-                </DialogHeader>
+                    </p>
+                </div>
 
-                {error && (
-                    <div className="px-4 py-3 bg-slate-50 border border-slate-200 rounded-md">
-                        <p className="text-sm text-slate-700">{error}</p>
-                    </div>
-                )}
-
-                <DialogFooter>
+                {/* Footer */}
+                <div className="px-5 py-3 border-t border-[#e5e7eb] flex items-center justify-end gap-3">
                     <Button
                         type="button"
                         variant="outline"
-                        className="border-slate-200 text-slate-700 hover:bg-slate-50"
+                        className="!rounded-[2px] text-[10px] font-headline font-bold tracking-widest uppercase border-gray-300"
                         onClick={handleCancel}
                         disabled={isLoading}
                     >
                         Cancel
                     </Button>
                     <Button
-                        variant="blackCta"
+                        variant="greenCta"
                         onClick={handleSwitch}
                         disabled={isLoading}
+                        className="min-w-[8rem] text-[10px] font-headline font-bold tracking-widest uppercase"
                     >
-                        {isLoading ? (
-                            <>
-                                <LoadingSpinner size="sm" className="mr-2" />
-                                Switching...
-                            </>
-                        ) : (
-                            <>
-                                <Building2 className="h-4 w-4 mr-2" />
-                                Switch Firm
-                            </>
-                        )}
+                        {isLoading ? <LoadingSpinner size="sm" /> : 'Switch Firm'}
                     </Button>
-                </DialogFooter>
+                </div>
             </DialogContent>
         </Dialog>
     )
