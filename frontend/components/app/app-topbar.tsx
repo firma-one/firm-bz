@@ -12,6 +12,93 @@ import { Tip } from "@/components/ui/tip"
 import { RemindersPanel } from "@/components/app/reminders-panel"
 import { CommandPalette } from "@/components/app/command-palette"
 
+// --- Typewriter trigger text ---
+const TYPEWRITER_PHRASES = [
+  "Go to Clients…",
+  "Go to Analytics…",
+  "Go to Reminders…",
+  "Go to Bookmarks…",
+  "Go to Notifications…",
+  "Go to Profile…",
+  "Go to Settings…",
+]
+const TYPE_MS = 65
+const ERASE_MS = 25
+const HOLD_MS = 2200
+const INTER_PHRASE_MS = 450
+const LOOP_DELAY_MS = 10000
+
+function TypewriterText({ isOpen }: { isOpen: boolean }) {
+  const [text, setText] = useState("Go to…")
+  const [cursorOn, setCursorOn] = useState(true)
+  const [showCursor, setShowCursor] = useState(false)
+
+  useEffect(() => {
+    const id = setInterval(() => setCursorOn((v) => !v), 530)
+    return () => clearInterval(id)
+  }, [])
+
+  // Reset immediately when palette opens
+  useEffect(() => {
+    if (isOpen) {
+      setText("Go to…")
+      setShowCursor(false)
+    }
+  }, [isOpen])
+
+  // Typewriter loop — restarts cleanly each time palette closes
+  useEffect(() => {
+    if (isOpen) return
+    let cancelled = false
+    const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
+
+    async function run() {
+      await sleep(1800)
+      let idx = 0
+      while (!cancelled) {
+        setShowCursor(true)
+        const phrase = TYPEWRITER_PHRASES[idx % TYPEWRITER_PHRASES.length]
+        for (let c = 1; c <= phrase.length; c++) {
+          if (cancelled) return
+          setText(phrase.slice(0, c))
+          await sleep(TYPE_MS)
+        }
+        await sleep(HOLD_MS)
+        if (cancelled) return
+        for (let c = phrase.length - 1; c >= 0; c--) {
+          if (cancelled) return
+          setText(phrase.slice(0, c))
+          await sleep(ERASE_MS)
+        }
+        idx++
+        if (idx % TYPEWRITER_PHRASES.length === 0) {
+          setShowCursor(false)
+          setText("Go to…")
+          await sleep(LOOP_DELAY_MS)
+        } else {
+          await sleep(INTER_PHRASE_MS)
+        }
+      }
+    }
+
+    run()
+    return () => { cancelled = true }
+  }, [isOpen])
+
+  return (
+    <span className="flex-1 text-left">
+      {text}
+      {showCursor && (
+        <span
+          aria-hidden
+          className="inline-block w-[1.5px] h-[13px] bg-[#45474c]/50 align-middle ml-[1px]"
+          style={{ opacity: cursorOn ? 1 : 0 }}
+        />
+      )}
+    </span>
+  )
+}
+
 // Cache firm branding by slug (in-memory for session)
 const brandingCache = new Map<string, { branding: OrganizationBranding | null; firmId?: string }>()
 
@@ -68,10 +155,11 @@ function setBrandingInSession(slug: string, branding: OrganizationBranding | nul
 export function AppTopbar() {
   const { user } = useAuth()
   const pathname = usePathname()
-  const [firmName, setFirmName] = useState<string>('')
+  const [, setFirmName] = useState<string>('')
   const [branding, setBranding] = useState<OrganizationBranding | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [, setLoading] = useState(true)
   const [mounted, setMounted] = useState(false)
+  const [paletteOpen, setPaletteOpen] = useState(false)
   const currentSlugRef = useRef<string | null>(null)
 
   const [showBookmarksDropdown, setShowBookmarksDropdown] = useState(false)
@@ -360,20 +448,30 @@ export function AppTopbar() {
 
       {/* Center: Command palette trigger */}
       <div className="flex-1 flex justify-center px-12">
-        <button
-          type="button"
-          onClick={() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true, bubbles: true }))}
-          className="flex items-center gap-2.5 w-full max-w-sm bg-[#f9f9fb] border border-[#e5e7eb] rounded-sm px-3 py-2 text-sm text-[#45474c]/60 hover:border-[#069668]/40 hover:bg-white transition-colors group"
-          aria-label="Open command palette"
-        >
-          <Search className="h-4 w-4 shrink-0" />
-          <span className="flex-1 text-left">Go to…</span>
-          <kbd className="hidden sm:inline-flex items-center gap-0.5 rounded border border-[#e5e7eb] bg-white px-1.5 py-0.5 text-[10px] font-mono text-[#45474c]/50 group-hover:border-[#069668]/30">
-            ⌘K
-          </kbd>
-        </button>
-      </div>
-      <CommandPalette />
+        {(() => {
+          const isMac = mounted && /Mac|iPhone|iPod|iPad/i.test(navigator.platform)
+          const modKey = !mounted ? '⌘' : isMac ? '⌘' : 'Ctrl'
+          return (
+            <button
+              type="button"
+              onClick={() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true, bubbles: true }))}
+              className="flex items-center gap-2.5 w-full max-w-sm bg-[#f9f9fb] border border-[#e5e7eb] rounded-sm px-3 py-2 text-sm text-[#45474c]/60 hover:border-[#069668]/40 hover:bg-white transition-colors group"
+              aria-label="Open command palette"
+            >
+              <Search className="h-4 w-4 shrink-0" />
+              <TypewriterText isOpen={paletteOpen} />
+              <span className="hidden sm:inline-flex items-center gap-1">
+                <kbd className="inline-flex items-center justify-center rounded border border-[#d1d5db] bg-white px-1.5 py-0.5 text-[11px] font-semibold font-mono text-[#45474c] shadow-[0_1px_0_0_#d1d5db] leading-none">
+                  {modKey}
+                </kbd>
+                <kbd className="inline-flex items-center justify-center rounded border border-[#d1d5db] bg-white px-1.5 py-0.5 text-[11px] font-semibold font-mono text-[#45474c] shadow-[0_1px_0_0_#d1d5db] leading-none">
+                  K
+                </kbd>
+              </span>
+            </button>
+          )
+        })()}</div>
+      <CommandPalette onOpenChange={setPaletteOpen} />
 
       {/* Right: Utility actions — w-64, justify-end */}
       <div className="w-64 shrink-0 flex items-center justify-end gap-1 pr-4">

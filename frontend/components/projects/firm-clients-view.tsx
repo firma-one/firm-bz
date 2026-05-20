@@ -287,7 +287,7 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
 
                     {canViewOrgAudit && (orgId ?? (clients[0]?.firmId ?? clients[0]?.firmId)) && (
                         <TabsContent value="analytics" className="m-0">
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 22rem', gap: '1.5rem', paddingTop: '0.5rem', paddingBottom: '1.5rem' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 22rem', gap: '1.5rem', paddingBottom: '1.5rem' }}>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', minWidth: 0 }}>
                                     <ErrorBoundary context="FirmInsightsTab">
                                         <FirmBusinessInsights

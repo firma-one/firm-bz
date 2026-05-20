@@ -90,7 +90,7 @@ function ReminderRow({ reminder, onMarkDone, isMarkingDone }: { reminder: Remind
     const labelClass = reminderLabelColor(reminder.labelStyle)
     const typeBadge = reminderTypeBadge(reminder.entityKey, reminder.action)
     return (
-        <div className="flex items-start justify-between gap-3 px-4 py-3 hover:bg-[#f3f4f6] transition-colors rounded border border-gray-100 bg-white">
+        <div className="flex items-start justify-between gap-3 px-4 py-3 hover:bg-[#f3f4f6] transition-colors rounded border border-[#d1d5db] bg-white shadow-sm">
             <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-gray-900 truncate">{reminder.entityName}</p>
                 <div className="flex items-center gap-1.5 mt-1 flex-wrap">
@@ -137,7 +137,7 @@ function ThreadRow({ item, firmSlug }: { item: UnansweredThreadItem; firmSlug: s
             href={`/d/f/${firmSlug}/c/${item.clientSlug}/e/${item.engagementSlug}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-[#f3f4f6] transition-colors rounded border border-gray-100 bg-white"
+            className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-[#f3f4f6] transition-colors rounded border border-[#d1d5db] bg-white shadow-sm"
         >
             <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
@@ -163,7 +163,7 @@ function ProspectRow({ item, firmSlug }: { item: ProspectItem; firmSlug: string 
             href={`/d/f/${firmSlug}/c/${item.clientSlug}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-[#f3f4f6] transition-colors rounded border border-gray-100 bg-white"
+            className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-[#f3f4f6] transition-colors rounded border border-[#d1d5db] bg-white shadow-sm"
         >
             <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
@@ -193,7 +193,7 @@ function InviteRow({ item, firmSlug }: { item: PendingInviteItem; firmSlug: stri
             href={`/d/f/${firmSlug}/c/${item.clientSlug}/e/${item.engagementSlug}/members`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-[#f3f4f6] transition-colors rounded border border-gray-100 bg-white"
+            className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-[#f3f4f6] transition-colors rounded border border-[#d1d5db] bg-white shadow-sm"
         >
             <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-gray-900 truncate">{item.email}</p>
@@ -216,7 +216,7 @@ function EngagementDueRow({ item, firmSlug }: { item: EngagementDueSoonItem; fir
             href={`/d/f/${firmSlug}/c/${item.clientSlug}/e/${item.engagementSlug}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-[#f3f4f6] transition-colors rounded border border-gray-100 bg-white"
+            className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-[#f3f4f6] transition-colors rounded border border-[#d1d5db] bg-white shadow-sm"
         >
             <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-gray-900 truncate">{item.engagementName}</p>
@@ -238,7 +238,7 @@ function DriveAlertRow({ item, firmSlug }: { item: EngagementDriveAlert; firmSlu
             href={`/d/f/${firmSlug}/c/${item.clientSlug}/e/${item.engagementSlug}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-[#f3f4f6] transition-colors rounded border border-gray-100 bg-white"
+            className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-[#f3f4f6] transition-colors rounded border border-[#d1d5db] bg-white shadow-sm"
         >
             <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-gray-900 truncate">{item.engagementName}</p>
@@ -387,7 +387,18 @@ export function FirmActionCenter({ firmId, firmSlug }: FirmActionCenterProps) {
     const hasPartialScan = totalDriveCount > scannedCount && totalDriveCount > 0
 
     return (
-        <div className="flex flex-col gap-3 border border-[#e5e7eb] rounded p-4 bg-[#f3f4f6] shadow-sm h-full">
+        <div
+            className="flex flex-col gap-3 border border-[#e5e7eb] rounded p-4 h-full"
+            style={{
+                backgroundColor: '#ffffff',
+                background: [
+                    'linear-gradient(135deg, rgba(243,244,246,0.3) 25%, transparent 25%) -10px 0 / 20px 20px',
+                    'linear-gradient(225deg, rgba(243,244,246,0.5) 25%, transparent 25%) -10px 0 / 20px 20px',
+                    'linear-gradient(315deg, rgba(243,244,246,0.3) 25%, transparent 25%) 0px 0 / 20px 20px',
+                    'linear-gradient(45deg, rgba(243,244,246,0.5) 25%, #ffffff 25%) 0px 0 / 20px 20px',
+                ].join(', '),
+            }}
+        >
             {/* Header */}
             <div className="flex items-center justify-between">
                 {acView === 'summary' ? (
@@ -396,7 +407,7 @@ export function FirmActionCenter({ firmId, firmSlug }: FirmActionCenterProps) {
                     <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2 duration-200">
                         <button
                             onClick={() => setAcView('summary')}
-                            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-gray-200 hover:bg-gray-300 active:scale-95 transition-all duration-150 text-gray-700 font-medium text-xs"
+                            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-[#f3f4f6] hover:bg-[#e5e7eb] active:scale-95 transition-all duration-150 text-gray-700 font-medium text-xs"
                         >
                             <ArrowLeft className="h-3.5 w-3.5" />
                             Back
@@ -412,7 +423,7 @@ export function FirmActionCenter({ firmId, firmSlug }: FirmActionCenterProps) {
                 {acView === 'summary' && (
                     <button
                         onClick={() => setRefreshTick((t) => t + 1)}
-                        className="p-1.5 rounded-lg bg-gray-200 hover:bg-gray-300 transition-colors"
+                        className="p-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors"
                         title="Refresh"
                     >
                         <RefreshCw className={`h-3.5 w-3.5 text-gray-600 ${loading ? 'animate-spin' : ''}`} />
@@ -439,7 +450,7 @@ export function FirmActionCenter({ firmId, firmSlug }: FirmActionCenterProps) {
                                 {overdueCount > 0 && (
                                     <button
                                         onClick={() => setAcView('overdue')}
-                                        className="w-full flex items-center justify-between p-3 bg-white rounded border border-red-100 shadow-sm hover:bg-red-50 hover:shadow-md hover:scale-[1.01] active:scale-[0.99] transition-all duration-150"
+                                        className="w-full flex items-center justify-between p-3 bg-white rounded border border-[#d1d5db] shadow-sm hover:bg-red-50 hover:scale-[1.01] active:scale-[0.99] transition-all duration-150"
                                     >
                                         <div className="flex items-center gap-3">
                                             <div className="p-2 rounded-lg bg-red-50">
@@ -459,7 +470,7 @@ export function FirmActionCenter({ firmId, firmSlug }: FirmActionCenterProps) {
                                 {upcomingCount > 0 && (
                                     <button
                                         onClick={() => setAcView('upcoming')}
-                                        className="w-full flex items-center justify-between p-3 bg-white rounded border border-amber-100 shadow-sm hover:bg-amber-50 hover:shadow-md hover:scale-[1.01] active:scale-[0.99] transition-all duration-150"
+                                        className="w-full flex items-center justify-between p-3 bg-white rounded border border-[#d1d5db] shadow-sm hover:bg-amber-50 hover:scale-[1.01] active:scale-[0.99] transition-all duration-150"
                                     >
                                         <div className="flex items-center gap-3">
                                             <div className="p-2 rounded-lg bg-amber-50">
@@ -483,7 +494,7 @@ export function FirmActionCenter({ firmId, firmSlug }: FirmActionCenterProps) {
                         {threadsCount > 0 && (
                             <button
                                 onClick={() => setAcView('threads')}
-                                className="w-full flex items-center justify-between p-3 bg-white rounded border border-purple-100 shadow-sm hover:bg-purple-50 hover:shadow-md hover:scale-[1.01] active:scale-[0.99] transition-all duration-150"
+                                className="w-full flex items-center justify-between p-3 bg-white rounded border border-[#d1d5db] shadow-sm hover:bg-purple-50 hover:scale-[1.01] active:scale-[0.99] transition-all duration-150"
                             >
                                 <div className="flex items-center gap-3">
                                     <div className="p-2 rounded-lg bg-purple-50">
@@ -533,12 +544,12 @@ export function FirmActionCenter({ firmId, firmSlug }: FirmActionCenterProps) {
                                 </div>
                                 <div className="flex flex-col gap-2">
                                     {([
-                                        { key: 'sharing' as const, icon: Share2, label: 'Sharing', count: sharingFileCount, engCount: driveAlerts?.sharing.length ?? 0, active: { border: 'border-blue-100', hover: 'hover:bg-blue-50', text: 'text-blue-700', iconBg: 'bg-blue-50', iconText: 'text-blue-600', chevron: 'text-blue-400', num: 'text-blue-600' } },
-                                        { key: 'sensitive' as const, icon: FileWarning, label: 'Sensitive', count: sensitiveFileCount, engCount: driveAlerts?.sensitive.length ?? 0, active: { border: 'border-orange-100', hover: 'hover:bg-orange-50', text: 'text-orange-700', iconBg: 'bg-orange-50', iconText: 'text-orange-600', chevron: 'text-orange-400', num: 'text-orange-600' } },
-                                        { key: 'storage' as const, icon: HardDrive, label: 'Storage', count: storageFileCount, engCount: driveAlerts?.storage.length ?? 0, active: { border: 'border-purple-100', hover: 'hover:bg-purple-50', text: 'text-purple-700', iconBg: 'bg-purple-50', iconText: 'text-purple-600', chevron: 'text-purple-400', num: 'text-purple-600' } },
+                                        { key: 'sharing' as const, icon: Share2, label: 'Sharing', count: sharingFileCount, engCount: driveAlerts?.sharing.length ?? 0, active: { border: 'border-[#d1d5db]', hover: 'hover:bg-blue-50', text: 'text-blue-700', iconBg: 'bg-blue-50', iconText: 'text-blue-600', chevron: 'text-blue-400', num: 'text-blue-600' } },
+                                        { key: 'sensitive' as const, icon: FileWarning, label: 'Sensitive', count: sensitiveFileCount, engCount: driveAlerts?.sensitive.length ?? 0, active: { border: 'border-[#d1d5db]', hover: 'hover:bg-orange-50', text: 'text-orange-700', iconBg: 'bg-orange-50', iconText: 'text-orange-600', chevron: 'text-orange-400', num: 'text-orange-600' } },
+                                        { key: 'storage' as const, icon: HardDrive, label: 'Storage', count: storageFileCount, engCount: driveAlerts?.storage.length ?? 0, active: { border: 'border-[#d1d5db]', hover: 'hover:bg-purple-50', text: 'text-purple-700', iconBg: 'bg-purple-50', iconText: 'text-purple-600', chevron: 'text-purple-400', num: 'text-purple-600' } },
                                     ]).map(({ key, icon: Icon, label, count, engCount, active }) => {
                                         const isAlert = count > 0
-                                        const border = isAlert ? active.border : 'border-green-100'
+                                        const border = isAlert ? active.border : 'border-[#d1d5db]'
                                         const hover = isAlert ? active.hover : 'hover:bg-green-50'
                                         const textColor = isAlert ? active.text : 'text-green-700'
                                         const iconBg = isAlert ? active.iconBg : 'bg-green-50'
@@ -550,7 +561,7 @@ export function FirmActionCenter({ firmId, firmSlug }: FirmActionCenterProps) {
                                             <button
                                                 key={key}
                                                 onClick={() => setAcView(key)}
-                                                className={`w-full flex items-center justify-between p-3 bg-white rounded border ${border} shadow-sm ${hover} hover:shadow-md hover:scale-[1.01] active:scale-[0.99] transition-all duration-150`}
+                                                className={`w-full flex items-center justify-between p-3 bg-white rounded border ${border} shadow-sm ${hover} hover:scale-[1.01] active:scale-[0.99] transition-all duration-150`}
                                             >
                                                 <div className="flex items-center gap-3">
                                                     <div className={`p-2 rounded-lg ${iconBg}`}>
