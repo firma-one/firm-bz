@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
-import { Building2 } from "lucide-react"
+import { Building2, SquarePlus } from "lucide-react"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { createFirm } from '@/lib/actions/firms'
 import { useAuth } from '@/lib/auth-context'
