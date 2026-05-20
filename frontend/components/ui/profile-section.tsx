@@ -6,7 +6,8 @@ import Link from "next/link"
 import { LogOut, ChevronDown, ChevronUp, Building2, CreditCard, UserCircle, LifeBuoy, Plug, MonitorCheck } from "lucide-react"
 import { ProfileBubble, ProfileBubblePopupContent } from "@/components/ui/profile-bubble-popup"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import Logo from "@/components/Logo"
+import { BrandMarkIcon } from "@/components/brand/BrandMarkIcon"
+import { BrandName } from "@/components/brand/BrandName"
 
 interface ProfileSectionProps {
   user: {
@@ -267,10 +268,20 @@ export function ProfileSection({
                     Sign Out
                   </button>
                   <div className="-mx-3 mt-2 border-t border-[#e5e7eb]" />
-                  <div className="flex items-center justify-center gap-1.5 pt-3 pb-1">
-                    <span className="text-xs text-[#9a9ba0]">Powered by</span>
-                    <a href="https://www.firma.bz" target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
-                      <Logo size="sm" showText={false} />
+                  <div className="flex flex-col items-start gap-1.5 pt-3 pb-1">
+                    <span className="text-[10px] text-[#9a9ba0] tracking-wide uppercase">Powered by</span>
+                    <a href="https://www.firma.bz" target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="group inline-flex items-center gap-2">
+                      <BrandMarkIcon className="h-7 w-7 shrink-0" />
+                      <div className="flex flex-col justify-center gap-0.5">
+                        <BrandName className="text-sm leading-none" />
+                        <span className="inline-flex items-center gap-1 text-[10px] font-medium leading-tight tracking-wide text-[#45474c] [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
+                          <span>Organize</span>
+                          <span aria-hidden className="inline-block h-1 w-1 shrink-0 rounded-full bg-[#72ff70]" />
+                          <span>Protect</span>
+                          <span aria-hidden className="inline-block h-1 w-1 shrink-0 rounded-full bg-[#72ff70]" />
+                          <span>Deliver</span>
+                        </span>
+                      </div>
                     </a>
                   </div>
                 </div>
