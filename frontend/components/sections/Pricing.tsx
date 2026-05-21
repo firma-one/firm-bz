@@ -3,7 +3,6 @@
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Users, CheckCircle, User, ArrowRight } from "lucide-react"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { PRICING_PLANS } from "@/config/pricing"
 
 export function Pricing() {
@@ -98,31 +97,6 @@ export function Pricing() {
                                 </div>
                             </div>
 
-                            {/* Features */}
-                            <div className="px-8 py-8">
-                                {plan.featuresHeader && (
-                                    <p className="font-semibold text-slate-900 mb-6 text-sm">{plan.featuresHeader}</p>
-                                )}
-                                <ul className="space-y-4">
-                                    {plan.features.map((feature, i) => (
-                                        <li key={i} className="flex items-start">
-                                            <CheckCircle className={`h-5 w-5 mr-3 flex-shrink-0 mt-0.5
-                                                ${plan.theme === 'purple' ? 'text-green-500' : (plan.id === 'team' ? 'text-green-500' : 'text-slate-300')}
-                                            `} />
-                                            <TooltipProvider delayDuration={0}>
-                                                <Tooltip>
-                                                    <TooltipTrigger asChild>
-                                                        <span className="text-slate-600 text-sm cursor-help hover:text-slate-900 transition-colors font-medium">{feature.name}</span>
-                                                    </TooltipTrigger>
-                                                    <TooltipContent>
-                                                        <p>{feature.tooltip}</p>
-                                                    </TooltipContent>
-                                                </Tooltip>
-                                            </TooltipProvider>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
                         </div>
                     ))}
                 </div>

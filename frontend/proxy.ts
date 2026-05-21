@@ -109,7 +109,7 @@ export async function proxy(request: NextRequest) {
     // Check deployment version - invalidate session if CODE changed (new deployment)
     // Note: Server restart with same code does NOT invalidate sessions
     // (cache is already lost in memory and rebuilds naturally)
-    if (user && !isAuthCallback && !isAuthPage) {
+    if (user && !isAuthCallback && !isAuthPage && isAppRoute) {
         const sessionDeploymentVersion = request.cookies.get(DEPLOYMENT_VERSION_COOKIE)?.value
         const currentDeploymentVersion = getDeploymentVersion()
 

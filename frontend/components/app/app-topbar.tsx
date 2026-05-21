@@ -313,6 +313,7 @@ export function AppTopbar() {
               subtext: b.subtext ?? null,
               themeColor: b.primaryColor ?? null,
               secondaryColor: b.secondaryColor ?? null,
+              website: b.website ?? null,
             }
             : null
 

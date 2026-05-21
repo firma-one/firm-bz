@@ -33,21 +33,23 @@ function safeDecrypt(val: string | null | undefined): string {
   }
 }
 
-// Helper to safely encrypt names
+// Helper to safely encrypt a value. Handles strings and numeric types (Decimal, number).
 function safeEncrypt(val: any): any {
-  if (typeof val === 'string' && val.length > 0) {
-    // Avoid double encryption
-    if (val.startsWith('v') && val.includes('$')) return val;
-    return encrypt(val);
-  }
-  return val;
+  if (val === null || val === undefined) return val
+  const str = typeof val === 'string' ? val : String(val)
+  if (str.length === 0) return val
+  // Avoid double encryption
+  if (str.startsWith('v') && str.includes('$')) return str
+  return encrypt(str)
 }
 
 const ENCRYPTED_FIELDS_MAP: Record<string, string[]> = {
-  firm: ['name'],
-  client: ['name'],
-  engagement: ['name'],
-  connector: ['accessToken', 'refreshToken'],
+  firm:               ['name'],
+  client:             ['name', 'description', 'internalMemo', 'billingAddress', 'relationshipValue'],
+  engagement:         ['name', 'description', 'rateOrValue'],
+  clientcontact:      ['name', 'email', 'phone', 'notes'],
+  doccommentmessage:  ['content'],
+  connector:          ['accessToken', 'refreshToken', 'name'],
 }
 
 /**

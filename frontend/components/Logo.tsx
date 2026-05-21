@@ -16,6 +16,7 @@ export interface OrganizationBranding {
   subtext?: string | null;
   themeColor?: string | null;
   secondaryColor?: string | null;
+  website?: string | null;
 }
 
 interface LogoProps {
@@ -143,14 +144,16 @@ export default function Logo({
     );
   }
 
-  return (
-    <div
-      className={cn(
-        'group',
-        hasSubtextRow ? `flex items-center gap-3 ${className}` : `inline-flex items-center ${className}`,
-      )}
-      style={useBranding && themeHex ? { ['--logo-theme' as string]: themeHex } : undefined}
-    >
+  const containerProps = {
+    className: cn(
+      'group',
+      hasSubtextRow ? `flex items-center gap-3 ${className}` : `inline-flex items-center ${className}`,
+    ),
+    style: useBranding && themeHex ? { ['--logo-theme' as string]: themeHex } : undefined,
+  };
+
+  const inner = (
+    <>
       <div className="inline-flex shrink-0 items-center">
         {useBranding && branding?.logoUrl ? (
           <span className={logoContainerClass}>
@@ -200,6 +203,16 @@ export default function Logo({
           </div>
         )
       )}
-    </div>
+    </>
   );
+
+  if (useBranding && branding?.website) {
+    return (
+      <a href={branding.website} target="_blank" rel="noopener noreferrer" aria-label={displayName} {...containerProps}>
+        {inner}
+      </a>
+    );
+  }
+
+  return <div {...containerProps}>{inner}</div>;
 }

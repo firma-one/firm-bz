@@ -364,6 +364,7 @@ export interface FirmBranding {
     subtext?: string | null
     primaryColor?: string | null
     secondaryColor?: string | null
+    website?: string | null
 }
 
 export interface FirmCurrency {
@@ -400,6 +401,7 @@ export async function updateFirm(
                 subtext: data.branding.subtext ?? null,
                 primaryColor: data.branding.primaryColor ?? null,
                 secondaryColor: data.branding.secondaryColor ?? null,
+                website: data.branding.website ?? null,
             }
             payload.settings = { ...(payload.settings ?? current), branding }
         }

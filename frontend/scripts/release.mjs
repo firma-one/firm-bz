@@ -48,7 +48,28 @@ try {
   process.exit(1);
 }
 
-const gitLog = execSync(`git log ${lastTag}..HEAD --pretty=format:"%s"`).toString().trim();
+// In squash-merge workflows, `git log lastTag..HEAD` includes every individual dev
+// commit that was squashed — they're not ancestors of the squash commit. Instead:
+// find the merge commit where the tag was synced back into dev, then collect
+// (a) dev commits not yet in the tag + (b) commits after the sync.
+const lastTagSha = execSync(`git rev-parse ${lastTag}`).toString().trim();
+const mergeLines = execSync(`git log --merges --pretty=format:"%H %P"`).toString().trim().split('\n');
+const syncMergeLine = mergeLines.find(line => line.trim().split(/\s+/).slice(1).includes(lastTagSha));
+
+let gitLog;
+if (syncMergeLine) {
+  const [syncSha, ...parents] = syncMergeLine.trim().split(/\s+/);
+  const devParent = parents.find(p => p !== lastTagSha);
+  const preSync = devParent
+    ? execSync(`git log ${lastTagSha}..${devParent} --no-merges --pretty=format:"%s"`).toString().trim()
+    : '';
+  const postSync = execSync(`git log ${syncSha}..HEAD --no-merges --pretty=format:"%s"`).toString().trim();
+  gitLog = [postSync, preSync].filter(Boolean).join('\n');
+  console.log(`🔍  Squash-merge workflow detected — using sync merge ${syncSha.slice(0, 7)} as range base`);
+} else {
+  gitLog = execSync(`git log ${lastTag}..HEAD --no-merges --pretty=format:"%s"`).toString().trim();
+}
+
 if (!gitLog) {
   console.log(`ℹ️   No new commits since ${lastTag}. Nothing to release.`);
   process.exit(0);
@@ -65,24 +86,39 @@ gitLog.split('\n').forEach(line => {
   else if (type === 'fix') fixes.push(desc);
   else if (['refactor', 'perf', 'style'].includes(type)) improvements.push(desc);
 });
+console.log(`📋  Commits since ${lastTag}: ${features.length} features, ${fixes.length} fixes, ${improvements.length} improvements`);
 
-// --- 5. Generate release title with Gemma 4 E2B (Apache 2.0, no API key needed)
+// --- 5. Generate release title + notes with Gemma 4 E2B (Apache 2.0, no API key needed)
 console.log('⏳  Loading Gemma 4 E2B model (first run downloads ~500MB, then cached)...');
 const { pipeline } = await import('@huggingface/transformers');
 const generator = await pipeline('text-generation', 'onnx-community/gemma-4-E2B-it-ONNX');
+console.log('✅  Model loaded');
 
 const allChanges = [...features, ...fixes, ...improvements];
 const changeList = allChanges.length > 0
   ? allChanges.map(c => `- ${c}`).join('\n')
   : gitLog.split('\n').slice(0, 8).join('\n');
 
-const prompt = `<start_of_turn>user\nWrite a single short software release title (max 8 words, no quotes, no punctuation at end) summarising these changes:\n${changeList}\n<end_of_turn>\n<start_of_turn>model\n`;
-const result = await generator(prompt, { max_new_tokens: 20 });
-const raw = result[0].generated_text.split('<start_of_turn>model\n').pop() ?? '';
-const title = raw.split('\n')[0].replace(/['"]/g, '').trim() || 'Updates and improvements';
+console.log('🤖  Generating release title...');
+const titleResult = await generator(
+  [{ role: 'user', content: `Write a single short software release title (max 8 words, no quotes, no punctuation at end) summarising these changes:\n${changeList}` }],
+  { max_new_tokens: 20 }
+);
+const title = (titleResult[0].generated_text.at(-1).content ?? '').split('\n')[0].replace(/['"]/g, '').trim() || 'Updates and improvements';
+console.log(`📝  Title: "${title}"`);
 
-// --- 6. Bump version
-const [major, minor, patch] = pkg.version.split('.').map(Number);
+console.log('🤖  Generating release notes...');
+const notesResult = await generator(
+  [{ role: 'user', content: `Write 3–5 product release notes for end users. Each note must be one crisp sentence (max 12 words), starting with "- ", describing a user-facing benefit. No technical jargon, no commit prefixes. Output only the bullet lines.\n\nChanges:\n${changeList}` }],
+  { max_new_tokens: 300 }
+);
+const notesRaw = notesResult[0].generated_text.at(-1).content ?? '';
+console.log(`📄  Raw notes output:\n${notesRaw}`);
+const generatedNotes = notesRaw.split('\n').filter(l => l.startsWith('- ')).join('\n') || changeList;
+console.log(generatedNotes === changeList ? '⚠️  Notes fallback triggered — using raw commit list' : '✅  Notes generated successfully');
+
+// --- 6. Bump version from last git tag (not from package.json)
+const [major, minor, patch] = lastTag.replace(/^v/, '').split('.').map(Number);
 const newVersion =
   bumpType === 'major' ? `${major + 1}.0.0` :
   bumpType === 'minor' ? `${major}.${minor + 1}.0` :
@@ -93,11 +129,7 @@ pkg.version = newVersion;
 const dateStr = new Date().toISOString().split('T')[0];
 const friendlyDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
-let newSection = `## v${newVersion} — ${title}\n\n*Released ${friendlyDate}*\n`;
-if (features.length) newSection += `\n### ✨ Features\n\n${features.map(d => `- ${d}`).join('\n')}\n`;
-if (fixes.length) newSection += `\n### 🐛 Bug Fixes\n\n${fixes.map(d => `- ${d}`).join('\n')}\n`;
-if (improvements.length) newSection += `\n### ⚡ Improvements\n\n${improvements.map(d => `- ${d}`).join('\n')}\n`;
-newSection += '\n---\n\n';
+let newSection = `## v${newVersion} — ${title}\n\n*Released ${friendlyDate}*\n\n${generatedNotes}\n\n---\n\n`;
 
 // --- 8. Update frontmatter metadata array
 const newMeta = { version: newVersion, commit: currentCommit, date: dateStr, title };
@@ -110,7 +142,7 @@ writeFileSync(mdxPath, newMdxContent);
 // --- 10. Write releases-meta.json (lightweight metadata for client-side modal)
 writeFileSync(metaPath, JSON.stringify(releases, null, 2) + '\n');
 
-// --- 11. Bump package.json
+// --- 11. Write package.json
 writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
 
 // --- 12. Create local git tag + stage files
