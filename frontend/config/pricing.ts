@@ -21,11 +21,6 @@ export interface PricingComparisonCategory {
     rows: PricingComparisonRow[]
 }
 
-export interface PricingFeature {
-    name: string
-    tooltip: string
-}
-
 export interface PricingPlan {
     id: string
     title: string
@@ -39,8 +34,6 @@ export interface PricingPlan {
     firmsIncluded?: number
     /** Cap for concurrent active engagements per subscription; pricing UI shows with firms line. */
     projectsIncluded?: number
-    featuresHeader?: string // e.g. "Everything in Free, plus:"
-    features: PricingFeature[]
     cta: string | null
     ctaVariant?: 'black' | 'gray'
     href: string | null
@@ -116,47 +109,6 @@ export const PRICING_PLANS: PricingPlan[] = [
         price: '$49',
         priceBilledAnnually: 39,
         duration: '/month',
-        featuresHeader: 'Standard features:',
-        features: [
-            { 
-                name: "Bring your own Google Drive · Non-custodial", 
-                tooltip: "Your files stay in your Drive. We don't store or copy them. Keep using your current document storage—no migration." 
-            },
-            { 
-                name: "Custom branded professional client portal (replaces documents delivered as email attachments or Drive links)", 
-                tooltip: "Branded portal instead of generic 'Untitled Folder' links. Works with your existing Google Drive." 
-            },            { 
-                name: "Firm → Client → Engagement hierarchy", 
-                tooltip: "Clean structure: your firm, each client, and their engagements. Maps to folders in your Drive—no migration." 
-            },
-            { 
-                name: "Unlimited clients. Unlimited firm & engagement members. Unlimited external contributors & viewers.", 
-                tooltip: "No per-user fees. Add clients, internal contributors, and external collaborators and viewers as needed." 
-            },
-            { 
-                name: "Google Drive–style document operations in Pockett", 
-                tooltip: "Familiar open, preview, download, and share actions. No new storage system to learn." 
-            },
-            { 
-                name: "Persona-based access (4 engagement roles)", 
-                tooltip: ENGAGEMENT_PERSONAS_PRICING_TOOLTIP,
-            },
-            { 
-                name: "Simple permission management. No granular file-by-file permissions.", 
-                tooltip: "No resharing links. Clients always know where to find documents." 
-            },
-            { 
-                name: "Engagement activity audit", 
-                tooltip: "Append-only audit trail for the engagement: lifecycle events, sharing actions, and key document operations—visible in the Audit tab. On Standard, audit history is kept for 30 days (longer on higher tiers—see Technical comparison)." 
-            },
-            { 
-                name: "Document comment thread (feedback & approvals)", 
-                tooltip: "Bring comments, feedback, and sign-offs together in one thread beside each file. Everyone on the engagement sees the same story—so nothing important lives only in an inbox or a chat app." 
-            },            { 
-                name: "One-click engagement closure", 
-                tooltip: "Revoke client and external access when an engagement ends. Lock folders to view-only." 
-            }
-        ],
         cta: 'Get Standard',
         ctaVariant: 'black',
         href: '/contact',
@@ -172,21 +124,6 @@ export const PRICING_PLANS: PricingPlan[] = [
         price: '$99',
         priceBilledAnnually: 79,
         duration: '/month',
-        featuresHeader: 'Everything in Standard, plus templates & advanced review:',
-        features: [
-            { name: "Custom Subdomain", tooltip: customSubdomainTooltip },
-            { name: "Watermarked Document Delivery", tooltip: "Add firm branding watermarks to exported PDFs" },
-            { name: "Document Templates", tooltip: "Pre-configured document templates for common use cases" },
-            { name: "Engagement templates", tooltip: "Choose from template engagements with pre-defined folder structures" },
-            { name: "Duplicate engagement", tooltip: "Clone existing engagements with all configurations" },
-            { name: "Engagement activity dashboard", tooltip: "See engagement activity, deadlines, and pending actions in one view" },
-            { name: "Document access tracking", tooltip: "See who viewed what and when, per document—for compliance and handoffs (beyond the engagement activity audit). On Pro, access history is kept for 90 days (longer on Business and Enterprise—see Technical comparison)." },
-            { name: "Advanced Review & Approval Workflow", tooltip: "Approve / Finalize / Publish workflow with guest approvals (Contributor External, Viewer External)" },
-            { name: "Document Versioning", tooltip: "Lock documents on approval, create version snapshots" },
-            { name: "Download Historical Versions", tooltip: "Access and download previous document versions" },
-            { name: "Review status & activity tracking", tooltip: "Comprehensive tracking of review status, comments, approvals, version history" },
-            { name: "Activity export (per engagement)", tooltip: "Export who viewed what and when for an engagement—for compliance or handoffs" }
-        ],
         cta: 'Coming Soon',
         ctaVariant: 'gray',
         href: '/contact',
@@ -202,24 +139,6 @@ export const PRICING_PLANS: PricingPlan[] = [
         price: '$149',
         priceBilledAnnually: 119,
         duration: '/month',
-        featuresHeader: 'Everything in Pro, plus automation:',
-        features: [
-            { name: "Engagement due date reminders", tooltip: "Automated reminders for engagement deadlines" },
-            { 
-                name: "Self-destruct timers & Never Share tags", 
-                tooltip: "Protect sensitive files. Set expiry on shared links. Tag internal files so they never reach clients." 
-            },
-            { name: "Document Relationships", tooltip: "Link related/dependent documents with relationship tracking" },
-            { name: "Relationship Tree View", tooltip: "Visualize document dependencies and connections" },
-            { name: "Automated Follow-ups", tooltip: "Automated consolidated client follow-up emails on pending documents" },
-            { name: "Custom Follow-up Messages", tooltip: "Customize follow-up templates and scheduling" },
-            { name: "Calendar Integration", tooltip: "Calendly integration for document discussion scheduling" },
-            { name: "Bi-directional Calendar Requests", tooltip: "Firm ↔ Client calendar request flows" },
-            { name: "Pre-configured Scheduling", tooltip: "Pre-configured scheduling, reminders, and email notifications" },
-            { name: "Weekly engagement status reports", tooltip: "Weekly schedule status to firm administrators and engagement leads" },
-            { name: "Folder Badge Indicators", tooltip: "Visual badges for pending actions from external contributors and viewers" },
-            { name: "Auto-permit Documents", tooltip: "Automatically deliver documents on onboarding to external contributors and viewers" }
-        ],
         cta: 'Coming Soon',
         ctaVariant: 'gray',
         href: '/contact',
@@ -233,22 +152,6 @@ export const PRICING_PLANS: PricingPlan[] = [
         description: 'For large organizations requiring advanced security and compliance.',
         price: 'Contact Us',
         duration: '',
-        featuresHeader: 'Everything in Business, plus enterprise features:',
-        features: [
-            { name: "Custom DNS Domain", tooltip: "Use your own domain (e.g., portal.yourcompany.com) with full DNS control and SSL certificate management" },
-            { name: "Critical engagement activity auditing", tooltip: "Comprehensive audit logs for all engagement activities" },
-            { name: "Recover from Recycle Bin", tooltip: "Restore deleted files with alerts on upcoming purges" },
-            { name: "Recycle Bin Purge Alerts", tooltip: "Notifications before permanent deletion" },
-            { name: "IP Theft Protection", tooltip: "Advanced security features to prevent unauthorized access" },
-            { name: "Disallow Download/Print", tooltip: "Restrict document download and printing for Viewer (External)" },
-            { name: "Custom Trigger Creation", tooltip: "Create custom automation triggers for scheduling" },
-            { name: "Scheduled engagement kickoff", tooltip: "Create engagements with delayed kickoff; schedule future firm and engagement memberships" },
-            { name: "Advanced Access Controls", tooltip: "Enhanced persona management and custom personas beyond the four default engagement roles" },
-            { name: "SSO/SAML Integration", tooltip: "Single Sign-On for enterprise authentication" },
-            { name: "Advanced Compliance", tooltip: "Enhanced compliance features for regulated industries" },
-            { name: "Dedicated Support", tooltip: "Priority support with SLA guarantees" },
-            { name: "Custom Onboarding", tooltip: "Tailored onboarding and training" }
-        ],
         cta: 'Coming Soon',
         ctaVariant: 'gray',
         href: '/contact',
@@ -344,8 +247,8 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
             },
             {
                 feature: "Document comment thread (feedback & approvals)",
-                tooltip: "One thread per file for comments, feedback, and approvals—shared with everyone on the engagement. Replace scattered email and chat with a single place where the conversation stays with the work.",
-                values: { Sandbox: false, Standard: true, Pro: true, Business: true, Enterprise: true },
+                tooltip: "One thread per file for comments, feedback, and approvals—shared with everyone on the engagement. Replace scattered email and chat with a single place where the conversation stays with the work. Each column shows how long comment history is retained.",
+                values: { Sandbox: false, Standard: "30 days", Pro: "90 days", Business: "365 days", Enterprise: "Unlimited" },
             },
             {
                 feature: "One-click engagement closure",

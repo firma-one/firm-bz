@@ -25,7 +25,7 @@ export function LandingHeroPrimaryCtas({ className }: { className?: string }) {
                 </Button>
             </Link>
             <Link
-                href="https://calendly.com/firmaone/30min"
+                href="https://calendly.com/firmaone/firma-connect"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-full sm:w-auto"

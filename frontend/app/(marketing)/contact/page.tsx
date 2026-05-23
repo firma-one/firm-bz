@@ -343,7 +343,7 @@ function ContactPageContent() {
                   </li>
                   <li>
                     <a
-                      href="https://calendly.com/firmaone/30min"
+                      href="https://calendly.com/firmaone/firma-connect"
                       target="_blank"
                       rel="noopener noreferrer"
                       className={thankYouSecondaryLinkClass}
@@ -418,7 +418,7 @@ function ContactPageContent() {
                 Same control as `LandingHeroPrimaryCtas` “Book a Demo” (navy pill, lime calendar icon, lift shadow).
               */}
               <Link
-                href="https://calendly.com/firmaone/30min"
+                href="https://calendly.com/firmaone/firma-connect"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-full shrink-0"

@@ -121,7 +121,7 @@ export async function createClient(organizationSlug: string, data: CreateClientD
                 expectedCloseDate: data.expectedCloseDate ? new Date(data.expectedCloseDate) : null,
                 leadSource: data.leadSource ?? null,
                 internalMemo: data.internalMemo?.trim() || null,
-                relationshipValue: data.relationshipValue ? parseFloat(data.relationshipValue) : null,
+                relationshipValue: data.relationshipValue?.trim() || null,
                 clientSinceDate: data.clientSinceDate ? new Date(data.clientSinceDate) : null,
                 linkedInUrl: data.linkedInUrl?.trim() || null,
                 companySizeBracket: data.companySizeBracket ?? null,
@@ -284,7 +284,7 @@ export async function updateClient(
     if (data.expectedCloseDate !== undefined) updateData.expectedCloseDate = data.expectedCloseDate ? new Date(data.expectedCloseDate) : null
     if (data.leadSource !== undefined) updateData.leadSource = data.leadSource ?? null
     if (data.internalMemo !== undefined) updateData.internalMemo = data.internalMemo?.trim() || null
-    if (data.relationshipValue !== undefined) updateData.relationshipValue = data.relationshipValue ? parseFloat(data.relationshipValue) : null
+    if (data.relationshipValue !== undefined) updateData.relationshipValue = data.relationshipValue?.trim() || null
     if (data.clientSinceDate !== undefined) updateData.clientSinceDate = data.clientSinceDate ? new Date(data.clientSinceDate) : null
     if (data.linkedInUrl !== undefined) updateData.linkedInUrl = data.linkedInUrl?.trim() || null
     if (data.companySizeBracket !== undefined) updateData.companySizeBracket = data.companySizeBracket ?? null

@@ -1,7 +1,7 @@
 'use server'
 
 import { prisma } from '@/lib/prisma'
-import { Prisma, type EngagementStatus } from '@prisma/client'
+import { type EngagementStatus } from '@prisma/client'
 import { createClient as createSupabaseClient } from '@/utils/supabase/server'
 import { upsertFollowUpReminder } from '@/lib/actions/user-reminders'
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
@@ -21,14 +21,11 @@ export type LwCrmEngagementStatus = 'PLANNED' | 'ACTIVE' | 'COMPLETED' | 'PAUSED
 
 function parseRateOrValue(
     v: string | number | null | undefined
-): Prisma.Decimal | null | undefined {
+): string | null | undefined {
     if (v === undefined) return undefined
     if (v === null || v === '') return null
-    try {
-        return new Prisma.Decimal(String(v).trim())
-    } catch {
-        return null
-    }
+    const s = String(v).trim()
+    return s === '' ? null : s
 }
 
 export interface CreateProjectData {

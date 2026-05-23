@@ -82,6 +82,7 @@ export function FirmSettingsForm({
     const [name, setName] = useState(initialName)
     const [logoUrl, setLogoUrl] = useState('')
     const [subtext, setSubtext] = useState('')
+    const [website, setWebsite] = useState('')
     const [themeColor, setThemeColor] = useState('')
     const [secondaryColor, setSecondaryColor] = useState('')
     const [currencyOpen, setCurrencyOpen] = useState(false)
@@ -125,6 +126,7 @@ export function FirmSettingsForm({
                     // Read exclusively from settings.branding
                     setLogoUrl(b.logoUrl ?? '')
                     setSubtext(b.subtext ?? '')
+                    setWebsite(b.website ?? '')
                     setThemeColor(b.primaryColor ?? '')
                     setSecondaryColor(b.secondaryColor ?? '')
                     setEnableBetaFeatures(settings.enableBetaFeatures === true)
@@ -264,6 +266,7 @@ export function FirmSettingsForm({
                 branding: {
                     logoUrl: resolvedLogoUrl || null,
                     subtext: subtext || null,
+                    website: website.trim() || null,
                     primaryColor: themeColor || null,
                     secondaryColor: secondaryColor || null,
                 },
@@ -367,6 +370,21 @@ export function FirmSettingsForm({
                                 disabled={isSandboxFirm}
                                 className={fieldInput}
                             />
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label htmlFor="org-website" className={fieldLabel}>
+                                Website <span className="text-[#9a9ba0] normal-case tracking-normal font-normal">(optional)</span>
+                            </Label>
+                            <Input
+                                id="org-website"
+                                type="url"
+                                value={website}
+                                onChange={(e) => setWebsite(e.target.value)}
+                                placeholder="https://yourfirm.com"
+                                disabled={isSandboxFirm}
+                                className={fieldInput}
+                            />
+                            <p className="text-xs text-[#9a9ba0]">Used as a link on the logo or avatar in the portal.</p>
                         </div>
                     </div>
 

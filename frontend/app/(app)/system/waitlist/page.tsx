@@ -4,6 +4,7 @@ import Link from "next/link"
 import { formatDistanceToNow } from "date-fns"
 import { Badge } from "@/components/ui/badge"
 import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library"
+import { CampaignManagement } from "./campaign-management"
 
 export const dynamic = 'force-dynamic'
 
@@ -13,25 +14,39 @@ type WaitlistEntry = any
 
 export default async function WaitlistPage() {
     let waitlistEntries: WaitlistEntry[]
+    let batches: any[] = []
     let error: string | null = null
 
     try {
-        waitlistEntries = await (prisma as any).waitlist.findMany({
-            orderBy: { createdAt: 'desc' },
-            select: {
-                id: true,
-                email: true,
-                plan: true,
-                companyName: true,
-                companySize: true,
-                role: true,
-                comments: true,
-                createdAt: true,
-                referralCount: true,
-                positionBoost: true,
-                referralCode: true,
-            },
-        })
+        [waitlistEntries, batches] = await Promise.all([
+            (prisma as any).waitlist.findMany({
+                orderBy: { createdAt: 'desc' },
+                select: {
+                    id: true,
+                    email: true,
+                    plan: true,
+                    companyName: true,
+                    companySize: true,
+                    role: true,
+                    comments: true,
+                    createdAt: true,
+                    referralCount: true,
+                    positionBoost: true,
+                    referralCode: true,
+                },
+            }),
+            (prisma as any).waitlistCampaign.findMany({
+                orderBy: { openedAt: 'desc' },
+                select: {
+                    id: true,
+                    name: true,
+                    isActive: true,
+                    openedAt: true,
+                    closedAt: true,
+                    _count: { select: { waitlist: true } },
+                },
+            }),
+        ])
     } catch (err) {
         if (err instanceof PrismaClientKnownRequestError) {
             if (err.code === 'P1001' || err.code === 'P1002' || err.code === 'P1003') {
@@ -45,6 +60,7 @@ export default async function WaitlistPage() {
             error = 'An unexpected error occurred.'
         }
         waitlistEntries = []
+        batches = []
     }
 
     const stats = {
@@ -59,6 +75,8 @@ export default async function WaitlistPage() {
 
     return (
         <div className="flex flex-col space-y-6">
+            <CampaignManagement batches={batches} />
+
             <div className="flex flex-col space-y-4">
                 <nav className="flex items-center text-sm text-gray-500">
                     <Link href="/system" className="flex items-center hover:text-gray-900 transition-colors">

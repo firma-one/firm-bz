@@ -130,7 +130,7 @@ const LEGACY: LandingTheme = {
   blurBottom: 'absolute bottom-0 left-0 w-[600px] h-[600px] bg-slate-100/50 rounded-full blur-[100px] translate-y-1/2 -translate-x-1/4',
   /** Fills laptop viewport below marketing layout header (`pt-24` / `lg:pt-28`); `100dvh` avoids mobile URL bar jump. */
   heroSection:
-    'relative flex min-h-[calc(100dvh-6rem)] flex-col pt-12 pb-10 md:pt-16 md:pb-12 lg:min-h-[calc(100dvh-7rem)] lg:pt-10 lg:pb-14',
+    'relative flex min-h-[calc(100dvh-6rem)] flex-col pt-4 pb-10 md:pt-16 md:pb-12 lg:min-h-[calc(100dvh-7rem)] lg:pt-10 lg:pb-14',
   heroGiant: `text-[10rem] lg:text-[10rem] font-black text-slate-100/80 tracking-tighter leading-none opacity-50 mix-blend-multiply blur-[1px] ${KINETIC_HEADLINE}`,
   heroBadge:
     `inline-flex items-center px-4 py-1.5 bg-black text-white rounded-md text-xs font-bold tracking-widest uppercase mb-4 shadow-xl shadow-[#b07d62]/20 ${KINETIC_HEADLINE}`,

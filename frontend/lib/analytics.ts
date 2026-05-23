@@ -31,4 +31,7 @@ export const ANALYTICS_EVENTS = {
     LOGIN: 'login',
     ADD_CONNECTOR_START: 'add_connector_start',
     ADD_CONNECTOR_COMPLETE: 'add_connector_complete',
+    RESEARCH_FORM_LOADED: 'research_form_loaded',
+    RESEARCH_FORM_STARTED: 'research_form_started',
+    RESEARCH_FORM_SUBMITTED: 'research_form_submitted',
 }

@@ -3,6 +3,9 @@
 import { headers } from 'next/headers'
 import { prisma } from '@/lib/prisma'
 import { serverActionWrapper, ActionResponse } from '@/lib/server-action-wrapper'
+import { sendEmail } from '@/lib/email'
+import { waitlistConfirmationEmail, referrerNotificationEmail } from '@/lib/email-templates/waitlist'
+import { getPlatformSiteOrigin } from '@/config/platform-domain'
 
 const WINDOW_SIZE = 60 * 60 * 1000 // 1 hour
 const MAX_REQUESTS = 3 // 3 requests per hour per IP
@@ -19,7 +22,7 @@ interface WaitlistResponse {
     referralCode?: string
 }
 
-export async function submitWaitlistForm(formData: FormData, token: string): Promise<ActionResponse<WaitlistResponse>> {
+export async function submitWaitlistForm(formData: FormData, token: string, campaignId: string): Promise<ActionResponse<WaitlistResponse>> {
     return serverActionWrapper(async () => {
         const headersList = await headers()
         const ip = headersList.get('x-forwarded-for') || headersList.get('x-real-ip') || 'unknown'
@@ -30,6 +33,7 @@ export async function submitWaitlistForm(formData: FormData, token: string): Pro
         const recentSubmissions = await (prisma as any).waitlist.count({
             where: {
                 ipAddress: ip,
+                campaignId,
                 createdAt: {
                     gte: oneHourAgo
                 }
@@ -88,7 +92,7 @@ export async function submitWaitlistForm(formData: FormData, token: string): Pro
         }
 
         const existing = await (prisma as any).waitlist.findFirst({
-            where: { email: email.toLowerCase().trim() },
+            where: { email: email.toLowerCase().trim(), campaignId },
             select: {
                 id: true,
                 email: true,
@@ -101,6 +105,7 @@ export async function submitWaitlistForm(formData: FormData, token: string): Pro
             // Calculate position
             const aheadCount = await (prisma as any).waitlist.count({
                 where: {
+                    campaignId,
                     createdAt: {
                         lt: existing.createdAt,
                     },
@@ -109,6 +114,7 @@ export async function submitWaitlistForm(formData: FormData, token: string): Pro
 
             const behindCount = await (prisma as any).waitlist.count({
                 where: {
+                    campaignId,
                     createdAt: {
                         gt: existing.createdAt,
                     },
@@ -187,23 +193,23 @@ export async function submitWaitlistForm(formData: FormData, token: string): Pro
                 ipAddress: ip,
                 referralCode: referralCodeForNewUser,
                 referredBy: referralCode || null,
+                campaignId,
+                status: 'WAITING',
             }
         })
 
         // 7. Process referral benefits
         if (isReferralSignup && referrerId) {
-            // Update referrer's stats
+            // Track referral count for referrer (5 referrals = Pro upgrade)
             await (prisma as any).waitlist.update({
                 where: { id: referrerId },
                 data: {
                     referralCount: { increment: 1 },
-                    positionBoost: { increment: 3 }, // Move up 3 positions per referral
                 },
             })
 
-            // Give referee position boost (skip ahead 10 positions)
-            // This is done by adjusting createdAt timestamp
-            const boostMinutes = 10 // Equivalent to 10 people signing up before them
+            // Give referee priority access by moving their createdAt earlier
+            const boostMinutes = 10
             await (prisma as any).waitlist.update({
                 where: { id: newEntry.id },
                 data: {
@@ -212,9 +218,38 @@ export async function submitWaitlistForm(formData: FormData, token: string): Pro
             })
         }
 
+        // Send transactional emails (fire-and-forget — don't block the response)
+        const siteOrigin = process.env.NEXT_PUBLIC_APP_URL || getPlatformSiteOrigin()
+
+        sendEmail(
+            normalizedEmail,
+            "You're on the Firma waitlist — here's your referral link",
+            waitlistConfirmationEmail({ referralCode: referralCodeForNewUser, campaignId, siteOrigin, email: normalizedEmail })
+        ).catch((err: unknown) => console.error('Failed to send waitlist confirmation:', err))
+
+        if (isReferralSignup && referrerEmail && referrerId) {
+            const updatedReferrer = await (prisma as any).waitlist.findUnique({
+                where: { id: referrerId },
+                select: { referralCount: true, referralCode: true }
+            })
+            const maskedJoiner = `${normalizedEmail.split('@')[0].substring(0, 3)}***@${normalizedEmail.split('@')[1]}`
+            sendEmail(
+                referrerEmail,
+                "Someone joined Firma using your referral link 🎉",
+                referrerNotificationEmail({
+                    referralCount: updatedReferrer.referralCount,
+                    newJoinerEmail: maskedJoiner,
+                    referralCode: updatedReferrer.referralCode,
+                    campaignId,
+                    siteOrigin,
+                    email: referrerEmail,
+                })
+            ).catch((err: unknown) => console.error('Failed to send referrer notification:', err))
+        }
+
         const successMessage = isReferralSignup
-            ? 'Thank you for joining via referral! You\'ve skipped ahead 10 positions. We\'ll notify you when Pro plan features are ready.'
-            : 'Thank you for joining the waitlist! We\'ll notify you when Pro plan features are ready.'
+            ? "You're on the list! As a referred member, you've received priority early access and a free 3-month Standard plan."
+            : "You're on the list! You've secured a free 3-month Standard subscription as an Early Adopter. Refer 5 friends to unlock a free Pro upgrade."
 
         return {
             message: successMessage,

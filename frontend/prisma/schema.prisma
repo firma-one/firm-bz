@@ -337,7 +337,7 @@ model Client {
   expectedCloseDate DateTime?
   leadSource        String?
   internalMemo      String?  @db.Text
-  relationshipValue Decimal? @db.Decimal(12, 2)
+  relationshipValue String?  // encrypted; parse with parseFloat() on read
 
   clientSinceDate    DateTime?
   linkedInUrl        String?
@@ -403,7 +403,7 @@ model Engagement {
   dueDate               DateTime? @db.Timestamptz(6)
   status                EngagementStatus @default(ACTIVE)
   contractType          String?
-  rateOrValue           Decimal? @db.Decimal(15, 2)
+  rateOrValue           String?  // encrypted; parse with parseFloat() on read
   tags                  Json     @default("[]")
   settings              Json     @default("{}")
   isDeleted             Boolean  @default(false)
@@ -834,20 +834,51 @@ model ContactSubmission {
   @@schema("system")
 }
 
+enum WaitlistStatus {
+  WAITING
+  INVITED
+  CONVERTED
+  EXPIRED
+
+  @@schema("system")
+}
+
+enum ResearchCampaignStatus {
+  DRAFT
+  ACTIVE
+  CLOSED
+
+  @@schema("system")
+}
+
+model WaitlistCampaign {
+  id        String     @id @default(cuid())
+  name      String
+  isActive  Boolean    @default(true)
+  openedAt  DateTime   @default(now())
+  closedAt  DateTime?
+  waitlist  Waitlist[]
+
+  @@schema("system")
+}
+
 model Waitlist {
-  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  id            String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamp(6)
   email         String
-  plan          String   @default("Pro")
-  companyName   String?  @map("company_name")
-  companySize   String?  @map("company_size")
+  plan          String         @default("Pro")
+  companyName   String?        @map("company_name")
+  companySize   String?        @map("company_size")
   role          String?
   comments      String?
-  ipAddress     String?  @map("ip_address")
-  referralCode  String?  @unique @default(dbgenerated("\"substring\"((gen_random_uuid())::text, 1, 8)")) @map("referral_code")
-  referredBy    String?  @map("referred_by")
-  referralCount Int      @default(0) @map("referral_count")
-  positionBoost Int      @default(0) @map("position_boost")
+  ipAddress     String?        @map("ip_address")
+  referralCode  String?        @unique @default(dbgenerated("\"substring\"((gen_random_uuid())::text, 1, 8)")) @map("referral_code")
+  referredBy    String?        @map("referred_by")
+  referralCount Int            @default(0) @map("referral_count")
+  positionBoost Int            @default(0) @map("position_boost")
+  campaignId    String?
+  status        WaitlistStatus @default(WAITING)
+  campaign      WaitlistCampaign? @relation(fields: [campaignId], references: [id])
 
   @@index([createdAt], map: "idx_waitlist_created_at")
   @@index([email], map: "idx_waitlist_email")
@@ -855,6 +886,19 @@ model Waitlist {
   @@index([referralCode], map: "idx_waitlist_referral_code")
   @@index([referredBy], map: "idx_waitlist_referred_by")
   @@map("waitlist")
+  @@schema("system")
+}
+
+model ResearchCampaign {
+  id            String                 @id @default(cuid())
+  description   String?                @db.Text
+  scriptSnippet String?                @map("script_snippet") @db.Text
+  queryParams   Json                   @default("[]") @map("query_params")
+  status        ResearchCampaignStatus @default(DRAFT)
+  closedAt      DateTime?              @map("closed_at")
+  createdAt     DateTime               @default(now()) @map("created_at")
+
+  @@map("research_campaign")
   @@schema("system")
 }
 
