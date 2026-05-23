@@ -8,113 +8,85 @@ interface LeaderboardEntry {
     rank: number
     email: string
     referralCount: number
-    positionBoost: number
     plan: string
     createdAt: Date
-    // Masked email for privacy (show only first 3 chars)
     maskedEmail: string
-    upgradedToProPlus?: boolean
-    points: number // Points based on referrals (30 points per referral)
-    isCurrentUser?: boolean // Whether this is the current user's entry
+    upgradedToPro?: boolean
+    isCurrentUser?: boolean
 }
 
 interface LeaderboardData {
     entries: LeaderboardEntry[]
     totalCount: number
-    userRank: number | null // Current user's rank (if on waitlist)
-    userPoints: number // Current user's points
-    userReferralCount: number // Current user's referral count
+    userRank: number | null
+    userReferralCount: number
 }
 
-export async function getWaitlistLeaderboard(email?: string): Promise<ActionResponse<LeaderboardData>> {
+export async function getWaitlistLeaderboard(campaignId: string, email?: string): Promise<ActionResponse<LeaderboardData>> {
     return serverActionWrapper(async () => {
-        // Calculate points: 30 points per referral (as shown in reference)
-        const POINTS_PER_REFERRAL = 30
-
         try {
-            // Get all users - we'll sort in JavaScript since Prisma Client may need regeneration
             const allUsersRaw = await (prisma as any).waitlist.findMany({
-                orderBy: [
-                    { positionBoost: 'desc' },
-                    { createdAt: 'asc' }
-                ],
+                where: { campaignId },
+                orderBy: [{ createdAt: 'asc' }],
                 select: {
                     id: true,
                     email: true,
-                    companyName: true,
-                    positionBoost: true,
                     referralCount: true,
                     createdAt: true
                 }
             })
 
-            // Sort by points (referrals * 30), then by createdAt for tie-breaking
+            // Sort by referral count desc, then by signup date asc for tiebreak
             const allUsers = allUsersRaw.sort((a: any, b: any) => {
-                // First sort by referral count (descending)
-                if (b.referralCount !== a.referralCount) {
-                    return b.referralCount - a.referralCount
-                }
-                // If tied, earlier signups rank higher (ascending createdAt)
+                if (b.referralCount !== a.referralCount) return b.referralCount - a.referralCount
                 return a.createdAt.getTime() - b.createdAt.getTime()
             })
 
-            // Get total waitlist count
-            const totalCount = await (prisma as any).waitlist.count()
+            const totalCount = await (prisma as any).waitlist.count({ where: { campaignId } })
 
-            // Calculate points and rank for all users
-            const usersWithPoints = allUsers.map((user: any, index: number) => ({
+            const rankedUsers = allUsers.map((user: any, index: number) => ({
                 ...user,
-                points: user.referralCount * POINTS_PER_REFERRAL,
                 rank: index + 1,
             }))
 
-            // Find user's entry
-            let userEntry: typeof usersWithPoints[0] | null = null
+            let userEntry: typeof rankedUsers[0] | null = null
             if (email) {
                 const normalizedEmail = email.toLowerCase().trim()
-                userEntry = usersWithPoints.find((u: any) => u.email.toLowerCase() === normalizedEmail) || null
+                userEntry = rankedUsers.find((u: any) => u.email.toLowerCase() === normalizedEmail) || null
             }
 
-            // Get top 10, but include user if they're not in top 10
-            const top10 = usersWithPoints.slice(0, 10)
+            const top10 = rankedUsers.slice(0, 10)
             const entriesToShow = [...top10]
 
-            // If user is not in top 10, add them at the end
             if (userEntry && !top10.find((e: any) => e.email.toLowerCase() === userEntry!.email.toLowerCase())) {
                 entriesToShow.push(userEntry)
             }
 
-            // Format leaderboard entries
             const entries: LeaderboardEntry[] = entriesToShow.map((entry: any) => {
                 const emailParts = entry.email.split('@')
                 const maskedEmail = `${emailParts[0].substring(0, 3)}***@${emailParts[1] || '***'}`
-                const upgradedToProPlus = entry.referralCount >= 5
+                const upgradedToPro = entry.referralCount >= 5
                 const isCurrentUser = email ? entry.email.toLowerCase() === email.toLowerCase() : false
 
                 return {
                     rank: entry.rank,
                     email: entry.email,
                     referralCount: entry.referralCount,
-                    positionBoost: entry.positionBoost,
-                    plan: upgradedToProPlus ? 'Pro Plus' : entry.plan,
+                    plan: upgradedToPro ? 'Pro' : 'Standard',
                     createdAt: entry.createdAt,
                     maskedEmail,
-                    upgradedToProPlus,
-                    points: entry.points,
+                    upgradedToPro,
                     isCurrentUser,
                 }
             })
 
-            // Extract user's rank and details
             const userRank = userEntry ? userEntry.rank : null
-            const userPoints = userEntry ? userEntry.points : 0
             const userReferralCount = userEntry ? userEntry.referralCount : 0
 
             return {
                 entries,
                 totalCount,
                 userRank,
-                userPoints,
                 userReferralCount,
             }
         } catch (error) {
@@ -127,7 +99,6 @@ export async function getWaitlistLeaderboard(email?: string): Promise<ActionResp
                     entries: [],
                     totalCount: 0,
                     userRank: null,
-                    userPoints: 0,
                     userReferralCount: 0,
                 }
             }

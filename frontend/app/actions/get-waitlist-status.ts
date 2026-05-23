@@ -17,7 +17,7 @@ interface WaitlistStatus {
     upgradedToProPlus: boolean | null
 }
 
-export async function getWaitlistStatus(email: string): Promise<ActionResponse<WaitlistStatus>> {
+export async function getWaitlistStatus(email: string, campaignId: string): Promise<ActionResponse<WaitlistStatus>> {
     return serverActionWrapper(async () => {
         if (!email || !email.includes('@')) {
             return {
@@ -38,8 +38,8 @@ export async function getWaitlistStatus(email: string): Promise<ActionResponse<W
 
         try {
             // Find the user's entry
-            const userEntry = await (prisma as any).legacyWaitlist.findFirst({
-                where: { email: normalizedEmail },
+            const userEntry = await (prisma as any).waitlist.findFirst({
+                where: { email: normalizedEmail, campaignId },
                 orderBy: { createdAt: 'asc' },
                 select: {
                     email: true,
@@ -69,6 +69,7 @@ export async function getWaitlistStatus(email: string): Promise<ActionResponse<W
             // Count entries before this user (ahead of them)
             const aheadCount = await (prisma as any).waitlist.count({
                 where: {
+                    campaignId,
                     createdAt: {
                         lt: userEntry.createdAt,
                     },
@@ -78,6 +79,7 @@ export async function getWaitlistStatus(email: string): Promise<ActionResponse<W
             // Count entries after this user (behind them)
             const behindCount = await (prisma as any).waitlist.count({
                 where: {
+                    campaignId,
                     createdAt: {
                         gt: userEntry.createdAt,
                     },
@@ -87,7 +89,7 @@ export async function getWaitlistStatus(email: string): Promise<ActionResponse<W
             // Position is 1-indexed (first person is position 1)
             const position = aheadCount + 1
 
-            // Check if they've earned Pro Plus upgrade (5+ referrals)
+            // 5+ referrals = Pro upgrade
             const upgradedToProPlus = userEntry.referralCount >= 5
 
             return {
@@ -95,7 +97,7 @@ export async function getWaitlistStatus(email: string): Promise<ActionResponse<W
                 position,
                 ahead: aheadCount,
                 behind: behindCount,
-                plan: upgradedToProPlus ? 'Pro Plus' : userEntry.plan,
+                plan: upgradedToProPlus ? 'Pro' : 'Standard',
                 createdAt: userEntry.createdAt,
                 referralCode: userEntry.referralCode,
                 referralCount: userEntry.referralCount,

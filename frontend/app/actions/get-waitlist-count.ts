@@ -13,13 +13,14 @@ interface WaitlistCount {
     }>
 }
 
-export async function getWaitlistCount(): Promise<ActionResponse<WaitlistCount>> {
+export async function getWaitlistCount(campaignId: string): Promise<ActionResponse<WaitlistCount>> {
     return serverActionWrapper(async () => {
         try {
-            const total = await (prisma as any).waitlist.count()
+            const total = await (prisma as any).waitlist.count({ where: { campaignId } })
 
             // Get 3 most recent joiners (for avatars/social proof)
             const recentJoiners = await (prisma as any).waitlist.findMany({
+                where: { campaignId },
                 orderBy: { createdAt: 'desc' },
                 take: 5,
                 select: {

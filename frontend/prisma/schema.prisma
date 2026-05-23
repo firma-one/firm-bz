@@ -834,20 +834,43 @@ model ContactSubmission {
   @@schema("system")
 }
 
+enum WaitlistStatus {
+  WAITING
+  INVITED
+  CONVERTED
+  EXPIRED
+
+  @@schema("system")
+}
+
+model WaitlistCampaign {
+  id        String     @id @default(cuid())
+  name      String
+  isActive  Boolean    @default(true)
+  openedAt  DateTime   @default(now())
+  closedAt  DateTime?
+  waitlist  Waitlist[]
+
+  @@schema("system")
+}
+
 model Waitlist {
-  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  id            String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamp(6)
   email         String
-  plan          String   @default("Pro")
-  companyName   String?  @map("company_name")
-  companySize   String?  @map("company_size")
+  plan          String         @default("Pro")
+  companyName   String?        @map("company_name")
+  companySize   String?        @map("company_size")
   role          String?
   comments      String?
-  ipAddress     String?  @map("ip_address")
-  referralCode  String?  @unique @default(dbgenerated("\"substring\"((gen_random_uuid())::text, 1, 8)")) @map("referral_code")
-  referredBy    String?  @map("referred_by")
-  referralCount Int      @default(0) @map("referral_count")
-  positionBoost Int      @default(0) @map("position_boost")
+  ipAddress     String?        @map("ip_address")
+  referralCode  String?        @unique @default(dbgenerated("\"substring\"((gen_random_uuid())::text, 1, 8)")) @map("referral_code")
+  referredBy    String?        @map("referred_by")
+  referralCount Int            @default(0) @map("referral_count")
+  positionBoost Int            @default(0) @map("position_boost")
+  campaignId    String?
+  status        WaitlistStatus @default(WAITING)
+  campaign      WaitlistCampaign? @relation(fields: [campaignId], references: [id])
 
   @@index([createdAt], map: "idx_waitlist_created_at")
   @@index([email], map: "idx_waitlist_email")
