@@ -843,6 +843,14 @@ enum WaitlistStatus {
   @@schema("system")
 }
 
+enum ResearchCampaignStatus {
+  DRAFT
+  ACTIVE
+  CLOSED
+
+  @@schema("system")
+}
+
 model WaitlistCampaign {
   id        String     @id @default(cuid())
   name      String
@@ -878,6 +886,19 @@ model Waitlist {
   @@index([referralCode], map: "idx_waitlist_referral_code")
   @@index([referredBy], map: "idx_waitlist_referred_by")
   @@map("waitlist")
+  @@schema("system")
+}
+
+model ResearchCampaign {
+  id            String                 @id @default(cuid())
+  description   String?                @db.Text
+  scriptSnippet String?                @map("script_snippet") @db.Text
+  queryParams   Json                   @default("[]") @map("query_params")
+  status        ResearchCampaignStatus @default(DRAFT)
+  closedAt      DateTime?              @map("closed_at")
+  createdAt     DateTime               @default(now()) @map("created_at")
+
+  @@map("research_campaign")
   @@schema("system")
 }
 
