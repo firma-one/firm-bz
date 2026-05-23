@@ -69,7 +69,6 @@ if (syncMergeLine) {
 } else {
   gitLog = execSync(`git log ${lastTag}..HEAD --no-merges --pretty=format:"%s"`).toString().trim();
 }
-
 if (!gitLog) {
   console.log(`ℹ️   No new commits since ${lastTag}. Nothing to release.`);
   process.exit(0);
