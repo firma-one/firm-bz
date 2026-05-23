@@ -282,7 +282,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
       }
 
-      const { connectionId, rootFolderId: newRootId } = body
+      const { connectionId, rootFolderId: rawRootId } = body
+      // Guard against accidentally receiving a picker result object instead of a plain ID string
+      const newRootId: string | undefined =
+        rawRootId && typeof rawRootId === 'object' && 'id' in rawRootId
+          ? (rawRootId as { id: string }).id
+          : typeof rawRootId === 'string' ? rawRootId : undefined
       if (!connectionId || !newRootId) {
         return NextResponse.json({ error: 'Missing connectionId or rootFolderId' }, { status: 400 })
       }

@@ -1781,7 +1781,11 @@ const OnboardingContent = () => {
                                                                 mode="select-folder"
                                                                 driveType="Shared Drive"
                                                                 query={workspaceFolderName}
-                                                                onImport={(ids) => void handleRootFolderSelected(ids as string[])}
+                                                                onImport={(items) => {
+                                                                    const first = items[0] as { id: string; name: string } | string | undefined
+                                                                    const folderId = first ? (typeof first === 'string' ? first : first.id) : undefined
+                                                                    if (folderId) void handleRootFolderSelected([folderId])
+                                                                }}
                                                             >
                                                                 <Button
                                                                     type="button"
