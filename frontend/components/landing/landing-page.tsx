@@ -657,7 +657,7 @@ export function LandingPage({
                 </FadeIn>
 
                 <FadeIn delay={80}>
-                  <div className="h-32 md:h-40 lg:h-48 flex items-center">
+                  <div className="h-auto md:h-40 lg:h-48 flex items-start md:items-center">
                     <AnimatePresence mode="wait">
                       {currentTaglineIndex === 0 ? (
                         <motion.h2
