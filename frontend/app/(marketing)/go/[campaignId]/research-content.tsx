@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react'
 import Link from 'next/link'
 import Logo from '@/components/Logo'
 import { Footer } from '@/components/layout/Footer'
+import { sendEvent, ANALYTICS_EVENTS } from '@/lib/analytics'
 
 interface ResearchContentProps {
     campaign: {
@@ -14,6 +15,7 @@ interface ResearchContentProps {
 
 export function ResearchContent({ campaign }: ResearchContentProps) {
     const embedRef = useRef<HTMLDivElement>(null)
+    const startedAtRef = useRef<number | null>(null)
 
     useEffect(() => {
         if (!campaign.scriptSnippet || !embedRef.current) return
@@ -22,6 +24,48 @@ export function ResearchContent({ campaign }: ResearchContentProps) {
         const fragment = document.createRange().createContextualFragment(campaign.scriptSnippet)
         embedRef.current.appendChild(fragment)
     }, [campaign.scriptSnippet])
+
+    useEffect(() => {
+        const campaignId = campaign.id
+
+        const handleMessage = (event: MessageEvent) => {
+            if (!event.data?.isTally) return
+
+            switch (event.data.code) {
+                case 'TallyFormLoaded':
+                    sendEvent({
+                        action: ANALYTICS_EVENTS.RESEARCH_FORM_LOADED,
+                        category: 'Research',
+                        label: campaignId,
+                    })
+                    break
+                case 'TallyFormStarted':
+                    startedAtRef.current = Date.now()
+                    sendEvent({
+                        action: ANALYTICS_EVENTS.RESEARCH_FORM_STARTED,
+                        category: 'Research',
+                        label: campaignId,
+                    })
+                    break
+                case 'TallyFormSubmitted': {
+                    const duration = startedAtRef.current
+                        ? Math.round((Date.now() - startedAtRef.current) / 1000)
+                        : undefined
+                    sendEvent({
+                        action: ANALYTICS_EVENTS.RESEARCH_FORM_SUBMITTED,
+                        category: 'Research',
+                        label: campaignId,
+                        ...(duration !== undefined && { completion_duration_seconds: duration }),
+                    })
+                    startedAtRef.current = null
+                    break
+                }
+            }
+        }
+
+        window.addEventListener('message', handleMessage)
+        return () => window.removeEventListener('message', handleMessage)
+    }, [campaign.id])
 
     return (
         <div className="relative flex min-h-screen flex-col">
