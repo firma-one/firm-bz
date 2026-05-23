@@ -458,46 +458,56 @@ export function OnboardingForm({
                         )}
                         {isSplitLight ? (
                             <div className="mt-0">
-                                <div
-                                    className={emailLocked && !emailVerifiedNewUser ? 'opacity-50 cursor-text' : ''}
-                                    onClick={() => setEmailLocked(false)}
-                                >
-                                <KineticFloatingEmailField
-                                    ref={emailInputRef}
-                                    id="email"
-                                    value={email}
-                                    onValueChange={setEmail}
-                                    disabled={emailVerifiedNewUser}
-                                    onFocus={() => setEmailLocked(false)}
-                                    required
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter' && !emailVerifiedNewUser) {
-                                            e.preventDefault()
-                                            void handleInfoSubmit(e as unknown as React.FormEvent<Element>)
-                                        }
-                                    }}
-                                    trailing={
-                                        !emailVerifiedNewUser ? (
-                                            <Button
-                                                type="submit"
-                                                variant="ghost"
-                                                size="icon"
-                                                disabled={loading || !email.trim()}
-                                                className={kineticLimeIconButton}
-                                                aria-label="Continue"
-                                            >
-                                                {loading ? (
-                                                    <LoadingSpinner size="sm" />
-                                                ) : (
-                                                    <ArrowRight
-                                                        className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5"
-                                                        strokeWidth={2}
-                                                    />
-                                                )}
-                                            </Button>
-                                        ) : undefined
-                                    }
-                                />
+                                {!emailVerifiedNewUser ? (
+                                    <div className="flex items-center gap-2">
+                                        <div
+                                            className={`min-w-0 flex-1 ${emailLocked ? 'opacity-50 cursor-text' : ''}`}
+                                            onClick={() => setEmailLocked(false)}
+                                        >
+                                            <KineticFloatingEmailField
+                                                ref={emailInputRef}
+                                                id="email"
+                                                value={email}
+                                                onValueChange={setEmail}
+                                                disabled={false}
+                                                onFocus={() => setEmailLocked(false)}
+                                                required
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        e.preventDefault()
+                                                        void handleInfoSubmit(e as unknown as React.FormEvent<Element>)
+                                                    }
+                                                }}
+                                            />
+                                        </div>
+                                        <Button
+                                            type="submit"
+                                            variant="ghost"
+                                            size="icon"
+                                            disabled={loading || !email.trim()}
+                                            className={kineticLimeIconButton}
+                                            aria-label="Continue"
+                                        >
+                                            {loading ? (
+                                                <LoadingSpinner size="sm" />
+                                            ) : (
+                                                <ArrowRight
+                                                    className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5"
+                                                    strokeWidth={2}
+                                                />
+                                            )}
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    <KineticFloatingEmailField
+                                        ref={emailInputRef}
+                                        id="email"
+                                        value={email}
+                                        onValueChange={setEmail}
+                                        disabled={true}
+                                        required
+                                    />
+                                )}
                                 {!emailVerifiedNewUser && (
                                     <p className="mt-1.5 text-xs text-[#45474c]">
                                         We&apos;ll check if you already have an account.
@@ -511,7 +521,6 @@ export function OnboardingForm({
                                         </Link>
                                     </p>
                                 )}
-                                </div>
                             </div>
                         ) : (
                             <>

@@ -1507,7 +1507,7 @@ const OnboardingContent = () => {
                                                 <p className="text-sm font-semibold text-slate-800">Google Drive Connected</p>
                                             </div>
                                             {/* Connected badge */}
-                                            <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
+                                            <div className="p-4 bg-white border border-slate-200 flex items-center justify-between">
                                                 <div className="flex items-center gap-3">
                                                     <div className="h-10 w-10 rounded-lg bg-white border border-slate-200 flex items-center justify-center">
                                                         <GoogleDriveIcon size={20} />
@@ -1562,7 +1562,7 @@ const OnboardingContent = () => {
                                                                 setMyDriveCountdown(3)
                                                             }
                                                         }}
-                                                        className="group flex flex-col items-start gap-3 rounded-2xl border-2 border-slate-100 bg-white p-5 text-left transition-all hover:border-slate-900 hover:shadow-lg active:scale-[0.98]"
+                                                        className="group flex flex-col items-start gap-3 border-2 border-slate-100 bg-white p-5 text-left transition-all hover:border-slate-900 hover:shadow-lg active:scale-[0.98]"
                                                     >
                                                         <div className="flex items-center gap-3">
                                                             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-slate-50 group-hover:bg-slate-100">
@@ -1577,7 +1577,7 @@ const OnboardingContent = () => {
                                                     <button
                                                         type="button"
                                                         onClick={() => setPreviewDrive("Shared Drive")}
-                                                        className="group flex flex-col items-start gap-3 rounded-2xl border-2 border-slate-100 bg-white p-5 text-left transition-all hover:border-slate-900 hover:shadow-lg active:scale-[0.98]"
+                                                        className="group flex flex-col items-start gap-3 border-2 border-slate-100 bg-white p-5 text-left transition-all hover:border-slate-900 hover:shadow-lg active:scale-[0.98]"
                                                     >
                                                         <div className="flex items-center gap-3">
                                                             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-slate-50 group-hover:bg-slate-100">
@@ -1818,7 +1818,7 @@ const OnboardingContent = () => {
                                     </div>
                                 ) : (
                                     <div className="space-y-6">
-                                        <div className="p-6 bg-slate-50 border border-slate-200 rounded-lg">
+                                        <div className="p-6 bg-white border border-slate-200">
                                             <h3 className="font-semibold text-slate-900 mb-4">Your Drive. Your data. Our layer on top.</h3>
                                             <ul className="space-y-3 text-sm text-slate-600">
                                                 <li className="flex items-start gap-3">
@@ -1855,7 +1855,7 @@ const OnboardingContent = () => {
                                         )}
 
                                         {/* Google Workspace tip */}
-                                        <div className="flex gap-2.5 rounded-lg border border-blue-100 bg-blue-50 px-3.5 py-3 text-xs text-blue-800">
+                                        <div className="flex gap-2.5 border border-blue-100 bg-blue-50 px-3.5 py-3 text-xs text-blue-800">
                                             <Info className="h-3.5 w-3.5 shrink-0 mt-0.5 text-blue-500" />
                                             <p className="leading-relaxed">
                                                 <span className="font-semibold">Google Workspace?</span> Connect with a dedicated account not tied to any individual user, so access isn&apos;t disrupted if someone leaves.{' '}
@@ -1977,7 +1977,7 @@ const OnboardingContent = () => {
                                 </div>
 
                                 <div className="space-y-4">
-                                    <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-5 shadow-sm">
+                                    <div className="border border-emerald-100 bg-emerald-50/60 p-5 shadow-sm">
                                         <div className="flex items-start gap-3">
                                             <div className="h-10 w-10 rounded-xl bg-white border border-emerald-200 flex items-center justify-center flex-shrink-0">
                                                 <CheckCircle2 className="h-5 w-5 text-emerald-600" />
@@ -1996,7 +1996,7 @@ const OnboardingContent = () => {
                                                 </p>
                                             </div>
                                         </div>
-                                        <div className="mt-4 rounded-xl border border-emerald-100/80 bg-white/90 p-4">
+                                        <div className="mt-4 border border-emerald-100/80 bg-white/90 p-4">
                                             <SandboxHierarchyPreview
                                                 sandboxFirmName={sandboxFirmName}
                                                 nodeStatus={(ix) => {
@@ -2015,7 +2015,7 @@ const OnboardingContent = () => {
                                         ) : null}
                                     </div>
 
-                                    <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50/90 p-3.5">
+                                    <div className="flex items-start gap-3 border border-slate-200 bg-white p-3.5">
                                         <div className="h-8 w-8 shrink-0 rounded-lg bg-white border border-slate-200 flex items-center justify-center mt-0.5">
                                             <Info className="h-4 w-4 text-slate-600" />
                                         </div>
