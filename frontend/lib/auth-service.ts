@@ -78,7 +78,7 @@ export class AuthService {
             // Flag checked on /signup after OAuth returns to show SignupSuccess
             sessionStorage.setItem('signup_success', '1')
 
-            const callbackNext = next ?? '/signup'
+            const callbackNext = next ?? '/d/signup-success'
             const redirectTo = `${getOAuthRedirectOrigin()}/auth/callback?next=${encodeURIComponent(callbackNext)}`
 
             const { error } = await supabase.auth.signInWithOAuth({

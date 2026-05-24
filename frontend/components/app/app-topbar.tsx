@@ -448,6 +448,7 @@ export function AppTopbar() {
 
   useEffect(() => {
     if (!mounted) return
+    if (pathname?.startsWith('/d/onboarding')) return
     loadNotifications()
     loadBookmarks()
     const handleNotificationsUpdate = () => loadNotifications()

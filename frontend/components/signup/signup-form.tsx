@@ -17,13 +17,13 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { OTPInput } from '@/components/onboarding/otp-input'
-import { KineticFloatingEmailField } from '@/components/onboarding/kinetic-floating-email-field'
+import { OTPInput } from '@/components/signup/otp-input'
+import { KineticFloatingEmailField } from '@/components/signup/kinetic-floating-email-field'
 import {
     SignupStepProgress,
     computeSignupProgressIndex,
     type SignupStepKey,
-} from '@/components/onboarding/signup-step-progress'
+} from '@/components/signup/signup-step-progress'
 import { Turnstile } from '@marsidev/react-turnstile'
 import { checkEmailExists, sendOTPWithTurnstile } from '@/app/actions/send-otp'
 import { sendEvent, ANALYTICS_EVENTS } from "@/lib/analytics"
@@ -46,7 +46,7 @@ const labelLight =
   `${H} block text-[10px] font-bold uppercase tracking-widest text-[#45474c]`
 
 /**
- * Kinetic lime primary — same as `landing-page.tsx` “Build Your Portal” / `pricing` `LANDING_LIME_CTA_CARD`.
+ * Kinetic lime primary — same as `landing-page.tsx` "Build Your Portal" / `pricing` `LANDING_LIME_CTA_CARD`.
  * Google OAuth keeps its own neutral styles.
  */
 const kineticLimeCtaBar = `${H} group inline-flex w-full items-center justify-center gap-2 rounded border-0 bg-[#72ff70] px-6 py-3.5 text-xs font-bold uppercase tracking-[0.2em] text-[#002203] shadow-[0_1px_0_rgba(0,34,3,0.28)] transition-all duration-200 hover:bg-[#72ff70] hover:-translate-y-0.5 hover:shadow-[0_10px_24px_-12px_rgba(0,34,3,0.65)] active:translate-y-0 active:scale-95 disabled:pointer-events-none disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-[0_1px_0_rgba(0,34,3,0.28)]`
@@ -66,7 +66,7 @@ function turnstileOptions(isSplitLight: boolean) {
         : ({ theme: 'auto' as const })
 }
 
-/** Contain Turnstile + iframe so parents don’t gain a horizontal scrollbar (min-w-0 chain). */
+/** Contain Turnstile + iframe so parents don't gain a horizontal scrollbar (min-w-0 chain). */
 const turnstileShellClass = 'w-full min-w-0 max-w-full overflow-hidden'
 
 /**
@@ -89,22 +89,22 @@ function parseNameFromEmail(email: string): { firstName: string; lastName: strin
     }
 }
 
-export type OnboardingFormLayout = 'stacked-dark' | 'split-light'
+export type SignupFormLayout = 'stacked-dark' | 'split-light'
 
-export interface OnboardingFormProps {
+export interface SignupFormProps {
     /** `split-light`: right-column surface from docs/design/v4/signin (light form); progress lives in parent. */
-    layout?: OnboardingFormLayout
+    layout?: SignupFormLayout
     /** Sync step to split layout (e.g. left column hero). */
     onStepChange?: (step: SignupStepKey) => void
     /** 0–3 progress index for the right-column indicator (four segments: email → names → auth → OTP). */
     onProgressIndexChange?: (index: number) => void
 }
 
-export function OnboardingForm({
+export function SignupForm({
     layout = 'stacked-dark',
     onStepChange,
     onProgressIndexChange,
-}: OnboardingFormProps) {
+}: SignupFormProps) {
     const searchParams = useSearchParams()
     const firstNameInputRef = useRef<HTMLInputElement>(null)
     const emailInputRef = useRef<HTMLInputElement>(null)
@@ -127,8 +127,6 @@ export function OnboardingForm({
     const [existingAccountMessage, setExistingAccountMessage] = useState('')
     const [emailLocked, setEmailLocked] = useState(!!searchParams.get('email'))
 
-    // Success state
-    const [successNavTarget, setSuccessNavTarget] = useState('/d/onboarding')
 
     useEffect(() => {
         onStepChange?.(step)
@@ -152,13 +150,13 @@ export function OnboardingForm({
 
     // Check if user is already logged in — full navigation so `/d` RSC sees auth cookies (same as post-OTP).
     // Use getUser() (validates against GoTrue) not getSession() (reads stale local cache).
+    // Redirect already-logged-in users away from the signup form
     useEffect(() => {
         const checkSession = async () => {
             if (justVerifiedRef.current) return
             const { data: { user } } = await supabase.auth.getUser()
-            if (user) {
-                window.location.href = '/d/onboarding'
-            }
+            if (!user) return
+            window.location.href = '/d/onboarding'
         }
         void checkSession()
     }, [])
@@ -386,10 +384,7 @@ export function OnboardingForm({
             return
         }
 
-        justVerifiedRef.current = true
-        setSuccessNavTarget(navTarget)
-        setStep('success')
-        setLoading(false)
+        window.location.href = '/d/signup-success'
     }
 
     const inputClass = isSplitLight ? inputLight : inputDark
@@ -547,7 +542,7 @@ export function OnboardingForm({
                                 )}
                             </>
                         )}
-                        
+
                         {/* Turnstile - shown after email submitted, before check */}
                         {showTurnstile && step === 'info' && !emailVerifiedNewUser && (
                             <div className={`mt-4 ${turnstileShellClass}`}>
@@ -886,11 +881,6 @@ export function OnboardingForm({
                         </Button>
                     )}
                 </div>
-            )}
-
-            {/* Step 4: Success */}
-            {step === 'success' && (
-                <SignupSuccess firstName={firstName} navTarget={successNavTarget} />
             )}
 
             {/* Step 3: OTP Verification */}

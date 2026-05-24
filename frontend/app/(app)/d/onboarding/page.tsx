@@ -214,8 +214,6 @@ function StepRequirementBadge({ kind }: { kind: 'mandatory' | 'optional' }) {
 }
 
 async function getAccessToken(): Promise<string | null> {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return null
     const { data: { session } } = await supabase.auth.getSession()
     return session?.access_token ?? null
 }
