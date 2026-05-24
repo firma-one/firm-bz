@@ -8,6 +8,8 @@
 ## Post-Change
 After changes, offer to: 1) run build, 2) commit/push. **Never auto-execute**—wait for explicit confirmation.
 
+**NEVER commit or push without explicit user approval.** Always present the proposed commit message and ask before running any `git commit` or `git push` command.
+
 ## Agents
 For specific roles, use: `.claude/agents/{product-manager,architecture,ux-coding,coding,quality-engineer,devops}.md`
 
