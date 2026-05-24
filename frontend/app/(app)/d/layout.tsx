@@ -41,5 +41,10 @@ export default async function DLayout({
         }
     }
 
+    // Signup-success is a standalone full-page experience — no app shell
+    if (invokePath === '/d/signup-success') {
+        return <>{children}</>
+    }
+
     return <DLayoutClient initialFirms={firms} isSystemAdmin={isSystemAdmin}>{children}</DLayoutClient>
 }

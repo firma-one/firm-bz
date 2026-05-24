@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { CheckCircle2 } from 'lucide-react'
 import { AuthService } from '@/lib/auth-service'
+import { supabase } from '@/lib/supabase'
 
 const H = '[font-family:var(--font-kinetic-headline),system-ui,sans-serif]'
 
@@ -52,7 +53,11 @@ export function SignupSuccess({ firstName: firstNameProp, navTarget = '/d/onboar
             </div>
             <button
                 type="button"
-                onClick={() => { if (skipReady) window.location.href = '/d' }}
+                onClick={async () => {
+                    if (!skipReady) return
+                    await supabase.auth.signOut()
+                    window.location.href = '/signin'
+                }}
                 disabled={!skipReady}
                 className={`${H} relative w-full overflow-hidden rounded-md bg-slate-800 px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-white transition-colors hover:bg-slate-700 active:bg-slate-900 disabled:pointer-events-none`}
             >

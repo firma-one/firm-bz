@@ -1,12 +1,11 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, Suspense } from 'react'
 import Link from 'next/link'
 import Logo from '@/components/Logo'
 import { GoogleDriveProductMark } from '@/components/ui/google-drive-icon'
-import { OnboardingForm } from '@/components/onboarding/onboarding-form'
-import { SignupSuccess } from '@/components/onboarding/signup-success'
-import { SignupStepProgress, type SignupStepKey } from '@/components/onboarding/signup-step-progress'
+import { SignupForm } from '@/components/signup/signup-form'
+import { SignupStepProgress, type SignupStepKey } from '@/components/signup/signup-step-progress'
 import { BRAND_NAME } from '@/config/brand'
 import { KINETIC_LANDING_HERO_BADGE } from '@/lib/marketing/target-audience-nav'
 import { KINETIC_AUTH_HERO_IMAGE } from '@/lib/marketing/kinetic-auth-hero'
@@ -22,14 +21,6 @@ const KINETIC_HERO_LEAD =
 export function SignupView() {
   const [step, setStep] = useState<SignupStepKey>('info')
   const [progressIndex, setProgressIndex] = useState(0)
-  const [oauthSuccess, setOauthSuccess] = useState(false)
-
-  useEffect(() => {
-    if (sessionStorage.getItem('signup_success') === '1') {
-      sessionStorage.removeItem('signup_success')
-      setOauthSuccess(true)
-    }
-  }, [])
 
   return (
     <div
@@ -148,17 +139,13 @@ export function SignupView() {
                       Create your account and start setting up your firm workspace.
                     </p>
                     <div className="mt-8 min-w-0">
-                      {oauthSuccess ? (
-                        <SignupSuccess navTarget="/d/onboarding?choice=1" />
-                      ) : (
-                        <Suspense fallback={<div className="py-8 text-[#45474c]">Loading...</div>}>
-                          <OnboardingForm
-                            layout="split-light"
-                            onStepChange={setStep}
-                            onProgressIndexChange={setProgressIndex}
-                          />
-                        </Suspense>
-                      )}
+                      <Suspense fallback={<div className="py-8 text-[#45474c]">Loading...</div>}>
+                        <SignupForm
+                          layout="split-light"
+                          onStepChange={setStep}
+                          onProgressIndexChange={setProgressIndex}
+                        />
+                      </Suspense>
                     </div>
                   </div>
                 </div>
