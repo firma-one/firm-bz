@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, Suspense } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import Link from 'next/link'
 import Logo from '@/components/Logo'
 import { GoogleDriveProductMark } from '@/components/ui/google-drive-icon'
@@ -21,6 +21,14 @@ const KINETIC_HERO_LEAD =
 export function SignupView() {
   const [step, setStep] = useState<SignupStepKey>('info')
   const [progressIndex, setProgressIndex] = useState(0)
+  const [oauthSuccess, setOauthSuccess] = useState(false)
+
+  useEffect(() => {
+    if (sessionStorage.getItem('signup_success') === '1') {
+      sessionStorage.removeItem('signup_success')
+      setOauthSuccess(true)
+    }
+  }, [])
 
   return (
     <div

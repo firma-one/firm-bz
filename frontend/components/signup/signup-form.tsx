@@ -29,6 +29,7 @@ import { checkEmailExists, sendOTPWithTurnstile } from '@/app/actions/send-otp'
 import { sendEvent, ANALYTICS_EVENTS } from "@/lib/analytics"
 import { logger } from '@/lib/logger'
 import { persistCheckoutIntent } from '@/lib/marketing/checkout-intent'
+import { SignupSuccess } from '@/components/onboarding/signup-success'
 
 type OnboardingStep = SignupStepKey
 
