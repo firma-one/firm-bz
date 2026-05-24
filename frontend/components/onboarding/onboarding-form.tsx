@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label'
 import { isValidEmail, isGoogleEmail, isPotentiallyGoogleWorkspace, generateDefaultOrgName } from '@/lib/email-utils'
 import { AuthService } from '@/lib/auth-service'
 import { supabase } from '@/lib/supabase'
-import { ArrowLeft, ArrowRight, Check, CheckCircle2 } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check } from 'lucide-react'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import {
     Tooltip,
@@ -29,6 +29,7 @@ import { checkEmailExists, sendOTPWithTurnstile } from '@/app/actions/send-otp'
 import { sendEvent, ANALYTICS_EVENTS } from "@/lib/analytics"
 import { logger } from '@/lib/logger'
 import { persistCheckoutIntent } from '@/lib/marketing/checkout-intent'
+import { SignupSuccess } from '@/components/onboarding/signup-success'
 
 type OnboardingStep = SignupStepKey
 
@@ -128,8 +129,6 @@ export function OnboardingForm({
 
     // Success state
     const [successNavTarget, setSuccessNavTarget] = useState('/d/onboarding')
-    const [countdown, setCountdown] = useState(5)
-    const [skipReady, setSkipReady] = useState(false)
 
     useEffect(() => {
         onStepChange?.(step)
@@ -146,30 +145,6 @@ export function OnboardingForm({
             persistCheckoutIntent({ plan: 'Standard', interval })
         }
     }, [searchParams])
-
-    // Auto-navigate after signup success — full navigation so the `/d` server layout sees auth cookies
-    useEffect(() => {
-        if (step !== 'success') return
-        if (countdown <= 0) {
-            window.location.href = successNavTarget
-            return
-        }
-        const t = setTimeout(() => setCountdown((c) => c - 1), 1000)
-        return () => clearTimeout(t)
-    }, [step, countdown, successNavTarget])
-
-    // Delay skip button activation so a stray Enter from OTP entry can't trigger it
-    useEffect(() => {
-        if (step !== 'success') return
-        setSkipReady(false)
-        const t = setTimeout(() => setSkipReady(true), 1500)
-        return () => clearTimeout(t)
-    }, [step])
-
-    const handleSkipOnboarding = async () => {
-        await supabase.auth.signOut()
-        window.location.href = '/'
-    }
 
     // Tracks whether the user just completed OTP in this session — prevents checkSession
     // from immediately redirecting away if the component remounts during the success countdown.
@@ -413,7 +388,6 @@ export function OnboardingForm({
 
         justVerifiedRef.current = true
         setSuccessNavTarget(navTarget)
-        setCountdown(8)
         setStep('success')
         setLoading(false)
     }
@@ -458,46 +432,56 @@ export function OnboardingForm({
                         )}
                         {isSplitLight ? (
                             <div className="mt-0">
-                                <div
-                                    className={emailLocked && !emailVerifiedNewUser ? 'opacity-50 cursor-text' : ''}
-                                    onClick={() => setEmailLocked(false)}
-                                >
-                                <KineticFloatingEmailField
-                                    ref={emailInputRef}
-                                    id="email"
-                                    value={email}
-                                    onValueChange={setEmail}
-                                    disabled={emailVerifiedNewUser}
-                                    onFocus={() => setEmailLocked(false)}
-                                    required
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter' && !emailVerifiedNewUser) {
-                                            e.preventDefault()
-                                            void handleInfoSubmit(e as unknown as React.FormEvent<Element>)
-                                        }
-                                    }}
-                                    trailing={
-                                        !emailVerifiedNewUser ? (
-                                            <Button
-                                                type="submit"
-                                                variant="ghost"
-                                                size="icon"
-                                                disabled={loading || !email.trim()}
-                                                className={kineticLimeIconButton}
-                                                aria-label="Continue"
-                                            >
-                                                {loading ? (
-                                                    <LoadingSpinner size="sm" />
-                                                ) : (
-                                                    <ArrowRight
-                                                        className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5"
-                                                        strokeWidth={2}
-                                                    />
-                                                )}
-                                            </Button>
-                                        ) : undefined
-                                    }
-                                />
+                                {!emailVerifiedNewUser ? (
+                                    <div className="flex items-center gap-2">
+                                        <div
+                                            className={`min-w-0 flex-1 ${emailLocked ? 'opacity-50 cursor-text' : ''}`}
+                                            onClick={() => setEmailLocked(false)}
+                                        >
+                                            <KineticFloatingEmailField
+                                                ref={emailInputRef}
+                                                id="email"
+                                                value={email}
+                                                onValueChange={setEmail}
+                                                disabled={false}
+                                                onFocus={() => setEmailLocked(false)}
+                                                required
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        e.preventDefault()
+                                                        void handleInfoSubmit(e as unknown as React.FormEvent<Element>)
+                                                    }
+                                                }}
+                                            />
+                                        </div>
+                                        <Button
+                                            type="submit"
+                                            variant="ghost"
+                                            size="icon"
+                                            disabled={loading || !email.trim()}
+                                            className={kineticLimeIconButton}
+                                            aria-label="Continue"
+                                        >
+                                            {loading ? (
+                                                <LoadingSpinner size="sm" />
+                                            ) : (
+                                                <ArrowRight
+                                                    className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5"
+                                                    strokeWidth={2}
+                                                />
+                                            )}
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    <KineticFloatingEmailField
+                                        ref={emailInputRef}
+                                        id="email"
+                                        value={email}
+                                        onValueChange={setEmail}
+                                        disabled={true}
+                                        required
+                                    />
+                                )}
                                 {!emailVerifiedNewUser && (
                                     <p className="mt-1.5 text-xs text-[#45474c]">
                                         We&apos;ll check if you already have an account.
@@ -511,7 +495,6 @@ export function OnboardingForm({
                                         </Link>
                                     </p>
                                 )}
-                                </div>
                             </div>
                         ) : (
                             <>
@@ -907,53 +890,7 @@ export function OnboardingForm({
 
             {/* Step 4: Success */}
             {step === 'success' && (
-                <div className="animate-in fade-in slide-in-from-bottom-2 space-y-6 duration-300">
-                    {/* Icon */}
-                    <div className={isSplitLight ? 'flex justify-start' : 'flex justify-center'}>
-                        <div
-                            className={`flex h-14 w-14 items-center justify-center rounded-full ${
-                                isSplitLight ? 'bg-[#72ff70]/15' : 'bg-[#72ff70]/10'
-                            }`}
-                        >
-                            <CheckCircle2
-                                className={`h-8 w-8 ${isSplitLight ? 'text-[#006e16]' : 'text-[#72ff70]'}`}
-                                strokeWidth={1.5}
-                            />
-                        </div>
-                    </div>
-
-                    {/* Headline */}
-                    <div className={isSplitLight ? 'text-left' : 'text-center'}>
-                        <h2
-                            className={`mb-1.5 text-xl font-bold tracking-tight ${H} ${
-                                isSplitLight ? 'text-[#1b1b1d]' : 'text-white'
-                            }`}
-                        >
-                            You&apos;re in{firstName ? `, ${firstName}` : ''}!
-                        </h2>
-                        <p className={`text-sm ${isSplitLight ? 'text-[#45474c]' : 'text-slate-400'}`}>
-                            Auto redirecting to Onboarding&hellip;
-                        </p>
-                    </div>
-
-                    {/* Skip CTA — dark button with left-to-right timer fill; clicking cancels and signs out */}
-                    <button
-                        type="button"
-                        onClick={() => { if (skipReady) void handleSkipOnboarding() }}
-                        disabled={!skipReady}
-                        className={`${H} relative w-full overflow-hidden rounded-md bg-slate-800 px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-white transition-colors hover:bg-slate-700 active:bg-slate-900 disabled:pointer-events-none`}
-                    >
-                        {/* Timer fill — slides left→right over 8s, 1s CSS transition matches the countdown interval */}
-                        <span
-                            className="pointer-events-none absolute inset-y-0 left-0 bg-white/10 transition-[width] duration-1000 ease-linear"
-                            style={{ width: `${((8 - countdown) / 8) * 100}%` }}
-                        />
-                        <span className="relative flex items-center justify-between">
-                            <span>Skip onboarding for now</span>
-                            <span className="tabular-nums font-normal opacity-50">{countdown}s</span>
-                        </span>
-                    </button>
-                </div>
+                <SignupSuccess firstName={firstName} navTarget={successNavTarget} />
             )}
 
             {/* Step 3: OTP Verification */}

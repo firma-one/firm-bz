@@ -75,10 +75,10 @@ export class AuthService {
         try {
             // Store onboarding data in localStorage for callback
             localStorage.setItem('onboarding_data', JSON.stringify(onboardingData))
+            // Flag checked on /signup after OAuth returns to show SignupSuccess
+            sessionStorage.setItem('signup_success', '1')
 
-            const callbackNext = next
-                ? `/signup/callback?next=${encodeURIComponent(next)}`
-                : '/signup/callback'
+            const callbackNext = next ?? '/signup'
             const redirectTo = `${getOAuthRedirectOrigin()}/auth/callback?next=${encodeURIComponent(callbackNext)}`
 
             const { error } = await supabase.auth.signInWithOAuth({

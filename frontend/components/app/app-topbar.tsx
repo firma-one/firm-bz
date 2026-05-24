@@ -497,9 +497,9 @@ export function AppTopbar() {
         )}
       </div>
 
-      {/* Center: Command palette trigger */}
+      {/* Center: Command palette trigger — hidden on onboarding */}
       <div className="flex-1 flex justify-center px-12">
-        {(() => {
+        {!pathname?.startsWith('/d/onboarding') && (() => {
           const isMac = mounted && /Mac|iPhone|iPod|iPad/i.test(navigator.platform)
           const modKey = !mounted ? '⌘' : isMac ? '⌘' : 'Ctrl'
           return (
