@@ -19,8 +19,6 @@ export function ResearchContent({ campaign }: ResearchContentProps) {
 
     useEffect(() => {
         if (!campaign.scriptSnippet || !embedRef.current) return
-        // createContextualFragment parses mixed HTML+<script> and executes scripts,
-        // unlike innerHTML which silently ignores injected <script> tags.
         const fragment = document.createRange().createContextualFragment(campaign.scriptSnippet)
         embedRef.current.appendChild(fragment)
     }, [campaign.scriptSnippet])
@@ -33,19 +31,11 @@ export function ResearchContent({ campaign }: ResearchContentProps) {
 
             switch (event.data.code) {
                 case 'TallyFormLoaded':
-                    sendEvent({
-                        action: ANALYTICS_EVENTS.RESEARCH_FORM_LOADED,
-                        category: 'Research',
-                        label: campaignId,
-                    })
+                    sendEvent({ action: ANALYTICS_EVENTS.RESEARCH_FORM_LOADED, category: 'Research', label: campaignId })
                     break
                 case 'TallyFormStarted':
                     startedAtRef.current = Date.now()
-                    sendEvent({
-                        action: ANALYTICS_EVENTS.RESEARCH_FORM_STARTED,
-                        category: 'Research',
-                        label: campaignId,
-                    })
+                    sendEvent({ action: ANALYTICS_EVENTS.RESEARCH_FORM_STARTED, category: 'Research', label: campaignId })
                     break
                 case 'TallyFormSubmitted': {
                     const duration = startedAtRef.current
@@ -68,17 +58,45 @@ export function ResearchContent({ campaign }: ResearchContentProps) {
     }, [campaign.id])
 
     return (
-        <div className="relative flex min-h-screen flex-col">
-            {/* Brand header — logo lockup only, no nav */}
-            <header className="border-b border-slate-200/60 bg-white/70 backdrop-blur-md px-6 py-4">
-                <Link href="/" aria-label="Firma home">
+        <div className="flex min-h-screen flex-col">
+            {/* Brand header */}
+            <header className="border-b border-slate-200/60 bg-white/70 backdrop-blur-md px-6 py-4 flex justify-center">
+                <Link href="/" aria-label="Firma home" className="[&>div]:items-center">
                     <Logo size="md" showText wordmarkClassName="text-2xl leading-none" />
                 </Link>
             </header>
 
-            {/* Main content */}
-            <main className="flex-1 w-full max-w-3xl mx-auto px-6 py-10">
-                <div ref={embedRef} className="w-full" />
+            <main className="flex-1 w-full">
+                <div className="md:max-w-7xl md:mx-auto md:px-6 md:py-16">
+
+                    {/* Outer card — desktop only */}
+                    <div className="md:bg-[#F0EDEE] md:p-8 md:shadow-[0_4px_24px_rgba(0,0,0,0.10),0_0_0_1px_rgba(0,0,0,0.05)]">
+
+                        {/* Inner diagonal card — desktop only */}
+                        <div className="relative overflow-hidden md:mx-8 md:my-8 md:shadow-[0_2px_12px_rgba(0,0,0,0.08),0_0_0_1px_rgba(0,0,0,0.04)]">
+
+                            {/* Diagonal backgrounds — desktop only */}
+                            <div className="hidden md:block absolute inset-0 bg-[#FDF8FA]" />
+                            <div className="hidden md:block absolute inset-0" style={{ clipPath: 'polygon(0% 15%, 100% 40%, 100% 100%, 0% 100%)', background: '#ECE5E0' }} />
+                            <div className="hidden md:block absolute inset-0" style={{ clipPath: 'polygon(0% 85%, 100% 50%, 100% 100%, 0% 100%)', background: '#E1DEE5' }} />
+
+                            {/* Left vertical "firma" label — desktop only */}
+                            <div className="hidden md:flex absolute left-0 inset-y-0 z-10 w-16 items-center justify-center">
+                                <span className="text-[#1b1b1d]/30 font-bold text-sm tracking-[0.35em] uppercase select-none" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', fontFamily: 'var(--font-kinetic-headline, system-ui)' }}>
+                                    firma
+                                </span>
+                            </div>
+
+                            {/* White iframe card — desktop centered, mobile plain */}
+                            <div className="relative z-10 md:flex md:justify-center md:py-12 md:px-20">
+                                <div className="w-full md:max-w-[640px] md:bg-white md:overflow-hidden md:shadow-[0_8px_32px_-4px_rgba(0,0,0,0.18),0_2px_8px_rgba(0,0,0,0.08),0_0_0_1px_rgba(0,0,0,0.04)]">
+                                    <div ref={embedRef} className="w-full" />
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
             </main>
 
             <Footer />

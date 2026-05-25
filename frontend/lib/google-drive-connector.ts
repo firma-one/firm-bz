@@ -1757,17 +1757,6 @@ export class GoogleDriveConnector {
           data: { connectorId: existingConnector.id }
         })
       }
-      upsertFollowUpReminder({
-        userId,
-        entityKey: 'platform.connectors.id',
-        entityValue: existingConnector.id,
-        action: 'Reconnect Drive',
-        dateKey: 'platform.connectors.tokenExpiresAt',
-        dateValue: tokenExpiresAt.toISOString(),
-        entityName: accountEmail?.trim() ?? name ?? 'Google Drive',
-        firmId: organizationId ?? '',
-        ctaUrl: '/d/onboarding',
-      }).catch(() => {})
       return updated
     }
 
@@ -1798,18 +1787,6 @@ export class GoogleDriveConnector {
         data: { connectorId: newConnector.id }
       })
     }
-
-    upsertFollowUpReminder({
-      userId,
-      entityKey: 'platform.connectors.id',
-      entityValue: newConnector.id,
-      action: 'Reconnect Drive',
-      dateKey: 'platform.connectors.tokenExpiresAt',
-      dateValue: tokenExpiresAt.toISOString(),
-      entityName: accountEmail?.trim() ?? name ?? 'Google Drive',
-      firmId: organizationId ?? '',
-      ctaUrl: '/d/onboarding',
-    }).catch(() => {})
 
     return newConnector
   }
@@ -1942,6 +1919,17 @@ export class GoogleDriveConnector {
           where: { id: connectionId },
           data: { status: ConnectorStatus.EXPIRED },
         })
+        upsertFollowUpReminder({
+          userId: connector.userId,
+          entityKey: 'platform.connectors.id',
+          entityValue: connectionId,
+          action: 'Reconnect Drive',
+          dateKey: 'platform.connectors.tokenExpiresAt',
+          dateValue: new Date().toISOString(),
+          entityName: (connector.settings as { accountEmail?: string } | null)?.accountEmail?.trim() ?? connector.name ?? 'Google Drive',
+          firmId: connector.firmId ?? '',
+          ctaUrl: '/d/onboarding',
+        }).catch(() => {})
       }
 
       if (oauthError === 'invalid_grant') {

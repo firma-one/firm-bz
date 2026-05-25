@@ -3,7 +3,7 @@
  */
 export const PLATFORM_BRAND_COOKIE = 'platform_brand_name'
 
-const DEFAULT_BRAND_NAME = 'Pockett'
+const DEFAULT_BRAND_NAME = 'firma'
 /** Default platform accent (e.g. UI highlights); override via `NEXT_PUBLIC_PLATFORM_BRAND_COLOR`. */
 const DEFAULT_BRAND_COLOR = '#ECC0AA'
 /** Darker peach for logo grid + `BrandName` (stronger contrast than `DEFAULT_BRAND_COLOR`). */
