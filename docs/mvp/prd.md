@@ -1,16 +1,16 @@
-# Product Requirements Document (PRD): Pockett Core Platform MVP
+# Product Requirements Document (PRD): Firma Core Platform MVP
 
-**Document purpose:** This PRD defines the product scope, features, and requirements for the Pockett platform—a client-centric document delivery and collaboration workspace for professional services. It is intended as a client and stakeholder deliverable for alignment on scope, behaviour, and acceptance criteria.
+**Document purpose:** This PRD defines the product scope, features, and requirements for the Firma platform—a client-centric document delivery and collaboration workspace for professional services. It is intended as a client and stakeholder deliverable for alignment on scope, behaviour, and acceptance criteria.
 
 **Audience:** Product owners, stakeholders, and implementation teams.
 
-**Recent updates:** Firm/Engagement terminology; canonical routes `/e/` (redirect from `/p/`); Search, Doc Comments, Bookmarks, Notifications (broadcast, dismiss), My Notes, Project Canvas; connector abstraction for OneDrive.
+**Recent updates:** Firm/Engagement terminology; canonical routes `/e/` (redirect from `/p/`); Search (Elasticsearch + semantic), Doc Comments, Bookmarks, Notifications (broadcast, dismiss), Reminders, Dashboard with action centre; connector abstraction for OneDrive; Sandbox/demo workspace; Board & Dossier tabs (BETA).
 
 ---
 
 ## 1. Overview
 
-Pockett is a professional client portal that connects organisations’ existing Google Drive to a structured workspace. Users organise work by clients and projects, control access via roles and personas, and deliver documents through a branded experience—without migrating files or changing where data lives. This document describes the implemented and planned features for the Core Platform MVP and the billing model that supports tiered plans (Standard, Pro, Business, Enterprise).
+Firma is a professional client portal that connects organisations’ existing Google Drive to a structured workspace. Users organise work by clients and projects, control access via roles and personas, and deliver documents through a branded experience—without migrating files or changing where data lives. This document describes the implemented and planned features for the Core Platform MVP and the billing model that supports tiered plans (Standard, Pro, Business, Enterprise).
 
 ## 2. Onboarding Flow
 
@@ -43,7 +43,7 @@ Pockett is a professional client portal that connects organisations’ existing 
 - [x] **Dashboard**:
   - [x] App Sidebar: Engagements (Projects), Members, Shares, Insights, Sources, Connectors.
 - [x] **Connectors**: Firm-level cloud storage at `/d/o/[slug]/connectors`. Connector registry supports multiple types (Google Drive implemented; OneDrive adapter stubbed). Used for engagement folder sync and Import from Drive. **RLS:** Connectors scoped by firm; storage adapters implement `IConnectorStorageAdapter`; document permission regrant is provider-specific (OneDrive equivalent can be added later).
-  - [x] **Folder Setup**: Google Drive connector creates `.pockett` root and firm folder with owner-only permissions. See [File Management Security](#6-file-management).
+  - [x] **Folder Setup**: Google Drive connector creates `.firma` root and firm folder with owner-only permissions. See [File Management Security](#6-file-management).
 
 ## 4. Client Management
 
@@ -81,31 +81,33 @@ Pockett is a professional client portal that connects organisations’ existing 
     - **Project Properties**: Name, Description, Save. When the project is closed (`isClosed: true`), property fields and Save are disabled; user must reopen to edit.
     - **Close project** (amber): Sets `isClosed: true`. Project becomes view-only for current members. All project members who are org guests (`ORG_GUEST`) are removed and their Google Drive folder access is revoked.
     - **Reopen project** (amber): Shown when `isClosed: true`. Sets `isClosed: false`; only Project Lead can reopen.
-    - **Delete project** (red): Soft delete. Sets `isDeleted: true`; removes all project members; revokes all Google Drive permissions on the project folder (restrict to owner only). The project folder is **not** deleted in Google Drive so the org admin can still access files natively outside Pockett. No other DB records or Drive files are deleted.
+    - **Delete project** (red): Soft delete. Sets `isDeleted: true`; removes all project members; revokes all Google Drive permissions on the project folder (restrict to owner only). The project folder is **not** deleted in Google Drive so the org admin can still access files natively outside Firma. No other DB records or Drive files are deleted.
 - [x] **Project lifecycle flags**: `Project.isClosed` (Boolean, default false) and `Project.isDeleted` (Boolean, default false). Deleted projects are excluded from hierarchy and all project fetches; they are hidden from everyone in the portal.
 - [x] **Project Workspace (Tabs)**: Tab and sidebar visibility are restricted by persona. See **§7.6 Permission-based UI: Who can see what** for the full matrix.
   1. [x] **Files**: Document management (default view); full file browser, uploads, Import from Drive, folder upload. Visible to all personas with project access.
   2. [x] **Members**: Member list, invitations, personas (see §7). Visible to Team Member, Project Lead, Client Owner, Org Owner only.
-  3. [ ] **Shares**: User/guest sharing settings (placeholder). Same visibility as Members.
+  3. [x] **Shares**: Document sharing activity dashboard; per-document sharing workflows (accept/finalize/unlock). Same visibility as Members.
   4. [x] **Insights**: Project-level insights dashboard (recent/trending/storage/sharing views). Same visibility as Members.
-  5. [ ] **Sources**: Data sources & connectors (placeholder; org-level Connectors at `/o/[slug]/connectors` for Google Drive). Same visibility as Members.
+  5. [ ] **Sources**: Data sources & connectors (placeholder; org-level Connectors at `/f/[slug]/connectors` for Google Drive). Same visibility as Members.
   6. [x] **Audit**: Project-level audit log shown in the Audit tab (main content). Visible to all personas with project access. Events are append-only and not editable (see §5 Audit view).
   7. [x] **Settings**: Project properties, close/reopen, delete. Visible to Project Lead, Client Owner, Org Owner only; implemented as a tab after Sources.
+  8. [x] **Board** (BETA): Kanban view of engagement status, due dates, contract type, and tags. Requires `enableBetaFeatures` org flag; visible to internal personas only.
+  9. [x] **Dossier** (BETA): Rich-text wiki pages per engagement. Requires `enableBetaFeatures` org flag; visible to internal personas only.
 
 ## 6. File Management
 
 **Purpose:** Secure, robust, and familiar document handling powered by Google Drive.
 
-- [x] **Architecture**: "Headless" Drive integration. Pockett acts as the UI, Google Drive acts as the storage/backend.
+- [x] **Architecture**: "Headless" Drive integration. Firma acts as the UI, Google Drive acts as the storage/backend.
 - [x] **Security**:
-  - [x] **Direct-to-Drive Uploads**: Files are streamed directly from Browser to Google (TLS 1.3), bypassing Pockett servers (Resumable Upload Protocol).
+  - [x] **Direct-to-Drive Uploads**: Files are streamed directly from Browser to Google (TLS 1.3), bypassing Firma servers (Resumable Upload Protocol).
   - [x] **Scoped Access**: System uses a Service Account or OAuth Scope limited to specific folders.
   - [x] **Folder Permission Restrictions**:
-    - [x] **Centralized Access Control**: All folder permissions are managed exclusively through Pockett Portal project membership. Google Drive's native sharing is disabled to prevent unauthorized access.
-    - [x] **`.pockett` Root Folder**: When created during organization setup, permissions are restricted to owner-only with no inheritance from parent folder. All non-owner permissions are removed to ensure strict access control.
-    - [x] **Organization Folders**: Each organization folder created under `.pockett` is restricted to owner-only access with no inheritance from `.pockett` parent. This ensures complete isolation of organization data.
+    - [x] **Centralized Access Control**: All folder permissions are managed exclusively through Firma Portal project membership. Google Drive's native sharing is disabled to prevent unauthorized access.
+    - [x] **`.firma` Root Folder**: When created during organization setup, permissions are restricted to owner-only with no inheritance from parent folder. All non-owner permissions are removed to ensure strict access control.
+    - [x] **Organization Folders**: Each organization folder created under `.firma` is restricted to owner-only access with no inheritance from `.firma` parent. This ensures complete isolation of organization data.
     - [x] **Project-Level Permissions**: Access to project folders is granted automatically when users join projects via invitation (Project Lead and Team Member personas receive `can_edit` access). Permissions are revoked automatically when members are removed from projects.
-    - [x] **Enforcement**: Applied automatically during `setupOrgFolder()` when Google Drive connector is initialized. Both new and existing folders are secured to prevent unauthorized access. This ensures that all access is controlled through Pockett Portal's project membership system, not through Google Drive's native sharing mechanisms.
+    - [x] **Enforcement**: Applied automatically during `setupOrgFolder()` when Google Drive connector is initialized. Both new and existing folders are secured to prevent unauthorized access. This ensures that all access is controlled through Firma Portal's project membership system, not through Google Drive's native sharing mechanisms.
 - [x] **Feature: File Browser**:
   - [x] **Visuals**: Clean, table-based layout (Name, Owner, Date modified, File size). Column headers in Title case; Sort column right-aligned with row action menu.
   - [x] **Icons**: Dynamic file-type icons (PDF, Sheets, Docs, Images, etc.).
@@ -116,7 +118,7 @@ Pockett is a professional client portal that connects organisations’ existing 
   - [x] **Refresh**: Button next to search to refresh list (e.g. after renaming in Google Docs).
   - [x] **Actions**: Row action menu (Preview, Edit in Google Docs, Open Folder in Drive, Download, Share, **Comments** (doc only), Version history, Bookmark, Set Due Date, Rename/Copy/Move/Delete when callbacks provided). Menu items `text-xs`; menu stays open until user dismisses. **Comments** opens the right pane with the document-level DocComments thread (see §6 DocComments).
   - [x] **Long names**: Truncated file names show full name in tooltip.
-  - [x] **Direct-to-Drive**: Add menu indicates uploads go directly to Google (never through Pockett servers).
+  - [x] **Direct-to-Drive**: Add menu indicates uploads go directly to Google (never through Firma servers).
 - [x] **Feature: Add Menu**:
   - [x] **New folder** (and New Doc/Sheet/Slide/etc. via submenu).
   - [x] **From your computer**: Upload files; Upload folder (retains folder structure in Drive; in-app confirmation modal).
@@ -190,6 +192,48 @@ Pockett is a professional client portal that connects organisations’ existing 
 
 - [ ] **Feature: UI Enhancements** (High Priority):
   - [ ] **Project Card Images**: Add random/featured images to Project cards for visual appeal and better project identification.
+
+## 6a. Search
+
+**Purpose:** Let users find documents and folders across projects quickly.
+
+- [x] **Project-level Search**: Full-text Elasticsearch search within a project's Drive folder via in-app search panel.
+- [x] **Semantic Search**: AI-powered semantic search using `lib/search-utils.ts` and `semantic-search.ts`.
+- [x] **Batch Indexing**: Files are indexed on upload/import via Inngest background jobs (`file.index.requested`, `file.index.batch.requested`).
+- [x] **Scan & Index**: Recursive project scan indexes entire folder trees on project creation or connector setup (`project.index.scan.requested`).
+
+## 6b. Bookmarks
+
+**Purpose:** Allow users to save and quickly return to frequently accessed files and engagements.
+
+- [x] **User Bookmarks** (`/d/u/bookmarks`): Persistent per-user bookmarks with a maximum of 50 entries.
+- [x] **Bookmark API**: `GET/POST/DELETE /api/bookmarks` for full bookmark management.
+- [x] **File Bookmarking**: "Bookmark" action available in the file browser row action menu.
+
+## 6c. Notifications & Reminders
+
+**Purpose:** Keep team members informed of important events without leaving the portal.
+
+- [x] **Notifications Page** (`/d/u/notifications`): System notifications with priorities (INFO, WARNING, CRITICAL); unread count badge.
+- [x] **Broadcast Notifications**: Org Admins can broadcast scoped notifications (org / client / project level) from the notification centre.
+- [x] **Realtime Delivery**: Supabase Realtime subscription pushes new notifications to connected clients instantly.
+- [x] **Reminders Page** (`/d/u/reminders`): User-level reminders with metadata tracking and status management.
+
+## 6d. Dashboard & Action Centre
+
+**Purpose:** Provide a unified landing page with pending actions, recent activity, and business insights.
+
+- [x] **Dashboard** (`/dash`): Landing page after login showing action centre (pending shares, approvals, due dates), business insights panels, and file review modals.
+- [x] **Recent Items** (`/d/u/recent`): Tracks and displays recently visited clients and engagements (stored in localStorage).
+- [x] **Action Centre**: Surfaces documents awaiting review or approval across all active engagements.
+
+## 6e. Beta Workspace Features
+
+**Purpose:** Advanced engagement views gated behind `enableBetaFeatures` org flag.
+
+- [x] **Board Tab** (BETA): Kanban/board view of engagement status, kickoff/due dates, contract type, and tags. Visible only to users with `project:can_view_internal` capability.
+- [x] **Dossier/Wiki Tab** (BETA): Rich-text wiki pages per engagement (`EngagementWikiPage` model). Supports persistent page count; visible to internal personas only.
+- [x] **Sandbox / Demo Workspace**: Automatically provisioned demo firm ("Acme Corp" sample data) for new free-tier users to explore the product without creating real data. Populated via Inngest background jobs with sample Drive files.
 
 ## 7. RBAC & Permission System
 
@@ -406,7 +450,7 @@ Project-level UI (tabs and sidebar sub-menus) is restricted by persona. The foll
   - [x] **Discount**: 15% off first 3 months when subscribing.
 
 - [x] **Referral Link Sharing**:
-  - [x] **Format**: `https://pockett.io/waitlist?ref=ABC123XY`
+  - [x] **Format**: `https://firma.one/waitlist?ref=ABC123XY`
   - [x] **Display**: Prominently shown in waitlist status view.
   - [x] **Copy Functionality**: One-click copy button with visual feedback.
   - [x] **URL Parameter Handling**: Automatically detects and processes referral codes from URL.
