@@ -89,7 +89,7 @@ export function AppFrame({ children, activeNav, activeUrl, logoColor = "#069668"
                 whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%",
               }}
             >
-              app.firma.one/{activeUrl}
+              www.firma.bz/{activeUrl}
             </span>
           </div>
         </div>

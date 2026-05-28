@@ -70,6 +70,7 @@ import { KineticHeroSection } from "@/components/kinetic/KineticHeroSection"
 import { KineticMarketingBadge, KineticSectionIntro } from "@/components/kinetic/kinetic-section-intro"
 import { LegacyHeroScreenMock } from "@/components/landing/LegacyHeroScreenMock"
 import { LandingHeroPrimaryCtas } from "@/components/marketing/landing-hero-primary-ctas"
+import { ProductPreview } from "@/components/marketing/app-carousel"
 
 function TargetAudienceUseCaseCard({ block }: { block: UseCaseBlock }) {
   const shell = cn(targetAudienceScrollMarginClass, "w-full min-w-0 break-words", block.cardShellClass)
@@ -564,6 +565,12 @@ export function LandingPage({
                         <ArrowRight className="h-5 w-5 transition-transform duration-200 group-hover:translate-x-0.5" strokeWidth={2} />
                   </Button>
                 </Link>
+                <Link href="#preview" className="w-full sm:w-auto">
+                      <div className="group h-14 px-8 rounded-md bg-[#5a78ff] text-white text-base font-bold tracking-widest border border-transparent flex items-center justify-center cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#4a68ef] hover:shadow-[0_10px_24px_-12px_rgba(90,120,255,0.55)] active:translate-y-0 active:scale-95 [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
+                        <PlayCircle className="w-5 h-5 mr-2 fill-white stroke-[#5a78ff]" />
+                    Watch Preview
+                  </div>
+                </Link>
                 <Link href={TRUST_CENTER_PATH} className="w-full sm:w-auto">
                       <div className="group h-14 px-8 rounded-md bg-[#141c2a] text-white text-base font-bold tracking-widest border border-transparent flex items-center justify-center cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:bg-black hover:shadow-[0_10px_24px_-12px_rgba(2,6,23,0.7)] active:translate-y-0 active:scale-95 [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
                         <ShieldCheck className={cn("w-5 h-5 mr-2 stroke-[1.5]", t.heroSecondaryIconHover)} />
@@ -868,6 +875,9 @@ export function LandingPage({
           {/* Background + gradients: `app/(marketing)/layout.tsx` (kinetic marketing shell) */}
           <Header />
           {landingBody}
+          <section id="preview" className="border-t border-black/[0.06]">
+            <ProductPreview />
+          </section>
       <Footer onOpenModal={openModal} />
         </>
       )}
