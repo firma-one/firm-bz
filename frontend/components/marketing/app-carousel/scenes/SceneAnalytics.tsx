@@ -65,7 +65,7 @@ function StatTile({ label, target, displayOverride, active }: {
       transition={{ type: "spring", stiffness: 260, damping: 24 }}
       style={{
         background: "#ffffff",
-        borderRadius: 2,
+        borderRadius: 4,
         border: "1px solid #e5e7eb",
         padding: "16px 18px",
         flex: 1,
@@ -158,7 +158,7 @@ export function SceneAnalytics({ phase }: Props) {
               style={{
                 flex: 1,
                 background: "#ffffff",
-                borderRadius: 2,
+                borderRadius: 4,
                 border: "1px solid #e5e7eb",
                 padding: "16px 18px",
               }}
@@ -169,7 +169,7 @@ export function SceneAnalytics({ phase }: Props) {
                   width: "60%",
                   background: "linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%)",
                   backgroundSize: "200% 100%",
-                  borderRadius: 2,
+                  borderRadius: 4,
                   marginBottom: 10,
                   animation: "shimmer 1.5s infinite linear",
                 }}
@@ -180,7 +180,7 @@ export function SceneAnalytics({ phase }: Props) {
                   width: "40%",
                   background: "linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%)",
                   backgroundSize: "200% 100%",
-                  borderRadius: 2,
+                  borderRadius: 4,
                   animation: "shimmer 1.5s infinite linear",
                   animationDelay: `${i * 0.15}s`,
                 }}
@@ -204,7 +204,7 @@ export function SceneAnalytics({ phase }: Props) {
       <div
         style={{
           background: "#ffffff",
-          borderRadius: 2,
+          borderRadius: 4,
           border: "1px solid #e5e7eb",
           padding: "14px 16px",
           flex: phase >= 3 ? "0 0 auto" : 1,
@@ -230,7 +230,7 @@ export function SceneAnalytics({ phase }: Props) {
               height: 80,
               background: "linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%)",
               backgroundSize: "200% 100%",
-              borderRadius: 2,
+              borderRadius: 4,
               animation: "shimmer 1.5s infinite linear",
             }}
           />
@@ -285,7 +285,7 @@ export function SceneAnalytics({ phase }: Props) {
             animate={{ opacity: 1 }}
             style={{
               background: "#ffffff",
-              borderRadius: 2,
+              borderRadius: 4,
               border: "1px solid #e5e7eb",
               overflow: "hidden",
             }}
@@ -322,7 +322,7 @@ export function SceneAnalytics({ phase }: Props) {
                   style={{
                     width: 28,
                     height: 28,
-                    borderRadius: 2,
+                    borderRadius: 4,
                     background: `${item.color}15`,
                     display: "flex",
                     alignItems: "center",

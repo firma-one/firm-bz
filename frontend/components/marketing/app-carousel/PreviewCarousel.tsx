@@ -59,7 +59,7 @@ function SceneCommandPalette({ phase }: { phase: number }) {
         <div
           style={{
             background: "#f3f4f6",
-            borderRadius: 2,
+            borderRadius: 4,
             padding: "6px 12px",
             fontFamily: "var(--font-kinetic-body, 'Work Sans', system-ui, sans-serif)",
             fontSize: 11,
@@ -75,7 +75,7 @@ function SceneCommandPalette({ phase }: { phase: number }) {
       <div
         style={{
           background: "#ffffff",
-          borderRadius: 2,
+          borderRadius: 4,
           border: "1px solid #e5e7eb",
           overflow: "hidden",
         }}
@@ -114,7 +114,7 @@ function SceneCommandPalette({ phase }: { phase: number }) {
               style={{
                 width: 32,
                 height: 32,
-                borderRadius: 2,
+                borderRadius: 4,
                 background: client.color,
                 display: "flex",
                 alignItems: "center",
@@ -160,7 +160,7 @@ function SceneCommandPalette({ phase }: { phase: number }) {
                 style={{
                   background: "#f0fdf4",
                   color: "#15803d",
-                  borderRadius: 2,
+                  borderRadius: 4,
                   padding: "2px 8px",
                   fontFamily: "var(--font-kinetic-body, 'Work Sans', system-ui, sans-serif)",
                   fontSize: 10,
