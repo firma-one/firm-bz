@@ -8,6 +8,7 @@ import { SceneFirmBranding } from "./scenes/SceneFirmBranding"
 import { SceneCreateClient } from "./scenes/SceneCreateClient"
 import { SceneCreateContact } from "./scenes/SceneCreateContact"
 import { SceneEngagementAndShare } from "./scenes/SceneEngagementAndShare"
+import { SceneWrapEngagement } from "./scenes/SceneWrapEngagement"
 import { SceneAnalytics } from "./scenes/SceneAnalytics"
 
 // ── SceneCommandPalette ──────────────────────────────────────────────────────
@@ -247,6 +248,19 @@ const SCENES = [
     ],
   },
   {
+    id: "wrap",
+    label: "Full control",
+    nav: "Clients" as const,
+    url: "app/firm/axiom/client/meridian/q3-review",
+    phases: [
+      { durationMs: 800,  cursor: { x: 480, y: 55,  clicking: false }, palettePhase: 0 },
+      { durationMs: 600,  cursor: { x: 480, y: 55,  clicking: true  }, palettePhase: 0 },
+      { durationMs: 1000, cursor: { x: 340, y: 355, clicking: false }, palettePhase: 0 },
+      { durationMs: 700,  cursor: { x: 340, y: 355, clicking: true  }, palettePhase: 0 },
+      { durationMs: 1500, cursor: { x: 420, y: 220, clicking: false }, palettePhase: 0 },
+    ],
+  },
+  {
     id: "analytics",
     label: "Analytics",
     nav: "Analytics" as const,
@@ -330,6 +344,7 @@ export function PreviewCarousel() {
       case "client":     return <SceneCreateClient phase={phase} />
       case "contact":    return <SceneCreateContact phase={phase} />
       case "engagement": return <SceneEngagementAndShare phase={phase} />
+      case "wrap":       return <SceneWrapEngagement phase={phase} />
       case "analytics":  return <SceneAnalytics phase={phase} />
       default:           return null
     }

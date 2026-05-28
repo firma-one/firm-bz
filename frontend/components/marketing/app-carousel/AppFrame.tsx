@@ -56,7 +56,7 @@ export function AppFrame({ children, activeNav, activeUrl, logoColor = "#069668"
       {/* Browser chrome bar */}
       <div
         style={{
-          background: "#36383d",
+          background: "#dee1e6",
           height: 40,
           display: "flex",
           alignItems: "center",
@@ -76,16 +76,17 @@ export function AppFrame({ children, activeNav, activeUrl, logoColor = "#069668"
         <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
           <div
             style={{
-              background: "#2d2d2d", borderRadius: 2, height: 24, width: "38%",
+              background: "#ffffff", borderRadius: 20, height: 26, width: "46%",
               display: "flex", alignItems: "center", justifyContent: "center",
-              gap: 5, padding: "0 10px", overflow: "hidden",
+              gap: 5, padding: "0 12px", overflow: "hidden",
+              border: "1px solid rgba(0,0,0,0.1)",
             }}
           >
             <span style={{ fontSize: 10 }}>🔒</span>
             <span
               style={{
                 fontFamily: "var(--font-kinetic-body, 'Work Sans', system-ui, sans-serif)",
-                fontSize: 11, color: "rgba(255,255,255,0.55)",
+                fontSize: 11, color: "#3c3c3c",
                 whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%",
               }}
             >
@@ -106,6 +107,7 @@ export function AppFrame({ children, activeNav, activeUrl, logoColor = "#069668"
           padding: "0 12px 0 14px",
           gap: 10,
           flexShrink: 0,
+          position: "relative",
         }}
       >
         {/* Branding — logo + firm name */}
@@ -134,10 +136,13 @@ export function AppFrame({ children, activeNav, activeUrl, logoColor = "#069668"
         {/* Divider */}
         <div style={{ width: 1, height: 18, background: "#e5e7eb", flexShrink: 0 }} />
 
-        {/* ⌘K command palette trigger */}
+        {/* ⌘K command palette trigger — absolutely centered */}
         <div
           style={{
-            flex: 1, height: 28,
+            position: "absolute",
+            left: "50%",
+            transform: "translateX(-50%)",
+            width: 240, height: 28,
             background: "#f3f4f6", borderRadius: 2,
             display: "flex", alignItems: "center", gap: 6,
             padding: "0 10px", cursor: "default",
@@ -166,8 +171,8 @@ export function AppFrame({ children, activeNav, activeUrl, logoColor = "#069668"
           </div>
         </div>
 
-        {/* Utility icons */}
-        <div style={{ display: "flex", alignItems: "center", gap: 3, flexShrink: 0 }}>
+        {/* Utility icons — right aligned */}
+        <div style={{ display: "flex", alignItems: "center", gap: 3, flexShrink: 0, marginLeft: "auto" }}>
           <div style={{ width: 28, height: 28, borderRadius: 2, display: "flex", alignItems: "center", justifyContent: "center", background: "#fff7ed" }}>
             <CalendarClock size={14} style={{ color: "#c2410c" }} strokeWidth={1.75} />
           </div>
@@ -197,7 +202,7 @@ export function AppFrame({ children, activeNav, activeUrl, logoColor = "#069668"
           }}
         >
           {/* Nav items */}
-          <div style={{ padding: "8px 0", flex: 1 }}>
+          <div style={{ padding: "8px 0", flex: 1, position: "relative" }}>
             {NAV_ITEMS.map((item) => {
               const isActive = item.label === activeNav
               return (
@@ -226,6 +231,20 @@ export function AppFrame({ children, activeNav, activeUrl, logoColor = "#069668"
             })}
           </div>
 
+          {/* Sidebar bottom fade */}
+          <div
+            style={{
+              position: "absolute",
+              bottom: 0,
+              left: 0,
+              right: 0,
+              height: 60,
+              background: "linear-gradient(to bottom, transparent, #f3f4f6)",
+              pointerEvents: "none",
+              zIndex: 10,
+            }}
+          />
+
           {/* Bottom user area */}
           <div style={{ padding: "10px 14px", borderTop: "1px solid #e5e7eb", display: "flex", alignItems: "center", gap: 8 }}>
             <div
@@ -247,6 +266,19 @@ export function AppFrame({ children, activeNav, activeUrl, logoColor = "#069668"
         {/* Content area */}
         <div style={{ flex: 1, background: "#f9f9fb", overflow: "hidden", position: "relative" }}>
           {children}
+          {/* Bottom fade */}
+          <div
+            style={{
+              position: "absolute",
+              bottom: 0,
+              left: 0,
+              right: 0,
+              height: 140,
+              background: "linear-gradient(to bottom, transparent, #f9f9fb)",
+              pointerEvents: "none",
+              zIndex: 10,
+            }}
+          />
         </div>
 
         {/* Command palette overlay */}
