@@ -50,13 +50,13 @@ export function AppFrame({ children, activeNav, activeUrl, logoColor = "#069668"
         height: "100%",
         display: "flex",
         flexDirection: "column",
-        boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+        boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.08)",
       }}
     >
       {/* Browser chrome bar */}
       <div
         style={{
-          background: "#dee1e6",
+          background: "#e2e4e8",
           height: 40,
           display: "flex",
           alignItems: "center",

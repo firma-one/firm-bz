@@ -456,7 +456,7 @@ export function PreviewCarousel() {
       ─────────────────────────────────────────────────────────────────────── */}
       <div style={{ width: "100%", background: SECTION_BG, paddingTop: 20, paddingBottom: 56 }}>
         <div className={SHELL}>
-          <div style={{ width: "100%", height: 540, position: "relative", overflow: "hidden" }}>
+          <div style={{ width: "100%", height: 540, position: "relative", filter: "drop-shadow(0 4px 6px rgba(0,0,0,0.04)) drop-shadow(0 12px 32px rgba(0,0,0,0.10)) drop-shadow(0 32px 64px rgba(0,0,0,0.07))" }}>
             <AppFrame
               activeNav={scene.nav}
               activeUrl={scene.url}
