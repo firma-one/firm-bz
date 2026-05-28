@@ -24,7 +24,7 @@ The following describes the **current** state at the time of this document. The 
   4. Fallback: `package.json` version + timestamp
 
 **Flow:**
-1. Middleware checks `pockett-deployment-version` cookie on each request
+1. Middleware checks `firma-deployment-version` cookie on each request
 2. If version mismatch → Clear session → Redirect to login
 3. On login → Set new version cookie → Rebuild permission cache
 

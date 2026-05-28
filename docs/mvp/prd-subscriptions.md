@@ -168,7 +168,7 @@ These features are available to all subscription tiers:
 - ✅ **Custom branded professional client portal**: Replaces documents delivered as email attachments or raw Drive links. Branded portal instead of generic 'Untitled Folder' links. Works with your existing Google Drive.
 - ✅ **Org → Client → Project hierarchy**: Clean structure clients understand. Uses your existing Drive—no migration.
 - ✅ **Unlimited Client Workspaces. Unlimited Team Members. Unlimited External Collaborators.**: No per-user fees.
-- ✅ **Google Drive–style document operations in Pockett**: Familiar open, preview, download, and share actions. No new storage system to learn.
+- ✅ **Google Drive–style document operations in Firma**: Familiar open, preview, download, and share actions. No new storage system to learn.
 - ✅ **Persona-based access (4 roles)**: Project Lead, Team Member, External Collaborator & Guest. Access follows role automatically.
 - ✅ **Simple permission management**: No granular file-by-file permissions. No resharing links; clients always know where to find documents.
 - ✅ **Document access tracking**: See who viewed what and when. Track feedback tied to each document.
@@ -189,7 +189,7 @@ These features are available to all subscription tiers:
 **Everything in Standard, plus templates & advanced review:**
 
 - ✅ **All Standard Features**
-- ✅ **Custom Subdomain**: Use custom subdomain (e.g., yourcompany.pockett.io) for client portal access
+- ✅ **Custom Subdomain**: Use custom subdomain (e.g., yourcompany.firma.one) for client portal access
 - ✅ **Watermarked Document Delivery**: Add organization branding watermarks to exported PDFs
 - ✅ **Document Templates**: Pre-configured document templates for common use cases
 - ✅ **Project Templates**: Choose from template projects with pre-defined folder structures

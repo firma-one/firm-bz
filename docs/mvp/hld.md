@@ -1,6 +1,6 @@
-# High-Level Design (HLD): Pockett Professional Client Portal
+# High-Level Design (HLD): Firma Professional Client Portal
 
-**Document purpose:** This HLD describes the system architecture, technology choices, and integration approach for the Pockett platform. It is intended for clients and stakeholders who need a clear view of how the product is built, how components interact, and how billing and subscriptions are integrated—without implementation detail.
+**Document purpose:** This HLD describes the system architecture, technology choices, and integration approach for the Firma platform. It is intended for clients and stakeholders who need a clear view of how the product is built, how components interact, and how billing and subscriptions are integrated—without implementation detail.
 
 **Audience:** Technical and non-technical stakeholders, implementation partners, and client delivery teams.
 
@@ -14,7 +14,7 @@
 | --------- | ----------- |
 | **Direct-to-Drive** | File bytes go browser → Google Drive (resumable upload). Portal servers never store or proxy file content; only metadata and upload URLs. |
 | **Multi-tenant** | All data is strictly scoped by Organization. Access is enforced via membership-based personas (`org_owner`, `project_admin`, etc.). **Autonomy:** Org Owners must be explicit members (Project Leads) to access project internals. |
-| **Headless Drive** | Portal is the UI; Google Drive is the storage backend. Folder structure is created at project creation; file list and uploads use Drive API and Picker. |
+| **Headless Drive** | Firma is the UI; Google Drive is the storage backend. Folder structure is created at project creation; file list and uploads use Drive API and Picker. |
 | **Session-first auth** | Supabase handles Google OAuth and session. API routes validate session and resolve org/client/project context; capabilities are resolved from a code-based mapping. |
 
 ---
@@ -83,15 +83,21 @@ Main application routes:
 | ----- | ------- |
 | `/onboarding` | New user workspace creation (no firm yet) |
 | `/d` | Firms list (HOME); shows all firms user belongs to |
-| `/dash` | Legacy redirect to `/d` |
-| `/d/o/[slug]` | Firm scope (dashboard: clients, connectors, insights) |
-| `/d/o/[slug]/c/[clientSlug]` | Client scope; engagement list |
-| `/d/o/[slug]/c/[clientSlug]/e/[engagementSlug]` | **Canonical** engagement workspace (Files, Members, Shares, Comments, Insights, Sources, Audit, Settings). Legacy `/p/[projectSlug]` redirects here. |
-| `/o/[slug]/c/[clientSlug]/e/[engagementSlug]` | Public engagement view (same; `/p/` redirects to `/e/`) |
+| `/dash` | Dashboard: action centre, business insights, file review modals |
+| `/d/f/[slug]` | Firm scope (clients list, connectors, insights) |
+| `/d/f/[slug]/c/[clientSlug]` | Client scope; engagement list |
+| `/d/f/[slug]/c/[clientSlug]/e/[engagementSlug]` | **Canonical** engagement workspace (Files, Members, Shares, Insights, Sources, Audit, Settings; Board & Dossier in BETA). Legacy `/p/[projectSlug]` redirects here. |
+| `/d/u/bookmarks` | User bookmarks (persistent, max 50) |
+| `/d/u/notifications` | User notifications with priority levels; admin broadcast |
+| `/d/u/reminders` | User reminders with metadata tracking |
+| `/d/u/recent` | Recently visited clients and engagements |
+| `/d/u/profile` | User profile settings |
+| `/d/f/[slug]/connectors` | Firm-level connector management (Google Drive; OneDrive stub) |
 | `/invite/[token]` | Invitation redemption (sign-in/sign-up → engagement) |
 | `/waitlist` | Public waitlist signup page with referral system |
 | `/pricing` | Public pricing page with plan comparison |
 | `/internal/waitlist` | Admin view of waitlist entries |
+| `/system` | System admin panel (maintenance flags, firm operations) |
 
 Slugs are URL-friendly (firm, client, engagement names). IDs are used in API and DB.
 
@@ -123,7 +129,11 @@ The application exposes a set of API routes for the frontend and for external se
 | `GET /api/permissions/project-tabs` | Project tab visibility (canViewInternalTabs, canViewSettings) by orgSlug/clientSlug/projectSlug; respects View As cookie. |
 | `GET/POST /api/projects/[projectId]/documents/[documentId]/doc-comments` | Document-level DocComments: list (GET) and append (POST). No UPDATE/DELETE; append-only. |
 | `GET /api/projects/[projectId]/audit` | Project-scoped platform audit events (list only; cursor pagination). No UPDATE/DELETE; append-only. |
+| `GET/POST/DELETE /api/bookmarks` | User bookmark management (max 50 per user). |
+| `GET /api/notifications` | Fetch user notifications with unread count. |
+| `GET /api/search` | Project-scoped full-text and semantic file search (Elasticsearch + AI). |
 | `POST /api/webhooks/polar` | Polar webhook receiver: subscription and order lifecycle events (signature-verified, idempotent). |
+| `POST /api/onboarding/create-sandbox` | Provision sandbox/demo workspace with sample Drive hierarchy (async via Inngest). |
 | Billing/checkout | Polar-hosted checkout and customer portal; app supplies redirect URLs and links from pricing/billing UI. |
 
 All authenticated routes expect `Authorization: Bearer <session.access_token>`. Org/client/project context is derived from request or path. The Polar webhook endpoint is unauthenticated but secured by Polar’s webhook signature. DocComments and Platform Audit: document-level comments (doc_comment_messages) and project audit events (platform_audit_events) are append-only; immutability enforced at API and DB (no UPDATE). Right pane hosts Comments (from document menu). Audit is shown in the Audit tab (main content). Author/actor derived from user IDs at read time.
@@ -184,15 +194,21 @@ Main UI entry points and components that LLD can break down into subcomponents, 
 | Area | Entry / key components |
 | ---- | ----------------------- |
 | **Onboarding** | `app/onboarding/page.tsx` — workspace name, slug, create org. |
-| **Organizations List** | `app/d/` — shows all organizations; grid/list view toggle; create organization button. |
-| **Dashboard** | Legacy `app/dash/` redirects to `/d` for backward compatibility. |
-| **Org / Client / Project** | `app/o/[slug]/layout.tsx`, `c/[clientSlug]/page.tsx`, `p/[projectSlug]/page.tsx` — hierarchy; `ProjectWorkspace` with tabs. |
-| **Project Files** | `ProjectFileList` — file table, breadcrumbs, Add menu, filters, sort, upload queue, Import from Drive, row actions. |
+| **Firms List** | `app/d/` — shows all firms; grid/list view toggle; create firm button. |
+| **Dashboard** | `app/dash/` — action centre (pending shares, approvals, due dates), business insights panels, file review modals. |
+| **Firm / Client / Engagement** | `app/d/f/[slug]/`, `c/[clientSlug]/`, `e/[engagementSlug]/` — hierarchy; `ProjectWorkspace` with tabs (Files, Members, Shares, Insights, Sources, Audit, Settings; Board & Dossier in BETA). |
+| **Project Files** | `ProjectFileList` — file table, breadcrumbs, Add menu, filters, sort, upload queue, Import from Drive, row actions, search panel. |
+| **Search** | `project-search-panel.tsx` — full-text Elasticsearch + semantic AI search scoped to project. |
+| **Bookmarks** | `app/d/u/bookmarks/` — user bookmark list; bookmark action in file row menu. |
+| **Notifications** | `app/d/u/notifications/` — notification list with priorities; admin broadcast modal for org/client/project scope. |
+| **Reminders** | `app/d/u/reminders/` — user reminder management with metadata. |
 | **Waitlist** | `app/waitlist/page.tsx` — email check, dynamic branching, status view, signup form, leaderboard, referral link sharing. |
 | **Pricing** | `app/pricing/page.tsx` — pricing cards, plan comparison, FAQ, CTAs. |
 | **Project Members** | `ProjectMembersTab` — member list, invite modal, persona assignment. |
-| **Connectors** | `app/o/[slug]/connectors/page.tsx` — Google Drive connect, link folders. |
+| **Connectors** | `app/d/f/[slug]/connectors/page.tsx` — Google Drive connect, link folders. |
 | **Invitation** | `app/invite/[token]/page.tsx` — redeem invite, sign-in/sign-up, join project. |
+| **Sandbox** | `app/api/onboarding/create-sandbox/` — demo workspace provisioning with Acme Corp sample data. |
+| **System Admin** | `app/system/` — maintenance flags, firm operations, stuck-firm resolution. |
 
 ---
 
@@ -1130,22 +1146,22 @@ These features are **good to have** and documented here so LLD and implementatio
 
 **LLD considerations:** Dedicated org/client/project records (or a single shared “Acme Corp” org with per-user access), feature gate by subscription tier, and Drive folder strategy (copy vs shortcut vs shared folder).
 
-### 10.2 Onboarding Import from Existing .pockett Drive Structure
+### 10.2 Onboarding Import from Existing .firma Drive Structure
 
 **Goal:** If a user’s Google Drive already has a folder structure that **strictly** matches the Portal hierarchy, import it during onboarding and assign the onboarding user as Client Admin and Project Admin.
 
 **Required path pattern:**
 
-- `<root>/.pockett/Organization/Client/Project(s)/general/`  
+- `<root>/.firma/Organization/Client/Project(s)/general/`  
   With optional subfolders and files under `general/`. Organization, Client, and Project(s) are folder names that map to org name, client name, and project names.
 
 **Behavior:**
 
-- **Strict match:** If the structure is detected and validated (exact hierarchy: `.pockett` → org folder → client folder → one or more project folders → `general/`), then:
+- **Strict match:** If the structure is detected and validated (exact hierarchy: `.firma` → org folder → client folder → one or more project folders → `general/`), then:
   - Create Organization, Client(s), Project(s) in the DB.
   - Link each project to the corresponding Drive folder (existing folder ID).
   - Assign the **onboarding user** as **Client Admin** and **Project Admin** (or equivalent personas) for the imported client and projects.
-- **No match:** If the hierarchy is not strict (e.g. different root, missing `.pockett`, extra levels, or inconsistent naming), **do nothing** — no import, no DB creation; proceed with normal onboarding only.
+- **No match:** If the hierarchy is not strict (e.g. different root, missing `.firma`, extra levels, or inconsistent naming), **do nothing** — no import, no DB creation; proceed with normal onboarding only.
 
 **Implementation notes:**
 
@@ -1153,7 +1169,7 @@ These features are **good to have** and documented here so LLD and implementatio
 - Validation rules (path depth, required `general` folder per project) must be documented and enforced so that only unambiguous structures are imported.
 - RLS and multi-tenancy must apply to imported org/client/project like any other; the onboarding user becomes the owner/admin of the imported org.
 
-**LLD considerations:** API or server action for “scan Drive for .pockett structure”, validation rules, idempotency (don’t re-import if already imported), and UI flow (e.g. “We found an existing structure; import it?”).
+**LLD considerations:** API or server action for “scan Drive for .firma structure”, validation rules, idempotency (don’t re-import if already imported), and UI flow (e.g. “We found an existing structure; import it?”).
 
 ---
 
@@ -1171,6 +1187,13 @@ These features are **good to have** and documented here so LLD and implementatio
 | **Waitlist** | Public-facing waitlist signup system with referral mechanics, leaderboard, and social proof. Stored in `admin` schema. |
 | **Polar** | Payment and subscription provider (polar.sh). Checkout, recurring billing, invoicing; webhooks update **`platform.subscriptions`** for the billing anchor firm. |
 | **Subscription (billing)** | A firm’s current plan state (Standard, Pro, …): persisted on **`platform.subscriptions`** (status, plan name, Polar ids, period end); caps and group sharing on **`platform.firms`**. See [hld-subscription.md](hld-subscription.md). |
+| **Search** | Full-text + semantic document search scoped to a project. Indexed via Inngest background jobs; served via Elasticsearch and AI embeddings (`semantic-search.ts`). |
+| **Bookmark** | User-level saved reference to a file or engagement. Max 50 per user; persisted in DB via `/api/bookmarks`. |
+| **Notification** | System event delivered to a user with priority (INFO, WARNING, CRITICAL). Pushed via Supabase Realtime; org admins can broadcast scoped notifications. |
+| **Sandbox** | Demo firm pre-populated with Acme Corp sample data and Drive files. Provisioned for new free-tier users via Inngest (`sandbox.provision.requested`). Controlled by `sandboxOnly` firm flag. |
+| **Dashboard** | Authenticated landing page (`/dash`) showing the action centre (pending shares, approvals, due dates), business insights, and file review modals across all engagements. |
+| **Board Tab** (BETA) | Kanban engagement view showing status, due dates, contract type, and tags. Requires `enableBetaFeatures` org flag. |
+| **Dossier Tab** (BETA) | Rich-text wiki/notes per engagement (`EngagementWikiPage`). Requires `enableBetaFeatures` org flag. |
 
 ---
 
@@ -1218,7 +1241,7 @@ The HLD provides:
 | **7 Waitlist system** | Waitlist signup flow, referral mechanics, leaderboard, position calculation, social proof. |
 | **8 Pricing page** | Pricing display, plan comparison, CTA handling, landing page integration. |
 | **9 Deployment context** | Build and deploy steps; env vars; DATABASE_URL vs DIRECT_URL usage. |
-| **10 Good to have (medium priority)** | Test Project (Acme Corp) for free tier: demo org/Drive strategy, feature gate, persona. Onboarding import: .pockett path detection, validation, import API, role assignment. |
+| **10 Good to have (medium priority)** | Test Project (Acme Corp) for free tier: demo org/Drive strategy, feature gate, persona. Onboarding import: .firma path detection, validation, import API, role assignment. |
 | **Permission-based UI framework** | Component props (e.g. `canViewInternalTabs`, `canViewSettings`); `lib/permissions` module boundaries; API `GET /api/permissions/project-tabs` request/response; gate config additions for new tabs/personas. |
 | **Glossary** | Terms used consistently in LLD; extend with domain terms introduced in LLD. |
 
