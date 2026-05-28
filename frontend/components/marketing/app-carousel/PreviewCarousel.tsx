@@ -454,13 +454,36 @@ export function PreviewCarousel() {
       {/* ── MAIN CONTAINER ─────────────────────────────────────────────────────
           Full-width EDE6E2 band. Browser frame constrained to shell width.
       ─────────────────────────────────────────────────────────────────────── */}
-      <div style={{ width: "100%", background: SECTION_BG, paddingTop: 20, paddingBottom: 56 }}>
+      <div style={{ width: "100%", background: SECTION_BG, paddingTop: 56, paddingBottom: 56 }}>
         <div className={SHELL}>
+          {/* Stacked-card 3D effect: ghost layers behind the main browser */}
+          <div style={{ position: "relative", width: "100%", height: 540 }}>
+            {/* Ghost card 2 — furthest back */}
+            <div style={{
+              position: "absolute",
+              inset: 0,
+              borderRadius: 14,
+              background: "rgba(255,255,255,0.45)",
+              border: "1px solid rgba(0,0,0,0.07)",
+              transform: "translate(-24px, -24px)",
+              zIndex: 0,
+            }} />
+            {/* Ghost card 1 — middle */}
+            <div style={{
+              position: "absolute",
+              inset: 0,
+              borderRadius: 14,
+              background: "rgba(255,255,255,0.65)",
+              border: "1px solid rgba(0,0,0,0.08)",
+              transform: "translate(-12px, -12px)",
+              zIndex: 1,
+            }} />
           {/* Gradient border wrapper: gradient bg shows through as the 2px border ring */}
           <div style={{
+            position: "relative",
+            zIndex: 2,
             width: "100%",
             height: 540,
-            position: "relative",
             borderRadius: 14,
             padding: 2,
             background: "rgba(255,255,255,0.75)",
@@ -491,6 +514,7 @@ export function PreviewCarousel() {
             </AppFrame>
             </div>
           </div>
+          </div>{/* end stacked-card wrapper */}
         </div>
       </div>
       <style>{`
