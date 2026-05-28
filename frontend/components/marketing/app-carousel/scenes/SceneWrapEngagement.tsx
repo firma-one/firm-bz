@@ -356,7 +356,7 @@ export function SceneWrapEngagement({ phase }: { phase: number }) {
               transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
               style={{
                 background: "#ffffff",
-                borderRadius: 10,
+                borderRadius: 2,
                 border: "1px solid #e5e7eb",
                 boxShadow: "0 24px 48px -12px rgba(0,0,0,0.18)",
                 padding: "24px",

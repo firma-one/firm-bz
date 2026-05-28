@@ -9,8 +9,8 @@ const STATS = [
   { label: "Action Center", value: 3 },
 ]
 
-const BAR_HEIGHTS = [40, 65, 45, 80, 70, 90]
-const MONTHS = ["Nov", "Dec", "Jan", "Feb", "Mar", "Apr"]
+const BAR_HEIGHTS = [30, 50, 38, 60, 45, 72, 55, 80, 62, 88, 74, 90]
+const MONTHS = ["M", "J", "J", "A", "S", "O", "N", "D", "J", "F", "M", "A"]
 
 const ACTIVITY_ITEMS = [
   { icon: "✅", text: "Hartwell Group — engagement wrapped", time: "1h ago", color: "#069668" },
@@ -235,7 +235,7 @@ export function SceneAnalytics({ phase }: Props) {
             }}
           />
         ) : (
-          <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 80 }}>
+          <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 80 }}>
             {BAR_HEIGHTS.map((h, i) => (
               <div
                 key={i}
@@ -251,7 +251,7 @@ export function SceneAnalytics({ phase }: Props) {
               >
                 <div
                   style={{
-                    width: "100%",
+                    width: 6,
                     height: `${h}%`,
                     background: "linear-gradient(180deg, #069668, #04724e)",
                     borderRadius: "2px 2px 0 0",

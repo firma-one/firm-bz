@@ -366,8 +366,8 @@ export function PreviewCarousel() {
           style={{ position: "absolute", inset: 0, display: "block", pointerEvents: "none" }}
           aria-hidden
         >
-          <path d="M0,0 L288,0 Q300,0 300,12 Q300,52 336,52 L0,52 Z" fill={SECTION_BG} />
-          <path d="M1000,0 L712,0 Q700,0 700,12 Q700,52 664,52 L1000,52 Z" fill={SECTION_BG} />
+          <path d="M0,0 L238,0 Q250,0 250,12 Q250,52 274,52 L0,52 Z" fill={SECTION_BG} />
+          <path d="M1000,0 L762,0 Q750,0 750,12 Q750,52 726,52 L1000,52 Z" fill={SECTION_BG} />
         </svg>
 
         <div
@@ -390,7 +390,7 @@ export function PreviewCarousel() {
               alignItems: "center",
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: 1 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-evenly", width: "100%" }}>
               {SCENES.map((s, i) => (
                 <button
                   key={s.id}
@@ -401,7 +401,7 @@ export function PreviewCarousel() {
                   style={{
                     position: "relative",
                     borderRadius: 999,
-                    padding: "9px 20px",
+                    padding: "9px 28px",
                     background: "transparent",
                     border: "none",
                     cursor: "pointer",

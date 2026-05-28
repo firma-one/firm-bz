@@ -132,8 +132,6 @@ export function AppFrame({ children, activeNav, activeUrl, logoColor = "#069668"
           </span>
         </div>
 
-        {/* Divider */}
-        <div style={{ width: 1, height: 18, background: "#e5e7eb", flexShrink: 0 }} />
 
         {/* ⌘K command palette trigger — absolutely centered */}
         <div
@@ -194,7 +192,7 @@ export function AppFrame({ children, activeNav, activeUrl, logoColor = "#069668"
           style={{
             width: 172,
             flexShrink: 0,
-            background: "#f3f4f6",
+            background: "#ffffff",
             borderRight: "1px solid #e5e7eb",
             display: "flex",
             flexDirection: "column",
@@ -238,7 +236,7 @@ export function AppFrame({ children, activeNav, activeUrl, logoColor = "#069668"
               left: 0,
               right: 0,
               height: 60,
-              background: "linear-gradient(to bottom, transparent, #f3f4f6)",
+              background: "linear-gradient(to bottom, transparent, #ffffff)",
               pointerEvents: "none",
               zIndex: 10,
             }}
