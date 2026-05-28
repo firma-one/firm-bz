@@ -456,7 +456,17 @@ export function PreviewCarousel() {
       ─────────────────────────────────────────────────────────────────────── */}
       <div style={{ width: "100%", background: SECTION_BG, paddingTop: 20, paddingBottom: 56 }}>
         <div className={SHELL}>
-          <div style={{ width: "100%", height: 540, position: "relative", filter: "drop-shadow(0 4px 6px rgba(0,0,0,0.04)) drop-shadow(0 12px 32px rgba(0,0,0,0.10)) drop-shadow(0 32px 64px rgba(0,0,0,0.07))" }}>
+          {/* Gradient border wrapper: gradient bg shows through as the 2px border ring */}
+          <div style={{
+            width: "100%",
+            height: 540,
+            position: "relative",
+            borderRadius: 14,
+            padding: 2,
+            background: "rgba(255,255,255,0.75)",
+            filter: "drop-shadow(0 4px 6px rgba(0,0,0,0.04)) drop-shadow(0 12px 32px rgba(0,0,0,0.10)) drop-shadow(0 32px 64px rgba(0,0,0,0.07))",
+          }}>
+            <div style={{ width: "100%", height: "100%", borderRadius: 12, overflow: "hidden" }}>
             <AppFrame
               activeNav={scene.nav}
               activeUrl={scene.url}
@@ -479,6 +489,7 @@ export function PreviewCarousel() {
                 <CarouselCursor x={cursor.x} y={cursor.y} clicking={cursor.clicking} />
               </div>
             </AppFrame>
+            </div>
           </div>
         </div>
       </div>
