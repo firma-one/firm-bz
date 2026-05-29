@@ -3,7 +3,8 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
-import { SquarePlus, Upload, FolderUp, X, Folder, File as FileIcon, ArrowUp, ArrowDown, ChevronRight, Search, List as ListIcon, LayoutGrid, Filter, ChevronDown, User, FileText, FileSpreadsheet, Presentation, ListChecks, PenTool, Map as MapIcon, LayoutTemplate, FileCode, AlertCircle, ShieldCheck, Maximize2, Minimize2, CheckCircle2, XCircle, Trash2, Layout, Code, Laptop, RefreshCw, Info, Share2, Layers, Building2, Users, Briefcase, Lock, FolderLock, Inbox, Sparkles, Link2, MessageCircle, CircleChevronLeft, Download, MoreVertical } from 'lucide-react'
+import { CoffeeIcon, type CoffeeIconHandle } from "@/components/ui/coffee-icon"
+import { SquarePlus, Upload, FolderUp, X, Folder, File as FileIcon, ArrowUp, ArrowDown, ChevronRight, Search, List as ListIcon, LayoutGrid, Filter, ChevronDown, User, FileText, FileSpreadsheet, Presentation, ListChecks, PenTool, Map as MapIcon, LayoutTemplate, FileCode, AlertCircle, ShieldCheck, Maximize2, Minimize2, CheckCircle2, XCircle, Trash2, Layout, Code, Laptop, RefreshCw, Info, Share2, Layers, Building2, Users, Briefcase, Lock, FolderLock, Inbox, Sparkles, Link2, MessageCircle, CircleChevronLeft, Download, MoreVertical, Clock } from 'lucide-react'
 import Fuse from 'fuse.js'
 import { config } from "@/lib/config"
 import { DocumentIcon } from '@/components/ui/document-icon'
@@ -345,6 +346,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
     const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([])
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(true)
     const uploadOverlayDismissedRef = useRef(false)
+    const coffeeIconRef = useRef<CoffeeIconHandle>(null)
     const { addToast } = useToast()
     const showSandboxPickerToast = useCallback(() => {
         addToast({
@@ -357,7 +359,16 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
     const [conflictItems, setConflictItems] = useState<ConflictItem[]>([])
     const [overwriteSelections, setOverwriteSelections] = useState<Set<string>>(new Set())
     const [isUploading, setIsUploading] = useState(false)
+    const [isUploadInitiating, setIsUploadInitiating] = useState(false)
     const [uploadProgress, setUploadProgress] = useState(0)
+
+    useEffect(() => {
+        if (isUploading || isUploadInitiating) {
+            coffeeIconRef.current?.startAnimation()
+        } else {
+            coffeeIconRef.current?.stopAnimation()
+        }
+    }, [isUploading, isUploadInitiating])
 
     // Intake action state
     const [intakeActionInProgress, setIntakeActionInProgress] = useState<string | null>(null)
@@ -1329,6 +1340,9 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
         const pathToFolderId = new Map<string, string>()
         pathToFolderId.set('', rootId)
 
+        setIsUploadInitiating(true)
+        setIsUploadModalOpen(true)
+
         const folderPaths = getFolderPathsFromFileList(fileList)
         for (const path of folderPaths) {
             const parts = path.split('/')
@@ -1354,6 +1368,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                 const errorMessage = data.error || 'Failed to create folder'
                 logger.error(errorMessage, new Error(errorMessage))
                 setError(errorMessage)
+                setIsUploadInitiating(false)
                 return
             }
             const data = await res.json()
@@ -1373,7 +1388,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
         })
 
         setIsUploading(true)
-        setIsUploadModalOpen(true)
+        setIsUploadInitiating(false)
         const newQueueItems: UploadQueueItem[] = fileEntries.map(({ file }) => ({
             id: `upload-${Date.now()}-${Math.random()}`,
             file,
@@ -2945,7 +2960,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
             {/* Content Area - Styled as a Card */}
             <div className="flex-1 overflow-hidden flex flex-col relative bg-white rounded border border-[#e5e7eb]">
                 {/* Google Drive Style Upload Progress Modal - portaled to body so fixed positioning is viewport-relative and not clipped by overflow-hidden */}
-                {uploadQueue.length > 0 && typeof document !== 'undefined' && document.body && createPortal(
+                {(uploadQueue.length > 0 || isUploadInitiating) && typeof document !== 'undefined' && document.body && createPortal(
                     <div className={cn(
                         "fixed bottom-4 right-4 bg-white rounded-lg shadow-xl border border-slate-200 z-[100] flex flex-col transition-all duration-300 w-[360px]",
                         isUploadModalOpen ? "h-auto max-h-[400px]" : "h-10"
@@ -2955,8 +2970,16 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                             className="flex items-center justify-between px-3 py-2 bg-slate-100 border-b border-slate-200 text-slate-900 rounded-t-lg cursor-pointer"
                             onClick={() => setIsUploadModalOpen(!isUploadModalOpen)}
                         >
-                            <span className="text-[11px] font-medium">
-                                {isUploading ? 'Uploading' : 'Uploads complete'} {uploadQueue.filter(i => i.status === 'completed').length}/{uploadQueue.length}
+                            <span className="text-[11px] font-medium flex items-center gap-1.5">
+                                {(isUploading || isUploadInitiating) && (
+                                    <CoffeeIcon ref={coffeeIconRef} size={13} className="text-slate-600 flex-shrink-0" />
+                                )}
+                                {isUploadInitiating
+                                    ? 'Preparing upload…'
+                                    : isUploading
+                                        ? `Uploading ${uploadQueue.filter(i => i.status === 'completed').length}/${uploadQueue.length}`
+                                        : `Uploads complete ${uploadQueue.filter(i => i.status === 'completed').length}/${uploadQueue.length}`
+                                }
                             </span>
                             <div className="flex items-center gap-2 text-slate-500">
                                 {isUploadModalOpen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
@@ -2966,6 +2989,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                         uploadOverlayDismissedRef.current = true
                                         setUploadQueue([])
                                         setIsUploading(false)
+                                        setIsUploadInitiating(false)
                                     }}
                                     className="hover:bg-slate-200 rounded p-0.5 transition-colors"
                                 >
@@ -2977,6 +3001,16 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                         {/* Modal Body */}
                         {isUploadModalOpen && (
                             <div className="flex-1 overflow-y-auto overflow-x-hidden p-0 custom-scrollbar">
+                                {isUploadInitiating && uploadQueue.length === 0 && (
+                                    <div className="flex flex-col gap-2 px-3 py-3">
+                                        {[1, 2, 3].map(i => (
+                                            <div key={i} className="flex items-center gap-2 animate-pulse">
+                                                <div className="h-3.5 w-3.5 rounded bg-slate-200 flex-shrink-0" />
+                                                <div className="h-2.5 rounded bg-slate-200 flex-1" style={{ width: `${55 + i * 13}%` }} />
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                                 {uploadQueue.map((item) => (
                                     <div key={item.id} className="flex flex-col gap-1 px-3 py-1.5 border-b border-slate-100 last:border-0 hover:bg-slate-50 group">
                                         <div className="flex items-center gap-2">
@@ -3011,7 +3045,8 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                     </TooltipProvider>
                                                 )}
 
-                                                {item.status === 'completed' && <CheckCircle2 className="h-3.5 w-3.5 text-slate-900" />}
+                                                {item.status === 'pending' && <Clock className="h-3.5 w-3.5 text-slate-400" />}
+                                                {item.status === 'completed' && <CheckCircle2 className="h-3.5 w-3.5 text-primary" />}
                                                 {item.status === 'error' && <XCircle className="h-3.5 w-3.5 text-red-500" />}
                                             </div>
                                         </div>
