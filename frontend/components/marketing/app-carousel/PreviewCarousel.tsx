@@ -391,8 +391,17 @@ export function PreviewCarousel() {
           style={{ position: "absolute", inset: 0, display: "block", pointerEvents: "none", zIndex: 2 }}
           aria-hidden
         >
-          <path d="M0,0 L313,0 Q325,0 325,12 Q325,52 349,52 L0,52 Z" fill={SECTION_BG} />
-          <path d="M1000,0 L687,0 Q675,0 675,12 Q675,52 651,52 L1000,52 Z" fill={SECTION_BG} />
+          {isMobile ? (
+            <>
+              <path d="M0,0 L238,0 Q250,0 250,12 Q250,52 274,52 L0,52 Z" fill={SECTION_BG} />
+              <path d="M1000,0 L762,0 Q750,0 750,12 Q750,52 726,52 L1000,52 Z" fill={SECTION_BG} />
+            </>
+          ) : (
+            <>
+              <path d="M0,0 L313,0 Q325,0 325,12 Q325,52 349,52 L0,52 Z" fill={SECTION_BG} />
+              <path d="M1000,0 L687,0 Q675,0 675,12 Q675,52 651,52 L1000,52 Z" fill={SECTION_BG} />
+            </>
+          )}
         </svg>
 
         <div
