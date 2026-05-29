@@ -2,6 +2,18 @@
 
 import { useEffect, useState, useRef, useCallback } from "react"
 import { AnimatePresence, motion } from "framer-motion"
+
+function useIsMobile(breakpoint = 768) {
+  const [isMobile, setIsMobile] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${breakpoint - 1}px)`)
+    setIsMobile(mq.matches)
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches)
+    mq.addEventListener("change", handler)
+    return () => mq.removeEventListener("change", handler)
+  }, [breakpoint])
+  return isMobile
+}
 import { AppFrame } from "./AppFrame"
 import { CarouselCursor } from "./CarouselCursor"
 import { SceneFirmBranding } from "./scenes/SceneFirmBranding"
@@ -291,6 +303,23 @@ export function PreviewCarousel() {
   const [palettePhase, setPalettePhase] = useState(0)
   const timeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([])
   const sceneIndexRef = useRef(0)
+  const isMobile = useIsMobile()
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([])
+  const stripRef = useRef<HTMLDivElement>(null)
+
+  // On mobile: slide the tab strip so the active tab is centered in the concave
+  useEffect(() => {
+    if (!isMobile) {
+      if (stripRef.current) stripRef.current.style.transform = ""
+      return
+    }
+    const strip = stripRef.current
+    const activeEl = tabRefs.current[sceneIndex]
+    if (!strip || !activeEl) return
+    const parentW = (strip.parentElement?.offsetWidth ?? 0)
+    const translateX = parentW / 2 - activeEl.offsetLeft - activeEl.offsetWidth / 2
+    strip.style.transform = `translateX(${translateX}px)`
+  }, [sceneIndex, isMobile])
 
   useEffect(() => { sceneIndexRef.current = sceneIndex }, [sceneIndex])
 
@@ -381,71 +410,88 @@ export function PreviewCarousel() {
             zIndex: 1,
           }}
         >
+          {/* Tab strip — on mobile slides so active tab stays centered in concave */}
           <div
             style={{
-              flexShrink: 0,
-              background: "transparent",
-              padding: "6px 6px 0",
+              width: "100%",
+              overflow: "hidden",
+              padding: "6px 0 0",
               display: "flex",
               alignItems: "center",
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-evenly", width: "100%" }}>
-              {SCENES.map((s, i) => (
-                <button
-                  key={s.id}
-                  onClick={() => {
-                    if (i === sceneIndex) scheduleScene(i)
-                    else setSceneIndex(i)
-                  }}
-                  style={{
-                    position: "relative",
-                    borderRadius: 999,
-                    padding: "9px 28px",
-                    background: "transparent",
-                    border: "none",
-                    cursor: "pointer",
-                    color: i === sceneIndex ? "#1a1a1a" : "#71717a",
-                    fontFamily: "var(--font-kinetic-body, 'Work Sans', system-ui, sans-serif)",
-                    fontSize: 14,
-                    fontWeight: i === sceneIndex ? 500 : 400,
-                    whiteSpace: "nowrap",
-                    letterSpacing: "0em",
-                    lineHeight: 1.4,
-                    transition: "color 0.2s ease",
-                  }}
-                >
-                  {i === sceneIndex && (
-                    <motion.div
-                      layoutId="tab-pill"
-                      style={{
-                        position: "absolute",
-                        inset: 0,
-                        background: "#EFEFEF",
-                        borderRadius: 999,
-                        overflow: "hidden",
-                      }}
-                      transition={{ type: "spring", stiffness: 400, damping: 35 }}
-                    >
-                      <div
-                        key={sceneIndex}
+            <div
+              ref={stripRef}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: isMobile ? "flex-start" : "space-evenly",
+                width: isMobile ? "max-content" : "100%",
+                transition: "transform 0.45s cubic-bezier(0.22,1,0.36,1)",
+                willChange: "transform",
+              }}
+            >
+              {SCENES.map((s, i) => {
+                const isActive = i === sceneIndex
+                return (
+                  <button
+                    key={s.id}
+                    ref={(el) => { tabRefs.current[i] = el }}
+                    onClick={() => {
+                      if (i === sceneIndex) scheduleScene(i)
+                      else setSceneIndex(i)
+                    }}
+                    style={{
+                      position: "relative",
+                      borderRadius: 999,
+                      padding: isMobile ? "9px 16px" : "9px 28px",
+                      background: "transparent",
+                      border: "none",
+                      cursor: "pointer",
+                      color: isActive ? "#1a1a1a" : (isMobile ? "rgba(0,0,0,0.35)" : "#71717a"),
+                      fontFamily: "var(--font-kinetic-body, 'Work Sans', system-ui, sans-serif)",
+                      fontSize: isMobile ? 13 : 14,
+                      fontWeight: isActive ? 500 : 400,
+                      whiteSpace: "nowrap",
+                      letterSpacing: "0em",
+                      lineHeight: 1.4,
+                      opacity: isMobile && !isActive ? 0.4 : 1,
+                      transition: "color 0.3s ease, opacity 0.3s ease",
+                      flexShrink: 0,
+                    }}
+                  >
+                    {isActive && (
+                      <motion.div
+                        layoutId="tab-pill"
                         style={{
                           position: "absolute",
                           inset: 0,
-                          background: "#C8C0BC",
+                          background: "#EFEFEF",
                           borderRadius: 999,
-                          transformOrigin: "left center",
-                          animationName: "tab-fill-progress",
-                          animationDuration: `${SCENE_DURATIONS[sceneIndex]}ms`,
-                          animationTimingFunction: "linear",
-                          animationFillMode: "forwards",
+                          overflow: "hidden",
                         }}
-                      />
-                    </motion.div>
-                  )}
-                  <span style={{ position: "relative", zIndex: 1 }}>{s.label}</span>
-                </button>
-              ))}
+                        transition={{ type: "spring", stiffness: 400, damping: 35 }}
+                      >
+                        <div
+                          key={sceneIndex}
+                          style={{
+                            position: "absolute",
+                            inset: 0,
+                            background: "#C8C0BC",
+                            borderRadius: 999,
+                            transformOrigin: "left center",
+                            animationName: "tab-fill-progress",
+                            animationDuration: `${SCENE_DURATIONS[sceneIndex]}ms`,
+                            animationTimingFunction: "linear",
+                            animationFillMode: "forwards",
+                          }}
+                        />
+                      </motion.div>
+                    )}
+                    <span style={{ position: "relative", zIndex: 1 }}>{s.label}</span>
+                  </button>
+                )
+              })}
             </div>
           </div>
         </div>
