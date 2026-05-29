@@ -17,20 +17,20 @@ const DOCS = [
 function DocIcon({ mimeType }: { mimeType: string }) {
   if (mimeType.includes("pdf")) {
     return (
-      <div style={{ width: 30, height: 30, borderRadius: 2, background: "#fef2f2", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+      <div style={{ width: 30, height: 30, borderRadius: 4, background: "#fef2f2", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
         <File size={15} style={{ color: "#dc2626" }} strokeWidth={1.75} />
       </div>
     )
   }
   if (mimeType.includes("word") || mimeType.includes("document")) {
     return (
-      <div style={{ width: 30, height: 30, borderRadius: 2, background: "#eff6ff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+      <div style={{ width: 30, height: 30, borderRadius: 4, background: "#eff6ff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
         <FileText size={15} style={{ color: "#2563eb" }} strokeWidth={1.75} />
       </div>
     )
   }
   return (
-    <div style={{ width: 30, height: 30, borderRadius: 2, background: "#f3f4f6", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+    <div style={{ width: 30, height: 30, borderRadius: 4, background: "#f3f4f6", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
       <File size={15} style={{ color: "#6b7280" }} strokeWidth={1.75} />
     </div>
   )
@@ -97,14 +97,14 @@ export function SceneCreateContact({ phase }: Props) {
           </div>
           <h2 style={{ fontFamily: "var(--font-kinetic-headline, 'Space Grotesk', system-ui, sans-serif)", fontSize: 17, fontWeight: 600, color: "#1b1b1d", margin: 0, letterSpacing: "-0.02em" }}>Documents</h2>
         </div>
-        <div style={{ background: "#f3f4f6", borderRadius: 2, padding: "5px 10px", fontFamily: "var(--font-kinetic-body, 'Work Sans', system-ui, sans-serif)", fontSize: 11, color: "#6b7280", display: "flex", alignItems: "center", gap: 5 }}>
+        <div style={{ background: "#f3f4f6", borderRadius: 4, padding: "5px 10px", fontFamily: "var(--font-kinetic-body, 'Work Sans', system-ui, sans-serif)", fontSize: 11, color: "#6b7280", display: "flex", alignItems: "center", gap: 5 }}>
           <Shield size={11} style={{ color: "#069668" }} />
           IP controls active
         </div>
       </div>
 
       {/* Document list */}
-      <div style={{ background: "#ffffff", borderRadius: 2, border: "1px solid #e5e7eb", overflow: "visible", position: "relative" }}>
+      <div style={{ background: "#ffffff", borderRadius: 4, border: "1px solid #e5e7eb", overflow: "visible", position: "relative" }}>
         <div style={{ padding: "8px 14px", borderBottom: "1px solid #f3f4f6", display: "flex", gap: 8, fontFamily: "var(--font-kinetic-body, 'Work Sans', system-ui, sans-serif)", fontSize: 10, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.06em" }}>
           <span style={{ flex: 1 }}>Document</span>
           <span style={{ width: 70 }}>Size</span>
@@ -141,12 +141,12 @@ export function SceneCreateContact({ phase }: Props) {
                     animate={{ scale: 1, opacity: 1 }}
                     transition={{ type: "spring", stiffness: 400, damping: 22 }}
                   >
-                    <div style={{ background: "#fef2f2", color: "#dc2626", borderRadius: 2, padding: "2px 8px", fontFamily: "var(--font-kinetic-body, 'Work Sans', system-ui, sans-serif)", fontSize: 10, fontWeight: 600, display: "flex", alignItems: "center", gap: 3, border: "1px solid #fecaca", whiteSpace: "nowrap" }}>
+                    <div style={{ background: "#fef2f2", color: "#dc2626", borderRadius: 4, padding: "2px 8px", fontFamily: "var(--font-kinetic-body, 'Work Sans', system-ui, sans-serif)", fontSize: 10, fontWeight: 600, display: "flex", alignItems: "center", gap: 3, border: "1px solid #fecaca", whiteSpace: "nowrap" }}>
                       🔴 Never Share
                     </div>
                   </motion.div>
                 ) : !isFramework ? (
-                  <div style={{ background: "#f3f4f6", color: "#9ca3af", borderRadius: 2, padding: "2px 8px", fontFamily: "var(--font-kinetic-body, 'Work Sans', system-ui, sans-serif)", fontSize: 10 }}>Shareable</div>
+                  <div style={{ background: "#f3f4f6", color: "#9ca3af", borderRadius: 4, padding: "2px 8px", fontFamily: "var(--font-kinetic-body, 'Work Sans', system-ui, sans-serif)", fontSize: 10 }}>Shareable</div>
                 ) : null}
               </div>
 
@@ -154,7 +154,7 @@ export function SceneCreateContact({ phase }: Props) {
               <div style={{ width: 30, display: "flex", justifyContent: "center", position: "relative", zIndex: 40 }}>
                 <div
                   style={{
-                    width: 24, height: 24, borderRadius: 2, display: "flex", alignItems: "center", justifyContent: "center",
+                    width: 24, height: 24, borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center",
                     background: menuOpen ? "#f3f4f6" : "transparent",
                     cursor: "default",
                     flexShrink: 0,
@@ -171,7 +171,7 @@ export function SceneCreateContact({ phase }: Props) {
                     transition={{ type: "spring", stiffness: 400, damping: 26 }}
                     style={{
                       position: "absolute", right: 0, top: "calc(100% + 4px)", zIndex: 50,
-                      background: "#ffffff", borderRadius: 2, boxShadow: "0 8px 24px rgba(0,0,0,0.12), 0 1px 4px rgba(0,0,0,0.06)",
+                      background: "#ffffff", borderRadius: 4, boxShadow: "0 8px 24px rgba(0,0,0,0.12), 0 1px 4px rgba(0,0,0,0.06)",
                       border: "1px solid #e5e7eb", minWidth: 180, overflow: "hidden",
                     }}
                   >
@@ -229,7 +229,7 @@ export function SceneCreateContact({ phase }: Props) {
             animate={{ opacity: 1, y: 0 }}
             transition={{ type: "spring", stiffness: 300, damping: 26 }}
             style={{
-              background: "#fffbeb", borderRadius: 2, border: "1px solid #fde68a",
+              background: "#fffbeb", borderRadius: 4, border: "1px solid #fde68a",
               padding: "14px 16px", display: "flex", alignItems: "center", gap: 12,
             }}
           >
@@ -243,7 +243,7 @@ export function SceneCreateContact({ phase }: Props) {
               </div>
             </div>
             <div style={{
-              border: "1.5px solid #f59e0b", borderRadius: 2, padding: "6px 12px",
+              border: "1.5px solid #f59e0b", borderRadius: 4, padding: "6px 12px",
               fontFamily: "var(--font-kinetic-body, 'Work Sans', system-ui, sans-serif)",
               fontSize: 12, color: "#b45309", fontWeight: 500, minWidth: 100,
               background: "#ffffff", display: "flex", alignItems: "center",
@@ -265,11 +265,11 @@ export function SceneCreateContact({ phase }: Props) {
             initial={{ opacity: 0, x: -10 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ type: "spring", stiffness: 300, damping: 26 }}
-            style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", background: "#ffffff", borderRadius: 2, border: "1px solid #e5e7eb" }}
+            style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", background: "#ffffff", borderRadius: 4, border: "1px solid #e5e7eb" }}
           >
-            <div style={{ background: "#fef2f2", color: "#dc2626", borderRadius: 2, padding: "4px 8px", fontSize: 11, fontWeight: 600, fontFamily: "var(--font-kinetic-body, 'Work Sans', system-ui, sans-serif)" }}>🔴 Never Share</div>
+            <div style={{ background: "#fef2f2", color: "#dc2626", borderRadius: 4, padding: "4px 8px", fontSize: 11, fontWeight: 600, fontFamily: "var(--font-kinetic-body, 'Work Sans', system-ui, sans-serif)" }}>🔴 Never Share</div>
             <span style={{ fontFamily: "var(--font-kinetic-body, 'Work Sans', system-ui, sans-serif)", fontSize: 12, color: "#6b7280" }}>+</span>
-            <div style={{ background: "#fffbeb", color: "#b45309", borderRadius: 2, padding: "4px 8px", fontSize: 11, fontWeight: 600, fontFamily: "var(--font-kinetic-body, 'Work Sans', system-ui, sans-serif)", border: "1px solid #fde68a" }}>⏱ Expires Jun 26</div>
+            <div style={{ background: "#fffbeb", color: "#b45309", borderRadius: 4, padding: "4px 8px", fontSize: 11, fontWeight: 600, fontFamily: "var(--font-kinetic-body, 'Work Sans', system-ui, sans-serif)", border: "1px solid #fde68a" }}>⏱ Expires Jun 26</div>
             <span style={{ marginLeft: "auto", fontFamily: "var(--font-kinetic-body, 'Work Sans', system-ui, sans-serif)", fontSize: 11, color: "#9ca3af" }}>Brand-Strategy-Framework.pdf</span>
           </motion.div>
         )}

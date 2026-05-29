@@ -9,8 +9,8 @@ const STATS = [
   { label: "Action Center", value: 3 },
 ]
 
-const BAR_HEIGHTS = [40, 65, 45, 80, 70, 90]
-const MONTHS = ["Nov", "Dec", "Jan", "Feb", "Mar", "Apr"]
+const BAR_HEIGHTS = [30, 50, 38, 60, 45, 72, 55, 80, 62, 88, 74, 90]
+const MONTHS = ["May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr"]
 
 const ACTIVITY_ITEMS = [
   { icon: "✅", text: "Hartwell Group — engagement wrapped", time: "1h ago", color: "#069668" },
@@ -65,7 +65,7 @@ function StatTile({ label, target, displayOverride, active }: {
       transition={{ type: "spring", stiffness: 260, damping: 24 }}
       style={{
         background: "#ffffff",
-        borderRadius: 2,
+        borderRadius: 4,
         border: "1px solid #e5e7eb",
         padding: "16px 18px",
         flex: 1,
@@ -158,7 +158,7 @@ export function SceneAnalytics({ phase }: Props) {
               style={{
                 flex: 1,
                 background: "#ffffff",
-                borderRadius: 2,
+                borderRadius: 4,
                 border: "1px solid #e5e7eb",
                 padding: "16px 18px",
               }}
@@ -169,7 +169,7 @@ export function SceneAnalytics({ phase }: Props) {
                   width: "60%",
                   background: "linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%)",
                   backgroundSize: "200% 100%",
-                  borderRadius: 2,
+                  borderRadius: 4,
                   marginBottom: 10,
                   animation: "shimmer 1.5s infinite linear",
                 }}
@@ -180,7 +180,7 @@ export function SceneAnalytics({ phase }: Props) {
                   width: "40%",
                   background: "linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%)",
                   backgroundSize: "200% 100%",
-                  borderRadius: 2,
+                  borderRadius: 4,
                   animation: "shimmer 1.5s infinite linear",
                   animationDelay: `${i * 0.15}s`,
                 }}
@@ -204,7 +204,7 @@ export function SceneAnalytics({ phase }: Props) {
       <div
         style={{
           background: "#ffffff",
-          borderRadius: 2,
+          borderRadius: 4,
           border: "1px solid #e5e7eb",
           padding: "14px 16px",
           flex: phase >= 3 ? "0 0 auto" : 1,
@@ -230,12 +230,12 @@ export function SceneAnalytics({ phase }: Props) {
               height: 80,
               background: "linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%)",
               backgroundSize: "200% 100%",
-              borderRadius: 2,
+              borderRadius: 4,
               animation: "shimmer 1.5s infinite linear",
             }}
           />
         ) : (
-          <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 80 }}>
+          <div style={{ display: "flex", alignItems: "flex-end", gap: 5, height: 80 }}>
             {BAR_HEIGHTS.map((h, i) => (
               <div
                 key={i}
@@ -251,7 +251,7 @@ export function SceneAnalytics({ phase }: Props) {
               >
                 <div
                   style={{
-                    width: "100%",
+                    width: "75%",
                     height: `${h}%`,
                     background: "linear-gradient(180deg, #069668, #04724e)",
                     borderRadius: "2px 2px 0 0",
@@ -265,7 +265,7 @@ export function SceneAnalytics({ phase }: Props) {
                 <span
                   style={{
                     fontFamily: "var(--font-kinetic-body, 'Work Sans', system-ui, sans-serif)",
-                    fontSize: 9,
+                    fontSize: 8,
                     color: "#9ca3af",
                   }}
                 >
@@ -285,7 +285,7 @@ export function SceneAnalytics({ phase }: Props) {
             animate={{ opacity: 1 }}
             style={{
               background: "#ffffff",
-              borderRadius: 2,
+              borderRadius: 4,
               border: "1px solid #e5e7eb",
               overflow: "hidden",
             }}
@@ -322,7 +322,7 @@ export function SceneAnalytics({ phase }: Props) {
                   style={{
                     width: 28,
                     height: 28,
-                    borderRadius: 2,
+                    borderRadius: 4,
                     background: `${item.color}15`,
                     display: "flex",
                     alignItems: "center",

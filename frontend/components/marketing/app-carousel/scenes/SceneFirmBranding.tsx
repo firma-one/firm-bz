@@ -103,7 +103,7 @@ export function SceneFirmBranding({ phase }: Props) {
       <div
         style={{
           background: "#ffffff",
-          borderRadius: 2,
+          borderRadius: 4,
           border: "1px solid #e5e7eb",
           padding: "20px 22px",
           display: "flex",
@@ -130,7 +130,7 @@ export function SceneFirmBranding({ phase }: Props) {
             style={{
               width: 44,
               height: 44,
-              borderRadius: 2,
+              borderRadius: 4,
               background: logoColor,
               transition: "background 0.5s ease",
               display: "flex",
@@ -193,7 +193,7 @@ export function SceneFirmBranding({ phase }: Props) {
           <div
             style={{
               border: phase >= 1 ? "1.5px solid #069668" : "1.5px solid #e5e7eb",
-              borderRadius: 2,
+              borderRadius: 4,
               padding: "8px 12px",
               background: phase >= 1 ? "rgba(6,150,104,0.03)" : "#ffffff",
               fontFamily: "var(--font-kinetic-body, 'Work Sans', system-ui, sans-serif)",
@@ -233,7 +233,7 @@ export function SceneFirmBranding({ phase }: Props) {
                   style={{
                     width: 28,
                     height: 28,
-                    borderRadius: 2,
+                    borderRadius: 4,
                     background: swatch.color,
                     cursor: "default",
                     boxShadow: isSelected
@@ -256,7 +256,7 @@ export function SceneFirmBranding({ phase }: Props) {
               background: "#069668",
               color: "#ffffff",
               border: "none",
-              borderRadius: 2,
+              borderRadius: 4,
               padding: "9px 18px",
               fontFamily: "var(--font-kinetic-headline, 'Space Grotesk', system-ui, sans-serif)",
               fontSize: 13,
@@ -285,7 +285,7 @@ export function SceneFirmBranding({ phase }: Props) {
               right: 20,
               background: "#069668",
               color: "#ffffff",
-              borderRadius: 2,
+              borderRadius: 4,
               padding: "10px 16px",
               fontFamily: "var(--font-kinetic-body, 'Work Sans', system-ui, sans-serif)",
               fontSize: 13,

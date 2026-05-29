@@ -50,13 +50,12 @@ export function AppFrame({ children, activeNav, activeUrl, logoColor = "#069668"
         height: "100%",
         display: "flex",
         flexDirection: "column",
-        boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
       }}
     >
       {/* Browser chrome bar */}
       <div
         style={{
-          background: "#36383d",
+          background: "#e2e4e8",
           height: 40,
           display: "flex",
           alignItems: "center",
@@ -76,16 +75,17 @@ export function AppFrame({ children, activeNav, activeUrl, logoColor = "#069668"
         <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
           <div
             style={{
-              background: "#2d2d2d", borderRadius: 2, height: 24, width: "38%",
+              background: "#ffffff", borderRadius: 40, height: 26, width: "46%",
               display: "flex", alignItems: "center", justifyContent: "center",
-              gap: 5, padding: "0 10px", overflow: "hidden",
+              gap: 5, padding: "0 12px", overflow: "hidden",
+              border: "1px solid rgba(0,0,0,0.1)",
             }}
           >
             <span style={{ fontSize: 10 }}>🔒</span>
             <span
               style={{
                 fontFamily: "var(--font-kinetic-body, 'Work Sans', system-ui, sans-serif)",
-                fontSize: 11, color: "rgba(255,255,255,0.55)",
+                fontSize: 11, color: "#3c3c3c",
                 whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%",
               }}
             >
@@ -106,13 +106,14 @@ export function AppFrame({ children, activeNav, activeUrl, logoColor = "#069668"
           padding: "0 12px 0 14px",
           gap: 10,
           flexShrink: 0,
+          position: "relative",
         }}
       >
         {/* Branding — logo + firm name */}
         <div style={{ display: "flex", alignItems: "center", gap: 7, flexShrink: 0 }}>
           <div
             style={{
-              width: 22, height: 22, borderRadius: 2, background: logoColor,
+              width: 22, height: 22, borderRadius: 4, background: logoColor,
               transition: "background 0.4s ease",
               display: "flex", alignItems: "center", justifyContent: "center",
             }}
@@ -131,14 +132,15 @@ export function AppFrame({ children, activeNav, activeUrl, logoColor = "#069668"
           </span>
         </div>
 
-        {/* Divider */}
-        <div style={{ width: 1, height: 18, background: "#e5e7eb", flexShrink: 0 }} />
 
-        {/* ⌘K command palette trigger */}
+        {/* ⌘K command palette trigger — absolutely centered */}
         <div
           style={{
-            flex: 1, height: 28,
-            background: "#f3f4f6", borderRadius: 2,
+            position: "absolute",
+            left: "50%",
+            transform: "translateX(-50%)",
+            width: 240, height: 28,
+            background: "#f3f4f6", borderRadius: 4,
             display: "flex", alignItems: "center", gap: 6,
             padding: "0 10px", cursor: "default",
             border: "1px solid #e5e7eb",
@@ -155,7 +157,7 @@ export function AppFrame({ children, activeNav, activeUrl, logoColor = "#069668"
           </span>
           <div
             style={{
-              background: "#ffffff", borderRadius: 2, border: "1px solid #e5e7eb",
+              background: "#ffffff", borderRadius: 4, border: "1px solid #e5e7eb",
               padding: "1px 5px",
               fontFamily: "var(--font-kinetic-body, 'Work Sans', system-ui, sans-serif)",
               fontSize: 10, color: "#6b7280", letterSpacing: "0.01em",
@@ -166,16 +168,16 @@ export function AppFrame({ children, activeNav, activeUrl, logoColor = "#069668"
           </div>
         </div>
 
-        {/* Utility icons */}
-        <div style={{ display: "flex", alignItems: "center", gap: 3, flexShrink: 0 }}>
-          <div style={{ width: 28, height: 28, borderRadius: 2, display: "flex", alignItems: "center", justifyContent: "center", background: "#fff7ed" }}>
+        {/* Utility icons — right aligned */}
+        <div style={{ display: "flex", alignItems: "center", gap: 3, flexShrink: 0, marginLeft: "auto" }}>
+          <div style={{ width: 28, height: 28, borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", background: "#fff7ed" }}>
             <CalendarClock size={14} style={{ color: "#c2410c" }} strokeWidth={1.75} />
           </div>
-          <div style={{ width: 28, height: 28, borderRadius: 2, display: "flex", alignItems: "center", justifyContent: "center", background: "#eef2ff" }}>
+          <div style={{ width: 28, height: 28, borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", background: "#eef2ff" }}>
             <Bookmark size={14} style={{ color: "#4f46e5" }} strokeWidth={1.75} />
           </div>
           <div style={{ position: "relative" }}>
-            <div style={{ width: 28, height: 28, borderRadius: 2, display: "flex", alignItems: "center", justifyContent: "center", background: "#f0fdf4" }}>
+            <div style={{ width: 28, height: 28, borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", background: "#f0fdf4" }}>
               <Bell size={14} style={{ color: "#069668" }} strokeWidth={1.75} />
             </div>
             <div style={{ position: "absolute", top: 5, right: 5, width: 6, height: 6, borderRadius: "50%", background: "#22c55e", border: "1.5px solid #ffffff" }} />
@@ -190,14 +192,14 @@ export function AppFrame({ children, activeNav, activeUrl, logoColor = "#069668"
           style={{
             width: 172,
             flexShrink: 0,
-            background: "#f3f4f6",
+            background: "#ffffff",
             borderRight: "1px solid #e5e7eb",
             display: "flex",
             flexDirection: "column",
           }}
         >
           {/* Nav items */}
-          <div style={{ padding: "8px 0", flex: 1 }}>
+          <div style={{ padding: "8px 0", flex: 1, position: "relative" }}>
             {NAV_ITEMS.map((item) => {
               const isActive = item.label === activeNav
               return (
@@ -205,7 +207,7 @@ export function AppFrame({ children, activeNav, activeUrl, logoColor = "#069668"
                   key={item.label}
                   style={{
                     display: "flex", alignItems: "center", gap: 8,
-                    padding: "7px 14px", margin: "1px 6px", borderRadius: 2,
+                    padding: "7px 14px", margin: "1px 6px", borderRadius: 4,
                     cursor: "default",
                     fontFamily: "var(--font-kinetic-body, 'Work Sans', system-ui, sans-serif)",
                     fontSize: 13, fontWeight: isActive ? 500 : 400,
@@ -225,6 +227,20 @@ export function AppFrame({ children, activeNav, activeUrl, logoColor = "#069668"
               )
             })}
           </div>
+
+          {/* Sidebar bottom fade */}
+          <div
+            style={{
+              position: "absolute",
+              bottom: 0,
+              left: 0,
+              right: 0,
+              height: 60,
+              background: "linear-gradient(to bottom, transparent, #ffffff)",
+              pointerEvents: "none",
+              zIndex: 10,
+            }}
+          />
 
           {/* Bottom user area */}
           <div style={{ padding: "10px 14px", borderTop: "1px solid #e5e7eb", display: "flex", alignItems: "center", gap: 8 }}>
@@ -247,6 +263,19 @@ export function AppFrame({ children, activeNav, activeUrl, logoColor = "#069668"
         {/* Content area */}
         <div style={{ flex: 1, background: "#f9f9fb", overflow: "hidden", position: "relative" }}>
           {children}
+          {/* Bottom fade */}
+          <div
+            style={{
+              position: "absolute",
+              bottom: 0,
+              left: 0,
+              right: 0,
+              height: 140,
+              background: "linear-gradient(to bottom, transparent, #f9f9fb)",
+              pointerEvents: "none",
+              zIndex: 10,
+            }}
+          />
         </div>
 
         {/* Command palette overlay */}
@@ -273,7 +302,7 @@ export function AppFrame({ children, activeNav, activeUrl, logoColor = "#069668"
                 transition={{ type: "spring", stiffness: 380, damping: 28 }}
                 style={{
                   width: "88%", maxWidth: 420,
-                  background: "#ffffff", borderRadius: 2,
+                  background: "#ffffff", borderRadius: 4,
                   boxShadow: "0 20px 48px rgba(0,0,0,0.18), 0 4px 12px rgba(0,0,0,0.08)",
                   border: "1px solid #e5e7eb", overflow: "hidden",
                 }}
@@ -284,7 +313,7 @@ export function AppFrame({ children, activeNav, activeUrl, logoColor = "#069668"
                   <span style={{ fontFamily: "var(--font-kinetic-body, 'Work Sans', system-ui, sans-serif)", fontSize: 13, color: "#9ca3af", flex: 1 }}>
                     Go to…
                   </span>
-                  <div style={{ background: "#f3f4f6", borderRadius: 2, padding: "2px 6px", fontFamily: "var(--font-kinetic-body, 'Work Sans', system-ui, sans-serif)", fontSize: 10, color: "#6b7280" }}>esc</div>
+                  <div style={{ background: "#f3f4f6", borderRadius: 4, padding: "2px 6px", fontFamily: "var(--font-kinetic-body, 'Work Sans', system-ui, sans-serif)", fontSize: 10, color: "#6b7280" }}>esc</div>
                 </div>
 
                 {/* Recent group */}
@@ -298,7 +327,7 @@ export function AppFrame({ children, activeNav, activeUrl, logoColor = "#069668"
                         cursor: "default",
                       }}
                     >
-                      <div style={{ width: 26, height: 26, borderRadius: 2, background: "#f3f4f6", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <div style={{ width: 26, height: 26, borderRadius: 4, background: "#f3f4f6", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                         <item.Icon size={13} style={{ color: item.color }} strokeWidth={1.75} />
                       </div>
                       <div style={{ flex: 1 }}>
@@ -328,7 +357,7 @@ export function AppFrame({ children, activeNav, activeUrl, logoColor = "#069668"
                       >
                         <div
                           style={{
-                            width: 26, height: 26, borderRadius: 2,
+                            width: 26, height: 26, borderRadius: 4,
                             background: isHighlighted ? "rgba(6,150,104,0.1)" : "#f3f4f6",
                             display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
                             transition: "background 0.2s ease",
@@ -344,7 +373,7 @@ export function AppFrame({ children, activeNav, activeUrl, logoColor = "#069668"
                           <motion.div
                             initial={{ opacity: 0, scale: 0.8 }}
                             animate={{ opacity: 1, scale: 1 }}
-                            style={{ background: "#f0fdf4", borderRadius: 2, padding: "2px 6px", fontFamily: "var(--font-kinetic-body, 'Work Sans', system-ui, sans-serif)", fontSize: 10, color: "#069668", border: "1px solid #bbf7d0" }}
+                            style={{ background: "#f0fdf4", borderRadius: 4, padding: "2px 6px", fontFamily: "var(--font-kinetic-body, 'Work Sans', system-ui, sans-serif)", fontSize: 10, color: "#069668", border: "1px solid #bbf7d0" }}
                           >
                             ↵
                           </motion.div>

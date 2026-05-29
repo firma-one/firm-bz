@@ -94,13 +94,12 @@ function BeforeChaosCarriersRow({
  * fill / label / icon accent match hero “Book a Demo” (`landing-page.tsx`).
  */
 const REALITY_MODAL_CLOSE_BUTTON_CLASS = cn(
-  "[font-family:var(--font-header-label),system-ui,sans-serif]",
-  "inline-flex items-center justify-center gap-2 rounded px-4 py-2 text-xs font-bold uppercase tracking-widest sm:px-6",
-  "border border-transparent bg-[#141c2a] text-white",
-  "transition-all duration-200",
-  "hover:-translate-y-0.5 hover:bg-black hover:shadow-[0_10px_24px_-12px_rgba(2,6,23,0.7)]",
+  "[font-family:var(--font-kinetic-body),system-ui,sans-serif]",
+  "inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-semibold",
+  "bg-black/20 text-white backdrop-blur-sm",
+  "transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#141c2a] hover:shadow-[0_10px_24px_-12px_rgba(2,6,23,0.7)]",
   "active:translate-y-0 active:scale-95",
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 focus-visible:ring-offset-2 focus-visible:ring-offset-[#E1E1E1]",
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30",
 )
 
 /** CTA matches header “Get started” sizing + lift/shadow (see `Header.tsx`). */
@@ -1282,7 +1281,7 @@ export function FirmTransformationSection({ skin = "kinetic" as LandingSkin }: {
               )}
               aria-label="Close reality check"
             >
-              <SquareX className="h-4 w-4 shrink-0 text-[#72ff70]" aria-hidden strokeWidth={2} />
+              <SquareX className="h-4 w-4 shrink-0" aria-hidden strokeWidth={2} />
               <span className="hidden md:inline">Close</span>
             </DialogPrimitive.Close>
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
@@ -1321,7 +1320,7 @@ export function FirmTransformationSection({ skin = "kinetic" as LandingSkin }: {
               )}
               aria-label="Close trust architecture"
             >
-              <SquareX className="h-4 w-4 shrink-0 text-[#72ff70]" aria-hidden strokeWidth={2} />
+              <SquareX className="h-4 w-4 shrink-0" aria-hidden strokeWidth={2} />
               <span className="hidden md:inline">Close</span>
             </DialogPrimitive.Close>
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">

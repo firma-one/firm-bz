@@ -81,7 +81,7 @@ export function SceneEngagementAndShare({ phase }: Props) {
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ type: "spring", stiffness: 320, damping: 24 }}
-              style={{ display: "flex", alignItems: "center", gap: 6, background: "#f0fdf4", borderRadius: 2, padding: "6px 12px", border: "1px solid #bbf7d0" }}
+              style={{ display: "flex", alignItems: "center", gap: 6, background: "#f0fdf4", borderRadius: 4, padding: "6px 12px", border: "1px solid #bbf7d0" }}
             >
               <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 6px rgba(34,197,94,0.6)" }} />
               <span style={{ fontFamily: "var(--font-kinetic-body, 'Work Sans', system-ui, sans-serif)", fontSize: 11, fontWeight: 600, color: "#15803d" }}>0 Risks · 2 active clients</span>
@@ -98,7 +98,7 @@ export function SceneEngagementAndShare({ phase }: Props) {
           { label: "Risks detected", value: "0", color: "#069668" },
         ].map((stat) => (
           <div key={stat.label} style={{
-            flex: 1, background: "#ffffff", borderRadius: 2, border: "1px solid #e5e7eb",
+            flex: 1, background: "#ffffff", borderRadius: 4, border: "1px solid #e5e7eb",
             padding: "10px 12px",
           }}>
             <div style={{ fontFamily: "var(--font-kinetic-body, 'Work Sans', system-ui, sans-serif)", fontSize: 10, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>{stat.label}</div>
@@ -108,7 +108,7 @@ export function SceneEngagementAndShare({ phase }: Props) {
       </div>
 
       {/* Event feed */}
-      <div style={{ background: "#ffffff", borderRadius: 2, border: "1px solid #e5e7eb", overflow: "hidden", flex: 1 }}>
+      <div style={{ background: "#ffffff", borderRadius: 4, border: "1px solid #e5e7eb", overflow: "hidden", flex: 1 }}>
         <div style={{ padding: "9px 14px", borderBottom: "1px solid #f3f4f6", display: "flex", alignItems: "center", gap: 6 }}>
           <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 6px rgba(34,197,94,0.5)" }} />
           <span style={{ fontFamily: "var(--font-kinetic-body, 'Work Sans', system-ui, sans-serif)", fontSize: 11, fontWeight: 600, color: "#374151", textTransform: "uppercase", letterSpacing: "0.05em" }}>Live Activity</span>
@@ -119,10 +119,10 @@ export function SceneEngagementAndShare({ phase }: Props) {
             // Skeleton
             [0, 1, 2].map((i) => (
               <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", borderBottom: "1px solid #f9f9fb" }}>
-                <div style={{ width: 30, height: 30, borderRadius: 2, background: "linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%)", backgroundSize: "200% 100%", animation: "shimmer 1.5s infinite linear", animationDelay: `${i * 0.15}s` }} />
+                <div style={{ width: 30, height: 30, borderRadius: 4, background: "linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%)", backgroundSize: "200% 100%", animation: "shimmer 1.5s infinite linear", animationDelay: `${i * 0.15}s` }} />
                 <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 5 }}>
-                  <div style={{ height: 10, width: "70%", background: "linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%)", backgroundSize: "200% 100%", borderRadius: 2, animation: "shimmer 1.5s infinite linear" }} />
-                  <div style={{ height: 8, width: "40%", background: "linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%)", backgroundSize: "200% 100%", borderRadius: 2, animation: "shimmer 1.5s infinite linear" }} />
+                  <div style={{ height: 10, width: "70%", background: "linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%)", backgroundSize: "200% 100%", borderRadius: 4, animation: "shimmer 1.5s infinite linear" }} />
+                  <div style={{ height: 8, width: "40%", background: "linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%)", backgroundSize: "200% 100%", borderRadius: 4, animation: "shimmer 1.5s infinite linear" }} />
                 </div>
               </div>
             ))
@@ -139,7 +139,7 @@ export function SceneEngagementAndShare({ phase }: Props) {
                 <div style={{ width: 7, height: 7, borderRadius: "50%", background: event.dot, flexShrink: 0, boxShadow: event.dot === "#22c55e" ? "0 0 5px rgba(34,197,94,0.5)" : "none" }} />
 
                 {/* Icon */}
-                <div style={{ width: 28, height: 28, borderRadius: 2, background: event.iconBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <div style={{ width: 28, height: 28, borderRadius: 4, background: event.iconBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                   <span style={{ fontSize: 12 }}>{event.icon}</span>
                 </div>
 
@@ -161,7 +161,7 @@ export function SceneEngagementAndShare({ phase }: Props) {
                 {/* Badge or time */}
                 <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
                   {event.badge && (
-                    <div style={{ background: "#fffbeb", color: "#b45309", borderRadius: 2, padding: "2px 6px", fontFamily: "var(--font-kinetic-body, 'Work Sans', system-ui, sans-serif)", fontSize: 10, fontWeight: 600, border: "1px solid #fde68a" }}>{event.badge}</div>
+                    <div style={{ background: "#fffbeb", color: "#b45309", borderRadius: 4, padding: "2px 6px", fontFamily: "var(--font-kinetic-body, 'Work Sans', system-ui, sans-serif)", fontSize: 10, fontWeight: 600, border: "1px solid #fde68a" }}>{event.badge}</div>
                   )}
                   <span style={{ fontFamily: "var(--font-kinetic-body, 'Work Sans', system-ui, sans-serif)", fontSize: 10, color: "#9ca3af" }}>{event.time}</span>
                 </div>

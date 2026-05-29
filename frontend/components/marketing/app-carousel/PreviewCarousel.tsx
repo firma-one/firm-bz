@@ -8,6 +8,7 @@ import { SceneFirmBranding } from "./scenes/SceneFirmBranding"
 import { SceneCreateClient } from "./scenes/SceneCreateClient"
 import { SceneCreateContact } from "./scenes/SceneCreateContact"
 import { SceneEngagementAndShare } from "./scenes/SceneEngagementAndShare"
+import { SceneWrapEngagement } from "./scenes/SceneWrapEngagement"
 import { SceneAnalytics } from "./scenes/SceneAnalytics"
 
 // ── SceneCommandPalette ──────────────────────────────────────────────────────
@@ -58,7 +59,7 @@ function SceneCommandPalette({ phase }: { phase: number }) {
         <div
           style={{
             background: "#f3f4f6",
-            borderRadius: 2,
+            borderRadius: 4,
             padding: "6px 12px",
             fontFamily: "var(--font-kinetic-body, 'Work Sans', system-ui, sans-serif)",
             fontSize: 11,
@@ -74,7 +75,7 @@ function SceneCommandPalette({ phase }: { phase: number }) {
       <div
         style={{
           background: "#ffffff",
-          borderRadius: 2,
+          borderRadius: 4,
           border: "1px solid #e5e7eb",
           overflow: "hidden",
         }}
@@ -113,7 +114,7 @@ function SceneCommandPalette({ phase }: { phase: number }) {
               style={{
                 width: 32,
                 height: 32,
-                borderRadius: 2,
+                borderRadius: 4,
                 background: client.color,
                 display: "flex",
                 alignItems: "center",
@@ -159,7 +160,7 @@ function SceneCommandPalette({ phase }: { phase: number }) {
                 style={{
                   background: "#f0fdf4",
                   color: "#15803d",
-                  borderRadius: 2,
+                  borderRadius: 4,
                   padding: "2px 8px",
                   fontFamily: "var(--font-kinetic-body, 'Work Sans', system-ui, sans-serif)",
                   fontSize: 10,
@@ -247,6 +248,19 @@ const SCENES = [
     ],
   },
   {
+    id: "wrap",
+    label: "Full control",
+    nav: "Clients" as const,
+    url: "app/firm/axiom/client/meridian/q3-review",
+    phases: [
+      { durationMs: 800,  cursor: { x: 480, y: 55,  clicking: false }, palettePhase: 0 },
+      { durationMs: 600,  cursor: { x: 480, y: 55,  clicking: true  }, palettePhase: 0 },
+      { durationMs: 1000, cursor: { x: 340, y: 355, clicking: false }, palettePhase: 0 },
+      { durationMs: 700,  cursor: { x: 340, y: 355, clicking: true  }, palettePhase: 0 },
+      { durationMs: 1500, cursor: { x: 420, y: 220, clicking: false }, palettePhase: 0 },
+    ],
+  },
+  {
     id: "analytics",
     label: "Analytics",
     nav: "Analytics" as const,
@@ -330,6 +344,7 @@ export function PreviewCarousel() {
       case "client":     return <SceneCreateClient phase={phase} />
       case "contact":    return <SceneCreateContact phase={phase} />
       case "engagement": return <SceneEngagementAndShare phase={phase} />
+      case "wrap":       return <SceneWrapEngagement phase={phase} />
       case "analytics":  return <SceneAnalytics phase={phase} />
       default:           return null
     }
@@ -351,8 +366,8 @@ export function PreviewCarousel() {
           style={{ position: "absolute", inset: 0, display: "block", pointerEvents: "none" }}
           aria-hidden
         >
-          <path d="M0,0 L288,0 Q300,0 300,12 Q300,52 336,52 L0,52 Z" fill={SECTION_BG} />
-          <path d="M1000,0 L712,0 Q700,0 700,12 Q700,52 664,52 L1000,52 Z" fill={SECTION_BG} />
+          <path d="M0,0 L238,0 Q250,0 250,12 Q250,52 274,52 L0,52 Z" fill={SECTION_BG} />
+          <path d="M1000,0 L762,0 Q750,0 750,12 Q750,52 726,52 L1000,52 Z" fill={SECTION_BG} />
         </svg>
 
         <div
@@ -375,7 +390,7 @@ export function PreviewCarousel() {
               alignItems: "center",
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: 1 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-evenly", width: "100%" }}>
               {SCENES.map((s, i) => (
                 <button
                   key={s.id}
@@ -386,7 +401,7 @@ export function PreviewCarousel() {
                   style={{
                     position: "relative",
                     borderRadius: 999,
-                    padding: "9px 20px",
+                    padding: "9px 28px",
                     background: "transparent",
                     border: "none",
                     cursor: "pointer",
@@ -439,9 +454,42 @@ export function PreviewCarousel() {
       {/* ── MAIN CONTAINER ─────────────────────────────────────────────────────
           Full-width EDE6E2 band. Browser frame constrained to shell width.
       ─────────────────────────────────────────────────────────────────────── */}
-      <div style={{ width: "100%", background: SECTION_BG, paddingTop: 20, paddingBottom: 56 }}>
+      <div style={{ width: "100%", background: SECTION_BG, paddingTop: 56, paddingBottom: 56 }}>
         <div className={SHELL}>
-          <div style={{ width: "100%", height: 540, position: "relative", overflow: "hidden" }}>
+          {/* Stacked-card 3D effect: ghost layers behind the main browser */}
+          <div style={{ position: "relative", width: "100%", height: 540 }}>
+            {/* Ghost card 2 — furthest back */}
+            <div style={{
+              position: "absolute",
+              inset: 0,
+              borderRadius: 14,
+              background: "rgba(255,255,255,0.45)",
+              border: "1px solid rgba(0,0,0,0.07)",
+              transform: "translate(-24px, -24px)",
+              zIndex: 0,
+            }} />
+            {/* Ghost card 1 — middle */}
+            <div style={{
+              position: "absolute",
+              inset: 0,
+              borderRadius: 14,
+              background: "rgba(255,255,255,0.65)",
+              border: "1px solid rgba(0,0,0,0.08)",
+              transform: "translate(-12px, -12px)",
+              zIndex: 1,
+            }} />
+          {/* Gradient border wrapper: gradient bg shows through as the 2px border ring */}
+          <div style={{
+            position: "relative",
+            zIndex: 2,
+            width: "100%",
+            height: 540,
+            borderRadius: 14,
+            padding: 2,
+            background: "rgba(255,255,255,0.75)",
+            filter: "drop-shadow(0 4px 6px rgba(0,0,0,0.04)) drop-shadow(0 12px 32px rgba(0,0,0,0.10)) drop-shadow(0 32px 64px rgba(0,0,0,0.07))",
+          }}>
+            <div style={{ width: "100%", height: "100%", borderRadius: 12, overflow: "hidden" }}>
             <AppFrame
               activeNav={scene.nav}
               activeUrl={scene.url}
@@ -464,7 +512,9 @@ export function PreviewCarousel() {
                 <CarouselCursor x={cursor.x} y={cursor.y} clicking={cursor.clicking} />
               </div>
             </AppFrame>
+            </div>
           </div>
+          </div>{/* end stacked-card wrapper */}
         </div>
       </div>
       <style>{`
