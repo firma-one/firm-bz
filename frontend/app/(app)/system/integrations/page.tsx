@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
-import { Activity, AlertCircle, CheckCircle2, Loader2, RotateCw, Copy, Check } from 'lucide-react'
+import { Activity, AlertCircle, ArrowUpRight, CheckCircle2, Loader2, RotateCw, Copy, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useAuth } from '@/lib/auth-context'
@@ -284,6 +284,16 @@ export default function IntegrationsPage() {
                     {service === 'smtp' && (data as any)?.host && <p>{`Host: ${(data as any).host}`}</p>}
                     {(data as any)?.latencyMs && <p>{`Latency: ${(data as any).latencyMs}ms`}</p>}
                     {(data as any)?.error && <p className="text-red-600 text-xs">{(data as any).error}</p>}
+                    {service === 'inngest' && (
+                      <a
+                        href={`https://app.inngest.com/env/${process.env.NODE_ENV}/metrics`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-gray-400 hover:text-gray-700 transition-colors mt-1"
+                      >
+                        Open dashboard <ArrowUpRight className="h-3 w-3" />
+                      </a>
+                    )}
                   </div>
                 </div>
               )

@@ -6,10 +6,9 @@ import { z } from 'zod'
 import { sendEmail } from '@/lib/email'
 import { prisma } from '@/lib/prisma'
 import { serverActionWrapper, type ActionResponse } from '@/lib/server-action-wrapper'
+import { isSystemAdminEmail } from '@/lib/system/admin-check'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { createClient } from '@/utils/supabase/server'
-
-const JWT_ADMIN_ROLE = 'SYS_ADMIN'
 
 const inputSchema = z.object({
   email: z.string().trim().email('Enter a valid email address'),
@@ -135,7 +134,7 @@ async function assertSystemAdmin(): Promise<{ userId: string }> {
   } = await supabase.auth.getUser()
 
   if (!user) throw new Error('Unauthorized')
-  if ((user.app_metadata?.role as string | undefined) !== JWT_ADMIN_ROLE) {
+  if (!isSystemAdminEmail(user.email)) {
     throw new Error('Only system admins can send signup invites')
   }
   return { userId: user.id }

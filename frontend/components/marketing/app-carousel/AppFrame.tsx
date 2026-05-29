@@ -1,11 +1,23 @@
 "use client"
 
-import React from "react"
+import React, { useEffect, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import {
   Users, Briefcase, Shield, BarChart3, Settings, Bell, Bookmark,
   CalendarClock, History, Search, Clock,
 } from "lucide-react"
+
+function useIsMobile(breakpoint = 768) {
+  const [isMobile, setIsMobile] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${breakpoint - 1}px)`)
+    setIsMobile(mq.matches)
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches)
+    mq.addEventListener("change", handler)
+    return () => mq.removeEventListener("change", handler)
+  }, [breakpoint])
+  return isMobile
+}
 
 interface AppFrameProps {
   children: React.ReactNode
@@ -39,6 +51,7 @@ const PALETTE_PERSONAL = [
 
 export function AppFrame({ children, activeNav, activeUrl, logoColor = "#069668", palettePhase = 0 }: AppFrameProps) {
   const paletteOpen = palettePhase >= 1
+  const isMobile = useIsMobile()
 
   return (
     <div
@@ -139,7 +152,7 @@ export function AppFrame({ children, activeNav, activeUrl, logoColor = "#069668"
             position: "absolute",
             left: "50%",
             transform: "translateX(-50%)",
-            width: 240, height: 28,
+            width: isMobile ? 120 : 240, height: 28,
             background: "#f3f4f6", borderRadius: 4,
             display: "flex", alignItems: "center", gap: 6,
             padding: "0 10px", cursor: "default",
@@ -190,12 +203,13 @@ export function AppFrame({ children, activeNav, activeUrl, logoColor = "#069668"
         {/* Sidebar */}
         <div
           style={{
-            width: 172,
+            width: isMobile ? 44 : 172,
             flexShrink: 0,
             background: "#ffffff",
             borderRight: "1px solid #e5e7eb",
             display: "flex",
             flexDirection: "column",
+            transition: "width 0.25s ease",
           }}
         >
           {/* Nav items */}
@@ -206,8 +220,11 @@ export function AppFrame({ children, activeNav, activeUrl, logoColor = "#069668"
                 <div
                   key={item.label}
                   style={{
-                    display: "flex", alignItems: "center", gap: 8,
-                    padding: "7px 14px", margin: "1px 6px", borderRadius: 4,
+                    display: "flex", alignItems: "center",
+                    justifyContent: isMobile ? "center" : "flex-start",
+                    gap: isMobile ? 0 : 8,
+                    padding: isMobile ? "7px 0" : "7px 14px",
+                    margin: "1px 6px", borderRadius: 4,
                     cursor: "default",
                     fontFamily: "var(--font-kinetic-body, 'Work Sans', system-ui, sans-serif)",
                     fontSize: 13, fontWeight: isActive ? 500 : 400,
@@ -222,7 +239,7 @@ export function AppFrame({ children, activeNav, activeUrl, logoColor = "#069668"
                     style={{ opacity: isActive ? 1 : 0.6, flexShrink: 0, color: isActive ? "#069668" : "#4b5563" }}
                     strokeWidth={isActive ? 2 : 1.75}
                   />
-                  {item.label}
+                  {!isMobile && item.label}
                 </div>
               )
             })}
@@ -243,7 +260,16 @@ export function AppFrame({ children, activeNav, activeUrl, logoColor = "#069668"
           />
 
           {/* Bottom user area */}
-          <div style={{ padding: "10px 14px", borderTop: "1px solid #e5e7eb", display: "flex", alignItems: "center", gap: 8 }}>
+          <div
+            style={{
+              padding: isMobile ? "10px 0" : "10px 14px",
+              borderTop: "1px solid #e5e7eb",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: isMobile ? "center" : "flex-start",
+              gap: 8,
+            }}
+          >
             <div
               style={{
                 width: 26, height: 26, borderRadius: "50%",
@@ -253,10 +279,12 @@ export function AppFrame({ children, activeNav, activeUrl, logoColor = "#069668"
             >
               <span style={{ fontSize: 10, color: "white", fontWeight: 600 }}>A</span>
             </div>
-            <div>
-              <div style={{ fontFamily: "var(--font-kinetic-body, 'Work Sans', system-ui, sans-serif)", fontSize: 11, fontWeight: 500, color: "#1b1b1d" }}>Alex Morgan</div>
-              <div style={{ fontFamily: "var(--font-kinetic-body, 'Work Sans', system-ui, sans-serif)", fontSize: 10, color: "#9ca3af" }}>Owner</div>
-            </div>
+            {!isMobile && (
+              <div>
+                <div style={{ fontFamily: "var(--font-kinetic-body, 'Work Sans', system-ui, sans-serif)", fontSize: 11, fontWeight: 500, color: "#1b1b1d" }}>Alex Morgan</div>
+                <div style={{ fontFamily: "var(--font-kinetic-body, 'Work Sans', system-ui, sans-serif)", fontSize: 10, color: "#9ca3af" }}>Owner</div>
+              </div>
+            )}
           </div>
         </div>
 
