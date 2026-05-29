@@ -135,7 +135,7 @@ export class SearchService {
       "embedding" = EXCLUDED."embedding",
       "clientId" = EXCLUDED."clientId",
       "connectorId" = EXCLUDED."connectorId",
-      "parentId" = COALESCE(EXCLUDED."parentId", "parentId"),
+      "parentId" = COALESCE(EXCLUDED."parentId", platform.engagement_documents."parentId"),
       "metadata" = EXCLUDED."metadata",
       "updatedAt" = NOW()
   `,
@@ -164,6 +164,7 @@ export class SearchService {
 
         } catch (error) {
             logger.error('Failed to index file in SearchService (V2):', error as Error)
+            throw error
         }
     }
 
