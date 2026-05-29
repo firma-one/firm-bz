@@ -15,6 +15,8 @@ import { OnboardingProvider } from '@/lib/onboarding-context'
 import { OnboardingSidebar } from '@/components/onboarding/onboarding-sidebar'
 import { DownloadProgressProvider } from '@/lib/download-progress-context'
 import { DownloadProgressPanel } from '@/components/ui/download-progress-panel'
+import { UploadProgressProvider } from '@/lib/upload-progress-context'
+import { UploadProgressPanel } from '@/components/ui/upload-progress-panel'
 import { DebugFloatingTrigger } from '@/components/debug/debug-floating-trigger'
 import { StandardCheckoutIntentBanner } from '@/components/billing/standard-checkout-intent-banner'
 import { OnboardingExitGuardBanner } from '@/components/onboarding/onboarding-exit-guard-banner'
@@ -189,12 +191,15 @@ export function DLayoutClient({
                     <ViewAsProvider>
                         <RightPaneProvider>
                             <DownloadProgressProvider>
+                            <UploadProgressProvider>
                                 <TooltipProvider delayDuration={400}>
                                     <AppLayoutContent isSystemAdmin={isSystemAdmin}>
                                         {children}
                                     </AppLayoutContent>
                                     <DownloadProgressPanel />
+                                    <UploadProgressPanel />
                                 </TooltipProvider>
+                            </UploadProgressProvider>
                             </DownloadProgressProvider>
                         </RightPaneProvider>
                     </ViewAsProvider>
