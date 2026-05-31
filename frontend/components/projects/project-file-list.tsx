@@ -362,6 +362,7 @@ const { addToast } = useToast()
     const [conflictItems, setConflictItems] = useState<ConflictItem[]>([])
     const [overwriteSelections, setOverwriteSelections] = useState<Set<string>>(new Set())
     const [uploadProgress, setUploadProgress] = useState(0)
+    const coffeeIconRef = useRef<CoffeeIconHandle>(null)
 
     useEffect(() => {
         if (isUploading || isUploadInitiating) {
