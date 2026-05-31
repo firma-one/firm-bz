@@ -3,7 +3,8 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
-import { SquarePlus, Upload, FolderUp, X, Folder, File as FileIcon, ArrowUp, ArrowDown, ChevronRight, Search, List as ListIcon, LayoutGrid, Filter, ChevronDown, User, FileText, FileSpreadsheet, Presentation, ListChecks, PenTool, Map as MapIcon, LayoutTemplate, FileCode, AlertCircle, ShieldCheck, Maximize2, Minimize2, CheckCircle2, XCircle, Trash2, Layout, Code, Laptop, RefreshCw, Info, Share2, Layers, Building2, Users, Briefcase, Lock, FolderLock, Inbox, Sparkles, Link2, MessageCircle, CircleChevronLeft, Download, MoreVertical } from 'lucide-react'
+import { CoffeeIcon, type CoffeeIconHandle } from "@/components/ui/coffee-icon"
+import { SquarePlus, Upload, FolderUp, X, Folder, File as FileIcon, ArrowUp, ArrowDown, ChevronRight, Search, List as ListIcon, LayoutGrid, Filter, ChevronDown, User, FileText, FileSpreadsheet, Presentation, ListChecks, PenTool, Map as MapIcon, LayoutTemplate, FileCode, AlertCircle, ShieldCheck, Maximize2, Minimize2, CheckCircle2, XCircle, Trash2, Layout, Code, Laptop, RefreshCw, Info, Share2, Layers, Building2, Users, Briefcase, Lock, FolderLock, Inbox, Sparkles, Link2, MessageCircle, CircleChevronLeft, Download, MoreVertical, Clock } from 'lucide-react'
 import Fuse from 'fuse.js'
 import { config } from "@/lib/config"
 import { DocumentIcon } from '@/components/ui/document-icon'
@@ -361,6 +362,14 @@ const { addToast } = useToast()
     const [conflictItems, setConflictItems] = useState<ConflictItem[]>([])
     const [overwriteSelections, setOverwriteSelections] = useState<Set<string>>(new Set())
     const [uploadProgress, setUploadProgress] = useState(0)
+
+    useEffect(() => {
+        if (isUploading || isUploadInitiating) {
+            coffeeIconRef.current?.startAnimation()
+        } else {
+            coffeeIconRef.current?.stopAnimation()
+        }
+    }, [isUploading, isUploadInitiating])
 
     // Intake action state
     const [intakeActionInProgress, setIntakeActionInProgress] = useState<string | null>(null)
