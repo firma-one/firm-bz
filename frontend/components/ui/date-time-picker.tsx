@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
-import { createPortal } from "react-dom"
+import * as Popover from "@radix-ui/react-popover"
 import { Button } from "@/components/ui/button"
 import { Calendar, Clock, ChevronDown, ChevronUp } from "lucide-react"
 
@@ -53,46 +53,15 @@ export function DateTimePicker({
   const [selectedDate, setSelectedDate] = useState<string>("")
   const [selectedTime, setSelectedTime] = useState<string>("")
   const [currentMonth, setCurrentMonth] = useState(new Date())
-  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 })
-  const triggerRef = useRef<HTMLButtonElement>(null)
   const monthYearScrollRef = useRef<HTMLDivElement>(null)
   const onChangeRef = useRef(onChange)
   useEffect(() => { onChangeRef.current = onChange }, [onChange])
   const lastEmittedRef = useRef<string>("")
 
-  const updatePos = useCallback(() => {
-    if (!triggerRef.current) return
-    const rect = triggerRef.current.getBoundingClientRect()
-    setDropdownPos({ top: rect.bottom + window.scrollY + 4, left: rect.left + window.scrollX })
-  }, [])
-
-  useEffect(() => {
-    if (isOpen) {
-      updatePos()
-      window.addEventListener('scroll', updatePos, true)
-      window.addEventListener('resize', updatePos)
-    }
-    return () => {
-      window.removeEventListener('scroll', updatePos, true)
-      window.removeEventListener('resize', updatePos)
-    }
-  }, [isOpen, updatePos])
-
-  // Close on outside click
-  useEffect(() => {
-    if (!isOpen) return
-    const handleClick = (e: MouseEvent) => {
-      if (triggerRef.current && !triggerRef.current.contains(e.target as Node)) {
-        // Check if click is inside the portal dropdown
-        const portal = document.getElementById('date-time-picker-portal')
-        if (portal && portal.contains(e.target as Node)) return
-        setIsOpen(false)
-        setViewMode('calendar')
-      }
-    }
-    document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [isOpen])
+  const handleOpenChange = (open: boolean) => {
+    setIsOpen(open)
+    if (!open) setViewMode('calendar')
+  }
 
   // Initialize from value prop — skip if we emitted this value (prevents timezone round-trip loop)
   useEffect(() => {
@@ -100,7 +69,6 @@ export function DateTimePicker({
     if (value) {
       const date = new Date(value)
       if (!isNaN(date.getTime())) {
-        // Use local date and time consistently to avoid UTC/local mismatch
         const y = date.getFullYear()
         const m = String(date.getMonth() + 1).padStart(2, '0')
         const d = String(date.getDate()).padStart(2, '0')
@@ -115,10 +83,9 @@ export function DateTimePicker({
     }
   }, [value])
 
-  // Update parent only when the value actually changed (prevents onChange reference loops)
+  // Update parent only when the value actually changed
   useEffect(() => {
     if (selectedDate && selectedTime) {
-      // Construct as local datetime to stay consistent with how we parse value back
       const [h, min] = selectedTime.split(':').map(Number)
       const [y, mo, d] = selectedDate.split('-').map(Number)
       const dt = new Date(y, mo - 1, d, h, min)
@@ -178,7 +145,6 @@ export function DateTimePicker({
       const date = new Date(startDate)
       date.setDate(startDate.getDate() + i)
 
-      // Use local date string to avoid UTC off-by-one in non-UTC timezones
       const localDateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
       const isCurrentMonth = date.getMonth() === month
       const isToday = date.getTime() === today.getTime()
@@ -229,250 +195,245 @@ export function DateTimePicker({
     onChange("")
   }
 
-  const dropdown = isOpen ? (
-    <div
-      id="date-time-picker-portal"
-      style={{ position: 'absolute', top: dropdownPos.top, left: dropdownPos.left, zIndex: 1100000 }}
-      className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 w-72"
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-xs font-semibold text-gray-900">Select Date & Time</h3>
-        <div className="flex items-center gap-2">
-          <TimezoneOffsetBadge />
-          <button
-            onClick={() => { setIsOpen(false); setViewMode('calendar') }}
-            className="text-gray-400 hover:text-gray-600 text-sm leading-none"
-          >
-            ×
-          </button>
-        </div>
-      </div>
-
-      {/* Calendar */}
-      <div className="mb-3">
-        {/* Month/year header */}
-        <div className="flex items-center justify-between mb-2">
-          {viewMode === 'calendar' && (
-            <button onClick={() => navigateMonth('prev')} className="p-1 hover:bg-gray-100 rounded text-sm leading-none">‹</button>
-          )}
-          <button
-            onClick={() => setViewMode(v => v === 'calendar' ? 'month-year' : 'calendar')}
-            className="flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded hover:bg-gray-100 transition-colors mx-auto"
-          >
-            {currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-            <ChevronDown className={`h-3 w-3 text-gray-400 transition-transform duration-150 ${viewMode === 'month-year' ? 'rotate-180' : ''}`} />
-          </button>
-          {viewMode === 'calendar' && (
-            <button onClick={() => navigateMonth('next')} className="p-1 hover:bg-gray-100 rounded text-sm leading-none">›</button>
-          )}
-        </div>
-
-        {viewMode === 'month-year' ? (() => {
-          const today = new Date()
-          const todayYear = today.getFullYear()
-          const todayMonth = today.getMonth()
-          const minYear = allowPastDateTimes ? todayYear - 50 : todayYear
-          const maxYear = allowFutureDateTimes ? todayYear + 20 : todayYear
-          const years = Array.from({ length: maxYear - minYear + 1 }, (_, i) => minYear + i)
-          const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-
-          return (
-            <div
-              ref={monthYearScrollRef}
-              className="max-h-52 overflow-y-auto -mx-1 px-1"
-            >
-              {years.map(y => {
-                const isCurrentYear = y === currentMonth.getFullYear()
-                return (
-                  <div key={y} id={`month-year-${y}`}>
-                    <div className={`text-xs font-semibold px-1 py-1.5 ${isCurrentYear ? 'text-gray-900' : 'text-gray-400'}`}>
-                      {y}
-                    </div>
-                    <div className="grid grid-cols-4 gap-1 mb-2">
-                      {MONTHS.map((m, mi) => {
-                        const isFutureDisabled = !allowFutureDateTimes && (y > todayYear || (y === todayYear && mi > todayMonth))
-                        const isPastDisabled = !allowPastDateTimes && (y < todayYear || (y === todayYear && mi < todayMonth))
-                        const isDisabled = isFutureDisabled || isPastDisabled
-                        const isSelected = y === currentMonth.getFullYear() && mi === currentMonth.getMonth()
-                        const isToday = y === todayYear && mi === todayMonth
-                        return (
-                          <button
-                            key={m}
-                            disabled={isDisabled}
-                            onClick={() => {
-                              setCurrentMonth(new Date(y, mi, 1))
-                              setViewMode('calendar')
-                            }}
-                            className={`
-                              text-xs py-1.5 rounded transition-colors
-                              ${isSelected ? 'bg-gray-900 text-white font-semibold' : ''}
-                              ${isToday && !isSelected ? 'ring-1 ring-gray-400 font-semibold text-gray-900' : ''}
-                              ${!isSelected && !isToday && !isDisabled ? 'hover:bg-gray-100 text-gray-700' : ''}
-                              ${isDisabled ? 'opacity-30 cursor-not-allowed text-gray-400' : 'cursor-pointer'}
-                            `}
-                          >
-                            {m}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )
-        })() : (
-          <>
-            {/* Day headers */}
-            <div className="grid grid-cols-7 gap-1 mb-1">
-              {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(day => (
-                <div key={day} className="text-xs text-gray-500 text-center p-1">{day}</div>
-              ))}
-            </div>
-            {/* Calendar days */}
-            <div className="grid grid-cols-7 gap-1">
-              {generateCalendarDays().map((day, index) => (
-                <button
-                  key={index}
-                  onClick={() => setSelectedDate(day.fullDate)}
-                  disabled={day.isDisabled}
-                  className={`
-                    text-xs p-2 rounded transition-colors
-                    ${day.isCurrentMonth ? 'text-gray-900' : 'text-gray-400'}
-                    ${day.isToday ? 'bg-gray-100 text-gray-900 font-semibold ring-2 ring-gray-300' : ''}
-                    ${day.isSelected ? 'bg-gray-900 text-white hover:bg-gray-800 font-semibold' : ''}
-                    ${!day.isSelected && !day.isToday ? 'hover:bg-gray-100' : ''}
-                    ${day.isDisabled ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}
-                  `}
-                >
-                  {day.date}
-                </button>
-              ))}
-            </div>
-          </>
-        )}
-      </div>
-
-      <div className="border-t border-gray-100 my-2" />
-
-      {/* Time picker */}
-      <div className="mb-3">
-        <button
-          type="button"
-          onClick={() => setTimeExpanded((v) => !v)}
-          className="flex items-center justify-between w-full mb-1.5 group"
-        >
-          <span className="text-xs font-medium text-gray-700 flex items-center gap-1">
-            <Clock className="h-3 w-3" />
-            Time
-            {selectedTime && (
-              <span className="ml-1 font-mono text-gray-500">{selectedTime}</span>
-            )}
-          </span>
-          {timeExpanded
-            ? <ChevronUp className="h-3.5 w-3.5 text-gray-400" />
-            : <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
-          }
-        </button>
-        {timeExpanded && (() => {
-          const HOURS = Array.from({ length: 24 }, (_, i) => i)
-          const MINUTES = Array.from({ length: 60 }, (_, i) => i)
-
-          const [selH24, selMin] = selectedTime
-            ? selectedTime.split(':').map(Number)
-            : [0, 0]
-
-          const applyTime = (h24: number, min: number) => {
-            const t = `${String(h24).padStart(2, '0')}:${String(min).padStart(2, '0')}`
-            const now = new Date()
-            const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-            const nowTime = now.toTimeString().slice(0, 5)
-            const isToday = !allowFutureDateTimes && selectedDate === todayStr
-            setSelectedTime(isToday && t > nowTime ? nowTime : t)
-          }
-
-          const cellCls = (active: boolean) =>
-            `text-xs p-1.5 rounded transition-colors w-full text-center ${
-              active
-                ? 'bg-gray-100 text-gray-900 font-semibold outline outline-2 outline-gray-400'
-                : 'text-gray-700 hover:bg-gray-100 cursor-pointer'
-            }`
-
-          return (
-            <div className="flex gap-1 px-0.5">
-              {/* Hours 0–23 */}
-              <div className="flex-1 flex flex-col gap-0.5">
-                <div className="text-[10px] font-medium text-gray-400 text-center pb-0.5">Hrs</div>
-                <div className="max-h-[120px] overflow-y-auto flex flex-col gap-0.5 p-0.5">
-                  {HOURS.map((h) => (
-                    <button key={h} type="button" className={cellCls(selH24 === h && !!selectedTime)} onClick={() => applyTime(h, selMin)}>
-                      {String(h).padStart(2, '0')}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {/* Minutes */}
-              <div className="flex-1 flex flex-col gap-0.5">
-                <div className="text-[10px] font-medium text-gray-400 text-center pb-0.5">Mins</div>
-                <div className="max-h-[120px] overflow-y-auto flex flex-col gap-0.5 p-0.5">
-                  {MINUTES.map((m) => (
-                    <button key={m} type="button" className={cellCls(selMin === m && !!selectedTime)} onClick={() => applyTime(selH24, m)}>
-                      {String(m).padStart(2, '0')}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )
-        })()}
-      </div>
-
-
-      {/* Actions */}
-      <div className="flex items-center justify-between pt-1">
-        <div className="flex space-x-1.5">
-          <button type="button" onClick={setToday} className="px-2 h-7 text-xs bg-gray-100 hover:bg-gray-200 rounded text-gray-700 transition-colors">
-            Today
-          </button>
-          <button type="button" onClick={() => { const n = new Date(); const d = `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; setSelectedDate(d); setSelectedTime(nowTime()) }} className="px-2 h-7 text-xs bg-gray-100 hover:bg-gray-200 rounded text-gray-700 transition-colors">
-            Now
-          </button>
-        </div>
-        <div className="flex space-x-1.5">
-          <button type="button" onClick={clearSelection} className="px-2 h-7 text-xs bg-gray-100 hover:bg-gray-200 rounded text-gray-700 transition-colors">
-            Clear
-          </button>
-          <Button size="sm" onClick={() => setIsOpen(false)} disabled={!selectedDate} className="text-xs h-7 px-3 bg-gray-900 hover:bg-gray-800 text-white">
-            Done
-          </Button>
-        </div>
-      </div>
-    </div>
-  ) : null
-
   return (
-    <div className={`relative ${className}`}>
-      <Button
-        ref={triggerRef}
-        variant="outline"
-        onClick={() => setIsOpen(!isOpen)}
-        disabled={disabled}
-        className="w-full justify-start text-left font-normal !text-xs !h-auto !py-1.5 !px-2"
-      >
-        <Calendar className="mr-1.5 h-3 w-3 shrink-0" />
-        <span className="flex-1 whitespace-nowrap overflow-hidden text-ellipsis">{formatDisplayValue()}</span>
-        {selectedDate && (
+    <Popover.Root open={isOpen} onOpenChange={handleOpenChange}>
+      <Popover.Trigger asChild disabled={disabled}>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={disabled}
+          className={`w-full justify-start text-left font-normal !text-xs h-9 !py-0 !px-2 disabled:opacity-100 ${disabled ? '!bg-[#f9f9fb] cursor-not-allowed' : ''} ${disabled && !selectedDate ? 'opacity-50' : ''} ${className}`}
+        >
+          <Calendar className="mr-1.5 h-3 w-3 shrink-0" />
+          <span className="flex-1 whitespace-nowrap overflow-hidden text-ellipsis">{formatDisplayValue()}</span>
           <span
             title={getUtcOffsetLabel()}
             className="ml-2 shrink-0 text-[10px] font-semibold font-mono px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200"
           >
             TZ
           </span>
-        )}
-      </Button>
+        </Button>
+      </Popover.Trigger>
 
-      {typeof document !== 'undefined' && createPortal(dropdown, document.body)}
-    </div>
+      <Popover.Portal>
+        <Popover.Content
+          align="start"
+          side="bottom"
+          sideOffset={4}
+          onOpenAutoFocus={(e) => e.preventDefault()}
+          className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 w-72 z-[1100000]"
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-xs font-semibold text-gray-900">Select Date & Time</h3>
+            <TimezoneOffsetBadge />
+          </div>
+
+          {/* Calendar */}
+          <div className="mb-3">
+            {/* Month/year header */}
+            <div className="flex items-center justify-between mb-2">
+              {viewMode === 'calendar' && (
+                <button type="button" onClick={() => navigateMonth('prev')} className="p-1 hover:bg-gray-100 rounded text-sm leading-none">‹</button>
+              )}
+              <button
+                type="button"
+                onClick={() => setViewMode(v => v === 'calendar' ? 'month-year' : 'calendar')}
+                className="flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded hover:bg-gray-100 transition-colors mx-auto"
+              >
+                {currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                <ChevronDown className={`h-3 w-3 text-gray-400 transition-transform duration-150 ${viewMode === 'month-year' ? 'rotate-180' : ''}`} />
+              </button>
+              {viewMode === 'calendar' && (
+                <button type="button" onClick={() => navigateMonth('next')} className="p-1 hover:bg-gray-100 rounded text-sm leading-none">›</button>
+              )}
+            </div>
+
+            {viewMode === 'month-year' ? (() => {
+              const today = new Date()
+              const todayYear = today.getFullYear()
+              const todayMonth = today.getMonth()
+              const minYear = allowPastDateTimes ? todayYear - 50 : todayYear
+              const maxYear = allowFutureDateTimes ? todayYear + 20 : todayYear
+              const years = Array.from({ length: maxYear - minYear + 1 }, (_, i) => minYear + i)
+              const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+              return (
+                <div
+                  ref={monthYearScrollRef}
+                  className="max-h-52 overflow-y-auto -mx-1 px-1"
+                >
+                  {years.map(y => {
+                    const isCurrentYear = y === currentMonth.getFullYear()
+                    return (
+                      <div key={y} id={`month-year-${y}`}>
+                        <div className={`text-xs font-semibold px-1 py-1.5 ${isCurrentYear ? 'text-gray-900' : 'text-gray-400'}`}>
+                          {y}
+                        </div>
+                        <div className="grid grid-cols-4 gap-1 mb-2">
+                          {MONTHS.map((m, mi) => {
+                            const isFutureDisabled = !allowFutureDateTimes && (y > todayYear || (y === todayYear && mi > todayMonth))
+                            const isPastDisabled = !allowPastDateTimes && (y < todayYear || (y === todayYear && mi < todayMonth))
+                            const isDisabled = isFutureDisabled || isPastDisabled
+                            const isSelected = y === currentMonth.getFullYear() && mi === currentMonth.getMonth()
+                            const isToday = y === todayYear && mi === todayMonth
+                            return (
+                              <button
+                                key={m}
+                                type="button"
+                                disabled={isDisabled}
+                                onClick={() => {
+                                  setCurrentMonth(new Date(y, mi, 1))
+                                  setViewMode('calendar')
+                                }}
+                                className={`
+                                  text-xs py-1.5 rounded transition-colors
+                                  ${isSelected ? 'bg-gray-900 text-white font-semibold' : ''}
+                                  ${isToday && !isSelected ? 'ring-1 ring-gray-400 font-semibold text-gray-900' : ''}
+                                  ${!isSelected && !isToday && !isDisabled ? 'hover:bg-gray-100 text-gray-700' : ''}
+                                  ${isDisabled ? 'opacity-30 cursor-not-allowed text-gray-400' : 'cursor-pointer'}
+                                `}
+                              >
+                                {m}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            })() : (
+              <>
+                {/* Day headers */}
+                <div className="grid grid-cols-7 gap-1 mb-1">
+                  {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(day => (
+                    <div key={day} className="text-xs text-gray-500 text-center p-1">{day}</div>
+                  ))}
+                </div>
+                {/* Calendar days */}
+                <div className="grid grid-cols-7 gap-1">
+                  {generateCalendarDays().map((day, index) => (
+                    <button
+                      key={index}
+                      type="button"
+                      onClick={() => setSelectedDate(day.fullDate)}
+                      disabled={day.isDisabled}
+                      className={`
+                        text-xs p-2 rounded transition-colors
+                        ${day.isCurrentMonth ? 'text-gray-900' : 'text-gray-400'}
+                        ${day.isToday ? 'bg-gray-100 text-gray-900 font-semibold ring-2 ring-gray-300' : ''}
+                        ${day.isSelected ? 'bg-gray-900 text-white hover:bg-gray-800 font-semibold' : ''}
+                        ${!day.isSelected && !day.isToday ? 'hover:bg-gray-100' : ''}
+                        ${day.isDisabled ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}
+                      `}
+                    >
+                      {day.date}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="border-t border-gray-100 my-2" />
+
+          {/* Time picker */}
+          <div className="mb-3">
+            <button
+              type="button"
+              onClick={() => setTimeExpanded((v) => !v)}
+              className="flex items-center justify-between w-full mb-1.5 group"
+            >
+              <span className="text-xs font-medium text-gray-700 flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                Time
+                {selectedTime && (
+                  <span className="ml-1 font-mono text-gray-500">{selectedTime}</span>
+                )}
+              </span>
+              {timeExpanded
+                ? <ChevronUp className="h-3.5 w-3.5 text-gray-400" />
+                : <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
+              }
+            </button>
+            {timeExpanded && (() => {
+              const HOURS = Array.from({ length: 24 }, (_, i) => i)
+              const MINUTES = Array.from({ length: 60 }, (_, i) => i)
+
+              const [selH24, selMin] = selectedTime
+                ? selectedTime.split(':').map(Number)
+                : [0, 0]
+
+              const applyTime = (h24: number, min: number) => {
+                const t = `${String(h24).padStart(2, '0')}:${String(min).padStart(2, '0')}`
+                const now = new Date()
+                const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+                const nowT = now.toTimeString().slice(0, 5)
+                const isToday = !allowFutureDateTimes && selectedDate === todayStr
+                setSelectedTime(isToday && t > nowT ? nowT : t)
+              }
+
+              const cellCls = (active: boolean) =>
+                `text-xs p-1.5 rounded transition-colors w-full text-center ${
+                  active
+                    ? 'bg-gray-100 text-gray-900 font-semibold outline outline-2 outline-gray-400'
+                    : 'text-gray-700 hover:bg-gray-100 cursor-pointer'
+                }`
+
+              return (
+                <div className="flex gap-1 px-0.5">
+                  {/* Hours 0–23 */}
+                  <div className="flex-1 flex flex-col gap-0.5">
+                    <div className="text-[10px] font-medium text-gray-400 text-center pb-0.5">Hrs</div>
+                    <div className="max-h-[120px] overflow-y-auto flex flex-col gap-0.5 p-0.5">
+                      {HOURS.map((h) => (
+                        <button key={h} type="button" className={cellCls(selH24 === h && !!selectedTime)} onClick={() => applyTime(h, selMin)}>
+                          {String(h).padStart(2, '0')}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {/* Minutes */}
+                  <div className="flex-1 flex flex-col gap-0.5">
+                    <div className="text-[10px] font-medium text-gray-400 text-center pb-0.5">Mins</div>
+                    <div className="max-h-[120px] overflow-y-auto flex flex-col gap-0.5 p-0.5">
+                      {MINUTES.map((m) => (
+                        <button key={m} type="button" className={cellCls(selMin === m && !!selectedTime)} onClick={() => applyTime(selH24, m)}>
+                          {String(m).padStart(2, '0')}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )
+            })()}
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center justify-between pt-1">
+            <div className="flex space-x-1.5">
+              <button type="button" onClick={setToday} className="px-2 h-7 text-xs bg-gray-100 hover:bg-gray-200 rounded text-gray-700 transition-colors">
+                Today
+              </button>
+              <button type="button" onClick={() => { const n = new Date(); const d = `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; setSelectedDate(d); setSelectedTime(nowTime()) }} className="px-2 h-7 text-xs bg-gray-100 hover:bg-gray-200 rounded text-gray-700 transition-colors">
+                Now
+              </button>
+            </div>
+            <div className="flex space-x-1.5">
+              {selectedDate && (
+                <button type="button" onClick={clearSelection} className="px-2 h-7 text-xs bg-gray-100 hover:bg-gray-200 rounded text-gray-700 transition-colors">
+                  Clear
+                </button>
+              )}
+              <Button type="button" size="sm" onClick={() => handleOpenChange(false)} className="text-xs h-7 px-3 bg-gray-900 hover:bg-gray-800 text-white">
+                Done
+              </Button>
+            </div>
+          </div>
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
   )
 }

@@ -61,6 +61,7 @@ import { getSavedFolderState, setSavedFolderState, consumeDeeplinkHighlight, typ
 import { useSecureOpenDocument } from '@/lib/use-secure-open-document'
 import { SecureAccessModal } from '@/components/projects/shares/secure-access-modal'
 import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
+import { useUploadProgress, type UploadQueueItem } from '@/lib/upload-progress-context'
 
 interface ProjectFileListProps {
     projectId: string
@@ -95,14 +96,6 @@ type ConflictItem = {
     existingId: string
 }
 
-type UploadQueueItem = {
-    id: string
-    file: File
-    progress: number
-    status: 'pending' | 'uploading' | 'completed' | 'error'
-    error?: string
-    finalName?: string
-}
 
 const VIEW_AS_SHARED_ONLY_PERSONAS = ['eng_ext_collaborator', 'eng_viewer']
 
@@ -342,12 +335,22 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
 
     // (deeplink handler effect is declared below, after navigateToItem is defined)
 
-    // Upload & Conflict State
-    const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([])
-    const [isUploadModalOpen, setIsUploadModalOpen] = useState(true)
-    const uploadOverlayDismissedRef = useRef(false)
-    const coffeeIconRef = useRef<CoffeeIconHandle>(null)
-    const { addToast } = useToast()
+    // Upload & Conflict State (queue lives in UploadProgressContext so the pane persists across navigation)
+    const {
+        uploadQueue,
+        isUploading,
+        isUploadInitiating,
+        isUploadModalOpen,
+        dismissedRef: uploadOverlayDismissedRef,
+        addToQueue,
+        updateQueueItem,
+        setIsUploading,
+        setIsUploadInitiating,
+        setIsUploadModalOpen,
+        setShowFileLocationCallback,
+        dismiss: dismissUploadPanel,
+    } = useUploadProgress()
+const { addToast } = useToast()
     const showSandboxPickerToast = useCallback(() => {
         addToast({
             type: 'error',
@@ -358,9 +361,8 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
     }, [addToast])
     const [conflictItems, setConflictItems] = useState<ConflictItem[]>([])
     const [overwriteSelections, setOverwriteSelections] = useState<Set<string>>(new Set())
-    const [isUploading, setIsUploading] = useState(false)
-    const [isUploadInitiating, setIsUploadInitiating] = useState(false)
     const [uploadProgress, setUploadProgress] = useState(0)
+    const coffeeIconRef = useRef<CoffeeIconHandle>(null)
 
     useEffect(() => {
         if (isUploading || isUploadInitiating) {
@@ -492,7 +494,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
         return next
     }), [])
 
-    const handleShowFileLocation = (fileName: string) => {
+    const handleShowFileLocation = useCallback((fileName: string) => {
         const file = files.find(f => f.name === fileName)
         if (file) {
             setHighlightedFileId(file.id)
@@ -501,7 +503,12 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                 if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
             }, 100)
         }
-    }
+    }, [files])
+
+    useEffect(() => {
+        setShowFileLocationCallback(handleShowFileLocation)
+        return () => setShowFileLocationCallback(null)
+    }, [handleShowFileLocation, setShowFileLocationCallback])
 
     const navigateToItem = async (file: DriveFile) => {
         try {
@@ -944,17 +951,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
         return () => cancelAnimationFrame(raf)
     }, [highlightedFileId, loading, isLoadingFolders])
 
-    useEffect(() => {
-        if (isUploading || uploadQueue.length === 0) return
-        const timer = setTimeout(() => {
-            if (!isUploading) {
-                setUploadQueue([])
-            }
-        }, 8000)
-        return () => clearTimeout(timer)
-    }, [isUploading, uploadQueue.length])
-
-    const handleRefresh = async () => {
+const handleRefresh = async () => {
         if (!currentFolderId || isRefreshing) return
         setIsRefreshing(true)
         try {
@@ -1096,12 +1093,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
         }
     }
 
-    // Helper to update queue item
-    const updateQueueItem = (id: string, updates: Partial<UploadQueueItem>) => {
-        setUploadQueue(prev => prev.map(item => item.id === id ? { ...item, ...updates } : item))
-    }
-
-    // Batch Resolution Handler
+// Batch Resolution Handler
     const handleBatchResolution = async () => {
         const remainingToProcess = [...conflictItems]
         setConflictItems([]) // Close dialog
@@ -1120,7 +1112,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
             fileToQueueId.set(item.file, newQueueItems[idx].id)
         })
 
-        setUploadQueue(prev => [...prev, ...newQueueItems])
+        addToQueue(newQueueItems)
         setIsUploading(true)
         setIsUploadModalOpen(true)
 
@@ -1239,7 +1231,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                 status: 'pending'
             }))
 
-            setUploadQueue(prev => [...prev, ...newQueueItems])
+            addToQueue(newQueueItems)
 
             // If we have conflicts, show dialog
             if (conflicts.length > 0) {
@@ -1395,7 +1387,7 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
             progress: 0,
             status: 'pending'
         }))
-        setUploadQueue(prev => [...prev, ...newQueueItems])
+        addToQueue(newQueueItems)
         const fileToQueueId = new Map<File, string>()
         fileEntries.forEach((_, idx) => fileToQueueId.set(fileEntries[idx].file, newQueueItems[idx].id))
 
@@ -2959,111 +2951,6 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
 
             {/* Content Area - Styled as a Card */}
             <div className="flex-1 overflow-hidden flex flex-col relative bg-white rounded border border-[#e5e7eb]">
-                {/* Google Drive Style Upload Progress Modal - portaled to body so fixed positioning is viewport-relative and not clipped by overflow-hidden */}
-                {(uploadQueue.length > 0 || isUploadInitiating) && typeof document !== 'undefined' && document.body && createPortal(
-                    <div className={cn(
-                        "fixed bottom-4 right-4 bg-white rounded-lg shadow-xl border border-slate-200 z-[100] flex flex-col transition-all duration-300 w-[360px]",
-                        isUploadModalOpen ? "h-auto max-h-[400px]" : "h-10"
-                    )}>
-                        {/* Modal Header */}
-                        <div
-                            className="flex items-center justify-between px-3 py-2 bg-slate-100 border-b border-slate-200 text-slate-900 rounded-t-lg cursor-pointer"
-                            onClick={() => setIsUploadModalOpen(!isUploadModalOpen)}
-                        >
-                            <span className="text-[11px] font-medium flex items-center gap-1.5">
-                                {(isUploading || isUploadInitiating) && (
-                                    <CoffeeIcon ref={coffeeIconRef} size={13} className="text-slate-600 flex-shrink-0" />
-                                )}
-                                {isUploadInitiating
-                                    ? 'Preparing upload…'
-                                    : isUploading
-                                        ? `Uploading ${uploadQueue.filter(i => i.status === 'completed').length}/${uploadQueue.length}`
-                                        : `Uploads complete ${uploadQueue.filter(i => i.status === 'completed').length}/${uploadQueue.length}`
-                                }
-                            </span>
-                            <div className="flex items-center gap-2 text-slate-500">
-                                {isUploadModalOpen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-                                <button
-                                    onClick={(e) => {
-                                        e.stopPropagation()
-                                        uploadOverlayDismissedRef.current = true
-                                        setUploadQueue([])
-                                        setIsUploading(false)
-                                        setIsUploadInitiating(false)
-                                    }}
-                                    className="hover:bg-slate-200 rounded p-0.5 transition-colors"
-                                >
-                                    <X className="h-3.5 w-3.5" />
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Modal Body */}
-                        {isUploadModalOpen && (
-                            <div className="flex-1 overflow-y-auto overflow-x-hidden p-0 custom-scrollbar">
-                                {isUploadInitiating && uploadQueue.length === 0 && (
-                                    <div className="flex flex-col gap-2 px-3 py-3">
-                                        {[1, 2, 3].map(i => (
-                                            <div key={i} className="flex items-center gap-2 animate-pulse">
-                                                <div className="h-3.5 w-3.5 rounded bg-slate-200 flex-shrink-0" />
-                                                <div className="h-2.5 rounded bg-slate-200 flex-1" style={{ width: `${55 + i * 13}%` }} />
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                                {uploadQueue.map((item) => (
-                                    <div key={item.id} className="flex flex-col gap-1 px-3 py-1.5 border-b border-slate-100 last:border-0 hover:bg-slate-50 group">
-                                        <div className="flex items-center gap-2">
-                                            <div className="flex-shrink-0">
-                                                <DocumentIcon mimeType={item.file.type} className="h-3.5 w-3.5" />
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-[11px] text-slate-700 truncate font-medium" title={item.finalName || item.file.name}>{item.finalName || item.file.name}</p>
-                                                {item.status === 'error' && (
-                                                    <p className="text-[10px] text-red-500 truncate">{item.error || 'Upload failed'}</p>
-                                                )}
-                                            </div>
-                                            <div className="flex-shrink-0 flex items-center gap-2">
-                                                {(item.status === 'completed' || item.status === 'uploading') && (
-                                                    <TooltipProvider>
-                                                        <Tooltip delayDuration={300}>
-                                                            <TooltipTrigger asChild>
-                                                                <button
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation()
-                                                                        handleShowFileLocation(item.finalName || item.file.name)
-                                                                    }}
-                                                                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-slate-100 rounded text-slate-500 transition-opacity"
-                                                                >
-                                                                    <Folder className="h-3.5 w-3.5" />
-                                                                </button>
-                                                            </TooltipTrigger>
-                                                            <TooltipContent>
-                                                                <p>Show file location</p>
-                                                            </TooltipContent>
-                                                        </Tooltip>
-                                                    </TooltipProvider>
-                                                )}
-
-                                                {item.status === 'pending' && <Clock className="h-3.5 w-3.5 text-slate-400" />}
-                                                {item.status === 'completed' && <CheckCircle2 className="h-3.5 w-3.5 text-primary" />}
-                                                {item.status === 'error' && <XCircle className="h-3.5 w-3.5 text-red-500" />}
-                                            </div>
-                                        </div>
-                                        {item.status === 'uploading' && (
-                                            <div className="flex items-center gap-2 pl-6">
-                                                <Progress value={item.progress} className="h-1 flex-1 bg-slate-100" />
-                                                <span className="text-[10px] text-slate-400 tabular-nums">{Math.round(item.progress)}%</span>
-                                            </div>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>,
-                    document.body
-                )}
-
                 {/* Download Progress Panel — portaled to body, stacked above upload panel */}
                 {downloadQueue.length > 0 && typeof document !== 'undefined' && document.body && createPortal(
                     <div className={cn(
@@ -3600,7 +3487,12 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                     const locked = file.lock?.type === 'finalize'
                                                     const canMutateFile = canEdit && !locked && !isIntakeRow
                                                     const canOrganizeTree = canManage && !locked && !isIntakeRow
+                                                    const notIndexed = !isFolder && !file.projectDocumentId
                                                     return (
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <span>
+                                                                <span className={cn(notIndexed && 'pointer-events-none opacity-40 inline-flex')}>
                                                         <DocumentActionMenu
                                                             document={file}
                                                             triggerIcon={<MoreVertical className="h-4 w-4" />}
@@ -3645,6 +3537,15 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                                                 )
                                                             }}
                                                         />
+                                                                </span>
+                                                                </span>
+                                                            </TooltipTrigger>
+                                                            {notIndexed && (
+                                                                <TooltipContent side="top" className="text-xs">
+                                                                    Unavailable until indexed
+                                                                </TooltipContent>
+                                                            )}
+                                                        </Tooltip>
                                                     )
                                                 })()}
                                             </div>
@@ -4126,24 +4027,26 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
 
                 {/* Move to Bin confirmation dialog */}
                 <Dialog open={!!trashConfirmTarget} onOpenChange={(open) => { if (!open) setTrashConfirmTarget(null) }}>
-                    <DialogContent className="max-w-sm gap-4 p-5 border-slate-200">
-                        <DialogHeader>
-                            <DialogTitle className="text-slate-900 flex items-center gap-2">
-                                <Trash2 className="h-4 w-4 text-red-500" />
+                    <DialogContent className="max-w-sm gap-5 p-5 border-slate-200">
+                        <DialogHeader className="space-y-3">
+                            <DialogTitle className="text-slate-900 flex items-center gap-2.5">
+                                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-red-50 ring-1 ring-red-200">
+                                    <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                                </div>
                                 Move to Bin?
                             </DialogTitle>
-                            <DialogDescription className="text-slate-600 pt-1">
-                                <span className="font-medium text-slate-800">{trashConfirmTarget?.name}</span> will be moved to your Google Drive Bin.
-                                Items in the Bin are permanently deleted after 30 days.
+                            <DialogDescription className="text-slate-500 text-xs leading-relaxed">
+                                <span className="font-semibold text-slate-800">{trashConfirmTarget?.name}</span>
+                                {' '}will be moved to your Google Drive Bin. Items in the Bin are permanently deleted after 30 days.
                             </DialogDescription>
                         </DialogHeader>
-                        <DialogFooter className="gap-2 sm:gap-0">
+                        <div className="flex justify-end gap-2">
                             <Button
                                 variant="outline"
                                 size="sm"
                                 onClick={() => setTrashConfirmTarget(null)}
                                 disabled={trashConfirming}
-                                className="border-slate-200 text-slate-700"
+                                className="border-slate-200 text-slate-700 hover:bg-slate-50"
                             >
                                 Cancel
                             </Button>
@@ -4151,11 +4054,11 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                                 size="sm"
                                 onClick={handleTrashConfirmed}
                                 disabled={trashConfirming}
-                                className="bg-red-600 hover:bg-red-700 text-white"
+                                className="bg-red-600 hover:bg-red-700 text-white shadow-sm"
                             >
-                                {trashConfirming ? <LoadingSpinner className="h-4 w-4" /> : 'Move to Bin'}
+                                {trashConfirming ? <LoadingSpinner className="h-3.5 w-3.5" /> : 'Move to Bin'}
                             </Button>
-                        </DialogFooter>
+                        </div>
                     </DialogContent>
                 </Dialog>
 

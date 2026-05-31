@@ -1,4 +1,4 @@
-import { X } from "lucide-react"
+import { SquareX } from "lucide-react"
 
 interface ModalProps {
   isOpen: boolean
@@ -28,7 +28,7 @@ export function Modal({ isOpen, onClose, title, children }: ModalProps) {
               onClick={onClose}
               className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
             >
-              <X className="h-6 w-6 text-gray-600" />
+              <SquareX className="h-6 w-6 text-gray-600" />
             </button>
           </div>
           

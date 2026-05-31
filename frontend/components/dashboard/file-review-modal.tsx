@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
-import { Trash2, Check, AlertTriangle, Filter, X, ChevronDown, HardDrive, Archive, Folder, ChevronRight, Minus } from 'lucide-react'
+import { Trash2, Check, AlertTriangle, Filter, X, SquareX, ChevronDown, HardDrive, Archive, Folder, ChevronRight, Minus } from 'lucide-react'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { formatDistanceToNow } from 'date-fns'
 import { DocumentIcon } from '@/components/ui/document-icon'
@@ -386,7 +386,7 @@ export function FileReviewModal({
                         onClick={onClose}
                         className="absolute top-6 right-6 p-2 rounded-full text-gray-400 hover:text-gray-900 hover:bg-gray-100/50 transition-colors"
                     >
-                        <X className="h-5 w-5" />
+                        <SquareX className="h-5 w-5" />
                     </button>
 
                     <div className="space-y-4">

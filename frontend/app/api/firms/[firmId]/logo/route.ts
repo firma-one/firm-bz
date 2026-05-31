@@ -69,16 +69,18 @@ async function ensureAssetsFolderId(connectorId: string, firmFolderId: string): 
 }
 
 async function getAssetsFolderIdIfExists(connectorId: string, firmFolderId: string): Promise<string | null> {
-  const adapter = await getStorageAdapter(connectorId)
-  const top = await adapter.listFolderChildren(connectorId, firmFolderId)
-  const meta = top.find((f) => f.name === METADATA_FOLDER_NAME)
-  if (!meta) return null
-  const children = await adapter.listFolderChildren(connectorId, meta.id)
-  return children.find((f) => f.name === ASSETS_FOLDER)?.id ?? null
+  try {
+    // Use findOrCreateFolder (targeted name query, same as POST) rather than listFolderChildren
+    // (which lists all children and misses items beyond the API's default page size)
+    return await ensureAssetsFolderId(connectorId, firmFolderId)
+  } catch {
+    return null
+  }
 }
 
 async function findLogoFile(connectorId: string, assetsFolderId: string) {
   const adapter = await getStorageAdapter(connectorId)
+  // assets folder only ever contains a handful of files — listing is safe
   const files = await adapter.listFolderChildren(connectorId, assetsFolderId)
   return files.find((f) => f.name?.startsWith('logo.')) ?? null
 }
@@ -86,15 +88,23 @@ async function findLogoFile(connectorId: string, assetsFolderId: string) {
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ firmId: string }> }) {
   try {
     const { firmId } = await params
+    console.log('[logo GET] firmId:', firmId)
+
     const { connectorId, firmFolderId } = await getFirmDriveContext(firmId)
+    console.log('[logo GET] connectorId:', connectorId, 'firmFolderId:', firmFolderId)
+
     const assetsFolderId = await getAssetsFolderIdIfExists(connectorId, firmFolderId)
-    if (!assetsFolderId) return NextResponse.json({ error: 'Logo not found' }, { status: 404 })
+    console.log('[logo GET] assetsFolderId:', assetsFolderId)
+    if (!assetsFolderId) return NextResponse.json({ error: 'Logo not found — assets folder missing' }, { status: 404 })
 
     const logo = await findLogoFile(connectorId, assetsFolderId)
-    if (!logo) return NextResponse.json({ error: 'Logo not found' }, { status: 404 })
+    console.log('[logo GET] logo file:', logo)
+    if (!logo) return NextResponse.json({ error: 'Logo not found — no logo file in assets' }, { status: 404 })
 
     const file = await googleDriveConnector.downloadFile(connectorId, logo.id)
-    return new NextResponse(file.stream as BodyInit, {
+    const buffer = await new Response(file.stream).arrayBuffer()
+    console.log('[logo GET] serving', file.mimeType, buffer.byteLength, 'bytes')
+    return new NextResponse(buffer, {
       status: 200,
       headers: {
         'Content-Type': file.mimeType || 'application/octet-stream',
@@ -102,8 +112,8 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       },
     })
   } catch (e) {
-    console.error('GET firm logo error', e)
-    return NextResponse.json({ error: 'Failed to load logo' }, { status: 500 })
+    console.error('[logo GET] error:', e)
+    return NextResponse.json({ error: 'Failed to load logo', detail: String(e) }, { status: 500 })
   }
 }
 
@@ -162,7 +172,7 @@ export async function POST(
       await adapter.writeFile(connectorId, assetsFolderId, fileName, buffer.toString('base64'), file.type)
     }
 
-    const pockettLogoUrl = `/api/firms/${firmId}/logo`
+    const pockettLogoUrl = `/api/firms/${firmId}/logo?v=${Date.now()}`
     const firmWithSettings = await prisma.firm.findUnique({
       where: { id: firmId },
       select: { settings: true },
