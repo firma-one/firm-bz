@@ -284,6 +284,7 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                                                 projects={selectedClient.engagements}
                                                 orgSlug={firmSlug}
                                                 clientSlug={selectedClient.slug}
+                                                clientStatus={selectedClient.status}
                                                 viewMode={viewMode}
                                                 isOrgInternal={isFirmInternal}
                                                 memberSummaries={memberSummaries}

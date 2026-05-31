@@ -6,7 +6,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ProjectInsightsDashboard } from './project-insights-dashboard'
 import { ProjectFileList } from './project-file-list'
 import { setSavedFolderState, type BreadcrumbItem } from '@/lib/files-folder-session'
-import { ProjectSettingsForm } from './project-settings-form'
+import { EngagementSettingsForm } from './engagement-settings-form'
 import { Folder, BarChart3, Building2, PenTool, ChevronRight, ChevronLeft, Users, Briefcase, Share2, Settings, Home, ClipboardList, MessageCircle, Lock, LayoutGrid, List } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
@@ -49,6 +49,7 @@ interface ProjectWorkspaceProps {
     engagementKickoffDate?: string | null
     engagementDueDate?: string | null
     engagementStatus?: LwCrmEngagementStatus
+    clientStatus?: string | null
     engagementContractType?: string
     engagementRateOrValue?: string | null
     engagementTags?: string[]
@@ -90,6 +91,7 @@ export function ProjectWorkspace({
     engagementKickoffDate = null,
     engagementDueDate = null,
     engagementStatus = 'ACTIVE',
+    clientStatus,
     engagementContractType = '',
     engagementRateOrValue = null,
     engagementTags = [],
@@ -220,6 +222,11 @@ export function ProjectWorkspace({
                             {engagementStatus && (
                                 <span className="bg-[#f0edee] text-[#45474c] border border-[#e5e7eb] px-2 py-0.5 rounded font-mono text-[10px] tracking-tight uppercase shrink-0">
                                     {engagementStatus}
+                                </span>
+                            )}
+                            {clientStatus === 'PROSPECT' && (
+                                <span className="bg-fuchsia-50 text-fuchsia-500 border border-fuchsia-200 px-2 py-0.5 rounded font-mono text-[10px] tracking-tight uppercase shrink-0">
+                                    Prospect
                                 </span>
                             )}
                         </div>
@@ -492,7 +499,7 @@ export function ProjectWorkspace({
                 ) : (currentTab === 'settings') ? (
                     <div className="flex-1 overflow-y-auto custom-scrollbar py-4">
                         {canViewSettings && (
-                            <ProjectSettingsForm
+                            <EngagementSettingsForm
                                 projectId={projectId}
                                 orgSlug={orgSlug}
                                 clientSlug={clientSlug}

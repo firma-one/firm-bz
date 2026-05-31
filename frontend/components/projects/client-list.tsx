@@ -154,7 +154,7 @@ export function ClientList({ clients, orgSlug, viewMode = 'grid', isRefreshing =
                 <Link
                     key={client.id}
                     href={`/d/f/${orgSlug}/c/${client.slug}`}
-                    className="group relative bg-white border border-[#e5e7eb] rounded p-5 hover:shadow-lg hover:border-primary/50 transition-all duration-200 flex flex-col h-48"
+                    className={`group relative bg-white rounded p-5 hover:shadow-lg transition-all duration-200 flex flex-col h-48 ${client.status === 'PROSPECT' ? 'border border-dashed border-amber-300 hover:border-amber-400' : 'border border-[#e5e7eb] hover:border-primary/50'}`}
                 >
                     <div className="flex items-start justify-between mb-3">
                         <div className="h-10 w-10 bg-[#f3f4f6] text-[#45474c] rounded flex items-center justify-center group-hover:bg-primary/10 group-hover:text-primary transition-colors shrink-0">

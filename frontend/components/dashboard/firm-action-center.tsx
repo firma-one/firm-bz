@@ -299,7 +299,7 @@ export function FirmActionCenter({ firmId, firmSlug }: FirmActionCenterProps) {
 
     // Overdue bucket
     const overdueReminders = data?.urgentReminders ?? []
-    const overdueEngagements = data?.engagementsDueSoon.filter(e => e.daysUntil < 0) ?? []
+    const overdueEngagements = data?.engagementsDueSoon?.filter(e => e.daysUntil < 0) ?? []
     // Deduplicate: exclude prospects already covered by a reminder on the same client
     const reminderClientIds = new Set(
         overdueReminders
@@ -307,15 +307,15 @@ export function FirmActionCenter({ firmId, firmSlug }: FirmActionCenterProps) {
             .map(r => r.entityValue)
             .filter(Boolean)
     )
-    const overdueProspects = (data?.prospects.filter(p => p.daysUntil < 0) ?? [])
+    const overdueProspects = (data?.prospects?.filter(p => p.daysUntil < 0) ?? [])
         .filter(p => !reminderClientIds.has(p.clientId))
-    const expiredInvites = data?.pendingInvitations.filter(i => i.daysUntilExpiry <= 0) ?? []
+    const expiredInvites = data?.pendingInvitations?.filter(i => i.daysUntilExpiry <= 0) ?? []
     const overdueCount = overdueReminders.length + overdueEngagements.length + overdueProspects.length + expiredInvites.length
 
     // Upcoming bucket
     const upcomingReminders = data?.upcomingReminders ?? []
-    const upcomingEngagements = data?.engagementsDueSoon.filter(e => e.daysUntil >= 0) ?? []
-    const pendingInvites = data?.pendingInvitations.filter(i => i.daysUntilExpiry > 0) ?? []
+    const upcomingEngagements = data?.engagementsDueSoon?.filter(e => e.daysUntil >= 0) ?? []
+    const pendingInvites = data?.pendingInvitations?.filter(i => i.daysUntilExpiry > 0) ?? []
     const upcomingCount = upcomingReminders.length + upcomingEngagements.length + pendingInvites.length
 
     const overdueSubtitle = (): string => {
