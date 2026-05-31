@@ -9,7 +9,6 @@ import { formatDistanceToNow } from 'date-fns'
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import {
     ProfileBubbleWithPopup,
-    ProfileBubble,
     type ProfileBubblePopupUser,
 } from '@/components/ui/profile-bubble-popup'
 
@@ -17,6 +16,7 @@ interface ProjectListProps {
     projects: HierarchyClient['engagements']
     orgSlug: string
     clientSlug: string
+    clientStatus?: string | null
     viewMode?: 'grid' | 'list'
     isOrgInternal?: boolean
     memberSummaries?: Record<string, ProjectMemberSummary>
@@ -47,7 +47,7 @@ function engagementStatusBadgeClass(status: string | null | undefined): string {
         case 'COMPLETED':
             return 'bg-[#f3f4f6] text-[#45474c] ring-1 ring-[#e5e7eb]'
         case 'PAUSED':
-            return 'bg-amber-50 text-amber-600 ring-1 ring-amber-200'
+            return 'bg-fuchsia-50 text-fuchsia-500 ring-1 ring-fuchsia-200'
         default:
             return 'bg-primary/10 text-primary ring-1 ring-primary/25'
     }
@@ -156,7 +156,8 @@ function LeadAvatar({ user }: { user: ProfileBubblePopupUser }) {
     )
 }
 
-export function ProjectList({ projects, orgSlug, clientSlug, viewMode = 'grid', isOrgInternal, memberSummaries = {}, isRefreshing = false }: ProjectListProps) {
+export function ProjectList({ projects, orgSlug, clientSlug, clientStatus, viewMode = 'grid', isOrgInternal, memberSummaries = {}, isRefreshing = false }: ProjectListProps) {
+    const isProspect = clientStatus === 'PROSPECT'
     if (projects.length === 0 && !isRefreshing) {
         return (
             <div className="flex flex-col items-center justify-center h-64 text-center border-2 border-dashed border-slate-200 rounded bg-slate-50/50">
@@ -215,9 +216,16 @@ export function ProjectList({ projects, orgSlug, clientSlug, viewMode = 'grid', 
                                             </Link>
                                         </td>
                                         <td className="px-4 py-3">
-                                            <span className={`px-2 py-1 rounded-sm text-xs font-medium ${engagementStatusBadgeClass(project.status)}`}>
-                                                {engagementStatusLabel(project.status)}
-                                            </span>
+                                            <div className="flex items-center gap-1.5">
+                                                <span className={`px-2 py-1 rounded-sm text-xs font-medium ${engagementStatusBadgeClass(project.status)}`}>
+                                                    {engagementStatusLabel(project.status)}
+                                                </span>
+                                                {isProspect && (
+                                                    <span className="px-2 py-1 rounded-sm text-xs font-medium bg-fuchsia-50 text-fuchsia-500 ring-1 ring-fuchsia-200">
+                                                        Prospect
+                                                    </span>
+                                                )}
+                                            </div>
                                         </td>
                                         <td className="px-4 py-3 text-slate-500 max-w-xs truncate">
                                             {project.description || "-"}
@@ -306,7 +314,7 @@ export function ProjectList({ projects, orgSlug, clientSlug, viewMode = 'grid', 
                         <Link
                             key={project.id}
                             href={`/d/f/${orgSlug}/c/${clientSlug}/e/${project.slug}/${isOrgInternal ? 'analytics' : 'files'}`}
-                            className="group relative bg-white border border-[#e5e7eb] rounded p-5 hover:shadow-lg hover:border-primary/50 transition-all duration-200 flex flex-col h-48"
+                            className={`group relative bg-white rounded p-5 hover:shadow-lg transition-all duration-200 flex flex-col h-48 ${isProspect ? 'border border-dashed border-amber-300 hover:border-amber-400' : 'border border-[#e5e7eb] hover:border-primary/50'}`}
                         >
                             <div className="flex items-start justify-between mb-3">
                                 <div className="h-10 w-10 bg-[#f3f4f6] text-[#45474c] rounded flex items-center justify-center group-hover:bg-primary/10 group-hover:text-primary transition-all shrink-0">
@@ -319,6 +327,11 @@ export function ProjectList({ projects, orgSlug, clientSlug, viewMode = 'grid', 
                                                 <LeadAvatar key={idx} user={lead} />
                                             ))}
                                         </div>
+                                    )}
+                                    {isProspect && (
+                                        <span className="shrink-0 px-2 py-0.5 rounded-sm text-xs font-medium bg-fuchsia-50 text-fuchsia-500 ring-1 ring-fuchsia-200">
+                                            Prospect
+                                        </span>
                                     )}
                                     <span className={`shrink-0 px-2 py-0.5 rounded-sm text-xs font-medium ${engagementStatusBadgeClass(project.status)}`}>
                                         {engagementStatusLabel(project.status)}

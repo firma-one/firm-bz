@@ -298,14 +298,14 @@ export function FirmBusinessInsights({ firmId }: FirmBusinessInsightsProps) {
             .finally(() => setLoading(false))
     }, [firmId, session, refreshTick])
 
-    const totalActiveClients = data?.clientCounts.ACTIVE ?? 0
-    const totalProspects = data?.clientCounts.PROSPECT ?? 0
+    const totalActiveClients = data?.clientCounts?.ACTIVE ?? 0
+    const totalProspects = data?.clientCounts?.PROSPECT ?? 0
     const totalEngagements = data?.activeEngagements ?? 0
-    const totalPendingInvites = data?.pendingInvitations.length ?? 0
+    const totalPendingInvites = data?.pendingInvitations?.length ?? 0
 
     const closingSoonCount = data?.engagementsDueSoon?.filter((e) => e.daysUntil >= 0 && e.daysUntil <= 30).length ?? 0
     const overdueDueCount = data?.engagementsDueSoon?.filter((e) => e.daysUntil < 0).length ?? 0
-    const atRiskClientCount = data ? data.clientCounts.ACTIVE + data.clientCounts.PROSPECT - (data.engagementsDueSoon?.length ?? 0) : 0
+    const atRiskClientCount = data ? (data.clientCounts?.ACTIVE ?? 0) + (data.clientCounts?.PROSPECT ?? 0) - (data.engagementsDueSoon?.length ?? 0) : 0
 
     return (
         <div className="bg-white border border-[#e5e7eb] rounded p-6 shadow-sm">
@@ -331,13 +331,13 @@ export function FirmBusinessInsights({ firmId }: FirmBusinessInsightsProps) {
                     <StatTile icon={MailOpen} label="Pending Invitation(s)" count={totalPendingInvites} colorClass="bg-amber-50 text-amber-600" />
                 </div>
 
-                {(data?.clientCounts.ON_HOLD ?? 0) > 0 || (data?.clientCounts.PAST ?? 0) > 0 ? (
+                {(data?.clientCounts?.ON_HOLD ?? 0) > 0 || (data?.clientCounts?.PAST ?? 0) > 0 ? (
                     <div className="flex gap-3 mt-1">
-                        {(data?.clientCounts.ON_HOLD ?? 0) > 0 && (
-                            <StatTile icon={PauseCircle} label="On Hold" count={data!.clientCounts.ON_HOLD} colorClass="bg-slate-50 text-slate-500" />
+                        {(data?.clientCounts?.ON_HOLD ?? 0) > 0 && (
+                            <StatTile icon={PauseCircle} label="On Hold" count={data?.clientCounts?.ON_HOLD ?? 0} colorClass="bg-slate-50 text-slate-500" />
                         )}
-                        {(data?.clientCounts.PAST ?? 0) > 0 && (
-                            <StatTile icon={UserMinus} label="Past Clients" count={data!.clientCounts.PAST} colorClass="bg-gray-50 text-gray-500" />
+                        {(data?.clientCounts?.PAST ?? 0) > 0 && (
+                            <StatTile icon={UserMinus} label="Past Clients" count={data?.clientCounts?.PAST ?? 0} colorClass="bg-gray-50 text-gray-500" />
                         )}
                     </div>
                 ) : null}

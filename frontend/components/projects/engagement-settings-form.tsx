@@ -9,14 +9,14 @@ import { useRouter } from 'next/navigation'
 import { useToast } from '@/components/ui/toast'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { AlertTriangle, ChevronDown, Check, X, CornerDownLeft } from 'lucide-react'
+import { AlertTriangle, Activity, AlignLeft, Banknote, CalendarCheck, CalendarClock, ChevronDown, CornerDownLeft, FileText, Tag, X } from 'lucide-react'
+import { SelectWithCustomEntry } from '@/components/ui/select-with-custom-entry'
 import { SandboxInfoBanner } from '@/components/ui/sandbox-info-banner'
 import { useOrgSandbox } from '@/lib/use-org-sandbox'
 import { DateTimePicker } from '@/components/ui/date-time-picker'
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
 
-export interface ProjectSettingsFormProps {
+export interface EngagementSettingsFormProps {
     projectId: string
     orgSlug: string
     clientSlug: string
@@ -34,9 +34,13 @@ export interface ProjectSettingsFormProps {
 }
 
 const fieldLabel = 'font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] block mb-1'
-const inputCls = 'border-[#e5e7eb] text-[#1b1b1d] text-sm placeholder:text-[#9a9ba0] rounded focus-visible:ring-1 focus-visible:ring-primary focus-visible:border-primary disabled:opacity-50 disabled:cursor-not-allowed'
+const inputCls = 'border-[#e5e7eb] text-[#1b1b1d] text-xs font-normal placeholder:text-[#9a9ba0] rounded focus-visible:ring-1 focus-visible:ring-primary focus-visible:border-primary disabled:opacity-50 disabled:cursor-not-allowed'
+const textareaCls = 'flex w-full rounded border border-[#e5e7eb] bg-white px-3 py-2 text-xs font-normal text-[#1b1b1d] placeholder:text-[#9a9ba0] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary disabled:bg-[#f9f9fb] disabled:cursor-not-allowed disabled:opacity-50'
+const selectItemCls = 'cursor-pointer rounded-none py-1 px-2.5 !text-[0.8125rem] text-[#45474c] outline-none focus:bg-[#f9f9fb] data-[state=checked]:bg-primary/10 data-[state=checked]:border-l-2 data-[state=checked]:border-brand-accent data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-[#f9f9fb]'
 
-export function ProjectSettingsForm({
+const CONTRACT_TYPES = ['Fixed Price', 'Retainer', 'Time & Material', 'Case Management', 'Milestone-Based', 'Strategic Advisory', 'Success Fee', 'Subscription / Recurring']
+
+export function EngagementSettingsForm({
     projectId,
     orgSlug,
     clientSlug,
@@ -51,7 +55,7 @@ export function ProjectSettingsForm({
     firmSandboxOnly = false,
     onCancel,
     onSaved,
-}: ProjectSettingsFormProps) {
+}: EngagementSettingsFormProps) {
     const router = useRouter()
     const { addToast } = useToast()
     const orgSandbox = useOrgSandbox()
@@ -62,10 +66,6 @@ export function ProjectSettingsForm({
     const [dueDate, setDueDate] = useState<string>(initialDueDate ?? '')
     const [status, setStatus] = useState<LwCrmEngagementStatus>(initialStatus)
     const [contractType, setContractType] = useState(initialContractType)
-    const [contractTypeOpen, setContractTypeOpen] = useState(false)
-    const [contractTypeIsCustom, setContractTypeIsCustom] = useState(
-        () => initialContractType !== '' && !['Fixed Price','Retainer','Time & Material','Case Management','Milestone-Based','Strategic Advisory','Success Fee','Subscription / Recurring'].includes(initialContractType)
-    )
     const [rateOrValue, setRateOrValue] = useState(initialRateOrValue ?? '')
     const [currencySymbol, setCurrencySymbol] = useState('')
     const [tags, setTags] = useState<string[]>(initialTags)
@@ -77,6 +77,7 @@ export function ProjectSettingsForm({
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
 
     const isCompleted = status === 'COMPLETED'
+    const disabled = isCompleted || isSandboxFirm
 
     useEffect(() => {
         setName(initialName)
@@ -108,19 +109,16 @@ export function ProjectSettingsForm({
         if (value && !tags.includes(value)) setTags((prev) => [...prev, value])
         setTagInput('')
     }
-
     const handleTagKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
         if (e.key === 'Enter') { e.preventDefault(); commitTag(tagInput) }
         else if (e.key === ',') { e.preventDefault(); commitTag(tagInput) }
         else if (e.key === 'Backspace' && tagInput === '' && tags.length > 0) setTags((prev) => prev.slice(0, -1))
     }
-
     const handleTagChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const val = e.target.value
         if (val.endsWith(',')) commitTag(val.slice(0, -1))
         else setTagInput(val)
     }
-
     const removeTag = (tag: string) => {
         setTags((prev) => prev.filter((t) => t !== tag))
         tagInputRef.current?.focus()
@@ -190,56 +188,72 @@ export function ProjectSettingsForm({
                 <div className="col-span-2 bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
                     <p className={fieldLabel}>Details</p>
 
-                    {/* Status + Start date + End date */}
-                    <div className="grid grid-cols-3 gap-3">
+                    {/* Row 1: Name + Status */}
+                    <div className="grid grid-cols-[3fr_1fr] gap-3">
                         <div>
-                            <label htmlFor="engagement-status" className={fieldLabel}>Status</label>
+                            <label htmlFor="project-name" className={fieldLabel}>
+                                <span className="inline-flex items-center gap-1">
+                                    <FileText className="h-3 w-3" /> Name <span className="text-red-500 normal-case tracking-normal font-sans">*</span>
+                                </span>
+                            </label>
+                            <Input
+                                id="project-name"
+                                value={name}
+                                onChange={(e) => setName(e.target.value)}
+                                placeholder="Engagement name"
+                                disabled={disabled}
+                                className={inputCls}
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="engagement-status" className={fieldLabel}>
+                                <span className="inline-flex items-center gap-1">
+                                    <Activity className="h-3 w-3" /> Status <span className="text-red-500 normal-case tracking-normal font-sans">*</span>
+                                </span>
+                            </label>
                             <Select value={status} onValueChange={(v) => setStatus(v as LwCrmEngagementStatus)} disabled={isSandboxFirm}>
                                 <SelectTrigger id="engagement-status" className={inputCls}>
                                     <SelectValue placeholder="Select status" />
                                 </SelectTrigger>
-                                <SelectContent side="bottom" align="start" sideOffset={6} className="z-[70] border border-[#e5e7eb] bg-white shadow-sm rounded">
-                                    <SelectItem value="PLANNED">Planned</SelectItem>
-                                    <SelectItem value="ACTIVE">Active</SelectItem>
-                                    <SelectItem value="PAUSED">Paused</SelectItem>
-                                    <SelectItem value="COMPLETED">Completed</SelectItem>
+                                <SelectContent side="bottom" align="start" sideOffset={6} className="z-[70] border border-[#e5e7eb] bg-white shadow-sm rounded-[2px] py-0.5 min-w-[var(--radix-select-trigger-width)]">
+                                    <SelectItem value="PLANNED" className={selectItemCls}>Planned</SelectItem>
+                                    <SelectItem value="ACTIVE" className={selectItemCls}>Active</SelectItem>
+                                    <SelectItem value="PAUSED" className={selectItemCls}>Paused</SelectItem>
+                                    <SelectItem value="COMPLETED" className={selectItemCls}>Completed</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
-                        <div>
-                            <label className={fieldLabel}>Start date <span className="normal-case tracking-normal font-sans text-[#9a9ba0]">(optional)</span></label>
-                            <DateTimePicker value={kickoffDate} onChange={setKickoffDate} placeholder="Select date" disabled={isCompleted || isSandboxFirm} defaultTime="09:00" />
-                        </div>
-                        <div>
-                            <label className={fieldLabel}>End date <span className="normal-case tracking-normal font-sans text-[#9a9ba0]">(optional)</span></label>
-                            <DateTimePicker value={dueDate} onChange={setDueDate} placeholder="Select date" disabled={isCompleted || isSandboxFirm} defaultTime="17:00" />
-                        </div>
                     </div>
 
-                    {/* Name */}
-                    <div>
-                        <label htmlFor="project-name" className={fieldLabel}>Name</label>
-                        <Input
-                            id="project-name"
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            placeholder="Engagement name"
-                            disabled={isCompleted || isSandboxFirm}
-                            className={inputCls}
-                        />
+                    {/* Row 2: Start date + End date */}
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className={fieldLabel}>
+                                <span className="inline-flex items-center gap-1"><CalendarClock className="h-3 w-3" /> Start date</span>
+                            </label>
+                            <DateTimePicker value={kickoffDate} onChange={setKickoffDate} placeholder="Select date" disabled={disabled} defaultTime="09:00" />
+                        </div>
+                        <div>
+                            <label className={fieldLabel}>
+                                <span className="inline-flex items-center gap-1"><CalendarCheck className="h-3 w-3" /> End date</span>
+                            </label>
+                            <DateTimePicker value={dueDate} onChange={setDueDate} placeholder="Select date" disabled={disabled} defaultTime="17:00" />
+                        </div>
                     </div>
 
                     {/* Description */}
                     <div>
-                        <label htmlFor="project-description" className={fieldLabel}>Description <span className="normal-case tracking-normal font-sans text-[#9a9ba0]">(optional)</span></label>
+                        <label htmlFor="project-description" className={fieldLabel}>
+                            <span className="inline-flex items-center gap-1"><AlignLeft className="h-3 w-3" /> Description</span>
+                        </label>
                         <textarea
                             id="project-description"
                             value={description}
                             onChange={(e) => setDescription(e.target.value)}
                             placeholder="Brief description of this engagement"
                             rows={3}
-                            disabled={isCompleted || isSandboxFirm}
-                            className={`flex w-full rounded border border-[#e5e7eb] bg-white px-3 py-2 text-sm text-[#1b1b1d] placeholder:text-[#9a9ba0] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary disabled:bg-[#f9f9fb] disabled:cursor-not-allowed disabled:opacity-50`}
+                            disabled={disabled}
+                            className={textareaCls}
                         />
                     </div>
                 </div>
@@ -250,60 +264,36 @@ export function ProjectSettingsForm({
 
                     {/* Contract type */}
                     <div>
-                        <label htmlFor="contract-type" className={fieldLabel}>Contract type <span className="normal-case tracking-normal font-sans text-[#9a9ba0]">(optional)</span></label>
-                        <DropdownMenu open={contractTypeOpen} onOpenChange={setContractTypeOpen}>
-                            <DropdownMenuTrigger asChild disabled={isCompleted || isSandboxFirm}>
-                                <button
-                                    id="contract-type"
-                                    className="w-full h-9 flex items-center justify-between rounded border border-[#e5e7eb] bg-white px-3 text-sm disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus:ring-1 focus:ring-primary"
-                                >
-                                    <span className={contractType ? 'text-[#1b1b1d]' : 'text-[#9a9ba0]'}>
-                                        {contractType || 'Select type…'}
-                                    </span>
-                                    <ChevronDown className="h-3.5 w-3.5 text-[#45474c] shrink-0" />
-                                </button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent className="w-[var(--radix-dropdown-menu-trigger-width)] p-1 border-[#e5e7eb] shadow-sm rounded" onCloseAutoFocus={(e) => e.preventDefault()}>
-                                {['Fixed Price','Retainer','Time & Material','Case Management','Milestone-Based','Strategic Advisory','Success Fee','Subscription / Recurring'].map((label) => (
-                                    <DropdownMenuItem
-                                        key={label}
-                                        className="flex items-center justify-between cursor-pointer text-sm text-[#1b1b1d]"
-                                        onSelect={() => { setContractType(label); setContractTypeIsCustom(false); setContractTypeOpen(false) }}
-                                    >
-                                        {label}
-                                        {contractType === label && !contractTypeIsCustom && <Check className="h-3.5 w-3.5 text-primary" />}
-                                    </DropdownMenuItem>
-                                ))}
-                                <DropdownMenuSeparator />
-                                <div className="px-2 py-1.5 flex items-center gap-2">
-                                    <input
-                                        value={contractTypeIsCustom ? contractType : ''}
-                                        onChange={(e) => { setContractType(e.target.value); setContractTypeIsCustom(true) }}
-                                        onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') setContractTypeOpen(false) }}
-                                        onClick={(e) => e.stopPropagation()}
-                                        placeholder="Other…"
-                                        className="flex-1 text-sm text-[#1b1b1d] placeholder:text-[#9a9ba0] outline-none bg-transparent"
-                                    />
-                                    {contractTypeIsCustom && contractType && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
-                                </div>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
+                        <label htmlFor="contract-type" className={fieldLabel}>
+                            <span className="inline-flex items-center gap-1"><FileText className="h-3 w-3" /> Contract type</span>
+                        </label>
+                        <SelectWithCustomEntry
+                            id="contract-type"
+                            value={contractType}
+                            onChange={setContractType}
+                            options={CONTRACT_TYPES}
+                            placeholder="Select type…"
+                            customEntryHint="Other…"
+                            disabled={disabled}
+                        />
                     </div>
 
                     {/* Contract value */}
                     <div>
-                        <label htmlFor="rate-value" className={fieldLabel}>Contract value <span className="normal-case tracking-normal font-sans text-[#9a9ba0]">(optional)</span></label>
-                        <div className={`flex items-center rounded border border-[#e5e7eb] bg-white focus-within:ring-1 focus-within:ring-primary focus-within:border-primary ${isCompleted || isSandboxFirm ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                        <label htmlFor="rate-value" className={fieldLabel}>
+                            <span className="inline-flex items-center gap-1"><Banknote className="h-3 w-3" /> Contract value</span>
+                        </label>
+                        <div className={`flex items-center rounded border border-[#e5e7eb] bg-white focus-within:ring-1 focus-within:ring-primary focus-within:border-primary ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
                             {currencySymbol && (
-                                <span className="pl-3 pr-1 text-sm text-[#45474c] shrink-0 select-none">{currencySymbol}</span>
+                                <span className="pl-3 pr-1 text-xs text-[#45474c] shrink-0 select-none">{currencySymbol}</span>
                             )}
                             <input
                                 id="rate-value"
                                 value={rateOrValue}
                                 onChange={(e) => setRateOrValue(e.target.value)}
                                 placeholder="Total value"
-                                disabled={isCompleted || isSandboxFirm}
-                                className="flex-1 h-9 px-3 text-sm text-[#1b1b1d] bg-transparent outline-none placeholder:text-[#9a9ba0] disabled:cursor-not-allowed"
+                                disabled={disabled}
+                                className="flex-1 h-9 px-3 text-xs text-[#1b1b1d] bg-transparent outline-none placeholder:text-[#9a9ba0] disabled:cursor-not-allowed"
                             />
                         </div>
                         {contractValueHint && (
@@ -313,10 +303,12 @@ export function ProjectSettingsForm({
 
                     {/* Tags */}
                     <div>
-                        <label htmlFor="engagement-tags" className={fieldLabel}>Tags <span className="normal-case tracking-normal font-sans text-[#9a9ba0]">(optional)</span></label>
+                        <label htmlFor="engagement-tags" className={fieldLabel}>
+                            <span className="inline-flex items-center gap-1"><Tag className="h-3 w-3" /> Tags</span>
+                        </label>
                         <div
-                            className={`flex flex-wrap gap-1.5 min-h-[36px] w-full rounded border px-3 py-2 text-sm transition-colors cursor-text
-                                ${isCompleted || isSandboxFirm
+                            className={`flex flex-wrap gap-1.5 min-h-[36px] w-full rounded border px-3 py-2 transition-colors cursor-text
+                                ${disabled
                                     ? 'border-[#e5e7eb] bg-[#f9f9fb] opacity-50 cursor-not-allowed'
                                     : 'border-[#e5e7eb] bg-white focus-within:ring-1 focus-within:ring-primary focus-within:border-primary'
                                 }`}
@@ -325,7 +317,7 @@ export function ProjectSettingsForm({
                             {tags.map((tag) => (
                                 <span key={tag} className="inline-flex items-center gap-1 rounded bg-[#f3f4f6] border border-[#e5e7eb] px-2 py-0.5 text-[11px] font-medium text-[#45474c]">
                                     {tag}
-                                    {!isCompleted && !isSandboxFirm && (
+                                    {!disabled && (
                                         <button type="button" onClick={(e) => { e.stopPropagation(); removeTag(tag) }} className="text-[#9a9ba0] hover:text-[#1b1b1d] transition-colors" aria-label={`Remove ${tag}`}>
                                             <X className="h-3 w-3" />
                                         </button>
@@ -339,8 +331,8 @@ export function ProjectSettingsForm({
                                 onChange={handleTagChange}
                                 onKeyDown={handleTagKeyDown}
                                 onBlur={() => { if (tagInput.trim()) commitTag(tagInput) }}
-                                placeholder={tags.length === 0 ? 'Type a tag e.g. "high-priority", press Enter or comma…' : ''}
-                                disabled={isCompleted || isSandboxFirm}
+                                placeholder={tags.length === 0 ? 'Type a tag, press Enter or comma…' : ''}
+                                disabled={disabled}
                                 className="flex-1 min-w-[120px] bg-transparent outline-none placeholder:text-[#9a9ba0] text-[#1b1b1d] text-xs disabled:cursor-not-allowed"
                             />
                             <CornerDownLeft className="h-3 w-3 text-primary shrink-0 self-center ml-1" />
@@ -353,7 +345,7 @@ export function ProjectSettingsForm({
             {/* Actions bar */}
             <div className="flex items-center gap-3">
                 {onCancel && (
-                    <Button type="button" variant="outline" className="rounded-[2px] text-[10px] font-headline font-bold tracking-widest uppercase" onClick={onCancel}>
+                    <Button type="button" variant="outline" className="rounded-[2px] w-32 text-[10px] font-headline font-bold tracking-widest uppercase" onClick={onCancel}>
                         Cancel
                     </Button>
                 )}
@@ -361,7 +353,7 @@ export function ProjectSettingsForm({
                     onClick={handleSaveProperties}
                     disabled={saving || isSandboxFirm}
                     variant="greenCta"
-                    className="rounded-[2px] min-w-[8rem] text-[10px] font-headline font-bold tracking-widest uppercase text-white"
+                    className="rounded-[2px] w-32 text-[10px] font-headline font-bold tracking-widest uppercase text-white"
                 >
                     {saving ? 'Saving…' : 'Save'}
                 </Button>
@@ -407,7 +399,7 @@ export function ProjectSettingsForm({
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter>
-                        <Button type="button" variant="outline" className="rounded-[2px]" onClick={() => setIsDeleteDialogOpen(false)} disabled={deleting}>
+                        <Button type="button" variant="outline" className="rounded-[2px] w-32 text-[10px] font-headline font-bold tracking-widests uppercase" onClick={() => setIsDeleteDialogOpen(false)} disabled={deleting}>
                             Cancel
                         </Button>
                         <Button

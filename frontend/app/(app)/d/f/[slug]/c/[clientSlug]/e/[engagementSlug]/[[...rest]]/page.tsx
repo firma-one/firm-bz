@@ -151,6 +151,7 @@ export default async function EngagementPage({ params }: PageProps) {
           engagementKickoffDate={project.kickoffDate}
           engagementDueDate={project.dueDate}
           engagementStatus={(project.status as LwCrmEngagementStatus) ?? "ACTIVE"}
+          clientStatus={client.status}
           engagementContractType={project.contractType ?? ""}
           engagementRateOrValue={project.rateOrValue}
           engagementTags={project.tags ?? []}

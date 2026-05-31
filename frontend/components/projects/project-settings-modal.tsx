@@ -10,7 +10,7 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { ProjectSettingsForm } from './project-settings-form'
+import { EngagementSettingsForm } from './engagement-settings-form'
 import type { LwCrmEngagementStatus } from '@/lib/actions/project'
 
 interface ProjectSettingsModalProps {
@@ -53,7 +53,7 @@ export function ProjectSettingsModal({
                     <DialogTitle>Engagement settings</DialogTitle>
                     <DialogDescription>Edit properties or delete this engagement.</DialogDescription>
                 </DialogHeader>
-                <ProjectSettingsForm
+                <EngagementSettingsForm
                     projectId={projectId}
                     orgSlug={orgSlug}
                     clientSlug={clientSlug}
