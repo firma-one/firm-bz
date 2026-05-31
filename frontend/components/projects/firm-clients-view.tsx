@@ -317,7 +317,6 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                                         const params = new URLSearchParams(searchParams.toString())
                                         params.set('tab', 'clients')
                                         router.push(`${pathname}?${params.toString()}`, { scroll: false })
-                                        router.refresh()
                                     }}
                                 />
                             </div>

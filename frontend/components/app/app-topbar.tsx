@@ -201,6 +201,7 @@ export function AppTopbar() {
   const [mounted, setMounted] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const currentSlugRef = useRef<string | null>(null)
+  const reloadBrandingRef = useRef<(() => Promise<void>) | null>(null)
 
   const [showBookmarksDropdown, setShowBookmarksDropdown] = useState(false)
   const [showNotificationsDropdown, setShowNotificationsDropdown] = useState(false)
@@ -309,6 +310,7 @@ export function AppTopbar() {
           const brandingData: OrganizationBranding | null = (b.logoUrl || b.primaryColor || org?.name)
             ? {
               logoUrl: b.logoUrl ?? null,
+              logoAspectRatio: b.logoAspectRatio ?? null,
               name: org?.name ?? null,
               subtext: b.subtext ?? null,
               themeColor: b.primaryColor ?? null,
@@ -327,6 +329,7 @@ export function AppTopbar() {
             brandingCache.set(slug, { branding: brandingData, firmId: org?.id })
             currentSlugRef.current = slug
             setBrandingInSession(slug, payload as SessionBrandingPayload)
+            window.dispatchEvent(new CustomEvent('firma-branding-reloaded'))
           }
         }
       } catch {
@@ -336,19 +339,22 @@ export function AppTopbar() {
       }
     }
 
-    loadFirmBranding()
-
-    const onBrandingUpdated = () => {
-      // Clear cache and reload when branding is updated
+    reloadBrandingRef.current = () => {
       if (slug) {
         brandingCache.delete(slug)
         currentSlugRef.current = null
       }
-      loadFirmBranding()
+      return loadFirmBranding()
     }
+
+    loadFirmBranding()
+  }, [user, pathname, slug])
+
+  useEffect(() => {
+    const onBrandingUpdated = () => reloadBrandingRef.current?.()
     window.addEventListener('firm-branding-updated', onBrandingUpdated)
     return () => window.removeEventListener('firm-branding-updated', onBrandingUpdated)
-  }, [user, pathname, slug])
+  }, [])
 
   const loadNotifications = useCallback(async () => {
     try {
@@ -487,7 +493,7 @@ export function AppTopbar() {
       aria-hidden={!mounted}
     >
       {/* Left: Org branding — only shown when org branding is loaded; Firma logo lives in the profile menu */}
-      <div className="w-60 shrink-0 flex items-center pl-1">
+      <div className="shrink-0 max-w-[280px] flex items-center pl-1">
         {branding && (
           <Logo
             size="lg"

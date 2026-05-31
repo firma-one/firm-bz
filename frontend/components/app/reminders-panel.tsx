@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import { usePathname } from "next/navigation"
-import { ArrowUpRight, BellOff, Building2, CalendarClock, CheckCircle2, ChevronRight, Clock, Eye, EyeOff, FileText, Undo2, Users, X } from "lucide-react"
+import { ArrowUpRight, BellOff, Building2, CalendarClock, CheckCircle2, ChevronRight, Clock, Eye, EyeOff, FileText, SquareX, Undo2, Users } from "lucide-react"
 import Link from "next/link"
 import {
     getUserReminders,
@@ -289,7 +289,7 @@ export function RemindersPanel({ onCountChange }: Props) {
                             ) : null}
                             <button type="button" onClick={() => setOpen(false)} aria-label="Close"
                                 className="p-1 rounded-[2px] hover:bg-[#f3f4f6] text-[#45474c] hover:text-[#1b1b1d] transition-colors">
-                                <X className="h-4 w-4" />
+                                <SquareX className="h-4 w-4" />
                             </button>
                         </div>
                     </div>

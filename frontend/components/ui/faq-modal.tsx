@@ -1,6 +1,6 @@
 "use client"
 import { useState, useEffect, useRef } from "react"
-import { FolderOpen, X } from "lucide-react"
+import { FolderOpen, SquareX } from "lucide-react"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { Button } from "@/components/ui/button"
 import { FAQ_DATA, FAQItem } from "@/data/faq-data"
@@ -168,7 +168,7 @@ export function FAQModal({ isOpen, onClose }: FAQModalProps) {
             onClick={onClose}
             className="ml-4 p-2 hover:bg-gray-100 rounded-full transition-colors"
           >
-            <X className="h-6 w-6 text-gray-500" />
+            <SquareX className="h-6 w-6 text-gray-500" />
           </button>
         </div>
 

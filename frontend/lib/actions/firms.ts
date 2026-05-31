@@ -361,6 +361,7 @@ export async function switchFirm(firmSlug: string): Promise<void> {
 
 export interface FirmBranding {
     logoUrl?: string | null
+    logoAspectRatio?: string | null
     subtext?: string | null
     primaryColor?: string | null
     secondaryColor?: string | null
@@ -377,7 +378,7 @@ export interface FirmCurrency {
  */
 export async function updateFirm(
     firmSlug: string,
-    data: { name?: string; branding?: FirmBranding; currency?: FirmCurrency; enableBetaFeatures?: boolean }
+    data: { name?: string; branding?: FirmBranding; currency?: FirmCurrency; enableBetaFeatures?: boolean; internalMemo?: string | null; industry?: string | null; companySizeBracket?: string | null; companyWebsite?: string | null; linkedInUrl?: string | null; billingAddress?: string | null; notes?: string | null; allowDomainAccess?: boolean; allowedEmailDomain?: string | null }
 ): Promise<void> {
     const supabase = await createClient()
     const { data: { user }, error } = await supabase.auth.getUser()
@@ -395,13 +396,15 @@ export async function updateFirm(
     if (data.branding !== undefined || data.currency !== undefined || data.enableBetaFeatures !== undefined) {
         const current = (firm.settings as Record<string, unknown>) || {}
         if (data.branding !== undefined) {
-            // Construct branding from scratch — do not spread existing to avoid persisting legacy keys
+            const existing = (current.branding as Record<string, unknown>) ?? {}
             const branding = {
-                logoUrl: data.branding.logoUrl ?? null,
-                subtext: data.branding.subtext ?? null,
-                primaryColor: data.branding.primaryColor ?? null,
-                secondaryColor: data.branding.secondaryColor ?? null,
-                website: data.branding.website ?? null,
+                ...existing,
+                ...(data.branding.logoUrl !== undefined && { logoUrl: data.branding.logoUrl ?? null }),
+                ...(data.branding.logoAspectRatio !== undefined && { logoAspectRatio: data.branding.logoAspectRatio ?? null }),
+                ...(data.branding.subtext !== undefined && { subtext: data.branding.subtext ?? null }),
+                ...(data.branding.primaryColor !== undefined && { primaryColor: data.branding.primaryColor ?? null }),
+                ...(data.branding.secondaryColor !== undefined && { secondaryColor: data.branding.secondaryColor ?? null }),
+                ...(data.branding.website !== undefined && { website: data.branding.website ?? null }),
             }
             payload.settings = { ...(payload.settings ?? current), branding }
         }
@@ -416,7 +419,31 @@ export async function updateFirm(
         if (data.enableBetaFeatures !== undefined) {
             payload.settings = { ...(payload.settings ?? current), enableBetaFeatures: data.enableBetaFeatures }
         }
+        if (data.internalMemo !== undefined) {
+            payload.settings = { ...(payload.settings ?? current), internalMemo: data.internalMemo }
+        }
+        if (data.industry !== undefined) {
+            payload.settings = { ...(payload.settings ?? current), industry: data.industry }
+        }
+        if (data.companySizeBracket !== undefined) {
+            payload.settings = { ...(payload.settings ?? current), companySizeBracket: data.companySizeBracket }
+        }
+        if (data.companyWebsite !== undefined) {
+            payload.settings = { ...(payload.settings ?? current), companyWebsite: data.companyWebsite }
+        }
+        if (data.linkedInUrl !== undefined) {
+            payload.settings = { ...(payload.settings ?? current), linkedInUrl: data.linkedInUrl }
+        }
+        if (data.billingAddress !== undefined) {
+            payload.settings = { ...(payload.settings ?? current), billingAddress: data.billingAddress }
+        }
+        if (data.notes !== undefined) {
+            payload.settings = { ...(payload.settings ?? current), notes: data.notes }
+        }
     }
+
+    if (data.allowDomainAccess !== undefined) payload.allowDomainAccess = data.allowDomainAccess
+    if (data.allowedEmailDomain !== undefined) payload.allowedEmailDomain = data.allowedEmailDomain
 
     await FirmService.updateFirm(firm.id, user.id, payload)
 

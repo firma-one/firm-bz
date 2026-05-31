@@ -339,7 +339,7 @@ export function ProjectSettingsForm({
                                 onChange={handleTagChange}
                                 onKeyDown={handleTagKeyDown}
                                 onBlur={() => { if (tagInput.trim()) commitTag(tagInput) }}
-                                placeholder={tags.length === 0 ? 'Type a tag, press Enter or comma…' : ''}
+                                placeholder={tags.length === 0 ? 'Type a tag e.g. "high-priority", press Enter or comma…' : ''}
                                 disabled={isCompleted || isSandboxFirm}
                                 className="flex-1 min-w-[120px] bg-transparent outline-none placeholder:text-[#9a9ba0] text-[#1b1b1d] text-xs disabled:cursor-not-allowed"
                             />

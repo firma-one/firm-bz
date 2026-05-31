@@ -12,6 +12,7 @@ const TAGLINE_DOT_CLASS =
 
 export interface OrganizationBranding {
   logoUrl?: string | null;
+  logoAspectRatio?: string | null;
   name?: string | null;
   subtext?: string | null;
   themeColor?: string | null;
@@ -102,8 +103,13 @@ export default function Logo({
   const initial = displayName ? displayName.trim().charAt(0).toUpperCase() : 'P';
 
   const hasSubtextRow = useBranding && branding?.subtext;
+  const logoHeightsPx: Record<string, number> = { sm: 24, md: 32, lg: 40, xl: 50 }
+  const logoHeights: Record<string, string> = { sm: 'h-6', md: 'h-8', lg: 'h-10', xl: 'h-[50px]' }
+  const arMap: Record<string, number> = { '4:3': 4/3, '16:9': 16/9 }
+  const logoAr = branding?.logoAspectRatio && arMap[branding.logoAspectRatio] ? arMap[branding.logoAspectRatio] : 1
+  const logoW = Math.round(logoHeightsPx[size] * logoAr)
   const logoContainerClass = useBranding && branding?.logoUrl
-    ? `inline-flex shrink-0 items-center justify-center rounded-lg bg-slate-50 border-2 border-slate-100 overflow-hidden ${iconSizes[size]}`
+    ? `inline-flex shrink-0 items-center justify-center rounded-lg bg-slate-50 border-2 border-slate-100 overflow-hidden ${logoHeights[size]}`
     : '';
   const bubbleClass = useBranding && !branding?.logoUrl
     ? `inline-flex shrink-0 items-center justify-center rounded-lg font-semibold text-black bg-slate-50 border-2 border-slate-100 ${iconSizes[size]}`
@@ -156,7 +162,7 @@ export default function Logo({
     <>
       <div className="inline-flex shrink-0 items-center">
         {useBranding && branding?.logoUrl ? (
-          <span className={logoContainerClass}>
+          <span className={logoContainerClass} style={{ width: logoW }}>
             <img
               src={branding.logoUrl}
               alt=""
@@ -180,10 +186,10 @@ export default function Logo({
       </div>
       {showText && (
         hasSubtextRow ? (
-          <div className="flex min-w-0 flex-col justify-center">
+          <div className="flex min-w-0 flex-col justify-center overflow-hidden">
             <BrandNameOrCustom
               displayName={displayName}
-              className={`${brandNameClass} leading-tight`}
+              className={`${brandNameClass} leading-tight truncate`}
               style={useBranding ? { color: brandNameColor } : (themeHex ? { color: themeHex } : undefined)}
             />
             <span className="mt-0.5 text-[11px] leading-tight text-gray-500 truncate" title={branding!.subtext ?? undefined}>
@@ -191,10 +197,10 @@ export default function Logo({
             </span>
           </div>
         ) : (
-          <div className="ml-2 inline-flex items-center">
+          <div className="ml-2 min-w-0 inline-flex items-center overflow-hidden">
             <BrandNameOrCustom
               displayName={displayName}
-              className={brandNameClass}
+              className={`${brandNameClass} truncate`}
               style={useBranding ? { color: brandNameColor } : (themeHex ? { color: themeHex } : undefined)}
             />
             {useBranding && branding?.subtext && (

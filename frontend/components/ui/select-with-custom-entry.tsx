@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { ChevronDown, Check } from 'lucide-react'
+import { ChevronDown, Check, X } from 'lucide-react'
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -18,6 +18,7 @@ interface SelectWithCustomEntryProps {
     placeholder?: string
     customEntryHint?: string
     disabled?: boolean
+    isMandatory?: boolean
     className?: string
 }
 
@@ -29,6 +30,7 @@ export function SelectWithCustomEntry({
     placeholder = 'Select…',
     customEntryHint = 'Other…',
     disabled = false,
+    isMandatory = false,
     className,
 }: SelectWithCustomEntryProps) {
     const [open, setOpen] = useState(false)
@@ -36,26 +38,41 @@ export function SelectWithCustomEntry({
 
     return (
         <DropdownMenu open={open} onOpenChange={setOpen}>
-            <DropdownMenuTrigger asChild disabled={disabled}>
-                <button
-                    id={id}
-                    type="button"
-                    className={`w-full h-10 flex items-center justify-between rounded-md border border-slate-200 bg-white px-3 text-sm disabled:cursor-not-allowed disabled:opacity-60 ${className ?? ''}`}
-                >
-                    <span className={value ? 'text-slate-900' : 'text-slate-400'}>
-                        {value || placeholder}
-                    </span>
-                    <ChevronDown className="h-4 w-4 text-slate-500 shrink-0" />
-                </button>
-            </DropdownMenuTrigger>
+            <div className="relative w-full">
+                <DropdownMenuTrigger asChild disabled={disabled}>
+                    <button
+                        id={id}
+                        type="button"
+                        className={`w-full h-9 flex items-center rounded border border-[#e5e7eb] bg-white px-3 pr-7 text-xs font-normal disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary focus-visible:border-primary ${className ?? ''}`}
+                    >
+                        <span className={`flex-1 text-left truncate ${value ? 'text-[#1b1b1d]' : 'text-[#9a9ba0]'}`}>
+                            {value || placeholder}
+                        </span>
+                    </button>
+                </DropdownMenuTrigger>
+                <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center">
+                    {value && !disabled && !isMandatory ? (
+                        <button
+                            type="button"
+                            className="pointer-events-auto p-0.5 rounded text-[#9a9ba0] hover:text-[#1b1b1d] hover:bg-gray-100 transition-colors"
+                            onClick={(e) => { e.stopPropagation(); onChange('') }}
+                            aria-label="Clear"
+                        >
+                            <X className="h-3 w-3" />
+                        </button>
+                    ) : (
+                        <ChevronDown className="h-3 w-3 text-[#45474c]" />
+                    )}
+                </div>
+            </div>
             <DropdownMenuContent
-                className="w-[var(--radix-dropdown-menu-trigger-width)] p-1"
+                className="w-[var(--radix-dropdown-menu-trigger-width)] rounded-[2px] border border-[#e5e7eb] bg-white shadow-md py-0.5 p-0"
                 onCloseAutoFocus={(e) => e.preventDefault()}
             >
                 {options.map((label) => (
                     <DropdownMenuItem
                         key={label}
-                        className="flex items-center justify-between cursor-pointer"
+                        className={`cursor-pointer rounded-none py-1 px-2.5 !text-[0.8125rem] text-[#45474c] outline-none focus:bg-[#f9f9fb] flex items-center justify-between ${value === label && !isCustom ? 'bg-primary/10 border-l-2 border-brand-accent text-primary font-semibold' : ''}`}
                         onSelect={() => {
                             onChange(label)
                             setOpen(false)
@@ -63,12 +80,12 @@ export function SelectWithCustomEntry({
                     >
                         {label}
                         {value === label && !isCustom && (
-                            <Check className="h-4 w-4 text-slate-700" />
+                            <Check className="h-3 w-3 shrink-0" />
                         )}
                     </DropdownMenuItem>
                 ))}
-                <DropdownMenuSeparator />
-                <div className="px-2 py-1.5 flex items-center gap-2">
+                <DropdownMenuSeparator className="my-0.5 bg-[#e5e7eb]" />
+                <div className="px-2.5 py-1.5 flex items-center gap-2">
                     <input
                         value={isCustom ? value : ''}
                         onChange={(e) => onChange(e.target.value)}
@@ -78,10 +95,10 @@ export function SelectWithCustomEntry({
                         }}
                         onClick={(e) => e.stopPropagation()}
                         placeholder={customEntryHint}
-                        className="flex-1 text-sm text-slate-900 placeholder:text-slate-400 outline-none bg-transparent"
+                        className="flex-1 text-xs text-[#1b1b1d] placeholder:text-[#9a9ba0] outline-none bg-transparent"
                     />
                     {isCustom && value && (
-                        <Check className="h-4 w-4 text-slate-700 shrink-0" />
+                        <Check className="h-3 w-3 text-[#45474c] shrink-0" />
                     )}
                 </div>
             </DropdownMenuContent>

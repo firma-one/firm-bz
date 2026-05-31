@@ -2025,7 +2025,7 @@ export class GoogleDriveConnector {
     let metadata: any
     if (revisionId) {
       // Get revision metadata
-      const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/revisions/${revisionId}?fields=originalFilename,mimeType,size,exportLinks`, {
+      const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/revisions/${revisionId}?fields=originalFilename,mimeType,size,exportLinks&supportsAllDrives=true`, {
         headers: { 'Authorization': `Bearer ${accessToken}` }
       })
       if (!response.ok) throw new Error(`Failed to fetch revision metadata: ${response.status}`)
@@ -2039,7 +2039,7 @@ export class GoogleDriveConnector {
       }
     } else {
       // Get file metadata
-      const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=name,mimeType,size`, {
+      const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=name,mimeType,size&supportsAllDrives=true`, {
         headers: { 'Authorization': `Bearer ${accessToken}` }
       })
       if (!response.ok) throw new Error(`Failed to fetch file metadata: ${response.status}`)
@@ -2076,7 +2076,7 @@ export class GoogleDriveConnector {
       if (revisionId) {
         downloadUrl = `https://www.googleapis.com/drive/v3/files/${fileId}/revisions/${revisionId}/export?mimeType=${encodeURIComponent(exportConfig.exportMime)}`
       } else {
-        downloadUrl = `https://www.googleapis.com/drive/v3/files/${fileId}/export?mimeType=${encodeURIComponent(exportConfig.exportMime)}`
+        downloadUrl = `https://www.googleapis.com/drive/v3/files/${fileId}/export?mimeType=${encodeURIComponent(exportConfig.exportMime)}&supportsAllDrives=true`
       }
 
       // Append extension
@@ -2091,7 +2091,7 @@ export class GoogleDriveConnector {
         ? `https://www.googleapis.com/drive/v3/files/${fileId}/revisions/${revisionId}`
         : `https://www.googleapis.com/drive/v3/files/${fileId}`
 
-      downloadUrl = `${baseUrl}?alt=media`
+      downloadUrl = `${baseUrl}?alt=media&supportsAllDrives=true`
     }
 
     const response = await fetch(downloadUrl, {
