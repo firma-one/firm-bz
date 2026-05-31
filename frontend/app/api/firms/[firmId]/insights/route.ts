@@ -435,7 +435,8 @@ export async function GET(
       r.labelStyle === 'red' || r.labelStyle === 'orange'
     )
     const upcomingReminders = visibleReminders.filter((r) =>
-      r.labelStyle === 'amber' || r.labelStyle === 'slate'
+      (r.labelStyle === 'amber' || r.labelStyle === 'slate') &&
+      r.dateKey !== 'platform.engagements.dueDate'
     )
 
     const response: FirmInsightsResponse = {
