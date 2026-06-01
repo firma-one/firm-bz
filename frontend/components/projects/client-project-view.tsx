@@ -6,7 +6,7 @@ import { getProjectMemberSummaries, type ProjectMemberSummary } from '@/lib/acti
 import { ProjectList } from './project-list'
 import { ClientSettingsForm } from './client-settings-form'
 import type { LwCrmClientStatus } from '@/lib/actions/client'
-import { SquarePlus, ChevronRight, Building2, Users, Briefcase, LayoutGrid, List, Home, Settings, UserCog, CalendarClock, Lock } from 'lucide-react'
+import { SquarePlus, ChevronRight, Building2, Users, Briefcase, LayoutGrid, List, Home, Settings, UserCog, Lock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { AddEngagementModal } from './add-engagement-modal'
@@ -147,32 +147,28 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                                         <h1 className="font-headline text-3xl md:text-4xl font-bold tracking-tight text-[#1b1b1d]">
                                             {selectedClient.name}
                                         </h1>
+                                        {selectedClient.status && (
+                                            <span className={`px-2 py-0.5 rounded font-mono text-[10px] tracking-tight uppercase shrink-0 border ${
+                                                selectedClient.status === 'ACTIVE'   ? 'bg-[#f0edee] text-[#45474c] border-[#e5e7eb]' :
+                                                selectedClient.status === 'PROSPECT' ? 'bg-fuchsia-50 text-fuchsia-500 border-fuchsia-200' :
+                                                selectedClient.status === 'ON_HOLD'  ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                                                selectedClient.status === 'PAST'     ? 'bg-slate-100 text-slate-500 border-slate-200' :
+                                                'bg-[#f0edee] text-[#45474c] border-[#e5e7eb]'
+                                            }`}>
+                                                {selectedClient.status === 'ON_HOLD' ? 'On Hold' : selectedClient.status.charAt(0) + selectedClient.status.slice(1).toLowerCase()}
+                                            </span>
+                                        )}
+                                        {selectedClient.followUpDate && (() => {
+                                            const today = new Date(); today.setHours(0, 0, 0, 0)
+                                            const due = new Date(selectedClient.followUpDate); due.setHours(0, 0, 0, 0)
+                                            const days = Math.round((due.getTime() - today.getTime()) / 86400000)
+                                            const label = days < 0 ? `${Math.abs(days)}d overdue` : days === 0 ? 'Follow up today' : days === 1 ? 'Follow up tomorrow' : `Follow up in ${days}d`
+                                            const color = days < 0 ? 'bg-red-50 text-red-700 border-red-200' : days <= 7 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-[#f0edee] text-[#45474c] border-[#e5e7eb]'
+                                            return <span className={`shrink-0 rounded font-mono text-[10px] border px-2 py-0.5 ${color}`}>{label}</span>
+                                        })()}
                                     </div>
                                     <div className="flex items-center gap-2 mt-1 flex-wrap">
                                         <p className="text-sm text-[#45474c]">Manage engagements and client settings.</p>
-                                        {(() => {
-                                            const fud = selectedClient.followUpDate
-                                            if (!fud) return null
-                                            const today = new Date(); today.setHours(0, 0, 0, 0)
-                                            const d = new Date(fud); d.setHours(0, 0, 0, 0)
-                                            const delta = Math.round((d.getTime() - today.getTime()) / 86400000)
-                                            if (delta > 2 || delta < -2) return null
-                                            const chips: Record<number, { label: string; cls: string }> = {
-                                                2:  { label: 'Follow up · in 2 days', cls: 'bg-indigo-50 text-indigo-600 border-indigo-200' },
-                                                1:  { label: 'Follow up · tomorrow',  cls: 'bg-indigo-50 text-indigo-600 border-indigo-200' },
-                                                0:  { label: 'Follow up today',        cls: 'bg-amber-50 text-amber-700 border-amber-200'  },
-                                                [-1]: { label: 'Follow up · 1 day late', cls: 'bg-orange-50 text-orange-700 border-orange-200' },
-                                                [-2]: { label: 'Follow up · 2 days late', cls: 'bg-red-50 text-red-700 border-red-200' },
-                                            }
-                                            const chip = chips[delta]
-                                            if (!chip) return null
-                                            return (
-                                                <span className={`inline-flex items-center gap-1 rounded-sm border px-2 py-0.5 text-[11px] font-semibold ${chip.cls}`}>
-                                                    <CalendarClock className="h-3 w-3" />
-                                                    {chip.label}
-                                                </span>
-                                            )
-                                        })()}
                                     </div>
                                 </div>
                             </div>
