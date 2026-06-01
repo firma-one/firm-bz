@@ -45,6 +45,7 @@ export type HierarchyClient = {
         tags: string[]
         kickoffDate: string | null
         dueDate: string | null
+        settings: Record<string, unknown>
         /** True when engagement status is COMPLETED (view-only details). */
         isClosed: boolean
         members: {
@@ -178,6 +179,7 @@ export async function getFirmHierarchy(firmSlug: string): Promise<HierarchyClien
                 tags: tagsFromJson(p.tags),
                 kickoffDate: p.kickoffDate ? new Date(p.kickoffDate).toISOString() : null,
                 dueDate: p.dueDate ? new Date(p.dueDate).toISOString() : null,
+                settings: (p.settings as Record<string, unknown>) ?? {},
                 isClosed: engStatus === 'COMPLETED',
                 members: [{
                     userId: user.id,
@@ -377,6 +379,7 @@ export async function getClientWithEngagements(
                 tags: tagsFromJson(p.tags),
                 kickoffDate: p.kickoffDate ? new Date(p.kickoffDate).toISOString() : null,
                 dueDate: p.dueDate ? new Date(p.dueDate).toISOString() : null,
+                settings: (p.settings as Record<string, unknown>) ?? {},
                 isClosed: engStatus === 'COMPLETED',
                 members: [{ userId: user.id, canView: canView || canManage, canEdit: canEdit || canManage, canManage }]
             }

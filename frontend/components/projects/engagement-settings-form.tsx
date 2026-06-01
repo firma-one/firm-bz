@@ -9,7 +9,7 @@ import { useRouter } from 'next/navigation'
 import { useToast } from '@/components/ui/toast'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { AlertTriangle, Activity, AlignLeft, Banknote, CalendarCheck, CalendarClock, ChevronDown, CornerDownLeft, FileText, Tag, X } from 'lucide-react'
+import { AlertTriangle, Activity, AlignLeft, Banknote, CalendarCheck, CalendarClock, ChevronDown, CornerDownLeft, FileText, Lock, Tag, X } from 'lucide-react'
 import { SelectWithCustomEntry } from '@/components/ui/select-with-custom-entry'
 import { SandboxInfoBanner } from '@/components/ui/sandbox-info-banner'
 import { useOrgSandbox } from '@/lib/use-org-sandbox'
@@ -28,6 +28,7 @@ export interface EngagementSettingsFormProps {
     initialContractType?: string
     initialRateOrValue?: string | null
     initialTags?: string[]
+    initialInternalMemo?: string | null
     firmSandboxOnly?: boolean
     onCancel?: () => void
     onSaved?: () => void
@@ -52,6 +53,7 @@ export function EngagementSettingsForm({
     initialContractType = '',
     initialRateOrValue = null,
     initialTags = [],
+    initialInternalMemo = null,
     firmSandboxOnly = false,
     onCancel,
     onSaved,
@@ -68,6 +70,7 @@ export function EngagementSettingsForm({
     const [contractType, setContractType] = useState(initialContractType)
     const [rateOrValue, setRateOrValue] = useState(initialRateOrValue ?? '')
     const [currencySymbol, setCurrencySymbol] = useState('')
+    const [internalMemo, setInternalMemo] = useState(initialInternalMemo ?? '')
     const [tags, setTags] = useState<string[]>(initialTags)
     const [tagInput, setTagInput] = useState('')
     const tagInputRef = useRef<HTMLInputElement>(null)
@@ -88,7 +91,8 @@ export function EngagementSettingsForm({
         setContractType(initialContractType ?? '')
         setRateOrValue(initialRateOrValue ?? '')
         setTags(initialTags)
-    }, [initialName, initialDescription, initialKickoffDate, initialDueDate, initialStatus, initialContractType, initialRateOrValue, initialTags])
+        setInternalMemo(initialInternalMemo ?? '')
+    }, [initialName, initialDescription, initialKickoffDate, initialDueDate, initialStatus, initialContractType, initialRateOrValue, initialTags, initialInternalMemo])
 
     useEffect(() => {
         let mounted = true
@@ -137,6 +141,7 @@ export function EngagementSettingsForm({
                 contractType: contractType.trim() || null,
                 rateOrValue: rateOrValue.trim() === '' ? null : rateOrValue.trim(),
                 tags: tagInput.trim() ? [...tags, tagInput.trim().toLowerCase().replace(/\s+/g, '-')] : tags,
+                internalMemo: internalMemo.trim() || null,
             }, orgSlug, clientSlug)
             addToast({ type: 'success', title: 'Saved', message: 'Engagement properties updated.' })
             onSaved?.()
@@ -181,14 +186,14 @@ export function EngagementSettingsForm({
                 </div>
             )}
 
-            {/* Tile grid */}
-            <div className="grid grid-cols-3 gap-3">
+            {/* Tile grid — 3 cols, all cards stretch to equal height */}
+            <div className="grid grid-cols-3 gap-3 items-stretch">
 
-                {/* DETAILS — col-span-2 */}
+                {/* DETAILS — col-span-2, row 1 */}
                 <div className="col-span-2 bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
                     <p className={fieldLabel}>Details</p>
 
-                    {/* Row 1: Name + Status */}
+                    {/* Name + Status */}
                     <div className="grid grid-cols-[3fr_1fr] gap-3">
                         <div>
                             <label htmlFor="project-name" className={fieldLabel}>
@@ -225,22 +230,6 @@ export function EngagementSettingsForm({
                         </div>
                     </div>
 
-                    {/* Row 2: Start date + End date */}
-                    <div className="grid grid-cols-2 gap-3">
-                        <div>
-                            <label className={fieldLabel}>
-                                <span className="inline-flex items-center gap-1"><CalendarClock className="h-3 w-3" /> Start date</span>
-                            </label>
-                            <DateTimePicker value={kickoffDate} onChange={setKickoffDate} placeholder="Select date" disabled={disabled} defaultTime="09:00" />
-                        </div>
-                        <div>
-                            <label className={fieldLabel}>
-                                <span className="inline-flex items-center gap-1"><CalendarCheck className="h-3 w-3" /> End date</span>
-                            </label>
-                            <DateTimePicker value={dueDate} onChange={setDueDate} placeholder="Select date" disabled={disabled} defaultTime="17:00" />
-                        </div>
-                    </div>
-
                     {/* Description */}
                     <div>
                         <label htmlFor="project-description" className={fieldLabel}>
@@ -251,15 +240,15 @@ export function EngagementSettingsForm({
                             value={description}
                             onChange={(e) => setDescription(e.target.value)}
                             placeholder="Brief description of this engagement"
-                            rows={3}
+                            rows={2}
                             disabled={disabled}
                             className={textareaCls}
                         />
                     </div>
                 </div>
 
-                {/* COMMERCIAL — col-span-1 */}
-                <div className="bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
+                {/* COMMERCIAL — col-span-1, row-span-2 */}
+                <div className="row-span-2 bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
                     <p className={fieldLabel}>Commercial</p>
 
                     {/* Contract type */}
@@ -337,6 +326,46 @@ export function EngagementSettingsForm({
                             />
                             <CornerDownLeft className="h-3 w-3 text-primary shrink-0 self-center ml-1" />
                         </div>
+                    </div>
+                </div>
+
+                {/* TRACKING — col-span-2, row 2: dates + internal memo */}
+                <div className="col-span-2 bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
+                    <p className={fieldLabel}>Tracking</p>
+
+                    {/* Start date + End date */}
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className={fieldLabel}>
+                                <span className="inline-flex items-center gap-1"><CalendarClock className="h-3 w-3" /> Start date</span>
+                            </label>
+                            <DateTimePicker value={kickoffDate} onChange={setKickoffDate} placeholder="Select date" disabled={disabled} defaultTime="09:00" />
+                        </div>
+                        <div>
+                            <label className={fieldLabel}>
+                                <span className="inline-flex items-center gap-1"><CalendarCheck className="h-3 w-3" /> End date</span>
+                            </label>
+                            <DateTimePicker value={dueDate} onChange={setDueDate} placeholder="Select date" disabled={disabled} defaultTime="17:00" />
+                        </div>
+                    </div>
+
+                    {/* Internal Memo */}
+                    <div>
+                        <label htmlFor="engagement-internal-memo" className={fieldLabel}>
+                            <span className="inline-flex items-center gap-1">
+                                <Lock className="h-3 w-3" /> Internal memo
+                                <span className="inline-flex items-center gap-0.5 normal-case tracking-normal font-sans text-[#9a9ba0]">— internal only</span>
+                            </span>
+                        </label>
+                        <textarea
+                            id="engagement-internal-memo"
+                            value={internalMemo}
+                            onChange={(e) => setInternalMemo(e.target.value)}
+                            placeholder="Private notes, call summaries, context…"
+                            rows={2}
+                            disabled={disabled}
+                            className={textareaCls}
+                        />
                     </div>
                 </div>
 

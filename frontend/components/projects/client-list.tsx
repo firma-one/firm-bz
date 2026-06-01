@@ -1,9 +1,10 @@
 'use client'
 
 import React from 'react'
-import { Users, Clock, CalendarClock } from 'lucide-react'
+import { Users, Clock, CalendarClock, Cog } from 'lucide-react'
 import { ClientSummary } from '@/lib/actions/hierarchy'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { formatDistanceToNow } from 'date-fns'
 
 interface ClientListProps {
@@ -58,6 +59,7 @@ function getFollowUpChip(followUpDate: Date | null): { label: string; cls: strin
 }
 
 export function ClientList({ clients, orgSlug, viewMode = 'grid', isRefreshing = false }: ClientListProps) {
+    const router = useRouter()
     if (clients.length === 0 && !isRefreshing) {
         return (
             <div className="flex flex-col items-center justify-center h-64 text-center border-2 border-dashed border-slate-200 rounded bg-slate-50/50">
@@ -160,9 +162,19 @@ export function ClientList({ clients, orgSlug, viewMode = 'grid', isRefreshing =
                         <div className="h-10 w-10 bg-[#f3f4f6] text-[#45474c] rounded flex items-center justify-center group-hover:bg-primary/10 group-hover:text-primary transition-colors shrink-0">
                             <Users className="h-5 w-5" />
                         </div>
-                        <span className={`shrink-0 px-2 py-0.5 rounded-sm text-xs font-medium ${clientStatusBadgeClass(client.status)}`}>
-                            {clientStatusLabel(client.status)}
-                        </span>
+                        <div className="flex items-center gap-2 shrink-0">
+                            <span className={`shrink-0 px-2 py-0.5 rounded-sm text-xs font-medium ${clientStatusBadgeClass(client.status)}`}>
+                                {clientStatusLabel(client.status)}
+                            </span>
+                            <button
+                                type="button"
+                                onClick={(e) => { e.preventDefault(); e.stopPropagation(); router.push(`/d/f/${orgSlug}/c/${client.slug}?tab=settings`) }}
+                                className="px-2 py-0.5 rounded-sm bg-[#f3f4f6] text-[#1b1b1d] ring-1 ring-[#e5e7eb] hover:bg-[#e5e7eb] transition-colors"
+                                title="Client settings"
+                            >
+                                <Cog className="h-3.5 w-3.5" />
+                            </button>
+                        </div>
                     </div>
 
                     <h3 className="text-sm font-semibold text-slate-900 mb-auto line-clamp-1 group-hover:text-black transition-colors">

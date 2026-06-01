@@ -11,7 +11,7 @@ import { VisuallyHidden } from "@radix-ui/react-visually-hidden"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { SquarePlus, Info, Activity, AlignLeft, Banknote, CalendarCheck, CalendarClock, FileText, Tag, X, CornerDownLeft } from "lucide-react"
+import { SquarePlus, Info, Activity, AlignLeft, Banknote, CalendarCheck, CalendarClock, FileText, Lock, Tag, X, CornerDownLeft } from "lucide-react"
 import { SelectWithCustomEntry } from '@/components/ui/select-with-custom-entry'
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { SandboxInfoBanner } from "@/components/ui/sandbox-info-banner"
@@ -40,6 +40,7 @@ export function AddEngagementModal({ firmSlug, clientSlug, firmSandboxOnly = fal
     const [endDate, setEndDate] = useState('')
     const [contractType, setContractType] = useState('')
     const [rateOrValue, setRateOrValue] = useState('')
+    const [internalMemo, setInternalMemo] = useState('')
     const [tags, setTags] = useState<string[]>([])
     const [tagInput, setTagInput] = useState('')
     const tagInputRef = useRef<HTMLInputElement>(null)
@@ -144,6 +145,7 @@ export function AddEngagementModal({ firmSlug, clientSlug, firmSandboxOnly = fal
                 contractType: contractType.trim() || undefined,
                 rateOrValue: rateOrValue.trim() || undefined,
                 tags: tagInput.trim() ? [...tags, tagInput.trim().toLowerCase().replace(/\s+/g, '-')] : tags,
+                internalMemo: internalMemo.trim() || null,
             })
             setOpen(false)
             setName('')
@@ -155,6 +157,7 @@ export function AddEngagementModal({ firmSlug, clientSlug, firmSandboxOnly = fal
             setRateOrValue('')
             setTags([])
             setTagInput('')
+            setInternalMemo('')
             setError(null)
             router.push(`/d/f/${firmSlug}/c/${clientSlug}?tab=projects`, { scroll: false })
             onSaved?.()
@@ -214,13 +217,13 @@ export function AddEngagementModal({ firmSlug, clientSlug, firmSandboxOnly = fal
                             )}
 
                             {/* Tile grid — mirrors Engagement Settings layout */}
-                            <div className="grid grid-cols-3 gap-3">
+                            <div className="grid grid-cols-3 gap-3 items-stretch">
 
-                                {/* DETAILS — col-span-2 */}
+                                {/* DETAILS — col-span-2, row 1 */}
                                 <div className="col-span-2 bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
                                     <p className={fieldLabel}>Details</p>
 
-                                    {/* Row 1: Name (3fr) + Status (1fr) */}
+                                    {/* Name + Status */}
                                     <div className="grid grid-cols-[3fr_1fr] gap-3">
                                         <div>
                                             <label htmlFor="eng-name" className={fieldLabel}>
@@ -258,22 +261,6 @@ export function AddEngagementModal({ firmSlug, clientSlug, firmSandboxOnly = fal
                                         </div>
                                     </div>
 
-                                    {/* Row 2: Start date + End date */}
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div>
-                                            <label className={fieldLabel}>
-                                                <span className="inline-flex items-center gap-1"><CalendarClock className="h-3 w-3" /> Start date</span>
-                                            </label>
-                                            <DateTimePicker value={startDate} onChange={setStartDate} placeholder="Select date" defaultTime="09:00" disabled={isDisabled} />
-                                        </div>
-                                        <div>
-                                            <label className={fieldLabel}>
-                                                <span className="inline-flex items-center gap-1"><CalendarCheck className="h-3 w-3" /> End date</span>
-                                            </label>
-                                            <DateTimePicker value={endDate} onChange={setEndDate} placeholder="Select date" defaultTime="17:00" disabled={isDisabled} />
-                                        </div>
-                                    </div>
-
                                     {/* Description */}
                                     <div>
                                         <label htmlFor="eng-description" className={fieldLabel}>
@@ -284,15 +271,15 @@ export function AddEngagementModal({ firmSlug, clientSlug, firmSandboxOnly = fal
                                             value={description}
                                             onChange={(e) => setDescription(e.target.value)}
                                             placeholder="Brief engagement description"
-                                            rows={3}
+                                            rows={2}
                                             disabled={isDisabled}
                                             className="flex w-full rounded border border-[#e5e7eb] bg-white px-3 py-2 text-xs font-normal text-[#1b1b1d] placeholder:text-[#9a9ba0] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
                                         />
                                     </div>
                                 </div>
 
-                                {/* COMMERCIAL — col-span-1 */}
-                                <div className="bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
+                                {/* COMMERCIAL — col-span-1, row-span-2 */}
+                                <div className="row-span-2 bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
                                     <p className={fieldLabel}>Commercial</p>
 
                                     {/* Contract type */}
@@ -388,6 +375,46 @@ export function AddEngagementModal({ firmSlug, clientSlug, firmSandboxOnly = fal
                                             />
                                             <CornerDownLeft className="h-3 w-3 text-primary shrink-0 self-center ml-1" />
                                         </div>
+                                    </div>
+                                </div>
+
+                                {/* TRACKING — col-span-2, row 2: dates + internal memo */}
+                                <div className="col-span-2 bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
+                                    <p className={fieldLabel}>Tracking</p>
+
+                                    {/* Start date + End date */}
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className={fieldLabel}>
+                                                <span className="inline-flex items-center gap-1"><CalendarClock className="h-3 w-3" /> Start date</span>
+                                            </label>
+                                            <DateTimePicker value={startDate} onChange={setStartDate} placeholder="Select date" defaultTime="09:00" disabled={isDisabled} />
+                                        </div>
+                                        <div>
+                                            <label className={fieldLabel}>
+                                                <span className="inline-flex items-center gap-1"><CalendarCheck className="h-3 w-3" /> End date</span>
+                                            </label>
+                                            <DateTimePicker value={endDate} onChange={setEndDate} placeholder="Select date" defaultTime="17:00" disabled={isDisabled} />
+                                        </div>
+                                    </div>
+
+                                    {/* Internal Memo */}
+                                    <div>
+                                        <label htmlFor="eng-internal-memo" className={fieldLabel}>
+                                            <span className="inline-flex items-center gap-1">
+                                                <Lock className="h-3 w-3" /> Internal memo
+                                                <span className="inline-flex items-center gap-0.5 normal-case tracking-normal font-sans text-[#9a9ba0]">— internal only</span>
+                                            </span>
+                                        </label>
+                                        <textarea
+                                            id="eng-internal-memo"
+                                            value={internalMemo}
+                                            onChange={(e) => setInternalMemo(e.target.value)}
+                                            placeholder="Private notes, call summaries, context…"
+                                            rows={2}
+                                            disabled={isDisabled}
+                                            className="flex w-full rounded border border-[#e5e7eb] bg-white px-3 py-2 text-xs font-normal text-[#1b1b1d] placeholder:text-[#9a9ba0] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                                        />
                                     </div>
                                 </div>
 

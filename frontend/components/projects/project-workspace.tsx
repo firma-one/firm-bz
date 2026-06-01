@@ -53,6 +53,7 @@ interface ProjectWorkspaceProps {
     engagementContractType?: string
     engagementRateOrValue?: string | null
     engagementTags?: string[]
+    engagementInternalMemo?: string | null
     /** When provided, tab and shares sub-state are driven by URL (path-based navigation) */
     pathSegments?: ProjectPathSegments
     /** Current user's project persona display name (from JWT / project settings plus); shown as badge on the title tile */
@@ -95,6 +96,7 @@ export function ProjectWorkspace({
     engagementContractType = '',
     engagementRateOrValue = null,
     engagementTags = [],
+    engagementInternalMemo = null,
     pathSegments,
     projectPersonaDisplayName,
     engagementSlug,
@@ -229,9 +231,6 @@ export function ProjectWorkspace({
                                     Prospect
                                 </span>
                             )}
-                        </div>
-                        <div className="flex items-center gap-2 mt-1 flex-wrap">
-                            <p className="text-sm text-[#45474c]">Manage files, sharing and collaboration for this engagement.</p>
                             {engagementDueDate && (() => {
                                 const today = new Date(); today.setHours(0, 0, 0, 0)
                                 const due = new Date(engagementDueDate); due.setHours(0, 0, 0, 0)
@@ -240,6 +239,9 @@ export function ProjectWorkspace({
                                 const color = days < 0 ? 'bg-red-50 text-red-700 border-red-200' : days <= 7 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-[#f0edee] text-[#45474c] border-[#e5e7eb]'
                                 return <span className={`shrink-0 rounded font-mono text-[10px] border px-2 py-0.5 ${color}`}>{label}</span>
                             })()}
+                        </div>
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                            <p className="text-sm text-[#45474c]">Manage files, sharing and collaboration for this engagement.</p>
                             {projectPersonaDisplayName && (
                                 <span
                                     className="shrink-0 bg-primary/10 text-primary border border-primary/20 rounded font-mono text-[10px] px-2 py-0.5"
@@ -511,6 +513,7 @@ export function ProjectWorkspace({
                                 initialContractType={engagementContractType}
                                 initialRateOrValue={engagementRateOrValue}
                                 initialTags={engagementTags}
+                                initialInternalMemo={engagementInternalMemo}
                                 firmSandboxOnly={firmSandboxOnly}
                                 onCancel={() => router.push(`${base}/files`)}
                                 onSaved={() => {

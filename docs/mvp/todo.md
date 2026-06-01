@@ -28,6 +28,13 @@
 
 - [ ] **Cleanup: remove Staging & Confidential folder creation from onboarding** — these folders are no longer surfaced in the UI; remove the Drive-side provisioning code that creates them during workspace setup
 
+## Reminders
+
+- [ ] **Firm-Level Reminder Email Configuration** — [plan](../../.claude/plans/firm-reminder-email-config.md)
+  - Immediate notification on reminder creation (sync email)
+  - Recurring reminder emails via Inngest fan-forward (every N days, starting X days before due)
+  - Firm Settings card to configure both
+
 ## AI Features — [plan](../../.claude/plans/ai-insights-and-business-features.md)
 
 AI layer using Gemma 4 (HuggingFace Transformers, same runtime as release notes generation — no API key, model cached locally).
