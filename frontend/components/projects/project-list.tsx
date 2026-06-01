@@ -1,10 +1,11 @@
 'use client'
 
 import React from 'react'
-import { Briefcase, Clock, Copy, Check } from 'lucide-react'
+import { Briefcase, Clock, Cog, Copy, Check } from 'lucide-react'
 import { HierarchyClient } from '@/lib/actions/hierarchy'
 import { type ProjectMemberSummary } from '@/lib/actions/members'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { formatDistanceToNow } from 'date-fns'
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import {
@@ -157,6 +158,7 @@ function LeadAvatar({ user }: { user: ProfileBubblePopupUser }) {
 }
 
 export function ProjectList({ projects, orgSlug, clientSlug, clientStatus, viewMode = 'grid', isOrgInternal, memberSummaries = {}, isRefreshing = false }: ProjectListProps) {
+    const router = useRouter()
     const isProspect = clientStatus === 'PROSPECT'
     if (projects.length === 0 && !isRefreshing) {
         return (
@@ -336,6 +338,14 @@ export function ProjectList({ projects, orgSlug, clientSlug, clientStatus, viewM
                                     <span className={`shrink-0 px-2 py-0.5 rounded-sm text-xs font-medium ${engagementStatusBadgeClass(project.status)}`}>
                                         {engagementStatusLabel(project.status)}
                                     </span>
+                                    <button
+                                        type="button"
+                                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); router.push(`/d/f/${orgSlug}/c/${clientSlug}/e/${project.slug}/settings`) }}
+                                        className="px-2 py-0.5 rounded-sm bg-[#f3f4f6] text-[#1b1b1d] ring-1 ring-[#e5e7eb] hover:bg-[#e5e7eb] transition-colors"
+                                        title="Engagement settings"
+                                    >
+                                        <Cog className="h-3.5 w-3.5" />
+                                    </button>
                                 </div>
                             </div>
 

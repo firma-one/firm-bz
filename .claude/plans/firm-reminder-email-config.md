@@ -114,6 +114,20 @@ In `upsertFollowUpReminder()` (and when a new reminder is created), after saving
 
 This is a synchronous call (no Inngest), done inline inside the server action.
 
+### 3a. Pass `internalMemo` as `note` on Client auto-reminders
+
+**Context:** A1–A3 client lifecycle gaps (onboarding, re-engagement, on-hold) don't need new implementation — the Firm Admin can use Client Settings > Due Date fields for auto-reminders. However, the `note` field on `ReminderItem` is currently never populated for client reminders.
+
+**Gap:** `upsertFollowUpReminder` accepts no `note` param; `internalMemo` is available at both call sites in `lib/actions/client.ts` but is never threaded through.
+
+**Fix:**
+
+1. Add `note?: string | null` to the `upsertFollowUpReminder` params type in `user-reminders.ts`.
+2. Store it on the `ReminderItem` when creating (and preserve it on update).
+3. In `lib/actions/client.ts`, pass `note: data.internalMemo ?? null` to both `upsertFollowUpReminder` calls (followUpDate and expectedCloseDate) — both in `createClient` and `updateClient`.
+
+This means when a Firm Admin sets a follow-up date and has an internal memo on the client, the memo automatically becomes the reminder note, giving context in the reminders panel.
+
 ### 4. Recurring reminder Inngest job
 
 **File:** `frontend/lib/inngest/functions.ts`
@@ -172,6 +186,81 @@ export async function getFirmReminderConfig(firmId: string): Promise<FirmReminde
   }
 }
 ```
+
+---
+
+## Feature: Wire `kickoffDate` as an Auto-Reminder (A4)
+
+**File:** `frontend/lib/actions/project.ts`
+
+`kickoffDate` is stored and displayed in the engagement UI but `upsertFollowUpReminder` is never called for it. Wire it up identically to `dueDate`:
+
+- On create/update, call `upsertFollowUpReminder` with `dateKey: 'platform.engagements.kickoffDate'`, `action: 'Engagement kickoff'`.
+- Add `'platform.engagements.kickoffDate'` to `DATE_FIELD_CLEARERS` in `user-reminders.ts`.
+- Pass engagement `notes` (if any) as the `note` param (same pattern as client `internalMemo`).
+
+---
+
+## Feature: Wire `FirmInvitation` expiry as Auto-Reminder (A7)
+
+**File:** `frontend/lib/actions/firms.ts` (or wherever `inviteFirmMember` / `resendFirmInvitation` live)
+
+`upsertFollowUpReminder` is already called in `inviteEngagementMember` but not for firm-level invitations. Add the same call in `inviteFirmMember` and `resendFirmInvitation` with:
+
+- `entityKey: 'platform.firm_invitations'`
+- `dateKey: 'platform.firm_invitations.expireAt'`
+- `action: 'Invitation expiring'`
+- `dateValue: expireAt.toISOString()`
+
+Add a new entry in `ENTITY_RESOLVERS` for `platform.firm_invitations` (resolves invitee email + ctaUrl to the firm members settings page).
+Add `'platform.firm_invitations.expireAt'` to `DATE_FIELD_CLEARERS`.
+
+---
+
+## Feature: Manual "Add Reminder" button — Engagement & Client detail pages (A5, A6, A10, B4)
+
+Covers: engagement paused/closed (A5, A6), annual relationship review (A10), ad-hoc client follow-up re-schedule (B4), and any other ad-hoc case with no dedicated date field.
+
+### UI
+
+A small **"+ Reminder"** button on:
+- Engagement detail page header/actions area
+- Client detail page header/actions area
+
+Opens a lightweight popover/sheet with:
+
+```
+┌─ Add Reminder ──────────────────────────────────────────────┐
+│  Action / label    [text input, e.g. "Post-delivery review"]│
+│  Due date          [date picker — optional]                  │
+│  Note              [textarea — optional]                     │
+│                                          [Cancel]  [Save]   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+- Recipient is always **self** (the logged-in user) for manual reminders — no tagging needed here; comment-reminders handle the "tag someone else" case.
+- Calls `upsertFollowUpReminder` directly with `entityKey: 'platform.clients'` or `'platform.engagements'`, `dateKey: null`, `dateValue` = picked date or null.
+- Complies with `FirmReminderEmailConfig` automatically (same code path).
+
+### Files
+
+- New small component `AddReminderPopover` in `frontend/components/projects/` — reusable across Client and Engagement detail pages.
+- Engagement detail page: add button alongside existing action buttons.
+- Client detail page: same.
+- No new server action needed — calls existing `upsertFollowUpReminder`.
+
+---
+
+## Deferred (separate plan — Inngest crons)
+
+The following gaps are observational/passive and are better handled as automated Inngest crons rather than manual reminders. Not in scope for this plan:
+
+- **A8**: Shared document not accessed after N days → cron detects no `accessLog` entry, auto-creates reminder for engagement lead.
+- **A9**: Document `activity.status` stalled at `to_do`/`in_progress` for > N days → cron auto-creates reminder.
+- **B3**: Engagement invitation expired but member still not JOINED → cron post-expiry check.
+- **B5**: Intake file in Staging unreviewed for > N days → cron escalation.
+
+These belong in the AI Features / automation cron section of `docs/mvp/todo.md`.
 
 ---
 
@@ -297,14 +386,19 @@ No entry needed — date-less reminders have no DB column to clear on `markRemin
 | File | Change |
 |------|--------|
 | `frontend/components/projects/firm-settings-form.tsx` | Add Email Reminders card with 4 settings fields |
-| `frontend/lib/actions/user-reminders.ts` | Call `getFirmReminderConfig` on upsert; trigger immediate email and/or schedule recurring job; add `platform.doc_comments` entity resolver |
+| `frontend/lib/actions/user-reminders.ts` | Add `note` param to `upsertFollowUpReminder`; add `platform.doc_comments` + `platform.firm_invitations` entity resolvers; add `kickoffDate` + `firm_invitations.expireAt` to `DATE_FIELD_CLEARERS` |
+| `frontend/lib/actions/client.ts` | Pass `note: data.internalMemo` to both `upsertFollowUpReminder` calls |
+| `frontend/lib/actions/project.ts` | Wire `kickoffDate` to `upsertFollowUpReminder`; pass engagement notes as `note` |
+| `frontend/lib/actions/firms.ts` | Add `getFirmReminderConfig` helper; merge `reminderEmailConfig` in `updateFirm`; call `upsertFollowUpReminder` in `inviteFirmMember` + `resendFirmInvitation` |
 | `frontend/lib/inngest/functions.ts` | Add `sendRecurringReminderEmails` function |
 | `frontend/lib/inngest/types.ts` | Add `ReminderRecurringScheduledEvent`, `ReminderRecurringCancelledEvent` |
-| `frontend/lib/actions/firms.ts` (or `firm-service.ts`) | Add `getFirmReminderConfig` helper; merge `reminderEmailConfig` in `updateFirm` |
 | `frontend/app/api/inngest/route.ts` | Register `sendRecurringReminderEmails` in the serve() call |
-| `frontend/prisma/schema.prisma` | Add `isReminder Boolean @default(false)` and `recipientId String? @db.Uuid` to `DocCommentMessage` |
+| `frontend/prisma/schema.prisma` | Add `settings Json @default("{}")` to `DocCommentMessage` |
 | `frontend/app/api/projects/[projectId]/documents/[documentId]/doc-comments/route.ts` | Accept `isReminder` + `recipientId`; call `upsertFollowUpReminder` after create |
 | `frontend/components/projects/document-doc-comments-pane.tsx` | Extend composer with reminder toggle + recipient dropdown |
+| `frontend/components/projects/AddReminderPopover.tsx` | New component — manual reminder popover for Client + Engagement detail pages |
+| Client detail page component | Add `+ Reminder` button wired to `AddReminderPopover` |
+| Engagement detail page component | Add `+ Reminder` button wired to `AddReminderPopover` |
 
 ---
 

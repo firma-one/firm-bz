@@ -53,6 +53,7 @@ interface ProjectWorkspaceProps {
     engagementContractType?: string
     engagementRateOrValue?: string | null
     engagementTags?: string[]
+    engagementInternalMemo?: string | null
     /** When provided, tab and shares sub-state are driven by URL (path-based navigation) */
     pathSegments?: ProjectPathSegments
     /** Current user's project persona display name (from JWT / project settings plus); shown as badge on the title tile */
@@ -95,6 +96,7 @@ export function ProjectWorkspace({
     engagementContractType = '',
     engagementRateOrValue = null,
     engagementTags = [],
+    engagementInternalMemo = null,
     pathSegments,
     projectPersonaDisplayName,
     engagementSlug,
@@ -511,6 +513,7 @@ export function ProjectWorkspace({
                                 initialContractType={engagementContractType}
                                 initialRateOrValue={engagementRateOrValue}
                                 initialTags={engagementTags}
+                                initialInternalMemo={engagementInternalMemo}
                                 firmSandboxOnly={firmSandboxOnly}
                                 onCancel={() => router.push(`${base}/files`)}
                                 onSaved={() => {

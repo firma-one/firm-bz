@@ -178,6 +178,7 @@ export async function getFirmHierarchy(firmSlug: string): Promise<HierarchyClien
                 tags: tagsFromJson(p.tags),
                 kickoffDate: p.kickoffDate ? new Date(p.kickoffDate).toISOString() : null,
                 dueDate: p.dueDate ? new Date(p.dueDate).toISOString() : null,
+                settings: (p.settings as Record<string, unknown>) ?? {},
                 isClosed: engStatus === 'COMPLETED',
                 members: [{
                     userId: user.id,

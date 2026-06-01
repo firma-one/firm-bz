@@ -155,6 +155,7 @@ export default async function EngagementPage({ params }: PageProps) {
           engagementContractType={project.contractType ?? ""}
           engagementRateOrValue={project.rateOrValue}
           engagementTags={project.tags ?? []}
+          engagementInternalMemo={(project.settings as Record<string, unknown>)?.internalMemo as string ?? null}
           pathSegments={pathSegments}
           projectPersonaDisplayName={projectPersonaDisplayName}
           engagementSlug={engagementSlug}

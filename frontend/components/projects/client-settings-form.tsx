@@ -227,16 +227,6 @@ export function ClientSettingsForm({
                         </div>
                     </div>
 
-                    {/* Row 2: Internal Memo */}
-                    <div>
-                        <label htmlFor="client-internal-memo" className={fieldLabel}>
-                            <span className="inline-flex items-center gap-1">
-                                <Lock className="h-3 w-3" /> Internal memo
-                                <span className="inline-flex items-center gap-0.5 normal-case tracking-normal font-sans text-[#9a9ba0]">— internal only</span>
-                            </span>
-                        </label>
-                        <textarea id="client-internal-memo" value={internalMemo} onChange={(e) => setInternalMemo(e.target.value)} placeholder="Private notes, call summaries, relationship context…" rows={2} disabled={isSandboxFirm} className={textareaCls} />
-                    </div>
                 </div>
 
                 {/* COMPANY — col-span-1, spans both left rows */}
@@ -352,6 +342,17 @@ export function ClientSettingsForm({
                             <DateTimePicker value={clientSinceDate} onChange={setClientSinceDate} placeholder="Select date" disabled={isSandboxFirm || status === 'PROSPECT'} defaultTime="00:00" />
                             <p className="mt-1 text-[10px] text-[#9a9ba0]">When did the formal business relationship start?</p>
                         </div>
+                    </div>
+
+                    {/* Row 3: Internal Memo */}
+                    <div>
+                        <label htmlFor="client-internal-memo" className={fieldLabel}>
+                            <span className="inline-flex items-center gap-1">
+                                <Lock className="h-3 w-3" /> Internal memo
+                                <span className="inline-flex items-center gap-0.5 normal-case tracking-normal font-sans text-[#9a9ba0]">— internal only</span>
+                            </span>
+                        </label>
+                        <textarea id="client-internal-memo" value={internalMemo} onChange={(e) => setInternalMemo(e.target.value)} placeholder="Private notes, call summaries, relationship context…" rows={2} disabled={isSandboxFirm} className={textareaCls} />
                     </div>
                 </div>
             </div>

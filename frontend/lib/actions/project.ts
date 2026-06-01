@@ -37,6 +37,7 @@ export interface CreateProjectData {
     contractType?: string
     rateOrValue?: string | number | null
     tags?: string[]
+    internalMemo?: string | null
 }
 
 /**
@@ -162,6 +163,7 @@ export async function createEngagement(firmSlug: string, clientSlug: string, dat
                 contractType: data.contractType?.trim() || null,
                 ...(rateParsed !== undefined ? { rateOrValue: rateParsed } : {}),
                 tags: Array.isArray(data.tags) ? data.tags.filter((t) => typeof t === 'string' && t.trim()) : [],
+                ...(data.internalMemo != null ? { settings: { internalMemo: data.internalMemo } } : {}),
                 createdBy: user.id,
                 updatedBy: user.id,
             }
@@ -341,6 +343,7 @@ export async function updateEngagement(
         contractType?: string | null
         rateOrValue?: string | number | null
         tags?: string[]
+        internalMemo?: string | null
     },
     firmSlug: string,
     clientSlug: string
@@ -349,7 +352,7 @@ export async function updateEngagement(
 
     const project = await prisma.engagement.findFirst({
         where: { id: projectId, isDeleted: false },
-        select: { firmId: true, clientId: true, dueDate: true, kickoffDate: true, status: true }
+        select: { firmId: true, clientId: true, dueDate: true, kickoffDate: true, status: true, settings: true }
     })
     if (!project) throw new Error('Project not found')
 
@@ -362,6 +365,7 @@ export async function updateEngagement(
     const parsedDue = data.dueDate === undefined ? undefined : (data.dueDate ? new Date(data.dueDate) : null)
     const parsedRate = parseRateOrValue(data.rateOrValue)
 
+    const existingSettings = (project as any).settings as Record<string, unknown> ?? {}
     await prisma.engagement.update({
         where: { id: projectId },
         data: {
@@ -374,6 +378,9 @@ export async function updateEngagement(
             ...(parsedRate !== undefined && { rateOrValue: parsedRate }),
             ...(data.tags !== undefined && {
                 tags: Array.isArray(data.tags) ? data.tags.filter((t) => typeof t === 'string' && t.trim()) : [],
+            }),
+            ...(data.internalMemo !== undefined && {
+                settings: { ...existingSettings, internalMemo: data.internalMemo ?? null },
             }),
         }
     })
