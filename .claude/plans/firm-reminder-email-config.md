@@ -189,7 +189,55 @@ export async function getFirmReminderConfig(firmId: string): Promise<FirmReminde
 
 ---
 
+## Feature: Engagement `followUpDate` — new field + auto-reminder (A5)
+
+Mirrors the existing `Client.followUpDate` pattern exactly.
+
+### Schema — `frontend/prisma/schema.prisma`
+
+Add to the `Engagement` model:
+
+```prisma
+followUpDate  DateTime? @db.Timestamptz(6)
+```
+
+### UI — `frontend/components/projects/engagement-settings-form.tsx`
+
+The **Tracking** card currently has a 2-column dates row (Start date, End date) + Internal Memo below. Extend to a **3-column dates row**:
+
+```
+┌─ TRACKING ────────────────────────────────────────────────────────┐
+│  Start date        End date          Follow-up date               │
+│  [DateTimePicker]  [DateTimePicker]  [DateTimePicker]             │
+│                                                                   │
+│  Internal memo                                                    │
+│  [textarea]                                                       │
+└───────────────────────────────────────────────────────────────────┘
+```
+
+Change the dates grid from `grid-cols-2` to `grid-cols-3`. Add state `const [followUpDate, setFollowUpDate] = useState<string>(initialFollowUpDate ?? '')`. Include in the save payload.
+
+### Action — `frontend/lib/actions/project.ts`
+
+- Add `followUpDate?: string | null` to both `createProject` and `updateProject` param types.
+- Persist to DB: `followUpDate: data.followUpDate ? new Date(data.followUpDate) : null`.
+- Call `upsertFollowUpReminder` with `dateKey: 'platform.engagements.followUpDate'`, `action: 'Follow-up'`, `note: data.internalMemo ?? null`.
+
+### Reminder wiring — `frontend/lib/actions/user-reminders.ts`
+
+Add `'platform.engagements.followUpDate'` to `DATE_FIELD_CLEARERS`:
+
+```ts
+'platform.engagements.followUpDate': async (id) => {
+  await prisma.engagement.update({ where: { id }, data: { followUpDate: null } })
+}
+```
+
+---
+
 ## Feature: Wire `kickoffDate` as an Auto-Reminder (A4)
+
+**Clarification:** In the UI, `kickoffDate` is labelled **"Start Date"** and `dueDate` is labelled **"End Date"**. Only future `kickoffDate` values should trigger a reminder — skip scheduling if the date is in the past.
 
 **File:** `frontend/lib/actions/project.ts`
 
@@ -197,22 +245,23 @@ export async function getFirmReminderConfig(firmId: string): Promise<FirmReminde
 
 - On create/update, call `upsertFollowUpReminder` with `dateKey: 'platform.engagements.kickoffDate'`, `action: 'Engagement kickoff'`.
 - Add `'platform.engagements.kickoffDate'` to `DATE_FIELD_CLEARERS` in `user-reminders.ts`.
-- Pass engagement `notes` (if any) as the `note` param (same pattern as client `internalMemo`).
+- Pass `data.internalMemo ?? null` as `note` — `internalMemo` already exists on Engagement (stored in `engagement.settings.internalMemo`, wired in both `createProject` and `updateProject` in `project.ts`, and shown in the Engagement Settings form). Same pattern as client `internalMemo`.
 
 ---
 
 ## Feature: Wire `FirmInvitation` expiry as Auto-Reminder (A7)
 
-**File:** `frontend/lib/actions/firms.ts` (or wherever `inviteFirmMember` / `resendFirmInvitation` live)
+**File:** `frontend/lib/actions/firm-members.ts`
 
-`upsertFollowUpReminder` is already called in `inviteEngagementMember` but not for firm-level invitations. Add the same call in `inviteFirmMember` and `resendFirmInvitation` with:
+`upsertFollowUpReminder` is already called in `inviteEngagementMember` (`lib/actions/invitations.ts`) but not for firm-level invitations. Expiry is hardcoded to **D+7** in both `inviteFirmMember` (line 113) and `resendFirmInvitation` (line 177). Add the same call in both with:
 
+- `userId: user.id` — assigned to the **initiator** (the firm admin who sent the invite)
 - `entityKey: 'platform.firm_invitations'`
 - `dateKey: 'platform.firm_invitations.expireAt'`
 - `action: 'Invitation expiring'`
-- `dateValue: expireAt.toISOString()`
+- `dateValue: expireAt.toISOString()` — i.e. D+7 from invite date
 
-Add a new entry in `ENTITY_RESOLVERS` for `platform.firm_invitations` (resolves invitee email + ctaUrl to the firm members settings page).
+Add a new entry in `ENTITY_RESOLVERS` for `platform.firm_invitations` (resolves invitee email + ctaUrl to the firm Members settings page).
 Add `'platform.firm_invitations.expireAt'` to `DATE_FIELD_CLEARERS`.
 
 ---
@@ -251,14 +300,55 @@ Opens a lightweight popover/sheet with:
 
 ---
 
-## Deferred (separate plan — Inngest crons)
+## Feature: Auto-Reminder on Document Share for EC/EV members (A8)
 
-The following gaps are observational/passive and are better handled as automated Inngest crons rather than manual reminders. Not in scope for this plan:
+When a document is shared (POST to `sharing/route.ts`) and `externalCollaborator` or `guest` is enabled, create a date-less `ReminderItem` for **each `EngagementMember`** whose `personaSlug` is `eng_ext_collaborator` or `eng_viewer` on that engagement.
 
-- **A8**: Shared document not accessed after N days → cron detects no `accessLog` entry, auto-creates reminder for engagement lead.
-- **A9**: Document `activity.status` stalled at `to_do`/`in_progress` for > N days → cron auto-creates reminder.
-- **B3**: Engagement invitation expired but member still not JOINED → cron post-expiry check.
-- **B5**: Intake file in Staging unreviewed for > N days → cron escalation.
+**File:** `frontend/app/api/projects/[projectId]/documents/[documentId]/sharing/route.ts`
+
+After the share settings are saved, when `externalCollaborator === true` or `guest === true`:
+
+1. Query `EngagementMember` for the engagement where `personaSlug IN ('eng_ext_collaborator', 'eng_viewer')`.
+2. For each matching member, call `upsertFollowUpReminder` with:
+   - `userId: member.userId`
+   - `entityKey: 'platform.documents'`
+   - `entityValue: documentId`
+   - `action: 'Review shared document'`
+   - `dateKey: null`, `dateValue: null` (date-less — immediate)
+   - `firmId: projectId → engagement.firmId`
+3. Complies with `FirmReminderEmailConfig` automatically (immediate email if enabled).
+
+Add `platform.documents` to `ENTITY_RESOLVERS` in `user-reminders.ts` (resolves document name + ctaUrl to the Files tab).
+
+**Note:** If sharing is later disabled for a persona, cancel the reminder via `reminder.email.cancelled` for each affected member.
+
+---
+
+## Future Scope — not in this plan
+
+**A6 — Post-engagement delivery follow-up**
+After `closeEngagement` is called, the EL may want a reminder to conduct a post-delivery review or collect client feedback. No date field exists for this. Implement as part of a future "Engagement Closure Checklist" or the Manual Reminder (AddReminderPopover) feature already planned — EL can manually set it on close.
+
+**A9 — Document activity stalled**
+Ownership is unclear when `activity.status` is stuck at `to_do`/`in_progress` for an extended period. No single rule qualifies "stalled." This is better surfaced as an analytics insight (e.g. on the Insights/Board page) once the Board feature is more developed. Do not implement as a reminder.
+
+**A10 — Annual relationship review / contract renewal**
+EL can use the existing Due Date at Client or Engagement level to track renewal milestones. No new field or reminder pathway needed.
+
+**B1 — Engagement due date, advance notice**
+Covered by `FirmReminderEmailConfig.recurring` (`startDaysBeforeDue` + `frequencyDays`). No additional implementation needed.
+
+**B2 — Document due date, advance notice**
+Same as B1 — covered by recurring reminder config. No additional implementation needed.
+
+**B3 — Invitation expired, member still not joined**
+The expiry reminder (A7) already fires at D+7. If recurring is enabled in Firm Settings, follow-up emails continue after that. No separate cron needed.
+
+**B4 — Client follow-up rescheduled ad-hoc**
+`Client.followUpDate` can be set and updated any number of times. Each save calls `upsertFollowUpReminder`, which cancels the old Inngest job and schedules a new one. No new mechanism needed.
+
+**B5 — Intake file in Staging unreviewed**
+The "Review intake" reminder (date-less) already created on staging upload. With recurring enabled in Firm Settings, emails repeat until the reminder is marked done. No escalation cron needed.
 
 These belong in the AI Features / automation cron section of `docs/mvp/todo.md`.
 
@@ -389,7 +479,9 @@ No entry needed — date-less reminders have no DB column to clear on `markRemin
 | `frontend/lib/actions/user-reminders.ts` | Add `note` param to `upsertFollowUpReminder`; add `platform.doc_comments` + `platform.firm_invitations` entity resolvers; add `kickoffDate` + `firm_invitations.expireAt` to `DATE_FIELD_CLEARERS` |
 | `frontend/lib/actions/client.ts` | Pass `note: data.internalMemo` to both `upsertFollowUpReminder` calls |
 | `frontend/lib/actions/project.ts` | Wire `kickoffDate` to `upsertFollowUpReminder`; pass engagement notes as `note` |
-| `frontend/lib/actions/firms.ts` | Add `getFirmReminderConfig` helper; merge `reminderEmailConfig` in `updateFirm`; call `upsertFollowUpReminder` in `inviteFirmMember` + `resendFirmInvitation` |
+| `frontend/lib/actions/firms.ts` | Add `getFirmReminderConfig` helper; merge `reminderEmailConfig` in `updateFirm` |
+| `frontend/lib/actions/firm-members.ts` | Call `upsertFollowUpReminder` in `inviteFirmMember` + `resendFirmInvitation` (A7); add `platform.firm_invitations` entity resolver + `DATE_FIELD_CLEARERS` entry |
+| `frontend/app/api/projects/[projectId]/documents/[documentId]/sharing/route.ts` | On share enable, create date-less reminders for each EC/EV member (A8) |
 | `frontend/lib/inngest/functions.ts` | Add `sendRecurringReminderEmails` function |
 | `frontend/lib/inngest/types.ts` | Add `ReminderRecurringScheduledEvent`, `ReminderRecurringCancelledEvent` |
 | `frontend/app/api/inngest/route.ts` | Register `sendRecurringReminderEmails` in the serve() call |
