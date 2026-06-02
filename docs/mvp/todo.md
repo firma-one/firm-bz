@@ -34,10 +34,16 @@
 
 ## Reminders
 
-- [ ] **Firm-Level Reminder Email Configuration** — [plan](../../.claude/plans/firm-reminder-email-config.md)
+- [x] **Firm-Level Reminder Email Configuration** — [plan](../../.claude/plans/firm-reminder-email-config.md)
   - Immediate notification on reminder creation (sync email)
   - Recurring reminder emails via Inngest fan-forward (every N days, starting X days before due)
   - Firm Settings card to configure both
+
+- [x] **Manual Reminders on Documents & Comments**
+  - SetupReminderModal — reusable portal component with multi-select assignees, date picker, "Me" row, pre-populates existing reminders
+  - Per-comment CalendarClock button in Comments pane
+  - "Setup Reminder" in document action menu (⋯)
+  - Branded HTML reminder email template (`lib/email-templates/`)
 
 ## AI Features — [plan](../../.claude/plans/ai-insights-and-business-features.md)
 
