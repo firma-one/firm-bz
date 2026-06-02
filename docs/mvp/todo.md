@@ -8,7 +8,7 @@
   - Event Source: Firm, Client, Engagement, Document
   - Event Type: CREATED, MODIFIED, DELETED, OPENED, DOWNLOADED, SHARE-CREATED, SHARE-MODIFIED, SHARE-DELETED
 
-- [ ] **Connectors** — restore the functionality of setting up the Workspace on Google Shared Drive in addition to My Drive
+- [x] **Connectors** — restore the functionality of setting up the Workspace on Google Shared Drive in addition to My Drive
 
 - [ ] **Connector: Replace Owning Account** — [plan](../../.claude/plans/connector-replace-owner.md)
   - Let a firm admin authenticate as a different Google account on an existing Connector
@@ -29,7 +29,7 @@
   - [x] Copy to another Engagement — files/folders land in target's General folder; Firm › Client › Engagement picker with tree UI; Move intentionally deferred (non-atomic Drive + DB op)
   - [x] Bulk select & download files or select folder & download
 
-- [ ] **Confidential folder** — implement via `settings.locked = private`, Google Drive permissions, or both; currently the folder exists on Drive but has no enforced access control in the app
+- [x] **Confidential folder** — implement via `settings.locked = private`, Google Drive permissions, or both; currently the folder exists on Drive but has no enforced access control in the app
 
 - [ ] **Cleanup: remove Staging & Confidential folder creation from onboarding** — these folders are no longer surfaced in the UI; remove the Drive-side provisioning code that creates them during workspace setup
 
@@ -63,6 +63,18 @@ AI layer using Gemma 4 (HuggingFace Transformers, same runtime as release notes 
 - [ ] **Weekly Digest Notification** — Inngest cron every Monday 8am; Gemma-written brief covering last week's activity and top 3 priorities for the week, delivered as an in-app notification to firm admins
 
 ## Infrastructure / Maintenance
+
+- [ ] **Unit Tests** — critical business logic coverage
+  - Invite flow: token verification, email match, permission fallback (engagementMember DB check)
+  - Reminder system: `upsertFollowUpReminder` upsert/dedup, `markReminderDone` cleanup, `entityTableKey` resolver mapping
+  - Permission helpers: `checkProjectPermission` cache-first + DB fallback paths
+  - Email templates: `renderReminderEmail` subject/body output for all `kind` variants
+
+- [ ] **Web Automation / E2E Tests** — happy-path flows via Playwright
+  - Invite flow: receive invite link → signup/signin → land on engagement workspace
+  - Setup Reminder: open modal, select assignee, set date, submit → reminder appears in topbar panel
+  - Document finalize + unlock cycle
+  - File upload (intake) → EL approval → document moves to General
 
 - [ ] **Prisma 7 Upgrade** — [plan](../../.claude/plans/prisma-7-upgrade.md)
   - Phase 1 (now, zero risk): create `frontend/prisma.config.ts`, remove deprecated `package.json#prisma` seed key
