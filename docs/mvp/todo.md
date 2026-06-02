@@ -10,6 +10,11 @@
 
 - [ ] **Connectors** — restore the functionality of setting up the Workspace on Google Shared Drive in addition to My Drive
 
+- [ ] **Connector: Replace Owning Account** — [plan](../../.claude/plans/connector-replace-owner.md)
+  - Let a firm admin authenticate as a different Google account on an existing Connector
+  - Old connector revoked + de-linked; new connector linked to firm; Drive workspace structure preserved
+  - UI: "Replace account" button with confirmation dialog alongside existing Reconnect/Disconnect
+
 - [x] **Finalize Document** — [plan](/.claude/plans/update-docs-mvp-todo-md-we-need-structured-hinton.md)
   - Client accepts the document → status set to `Finalized`; document becomes read-only
   - Engagement Lead can unlock it (revert to `Draft`) if revisions are needed
