@@ -28,6 +28,10 @@
 
 - [ ] **Cleanup: remove Staging & Confidential folder creation from onboarding** — these folders are no longer surfaced in the UI; remove the Drive-side provisioning code that creates them during workspace setup
 
+- [ ] **Workspace Picker Route** — [plan](../../.claude/plans/workspace-picker-route.md)
+  - Move "Choose Your Workspace" (onboarding step 0) from `/d/onboarding` to `/d/f/`
+  - Returning users with multiple firms get AppSidebar chrome instead of OnboardingBar
+
 ## Reminders
 
 - [ ] **Firm-Level Reminder Email Configuration** — [plan](../../.claude/plans/firm-reminder-email-config.md)
