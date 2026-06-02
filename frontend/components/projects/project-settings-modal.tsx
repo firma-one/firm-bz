@@ -23,6 +23,7 @@ interface ProjectSettingsModalProps {
     initialDescription?: string
     initialKickoffDate?: string | null
     initialDueDate?: string | null
+    initialFollowUpDate?: string | null
     initialStatus?: LwCrmEngagementStatus
     initialContractType?: string
     initialRateOrValue?: string | null
@@ -40,6 +41,7 @@ export function ProjectSettingsModal({
     initialDescription = '',
     initialKickoffDate = null,
     initialDueDate = null,
+    initialFollowUpDate = null,
     initialStatus = 'ACTIVE',
     initialContractType = '',
     initialRateOrValue = null,
@@ -61,6 +63,7 @@ export function ProjectSettingsModal({
                     initialDescription={initialDescription}
                     initialKickoffDate={initialKickoffDate}
                     initialDueDate={initialDueDate}
+                    initialFollowUpDate={initialFollowUpDate}
                     initialStatus={initialStatus}
                     initialContractType={initialContractType}
                     initialRateOrValue={initialRateOrValue}

@@ -203,3 +203,34 @@ export interface ReminderEmailCancelledEvent {
   name: 'reminder.email.cancelled'
   data: { reminderId: string }
 }
+
+/**
+ * Fired to schedule the next iteration of a recurring reminder email.
+ * Fan-forward pattern: each iteration re-emits this event with an updated nextFireAt.
+ * Cancelled via 'reminder.recurring.cancelled' matching reminderId.
+ */
+export interface ReminderRecurringScheduledEvent {
+  name: 'reminder.recurring.scheduled'
+  data: {
+    reminderId: string
+    userId: string
+    firmId: string
+    entityName: string
+    entityKey: string
+    entityValue: string
+    action: string
+    ctaUrl: string | null
+    dueDate: string | null      // ISO — null means date-less reminder
+    frequencyDays: number
+    startDaysBeforeDue: number
+    nextFireAt: string          // ISO UTC — when to send the next email
+  }
+}
+
+/**
+ * Fired when a reminder is done/cleared — cancels the recurring Inngest run.
+ */
+export interface ReminderRecurringCancelledEvent {
+  name: 'reminder.recurring.cancelled'
+  data: { reminderId: string }
+}

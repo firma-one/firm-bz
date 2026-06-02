@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react'
-import { Eye, MessageCircle, Send, Loader2, Check, ChevronDown, Link2, SlidersHorizontal, Smile } from 'lucide-react'
+import { CalendarClock, Eye, MessageCircle, Send, Loader2, Check, ChevronDown, Link2, SlidersHorizontal, Smile } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useRightPane } from '@/lib/right-pane-context'
@@ -10,7 +10,6 @@ import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
@@ -22,11 +21,14 @@ import {
 import { SandboxInfoBanner } from '@/components/ui/sandbox-info-banner'
 import { useOrgSandbox } from '@/lib/use-org-sandbox'
 import { DateTimePicker } from '@/components/ui/date-time-picker'
+import { SetupReminderModal } from '@/components/ui/setup-reminder-modal'
 
 export interface DocumentDocCommentsPaneProps {
   engagementId: string
   documentId: string
   documentName?: string
+  documentMimeType?: string
+  orgSlug?: string
 }
 
 type CommentMessage = {
@@ -56,7 +58,7 @@ const REACTIONS: { key: ReactionKey; label: string; emoji: string; chipClass: st
 const LIGHT_TOOLTIP_CLASS =
   'z-[9999] max-w-[320px] p-3 text-xs bg-white text-slate-900 border border-slate-200 shadow-xl break-words'
 
-export function DocumentDocCommentsPane({ engagementId, documentId, documentName }: DocumentDocCommentsPaneProps) {
+export function DocumentDocCommentsPane({ engagementId, documentId, documentName, documentMimeType, orgSlug }: DocumentDocCommentsPaneProps) {
   const rightPane = useRightPane()
   const { user } = useAuth()
   const firmSandbox = useOrgSandbox()
@@ -68,6 +70,10 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
   const [error, setError] = useState<string | null>(null)
   const [newContent, setNewContent] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [firmMembers, setFirmMembers] = useState<{ userId: string; email: string; name: string; role: string; avatarUrl?: string | null }[]>([])
+  const [reminderModal, setReminderModal] = useState<{ messageId: string; content: string } | null>(null)
+  // Map of userId → { reminderId, dateValue } for already-set reminders on this comment
+  const [existingReminders, setExistingReminders] = useState<Map<string, { reminderId: string; dateValue: string | null }>>(new Map())
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const topSentinelRef = useRef<HTMLDivElement>(null)
@@ -144,6 +150,19 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
     }
   }, [sortOrder, hideOlderMessages])
 
+  // Fetch internal engagement members for reminder recipient dropdown
+  useEffect(() => {
+    fetch(`/api/projects/${engagementId}/members`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        const members: { userId: string; email: string; name: string; role: string }[] = (data?.members ?? [])
+          .filter((m: any) => m.userId && m.email)
+          .map((m: any) => ({ userId: m.userId, email: m.email, name: m.name ?? m.email.split('@')[0], role: m.role ?? '', avatarUrl: m.avatarUrl ?? null }))
+        setFirmMembers(members)
+      })
+      .catch(() => {})
+  }, [engagementId])
+
   const fetchMessages = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -165,6 +184,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
   useEffect(() => {
     fetchMessages()
   }, [fetchMessages])
+
 
   useEffect(() => {
     // Keyboard friendly: focus composer on open
@@ -343,32 +363,34 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
   }, [loading, sortOrder, visibleMessages.length])
 
   const Composer = (
-    <form onSubmit={handleSubmit} className="flex gap-2 shrink-0">
-      <textarea
-        ref={textareaRef}
-        value={newContent}
-        onChange={(e) => setNewContent(e.target.value)}
-        placeholder="Add a comment…"
-        rows={2}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault()
-            void handleSubmit(e as any)
-          }
-        }}
-        className="flex-1 min-w-0 rounded-sm border border-slate-200 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-300 focus:border-slate-300 resize-none disabled:cursor-not-allowed disabled:opacity-60"
-        disabled={isSandboxFirm || submitting}
-      />
-      <Button
-        variant="blackCta"
-        type="submit"
-        size="icon"
-        className="shrink-0 h-10 w-10 rounded-xl"
-        disabled={isSandboxFirm || submitting || !newContent.trim()}
-        aria-label="Send comment"
-      >
-        {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-      </Button>
+    <form onSubmit={handleSubmit} className="flex flex-col gap-2 shrink-0">
+      <div className="flex gap-2">
+        <textarea
+          ref={textareaRef}
+          value={newContent}
+          onChange={(e) => setNewContent(e.target.value)}
+          placeholder="Add a comment…"
+          rows={2}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              void handleSubmit(e as any)
+            }
+          }}
+          className="flex-1 min-w-0 rounded-sm border border-slate-200 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-300 focus:border-slate-300 resize-none disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={isSandboxFirm || submitting}
+        />
+        <Button
+          variant="blackCta"
+          type="submit"
+          size="icon"
+          className="shrink-0 h-10 w-10 rounded-xl"
+          disabled={isSandboxFirm || submitting || !newContent.trim()}
+          aria-label="Send comment"
+        >
+          {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+        </Button>
+      </div>
     </form>
   )
 
@@ -413,6 +435,32 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
     },
     [engagementId, documentId, updateReactionOptimistic, isSandboxFirm]
   )
+
+  const handleReminderSubmit = async ({ selected, deselected, dateValue }: { selected: string[]; deselected: string[]; dateValue: string | null }) => {
+    if (!reminderModal) return
+    const ops: Promise<void>[] = [
+      ...deselected.map((recipientId) => {
+        const existing = existingReminders.get(recipientId)
+        return fetch(`/api/projects/${engagementId}/documents/${documentId}/doc-comments`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messageId: reminderModal.messageId, reminderId: existing?.reminderId, recipientId }),
+        }).then(async (res) => { if (!res.ok) throw new Error('Failed to remove reminder') })
+      }),
+      ...selected.map((recipientId) =>
+        fetch(`/api/projects/${engagementId}/documents/${documentId}/doc-comments`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messageId: reminderModal.messageId, recipientId, dateValue }),
+        }).then(async (res) => {
+          if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error ?? 'Failed') }
+        })
+      ),
+    ]
+    const results = await Promise.allSettled(ops)
+    const failed = results.filter((r) => r.status === 'rejected')
+    if (failed.length > 0) throw new Error(`${failed.length} operation(s) failed`)
+  }
 
   return (
     <div className="flex flex-col h-full min-h-0 p-4 min-w-0">
@@ -1004,7 +1052,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                               onClick={(e) => e.stopPropagation()}
                               disabled={isSandboxFirm}
                             >
-                              <Smile className="h-4 w-4" />
+                              <Smile className="h-4 w-4 text-yellow-600" />
                             </button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent className="w-[186px] p-2">
@@ -1081,25 +1129,56 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                       {/* No fade mask needed for wrapped layout */}
                     </div>
 
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          className="shrink-0 h-7 w-7 rounded-md text-slate-500 hover:text-slate-700 hover:bg-slate-100/80 transition-colors inline-flex items-center justify-center"
-                          aria-label="Copy link to comment"
-                          onClick={() => {
-                            const base = typeof window !== 'undefined' ? window.location.href.replace(/#.*$/, '') : ''
-                            const url = base ? `${base}#doc-comment:${documentId}:${msg.id}` : ''
-                            if (url) void navigator.clipboard.writeText(url)
-                          }}
-                        >
-                          <Link2 className="h-4 w-4" />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side="top" className={LIGHT_TOOLTIP_CLASS}>
-                        Copy link
-                      </TooltipContent>
-                    </Tooltip>
+                    <div className="flex items-center gap-1">
+                      {firmMembers.length > 0 && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              className="shrink-0 h-7 w-7 rounded-md hover:bg-orange-50 transition-colors inline-flex items-center justify-center"
+                              style={{ color: '#C4572B' }}
+                              aria-label="Assign reminder"
+                              onClick={() => {
+                                setReminderModal({ messageId: msg.id, content: msg.content })
+                                // Fetch existing reminders — component pre-populates selection from this map
+                                fetch(`/api/projects/${engagementId}/documents/${documentId}/doc-comments/reminders?messageId=${encodeURIComponent(msg.id)}`)
+                                  .then((r) => r.ok ? r.json() : null)
+                                  .then((data) => {
+                                    const map = new Map<string, { reminderId: string; dateValue: string | null }>()
+                                    ;(data?.reminders ?? []).forEach((r: any) => map.set(r.userId, { reminderId: r.reminderId, dateValue: r.dateValue }))
+                                    setExistingReminders(map)
+                                  })
+                                  .catch(() => setExistingReminders(new Map()))
+                              }}
+                            >
+                              <CalendarClock className="h-4 w-4" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className={LIGHT_TOOLTIP_CLASS}>
+                            Setup Reminder
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            className="shrink-0 h-7 w-7 rounded-md text-slate-500 hover:text-slate-700 hover:bg-slate-100/80 transition-colors inline-flex items-center justify-center"
+                            aria-label="Copy link to comment"
+                            onClick={() => {
+                              const base = typeof window !== 'undefined' ? window.location.href.replace(/#.*$/, '') : ''
+                              const url = base ? `${base}#doc-comment:${documentId}:${msg.id}` : ''
+                              if (url) void navigator.clipboard.writeText(url)
+                            }}
+                          >
+                            <Link2 className="h-4 w-4" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className={LIGHT_TOOLTIP_CLASS}>
+                          Copy link
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
                   </div>
                 </div>
               )
@@ -1110,6 +1189,23 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
       </div>
 
       {sortOrder === 'latestLast' ? Composer : null}
+
+      <SetupReminderModal
+        open={reminderModal !== null}
+        onClose={() => {
+          setReminderModal(null)
+          setExistingReminders(new Map())
+        }}
+        entityName={documentName}
+        entityMimeType={documentMimeType}
+        contentPreview={reminderModal?.content}
+        currentUser={user ? { userId: user.id, name: user.user_metadata?.full_name ?? user.user_metadata?.name ?? null, email: user.email ?? null, avatarUrl: user.user_metadata?.avatar_url ?? null, role: firmMembers.find((m) => m.userId === user.id)?.role ?? null } : undefined}
+        members={firmMembers.filter((m) => m.userId !== user?.id)}
+        existingReminders={existingReminders}
+        multiSelect={true}
+        hint="A reminder with a link to this comment will appear in the assignee's reminders on the selected date."
+        onSubmit={handleReminderSubmit}
+      />
     </TooltipProvider>
     </div>
   )

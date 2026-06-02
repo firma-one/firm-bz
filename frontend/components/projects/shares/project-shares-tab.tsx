@@ -113,6 +113,7 @@ interface ProjectSharesTabProps {
   pathViewMode?: 'list' | 'board' | 'grid'
   /** Base URL for deeplinks (e.g. ".../files"). Used for Copy Link buttons. */
   deeplinkBase?: string
+  orgSlug?: string
 }
 
 const LANES: {
@@ -1129,6 +1130,7 @@ export function ProjectSharesTab({
   onOpenInFiles,
   pathViewMode,
   deeplinkBase,
+  orgSlug,
 }: ProjectSharesTabProps) {
   const rightPane = useRightPane()
   const [shares, setShares] = useState<ShareRecord[]>([])
@@ -1431,6 +1433,8 @@ export function ProjectSharesTab({
           engagementId={share.projectId}
           documentId={share.documentId}
           documentName={share.documentName}
+          documentMimeType={share.documentMimeType ?? undefined}
+          orgSlug={orgSlug}
         />
       )
     },

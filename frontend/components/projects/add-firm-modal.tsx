@@ -21,6 +21,7 @@ import { validateCheckoutReturnTo } from '@/lib/billing/checkout-return-path'
 import { upgradeCopy } from '@/lib/billing/upgrade-copy'
 import { supabase } from '@/lib/supabase'
 import { contrastRatioAgainstWhite } from '@/lib/color-utils'
+import { FIRMA_COLOR } from '@/config/brand'
 
 const fieldLabel = 'font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] block mb-1'
 const inputCls = 'border-[#e5e7eb] text-[#1b1b1d] text-xs font-normal placeholder:text-[#9a9ba0] rounded focus-visible:ring-1 focus-visible:ring-primary focus-visible:border-primary disabled:opacity-50 disabled:cursor-not-allowed'
@@ -575,7 +576,7 @@ export function AddFirmModal({ trigger, open: controlledOpen, onOpenChange: cont
                                             <span className="inline-flex items-center gap-1"><Palette className="h-3 w-3" /> Brand primary color <span className="text-[#9a9ba0] normal-case tracking-normal font-sans font-normal">— optional</span></span>
                                         </label>
                                         <div className="flex items-center gap-2">
-                                            <input id="cf-color" type="color" value={themeColor || '#069668'}
+                                            <input id="cf-color" type="color" value={themeColor || FIRMA_COLOR}
                                                 onChange={(e) => setThemeColor(e.target.value)} disabled={isFormDisabled || brandingLocked}
                                                 className="h-9 w-10 rounded border border-[#e5e7eb] cursor-pointer bg-white disabled:cursor-not-allowed disabled:opacity-60 shrink-0" />
                                             <Input value={themeColor} onChange={(e) => setThemeColor(e.target.value)}
@@ -628,7 +629,7 @@ export function AddFirmModal({ trigger, open: controlledOpen, onOpenChange: cont
                                                     )
                                                 })() : (
                                                     <span className="inline-flex shrink-0 items-center justify-center rounded-lg bg-slate-50 border-2 border-slate-100 h-10 w-10 text-lg font-semibold"
-                                                        style={{ color: themeColor || '#069668' }}>
+                                                        style={{ color: themeColor || FIRMA_COLOR }}>
                                                         {(name || '?').trim().charAt(0).toUpperCase()}
                                                     </span>
                                                 )}

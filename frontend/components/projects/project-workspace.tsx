@@ -19,6 +19,7 @@ import { ProjectAuditPane } from './project-audit-pane'
 import { ProjectCommentsTab } from './project-comments-tab'
 import { ProjectWikiTab } from './wiki/project-wiki-tab'
 import type { LwCrmEngagementStatus } from '@/lib/actions/project'
+import { AddReminderPopover } from './add-reminder-popover'
 
 export interface ProjectPathSegments {
     tab: string
@@ -48,6 +49,7 @@ interface ProjectWorkspaceProps {
     projectDescription?: string
     engagementKickoffDate?: string | null
     engagementDueDate?: string | null
+    engagementFollowUpDate?: string | null
     engagementStatus?: LwCrmEngagementStatus
     clientStatus?: string | null
     engagementContractType?: string
@@ -91,6 +93,7 @@ export function ProjectWorkspace({
     projectDescription,
     engagementKickoffDate = null,
     engagementDueDate = null,
+    engagementFollowUpDate = null,
     engagementStatus = 'ACTIVE',
     clientStatus,
     engagementContractType = '',
@@ -239,6 +242,15 @@ export function ProjectWorkspace({
                                 const color = days < 0 ? 'bg-red-50 text-red-700 border-red-200' : days <= 7 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-[#f0edee] text-[#45474c] border-[#e5e7eb]'
                                 return <span className={`shrink-0 rounded font-mono text-[10px] border px-2 py-0.5 ${color}`}>{label}</span>
                             })()}
+                            {firmId && projectId && (
+                                <AddReminderPopover
+                                    entityKey="platform.engagements"
+                                    entityValue={projectId}
+                                    entityName={projectName ?? 'Engagement'}
+                                    firmId={firmId}
+                                    ctaUrl={`/d/f/${orgSlug}/c/${clientSlug}/e/${engagementSlug ?? ''}`}
+                                />
+                            )}
                         </div>
                         <div className="flex items-center gap-2 mt-1 flex-wrap">
                             <p className="text-sm text-[#45474c]">Manage files, sharing and collaboration for this engagement.</p>
@@ -455,6 +467,7 @@ export function ProjectWorkspace({
                                         canManage={canManage}
                                         restrictToSharedOnly={restrictToSharedOnly}
                                         firmId={firmId}
+                                        orgSlug={orgSlug}
                                         firmSandboxOnly={firmSandboxOnly}
                                         navSlot={filesNavSlot}
                                     />
@@ -476,6 +489,7 @@ export function ProjectWorkspace({
                                     sharesBasePath={`${projectBase(orgSlug, clientSlug, projectSlug, useEngagement)}/shares`}
                                     pathViewMode={pathSegments?.viewMode}
                                     deeplinkBase={typeof window !== 'undefined' ? `${window.location.origin}${projectBase(orgSlug, clientSlug, projectSlug, useEngagement)}/files` : undefined}
+                                    orgSlug={orgSlug}
                                 />
                             </ErrorBoundary>
                         )}
@@ -494,6 +508,7 @@ export function ProjectWorkspace({
                                     sharesBasePath={`${projectBase(orgSlug, clientSlug, projectSlug, useEngagement)}/shares`}
                                     pathViewMode="board"
                                     deeplinkBase={typeof window !== 'undefined' ? `${window.location.origin}${projectBase(orgSlug, clientSlug, projectSlug, useEngagement)}/files` : undefined}
+                                    orgSlug={orgSlug}
                                 />
                             </ErrorBoundary>
                         )}
@@ -509,6 +524,7 @@ export function ProjectWorkspace({
                                 initialDescription={projectDescription}
                                 initialKickoffDate={engagementKickoffDate}
                                 initialDueDate={engagementDueDate}
+                                initialFollowUpDate={engagementFollowUpDate}
                                 initialStatus={engagementStatus}
                                 initialContractType={engagementContractType}
                                 initialRateOrValue={engagementRateOrValue}
@@ -539,7 +555,7 @@ export function ProjectWorkspace({
                     {currentTab === 'comments' && (
                         <div className="py-1 h-full">
                             <ErrorBoundary context="ProjectComments">
-                                <ProjectCommentsTab projectId={projectId} />
+                                <ProjectCommentsTab projectId={projectId} orgSlug={orgSlug} />
                             </ErrorBoundary>
                         </div>
                     )}

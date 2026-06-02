@@ -16,6 +16,7 @@ import {
   Clock,
 } from "lucide-react"
 import { getFirmRole } from "@/lib/actions/firm"
+import { FIRMA_COLOR } from "@/config/brand"
 
 type RecentItem = {
   type: "client" | "engagement"
@@ -117,7 +118,7 @@ function buildItems(firmSlug: string | null, canManageOrg: boolean): CommandItem
       icon: <Bell className="h-4 w-4" />,
       href: "/d/u/notifications",
       group: "Personal",
-      iconColor: "#069668",
+      iconColor: FIRMA_COLOR,
     },
     {
       id: "recent",
@@ -126,7 +127,7 @@ function buildItems(firmSlug: string | null, canManageOrg: boolean): CommandItem
       icon: <Clock className="h-4 w-4" />,
       href: "/d/u/recent",
       group: "Personal",
-      iconColor: "#069668",
+      iconColor: FIRMA_COLOR,
     },
     {
       id: "profile",
@@ -135,7 +136,7 @@ function buildItems(firmSlug: string | null, canManageOrg: boolean): CommandItem
       icon: <UserCircle className="h-4 w-4" />,
       href: "/d/u/profile",
       group: "Account",
-      iconColor: "#069668",
+      iconColor: FIRMA_COLOR,
     },
   )
 

@@ -199,16 +199,27 @@ export async function checkProjectPermission(
     return true
   }
 
-  // Final fallback: Direct DB check for freshly-created firms where the cache hasn't updated yet.
-  // This handles the race condition where a user just created a custom firm and immediately
-  // navigated to a project page before their userSettingsPlus cache was invalidated.
+  // Final fallback: Direct DB check for cases where the cache hasn't updated yet.
+  // Covers: (1) freshly-created firm_admin, (2) newly-invited engagement member whose
+  // userSettingsPlus cache was invalidated but not yet rebuilt in this process.
   try {
     const { prisma } = await import('./prisma')
-    const dbMembership = await prisma.firmMember.findFirst({
-      where: { userId: user.id, firmId },
-      select: { role: true },
-    })
-    if (dbMembership?.role === 'firm_admin') {
+    const [dbFirmMembership, dbEngagementMembership] = await Promise.all([
+      prisma.firmMember.findFirst({
+        where: { userId: user.id, firmId },
+        select: { role: true },
+      }),
+      prisma.engagementMember.findFirst({
+        where: { userId: user.id, engagementId: projectId },
+        select: { role: true },
+      }),
+    ])
+    if (dbFirmMembership?.role === 'firm_admin') {
+      return true
+    }
+    // Only internal roles fall back here — EC/EV access is covered by userSettingsPlus scopes.
+    const internalEngagementRoles = ['eng_admin', 'eng_member']
+    if (dbEngagementMembership && internalEngagementRoles.includes(dbEngagementMembership.role)) {
       return true
     }
   } catch (dbError) {

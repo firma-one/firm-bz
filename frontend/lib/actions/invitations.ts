@@ -32,7 +32,7 @@ export async function inviteMember(projectId: string, email: string, personaId: 
     const invReminderCtx = {
         firmId: projectOrg?.client?.firm?.id ?? '',
         ctaUrl: projectOrg?.client?.firm?.slug && projectOrg?.client?.slug && projectOrg?.slug
-            ? `/d/f/${projectOrg.client.firm.slug}/c/${projectOrg.client.slug}/e/${projectOrg.slug}`
+            ? `/d/f/${projectOrg.client.firm.slug}/c/${projectOrg.client.slug}/e/${projectOrg.slug}/members`
             : null,
     }
 
@@ -162,7 +162,7 @@ export async function resendInvitation(invitationId: string) {
         entityName: invite.email,
         firmId: engDetails?.client?.firm?.id ?? '',
         ctaUrl: engDetails?.client?.firm?.slug && engDetails?.client?.slug && engDetails?.slug
-            ? `/d/f/${engDetails.client.firm.slug}/c/${engDetails.client.slug}/e/${engDetails.slug}`
+            ? `/d/f/${engDetails.client.firm.slug}/c/${engDetails.client.slug}/e/${engDetails.slug}/members`
             : null,
     }).catch(() => {})
 

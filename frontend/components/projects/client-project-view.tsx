@@ -15,6 +15,7 @@ import { ClientContactsTab } from './client-contacts-tab'
 import { ClientMembersTab } from './members/client-members-tab'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import Link from 'next/link'
+import { AddReminderPopover } from './add-reminder-popover'
 
 interface ClientProjectViewProps {
     clients: HierarchyClient[]
@@ -147,6 +148,16 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                                         <h1 className="font-headline text-3xl md:text-4xl font-bold tracking-tight text-[#1b1b1d]">
                                             {selectedClient.name}
                                         </h1>
+                                        {firmId && selectedClient.id && (
+                                            <AddReminderPopover
+                                                entityKey="platform.clients"
+                                                entityValue={selectedClient.id}
+                                                entityName={selectedClient.name}
+                                                firmId={firmId}
+                                                ctaUrl={`/d/f/${firmSlug}/c/${selectedClient.slug}`}
+                                                disabled={false}
+                                            />
+                                        )}
                                         {selectedClient.status && (
                                             <span className={`px-2 py-0.5 rounded font-mono text-[10px] tracking-tight uppercase shrink-0 border ${
                                                 selectedClient.status === 'ACTIVE'   ? 'bg-[#f0edee] text-[#45474c] border-[#e5e7eb]' :

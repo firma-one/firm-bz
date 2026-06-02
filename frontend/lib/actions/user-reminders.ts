@@ -3,6 +3,8 @@
 import { prisma } from '@/lib/prisma'
 import { createClient } from '@/utils/supabase/server'
 import { safeInngestSend } from '@/lib/inngest/client'
+import { getFirmReminderConfig } from '@/lib/actions/firms'
+import { logger } from '@/lib/logger'
 
 // ─── Stored shape ────────────────────────────────────────────────────────────
 
@@ -99,6 +101,61 @@ const ENTITY_RESOLVERS: Record<string, (id: string) => Promise<EntityContext>> =
         const email = (c?.settings as any)?.accountEmail ?? c?.name ?? 'Google Drive'
         return { name: email, slug: null, firmSlug: null, ctaUrl: '/d/onboarding' }
     },
+    'platform.firm_invitations': async (id) => {
+        const inv = await (prisma as any).firmInvitation.findUnique({
+            where: { id },
+            select: { email: true, firm: { select: { slug: true } } },
+        })
+        const firmSlug = inv?.firm?.slug ?? null
+        return {
+            name: inv?.email ?? 'Invited member',
+            slug: null,
+            firmSlug,
+            ctaUrl: firmSlug ? `/d/f/${firmSlug}/settings` : null,
+        }
+    },
+    'platform.documents': async (id) => {
+        const doc = await (prisma as any).engagementDocument.findUnique({
+            where: { id },
+            select: {
+                name: true,
+                engagement: { select: { slug: true, client: { select: { slug: true, firm: { select: { slug: true } } } } } },
+            },
+        })
+        const firmSlug = doc?.engagement?.client?.firm?.slug ?? null
+        const clientSlug = doc?.engagement?.client?.slug ?? null
+        const engSlug = doc?.engagement?.slug ?? null
+        return {
+            name: doc?.name ?? 'Shared document',
+            slug: null,
+            firmSlug,
+            ctaUrl: firmSlug && clientSlug && engSlug
+                ? `/d/f/${firmSlug}/c/${clientSlug}/e/${engSlug}/files`
+                : null,
+        }
+    },
+    'platform.doc_comments': async (id) => {
+        const c = await (prisma as any).docCommentMessage.findUnique({
+            where: { id },
+            select: {
+                content: true,
+                projectDocumentId: true,
+                engagement: { select: { slug: true, client: { select: { slug: true, firm: { select: { slug: true } } } } } },
+            },
+        })
+        const firmSlug = c?.engagement?.client?.firm?.slug ?? null
+        const clientSlug = c?.engagement?.client?.slug ?? null
+        const engSlug = c?.engagement?.slug ?? null
+        const preview = c?.content?.slice(0, 60) ?? 'Comment'
+        return {
+            name: preview,
+            slug: null,
+            firmSlug,
+            ctaUrl: firmSlug && clientSlug && engSlug
+                ? `/d/f/${firmSlug}/c/${clientSlug}/e/${engSlug}/files#doc-comment:${c?.projectDocumentId}:${id}`
+                : null,
+        }
+    },
 }
 
 // ─── Date field clearer map ──────────────────────────────────────────────────
@@ -112,6 +169,15 @@ const DATE_FIELD_CLEARERS: Record<string, (entityValue: string) => Promise<void>
     },
     'platform.engagements.dueDate': async (id) => {
         await (prisma as any).engagement.update({ where: { id }, data: { dueDate: null } })
+    },
+    'platform.engagements.kickoffDate': async (id) => {
+        await (prisma as any).engagement.update({ where: { id }, data: { kickoffDate: null } })
+    },
+    'platform.engagements.followUpDate': async (id) => {
+        await (prisma as any).engagement.update({ where: { id }, data: { followUpDate: null } })
+    },
+    'platform.firm_invitations.expireAt': async (id) => {
+        // Invitations are not cleared — just remove the reminder when done
     },
 }
 
@@ -226,11 +292,12 @@ export async function upsertFollowUpReminder(params: {
     entityKey: string
     entityValue: string
     action: string
-    dateKey: string
+    dateKey: string | null
     dateValue: string | null
     entityName: string
     firmId: string
     ctaUrl: string | null
+    note?: string | null
 }): Promise<void> {
     const items = await loadItems(params.userId)
 
@@ -240,10 +307,11 @@ export async function upsertFollowUpReminder(params: {
                r.dateKey === params.dateKey
     )
 
-    if (!params.dateValue) {
+    if (!params.dateValue && params.dateKey !== null) {
         // Date was cleared — remove the reminder node and cancel Inngest
         if (existing) {
             await safeInngestSend('reminder.email.cancelled', { reminderId: existing.id })
+            await safeInngestSend('reminder.recurring.cancelled', { reminderId: existing.id })
             const next = items.filter((r) => r.id !== existing.id)
             await saveItems(params.userId, next)
         }
@@ -251,16 +319,19 @@ export async function upsertFollowUpReminder(params: {
     }
 
     if (existing) {
-        // Update dateValue
+        // Update dateValue (and note if provided)
         const wasScheduled = existing.dateValue !== params.dateValue
         const next = items.map((r) =>
-            r.id === existing.id ? { ...r, dateValue: params.dateValue } : r
+            r.id === existing.id
+                ? { ...r, dateValue: params.dateValue, ...(params.note !== undefined && { note: params.note }) }
+                : r
         )
         await saveItems(params.userId, next)
         if (wasScheduled) {
-            // Cancel old Inngest job and schedule new one
             await safeInngestSend('reminder.email.cancelled', { reminderId: existing.id })
+            await safeInngestSend('reminder.recurring.cancelled', { reminderId: existing.id })
             await scheduleReminderEmail(existing.id, params)
+            await scheduleRecurringReminder(existing.id, params)
         }
     } else {
         // Create new reminder item
@@ -274,15 +345,18 @@ export async function upsertFollowUpReminder(params: {
             dateValue: params.dateValue,
             hiddenAt: null,
             createdAt: new Date().toISOString(),
+            note: params.note ?? null,
         }
         await saveItems(params.userId, [...items, newItem])
         await scheduleReminderEmail(id, params)
+        await scheduleRecurringReminder(id, params)
+        await sendImmediateReminderEmail(params)
     }
 }
 
 async function scheduleReminderEmail(
     reminderId: string,
-    params: { entityKey: string; entityValue: string; action: string; dateKey: string; dateValue: string | null; entityName: string; firmId: string; ctaUrl: string | null; userId: string }
+    params: { entityKey: string; entityValue: string; action: string; dateKey: string | null; dateValue: string | null; entityName: string; firmId: string; ctaUrl: string | null; userId: string }
 ): Promise<void> {
     if (!params.dateValue) return
     const fireAt = new Date(params.dateValue)
@@ -303,6 +377,81 @@ async function scheduleReminderEmail(
     })
 }
 
+async function scheduleRecurringReminder(
+    reminderId: string,
+    params: { entityKey: string; entityValue: string; action: string; dateKey: string | null; dateValue: string | null; entityName: string; firmId: string; ctaUrl: string | null; userId: string }
+): Promise<void> {
+    const config = await getFirmReminderConfig(params.firmId)
+    if (!config.recurring.enabled) return
+
+    const now = new Date()
+    let nextFireAt: Date
+
+    if (params.dateValue) {
+        const dueDate = new Date(params.dateValue)
+        const startDate = new Date(dueDate)
+        startDate.setDate(startDate.getDate() - config.recurring.startDaysBeforeDue)
+        // Start from max(today, dueDate - startDaysBeforeDue)
+        nextFireAt = startDate > now ? startDate : now
+        // Don't schedule if already past due date
+        if (nextFireAt >= dueDate) return
+    } else {
+        // Date-less reminder — start recurring from now
+        nextFireAt = now
+    }
+
+    nextFireAt.setUTCHours(9, 0, 0, 0)
+    // If that time is already past today, advance to tomorrow
+    if (nextFireAt <= now) {
+        nextFireAt.setDate(nextFireAt.getDate() + 1)
+    }
+
+    await safeInngestSend('reminder.recurring.scheduled', {
+        reminderId,
+        userId: params.userId,
+        firmId: params.firmId,
+        entityName: params.entityName,
+        entityKey: params.entityKey,
+        entityValue: params.entityValue,
+        action: params.action,
+        ctaUrl: params.ctaUrl,
+        dueDate: params.dateValue ?? null,
+        frequencyDays: config.recurring.frequencyDays,
+        startDaysBeforeDue: config.recurring.startDaysBeforeDue,
+        nextFireAt: nextFireAt.toISOString(),
+    })
+}
+
+async function sendImmediateReminderEmail(
+    params: { entityName: string; firmId: string; ctaUrl: string | null; userId: string; action: string }
+): Promise<void> {
+    const config = await getFirmReminderConfig(params.firmId)
+    if (!config.immediateOnCreate) return
+
+    try {
+        const { createAdminClient } = await import('@/utils/supabase/admin')
+        const { sendEmail } = await import('@/lib/email')
+        const { renderReminderEmail } = await import('@/lib/email-templates/reminder')
+        const admin = createAdminClient()
+        const { data } = await admin.auth.admin.getUserById(params.userId)
+        const email = data?.user?.email
+        if (!email) return
+
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
+        const ctaUrl = params.ctaUrl ? `${appUrl}${params.ctaUrl}` : null
+        const { subject, html } = renderReminderEmail({
+            entityName: params.entityName,
+            action: params.action,
+            ctaUrl,
+            ctaLabel: 'View →',
+            kind: 'created',
+        })
+        await sendEmail(email, subject, html)
+    } catch (e) {
+        logger.error('sendImmediateReminderEmail failed', e as Error, 'Reminders', { userId: params.userId })
+    }
+}
+
 /** Mark a reminder done: remove the node, clear the dateKey column, cancel Inngest. */
 export async function markReminderDone(reminderId: string): Promise<void> {
     const supabase = await createClient()
@@ -318,8 +467,9 @@ export async function markReminderDone(reminderId: string): Promise<void> {
         await DATE_FIELD_CLEARERS[item.dateKey](item.entityValue).catch(() => {})
     }
 
-    // Cancel Inngest job
+    // Cancel Inngest jobs
     await safeInngestSend('reminder.email.cancelled', { reminderId })
+    await safeInngestSend('reminder.recurring.cancelled', { reminderId })
 
     // Remove node from array
     await saveItems(user.id, items.filter((r) => r.id !== reminderId))
@@ -361,4 +511,33 @@ export async function markAllRemindersDone(reminderIds: string[]): Promise<void>
     for (const id of reminderIds) {
         await markReminderDone(id)
     }
+}
+
+/** Create a manual (ad-hoc) reminder for the currently logged-in user. Called from client UI. */
+export async function createManualReminder(params: {
+    entityKey: string
+    entityValue: string
+    action: string
+    dateValue: string | null
+    entityName: string
+    firmId: string
+    ctaUrl: string | null
+    note?: string | null
+}): Promise<void> {
+    const supabase = await createClient()
+    const { data: { user }, error } = await supabase.auth.getUser()
+    if (error || !user) throw new Error('Unauthorized')
+
+    await upsertFollowUpReminder({
+        userId: user.id,
+        entityKey: params.entityKey,
+        entityValue: params.entityValue,
+        action: params.action,
+        dateKey: null,
+        dateValue: params.dateValue,
+        entityName: params.entityName,
+        firmId: params.firmId,
+        ctaUrl: params.ctaUrl,
+        note: params.note,
+    })
 }

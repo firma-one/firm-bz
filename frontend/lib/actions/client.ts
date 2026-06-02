@@ -198,6 +198,7 @@ export async function createClient(organizationSlug: string, data: CreateClientD
         entityName: newClient.name,
         firmId: firm.id,
         ctaUrl: `/d/f/${organizationSlug}/c/${newClient.slug}`,
+        note: data.internalMemo ?? null,
     }).catch(() => {})
     upsertFollowUpReminder({
         userId: user.id,
@@ -209,6 +210,7 @@ export async function createClient(organizationSlug: string, data: CreateClientD
         entityName: newClient.name,
         firmId: firm.id,
         ctaUrl: `/d/f/${organizationSlug}/c/${newClient.slug}`,
+        note: data.internalMemo ?? null,
     }).catch(() => {})
 
     revalidatePath(`/d/f/${organizationSlug}`)
@@ -311,14 +313,15 @@ export async function updateClient(
     if (followUpChanged || expectedCloseChanged || statusChanged) {
         const latest = await (prisma as any).client.findUnique({
             where: { id: client.id },
-            select: { followUpDate: true, expectedCloseDate: true, status: true, ownerId: true, slug: true },
-        }) as { followUpDate: Date | null; expectedCloseDate: Date | null; status: string; ownerId: string | null; slug: string } | null
+            select: { followUpDate: true, expectedCloseDate: true, status: true, ownerId: true, slug: true, internalMemo: true },
+        }) as { followUpDate: Date | null; expectedCloseDate: Date | null; status: string; ownerId: string | null; slug: string; internalMemo: string | null } | null
         const activeStatuses = ['PROSPECT', 'ACTIVE']
         const isActive = activeStatuses.includes(latest?.status ?? '')
         const effectiveOwnerId = latest?.ownerId ?? null
         const ctaUrl = `/d/f/${organizationSlug}/c/${latest?.slug ?? clientSlug}`
         const entityName = data.name ?? client.name
         if (effectiveOwnerId) {
+            const memo = data.internalMemo !== undefined ? data.internalMemo : latest?.internalMemo ?? null
             upsertFollowUpReminder({
                 userId: effectiveOwnerId,
                 entityKey: 'platform.clients.id',
@@ -329,6 +332,7 @@ export async function updateClient(
                 entityName,
                 firmId: firm.id,
                 ctaUrl,
+                note: memo,
             }).catch(() => {})
             upsertFollowUpReminder({
                 userId: effectiveOwnerId,
@@ -340,6 +344,7 @@ export async function updateClient(
                 entityName,
                 firmId: firm.id,
                 ctaUrl,
+                note: memo,
             }).catch(() => {})
         }
     }
