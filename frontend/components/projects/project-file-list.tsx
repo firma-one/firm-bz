@@ -76,6 +76,7 @@ interface ProjectFileListProps {
     restrictToSharedOnly?: boolean
     /** Optional; used for secure-open modal thumbnail. */
     firmId?: string
+    orgSlug?: string
     /** When true, firm is sandbox-only (restricts Add menu: no new folder / native Google types; upload + Drive import allowed). */
     firmSandboxOnly?: boolean
     /** Portal target for the New Document button in the workspace nav bar. */
@@ -99,7 +100,7 @@ type ConflictItem = {
 
 const VIEW_AS_SHARED_ONLY_PERSONAS = ['eng_ext_collaborator', 'eng_viewer']
 
-export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderName = 'Engagement Files', orgName, clientName, projectName, canEdit = false, canManage = false, restrictToSharedOnly = false, firmId, firmSandboxOnly = false, navSlot }: ProjectFileListProps) {
+export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderName = 'Engagement Files', orgName, clientName, projectName, canEdit = false, canManage = false, restrictToSharedOnly = false, firmId, orgSlug, firmSandboxOnly = false, navSlot }: ProjectFileListProps) {
     const { session } = useAuth()
     const sessionRef = useRef(session)
     const orgSandbox = useOrgSandbox()
@@ -187,6 +188,8 @@ export function ProjectFileList({ projectId, connectorRootFolderId, rootFolderNa
                     engagementId={projectId}
                     documentId={docIdForComments}
                     documentName={file.name}
+                    documentMimeType={file.mimeType}
+                    orgSlug={orgSlug}
                 />
             )
             rightPane.setExpanded?.(false)
@@ -723,6 +726,19 @@ const { addToast } = useToast()
                 lastHandledDeeplinkHashRef.current = hash
                 return
             }
+            // Navigate to the file's folder so it's visible and highlighted in the list.
+            // navigateToItem is awaited but the file list re-render it triggers is async,
+            // so the comments pane below may open slightly before the row appears — intentional,
+            // since the comment is the primary destination and the highlight is best-effort.
+            if (!isLoadingFolders) {
+                await navigateToItem({
+                    id: externalId, name: fileName ?? 'Document',
+                    mimeType: 'application/octet-stream', webViewLink: '', iconLink: '',
+                    modifiedTime: new Date().toISOString(),
+                } as DriveFile)
+                setHighlightedFileId(externalId)
+            }
+
             setDeeplinkResolving(false)
 
             setActiveCommentDocId(externalId)
@@ -735,6 +751,7 @@ const { addToast } = useToast()
                     engagementId={projectId}
                     documentId={documentIdParam}
                     documentName={fileName ?? undefined}
+                    orgSlug={orgSlug}
                 />
             )
             rightPane.setExpanded?.(false)
@@ -3502,6 +3519,7 @@ const handleRefresh = async () => {
                                                             isExternalUser={isEC || isGuest}
                                                             isExternalViewer={isGuest}
                                                             projectId={projectId}
+                                                            orgSlug={orgSlug}
                                                             onShareSaved={refreshShareStateAndFiles}
                                                             canManage={canOrganizeTree}
                                                             currentFolderType={currentFolderType}

@@ -17,8 +17,10 @@ type DocRow = {
 
 export function ProjectCommentsTab({
   projectId,
+  orgSlug,
 }: {
   projectId: string
+  orgSlug?: string
 }) {
   const rightPane = useRightPane()
   const [query, setQuery] = useState('')
@@ -114,6 +116,7 @@ export function ProjectCommentsTab({
                       engagementId={projectId}
                       documentId={r.projectDocumentId}
                       documentName={r.documentName}
+                      orgSlug={orgSlug}
                     />
                   )
                   rightPane.setExpanded?.(false)

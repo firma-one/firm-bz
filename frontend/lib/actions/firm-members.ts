@@ -9,6 +9,7 @@ import { sendEmail } from '@/lib/email'
 import { BRAND_NAME } from '@/config/brand'
 import { canManageOrganization } from '@/lib/permission-helpers'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
+import { upsertFollowUpReminder } from '@/lib/actions/user-reminders'
 
 const supabaseAdmin = createSupabaseAdmin(
     process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321',
@@ -78,7 +79,7 @@ export async function inviteFirmMember(firmId: string, email: string) {
 
     const firm = await prisma.firm.findUnique({
         where: { id: firmId },
-        select: { sandboxOnly: true }
+        select: { sandboxOnly: true, slug: true }
     })
     if (!firm) throw new Error('Firm not found')
     if (firm.sandboxOnly) {
@@ -117,6 +118,7 @@ export async function inviteFirmMember(firmId: string, email: string) {
         where: { firmId_email: { firmId, email: normalizedEmail } }
     })
 
+    let invitationId: string
     if (existing) {
         if (existing.status === InvitationStatus.JOINED) {
             throw new Error('This user has already joined the firm')
@@ -125,8 +127,9 @@ export async function inviteFirmMember(firmId: string, email: string) {
             where: { id: existing.id },
             data: { status: 'PENDING', token, expireAt, updatedBy: user.id }
         })
+        invitationId = existing.id
     } else {
-        await prisma.firmInvitation.create({
+        const created = await prisma.firmInvitation.create({
             data: {
                 firmId,
                 email: normalizedEmail,
@@ -138,7 +141,20 @@ export async function inviteFirmMember(firmId: string, email: string) {
                 updatedBy: user.id,
             }
         })
+        invitationId = created.id
     }
+
+    upsertFollowUpReminder({
+        userId: user.id,
+        entityKey: 'platform.firm_invitations',
+        entityValue: invitationId,
+        action: 'Invitation expiring',
+        dateKey: 'platform.firm_invitations.expireAt',
+        dateValue: expireAt.toISOString(),
+        entityName: normalizedEmail,
+        firmId,
+        ctaUrl: `/d/f/${firm.slug}/settings`,
+    }).catch(() => {})
 
     const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invite/${token}`
     await sendEmail(
@@ -165,7 +181,7 @@ export async function resendFirmInvitation(invitationId: string) {
 
     const invite = await prisma.firmInvitation.findUnique({
         where: { id: invitationId },
-        include: { firm: { select: { sandboxOnly: true } } }
+        include: { firm: { select: { sandboxOnly: true, slug: true } } }
     })
     if (!invite) throw new Error('Invitation not found')
     if (invite.status === InvitationStatus.JOINED) throw new Error('User has already joined')
@@ -181,6 +197,18 @@ export async function resendFirmInvitation(invitationId: string) {
         where: { id: invitationId },
         data: { token, status: 'PENDING', expireAt, updatedAt: new Date() }
     })
+
+    upsertFollowUpReminder({
+        userId: user.id,
+        entityKey: 'platform.firm_invitations',
+        entityValue: invitationId,
+        action: 'Invitation expiring',
+        dateKey: 'platform.firm_invitations.expireAt',
+        dateValue: expireAt.toISOString(),
+        entityName: invite.email,
+        firmId: invite.firmId,
+        ctaUrl: `/d/f/${invite.firm?.slug}/settings`,
+    }).catch(() => {})
 
     const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invite/${token}`
     await sendEmail(

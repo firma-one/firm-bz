@@ -27,6 +27,7 @@ import {
   Clock,
   Trash2,
   Calendar,
+  CalendarClock,
   Check,
   BadgeCheck,
   Info,
@@ -44,6 +45,7 @@ import {
   CheckCircle2,
   XCircle,
   Building2,
+  Loader2,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -59,6 +61,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { useToast } from "@/components/ui/toast"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useDownloadProgress } from "@/lib/download-progress-context"
+import { SetupReminderModal } from "@/components/ui/setup-reminder-modal"
+import { useAuth } from "@/lib/auth-context"
 
 const VERSION_LOCK_TOOLTIP =
   'Finalize locks the document — all collaborators become view-only. Return to Draft restores each collaborator\'s prior access level based on their role and sharing settings.'
@@ -93,6 +97,7 @@ interface DocumentActionMenuProps {
   showShareModal?: boolean
   /** Required when showShareModal is true; project UUID for saving share settings. */
   projectId?: string
+  orgSlug?: string
   /** Called after share settings are saved (e.g. to refresh shared badges). */
   onShareSaved?: () => void
   /** Project Lead / Client Partner / Org Owner: show persona move-tree options and allow Organize. */
@@ -161,6 +166,7 @@ export function DocumentActionMenu({
   isExternalUser,
   isExternalViewer,
   deeplinkBase,
+  orgSlug,
 }: DocumentActionMenuProps) {
   const [showDueDatePicker, setShowDueDatePicker] = useState(false)
   const [showShareModalOpen, setShowShareModalOpen] = useState(false)
@@ -170,9 +176,14 @@ export function DocumentActionMenu({
   const [hasCopiedName, setHasCopiedName] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [privateInfoOpen, setPrivateInfoOpen] = useState(false)
+  const [showReminderModal, setShowReminderModal] = useState(false)
+  const [reminderMembers, setReminderMembers] = useState<{ userId: string; email: string; name: string; role: string; avatarUrl?: string | null }[]>([])
+  const [existingDocReminders, setExistingDocReminders] = useState<Map<string, { reminderId: string; dateValue: string | null }>>(new Map())
+  const [currentUserRole, setCurrentUserRole] = useState<string | null>(null)
   const { addToast } = useToast()
   const rightPane = useRightPane()
   const { addTask, updateTask } = useDownloadProgress()
+  const { user } = useAuth()
 
   const mime = (document?.mimeType ?? '').toLowerCase()
   const canOpenWithGoogleDoc = mime.includes('document') || mime.includes('vnd.google-apps.document')
@@ -784,6 +795,8 @@ export function DocumentActionMenu({
                             engagementId={projectId}
                             documentId={docIdForComments}
                             documentName={document.name}
+                            documentMimeType={document.mimeType}
+                            orgSlug={orgSlug}
                           />
                         )
                         rightPane.setExpanded?.(false)
@@ -793,6 +806,49 @@ export function DocumentActionMenu({
                   >
                     <MessageCircle className="h-4 w-4 text-gray-600" />
                     <span>Comment</span>
+                  </DropdownMenuItem>
+                )}
+
+                {/* Setup Reminder */}
+                {projectId && (
+                  <DropdownMenuItem
+                    onClick={async () => {
+                      if (!projectId) return
+                      const docId = (document as any).projectDocumentId || document.id
+                      // Fetch members and existing reminders in parallel
+                      try {
+                        const { getSession } = await import('@/lib/supabase')
+                        const membersSession = await getSession()
+                        const authHeaders: HeadersInit = membersSession?.access_token ? { Authorization: `Bearer ${membersSession.access_token}` } : {}
+                        const [membersRes, remindersRes] = await Promise.all([
+                          fetch(`/api/projects/${projectId}/members`, { headers: authHeaders }),
+                          fetch(`/api/projects/${projectId}/documents/${encodeURIComponent(docId)}/reminder`, { headers: authHeaders }),
+                        ])
+                        if (membersRes.ok) {
+                          const data = await membersRes.json()
+                          const selfEntry = (data.members ?? []).find((m: any) => m.userId === user?.id)
+                          if (selfEntry) setCurrentUserRole(selfEntry.role ?? null)
+                          setReminderMembers(
+                            (data.members ?? [])
+                              .filter((m: any) => m.userId && m.email && m.userId !== user?.id)
+                              .map((m: any) => ({ userId: m.userId, email: m.email, name: m.name ?? m.email.split('@')[0], role: m.role ?? '', avatarUrl: m.avatarUrl ?? null }))
+                          )
+                        }
+                        if (remindersRes.ok) {
+                          const data = await remindersRes.json()
+                          const map = new Map<string, { reminderId: string; dateValue: string | null }>()
+                          ;(data.reminders ?? []).forEach((r: any) => map.set(r.userId, { reminderId: r.reminderId, dateValue: r.dateValue }))
+                          setExistingDocReminders(map)
+                        }
+                      } catch {
+                        setExistingDocReminders(new Map())
+                      }
+                      setShowReminderModal(true)
+                    }}
+                    className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                  >
+                    <CalendarClock className="h-4 w-4 text-gray-600" />
+                    <span>Setup Reminder</span>
                   </DropdownMenuItem>
                 )}
 
@@ -1203,6 +1259,54 @@ export function DocumentActionMenu({
           onSaved={onShareSaved}
         />
       )}
+
+      {/* Setup Reminder modal */}
+      <SetupReminderModal
+        open={showReminderModal}
+        onClose={() => { setShowReminderModal(false); setExistingDocReminders(new Map()); setCurrentUserRole(null) }}
+        entityName={document.name}
+        entityMimeType={document.mimeType}
+        currentUser={user ? { userId: user.id, name: user.user_metadata?.full_name ?? user.user_metadata?.name ?? null, email: user.email ?? null, avatarUrl: user.user_metadata?.avatar_url ?? null, role: currentUserRole } : undefined}
+        members={reminderMembers}
+        existingReminders={existingDocReminders}
+        multiSelect={false}
+        hint="A reminder with a link to this document will appear in the assignee's reminders on the selected date."
+        onSubmit={async ({ selected, deselected, dateValue }) => {
+          if (!projectId) return
+          const { getSession } = await import('@/lib/supabase')
+          const session = await getSession()
+          if (!session?.access_token) {
+            addToast({ type: 'error', title: 'Session expired', message: 'Please refresh and try again.' })
+            throw new Error('No session')
+          }
+          const docId = (document as any).projectDocumentId || document.id
+          const authHeader = { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` }
+          const ops: Promise<void>[] = [
+            ...deselected.map((userId) => {
+              const existing = existingDocReminders.get(userId)
+              return fetch(`/api/projects/${projectId}/documents/${encodeURIComponent(docId)}/reminder`, {
+                method: 'DELETE', headers: authHeader,
+                body: JSON.stringify({ reminderId: existing?.reminderId, recipientId: userId }),
+              }).then(async (res) => { if (!res.ok) throw new Error('Failed to remove') })
+            }),
+            ...selected.map((recipientId) =>
+              fetch(`/api/projects/${projectId}/documents/${encodeURIComponent(docId)}/reminder`, {
+                method: 'POST', headers: authHeader,
+                body: JSON.stringify({ recipientId, dateValue }),
+              }).then(async (res) => {
+                if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error ?? 'Failed') }
+              })
+            ),
+          ]
+          const results = await Promise.allSettled(ops)
+          const failed = results.filter((r) => r.status === 'rejected')
+          if (failed.length > 0) {
+            addToast({ type: 'error', title: 'Partial failure', message: `${failed.length} operation(s) failed.` })
+            throw new Error('partial failure')
+          }
+          setExistingDocReminders(new Map())
+        }}
+      />
 
       {/* Still using Portal for Date Picker as it is a complex modal. Could use Dialog too but sticking to scope. */}
       {showDueDatePicker && mounted && typeof window !== 'undefined' && window.document?.body && createPortal(

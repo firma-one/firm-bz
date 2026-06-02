@@ -14,16 +14,18 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog'
-import { AlertTriangle, Building2, ChevronDown, Check, DollarSign, FileText, FlaskConical, Globe, ImageIcon, ImagePlus, Info, Linkedin, Lock, MapPin, Palette, RotateCcw, Shield, Trash2, Type, Users2, X } from 'lucide-react'
+import { AlertTriangle, Bell, Building2, ChevronDown, Check, DollarSign, FileText, FlaskConical, Globe, ImageIcon, ImagePlus, Info, Linkedin, Lock, MapPin, Palette, RotateCcw, RefreshCw, Shield, Trash2, Type, Users2, X } from 'lucide-react'
 import { contrastRatioAgainstWhite } from '@/lib/color-utils'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { supabase } from '@/lib/supabase'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { SelectWithCustomEntry } from '@/components/ui/select-with-custom-entry'
 import { SandboxInfoBanner } from '@/components/ui/sandbox-info-banner'
 import { useOrgSandbox } from '@/lib/use-org-sandbox'
+import { FIRMA_COLOR } from '@/config/brand'
 
 const WORLD_CURRENCIES: { code: string; symbol: string; label: string }[] = [
     { code: 'USD', symbol: '$',    label: 'USD ($)' },
@@ -113,6 +115,10 @@ export function FirmSettingsForm({
     const [logoY, setLogoY] = useState(0)
     const [logoAspectRatio, setLogoAspectRatio] = useState<'1:1' | '4:3' | '16:9'>('1:1')
     const [enableBetaFeatures, setEnableBetaFeatures] = useState(false)
+    const [immediateOnCreate, setImmediateOnCreate] = useState(true)
+    const [recurringEnabled, setRecurringEnabled] = useState(true)
+    const [recurringFrequencyDays, setRecurringFrequencyDays] = useState(1)
+    const [startDaysBeforeDue, setStartDaysBeforeDue] = useState(7)
     const [allowDomainAccess, setAllowDomainAccess] = useState(false)
     const [allowedEmailDomain, setAllowedEmailDomain] = useState('')
     const [saving, setSaving] = useState(false)
@@ -158,6 +164,11 @@ export function FirmSettingsForm({
                     setBillingAddress((settings.billingAddress as string) ?? '')
                     setNotes((settings.notes as string) ?? '')
                     setEnableBetaFeatures(settings.enableBetaFeatures === true)
+                    const rc = (settings.reminderEmailConfig as Record<string, any>) ?? {}
+                    setImmediateOnCreate(rc.immediateOnCreate ?? true)
+                    setRecurringEnabled(rc.recurring?.enabled ?? true)
+                    setRecurringFrequencyDays(rc.recurring?.frequencyDays ?? 1)
+                    setStartDaysBeforeDue(rc.recurring?.startDaysBeforeDue ?? 7)
                     setAllowDomainAccess(firm.allowDomainAccess === true)
                     setAllowedEmailDomain(firm.allowedEmailDomain ?? '')
                     const savedCode = c.code ?? ''
@@ -324,6 +335,14 @@ export function FirmSettingsForm({
                 notes: notes.trim() || null,
                 allowDomainAccess: allowDomainAccess && !!allowedEmailDomain.trim(),
                 allowedEmailDomain: allowDomainAccess ? (allowedEmailDomain.trim() || null) : null,
+                reminderEmailConfig: {
+                    immediateOnCreate,
+                    recurring: {
+                        enabled: recurringEnabled,
+                        frequencyDays: recurringFrequencyDays,
+                        startDaysBeforeDue,
+                    },
+                },
             })
             addToast({ type: 'success', title: 'Saved', message: 'Firm details updated.' })
             if (typeof window !== 'undefined') {
@@ -524,6 +543,76 @@ export function FirmSettingsForm({
                             <Switch checked={enableBetaFeatures} onCheckedChange={setEnableBetaFeatures}
                                 disabled={isSandboxFirm || !brandingLoaded} aria-label="Enable beta features" />
                         </div>
+                    </div>
+
+                    {/* EMAIL REMINDERS */}
+                    <div className="flex-1 bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
+                        <p className={`${fieldLabel} mb-3`}>Email Reminders</p>
+
+                        {/* Immediate notification */}
+                        <div className="flex items-center justify-between gap-4">
+                            <div className="flex items-start gap-2.5">
+                                <Bell className="h-4 w-4 text-[#45474c] mt-0.5 shrink-0" />
+                                <div>
+                                    <div className="text-sm font-semibold text-[#1b1b1d]">Immediate notification</div>
+                                    <p className="text-xs text-[#45474c] mt-0.5">Send an email when a reminder is created.</p>
+                                </div>
+                            </div>
+                            <Switch checked={immediateOnCreate} onCheckedChange={setImmediateOnCreate}
+                                disabled={isSandboxFirm || !brandingLoaded} aria-label="Immediate notification on create" />
+                        </div>
+
+                        {/* Recurring emails */}
+                        <div className="flex items-center justify-between gap-4">
+                            <div className="flex items-start gap-2.5">
+                                <RefreshCw className="h-4 w-4 text-[#45474c] mt-0.5 shrink-0" />
+                                <div>
+                                    <div className="text-sm font-semibold text-[#1b1b1d]">Recurring emails</div>
+                                    <p className="text-xs text-[#45474c] mt-0.5">Send repeat reminder emails until marked done.</p>
+                                </div>
+                            </div>
+                            <Switch checked={recurringEnabled} onCheckedChange={setRecurringEnabled}
+                                disabled={isSandboxFirm || !brandingLoaded} aria-label="Recurring reminder emails" />
+                        </div>
+
+                        {recurringEnabled && (
+                            <div className="pl-6 space-y-2 border-l-2 border-[#f0f0f2] ml-2">
+                                <div>
+                                    <label className={fieldLabel}>Frequency (every N days)</label>
+                                    <Select
+                                        value={String(recurringFrequencyDays)}
+                                        onValueChange={(v) => setRecurringFrequencyDays(Number(v))}
+                                        disabled={isSandboxFirm || !brandingLoaded}
+                                    >
+                                        <SelectTrigger className={inputCls}>
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {[1, 3, 7, 14].map((n) => (
+                                                <SelectItem key={n} value={String(n)}>{n === 1 ? 'Every day' : `Every ${n} days`}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div>
+                                    <label className={fieldLabel}>Start before due date</label>
+                                    <Select
+                                        value={String(startDaysBeforeDue)}
+                                        onValueChange={(v) => setStartDaysBeforeDue(Number(v))}
+                                        disabled={isSandboxFirm || !brandingLoaded}
+                                    >
+                                        <SelectTrigger className={inputCls}>
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {[1, 3, 7, 14, 21, 30].map((n) => (
+                                                <SelectItem key={n} value={String(n)}>{n} {n === 1 ? 'day' : 'days'} before</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     </div>{/* end LEFT COLUMN */}
@@ -735,11 +824,11 @@ export function FirmSettingsForm({
                             </label>
                             <div className="flex items-center gap-2">
                                 <input id="org-primary-color" type="color"
-                                    value={themeColor || '#069668'}
+                                    value={themeColor || FIRMA_COLOR}
                                     onChange={(e) => setThemeColor(e.target.value)} disabled={isSandboxFirm}
                                     className="h-9 w-10 rounded border border-[#e5e7eb] cursor-pointer bg-white disabled:cursor-not-allowed disabled:opacity-60 shrink-0" />
                                 <Input value={themeColor} onChange={(e) => setThemeColor(e.target.value)}
-                                    placeholder="Leave empty to use Firma default (#069668)"
+                                    placeholder={`Leave empty to use Firma default (${FIRMA_COLOR})`}
                                     disabled={isSandboxFirm}
                                     className={`font-mono ${inputCls}`} />
                                 <button type="button" onClick={() => setThemeColor('')} disabled={!themeColor || isSandboxFirm} className="shrink-0 text-[#9a9ba0] hover:text-[#45474c] transition-colors disabled:opacity-30 disabled:cursor-default" aria-label="Clear primary color">
@@ -808,7 +897,7 @@ export function FirmSettingsForm({
                                     )
                                 })() : (
                                     <span className="inline-flex shrink-0 items-center justify-center rounded-lg bg-slate-50 border-2 border-slate-100 h-10 w-10 text-lg font-semibold"
-                                        style={{ color: themeColor || '#069668' }}>
+                                        style={{ color: themeColor || FIRMA_COLOR }}>
                                         {(name || '?').trim().charAt(0).toUpperCase()}
                                     </span>
                                 )}

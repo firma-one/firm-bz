@@ -16,6 +16,7 @@ import {
     platformMaintenanceActivate,
     checkClientFollowUpReminders,
     sendReminderEmail,
+    sendRecurringReminderEmails,
 } from "@/lib/inngest/functions";
 
 export const { GET, POST, PUT } = serve({
@@ -36,5 +37,6 @@ export const { GET, POST, PUT } = serve({
         platformMaintenanceActivate,
         checkClientFollowUpReminders,
         sendReminderEmail,
+        sendRecurringReminderEmails,
     ],
 });

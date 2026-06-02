@@ -380,6 +380,52 @@ export async function PUT(
         .actor(user.id)
         .meta({ fileName: updated.fileName })
         .fireAndForget()
+
+      // A8: create date-less reminder for each EC/EV member when sharing is enabled
+      const wasEcEnabled = (parseSettingsFromDb((existing?.settings as Record<string, unknown>) || {}))?.share?.externalCollaborator?.enabled
+      const wasGuestEnabled = (parseSettingsFromDb((existing?.settings as Record<string, unknown>) || {}))?.share?.guest?.enabled
+      const ecJustEnabled = externalCollaborator && !wasEcEnabled
+      const guestJustEnabled = guest && !wasGuestEnabled
+
+      if (ecJustEnabled || guestJustEnabled) {
+        try {
+          const { upsertFollowUpReminder } = await import('@/lib/actions/user-reminders')
+          const ecEvRoles: string[] = []
+          if (ecJustEnabled) ecEvRoles.push('eng_ext_collaborator')
+          if (guestJustEnabled) ecEvRoles.push('eng_viewer')
+
+          const ecEvMembers = await (prisma as any).engagementMember.findMany({
+            where: { engagementId: projectId, role: { in: ecEvRoles } },
+            select: { userId: true },
+          })
+
+          const engDetails = await prisma.engagement.findUnique({
+            where: { id: projectId },
+            select: { slug: true, client: { select: { slug: true, firm: { select: { slug: true } } } } },
+          })
+          const firmSlug = engDetails?.client?.firm?.slug ?? ''
+          const clientSlug = engDetails?.client?.slug ?? ''
+          const engSlug = engDetails?.slug ?? ''
+
+          for (const member of ecEvMembers) {
+            upsertFollowUpReminder({
+              userId: member.userId,
+              entityKey: 'platform.documents',
+              entityValue: updated.id,
+              action: 'Review shared document',
+              dateKey: null,
+              dateValue: null,
+              entityName: updated.fileName ?? 'Shared document',
+              firmId: fileInfo.organizationId,
+              ctaUrl: firmSlug && clientSlug && engSlug
+                ? `/d/f/${firmSlug}/c/${clientSlug}/e/${engSlug}/files`
+                : null,
+            }).catch(() => {})
+          }
+        } catch {
+          // Never break sharing if reminder creation fails
+        }
+      }
     }
 
     return NextResponse.json({ sharing: toJsonSafeSharing(updated as Record<string, unknown> | null) })

@@ -156,10 +156,13 @@ export function SignupForm({
             if (justVerifiedRef.current) return
             const { data: { user } } = await supabase.auth.getUser()
             if (!user) return
-            window.location.href = '/d/onboarding'
+            // Honour ?next= / ?redirect= so invite links aren't dropped for logged-in users
+            const nextRel = searchParams.get('next') || searchParams.get('redirect')
+            const isSafeRedirect = nextRel && nextRel.startsWith('/')
+            window.location.href = isSafeRedirect && nextRel ? nextRel : '/d/onboarding'
         }
         void checkSession()
-    }, [])
+    }, [searchParams])
 
     // Handle email check (called after Turnstile success) — checks existence only, no OTP sent
     const handleEmailCheckWithOTP = async (token: string) => {
@@ -389,7 +392,14 @@ export function SignupForm({
 
     const inputClass = isSplitLight ? inputLight : inputDark
     const labelClass = isSplitLight ? labelLight : labelDark
-    const signinHref = email.trim() ? `/signin?email=${encodeURIComponent(email.trim())}` : '/signin'
+    const signinHref = (() => {
+        const params = new URLSearchParams()
+        if (email.trim()) params.set('email', email.trim())
+        const nextRel = searchParams.get('next') || searchParams.get('redirect')
+        if (nextRel) params.set('redirect', nextRel)
+        const qs = params.toString()
+        return qs ? `/signin?${qs}` : '/signin'
+    })()
 
     return (
         <div

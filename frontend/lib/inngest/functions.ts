@@ -1118,23 +1118,103 @@ export const sendReminderEmail = inngest.createFunction(
 
             const { createAdminClient } = await import("@/utils/supabase/admin")
             const { sendEmail } = await import("@/lib/email")
+            const { renderReminderEmail } = await import("@/lib/email-templates/reminder")
             const admin = createAdminClient()
             const { data } = await admin.auth.admin.getUserById(event.data.userId)
             const email = data?.user?.email
             if (!email) return { skipped: 'no-email' }
 
             const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
-            const ctaHtml = event.data.ctaUrl
-                ? `<p><a href="${appUrl}${event.data.ctaUrl}">Open client →</a></p>`
-                : ''
-
-            await sendEmail(
-                email,
-                `Follow up today: ${event.data.entityName}`,
-                `<p>Your scheduled follow-up with <strong>${event.data.entityName}</strong> is due today.</p>${ctaHtml}`
-            )
+            const ctaUrl = event.data.ctaUrl ? `${appUrl}${event.data.ctaUrl}` : null
+            const { subject, html } = renderReminderEmail({
+                entityName: event.data.entityName,
+                action: event.data.action,
+                ctaUrl,
+                ctaLabel: 'View →',
+                kind: 'followup',
+            })
+            await sendEmail(email, subject, html)
             return { sent: true }
         })
+
+        return { reminderId: event.data.reminderId }
+    }
+)
+
+// ---------------------------------------------------------------------------
+// Recurring Reminder Email — fan-forward pattern
+// ---------------------------------------------------------------------------
+
+export const sendRecurringReminderEmails = inngest.createFunction(
+    {
+        id: "send-recurring-reminder-emails",
+        triggers: [{ event: "reminder.recurring.scheduled" }],
+        cancelOn: [{
+            event: "reminder.recurring.cancelled",
+            if: "event.data.reminderId == async.data.reminderId",
+        }],
+    },
+    async ({ event, step }: any) => {
+        await step.sleepUntil("wait-for-next-fire", event.data.nextFireAt)
+
+        const result = await step.run("send-and-reschedule", async () => {
+            // Check reminder still exists
+            const personalization = await prisma.userPersonalization.findUnique({
+                where: { userId: event.data.userId },
+                select: { reminders: true },
+            })
+            const items: any[] = Array.isArray(personalization?.reminders)
+                ? (personalization!.reminders as any[])
+                : []
+            const item = items.find((r: any) => r.id === event.data.reminderId)
+            if (!item) return { skipped: 'done' }
+
+            // Re-read firm config — user may have disabled recurring since this was scheduled
+            const { getFirmReminderConfig } = await import('@/lib/actions/firms')
+            const config = await getFirmReminderConfig(event.data.firmId)
+            if (!config.recurring.enabled) return { skipped: 'disabled' }
+
+            // Send email
+            const { createAdminClient } = await import('@/utils/supabase/admin')
+            const { sendEmail } = await import('@/lib/email')
+            const { renderReminderEmail } = await import('@/lib/email-templates/reminder')
+            const admin = createAdminClient()
+            const { data } = await admin.auth.admin.getUserById(event.data.userId)
+            const email = data?.user?.email
+            if (!email) return { skipped: 'no-email' }
+
+            const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
+            const ctaUrl = event.data.ctaUrl ? `${appUrl}${event.data.ctaUrl}` : null
+            const { subject, html } = renderReminderEmail({
+                entityName: event.data.entityName,
+                action: event.data.action,
+                ctaUrl,
+                ctaLabel: 'View →',
+                kind: 'recurring',
+            })
+            await sendEmail(email, subject, html)
+
+            // Compute next fire time
+            const nextFireAt = new Date(event.data.nextFireAt)
+            nextFireAt.setDate(nextFireAt.getDate() + event.data.frequencyDays)
+
+            // Stop if we've passed the due date
+            if (event.data.dueDate) {
+                const dueDate = new Date(event.data.dueDate)
+                if (nextFireAt > dueDate) return { sent: true, stopped: 'past-due' }
+            }
+
+            return { sent: true, nextFireAt: nextFireAt.toISOString() }
+        })
+
+        // Fan-forward: re-emit with updated nextFireAt to continue the chain
+        if (result?.sent && result?.nextFireAt) {
+            const { safeInngestSend } = await import('@/lib/inngest/client')
+            await safeInngestSend('reminder.recurring.scheduled', {
+                ...event.data,
+                nextFireAt: result.nextFireAt,
+            })
+        }
 
         return { reminderId: event.data.reminderId }
     }

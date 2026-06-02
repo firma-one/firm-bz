@@ -24,6 +24,7 @@ export interface EngagementSettingsFormProps {
     initialDescription?: string
     initialKickoffDate?: string | null
     initialDueDate?: string | null
+    initialFollowUpDate?: string | null
     initialStatus?: LwCrmEngagementStatus
     initialContractType?: string
     initialRateOrValue?: string | null
@@ -49,6 +50,7 @@ export function EngagementSettingsForm({
     initialDescription = '',
     initialKickoffDate = null,
     initialDueDate = null,
+    initialFollowUpDate = null,
     initialStatus = 'ACTIVE',
     initialContractType = '',
     initialRateOrValue = null,
@@ -66,6 +68,7 @@ export function EngagementSettingsForm({
     const [description, setDescription] = useState(initialDescription)
     const [kickoffDate, setKickoffDate] = useState<string>(initialKickoffDate ?? '')
     const [dueDate, setDueDate] = useState<string>(initialDueDate ?? '')
+    const [followUpDate, setFollowUpDate] = useState<string>(initialFollowUpDate ?? '')
     const [status, setStatus] = useState<LwCrmEngagementStatus>(initialStatus)
     const [contractType, setContractType] = useState(initialContractType)
     const [rateOrValue, setRateOrValue] = useState(initialRateOrValue ?? '')
@@ -137,6 +140,7 @@ export function EngagementSettingsForm({
                 description,
                 kickoffDate: kickoffDate || null,
                 dueDate: dueDate || null,
+                followUpDate: followUpDate || null,
                 status,
                 contractType: contractType.trim() || null,
                 rateOrValue: rateOrValue.trim() === '' ? null : rateOrValue.trim(),
@@ -333,8 +337,8 @@ export function EngagementSettingsForm({
                 <div className="col-span-2 bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
                     <p className={fieldLabel}>Tracking</p>
 
-                    {/* Start date + End date */}
-                    <div className="grid grid-cols-2 gap-3">
+                    {/* Start date + End date + Follow-up date */}
+                    <div className="grid grid-cols-3 gap-3">
                         <div>
                             <label className={fieldLabel}>
                                 <span className="inline-flex items-center gap-1"><CalendarClock className="h-3 w-3" /> Start date</span>
@@ -346,6 +350,12 @@ export function EngagementSettingsForm({
                                 <span className="inline-flex items-center gap-1"><CalendarCheck className="h-3 w-3" /> End date</span>
                             </label>
                             <DateTimePicker value={dueDate} onChange={setDueDate} placeholder="Select date" disabled={disabled} defaultTime="17:00" />
+                        </div>
+                        <div>
+                            <label className={fieldLabel}>
+                                <span className="inline-flex items-center gap-1"><CalendarClock className="h-3 w-3" /> Follow-up date</span>
+                            </label>
+                            <DateTimePicker value={followUpDate} onChange={setFollowUpDate} placeholder="Select date" disabled={disabled} defaultTime="09:00" />
                         </div>
                     </div>
 

@@ -46,6 +46,11 @@ export const BRAND_NAME = resolveBrandName()
 export const BRAND_PRIMARY_COLOR = resolveBrandColor()
 /** Logo icon + `BrandName` default text color (darker than `BRAND_PRIMARY_COLOR`). */
 export const BRAND_LOGO_COLOR = resolveBrandLogoColor()
+/**
+ * Firma platform chrome color — matches the `firma` Tailwind token and `--primary` CSS var.
+ * This is intentionally NOT overridable per-firm; it identifies the platform itself.
+ */
+export const FIRMA_COLOR = '#069668'
 
 /**
  * Default wordmark gradient (left → mid → right), same as `BrandName` / `app/icon.svg`.

@@ -15,6 +15,7 @@ import { useToast } from "@/components/ui/toast"
 import { uploadSupportAttachment, type AttachmentMeta } from '@/lib/support-attachment-upload'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
+import { FIRMA_COLOR } from '@/config/brand'
 
 interface CreateSupportRequestModalProps {
   firmSlug: string
@@ -44,7 +45,7 @@ const REQUEST_TYPES = [
     id: TicketType.REQUEST,
     label: 'Feature Request',
     icon: Lightbulb,
-    color: '#069668',
+    color: FIRMA_COLOR,
     activeBgColor: '#f0faf6',
     activeBorderColor: '#6ee7c7',
   },

@@ -18,6 +18,7 @@ import { useToast } from '@/components/ui/toast'
 import { uploadSupportAttachment, type AttachmentMeta } from '@/lib/support-attachment-upload'
 import { supabase } from '@/lib/supabase'
 import { formatDistanceToNow } from 'date-fns'
+import { FIRMA_COLOR } from '@/config/brand'
 import {
   Tooltip,
   TooltipContent,
@@ -53,7 +54,7 @@ type PendingAttachment = {
 
 const TYPE_CONFIG: Record<TicketType, { label: string; color: string; bgColor: string; borderColor: string; icon: React.ElementType }> = {
   [TicketType.BUG]:     { label: 'Bug Report',       color: '#f43f5e', bgColor: '#fff1f2', borderColor: '#fda4af', icon: AlertCircle },
-  [TicketType.REQUEST]: { label: 'Feature Request',  color: '#069668', bgColor: '#f0faf6', borderColor: '#6ee7c7', icon: Lightbulb   },
+  [TicketType.REQUEST]: { label: 'Feature Request',  color: FIRMA_COLOR, bgColor: '#f0faf6', borderColor: '#6ee7c7', icon: Lightbulb   },
   [TicketType.ENQUIRY]: { label: 'General Enquiry',  color: '#5A78FF', bgColor: '#f0f3ff', borderColor: '#a5b4fc', icon: HelpCircle  },
 }
 

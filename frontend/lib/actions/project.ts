@@ -34,6 +34,7 @@ export interface CreateProjectData {
     status?: LwCrmEngagementStatus
     startDate?: string | null
     endDate?: string | null
+    followUpDate?: string | null
     contractType?: string
     rateOrValue?: string | number | null
     tags?: string[]
@@ -148,6 +149,7 @@ export async function createEngagement(firmSlug: string, clientSlug: string, dat
     // 5–6. Engagement + members in one transaction (Drive step below must succeed or we roll back)
     const kickoff = data.startDate ? new Date(data.startDate) : null
     const due = data.endDate ? new Date(data.endDate) : null
+    const followUp = data.followUpDate ? new Date(data.followUpDate) : null
     const rateParsed = parseRateOrValue(data.rateOrValue)
     const newProject = await prisma.$transaction(async (tx) => {
         const project = await tx.engagement.create({
@@ -160,6 +162,7 @@ export async function createEngagement(firmSlug: string, clientSlug: string, dat
                 status: (data.status ?? 'ACTIVE') as EngagementStatus,
                 kickoffDate: kickoff,
                 dueDate: due,
+                followUpDate: followUp,
                 contractType: data.contractType?.trim() || null,
                 ...(rateParsed !== undefined ? { rateOrValue: rateParsed } : {}),
                 tags: Array.isArray(data.tags) ? data.tags.filter((t) => typeof t === 'string' && t.trim()) : [],
@@ -237,6 +240,8 @@ export async function createEngagement(firmSlug: string, clientSlug: string, dat
         .meta({ name: newProject.name, slug: newProject.slug })
         .fireAndForget()
 
+    const engCtaUrl = `/d/f/${firmSlug}/c/${clientSlug}/e/${newProject.slug}`
+    const engNote = data.internalMemo ?? null
     upsertFollowUpReminder({
         userId: user.id,
         entityKey: 'platform.engagements.id',
@@ -246,8 +251,37 @@ export async function createEngagement(firmSlug: string, clientSlug: string, dat
         dateValue: due?.toISOString() ?? null,
         entityName: newProject.name,
         firmId: firm.id,
-        ctaUrl: `/d/f/${firmSlug}/c/${clientSlug}/e/${newProject.slug}`,
+        ctaUrl: engCtaUrl,
+        note: engNote,
     }).catch(() => {})
+    if (kickoff && kickoff > new Date()) {
+        upsertFollowUpReminder({
+            userId: user.id,
+            entityKey: 'platform.engagements.id',
+            entityValue: newProject.id,
+            action: 'Engagement kickoff',
+            dateKey: 'platform.engagements.kickoffDate',
+            dateValue: kickoff.toISOString(),
+            entityName: newProject.name,
+            firmId: firm.id,
+            ctaUrl: engCtaUrl,
+            note: engNote,
+        }).catch(() => {})
+    }
+    if (followUp) {
+        upsertFollowUpReminder({
+            userId: user.id,
+            entityKey: 'platform.engagements.id',
+            entityValue: newProject.id,
+            action: 'Follow-up',
+            dateKey: 'platform.engagements.followUpDate',
+            dateValue: followUp.toISOString(),
+            entityName: newProject.name,
+            firmId: firm.id,
+            ctaUrl: engCtaUrl,
+            note: engNote,
+        }).catch(() => {})
+    }
 
     revalidatePath(`/d/f/${firmSlug}/c/${clientSlug}`)
     return { id: newProject.id, slug: newProject.slug, name: newProject.name }
@@ -339,6 +373,7 @@ export async function updateEngagement(
         description?: string
         kickoffDate?: string | null
         dueDate?: string | null
+        followUpDate?: string | null
         status?: LwCrmEngagementStatus
         contractType?: string | null
         rateOrValue?: string | number | null
@@ -363,6 +398,7 @@ export async function updateEngagement(
 
     const parsedKickoff = data.kickoffDate === undefined ? undefined : (data.kickoffDate ? new Date(data.kickoffDate) : null)
     const parsedDue = data.dueDate === undefined ? undefined : (data.dueDate ? new Date(data.dueDate) : null)
+    const parsedFollowUp = data.followUpDate === undefined ? undefined : (data.followUpDate ? new Date(data.followUpDate) : null)
     const parsedRate = parseRateOrValue(data.rateOrValue)
 
     const existingSettings = (project as any).settings as Record<string, unknown> ?? {}
@@ -373,6 +409,7 @@ export async function updateEngagement(
             ...(data.description !== undefined && { description: data.description }),
             ...(parsedKickoff !== undefined && { kickoffDate: parsedKickoff }),
             ...(parsedDue !== undefined && { dueDate: parsedDue }),
+            ...(parsedFollowUp !== undefined && { followUpDate: parsedFollowUp }),
             ...(data.status !== undefined && { status: data.status as EngagementStatus }),
             ...(data.contractType !== undefined && { contractType: data.contractType?.trim() || null }),
             ...(parsedRate !== undefined && { rateOrValue: parsedRate }),
@@ -461,22 +498,59 @@ export async function updateEngagement(
         logger.warn('Failed to create due date notifications', e as Error)
     }
 
-    if (parsedDue !== undefined && user) {
+    if ((parsedDue !== undefined || parsedKickoff !== undefined || parsedFollowUp !== undefined) && user) {
         const engDetails = await prisma.engagement.findFirst({
             where: { id: projectId },
-            select: { name: true, slug: true },
+            select: { name: true, slug: true, settings: true },
         })
-        upsertFollowUpReminder({
-            userId: user.id,
-            entityKey: 'platform.engagements.id',
-            entityValue: projectId,
-            action: 'Engagement due',
-            dateKey: 'platform.engagements.dueDate',
-            dateValue: parsedDue?.toISOString() ?? null,
-            entityName: engDetails?.name ?? '',
-            firmId: project.firmId,
-            ctaUrl: `/d/f/${firmSlug}/c/${clientSlug}/e/${engDetails?.slug ?? ''}`,
-        }).catch(() => {})
+        const engCtaUrl = `/d/f/${firmSlug}/c/${clientSlug}/e/${engDetails?.slug ?? ''}`
+        const engNote = data.internalMemo !== undefined
+            ? data.internalMemo
+            : ((engDetails?.settings as any)?.internalMemo ?? null)
+
+        if (parsedDue !== undefined) {
+            upsertFollowUpReminder({
+                userId: user.id,
+                entityKey: 'platform.engagements.id',
+                entityValue: projectId,
+                action: 'Engagement due',
+                dateKey: 'platform.engagements.dueDate',
+                dateValue: parsedDue?.toISOString() ?? null,
+                entityName: engDetails?.name ?? '',
+                firmId: project.firmId,
+                ctaUrl: engCtaUrl,
+                note: engNote,
+            }).catch(() => {})
+        }
+        if (parsedKickoff !== undefined) {
+            const kickoffFuture = parsedKickoff && parsedKickoff > new Date()
+            upsertFollowUpReminder({
+                userId: user.id,
+                entityKey: 'platform.engagements.id',
+                entityValue: projectId,
+                action: 'Engagement kickoff',
+                dateKey: 'platform.engagements.kickoffDate',
+                dateValue: kickoffFuture ? parsedKickoff!.toISOString() : null,
+                entityName: engDetails?.name ?? '',
+                firmId: project.firmId,
+                ctaUrl: engCtaUrl,
+                note: engNote,
+            }).catch(() => {})
+        }
+        if (parsedFollowUp !== undefined) {
+            upsertFollowUpReminder({
+                userId: user.id,
+                entityKey: 'platform.engagements.id',
+                entityValue: projectId,
+                action: 'Follow-up',
+                dateKey: 'platform.engagements.followUpDate',
+                dateValue: parsedFollowUp?.toISOString() ?? null,
+                entityName: engDetails?.name ?? '',
+                firmId: project.firmId,
+                ctaUrl: engCtaUrl,
+                note: engNote,
+            }).catch(() => {})
+        }
     }
 
     revalidatePath(`/d/f/${firmSlug}/c/${clientSlug}`)

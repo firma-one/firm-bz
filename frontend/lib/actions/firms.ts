@@ -376,9 +376,31 @@ export interface FirmCurrency {
 /**
  * Update firm. Firm admin only.
  */
+export type FirmReminderEmailConfig = {
+    immediateOnCreate: boolean
+    recurring: {
+        enabled: boolean
+        frequencyDays: number
+        startDaysBeforeDue: number
+    }
+}
+
+export async function getFirmReminderConfig(firmId: string): Promise<FirmReminderEmailConfig> {
+    const firm = await prisma.firm.findUnique({ where: { id: firmId }, select: { settings: true } })
+    const raw = (firm?.settings as any)?.reminderEmailConfig ?? {}
+    return {
+        immediateOnCreate: raw.immediateOnCreate ?? true,
+        recurring: {
+            enabled: raw.recurring?.enabled ?? true,
+            frequencyDays: raw.recurring?.frequencyDays ?? 1,
+            startDaysBeforeDue: raw.recurring?.startDaysBeforeDue ?? 7,
+        },
+    }
+}
+
 export async function updateFirm(
     firmSlug: string,
-    data: { name?: string; branding?: FirmBranding; currency?: FirmCurrency; enableBetaFeatures?: boolean; internalMemo?: string | null; industry?: string | null; companySizeBracket?: string | null; companyWebsite?: string | null; linkedInUrl?: string | null; billingAddress?: string | null; notes?: string | null; allowDomainAccess?: boolean; allowedEmailDomain?: string | null }
+    data: { name?: string; branding?: FirmBranding; currency?: FirmCurrency; enableBetaFeatures?: boolean; internalMemo?: string | null; industry?: string | null; companySizeBracket?: string | null; companyWebsite?: string | null; linkedInUrl?: string | null; billingAddress?: string | null; notes?: string | null; allowDomainAccess?: boolean; allowedEmailDomain?: string | null; reminderEmailConfig?: FirmReminderEmailConfig }
 ): Promise<void> {
     const supabase = await createClient()
     const { data: { user }, error } = await supabase.auth.getUser()
@@ -393,7 +415,7 @@ export async function updateFirm(
     let payload: any = {}
     if (data.name !== undefined) payload.name = data.name
 
-    if (data.branding !== undefined || data.currency !== undefined || data.enableBetaFeatures !== undefined) {
+    if (data.branding !== undefined || data.currency !== undefined || data.enableBetaFeatures !== undefined || data.reminderEmailConfig !== undefined || data.internalMemo !== undefined || data.industry !== undefined || data.companySizeBracket !== undefined || data.companyWebsite !== undefined || data.linkedInUrl !== undefined || data.billingAddress !== undefined || data.notes !== undefined) {
         const current = (firm.settings as Record<string, unknown>) || {}
         if (data.branding !== undefined) {
             const existing = (current.branding as Record<string, unknown>) ?? {}
@@ -439,6 +461,9 @@ export async function updateFirm(
         }
         if (data.notes !== undefined) {
             payload.settings = { ...(payload.settings ?? current), notes: data.notes }
+        }
+        if (data.reminderEmailConfig !== undefined) {
+            payload.settings = { ...(payload.settings ?? current), reminderEmailConfig: data.reminderEmailConfig }
         }
     }
 

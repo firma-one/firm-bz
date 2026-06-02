@@ -10,6 +10,11 @@
 
 - [ ] **Connectors** — restore the functionality of setting up the Workspace on Google Shared Drive in addition to My Drive
 
+- [ ] **Connector: Replace Owning Account** — [plan](../../.claude/plans/connector-replace-owner.md)
+  - Let a firm admin authenticate as a different Google account on an existing Connector
+  - Old connector revoked + de-linked; new connector linked to firm; Drive workspace structure preserved
+  - UI: "Replace account" button with confirmation dialog alongside existing Reconnect/Disconnect
+
 - [x] **Finalize Document** — [plan](/.claude/plans/update-docs-mvp-todo-md-we-need-structured-hinton.md)
   - Client accepts the document → status set to `Finalized`; document becomes read-only
   - Engagement Lead can unlock it (revert to `Draft`) if revisions are needed
@@ -28,12 +33,22 @@
 
 - [ ] **Cleanup: remove Staging & Confidential folder creation from onboarding** — these folders are no longer surfaced in the UI; remove the Drive-side provisioning code that creates them during workspace setup
 
+- [ ] **Workspace Picker Route** — [plan](../../.claude/plans/workspace-picker-route.md)
+  - Move "Choose Your Workspace" (onboarding step 0) from `/d/onboarding` to `/d/f/`
+  - Returning users with multiple firms get AppSidebar chrome instead of OnboardingBar
+
 ## Reminders
 
-- [ ] **Firm-Level Reminder Email Configuration** — [plan](../../.claude/plans/firm-reminder-email-config.md)
+- [x] **Firm-Level Reminder Email Configuration** — [plan](../../.claude/plans/firm-reminder-email-config.md)
   - Immediate notification on reminder creation (sync email)
   - Recurring reminder emails via Inngest fan-forward (every N days, starting X days before due)
   - Firm Settings card to configure both
+
+- [x] **Manual Reminders on Documents & Comments**
+  - SetupReminderModal — reusable portal component with multi-select assignees, date picker, "Me" row, pre-populates existing reminders
+  - Per-comment CalendarClock button in Comments pane
+  - "Setup Reminder" in document action menu (⋯)
+  - Branded HTML reminder email template (`lib/email-templates/`)
 
 ## AI Features — [plan](../../.claude/plans/ai-insights-and-business-features.md)
 

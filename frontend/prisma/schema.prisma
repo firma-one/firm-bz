@@ -401,6 +401,7 @@ model Engagement {
   connectorRootFolderId String?
   kickoffDate           DateTime? @db.Timestamptz(6)
   dueDate               DateTime? @db.Timestamptz(6)
+  followUpDate          DateTime? @db.Timestamptz(6)
   status                EngagementStatus @default(ACTIVE)
   contractType          String?
   rateOrValue           String?  // encrypted; parse with parseFloat() on read
@@ -740,6 +741,7 @@ model DocCommentMessage {
 
   content           String
   reactions         Json     @default("{}")
+  settings          Json     @default("{}")
 
   firm              Firm           @relation(fields: [firmId], references: [id], onDelete: Cascade)
   client            Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
