@@ -302,7 +302,7 @@ export async function importDetectedOrganization(
     firmFolderId: detectedOrg.folderId,
     allowDomainAccess: resolvedAllowDomain,
     sandboxOnly: isSandbox,
-    billingSharesSubscriptionFromFirmId: billingAnchorId ?? undefined,
+    anchorFirmId: billingAnchorId ?? undefined,
   })
 
   // Set the slug correctly if it differs from generated

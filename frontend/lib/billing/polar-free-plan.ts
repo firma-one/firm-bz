@@ -3,7 +3,6 @@ import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
 import { resolveBillingAnchorFirmId } from '@/lib/billing/billing-group'
 import { type PricingModel, pricingModelFromRecurringFlag } from '@/lib/billing/pricing-model'
-import { getDefaultCapsForPlanColumn } from '@/lib/billing/plan-default-caps'
 import { refreshBillingPlanForFirmGroupUsers } from '@/lib/billing/billing-user-session-sync'
 import { resolveSubscriptionAuditUserId } from '@/lib/billing/subscription-audit'
 import { subscriptionAccessStatusLabel } from '@/lib/billing/active-billing-subscription'
@@ -72,7 +71,6 @@ async function persistFirmWithLifetimeFreePlan(
     const pricingModel = pricingModelFromRecurringFlag(polarProduct.isRecurring)
     const polarProductSnapshot = polarEntityToJsonSnapshot(polarProduct)
     const polarPlanMetadataFlat = polarEntityToJsonSnapshot(polarProduct.metadata ?? {})
-    const sandboxCaps = getDefaultCapsForPlanColumn('sandbox')
     await prisma.$transaction(async (tx) => {
         const auditUserId = await resolveSubscriptionAuditUserId(tx, anchorFirmId, actorUserId)
 
@@ -129,29 +127,12 @@ async function persistFirmWithLifetimeFreePlan(
                 (metadata.source === 'polar_free_product_sync' &&
                     existingActiveSameCustomer.plan?.trim() === planLabel)
             if (alreadyFreeProduct) {
-                await tx.firm.update({
-                    where: { id: anchorFirmId },
-                    data: {
-                        billingActiveEngagementCap: sandboxCaps.activeEngagementCap,
-                        billingGroupFirmCap: sandboxCaps.firmGroupCap,
-                        billingCapsLocked: false,
-                    },
-                })
-                logger.info('[polar-free-plan] Free plan row already active for customer; refreshed firm caps only', {
+                logger.info('[polar-free-plan] Free plan row already active for customer; no-op', {
                     anchorFirmId,
                 })
                 return
             }
         }
-
-        await tx.firm.update({
-            where: { id: anchorFirmId },
-            data: {
-                billingActiveEngagementCap: sandboxCaps.activeEngagementCap,
-                billingGroupFirmCap: sandboxCaps.firmGroupCap,
-                billingCapsLocked: false,
-            },
-        })
 
         await tx.subscription.updateMany({
             where: {
@@ -182,7 +163,8 @@ async function persistFirmWithLifetimeFreePlan(
                 settings: {
                     metadata: {
                         ...polarPlanMetadataFlat,
-                        entitledEngagements: sandboxCaps.activeEngagementCap,
+                        entitledFirms: '1',
+                        entitledEngagements: 100_000,
                         source: 'polar_free_product_sync',
                         polarProductId: polarProduct.id,
                         polarProduct: polarProductSnapshot,

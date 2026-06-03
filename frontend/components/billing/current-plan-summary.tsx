@@ -109,7 +109,7 @@ export function CurrentPlanSummary({
                 <div className="flex w-full shrink-0 flex-col sm:w-auto sm:items-end">
                     <Button
                         type="button"
-                        variant="greenCta"
+                        variant="blackCta"
                         className="h-auto py-1.5 px-4 w-full min-w-[6.5rem] gap-2 rounded-[2px] sm:w-auto text-[10px] font-headline font-bold tracking-widest uppercase"
                         disabled={portalLoading}
                         onClick={() => void openBillingPortal()}

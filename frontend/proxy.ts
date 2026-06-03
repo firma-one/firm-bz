@@ -143,12 +143,10 @@ export async function proxy(request: NextRequest) {
             // Clear session and redirect to login to rebuild cache with new code
             await supabase.auth.signOut()
 
-            // Create redirect response (normalize /dash to /d so post-login goes to /d)
+            // Always redirect to /d after re-login so resolveDefaultFirmLandingPath
+            // picks the correct workspace rather than restoring a stale path.
             const loginUrl = new URL('/signin', request.url)
-            const redirectPath = pathname === '/dash' || pathname.startsWith('/dash/')
-                ? '/d' + (pathname === '/dash' ? '' : pathname.slice(5))
-                : pathname
-            loginUrl.searchParams.set('redirect', redirectPath)
+            loginUrl.searchParams.set('redirect', '/d')
             loginUrl.searchParams.set('reason', 'deployment')
             const redirectResponse = NextResponse.redirect(loginUrl)
 

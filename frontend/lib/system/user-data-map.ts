@@ -203,7 +203,7 @@ function buildFindings(params: {
                 recommendedActionType: 'repair',
                 sqlPreview: [
                     '-- Repoint to a valid anchor or clear broken anchor relationship',
-                    `UPDATE platform.firms SET "anchorFirmId" = NULL, "billingSharesSubscriptionFromFirmId" = NULL WHERE "id" = '${firm.id}'::uuid;`,
+                    `UPDATE platform.firms SET "anchorFirmId" = NULL WHERE "id" = '${firm.id}'::uuid;`,
                 ].join('\n'),
             })
         }

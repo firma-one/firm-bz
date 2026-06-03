@@ -39,7 +39,7 @@ interface FirmSelectorProps {
 
 export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className, compact }: FirmSelectorProps) {
     const { user } = useAuth()
-    const { canCreateAdditionalFirm, loadingEntitlement } = useCanCreateAdditionalFirm(user?.id)
+    const { canCreateAdditionalFirm, loadingEntitlement, gateReason, gateCap } = useCanCreateAdditionalFirm(user?.id)
     const addFirmDisabled = !user?.id || loadingEntitlement || !canCreateAdditionalFirm
     const showAddFirmUpgradeHint = Boolean(user?.id) && !loadingEntitlement && !canCreateAdditionalFirm
 
@@ -181,20 +181,31 @@ export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className,
                                 <SquarePlus className="h-4 w-4 shrink-0 text-[#45474c] translate-y-0.5" aria-hidden />
                                 <div className="min-w-0 flex-1 text-left">
                                     <p className="text-sm font-medium text-[#1b1b1d] leading-snug">
-                                        {upgradeCopy.dropdownHeadline}
+                                        {gateReason === 'at_cap' ? 'Firm limit reached' : upgradeCopy.dropdownHeadline}
                                     </p>
                                     <p className="text-xs text-[#45474c] leading-snug mt-1.5">
-                                        {upgradeCopy.dropdownBody}
+                                        {gateReason === 'at_cap'
+                                            ? `Your plan allows ${gateCap ?? firms.length} firm workspace${(gateCap ?? firms.length) === 1 ? '' : 's'}. Contact us to increase your limit.`
+                                            : upgradeCopy.dropdownBody}
                                     </p>
-                                    <Link
-                                        href={buildBillingPageHref({
-                                            firmSlug: firmForBilling?.slug ?? null,
-                                            pathname: pathname ?? null,
-                                        })}
-                                        className="mt-2 inline-block text-xs font-semibold text-primary hover:text-primary underline-offset-2 hover:underline text-left"
-                                    >
-                                        {upgradeCopy.dropdownAction}
-                                    </Link>
+                                    {gateReason === 'at_cap' ? (
+                                        <a
+                                            href="mailto:support@firmaone.com"
+                                            className="mt-2 inline-block text-xs font-semibold text-primary underline-offset-2 hover:underline text-left"
+                                        >
+                                            Contact support
+                                        </a>
+                                    ) : (
+                                        <Link
+                                            href={buildBillingPageHref({
+                                                firmSlug: firmForBilling?.slug ?? null,
+                                                pathname: pathname ?? null,
+                                            })}
+                                            className="mt-2 inline-block text-xs font-semibold text-primary hover:text-primary underline-offset-2 hover:underline text-left"
+                                        >
+                                            {upgradeCopy.dropdownAction}
+                                        </Link>
+                                    )}
                                 </div>
                             </div>
                         </div>

@@ -57,19 +57,7 @@ export function useSignInFlow() {
           router.push(redirectTo)
           return
         }
-        try {
-          const response = await fetch('/api/firms/default-slug', { cache: 'no-store' })
-          if (response.ok) {
-            const data = await response.json()
-            if (data.slug && data.onboardingComplete) {
-              router.push(`/d/f/${data.slug}`)
-              return
-            }
-          }
-        } catch (err) {
-          console.error('Failed to fetch default org slug:', err)
-        }
-        router.push('/d/onboarding')
+        router.push('/d')
       }
     }
     checkSession()
@@ -261,19 +249,7 @@ export function useSignInFlow() {
 
         await new Promise((resolve) => setTimeout(resolve, 150))
 
-        try {
-          const response = await fetch('/api/firms/default-slug', { cache: 'no-store' })
-          if (response.ok) {
-            const data = await response.json()
-            if (data.slug && data.onboardingComplete) {
-              window.location.href = `/d/f/${data.slug}`
-              return
-            }
-          }
-        } catch {
-          /* fall through */
-        }
-        window.location.href = '/d/onboarding'
+        window.location.href = '/d'
       } else {
         setError('Failed to establish session')
         setLoading(false)

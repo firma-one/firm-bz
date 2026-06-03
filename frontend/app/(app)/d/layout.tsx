@@ -1,5 +1,6 @@
 import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
+import { isRedirectError } from 'next/dist/client/components/redirect-error'
 import { getUserFirms, resolveDefaultFirmLandingPath } from '@/lib/actions/firms'
 import { createClient } from '@/utils/supabase/server'
 import { isSystemAdminEmail } from '@/lib/system/admin-check'
@@ -35,7 +36,8 @@ export default async function DLayout({
             try {
                 const path = await resolveDefaultFirmLandingPath(user.id)
                 if (path) redirect(path)
-            } catch {
+            } catch (e) {
+                if (isRedirectError(e)) throw e
                 redirect('/d/onboarding')
             }
         }

@@ -117,9 +117,9 @@ export function AddFirmModal({ trigger, open: controlledOpen, onOpenChange: cont
     const router = useRouter()
     const pathname = usePathname()
     const billingHref = (() => {
-        const m = pathname?.match(/\/d\/f\/([^/]+)/)
+        const m = pathname?.match(/\/d\/(?:f|o)\/([^/]+)/)
         const slug = m?.[1]
-        if (!slug) return '/d/billing'
+        if (!slug) return `/d/billing?returnTo=%2Fd%2Ff%2F`
         const returnPath = validateCheckoutReturnTo(pathname ?? null) ?? `/d/f/${slug}`
         return buildAppBillingHref({ firmSlug: slug, returnPath })
     })()

@@ -31,12 +31,40 @@ export async function getActiveSubscriptionMetadataForFirm(firmId: string): Prom
 }
 
 /**
+ * Parse entitledEngagements from subscription metadata.
+ * Handles old Polar typo key 'entitiledEngagements' for rows written before the fix.
  * Returns null when unlimited (-1) or not configured.
  */
-export async function getEntitledEngagementsCapForFirm(firmId: string): Promise<number | null> {
-    const metadata = await getActiveSubscriptionMetadataForFirm(firmId)
-    const parsed = parseIntLike(metadata.entitledEngagements)
+export function parseEntitledEngagements(meta: JsonRecord): number | null {
+    const raw = meta['entitledEngagements'] ?? meta['entitiledEngagements']
+    const parsed = parseIntLike(raw)
     if (parsed == null || parsed < 0) return null
     return parsed
 }
 
+/**
+ * Parse entitledFirms from subscription metadata.
+ * Returns null when "0" (free sandbox) or not configured — callers use sandbox defaults.
+ */
+export function parseEntitledFirms(meta: JsonRecord): number | null {
+    const raw = meta['entitledFirms']
+    const parsed = parseIntLike(raw)
+    if (parsed == null || parsed <= 0) return null
+    return parsed
+}
+
+/**
+ * Returns null when unlimited (-1) or not configured.
+ */
+export async function getEntitledEngagementsCapForFirm(firmId: string): Promise<number | null> {
+    const metadata = await getActiveSubscriptionMetadataForFirm(firmId)
+    return parseEntitledEngagements(metadata)
+}
+
+/**
+ * Returns null when not configured or free sandbox (entitledFirms=0).
+ */
+export async function getEntitledFirmsCapForFirm(firmId: string): Promise<number | null> {
+    const metadata = await getActiveSubscriptionMetadataForFirm(firmId)
+    return parseEntitledFirms(metadata)
+}

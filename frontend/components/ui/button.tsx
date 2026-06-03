@@ -13,9 +13,9 @@ const buttonVariants = cva(
           "border border-transparent bg-slate-800 text-white shadow-[0_1px_2px_rgba(15,23,42,0.08),0_3px_10px_-4px_rgba(15,23,42,0.12)] hover:bg-slate-700 hover:text-white hover:shadow-[0_2px_8px_-2px_rgba(15,23,42,0.14),0_1px_3px_rgba(15,23,42,0.08)] focus-visible:border-transparent focus-visible:bg-slate-700 focus-visible:text-white focus-visible:ring-2 focus-visible:ring-slate-400/45 focus-visible:ring-offset-2 active:bg-slate-900 active:scale-95 active:shadow-[inset_0_2px_4px_rgba(15,23,42,0.08)]",
         greenCta:
           "rounded-[2px] border-0 bg-primary text-white shadow-sm hover:bg-primary hover:brightness-110 hover:shadow-[0_6px_16px_-4px_rgba(0,0,0,0.20),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 active:shadow-sm transition-all",
-        /** Outline by default; hover → dark slate (no light sweep — matches checkout family) */
+        /** Dark CTA — matches blackCta family, used for Manage Subscription on active plan cards */
         manageBillingCta:
-          "border border-slate-300/80 bg-slate-50 text-slate-900 shadow-[0_1px_2px_rgba(15,23,42,0.06)] hover:!border-slate-800 hover:!bg-slate-800 hover:!text-slate-50 hover:shadow-[0_2px_10px_-4px_rgba(15,23,42,0.18)] focus-visible:ring-2 focus-visible:ring-slate-500/45 focus-visible:ring-offset-2 active:scale-95 active:!border-slate-900 active:!bg-slate-900 active:!text-slate-50 active:shadow-[inset_0_2px_4px_rgba(0,0,0,0.18)]",
+          "border border-transparent bg-slate-800 text-white shadow-[0_1px_2px_rgba(15,23,42,0.08),0_3px_10px_-4px_rgba(15,23,42,0.12)] hover:bg-slate-700 hover:text-white hover:shadow-[0_2px_8px_-2px_rgba(15,23,42,0.14),0_1px_3px_rgba(15,23,42,0.08)] focus-visible:ring-2 focus-visible:ring-slate-400/45 focus-visible:ring-offset-2 active:bg-slate-900 active:scale-95 active:shadow-[inset_0_2px_4px_rgba(15,23,42,0.08)]",
         destructive:
           "bg-red-500 text-white ring-1 ring-inset ring-white/10 shadow-[0_1px_0_0_rgba(255,255,255,0.1)_inset,0_1px_2px_rgba(15,23,42,0.06),0_4px_12px_-4px_rgba(220,38,38,0.14)] hover:brightness-105 active:scale-95 active:shadow-[inset_0_2px_5px_rgba(0,0,0,0.12)]",
         outline: "border border-gray-300 bg-white shadow-sm hover:bg-gray-50 active:scale-95",

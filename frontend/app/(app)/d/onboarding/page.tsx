@@ -7,15 +7,10 @@ import { useAuth } from "@/lib/auth-context"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
-import { CheckCircle2, ArrowRight, ArrowLeft, Building2, LogIn, Lock, AlertCircle, Users, Briefcase, HardDrive, FolderOpen, Folder, SquarePlus, Info, Copy, Check, Loader2, Cloud } from "lucide-react"
+import { CheckCircle2, ArrowRight, ArrowLeft, Building2, Lock, AlertCircle, Users, Briefcase, HardDrive, FolderOpen, Folder, SquarePlus, Info, Copy, Check, Loader2, Cloud } from "lucide-react"
 import { GoogleDriveIcon } from "@/components/ui/google-drive-icon"
 import { GoogleSharedDriveIcon } from "@/components/ui/google-shared-drive-icon"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import {
-    joinOrganizationByDomain,
-    type DomainOnboardingOptions,
-    type DomainOrgOption
-} from "@/lib/actions/domain-onboarding"
 import { useOnboarding } from "@/lib/onboarding-context"
 import { SANDBOX_HIERARCHY, SANDBOX_FIRM_NAME_FALLBACK } from "@/lib/services/sample-file-service"
 import { buildDefaultSandboxFirmName } from "@/lib/onboarding/sandbox-firm-name"
@@ -278,10 +273,6 @@ const OnboardingContent = () => {
     const [error, setError] = useState<string | null>(null)
     const [rootFolderId, setRootFolderId] = useState('')
 
-    // Step 0: Domain Choice
-    const [domainOptions, setDomainOptions] = useState<DomainOnboardingOptions | null>(null)
-    const [domainJoiningId, setDomainJoiningId] = useState<string | null>(null)
-    const [domainError, setDomainError] = useState<string | null>(null)
     const [selectionMode, setSelectionMode] = useState<'whole' | 'specific'>('specific')
 
     // Step 3: Google Drive connection (mandatory)
@@ -924,34 +915,9 @@ const OnboardingContent = () => {
                                     // ignore
                                 }
 
-                                // If onboarding is complete, show domain choice (Step 0) to continue or create new
+                                // Onboarding complete → go to workspace picker or completed screen
                                 if (onboarding?.isComplete || workspaceReady) {
-                                    try {
-                                        const domainRes = await fetch('/api/onboarding/domain-options', {
-                                            headers: { 'Authorization': `Bearer ${token}` }
-                                        })
-                                        if (domainRes.ok) {
-                                            const opts = await domainRes.json()
-                                            if (
-                                                opts &&
-                                                ((opts.orgsToJoin?.length ?? 0) > 0 ||
-                                                    (opts.orgsAlreadyIn?.length ?? 0) > 0)
-                                            ) {
-                                                setDomainOptions(opts)
-                                                setStep(0) // Show domain choice screen
-                                                setOnboarding(true, 0)
-                                            } else {
-                                                // Onboarding complete, no domain options → show completed screen then redirect
-                                                setStep(-1)
-                                            }
-                                        } else {
-                                            // Can't load domain options → still completed
-                                            setStep(-1)
-                                        }
-                                    } catch (err) {
-                                        logger.error('Failed to load domain options', err as Error)
-                                        setStep(-1)
-                                    }
+                                    setStep(-1)
                                 } else {
                                     const firmOb = (onboarding || {}) as Record<string, unknown>
                                     const flowV = Number(firmOb.onboardingFlowVersion) || 2
@@ -1083,33 +1049,6 @@ const OnboardingContent = () => {
         }
     }, [step, isConnected, rootFolderId])
 
-    // Fetch Domain Options when step is 0
-    useEffect(() => {
-        if (step === 0 && !domainOptions) {
-            const fetchOptions = async () => {
-                try {
-                    const token = await getAccessToken()
-                    if (!token) {
-                        setDomainOptions(null)
-                        return
-                    }
-                    const res = await fetch('/api/onboarding/domain-options', {
-                        headers: { 'Authorization': `Bearer ${token}` }
-                    })
-                    if (res.ok) {
-                        const opts = await res.json()
-                        setDomainOptions(opts || null)
-                    } else {
-                        setDomainOptions(null)
-                    }
-                } catch (err) {
-                    logger.error("Failed to fetch domain options", err as Error)
-                    setDomainOptions(null)
-                }
-            }
-            fetchOptions()
-        }
-    }, [step, domainOptions])
 
     useEffect(() => {
         if (step === 1 || step === 2) {
@@ -1347,135 +1286,6 @@ const OnboardingContent = () => {
                         {/* Onboarding Already Completed — redirect guard */}
                         {step === -1 && (
                             <AlreadyCompletedScreen onGoToDashboard={() => void handleFinish()} />
-                        )}
-
-                        {/* Domain Choice Screen (Step 0) */}
-                        {step === 0 && domainOptions && (
-                            <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-                                <div className="mb-6">
-                                    <h1 className="font-headline text-3xl font-bold text-[#1b1b1d] mb-2">Choose your workspace</h1>
-                                    <p className="text-[0.8125rem] text-[#45474c]">
-                                        Your email is part of an organization that uses {BRAND_NAME}
-                                    </p>
-                                </div>
-
-                                {user?.email && (
-                                    <div className="bg-[#f9f9fb] border border-[#e5e7eb] rounded-[2px] px-4 py-3 mb-8 flex items-center gap-3">
-                                        <div className="h-8 w-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0 text-primary font-bold text-xs">
-                                            {user.email.charAt(0).toUpperCase()}
-                                        </div>
-                                        <p className="text-[0.8125rem] text-[#45474c]">{user.email}</p>
-                                    </div>
-                                )}
-
-                                {/* Already-in orgs as cards */}
-                                {domainOptions.orgsAlreadyIn.length > 0 && (
-                                    <div className="grid grid-cols-1 gap-3 mb-6 sm:grid-cols-2">
-                                        {domainOptions.orgsAlreadyIn.map((org: DomainOrgOption) => (
-                                            <button
-                                                key={org.id}
-                                                type="button"
-                                                className="group relative flex flex-col gap-4 p-5 rounded-[2px] border border-[#e5e7eb] bg-white hover:border-primary/40 hover:shadow-md text-left transition-all"
-                                                onClick={() => router.push(`/d/f/${org.slug}`)}
-                                            >
-                                                <div className="flex items-start justify-between">
-                                                    <div className="h-12 w-12 rounded-[2px] bg-[#f9f9fb] border border-[#e5e7eb] flex items-center justify-center flex-shrink-0">
-                                                        <Building2 className="h-6 w-6 text-[#45474c]" />
-                                                    </div>
-                                                    <ArrowRight className="h-4 w-4 text-[#45474c]/30 group-hover:text-primary transition-colors mt-1" />
-                                                </div>
-                                                <div>
-                                                    <p className="font-bold text-[#1b1b1d] text-base leading-tight mb-1">{org.name}</p>
-                                                    <p className="text-xs text-[#45474c]/70">You're already a member</p>
-                                                </div>
-                                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-primary bg-primary/10 px-2 py-0.5 rounded-sm w-fit">
-                                                    Continue <ArrowRight className="h-2.5 w-2.5" />
-                                                </span>
-                                            </button>
-                                        ))}
-                                    </div>
-                                )}
-
-                                {domainOptions.orgsToJoin.length > 0 && (
-                                    <>
-                                        {domainOptions.orgsAlreadyIn.length > 0 && (
-                                            <div className="relative mb-6">
-                                                <div className="absolute inset-0 flex items-center">
-                                                    <div className="w-full border-t border-[#e5e7eb]" />
-                                                </div>
-                                                <div className="relative flex justify-center text-xs">
-                                                    <span className="px-2 bg-white text-[#45474c] text-xs">or join</span>
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        <div className="grid grid-cols-1 gap-3 mb-6 sm:grid-cols-2">
-                                            {domainOptions.orgsToJoin.map((org: DomainOrgOption) => (
-                                                <button
-                                                    key={org.id}
-                                                    type="button"
-                                                    disabled={domainJoiningId !== null}
-                                                    className="group relative flex flex-col gap-4 p-5 rounded-[2px] border border-[#e5e7eb] bg-white hover:border-primary/40 hover:shadow-md text-left transition-all disabled:opacity-50"
-                                                    onClick={async () => {
-                                                        setDomainJoiningId(org.id)
-                                                        setDomainError(null)
-                                                        const result = await joinOrganizationByDomain(org.id)
-                                                        if (result.ok) {
-                                                            router.push(`/d/f/${result.slug}`)
-                                                        } else {
-                                                            setDomainError(result.error)
-                                                            setDomainJoiningId(null)
-                                                        }
-                                                    }}
-                                                >
-                                                    <div className="flex items-start justify-between">
-                                                        <div className="h-12 w-12 rounded-[2px] bg-[#f9f9fb] border border-[#e5e7eb] flex items-center justify-center flex-shrink-0">
-                                                            {domainJoiningId === org.id ? (
-                                                                <LoadingSpinner size="sm" />
-                                                            ) : (
-                                                                <LogIn className="h-6 w-6 text-[#45474c]" />
-                                                            )}
-                                                        </div>
-                                                        <ArrowRight className="h-4 w-4 text-[#45474c]/30 group-hover:text-primary transition-colors mt-1" />
-                                                    </div>
-                                                    <div>
-                                                        <p className="font-bold text-[#1b1b1d] text-base leading-tight mb-1">{org.name}</p>
-                                                        <p className="text-xs text-[#45474c]/70">Request access to join</p>
-                                                    </div>
-                                                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-[#45474c] bg-[#f9f9fb] border border-[#e5e7eb] px-2 py-0.5 rounded-sm w-fit">
-                                                        Join workspace
-                                                    </span>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </>
-                                )}
-
-                                <div className="relative mb-6">
-                                    <div className="absolute inset-0 flex items-center">
-                                        <div className="w-full border-t border-[#e5e7eb]" />
-                                    </div>
-                                    <div className="relative flex justify-center text-xs">
-                                        <span className="px-2 bg-white text-[#45474c] text-xs">or</span>
-                                    </div>
-                                </div>
-
-                                <button
-                                    type="button"
-                                    disabled={domainJoiningId !== null}
-                                    className="group w-full flex items-center justify-center gap-2 px-4 py-3 rounded-[2px] bg-primary hover:brightness-110 text-primary-foreground font-medium text-[0.8125rem] transition-all shadow-[0_1px_2px_rgba(0,0,0,0.25),inset_0_1px_0_rgba(255,255,255,0.08)] hover:shadow-[0_4px_8px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.08)] hover:-translate-y-px active:translate-y-0 active:shadow-[0_1px_2px_rgba(0,0,0,0.25),inset_0_1px_0_rgba(255,255,255,0.06)] disabled:opacity-50"
-                                    onClick={() => setStep(1)}
-                                >
-                                    <Building2 className="h-4 w-4" />
-                                    Create a new Firm workspace
-                                </button>
-
-                                {domainError && (
-                                    <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-[2px] text-xs text-red-700">
-                                        {domainError}
-                                    </div>
-                                )}
-                            </div>
                         )}
 
                         {/* Step 3: Connect Cloud Storage — mandatory; Inngest runs after link + root. */}

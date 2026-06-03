@@ -188,21 +188,6 @@ model Firm {
   settings           Json     @default("{}")
   allowDomainAccess  Boolean  @default(false)
   allowedEmailDomain String?
-  /**
-   * Optional backdoor: extra firm workspaces on a single paid subscription.
-   * Satellite firms set this to the anchor firm id; the anchor holds billing state in `platform.subscriptions`.
-   * Anchor may set billingGroupFirmCap to the max total firms in the group (anchor + satellites); null = 1.
-   */
-  billingSharesSubscriptionFromFirmId String? @db.Uuid
-  billingGroupFirmCap                 Int?
-  /**
-   * Effective max concurrent ACTIVE engagements for workspaces under this billing anchor (grandfathering + exceptions).
-   * Null = derive from subscription plan at runtime until webhook/free-plan provisioning sets it.
-   */
-  billingActiveEngagementCap          Int?
-  /** When true, Polar webhooks must not overwrite billing*Cap fields (manual exceptions). */
-  billingCapsLocked                   Boolean  @default(false)
-
   /** Optional umbrella anchor: satellites point to an anchor firm id (one-level hierarchy). */
   anchorFirmId        String?  @db.Uuid
 
@@ -217,8 +202,6 @@ model Firm {
   connectors        Connector[]       @relation("FirmConnectors")
   anchorFirm        Firm?             @relation("FirmAnchorHierarchy", fields: [anchorFirmId], references: [id], onDelete: SetNull)
   anchoredFirms     Firm[]            @relation("FirmAnchorHierarchy")
-  billingSubscriptionAnchor Firm?     @relation("FirmBillingShare", fields: [billingSharesSubscriptionFromFirmId], references: [id], onDelete: SetNull)
-  satelliteFirms            Firm[]    @relation("FirmBillingShare")
   subscriptions             Subscription[]
   clients           Client[]
   engagements       Engagement[]
@@ -229,7 +212,6 @@ model Firm {
   platformAuditEvents PlatformAuditEvent[]
   workspaceMigrations FirmWorkspaceMigration[]
 
-  @@index([billingSharesSubscriptionFromFirmId])
   @@index([anchorFirmId])
   @@map("firms")
   @@schema("platform")

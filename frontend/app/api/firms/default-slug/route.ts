@@ -20,8 +20,11 @@ export async function GET() {
               connectorId: defaultFirm.connectorId ?? null,
           })
         : false
+    const isFirmAdmin = defaultFirm
+        ? defaultFirm.members.some((m: any) => m.userId === user.id && m.role === 'firm_admin')
+        : false
 
-    return NextResponse.json({ slug, onboardingComplete })
+    return NextResponse.json({ slug, onboardingComplete, isFirmAdmin })
   } catch {
     return NextResponse.json({ slug: null, onboardingComplete: false }, { status: 200 })
   }
