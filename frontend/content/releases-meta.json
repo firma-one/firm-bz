@@ -1,5 +1,11 @@
 [
   {
+    "version": "1.1.0",
+    "commit": "f845c659b23d60f323f06e8bb81c0a5c0c98672e",
+    "date": "2026-06-03",
+    "title": "Feature updates client management and platform enhancements"
+  },
+  {
     "version": "1.0.0",
     "commit": "6d864c16c05fd7de23755443e31cbd4062f93417",
     "date": "2026-05-20",

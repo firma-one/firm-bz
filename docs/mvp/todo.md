@@ -10,6 +10,10 @@
 
 - [x] **Connectors** — restore the functionality of setting up the Workspace on Google Shared Drive in addition to My Drive
 
+- [ ] **Connector: OneDrive Support** — [plan](../../.claude/plans/i-want-to-introduce-flickering-milner.md)
+  - Phase 1: Generalize/abstract existing GDrive code to be multi-connector ready (5–8 days)
+  - Phase 2: Implement OneDrive connector on top of the abstracted foundation (10–14 days)
+
 - [ ] **Connector: Replace Owning Account** — [plan](../../.claude/plans/connector-replace-owner.md)
   - Let a firm admin authenticate as a different Google account on an existing Connector
   - Old connector revoked + de-linked; new connector linked to firm; Drive workspace structure preserved

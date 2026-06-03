@@ -10,6 +10,9 @@ After changes, offer to: 1) run build, 2) commit/push. **Never auto-execute**—
 
 **NEVER commit or push without explicit user approval.** Always present the proposed commit message and ask before running any `git commit` or `git push` command.
 
+## Plans
+All plans must be created under `.claude/plans/` in the project root. Never save plans to `~/.claude/plans/` or any other location.
+
 ## Agents
 For specific roles, use: `.claude/agents/{product-manager,architecture,ux-coding,coding,quality-engineer,devops}.md`
 
