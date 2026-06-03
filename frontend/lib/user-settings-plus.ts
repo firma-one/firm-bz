@@ -304,7 +304,6 @@ class UserSettingsPlusCache {
           select: {
             id: true,
             anchorFirmId: true,
-            billingSharesSubscriptionFromFirmId: true,
           },
         },
       },
@@ -314,7 +313,7 @@ class UserSettingsPlusCache {
 
     const anchorIds = Array.from(
       new Set(
-        memberships.map((m) => m.firm.anchorFirmId ?? m.firm.billingSharesSubscriptionFromFirmId ?? m.firm.id)
+        memberships.map((m) => m.firm.anchorFirmId ?? m.firm.id)
       )
     )
 
@@ -344,7 +343,7 @@ class UserSettingsPlusCache {
 
     const out: Record<string, Record<string, unknown>> = {}
     for (const membership of memberships) {
-      const anchorId = membership.firm.anchorFirmId ?? membership.firm.billingSharesSubscriptionFromFirmId ?? membership.firm.id
+      const anchorId = membership.firm.anchorFirmId ?? membership.firm.id
       out[membership.firmId] = metadataByAnchor.get(anchorId) ?? {}
     }
     return out

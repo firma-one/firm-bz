@@ -20,11 +20,8 @@ export interface CreateFirmData {
   connectorId?: string | null
   /** Whether this is a sandbox firm. */
   sandboxOnly?: boolean
-  /**
-   * When set, this firm shares the Polar subscription of the anchor (e.g. paid sandbox workspace).
-   * Required for custom firms so `subscription-gate` resolves the same anchor as checkout.
-   */
-  billingSharesSubscriptionFromFirmId?: string | null
+  /** When set, this firm is a satellite under this anchor for billing purposes. */
+  anchorFirmId?: string | null
 }
 
 export interface FirmWithMembers {
@@ -84,7 +81,7 @@ export class FirmService {
     const { generateFirmSlug } = await import('@/lib/slug-utils')
     const slug = await generateFirmSlug(data.firmName)
 
-    const billingAnchorId = data.billingSharesSubscriptionFromFirmId?.trim() || null
+    const billingAnchorId = data.anchorFirmId?.trim() || null
     if (billingAnchorId) {
       const anchorRow = await prisma.firm.findUnique({
         where: { id: billingAnchorId },
@@ -115,7 +112,6 @@ export class FirmService {
           connectorId: data.connectorId,
           sandboxOnly: data.sandboxOnly ?? false,
           anchorFirmId: billingAnchorId,
-          billingSharesSubscriptionFromFirmId: billingAnchorId,
           createdBy: data.userId,
           updatedBy: data.userId,
         },

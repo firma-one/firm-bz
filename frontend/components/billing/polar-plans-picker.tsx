@@ -14,13 +14,11 @@ import { BRAND_NAME } from '@/config/brand'
 import { getPricingComparisonBulletsForPlan, type PricingPlanColumnId } from '@/config/pricing'
 import { BillingCheckoutFootnote, BillingPolarExplainInline, BillingRefundPolicyNote } from '@/components/billing/billing-polar-inline'
 import { Button, buttonVariants } from '@/components/ui/button'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { EmailInline } from '@/components/ui/email-inline'
 import { PLATFORM_SUPPORT_EMAIL } from '@/config/platform-emails'
-import { formatSubscriptionStatus } from '@/lib/billing/subscription-display'
 import { persistCheckoutIntent, readCheckoutIntent, type CheckoutPlanName } from '@/lib/marketing/checkout-intent'
 import { cn } from '@/lib/utils'
-import { Check, ChevronDown, ChevronUp, Clock, CreditCard, ExternalLink, Loader2, Rows3, Ticket } from 'lucide-react'
+import { Check, ChevronDown, ChevronUp, CreditCard, ExternalLink, Loader2, Rows3 } from 'lucide-react'
 import { EVENTS, Joyride, STATUS, type Controls, type EventData } from 'react-joyride'
 
 type CatalogJson = { items?: BillingCatalogPlan[]; error?: string }
@@ -266,6 +264,60 @@ const planCardBase = cn(
     'shadow-sm',
     'transition-all duration-300 ease-out'
 )
+
+/** Top-right corner patch for the active plan card */
+function ActivePlanCornerPatch({
+    periodEnd,
+    isTrialing,
+    peach,
+}: {
+    periodEnd: string | null
+    isTrialing: boolean
+    peach?: boolean
+}) {
+    return (
+        <div className="pointer-events-none absolute right-0 top-0 z-20 overflow-hidden" style={{ width: 96, height: 96 }}>
+            {/* Triangle fill */}
+            <div
+                className={cn(
+                    'absolute inset-0',
+                    peach ? 'bg-[#ECC0AA]' : 'bg-emerald-600'
+                )}
+                style={{ clipPath: 'polygon(100% 0, 0 0, 100% 100%)' }}
+            />
+            {/* Text rotated 45° along the hypotenuse */}
+            <div
+                className="absolute flex flex-col items-center justify-center gap-px"
+                style={{
+                    width: 96,
+                    top: 14,
+                    right: -22,
+                    transform: 'rotate(45deg)',
+                    transformOrigin: 'center center',
+                }}
+            >
+                <span
+                    className={cn(
+                        'text-[9px] font-bold uppercase tracking-widest leading-none',
+                        peach ? 'text-[#3d2a22]' : 'text-white'
+                    )}
+                >
+                    {isTrialing ? 'Trialing' : 'Active'}
+                </span>
+                {periodEnd && (
+                    <span
+                        className={cn(
+                            'text-[8px] font-medium leading-none tabular-nums',
+                            peach ? 'text-[#5c3f32]/80' : 'text-white/85'
+                        )}
+                    >
+                        {periodEnd}
+                    </span>
+                )}
+            </div>
+        </div>
+    )
+}
 
 const sandboxPlanHighlights = [
     '1 sandbox firm workspace included',
@@ -1026,7 +1078,6 @@ export function PolarPlansPicker({
     const highlightCheckClass = blueAccentTrial ? 'text-[#c17a54]' : 'text-emerald-600/90'
     const normalizedStatus = (currentPlanState?.subscriptionStatus ?? '').toLowerCase()
     const paidPlans = sortedPlans.filter((p) => p.pricingModel === 'recurring_subscription')
-    const freeLikePlans = sortedPlans.filter((p) => p.pricingModel === 'one_time_purchase')
     const paidIdMatch = paidPlans.find((p) => p.id === currentPlanState?.subscriptionProductId)
     const paidMatch = paidPlans.find((p) => namesLikelyMatch(p.name, currentPlanState?.subscriptionPlan))
     const hasPaidMatch = Boolean(paidIdMatch || paidMatch)
@@ -1197,10 +1248,8 @@ export function PolarPlansPicker({
                                         blueAccentTrial
                                             ? 'border-[#ECC0AA]/42 ring-[#ECC0AA]/22 hover:border-[#d4a892] hover:ring-[#ECC0AA]/35'
                                             : 'border-slate-200/90 hover:border-slate-300/90 hover:ring-slate-200/40',
+                                        isCurrentPlan && !blueAccentTrial && 'border-emerald-200 ring-1 ring-emerald-100',
                                         blueAccentTrial && isCurrentPlan && 'bg-[#ECC0AA]/10',
-                                        blueAccentTrial &&
-                                            isCurrentPlan &&
-                                            'before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:z-10 before:h-1 before:rounded-t-[1rem] before:bg-[#ECC0AA]',
                                         isIntentHighlight &&
                                             !enableCheckoutIntentJoyride &&
                                             (blueAccentTrial
@@ -1208,6 +1257,13 @@ export function PolarPlansPicker({
                                                 : 'ring-2 ring-emerald-600/40 ring-offset-2 ring-offset-white')
                                     )}
                                 >
+                                    {isCurrentPlan && (
+                                        <ActivePlanCornerPatch
+                                            periodEnd={currentPlanPeriodEnd}
+                                            isTrialing={isTrialingCurrentPlan}
+                                            peach={blueAccentTrial}
+                                        />
+                                    )}
                                     <div className={cn('flex flex-1 flex-col', compact ? 'p-4' : 'p-5 sm:p-6')}>
                                         <div>
                                             <div className="flex items-start justify-between gap-2 sm:gap-3">
@@ -1222,7 +1278,8 @@ export function PolarPlansPicker({
                                                 <div
                                                     className={cn(
                                                         billingToggleTrackClass(Boolean(blueAccentTrial)),
-                                                        'shrink-0'
+                                                        'shrink-0',
+                                                        isCurrentPlan && 'mr-14'
                                                     )}
                                                     role="group"
                                                     aria-label={`Billing period for ${row.name}`}
@@ -1274,117 +1331,23 @@ export function PolarPlansPicker({
                                                     </button>
                                                 </div>
                                             </div>
-                                            <div
-                                                className={cn(
-                                                    'mt-2 items-start gap-x-4 gap-y-1',
-                                                    isCurrentPlan
-                                                        ? 'grid grid-cols-[minmax(0,1fr)_auto]'
-                                                        : 'block'
+                                            <div className="mt-2 min-w-0 leading-none">
+                                                {eqCents != null ? (
+                                                    <CatalogGroupedPriceDisplay
+                                                        monthlyEquivCents={eqCents}
+                                                        currency={selectedPlan.priceCurrency}
+                                                        billingPeriod={period}
+                                                        compact={compact}
+                                                        peachAmount={blueAccentTrial}
+                                                    />
+                                                ) : (
+                                                    <PlanPriceDisplay
+                                                        label={selectedPlan.priceLabel}
+                                                        compact={compact}
+                                                        peachAmount={blueAccentTrial}
+                                                    />
                                                 )}
-                                            >
-                                                    <div className="min-w-0 leading-none">
-                                                        {eqCents != null ? (
-                                                            <CatalogGroupedPriceDisplay
-                                                                monthlyEquivCents={eqCents}
-                                                                currency={selectedPlan.priceCurrency}
-                                                                billingPeriod={period}
-                                                                compact={compact}
-                                                                peachAmount={blueAccentTrial}
-                                                            />
-                                                        ) : (
-                                                            <PlanPriceDisplay
-                                                                label={selectedPlan.priceLabel}
-                                                                compact={compact}
-                                                                peachAmount={blueAccentTrial}
-                                                            />
-                                                        )}
-                                                    </div>
-                                                    {isCurrentPlan ? (
-                                                    <div className="flex min-w-[7.5rem] max-w-[11rem] shrink-0 flex-col gap-1.5 text-xs sm:min-w-[8.5rem] sm:text-sm">
-                                                        <TooltipProvider delayDuration={200}>
-                                                            <div className="grid grid-cols-[1rem_1fr] items-center gap-2">
-                                                                <Tooltip>
-                                                                    <TooltipTrigger asChild>
-                                                                        <span className="inline-flex h-4 w-4 items-center justify-center">
-                                                                            <Ticket
-                                                                                className={cn(
-                                                                                    'h-4 w-4 shrink-0',
-                                                                                    blueAccentTrial
-                                                                                        ? 'text-[#c17a54]'
-                                                                                        : 'text-slate-400'
-                                                                                )}
-                                                                                strokeWidth={2.25}
-                                                                                aria-hidden
-                                                                            />
-                                                                        </span>
-                                                                    </TooltipTrigger>
-                                                                    <TooltipContent
-                                                                        variant="light"
-                                                                        side="top"
-                                                                        align="start"
-                                                                    >
-                                                                        Subscription status
-                                                                    </TooltipContent>
-                                                                </Tooltip>
-                                                                <span
-                                                                    className={cn(
-                                                                        'text-sm font-medium',
-                                                                        blueAccentTrial
-                                                                            ? 'text-[#7a5343]'
-                                                                            : 'text-slate-600'
-                                                                    )}
-                                                                >
-                                                                    {formatSubscriptionStatus(currentPlanState?.subscriptionStatus)}
-                                                                </span>
-                                                            </div>
-                                                        </TooltipProvider>
-                                                        {currentPlanPeriodEnd ? (
-                                                            <TooltipProvider delayDuration={200}>
-                                                                <div className="grid grid-cols-[1rem_1fr] items-center gap-2">
-                                                                    <Tooltip>
-                                                                        <TooltipTrigger asChild>
-                                                                            <span className="inline-flex h-4 w-4 items-center justify-center">
-                                                                                <Clock
-                                                                                    className={cn(
-                                                                                        'h-4 w-4 shrink-0',
-                                                                                        blueAccentTrial
-                                                                                            ? 'text-[#c17a54]'
-                                                                                            : 'text-slate-400'
-                                                                                    )}
-                                                                                    strokeWidth={2.25}
-                                                                                    aria-hidden
-                                                                                />
-                                                                            </span>
-                                                                        </TooltipTrigger>
-                                                                        <TooltipContent
-                                                                            variant="light"
-                                                                            side="top"
-                                                                            align="start"
-                                                                        >
-                                                                            {isTrialingCurrentPlan
-                                                                                ? 'Trial ends on'
-                                                                                : 'Renews on'}
-                                                                        </TooltipContent>
-                                                                    </Tooltip>
-                                                                    <span className="text-sm font-medium text-slate-900 tabular-nums">
-                                                                        {currentPlanPeriodEnd}
-                                                                    </span>
-                                                                </div>
-                                                            </TooltipProvider>
-                                                        ) : (
-                                                            <div
-                                                                className="grid grid-cols-[1rem_1fr] items-center gap-2 opacity-0"
-                                                                aria-hidden
-                                                            >
-                                                                <span className="h-4 w-4" />
-                                                                <span className="text-sm font-medium tabular-nums">
-                                                                    —
-                                                                </span>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                ) : null}
-                                                </div>
+                                            </div>
                                         </div>
 
                                         {selectedPlan.description ? (
@@ -1455,7 +1418,7 @@ export function PolarPlansPicker({
                                                         </p>
                                                     </div>
                                                 )
-                                            ) : isFirmBillingAdmin ? (
+                                            ) : isPaidRecurringCurrent ? null : isFirmBillingAdmin ? (
                                                 <Button
                                                     type="button"
                                                     variant={blueAccentTrial ? 'outline' : 'blackCta'}
@@ -1547,10 +1510,8 @@ export function PolarPlansPicker({
                                                   ? 'border-[#ECC0AA]/42 ring-[#ECC0AA]/22 hover:border-[#d4a892] hover:ring-[#ECC0AA]/35'
                                                   : 'border-slate-200/90 hover:border-slate-300/90 hover:ring-slate-200/40'
                                           ),
+                                    isCurrentPlan && !isFreeTier && !blueAccentTrial && 'border-emerald-200 ring-1 ring-emerald-100',
                                     blueAccentTrial && isCurrentPlan && 'bg-[#ECC0AA]/10',
-                                    blueAccentTrial &&
-                                        isCurrentPlan &&
-                                        'before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:z-10 before:h-1 before:rounded-t-[1rem] before:bg-[#ECC0AA]',
                                     isIntentHighlight &&
                                         !enableCheckoutIntentJoyride &&
                                         (blueAccentTrial
@@ -1558,6 +1519,13 @@ export function PolarPlansPicker({
                                             : 'ring-2 ring-emerald-600/40 ring-offset-2 ring-offset-white')
                                 )}
                             >
+                                {isCurrentPlan && !isFreeTier && (
+                                    <ActivePlanCornerPatch
+                                        periodEnd={currentPlanPeriodEnd}
+                                        isTrialing={isTrialingCurrentPlan}
+                                        peach={blueAccentTrial}
+                                    />
+                                )}
                                 <div className={cn('flex flex-1 flex-col', compact ? 'p-4' : 'p-5 sm:p-6')}>
                                     {isFreeTier ? (
                                         <>
@@ -1573,114 +1541,17 @@ export function PolarPlansPicker({
                                             </p>
                                         </>
                                     ) : (
-                                        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-2">
-                                            <h3
-                                                className={cn(
-                                                    planCardHeadingClass(compact),
-                                                    'col-start-1 row-start-1 min-w-0'
-                                                )}
-                                            >
+                                        <div>
+                                            <h3 className={cn(planCardHeadingClass(compact), 'min-w-0', isCurrentPlan && 'pr-14')}>
                                                 {plan.name}
                                             </h3>
-                                            <p className="col-start-1 row-start-2 min-w-0 leading-none">
+                                            <p className="mt-2 min-w-0 leading-none">
                                                 <PlanPriceDisplay
                                                     label={plan.priceLabel}
                                                     compact={compact}
                                                     peachAmount={blueAccentTrial}
                                                 />
                                             </p>
-                                            <div className="col-start-2 row-span-2 row-start-1 flex min-w-[140px] max-w-[11rem] shrink-0 flex-col gap-1.5 self-start text-sm">
-                                                {isCurrentPlan ? (
-                                                    <>
-                                                        <TooltipProvider delayDuration={200}>
-                                                            <div className="grid grid-cols-[1rem_1fr] items-center gap-2">
-                                                                <Tooltip>
-                                                                    <TooltipTrigger asChild>
-                                                                        <span className="inline-flex h-4 w-4 items-center justify-center">
-                                                                            <Ticket
-                                                                                className={cn(
-                                                                                    'h-4 w-4 shrink-0',
-                                                                                    blueAccentTrial ? 'text-[#c17a54]' : 'text-slate-400'
-                                                                                )}
-                                                                                strokeWidth={2.25}
-                                                                                aria-hidden
-                                                                            />
-                                                                        </span>
-                                                                    </TooltipTrigger>
-                                                                    <TooltipContent variant="light" side="top" align="start">
-                                                                        Subscription status
-                                                                    </TooltipContent>
-                                                                </Tooltip>
-                                                                <span
-                                                                    className={cn(
-                                                                        'text-sm font-medium',
-                                                                        blueAccentTrial ? 'text-[#7a5343]' : 'text-slate-600'
-                                                                    )}
-                                                                >
-                                                                    {formatSubscriptionStatus(currentPlanState?.subscriptionStatus)}
-                                                                </span>
-                                                            </div>
-                                                        </TooltipProvider>
-                                                        {currentPlanPeriodEnd ? (
-                                                            <TooltipProvider delayDuration={200}>
-                                                                <div className="grid grid-cols-[1rem_1fr] items-center gap-2">
-                                                                    <Tooltip>
-                                                                        <TooltipTrigger asChild>
-                                                                            <span className="inline-flex h-4 w-4 items-center justify-center">
-                                                                                <Clock
-                                                                                    className={cn(
-                                                                                        'h-4 w-4 shrink-0',
-                                                                                        blueAccentTrial
-                                                                                            ? 'text-[#c17a54]'
-                                                                                            : 'text-slate-400'
-                                                                                    )}
-                                                                                    strokeWidth={2.25}
-                                                                                    aria-hidden
-                                                                                />
-                                                                            </span>
-                                                                        </TooltipTrigger>
-                                                                        <TooltipContent variant="light" side="top" align="start">
-                                                                            {isTrialingCurrentPlan ? 'Trial ends on' : 'Renews on'}
-                                                                        </TooltipContent>
-                                                                    </Tooltip>
-                                                                    <span className="text-sm font-medium text-slate-900 tabular-nums">
-                                                                        {currentPlanPeriodEnd}
-                                                                    </span>
-                                                                </div>
-                                                            </TooltipProvider>
-                                                        ) : (
-                                                            <div className="grid grid-cols-[1rem_1fr] items-center gap-2 opacity-0" aria-hidden>
-                                                                <span className="h-4 w-4" />
-                                                                <span className="text-sm font-medium tabular-nums">—</span>
-                                                            </div>
-                                                        )}
-                                                    </>
-                                                ) : (
-                                                    <div
-                                                        className="invisible pointer-events-none select-none"
-                                                        aria-hidden
-                                                    >
-                                                        <div className="flex flex-col gap-1.5">
-                                                            <div className="grid grid-cols-[1rem_1fr] items-center gap-2">
-                                                                <span className="inline-flex h-4 w-4 items-center justify-center">
-                                                                    <Ticket className="h-4 w-4 shrink-0" aria-hidden />
-                                                                </span>
-                                                                <span className="text-sm font-medium text-slate-600">
-                                                                    Trialing
-                                                                </span>
-                                                            </div>
-                                                            <div className="grid grid-cols-[1rem_1fr] items-center gap-2">
-                                                                <span className="inline-flex h-4 w-4 items-center justify-center">
-                                                                    <Clock className="h-4 w-4 shrink-0" aria-hidden />
-                                                                </span>
-                                                                <span className="text-sm font-medium text-slate-900 tabular-nums">
-                                                                    Sep 30, 2099
-                                                                </span>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
                                         </div>
                                     )}
 
@@ -1805,7 +1676,7 @@ export function PolarPlansPicker({
                                                     {upgradeCopy.freeSandboxFootnote}
                                                 </p>
                                             </div>
-                                        ) : isFirmBillingAdmin ? (
+                                        ) : isPaidRecurringCurrent ? null : isFirmBillingAdmin ? (
                                             <Button
                                                 type="button"
                                                 variant={blueAccentTrial ? 'outline' : 'blackCta'}

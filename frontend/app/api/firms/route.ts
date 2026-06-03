@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
       connectorId: billingAnchor.connectorId,
       allowDomainAccess,
       allowedEmailDomain,
-      billingSharesSubscriptionFromFirmId: billingAnchorId,
+      anchorFirmId: billingAnchorId,
     })
 
     const driveRootFolderId = await googleDriveConnector.resolveWorkspaceRootFolderId(billingAnchor.connectorId)

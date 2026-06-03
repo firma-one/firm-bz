@@ -19,7 +19,7 @@ const KINETIC_HERO_LEAD =
 
 export default function SignupSuccessPage() {
     const [firstName, setFirstName] = useState<string | undefined>(undefined)
-    const [navTarget, setNavTarget] = useState('/d/onboarding?choice=1')
+    const navTarget = '/d'
     const [ready, setReady] = useState(false)
 
     useEffect(() => {
@@ -35,15 +35,6 @@ export default function SignupSuccessPage() {
                     ''
                 if (name) setFirstName(name)
             }
-
-            // Resolve post-signup destination
-            try {
-                const res = await fetch('/api/firms/default-slug', { cache: 'no-store' })
-                if (res.ok) {
-                    const data = await res.json()
-                    if (data?.slug && data.onboardingComplete) setNavTarget(`/d/f/${data.slug}`)
-                }
-            } catch { /* fall through to default */ }
 
             setReady(true)
         }

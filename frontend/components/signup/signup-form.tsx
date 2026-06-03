@@ -361,24 +361,12 @@ export function SignupForm({
         // Resolve the post-signup destination
         const nextRel = searchParams.get('next') || searchParams.get('redirect')
         const isSafeRedirect = nextRel && nextRel.startsWith('/')
-        let navTarget = '/d/onboarding'
+        let navTarget = '/d'
         if (isSafeRedirect && nextRel) {
             navTarget =
                 nextRel === '/dash' || nextRel.startsWith('/dash/')
                     ? '/d' + (nextRel === '/dash' ? '' : nextRel.slice(5))
                     : nextRel
-        } else {
-            try {
-                const response = await fetch('/api/firms/default-slug', { cache: 'no-store' })
-                if (response.ok) {
-                    const data = await response.json()
-                    if (data.slug && data.onboardingComplete) {
-                        navTarget = `/d/f/${data.slug}`
-                    }
-                }
-            } catch {
-                /* fall through to /d/onboarding */
-            }
         }
 
         // Returning users go straight through; new signups see the success screen

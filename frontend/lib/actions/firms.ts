@@ -113,6 +113,14 @@ export async function getCanCreateAdditionalFirm(): Promise<boolean> {
     return canCreateNonSandboxFirm(user.id)
 }
 
+export async function getFirmCreationGateReasonForCurrentUser(): Promise<import('@/lib/billing/firm-creation-gate').FirmCreationGateResult> {
+    const supabase = await createClient()
+    const { data: { user }, error } = await supabase.auth.getUser()
+    if (error || !user) return { reason: 'free_sandbox', cap: null }
+    const { getFirmCreationGateReason } = await import('@/lib/billing/firm-creation-gate')
+    return getFirmCreationGateReason(user.id)
+}
+
 /**
  * Get the default firm slug for the current user
  */
@@ -155,19 +163,28 @@ export async function getDefaultFirmWithOnboardingStatus(): Promise<{
 
 /**
  * Where to send the user when entering the app at `/d` (and when auth callback has no explicit `next`).
- * Invited non-admins go straight to `/d/f/{slug}`; firm admins must finish workspace onboarding
- * (connector `settings.onboarding` + org folder map; legacy `firm.settings.onboarding`) before landing
- * in the default workspace — same rules as `auth/callback`.
- * Returns `null` only if the resolved firm has no slug (malformed data); caller may show a firm picker.
+ *
+ * Routing rules (in order):
+ * 1. No firm memberships at all → `/d/onboarding` (new user)
+ * 2. Multiple firm memberships → `/d/f/` (workspace picker)
+ * 3. Single firm, non-admin → `/d/f/{slug}` (go straight in)
+ * 4. Single firm, admin, onboarding incomplete → `/d/onboarding`
+ * 5. Single firm, admin, onboarding complete, domain orgs available → `/d/f/` (workspace picker)
+ * 6. Single firm, admin, onboarding complete, no domain orgs → `/d/f/{slug}`
+ *
+ * Returns `null` only if the resolved firm has no slug (malformed data).
  */
 export async function resolveDefaultFirmLandingPath(userId: string): Promise<string | null> {
-    let targetFirm = await FirmService.getDefaultFirm(userId)
-    if (!targetFirm) {
-        const all = await FirmService.getUserFirms(userId)
-        if (all.length === 0) return '/d/onboarding'
-        targetFirm = all[0]
-    }
+    const allFirms = await FirmService.getUserFirms(userId)
 
+    logger.info('[resolveDefaultFirmLandingPath]', { userId, firmCount: allFirms.length, slugs: allFirms.map(f => f.slug) })
+
+    if (allFirms.length === 0) return '/d/onboarding'
+
+    // Multiple memberships → always show picker so user can choose the right workspace
+    if (allFirms.length > 1) return '/d/f/'
+
+    const targetFirm = allFirms[0]
     if (!targetFirm?.slug) return null
 
     const membership = targetFirm.members.find((m) => m.userId === userId)
@@ -185,6 +202,17 @@ export async function resolveDefaultFirmLandingPath(userId: string): Promise<str
 
     if (!onboardingComplete) {
         return '/d/onboarding'
+    }
+
+    // Admin, onboarding done — check for joinable/already-joined domain orgs
+    const { getDomainOnboardingOptions } = await import('@/lib/actions/domain-onboarding')
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user?.email) {
+        const domainOpts = await getDomainOnboardingOptions(userId, user.email)
+        if ((domainOpts.orgsToJoin.length + domainOpts.orgsAlreadyIn.length) > 0) {
+            return '/d/f/'
+        }
     }
 
     return `/d/f/${targetFirm.slug}`
@@ -262,7 +290,7 @@ export async function createFirm(data: CreateFirmData): Promise<FirmOption> {
         connectorId: billingAnchor.connectorId,
         allowDomainAccess: data.allowDomainAccess,
         allowedEmailDomain: data.allowedEmailDomain,
-        billingSharesSubscriptionFromFirmId: billingAnchorId,
+        anchorFirmId: billingAnchorId,
     })
 
     const driveRootFolderId = await googleDriveConnector.resolveWorkspaceRootFolderId(billingAnchor.connectorId)

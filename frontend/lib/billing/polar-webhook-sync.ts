@@ -6,7 +6,6 @@ import {
     findFirmIdByPolarSubscriptionId,
 } from '@/lib/billing/active-billing-subscription'
 import { pricingModelFromRecurringFlag } from '@/lib/billing/pricing-model'
-import { applyBillingCapsAfterPolarSubscriptionSync } from '@/lib/billing/effective-billing-caps'
 import { refreshBillingPlanForFirmGroupUsers } from '@/lib/billing/billing-user-session-sync'
 import { resolveSubscriptionAuditUserId } from '@/lib/billing/subscription-audit'
 import { advanceOnboardingPastSubscribeForBillingAnchor } from '@/lib/onboarding/advance-past-subscribe-on-paid'
@@ -275,13 +274,6 @@ export async function syncFirmSubscriptionFromPolarEvent(
                 },
             })
         }
-    })
-
-    await applyBillingCapsAfterPolarSubscriptionSync({
-        anchorFirmId,
-        productId: details.productId,
-        planName: details.planName,
-        status,
     })
 
     if (active) {
