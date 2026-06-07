@@ -169,6 +169,7 @@ export async function GET(request: Request) {
                 subscriptionProductId,
                 pricingModel,
                 periodEndIso: periodEnd?.toISOString() ?? null,
+                scheduledCancelAtIso: anchorSub?.scheduledCancelAt?.toISOString() ?? null,
                 canOpenCustomerPortal: canOpenCustomerPortal || ['active', 'trialing', 'past_due'].includes(normalizedStatus),
                 isFirmBillingAdmin,
             },

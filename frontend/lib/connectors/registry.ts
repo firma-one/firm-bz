@@ -7,8 +7,9 @@
 
 import { ConnectorType } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import type { IConnectorStorageAdapter } from './types'
+import type { IConnectorStorageAdapter, IConnectorPermissionAdapter, IConnectorMigrationAdapter } from './types'
 import { createGoogleDriveAdapter } from './adapters/google-drive-adapter'
+import { createGoogleDrivePermissionAdapter } from './adapters/google-drive-permission-adapter'
 import { createOneDriveAdapter } from './adapters/onedrive-adapter'
 import { GoogleDriveConnector } from '@/lib/google-drive-connector'
 import { getOneDriveConnectorInstance } from './onedrive-connector'
@@ -57,50 +58,72 @@ export function getConnectorInstance(type: ConnectorType): IConnectorInstance {
   return getConnectorInstanceByType(type)
 }
 
+const CONNECTOR_SELECT = {
+  id: true,
+  type: true,
+  name: true,
+  externalAccountId: true,
+  settings: true,
+  createdAt: true,
+  status: true,
+  lastSyncAt: true,
+} as const
+
+function mapConnectorToConnection(c: {
+  id: string
+  type: ConnectorType
+  name: string | null
+  externalAccountId: string
+  settings: unknown
+  createdAt: Date
+  status: string
+  lastSyncAt: Date | null
+}): ConnectorConnection {
+  const settings = (c.settings || {}) as { accountEmail?: string }
+  const stored = settings.accountEmail?.trim()
+  const email =
+    stored && stored.includes('@')
+      ? stored
+      : c.externalAccountId.includes('@')
+        ? c.externalAccountId
+        : ''
+  return {
+    id: c.id,
+    type: c.type,
+    email,
+    name: c.name ?? '',
+    connectedAt: c.createdAt.toISOString().split('T')[0],
+    status: c.status,
+    lastSyncAt: c.lastSyncAt?.toISOString(),
+  }
+}
+
 /**
- * List all connections for an organization (all connector types). Uses Prisma; no provider-specific filtering.
+ * List all connections for an organization (all connector types).
+ * Unions the legacy connectorId FK relation and the new firmId-linked connectors
+ * to ensure both old and new OAuth flows surface in the UI.
  */
 export async function getConnections(organizationId: string): Promise<ConnectorConnection[]> {
   const org = await prisma.firm.findUnique({
     where: { id: organizationId },
     include: {
-      connector: {
-        select: {
-          id: true,
-          type: true,
-          name: true,
-          externalAccountId: true,
-          settings: true,
-          createdAt: true,
-          status: true,
-          lastSyncAt: true
-        }
-      }
-    }
+      connector: { select: CONNECTOR_SELECT },
+      connectors: { select: CONNECTOR_SELECT },
+    },
   })
 
-  if (!org?.connector) return []
+  if (!org) return []
 
-  const connectors = [org.connector]
-  return connectors.map((c) => {
-    const settings = (c.settings || {}) as { accountEmail?: string }
-    const stored = settings.accountEmail?.trim()
-    const email =
-      stored && stored.includes('@')
-        ? stored
-        : c.externalAccountId.includes('@')
-          ? c.externalAccountId
-          : ''
-    return {
-      id: c.id,
-      type: c.type,
-      email,
-      name: c.name ?? '',
-      connectedAt: c.createdAt.toISOString().split('T')[0],
-      status: c.status,
-      lastSyncAt: c.lastSyncAt?.toISOString(),
-    }
+  // Union legacy + new model, dedupe by id (a connector may appear in both if firmId was back-filled)
+  const seen = new Set<string>()
+  const all = [...(org.connectors ?? []), ...(org.connector ? [org.connector] : [])]
+  const deduped = all.filter((c) => {
+    if (seen.has(c.id)) return false
+    seen.add(c.id)
+    return true
   })
+
+  return deduped.map(mapConnectorToConnection)
 }
 
 /**
@@ -148,4 +171,66 @@ export async function removeConnection(connectionId: string): Promise<void> {
   if (!connector) throw new Error('Connection not found')
   const instance = getConnectorInstance(connector.type)
   await instance.removeConnection(connectionId)
+}
+
+/**
+ * Get the permission adapter for a connection (by connector id).
+ * Provides provider-agnostic access to permission grant/revoke/folder ops.
+ */
+export async function getPermissionAdapter(connectionId: string): Promise<IConnectorPermissionAdapter> {
+  const connector = await prisma.connector.findUnique({ where: { id: connectionId } })
+  if (!connector) throw new Error('Connection not found')
+  if (connector.type === ConnectorType.GOOGLE_DRIVE) {
+    return createGoogleDrivePermissionAdapter()
+  }
+  throw new Error(`No permission adapter for connector type: ${connector.type}`)
+}
+
+/**
+ * Get the migration adapter for a connection (by connector id).
+ * Provides provider-agnostic access to workspace root migration ops:
+ * listing top-level children, moving file batches, and persisting the new root location.
+ * estimate-migration is intentionally NOT on this interface — it is Drive-query-specific
+ * and stays behind a connector-type guard in the API route.
+ */
+export async function getMigrationAdapter(connectionId: string): Promise<IConnectorMigrationAdapter> {
+  const connector = await prisma.connector.findUnique({ where: { id: connectionId } })
+  if (!connector) throw new Error('Connection not found')
+  if (connector.type === ConnectorType.GOOGLE_DRIVE) {
+    const g = GoogleDriveConnector.getInstance()
+    return {
+      listTopLevelChildren: (id, parentFolderId) => g.listTopLevelChildren(id, parentFolderId),
+      listTopLevelChildrenWithNames: (id, parentFolderId) => g.listTopLevelChildrenWithNames(id, parentFolderId),
+      getFolderBreadcrumb: (id, folderId) => g.getFolderBreadcrumb(id, folderId),
+      moveBatch: async (id, fileIds, oldParent, newParent) => {
+        const result = await g.moveBatch(id, fileIds, oldParent, newParent)
+        return { failures: result.failures }
+      },
+      persistWorkspaceRootLocation: (id, rootFolderId) => g.persistWorkspaceRootLocation(id, rootFolderId),
+    }
+  }
+  throw new Error(`No migration adapter for connector type: ${connector.type}`)
+}
+
+/** Connector display metadata for UI (label, icon key, enabled state). */
+export interface ConnectorMeta {
+  label: string
+  iconKey: string
+  enabled: boolean
+}
+
+/** Return display metadata for a connector type. Used to render tab list data-driven. */
+export function getConnectorMeta(type: ConnectorType): ConnectorMeta {
+  switch (type) {
+    case ConnectorType.GOOGLE_DRIVE:
+      return { label: 'Google Drive', iconKey: 'google-drive', enabled: true }
+    case ConnectorType.ONEDRIVE:
+      return { label: 'OneDrive', iconKey: 'onedrive', enabled: false }
+    case ConnectorType.DROPBOX:
+      return { label: 'Dropbox', iconKey: 'dropbox', enabled: false }
+    case ConnectorType.BOX:
+      return { label: 'Box', iconKey: 'box', enabled: false }
+    default:
+      return { label: String(type), iconKey: String(type).toLowerCase(), enabled: false }
+  }
 }

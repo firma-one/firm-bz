@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { randomBytes } from 'crypto'
+import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { config, getGoogleDriveOAuthServerCredentials } from '@/lib/config'
 import { METADATA_FOLDER_NAME } from '@/lib/connectors/types'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
+import { getMigrationAdapter } from '@/lib/connectors/registry'
 import { userSettingsPlus } from '@/lib/user-settings-plus'
 import { safeInngestSend } from '@/lib/inngest/client'
 import { setMigrationPending } from '@/lib/firm-maintenance'
 import { logger } from '@/lib/logger'
+import { prisma } from '@/lib/prisma'
 
 /** Parse first Drive API error body from `moveTopLevelChildrenBetweenParents` failure entries. */
 function driveMoveFailureHint(failures: { id: string; error: string }[]): string | undefined {
@@ -75,6 +78,7 @@ export async function POST(request: NextRequest) {
         next: body.next || null,
         flow,
         skipAutoFolder: body.skipAutoFolder === true,
+        ...(body.replaceConnectorId && { replaceConnectorId: body.replaceConnectorId }),
         ...(nonce && { nonce }),
         ...(flow === 'popup' && body.openerOrigin && { openerOrigin: body.openerOrigin })
       }
@@ -107,7 +111,6 @@ export async function POST(request: NextRequest) {
       if (!connectionId) {
         return NextResponse.json({ error: 'Connection ID required' }, { status: 400 })
       }
-      const { prisma } = require('@/lib/prisma')
       const connector = await prisma.connector.findUnique({ where: { id: connectionId } })
       if (!connector) return NextResponse.json({ error: 'Connector not found' }, { status: 404 })
       const token = await googleDriveConnector.getAccessToken(connectionId)
@@ -133,8 +136,7 @@ export async function POST(request: NextRequest) {
       let userId: string | undefined
       const authHeader = request.headers.get('authorization')
       if (authHeader?.startsWith('Bearer ')) {
-        const { createClient } = require('@supabase/supabase-js')
-        const supabase = createClient(
+        const supabase = createSupabaseAdmin(
           (process.env.NEXT_PUBLIC_SUPABASE_URL || "http://127.0.0.1:54321"),
           process.env.SUPABASE_SERVICE_ROLE_KEY!
         )
@@ -142,7 +144,6 @@ export async function POST(request: NextRequest) {
         userId = user?.id
       }
 
-      const { prisma } = require('@/lib/prisma')
       const connector = await prisma.connector.findUnique({ where: { id: connectionId } })
       let stepOneOrgSlug: string | null = null
       let org = null
@@ -242,8 +243,7 @@ export async function POST(request: NextRequest) {
       let userId: string | undefined
       const authHeader = request.headers.get('authorization')
       if (authHeader?.startsWith('Bearer ')) {
-        const { createClient } = require('@supabase/supabase-js')
-        const supabase = createClient(
+        const supabase = createSupabaseAdmin(
           (process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321'),
           process.env.SUPABASE_SERVICE_ROLE_KEY!
         )
@@ -254,7 +254,6 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
       }
 
-      const { prisma } = require('@/lib/prisma')
       const connector = await prisma.connector.findUnique({ where: { id: connectionId } })
       if (!connector) {
         return NextResponse.json({ error: 'Connector not found' }, { status: 404 })
@@ -271,8 +270,7 @@ export async function POST(request: NextRequest) {
       if (!authHeader?.startsWith('Bearer ')) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
       }
-      const { createClient } = require('@supabase/supabase-js')
-      const supabaseAuth = createClient(
+      const supabaseAuth = createSupabaseAdmin(
         (process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321'),
         (process.env.SUPABASE_SERVICE_ROLE_KEY || '')
       )
@@ -292,7 +290,6 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Missing connectionId or rootFolderId' }, { status: 400 })
       }
 
-      const { prisma } = require('@/lib/prisma')
       const existing = await (prisma as any).connector.findUnique({ where: { id: connectionId } })
       if (!existing || existing.userId !== rootUser.id || existing.type !== 'GOOGLE_DRIVE') {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -337,7 +334,6 @@ export async function POST(request: NextRequest) {
         parents: parentId ? [parentId] : ['root']
       })
 
-      const { prisma } = require('@/lib/prisma')
       const existing = await prisma.connector.findUnique({ where: { id: connectionId } })
       const prevSettings = (existing?.settings as Record<string, unknown>) || {}
       await prisma.connector.update({
@@ -360,6 +356,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, folderId: folder.id })
     }
 
+    if (action === 'folder-breadcrumb') {
+      const { connectionId: bcConnId, folderId: bcFolderId } = body
+      if (!bcConnId || !bcFolderId) {
+        return NextResponse.json({ error: 'Missing connectionId or folderId' }, { status: 400 })
+      }
+      try {
+        const path = await googleDriveConnector.getFolderBreadcrumb(bcConnId, bcFolderId)
+        return NextResponse.json({ path })
+      } catch (e) {
+        return NextResponse.json({ path: [] })
+      }
+    }
+
     if (action === 'estimate-migration') {
       const authHeader = request.headers.get('authorization')
       if (!authHeader?.startsWith('Bearer ')) {
@@ -369,8 +378,10 @@ export async function POST(request: NextRequest) {
       if (!estConnId) {
         return NextResponse.json({ error: 'Missing connectionId' }, { status: 400 })
       }
-      const { prisma } = require('@/lib/prisma')
       const estConnector = await (prisma as any).connector.findUnique({ where: { id: estConnId } })
+      if (estConnector && estConnector.type !== 'GOOGLE_DRIVE') {
+        return NextResponse.json({ error: 'estimate-migration is only supported for Google Drive connectors' }, { status: 400 })
+      }
       if (!estConnector) return NextResponse.json({ error: 'Connector not found' }, { status: 404 })
       const estSettings = (estConnector.settings as any) || {}
       const estRootId: string = estSettings.rootFolderId || ''
@@ -403,8 +414,7 @@ export async function POST(request: NextRequest) {
       if (!authHeader?.startsWith('Bearer ')) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
       }
-      const { createClient } = require('@supabase/supabase-js')
-      const supabaseAuth = createClient(
+      const supabaseAuth = createSupabaseAdmin(
         (process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321'),
         (process.env.SUPABASE_SERVICE_ROLE_KEY || '')
       )
@@ -419,7 +429,6 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Missing connectionId or newRootFolderId' }, { status: 400 })
       }
 
-      const { prisma } = require('@/lib/prisma')
       const migExisting = await (prisma as any).connector.findUnique({ where: { id: migConnId } })
       if (!migExisting || migExisting.userId !== migUser.id || migExisting.type !== 'GOOGLE_DRIVE') {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -442,13 +451,16 @@ export async function POST(request: NextRequest) {
       })
 
       try {
-        await googleDriveConnector.persistWorkspaceRootLocation(migConnId, migNewRoot)
+        const migAdapter = await getMigrationAdapter(migConnId)
+        await migAdapter.persistWorkspaceRootLocation(migConnId, migNewRoot)
       } catch {
         // Backfilled on status if needed
       }
 
+      logger.info('[migrate-and-update-root] guard check', { oldRoot, migNewRoot, sameFolder: oldRoot === migNewRoot, hasOldRoot: !!oldRoot })
       if (oldRoot && oldRoot !== migNewRoot) {
         const firm = await prisma.firm.findFirst({ where: { connectorId: migConnId } })
+        logger.info('[migrate-and-update-root] firm lookup', { firmId: firm?.id ?? null, connectorId: migConnId })
         if (firm) {
           const estimatedMinutes = typeof bodyEstMinutes === 'number' ? bodyEstMinutes : 5
           await setMigrationPending(firm.id, {
@@ -456,6 +468,7 @@ export async function POST(request: NextRequest) {
             estimatedStartMinutes: 2,
             initiatedBy: migUser.id,
           })
+          logger.info('[migrate-and-update-root] sending workspace.migrate.requested', { firmId: firm.id, oldRoot, migNewRoot, estimatedMinutes })
           await safeInngestSend('workspace.migrate.requested', {
             connectionId: migConnId,
             newRootFolderId: migNewRoot,
@@ -466,6 +479,7 @@ export async function POST(request: NextRequest) {
             estimatedMinutes,
             startedAt: new Date().toISOString(),
           })
+          logger.info('[migrate-and-update-root] safeInngestSend completed')
         }
       }
 
@@ -497,8 +511,7 @@ export async function GET(request: NextRequest) {
     }
 
     // We need the user ID to check the default org
-    const { createClient } = require('@supabase/supabase-js')
-    const supabase = createClient(
+    const supabase = createSupabaseAdmin(
       (process.env.NEXT_PUBLIC_SUPABASE_URL || "http://127.0.0.1:54321"),
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     )
@@ -511,7 +524,6 @@ export async function GET(request: NextRequest) {
 
 
     if (action === 'status') {
-      const { prisma } = require('@/lib/prisma')
       const connectionIdFilter = searchParams.get('connectionId')
 
       const baseWhere = { userId: user.id, type: 'GOOGLE_DRIVE', status: 'ACTIVE' as const }
@@ -523,10 +535,16 @@ export async function GET(request: NextRequest) {
             where: baseWhere,
           })
 
+      if (!connector && connectionIdFilter) {
+        // userId mismatch — fetch without userId to diagnose
+        const connectorRaw = await (prisma as any).connector.findUnique({ where: { id: connectionIdFilter }, select: { userId: true, status: true } })
+        logger.warn('[status] connector not found by userId+id', { sessionUserId: user.id, connectorUserId: connectorRaw?.userId, status: connectorRaw?.status, connectionIdFilter })
+      }
+
       let rootFolderId = connector ? (connector.settings as any)?.rootFolderId as string | undefined : undefined
       let rootFolderName: string | null = null
       let workspaceRootLocation = connector?.workspaceRootLocation ?? null
-      let workspaceRootSharedDriveName = connector?.workspaceRootSharedDriveName ?? null
+      let workspaceRootSharedStorageName = connector?.workspaceRootSharedStorageName ?? null
 
       if (connector && rootFolderId) {
         try {
@@ -557,7 +575,7 @@ export async function GET(request: NextRequest) {
               })
               if (refreshed) {
                 workspaceRootLocation = refreshed.workspaceRootLocation ?? null
-                workspaceRootSharedDriveName = refreshed.workspaceRootSharedDriveName ?? null
+                workspaceRootSharedStorageName = refreshed.workspaceRootSharedStorageName ?? null
               }
             } catch {
               // optional
@@ -575,7 +593,7 @@ export async function GET(request: NextRequest) {
             })
             if (refreshed) {
               workspaceRootLocation = refreshed.workspaceRootLocation ?? null
-              workspaceRootSharedDriveName = refreshed.workspaceRootSharedDriveName ?? null
+              workspaceRootSharedStorageName = refreshed.workspaceRootSharedStorageName ?? null
             }
           } catch {
             // Leave null if Drive or token fails
@@ -594,7 +612,7 @@ export async function GET(request: NextRequest) {
               rootFolderId,
               rootFolderName,
               workspaceRootLocation,
-              workspaceRootSharedDriveName,
+              workspaceRootSharedStorageName,
               onboarding: (connector.settings as any)?.onboarding,
             }
           : null,
@@ -602,7 +620,6 @@ export async function GET(request: NextRequest) {
     }
 
     if (action === 'token') {
-      const { prisma } = require('@/lib/prisma')
 
       // Query connector directly by userId
       const connector = await (prisma as any).connector.findFirst({
@@ -636,7 +653,6 @@ export async function GET(request: NextRequest) {
     }
 
     if (action === 'drives') {
-      const { prisma } = require('@/lib/prisma')
 
       // Query connector directly by userId
       const connector = await (prisma as any).connector.findFirst({

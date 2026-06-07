@@ -5,6 +5,7 @@ import { createClient } from '@/utils/supabase/server'
 import { safeInngestSend } from '@/lib/inngest/client'
 import { getFirmReminderConfig } from '@/lib/actions/firms'
 import { logger } from '@/lib/logger'
+import { resolveEntity } from '@/lib/reminders/entity-registry'
 
 // ─── Stored shape ────────────────────────────────────────────────────────────
 
@@ -42,121 +43,6 @@ export type ReminderWithContext = {
     labelStyle: 'slate' | 'amber' | 'orange' | 'red'
 }
 
-// ─── Entity resolver map ─────────────────────────────────────────────────────
-
-type EntityContext = {
-    name: string
-    slug: string | null
-    firmSlug: string | null
-    ctaUrl: string | null
-}
-
-const ENTITY_RESOLVERS: Record<string, (id: string) => Promise<EntityContext>> = {
-    'platform.clients': async (id) => {
-        const c = await (prisma as any).client.findUnique({
-            where: { id },
-            select: { name: true, slug: true, firm: { select: { slug: true } } },
-        })
-        return {
-            name: c?.name ?? '',
-            slug: c?.slug ?? null,
-            firmSlug: c?.firm?.slug ?? null,
-            ctaUrl: c?.firm?.slug && c?.slug ? `/d/f/${c.firm.slug}/c/${c.slug}` : null,
-        }
-    },
-    'platform.engagements': async (id) => {
-        const e = await (prisma as any).engagement.findUnique({
-            where: { id },
-            select: { name: true, slug: true, client: { select: { slug: true, firm: { select: { slug: true } } } } },
-        })
-        const firmSlug = e?.client?.firm?.slug ?? null
-        const clientSlug = e?.client?.slug ?? null
-        return {
-            name: e?.name ?? '',
-            slug: e?.slug ?? null,
-            firmSlug,
-            ctaUrl: firmSlug && clientSlug && e?.slug ? `/d/f/${firmSlug}/c/${clientSlug}/e/${e.slug}` : null,
-        }
-    },
-    'platform.engagement_invitations': async (id) => {
-        const inv = await (prisma as any).engagementInvitation.findUnique({
-            where: { id },
-            select: { email: true, engagement: { select: { slug: true, client: { select: { slug: true, firm: { select: { slug: true } } } } } } },
-        })
-        const firmSlug = inv?.engagement?.client?.firm?.slug ?? null
-        const clientSlug = inv?.engagement?.client?.slug ?? null
-        const engSlug = inv?.engagement?.slug ?? null
-        return {
-            name: inv?.email ?? '',
-            slug: null,
-            firmSlug,
-            ctaUrl: firmSlug && clientSlug && engSlug ? `/d/f/${firmSlug}/c/${clientSlug}/e/${engSlug}` : null,
-        }
-    },
-    'platform.connectors': async (id) => {
-        const c = await (prisma as any).connector.findUnique({
-            where: { id },
-            select: { name: true, settings: true },
-        })
-        const email = (c?.settings as any)?.accountEmail ?? c?.name ?? 'Google Drive'
-        return { name: email, slug: null, firmSlug: null, ctaUrl: '/d/onboarding' }
-    },
-    'platform.firm_invitations': async (id) => {
-        const inv = await (prisma as any).firmInvitation.findUnique({
-            where: { id },
-            select: { email: true, firm: { select: { slug: true } } },
-        })
-        const firmSlug = inv?.firm?.slug ?? null
-        return {
-            name: inv?.email ?? 'Invited member',
-            slug: null,
-            firmSlug,
-            ctaUrl: firmSlug ? `/d/f/${firmSlug}/settings` : null,
-        }
-    },
-    'platform.documents': async (id) => {
-        const doc = await (prisma as any).engagementDocument.findUnique({
-            where: { id },
-            select: {
-                name: true,
-                engagement: { select: { slug: true, client: { select: { slug: true, firm: { select: { slug: true } } } } } },
-            },
-        })
-        const firmSlug = doc?.engagement?.client?.firm?.slug ?? null
-        const clientSlug = doc?.engagement?.client?.slug ?? null
-        const engSlug = doc?.engagement?.slug ?? null
-        return {
-            name: doc?.name ?? 'Shared document',
-            slug: null,
-            firmSlug,
-            ctaUrl: firmSlug && clientSlug && engSlug
-                ? `/d/f/${firmSlug}/c/${clientSlug}/e/${engSlug}/files`
-                : null,
-        }
-    },
-    'platform.doc_comments': async (id) => {
-        const c = await (prisma as any).docCommentMessage.findUnique({
-            where: { id },
-            select: {
-                content: true,
-                projectDocumentId: true,
-                engagement: { select: { slug: true, client: { select: { slug: true, firm: { select: { slug: true } } } } } },
-            },
-        })
-        const firmSlug = c?.engagement?.client?.firm?.slug ?? null
-        const clientSlug = c?.engagement?.client?.slug ?? null
-        const engSlug = c?.engagement?.slug ?? null
-        const preview = c?.content?.slice(0, 60) ?? 'Comment'
-        return {
-            name: preview,
-            slug: null,
-            firmSlug,
-            ctaUrl: firmSlug && clientSlug && engSlug
-                ? `/d/f/${firmSlug}/c/${clientSlug}/e/${engSlug}/files#doc-comment:${c?.projectDocumentId}:${id}`
-                : null,
-        }
-    },
-}
 
 // ─── Date field clearer map ──────────────────────────────────────────────────
 
@@ -182,11 +68,6 @@ const DATE_FIELD_CLEARERS: Record<string, (entityValue: string) => Promise<void>
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function entityTableKey(entityKey: string): string {
-    // "platform.clients.id" → "platform.clients"
-    return entityKey.split('.').slice(0, 2).join('.')
-}
 
 function computeLabel(delta: number): { label: string; labelStyle: ReminderWithContext['labelStyle'] } {
     switch (delta) {
@@ -237,11 +118,7 @@ export async function getUserReminders(): Promise<ReminderWithContext[]> {
 
     const resolved = await Promise.all(
         inWindow.map(async (item): Promise<ReminderWithContext | null> => {
-            const tableKey = entityTableKey(item.entityKey)
-            const resolver = ENTITY_RESOLVERS[tableKey]
-            const ctx = resolver
-                ? await resolver(item.entityValue).catch(() => null)
-                : null
+            const ctx = await resolveEntity(item.entityKey, item.entityValue)?.catch(() => null) ?? null
             if (!ctx) return null
 
             let delta: number | null = null

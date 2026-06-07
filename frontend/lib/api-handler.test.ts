@@ -36,7 +36,7 @@ describe('apiHandler', () => {
 
         expect(response.status).toBe(500)
         const data = await response.json()
-        expect(data.error.message).toBe('Test Error') // In dev/test env (non-prod), it shows message
+        expect(data.error.message).toBe('An unexpected error occurred') // sanitised in non-development envs (NODE_ENV=test fails the dev check)
     })
 
     it('should handle ApiError', async () => {

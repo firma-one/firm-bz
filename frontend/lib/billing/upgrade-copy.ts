@@ -19,7 +19,10 @@ export const upgradeCopy = {
     currentPlanNameFallback: 'Free',
     currentPlanLabelPlan: 'Plan',
     currentPlanLabelValidUntil: 'Valid until',
+    currentPlanLabelAccessEnds: 'Access ends',
     currentPlanValidUntilUnlimited: 'Unlimited',
+    scheduledCancelWarning: 'Subscription cancelled — access to non-sandbox firms ends on',
+    scheduledCancelWarningTrail: '. Reactivate before this date to keep access.',
     /** https://polar.sh — linked from billing UI */
     polarShUrl: 'https://polar.sh',
     polarLinkLabel: 'Polar',

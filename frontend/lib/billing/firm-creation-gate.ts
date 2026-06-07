@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import { countFirmsInBillingGroup, resolveBillingAnchorFirmId } from '@/lib/billing/billing-group'
+import { countBillableFirmsInBillingGroup, resolveBillingAnchorFirmId } from '@/lib/billing/billing-group'
 import {
     anchorUsesSandboxCapDefaults,
     effectiveFirmGroupCapForAnchor,
@@ -40,7 +40,7 @@ export async function getEligibleSatelliteAnchorCandidates(
         if (!anchor || anchorUsesSandboxCapDefaults(anchor)) continue
 
         const cap = effectiveFirmGroupCapForAnchor(anchor)
-        const used = await countFirmsInBillingGroup(anchorId)
+        const used = await countBillableFirmsInBillingGroup(anchorId)
         if (used < cap) {
             out.push({ anchorId, sandboxOnly: anchor.sandboxOnly })
         }
@@ -122,7 +122,7 @@ export async function getFirmCreationGateReason(userId: string): Promise<FirmCre
         hasPaidSubscription = true
 
         const cap = effectiveFirmGroupCapForAnchor(anchor)
-        const used = await countFirmsInBillingGroup(anchorId)
+        const used = await countBillableFirmsInBillingGroup(anchorId)
         if (used < cap) return { reason: 'allowed', cap }
         // At cap — return the cap value for messaging
         return { reason: 'at_cap', cap }

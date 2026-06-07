@@ -1,6 +1,7 @@
 import { inngest } from "./client";
 import { prisma } from "@/lib/prisma";
 import { googleDriveConnector } from "@/lib/google-drive-connector";
+import { getPermissionAdapter, getMigrationAdapter, getConnectorInstance } from "@/lib/connectors/registry";
 import { parseSettingsFromDb } from "@/lib/sharing-settings";
 import { logger } from "@/lib/logger";
 import { DocumentSharingPermissionStatus } from "@prisma/client";
@@ -13,6 +14,7 @@ import {
     setMigrationState,
     sendMaintenanceWarningToFirmMembers,
     forceSignOutFirmMembers,
+    createMigration,
     getActiveMigration,
     addMigrationFiles,
     updateMigrationStatus,
@@ -210,10 +212,11 @@ export const scanAndIndexProject = inngest.createFunction(
             const files: { externalId: string; fileName: string; parentId: string | null }[] = []
             const queue = [...rootFolderIds]
             const visited = new Set<string>()
+            const adapter = await getPermissionAdapter(connectorId)
 
             for (const folderId of rootFolderIds) {
                 try {
-                    const meta = await googleDriveConnector.getFileMetadata(connectorId, folderId)
+                    const meta = await adapter.getFileMetadata(connectorId, folderId)
                     if (meta?.name) {
                         files.push({
                             externalId: folderId,
@@ -232,7 +235,7 @@ export const scanAndIndexProject = inngest.createFunction(
                 visited.add(folderId)
 
                 try {
-                    const children = await googleDriveConnector.listFiles(connectorId, folderId, 500)
+                    const children = await adapter.listFiles(connectorId, folderId, 500)
                     for (const child of children) {
                         if (!child.id || !child.name) continue
                         files.push({ externalId: child.id, fileName: child.name, parentId: folderId })
@@ -372,7 +375,7 @@ export const provisionSandboxHierarchy = inngest.createFunction(
 export const reconcileFileDeletion = inngest.createFunction(
     { id: "reconcile-file-deletion", triggers: [{ event: "file.delete.requested" }] },
     async ({ event, step }) => {
-        const { organizationId, externalId, googlePermissionId } = event.data
+        const { organizationId, externalId, connectorPermissionId } = event.data
 
         await step.run("remove-from-search-index", async () => {
             const { SearchService } = await import("@/lib/services/search-service")
@@ -393,20 +396,21 @@ export const reconcileFileDeletion = inngest.createFunction(
 
             const docIds = docs.map((d) => d.id)
 
-            // Revoke all outstanding GDrive permissions for these docs
+            // Revoke all outstanding connector permissions for these docs
             if (connectorId) {
+                const adapter = await getPermissionAdapter(connectorId)
                 const sharingUsers = await prisma.engagementDocumentSharingUser.findMany({
                     where: {
                         projectDocumentId: { in: docIds },
                         sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED,
-                        googlePermissionId: { not: null },
+                        connectorPermissionId: { not: null },
                     },
-                    select: { googlePermissionId: true },
+                    select: { connectorPermissionId: true },
                 })
                 await Promise.allSettled(
                     sharingUsers
-                        .filter((s) => s.googlePermissionId)
-                        .map((s) => googleDriveConnector.revokePermission(connectorId, externalId, s.googlePermissionId!))
+                        .filter((s) => s.connectorPermissionId)
+                        .map((s) => adapter.revokePermission(connectorId, externalId, s.connectorPermissionId!))
                 )
 
                 // Trash system PDF copies (guest sharePdfOnly) — one per doc, if present
@@ -414,7 +418,7 @@ export const reconcileFileDeletion = inngest.createFunction(
                     docs
                         .map((d) => parseSettingsFromDb(d.settings)?.share?.guest?.options?.sharedPdfDriveId)
                         .filter((pdfId): pdfId is string => !!pdfId)
-                        .map((pdfId) => googleDriveConnector.trashFile(connectorId, pdfId))
+                        .map((pdfId) => adapter.trashFile(connectorId, pdfId))
                 )
             }
 
@@ -458,20 +462,21 @@ export const reconcileFolderDeletion = inngest.createFunction(
                 select: { connectorId: true },
             }))?.connectorId
 
-            // Revoke all outstanding GDrive permissions
+            // Revoke all outstanding connector permissions
             if (connectorId) {
+                const adapter = await getPermissionAdapter(connectorId)
                 const sharingUsers = await prisma.engagementDocumentSharingUser.findMany({
                     where: {
                         projectDocumentId: doc.id,
                         sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED,
-                        googlePermissionId: { not: null },
+                        connectorPermissionId: { not: null },
                     },
-                    select: { googlePermissionId: true },
+                    select: { connectorPermissionId: true },
                 })
                 await Promise.allSettled(
                     sharingUsers
-                        .filter((s) => s.googlePermissionId)
-                        .map((s) => googleDriveConnector.revokePermission(connectorId, externalId, s.googlePermissionId!))
+                        .filter((s) => s.connectorPermissionId)
+                        .map((s) => adapter.revokePermission(connectorId, externalId, s.connectorPermissionId!))
                 )
             }
 
@@ -524,7 +529,7 @@ export const revokeProjectSharing = inngest.createFunction(
                     where: { engagementId: projectId },
                     data: {
                         sharingPermissionStatus: DocumentSharingPermissionStatus.REVOKED,
-                        googlePermissionId: null,
+                        connectorPermissionId: null,
                     },
                 });
             });
@@ -532,23 +537,25 @@ export const revokeProjectSharing = inngest.createFunction(
         }
 
         const revokeResults = await step.run("revoke-permissions", async () => {
+            const adapter = await getPermissionAdapter(connectorId)
             let successCount = 0;
+            let failureCount = 0;
             const BATCH_SIZE = 10;
 
             for (let i = 0; i < shares.length; i += BATCH_SIZE) {
                 const batch = shares.slice(i, i + BATCH_SIZE);
-                await Promise.all(batch.map(async (share: { googlePermissionId: string | null; document: { externalId: string } | null }) => {
-                    if (share.googlePermissionId && share.document?.externalId) {
+                await Promise.all(batch.map(async (share: { connectorPermissionId: string | null; document: { externalId: string } | null }) => {
+                    if (share.connectorPermissionId && share.document?.externalId) {
                         try {
-                            await googleDriveConnector.revokePermission(connectorId, share.document.externalId, share.googlePermissionId);
+                            await adapter.revokePermission(connectorId, share.document.externalId, share.connectorPermissionId);
                             successCount++;
                         } catch (e) {
-                            successCount++
+                            failureCount++
                         }
                     }
                 }));
             }
-            return { successCount };
+            return { successCount, failureCount };
         });
 
         await step.run("mark-shares-revoked", async () => {
@@ -556,7 +563,7 @@ export const revokeProjectSharing = inngest.createFunction(
                 where: { engagementId: projectId },
                 data: {
                     sharingPermissionStatus: DocumentSharingPermissionStatus.REVOKED,
-                    googlePermissionId: null,
+                    connectorPermissionId: null,
                 },
             });
         });
@@ -584,7 +591,8 @@ export const revokeProjectSharing = inngest.createFunction(
             const authUsers = await prisma.$queryRawUnsafe<Array<{ id: string; email: string }>>(
                 `SELECT id::text, email FROM auth.users WHERE id IN (${userIds})`
             );
-            const folderIds = await googleDriveConnector.getProjectFolderIds(cid, engagement.slug, {
+            const adapter = await getPermissionAdapter(cid)
+            const folderIds = await adapter.getEngagementFolderIds(cid, engagement.slug, {
                 projectName: engagement.name,
                 clientSlug: engagement.client.slug,
                 clientName: engagement.client.name,
@@ -594,10 +602,10 @@ export const revokeProjectSharing = inngest.createFunction(
             for (const row of authUsers) {
                 if (!row.email) continue;
                 if (folderIds.generalFolderId) {
-                    if (await googleDriveConnector.downgradeFolderUserPermissionToReader(cid, folderIds.generalFolderId, row.email)) n++;
+                    if (await adapter.downgradeFolderUserPermissionToReader(cid, folderIds.generalFolderId, row.email)) n++;
                 }
                 if (folderIds.confidentialFolderId) {
-                    await googleDriveConnector.downgradeFolderUserPermissionToReader(cid, folderIds.confidentialFolderId, row.email);
+                    await adapter.downgradeFolderUserPermissionToReader(cid, folderIds.confidentialFolderId, row.email);
                 }
             }
             return { downgraded: n };
@@ -676,7 +684,7 @@ export const revokeByDisabledPersona = inngest.createFunction(
                     (disabledPersonas.includes('guest') && personaSlug === 'eng_viewer') ||
                     (disabledPersonas.includes('externalCollaborator') && personaSlug === 'eng_ext_collaborator');
 
-                if (shouldRevoke && user.googlePermissionId) {
+                if (shouldRevoke && user.connectorPermissionId) {
                     usersForRevocation.push(user);
                 }
             }
@@ -686,11 +694,12 @@ export const revokeByDisabledPersona = inngest.createFunction(
         if (usersToRevoke.length === 0) return { message: "No users to revoke" };
 
         const revokeResults = await step.run("revoke-permissions", async () => {
+            const adapter = await getPermissionAdapter(connectorId)
             let successCount = 0;
             for (const user of usersToRevoke) {
-                if (user.googlePermissionId) {
+                if (user.connectorPermissionId) {
                     try {
-                        await googleDriveConnector.revokePermission(connectorId, documentId, user.googlePermissionId);
+                        await adapter.revokePermission(connectorId, documentId, user.connectorPermissionId);
                         successCount++;
                     } catch (e) {
                         // ignore
@@ -706,7 +715,7 @@ export const revokeByDisabledPersona = inngest.createFunction(
                 where: { id: { in: userIdsToDelete } },
                 data: {
                     sharingPermissionStatus: DocumentSharingPermissionStatus.REVOKED,
-                    googlePermissionId: null,
+                    connectorPermissionId: null,
                 },
             });
         });
@@ -744,17 +753,18 @@ export const revokeByMemberPersonaChange = inngest.createFunction(
                 include: { sharingUsers: { where: { userId } } }
             });
 
-            return docs.flatMap((d: any) => d.sharingUsers.map((u: any) => ({ document: d, user: u }))).filter((x: any) => x.user.googlePermissionId);
+            return docs.flatMap((d: any) => d.sharingUsers.map((u: any) => ({ document: d, user: u }))).filter((x: any) => x.user.connectorPermissionId);
         });
 
         if (sharesToRevoke.length === 0) return { message: "No shares found" };
 
         const revokeResults = await step.run("revoke-permissions", async () => {
+            const adapter = await getPermissionAdapter(connectorId)
             let successCount = 0;
             for (const { document, user } of sharesToRevoke) {
-                if (user.googlePermissionId && document.externalId) {
+                if (user.connectorPermissionId && document.externalId) {
                     try {
-                        await googleDriveConnector.revokePermission(connectorId, document.externalId, user.googlePermissionId);
+                        await adapter.revokePermission(connectorId, document.externalId, user.connectorPermissionId);
                         successCount++;
                     } catch (e) {
                         // ignore
@@ -770,7 +780,7 @@ export const revokeByMemberPersonaChange = inngest.createFunction(
                 where: { id: { in: userShareIds } },
                 data: {
                     sharingPermissionStatus: DocumentSharingPermissionStatus.REVOKED,
-                    googlePermissionId: null,
+                    connectorPermissionId: null,
                 },
             });
         });
@@ -853,13 +863,14 @@ export const grantPermissionsForNewMember = inngest.createFunction(
         const role: "writer" | "reader" = personaSlug === "eng_viewer" ? "reader" : "writer";
 
         const grantResults = await step.run("grant-permissions", async () => {
+            const adapter = await getPermissionAdapter(connectorId)
             let successCount = 0;
             for (const doc of documentsToGrant) {
                 try {
                     const externalId = doc.externalId;
                     if (!externalId) continue;
 
-                    const permissionId = await googleDriveConnector.grantFolderPermission(connectorId, externalId, email, role);
+                    const permissionId = await adapter.grantFolderPermission(connectorId, externalId, email, role);
 
                     if (permissionId) {
                         await prisma.engagementDocumentSharingUser.create({
@@ -868,7 +879,7 @@ export const grantPermissionsForNewMember = inngest.createFunction(
                                 projectDocumentId: doc.id,
                                 userId,
                                 email,
-                                googlePermissionId: permissionId,
+                                connectorPermissionId: permissionId,
                                 sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED,
                             },
                         });
@@ -893,7 +904,10 @@ export const migrateWorkspaceRoot = inngest.createFunction(
         triggers: [{ event: 'workspace.migrate.requested' }],
         onFailure: async ({ error, event }: { error: Error; event: { data: { event: { data: { firmId: string; newRootFolderId: string; oldRootFolderId: string; startedAt?: string } } } } }) => {
             const { firmId } = event.data.event.data
-            await setMaintenanceMode(firmId, null)
+            await Promise.all([
+                setMaintenanceMode(firmId, null),
+                setMigrationPending(firmId, null),
+            ])
             const migration = await getActiveMigration(firmId)
             if (migration) {
                 await updateMigrationStatus(migration.id, 'failed')
@@ -907,9 +921,31 @@ export const migrateWorkspaceRoot = inngest.createFunction(
             sendMaintenanceWarningToFirmMembers(firmId, estimatedMinutes)
         )
 
+        // Create the DB migration record so latestMigrationStatus is trackable from the start.
+        // upsert-style: if a record already exists from a prior attempt, reuse it.
+        await step.run('create-migration-record', async () => {
+            const existing = await getActiveMigration(firmId)
+            if (!existing) {
+                await createMigration({
+                    firmId,
+                    connectorId: connectionId,
+                    oldRootFolderId: oldRootFolderId || null,
+                    newRootFolderId,
+                    initiatedBy: initiatingUserId,
+                    estimatedMinutes,
+                })
+            }
+        })
+
         await step.sleep('grace-period', '2m')
 
         await step.run('lock-and-sign-out', async () => {
+            // Guard: if cancelled during the grace sleep, migrationPending will be null — abort
+            const migration = await getActiveMigration(firmId)
+            if (!migration || migration.status !== 'pending_grace') {
+                logger.info('Migration cancelled during grace period — aborting lock', 'MigrateWorkspace', { firmId })
+                return
+            }
             await Promise.all([
                 setMaintenanceMode(firmId, {
                     active: true,
@@ -920,31 +956,39 @@ export const migrateWorkspaceRoot = inngest.createFunction(
                     reason: 'workspace_migration',
                 }),
                 setMigrationPending(firmId, null),
+                ...(migration ? [updateMigrationStatus(migration.id, 'in_progress')] : []),
             ])
             await forceSignOutFirmMembers(firmId, initiatingUserId)
         })
 
-        // Verify access token is obtainable before proceeding
+        // Resolve the migration adapter once (one DB read) and verify the access token before proceeding.
+        // getMigrationAdapter is called outside step.run intentionally: it is idempotent, has no
+        // side-effects, and its result (an object) cannot be serialized across Inngest step boundaries.
+        // The token check is wrapped in a step so Inngest can retry it independently.
+        const migrationAdapter = await getMigrationAdapter(connectionId)
+
         await step.run('get-access-token', async () => {
-            const token = await googleDriveConnector.getAccessToken(connectionId)
+            const connector = await prisma.connector.findUnique({ where: { id: connectionId }, select: { type: true } })
+            if (!connector) throw new Error('Connector not found: ' + connectionId)
+            const token = await getConnectorInstance(connector.type).getAccessToken(connectionId)
             if (!token) throw new Error('Could not obtain access token for connector ' + connectionId)
             return token
         })
-
         const allFailures: { id: string; error: string }[] = []
 
         if (oldRootFolderId) {
-            // Step: list all top-level children of the old root
-            const fileIds = await step.run('list-children', () =>
-                googleDriveConnector.listTopLevelChildren(connectionId, oldRootFolderId)
+            // Step: list all top-level children of the old root (with names for progress tracking)
+            const fileItems = await step.run('list-children', () =>
+                migrationAdapter.listTopLevelChildrenWithNames(connectionId, oldRootFolderId)
             )
+            const fileIds = fileItems.map((f: { id: string; name: string }) => f.id)
 
-            // Bulk-insert file records for tracking
-            if (fileIds.length > 0) {
+            // Bulk-insert file records for tracking (with names so the UI can show them)
+            if (fileItems.length > 0) {
                 await step.run('register-migration-files', async () => {
                     const migration = await getActiveMigration(firmId)
                     if (migration) {
-                        await addMigrationFiles(migration.id, fileIds.map((id: string) => ({ fileId: id })))
+                        await addMigrationFiles(migration.id, fileItems.map((f: { id: string; name: string }) => ({ fileId: f.id, fileName: f.name })))
                     }
                 })
             }
@@ -957,7 +1001,7 @@ export const migrateWorkspaceRoot = inngest.createFunction(
                 const batchIndex = Math.floor(i / BATCH_SIZE)
 
                 const result = await step.run(`move-batch-${batchIndex}`, () =>
-                    googleDriveConnector.moveBatch(connectionId, batch, oldRootFolderId, newRootFolderId)
+                    migrationAdapter.moveBatch(connectionId, batch, oldRootFolderId, newRootFolderId)
                 )
                 allFailures.push(...result.failures)
 
@@ -968,7 +1012,7 @@ export const migrateWorkspaceRoot = inngest.createFunction(
         }
 
         await step.run('persist-root-location', () =>
-            googleDriveConnector.persistWorkspaceRootLocation(connectionId, newRootFolderId)
+            migrationAdapter.persistWorkspaceRootLocation(connectionId, newRootFolderId)
         )
 
         // Note: project-level reindex requires rootFolderIds per project — not available
@@ -976,7 +1020,12 @@ export const migrateWorkspaceRoot = inngest.createFunction(
         // on next access or via a dedicated reindex trigger.
 
         await step.run('unlock-workspace', async () => {
-            await setMaintenanceMode(firmId, null)
+            const migration = await getActiveMigration(firmId)
+            const finalStatus = allFailures.length > 0 ? 'failed_partial' : 'completed'
+            await Promise.all([
+                setMaintenanceMode(firmId, null),
+                ...(migration ? [updateMigrationStatus(migration.id, finalStatus)] : []),
+            ])
             if (allFailures.length > 0) {
                 const firm = await prisma.firm.findUnique({ where: { id: firmId } })
                 if (firm) {

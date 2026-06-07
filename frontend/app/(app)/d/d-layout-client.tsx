@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { AuthGuard } from '@/components/auth/auth-guard'
 import { AppSidebar } from '@/components/app/app-sidebar'
 import { AppTopbar } from '@/components/app/app-topbar'
-import { LayoutRightPanel, RIGHT_PANEL_DOCKED_WIDTH_PX, RIGHT_PANEL_MEDIUM_WIDTH_PX } from '@/components/app/layout-right-panel'
+import { LayoutRightPanel, RIGHT_PANEL_DOCKED_WIDTH_PX } from '@/components/app/layout-right-panel'
 import { SidebarProvider, useSidebar } from '@/lib/sidebar-context'
 import { ViewAsProvider } from '@/lib/view-as-context'
 import { RightPaneProvider, useRightPane } from '@/lib/right-pane-context'
@@ -17,6 +17,7 @@ import { DownloadProgressProvider } from '@/lib/download-progress-context'
 import { DownloadProgressPanel } from '@/components/ui/download-progress-panel'
 import { UploadProgressProvider } from '@/lib/upload-progress-context'
 import { UploadProgressPanel } from '@/components/ui/upload-progress-panel'
+import { MigrationProgressPanel } from '@/components/ui/migration-progress-panel'
 import { DebugFloatingTrigger } from '@/components/debug/debug-floating-trigger'
 import { StandardCheckoutIntentBanner } from '@/components/billing/standard-checkout-intent-banner'
 import { OnboardingExitGuardBanner } from '@/components/onboarding/onboarding-exit-guard-banner'
@@ -24,7 +25,6 @@ import { AppShellHintStrip } from '@/components/layout/app-shell-hint-strip'
 import { useFirmMaintenanceStatus } from '@/lib/hooks/use-firm-maintenance-status'
 import { usePlatformMaintenanceStatus } from '@/lib/hooks/use-platform-maintenance-status'
 import { useAuth } from '@/lib/auth-context'
-import { useToast } from '@/components/ui/toast'
 import { Megaphone } from 'lucide-react'
 
 const TOP_BAR_HEIGHT = 64
@@ -34,7 +34,6 @@ function AppLayoutContent({ children, isSystemAdmin }: { children: React.ReactNo
     const { isCollapsed } = useSidebar()
     const { content: rightPaneContent, title: rightPaneTitle, clearPane, headerActions: rightPaneHeaderActions, headerIcon, headerSubtitle, paneSize } = useRightPane()
     const { session } = useAuth()
-    const { addToast } = useToast()
     const accessToken = session?.access_token ?? null
     const firms = useSidebarFirms()
 
@@ -51,17 +50,55 @@ function AppLayoutContent({ children, isSystemAdmin }: { children: React.ReactNo
         ? (firms?.find((f) => f.slug === currentSlug)?.id ?? null)
         : null
 
-    const maintenanceStatus = useFirmMaintenanceStatus(currentFirmId, accessToken, 15_000)
+    const { status: maintenanceStatus, refresh: refreshMaintenanceStatus } = useFirmMaintenanceStatus(currentFirmId, accessToken, 15_000)
     const prevActiveRef = useRef<boolean | null>(null)
+    const prevMigrationStatusRef = useRef<string | null | undefined>(undefined)
 
     useEffect(() => {
         const isActive = maintenanceStatus?.active === true
+        const migrationStatus = maintenanceStatus?.latestMigrationStatus
+
+        // Case 1: tab saw active=true and now it's false — migration just completed
         if (prevActiveRef.current === true && !isActive && maintenanceStatus !== null) {
-            addToast({ title: 'Workspace ready', message: 'Migration complete — workspace is back online.', type: 'success' })
             window.location.reload()
+            return
         }
-        if (maintenanceStatus !== null) prevActiveRef.current = isActive
-    }, [maintenanceStatus, addToast])
+        // Case 2: tab missed active=true (loaded mid-migration or after) — detect
+        // completion via latestMigrationStatus transitioning to a terminal state
+        const terminal = migrationStatus === 'completed' || migrationStatus === 'failed' || migrationStatus === 'failed_partial'
+        if (
+            prevMigrationStatusRef.current !== undefined &&
+            prevMigrationStatusRef.current !== migrationStatus &&
+            terminal
+        ) {
+            window.location.reload()
+            return
+        }
+
+        if (maintenanceStatus !== null) {
+            prevActiveRef.current = isActive
+            prevMigrationStatusRef.current = migrationStatus
+        }
+    }, [maintenanceStatus])
+
+    // Allow any child to trigger an immediate maintenance status refresh
+    // by dispatching a `firma:refresh-maintenance` custom event on window.
+    useEffect(() => {
+        const handler = () => void refreshMaintenanceStatus()
+        window.addEventListener('firma:refresh-maintenance', handler)
+        return () => window.removeEventListener('firma:refresh-maintenance', handler)
+    }, [refreshMaintenanceStatus])
+
+    const [migrationStartedAt, setMigrationStartedAt] = useState<string | null>(null)
+
+    useEffect(() => {
+        const handler = () => {
+            setMigrationStartedAt(new Date().toISOString())
+            void refreshMaintenanceStatus()
+        }
+        window.addEventListener('firma:migration-started', handler)
+        return () => window.removeEventListener('firma:migration-started', handler)
+    }, [refreshMaintenanceStatus])
 
     const platformStatus = usePlatformMaintenanceStatus(20_000)
     const [graceCountdown, setGraceCountdown] = useState<string | null>(null)
@@ -138,13 +175,6 @@ function AppLayoutContent({ children, isSystemAdmin }: { children: React.ReactNo
                                 description="All active sessions will be signed out automatically. You can sign back in once maintenance is complete."
                             />
                         )}
-                        {maintenanceStatus?.active === true && (
-                            <AppShellHintStrip
-                                accent="amber"
-                                title="Workspace maintenance in progress"
-                                description={`Files are being migrated · Est. ${maintenanceStatus.estimatedMinutes ?? '?'} min remaining`}
-                            />
-                        )}
                     </main>
 
                     {/* ── Right pane: m-4 rounded-xl shadow-xl (matches code.html) ── */}
@@ -170,6 +200,15 @@ function AppLayoutContent({ children, isSystemAdmin }: { children: React.ReactNo
 
                 <OnboardingExitGuardBanner />
                 <DebugFloatingTrigger />
+                <MigrationProgressPanel
+                    status={maintenanceStatus}
+                    migrationStartedAt={migrationStartedAt}
+                    onMigrationStartedAtClear={() => setMigrationStartedAt(null)}
+                    firmId={currentFirmId}
+                    accessToken={accessToken}
+                    onCancelled={() => window.location.reload()}
+                    onRefresh={refreshMaintenanceStatus}
+                />
             </div>
         </AuthGuard>
     )

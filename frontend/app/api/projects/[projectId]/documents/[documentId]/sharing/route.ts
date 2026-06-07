@@ -9,7 +9,10 @@ import { safeInngestSend } from '@/lib/inngest/client'
 import { resolveProjectContext } from '@/lib/resolve-project-context'
 import { canManageProject } from '@/lib/permission-helpers'
 import { GoogleDriveConnector } from '@/lib/google-drive-connector'
+import { getPermissionAdapter } from '@/lib/connectors/registry'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
+import { assertFirmSubscriptionAccess } from '@/lib/billing/subscription-gate'
+import { SubscriptionRevokedError } from '@/lib/errors/api-error'
 
 /** ProjectDocument can contain BigInt (fileSize); JSON.stringify cannot serialize it. */
 function toJsonSafeSharing(doc: Record<string, unknown> | null): Record<string, unknown> | null {
@@ -110,6 +113,8 @@ export async function PUT(
     const canManage = await canManageProject(ctx.firmId, ctx.clientId, ctx.projectId)
     if (!canManage) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
+    await assertFirmSubscriptionAccess(ctx.firmId)
+
     const body = await request.json().catch(() => ({}))
     const title = typeof body.title === 'string' ? body.title : ''
 
@@ -167,11 +172,15 @@ export async function PUT(
         if (sharedPdfDriveId) {
           let resolvedConnectorId = existing.connectorId
           if (!resolvedConnectorId) {
-            const org = await prisma.firm.findUnique({ where: { id: fileInfo.organizationId }, include: { connector: true } })
-            if (org?.connector?.type === 'GOOGLE_DRIVE' && org.connector.status === 'ACTIVE') resolvedConnectorId = org.connector.id
+            const org = await prisma.firm.findUnique({ where: { id: fileInfo.organizationId }, include: { connector: true, connectors: true } })
+            const active = [...(org?.connectors ?? []), ...(org?.connector ? [org.connector] : [])].find(c => c.status === 'ACTIVE')
+            if (active) resolvedConnectorId = active.id
           }
           if (resolvedConnectorId) {
-            try { await GoogleDriveConnector.getInstance().trashFile(resolvedConnectorId, sharedPdfDriveId) } catch {}
+            try {
+              const adapter = await getPermissionAdapter(resolvedConnectorId)
+              await adapter.trashFile(resolvedConnectorId, sharedPdfDriveId)
+            } catch {}
           }
         }
 
@@ -288,16 +297,15 @@ export async function PUT(
           if (!resolvedConnectorId) {
             const org = await prisma.firm.findUnique({
               where: { id: fileInfo.organizationId },
-              include: { connector: true },
+              include: { connector: true, connectors: true },
             })
-            if (org?.connector?.type === 'GOOGLE_DRIVE' && org.connector.status === 'ACTIVE') {
-              resolvedConnectorId = org.connector.id
-            }
+            const active = [...(org?.connectors ?? []), ...(org?.connector ? [org.connector] : [])].find(c => c.status === 'ACTIVE')
+            if (active) resolvedConnectorId = active.id
           }
           if (resolvedConnectorId) {
             try {
-              const drive = GoogleDriveConnector.getInstance()
-              await drive.trashFile(resolvedConnectorId, pdfDriveId)
+              const adapter = await getPermissionAdapter(resolvedConnectorId)
+              await adapter.trashFile(resolvedConnectorId, pdfDriveId)
             } catch (e) {
               console.error('Failed to trash system PDF on guest disable:', e)
             }
@@ -317,17 +325,27 @@ export async function PUT(
         })
       }
 
-      // Enforce allowDownload on Drive files whenever guest sharing is active
+      // Enforce allowDownload on Drive files whenever guest sharing is active.
+      // patchFileProperties is Google Drive-specific — resolve a Drive connector only.
       if (guest) {
-        let resolvedConnectorId = updated.connectorId
+        let resolvedConnectorId: string | null = null
+        if (updated.connectorId) {
+          // Verify the document's own connector is an active Google Drive connector before using it
+          const docConnector = await prisma.connector.findUnique({
+            where: { id: updated.connectorId },
+            select: { id: true, type: true, status: true },
+          })
+          if (docConnector?.type === 'GOOGLE_DRIVE' && docConnector.status === 'ACTIVE') {
+            resolvedConnectorId = docConnector.id
+          }
+        }
         if (!resolvedConnectorId) {
           const org = await prisma.firm.findUnique({
             where: { id: fileInfo.organizationId },
-            include: { connector: true },
+            include: { connector: true, connectors: true },
           })
-          if (org?.connector?.type === 'GOOGLE_DRIVE' && org.connector.status === 'ACTIVE') {
-            resolvedConnectorId = org.connector.id
-          }
+          const active = [...(org?.connectors ?? []), ...(org?.connector ? [org.connector] : [])].find(c => c.status === 'ACTIVE' && c.type === 'GOOGLE_DRIVE')
+          if (active) resolvedConnectorId = active.id
         }
 
         if (resolvedConnectorId) {
@@ -430,6 +448,7 @@ export async function PUT(
 
     return NextResponse.json({ sharing: toJsonSafeSharing(updated as Record<string, unknown> | null) })
   } catch (e) {
+    if (e instanceof SubscriptionRevokedError) return NextResponse.json({ error: e.message }, { status: 403 })
     console.error('PUT sharing error', e)
     return NextResponse.json({ error: 'Failed to save sharing' }, { status: 500 })
   }
@@ -449,6 +468,8 @@ export async function DELETE(
     if (!ctx) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
     const canManage = await canManageProject(ctx.firmId, ctx.clientId, ctx.projectId)
     if (!canManage) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+    await assertFirmSubscriptionAccess(ctx.firmId)
 
     const fileInfo = await getFileInfo(projectId, documentIdParam)
     if (!fileInfo) return NextResponse.json({ error: 'File not found' }, { status: 404 })
@@ -489,13 +510,16 @@ export async function DELETE(
         ? await prisma.connector.findUnique({ where: { id: existing.connectorId } })
         : await prisma.firm.findUnique({
             where: { id: fileInfo.organizationId },
-            include: { connector: true },
-          }).then(org => org?.connector || null)
+            include: { connector: true, connectors: true },
+          }).then(org => {
+            const all = [...(org?.connectors ?? []), ...(org?.connector ? [org.connector] : [])]
+            return all.find(c => c.status === 'ACTIVE') ?? null
+          })
 
-      if (connector?.type === 'GOOGLE_DRIVE' && connector?.status === 'ACTIVE') {
+      if (connector?.status === 'ACTIVE') {
         try {
-          const drive = GoogleDriveConnector.getInstance()
-          await drive.trashFile(connector.id, sharedPdfDriveId)
+          const adapter = await getPermissionAdapter(connector.id)
+          await adapter.trashFile(connector.id, sharedPdfDriveId)
         } catch (e) {
           console.error('Failed to trash system PDF file:', e)
         }
@@ -529,6 +553,7 @@ export async function DELETE(
 
     return NextResponse.json({ success: true })
   } catch (e) {
+    if (e instanceof SubscriptionRevokedError) return NextResponse.json({ error: e.message }, { status: 403 })
     console.error('DELETE sharing error', e)
     return NextResponse.json({ error: 'Failed to delete sharing' }, { status: 500 })
   }

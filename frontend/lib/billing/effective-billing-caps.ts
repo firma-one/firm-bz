@@ -5,7 +5,7 @@ import {
 } from '@/lib/billing/active-billing-subscription'
 import {
     resolveBillingAnchorFirmId,
-    countFirmsInBillingGroup,
+    countBillableFirmsInBillingGroup,
     listFirmIdsInBillingGroup,
 } from '@/lib/billing/billing-group'
 import { pricingModelFromRecurringFlag } from '@/lib/billing/pricing-model'
@@ -124,7 +124,7 @@ export async function assertWithinFirmGroupCap(anchorFirmId: string): Promise<vo
     if (!anchor || anchorUsesSandboxCapDefaults(anchor)) return
 
     const cap = effectiveFirmGroupCapForAnchor(anchor)
-    const n = await countFirmsInBillingGroup(anchorFirmId)
+    const n = await countBillableFirmsInBillingGroup(anchorFirmId)
     if (n >= cap) {
         throw new Error(
             `Your subscription allows ${cap} firm workspace${cap === 1 ? '' : 's'}. Upgrade or contact support to add more.`

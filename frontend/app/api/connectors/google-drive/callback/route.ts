@@ -218,6 +218,7 @@ export async function GET(request: NextRequest) {
     let organizationId = ''
     let rootFolderId: string | undefined = undefined
     let skipAutoFolder = false
+    let replaceConnectorId: string | undefined = undefined
 
     try {
       if (state) {
@@ -227,6 +228,7 @@ export async function GET(request: NextRequest) {
         nextPath = decodedState.next || null
         rootFolderId = decodedState.rootFolderId || undefined
         skipAutoFolder = decodedState.skipAutoFolder === true
+        replaceConnectorId = decodedState.replaceConnectorId || undefined
       } else {
         throw new Error('No state provided')
       }
@@ -306,6 +308,30 @@ export async function GET(request: NextRequest) {
       // Note: If no organization exists yet (DB reset or fresh onboarding),
       // we still store the connection. The organization will be linked later.
       const tokenExpiresAt = new Date(Date.now() + tokens.expires_in * 1000)
+
+      // When replacing an existing connector, revoke it before creating the new one
+      // to avoid duplicate-connector state. We revoke regardless of whether the new
+      // account is the same or different — storeConnection upserts by (type, userId).
+      if (replaceConnectorId) {
+        try {
+          await prisma.connector.update({
+            where: { id: replaceConnectorId },
+            data: {
+              status: 'REVOKED',
+              accessToken: '',
+              refreshToken: null,
+              tokenExpiresAt: null,
+              firmId: null,
+            },
+          })
+          logger.info('Revoked replaced connector', { replaceConnectorId })
+        } catch (revokeErr) {
+          logger.warn('Could not revoke replaced connector', {
+            replaceConnectorId,
+            error: revokeErr instanceof Error ? revokeErr.message : String(revokeErr),
+          })
+        }
+      }
 
       const connector = await googleDriveConnector.storeConnection(
         organization?.id, // Might be undefined

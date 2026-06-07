@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:polar.sh)",
+      "Bash(grep -n '$queryRawUnsafe' /Users/deepak/Personal/Projects/firma-one/firm-bz/frontend/lib/sync-document-sharing.ts /Users/deepak/Personal/Projects/firma-one/firm-bz/frontend/lib/inngest/functions.ts)",
+      "Bash(npx markdownlint *)",
+      "Bash(node -e ' *)",
+      "Bash(DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres node -e ' *)"
+    ]
+  }
+}

@@ -126,9 +126,16 @@ export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className,
                             {selectedOrg?.name || 'Select Workspace...'}
                         </span>
                         {selectedOrg?.sandboxOnly && (
-                            <span className="inline-flex items-center rounded bg-[#f3f4f6] px-1.5 py-0.5 text-[10px] font-medium text-[#6b7280] ring-1 ring-inset ring-[#e5e7eb] whitespace-nowrap shrink-0">
-                                Sandbox
-                            </span>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <span className="shrink-0 flex items-center" aria-label="Sandbox firm">
+                                        <Box className="h-3.5 w-3.5 text-[#9ca3af]" />
+                                    </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="text-xs">
+                                    Sandbox Firm — no real client data
+                                </TooltipContent>
+                            </Tooltip>
                         )}
                         <span className="ml-auto shrink-0 flex items-center">
                             {isSelectOpen
@@ -151,9 +158,16 @@ export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className,
                                     {selectedOrg ? `/${selectedOrg.slug}` : '/—'}
                                 </span>
                                 {selectedOrg?.sandboxOnly && (
-                                    <span className="inline-flex items-center rounded bg-[#f3f4f6] px-1.5 py-0.5 text-[10px] font-medium text-[#6b7280] ring-1 ring-inset ring-[#e5e7eb] whitespace-nowrap shrink-0">
-                                        Sandbox
-                                    </span>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <span className="shrink-0 flex items-center" aria-label="Sandbox firm">
+                                                <Box className="h-3.5 w-3.5 text-[#9ca3af]" />
+                                            </span>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top" className="text-xs">
+                                            Sandbox Firm — no real client data
+                                        </TooltipContent>
+                                    </Tooltip>
                                 )}
                             </div>
                         </div>

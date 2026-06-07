@@ -59,6 +59,20 @@ export async function countFirmsInBillingGroup(anchorFirmId: string): Promise<nu
     })
 }
 
+/**
+ * Non-sandbox firms in this billing group counted against the plan's firm cap.
+ * The sandbox/anchor firm itself does not consume a firm slot.
+ */
+export async function countBillableFirmsInBillingGroup(anchorFirmId: string): Promise<number> {
+    return prisma.firm.count({
+        where: {
+            OR: [{ id: anchorFirmId }, { anchorFirmId }],
+            deletedAt: null,
+            sandboxOnly: false,
+        },
+    })
+}
+
 /** Returns firm ids under this anchor umbrella (anchor + one-level satellites). */
 export async function listFirmIdsInBillingGroup(anchorFirmId: string): Promise<string[]> {
     const rows = await prisma.firm.findMany({
