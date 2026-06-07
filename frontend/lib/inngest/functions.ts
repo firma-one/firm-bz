@@ -943,7 +943,7 @@ export const migrateWorkspaceRoot = inngest.createFunction(
             // Guard: if cancelled during the grace sleep, migrationPending will be null — abort
             const migration = await getActiveMigration(firmId)
             if (!migration || migration.status !== 'pending_grace') {
-                logger.info('Migration cancelled during grace period — aborting lock', 'MigrateWorkspace', undefined, { firmId })
+                logger.info('Migration cancelled during grace period — aborting lock', 'MigrateWorkspace', { firmId })
                 return
             }
             await Promise.all([

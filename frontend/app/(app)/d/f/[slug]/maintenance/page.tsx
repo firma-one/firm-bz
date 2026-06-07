@@ -29,7 +29,7 @@ export default function MaintenancePage() {
       .catch(() => { /* ignore */ })
   }, [slug, accessToken])
 
-  const status = useFirmMaintenanceStatus(firmId, accessToken, 20_000)
+  const { status } = useFirmMaintenanceStatus(firmId, accessToken, 20_000)
   const wasActive = useRef(false)
 
   useEffect(() => {
