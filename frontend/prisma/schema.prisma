@@ -36,10 +36,10 @@ enum ConnectorStatus {
   @@schema("platform")
 }
 
-/** Where the Google Drive workspace root folder lives (persisted; backfilled from Drive API when null). */
+/** Where the connector workspace root folder lives (persisted; backfilled from provider API when null). */
 enum WorkspaceRootLocation {
-  MY_DRIVE
-  SHARED_DRIVE
+  PERSONAL
+  SHARED
 
   @@schema("platform")
 }
@@ -156,12 +156,12 @@ model Connector {
   status            ConnectorStatus @default(ACTIVE)
   lastSyncAt        DateTime?
   settings          Json            @default("{}")
-  /** Set when workspace root is known; null until backfilled from Drive or an update. */
+  /** Set when workspace root is known; null until backfilled from provider API or an update. */
   workspaceRootLocation        WorkspaceRootLocation?
-  /** Google shared drive id (Drive API `driveId`) when location is SHARED_DRIVE. */
-  workspaceRootSharedDriveId   String?
-  /** Cached shared drive display name for UI. */
-  workspaceRootSharedDriveName String?
+  /** Provider-specific shared storage id (e.g. Drive API `driveId`, SharePoint site id) when location is SHARED. */
+  workspaceRootSharedStorageId   String?
+  /** Cached shared storage display name for UI. */
+  workspaceRootSharedStorageName String?
   /** Firm owner (new model). Legacy firm.connectorId flow may still be present during migration. */
   firmId            String?         @db.Uuid
 
@@ -275,6 +275,7 @@ model Subscription {
   /** `recurring_subscription` | `one_time_purchase` — mirrors Polar product recurrence for caps/UI. */
   pricingModel       String?
   currentPeriodEnd   DateTime? @db.Timestamptz(6)
+  scheduledCancelAt  DateTime? @db.Timestamptz(6)
   couponCode         String?   @map("coupon_code")
   polarCustomerId    String?
   polarSubscriptionId String?
@@ -696,7 +697,7 @@ model EngagementDocumentSharingUser {
   engagementId              String                           @db.Uuid
   userId                    String                           @db.Uuid
   email                     String
-  googlePermissionId        String?
+  connectorPermissionId     String?
   sharingPermissionStatus   DocumentSharingPermissionStatus  @default(GRANTED)
 
   document           EngagementDocument @relation(fields: [projectDocumentId], references: [id], onDelete: Cascade)

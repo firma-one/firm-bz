@@ -76,7 +76,7 @@ function buildItems(firmSlug: string | null, canManageOrg: boolean): CommandItem
         label: "Analytics",
         description: "Firm-wide insights and reporting",
         icon: <BarChart3 className="h-4 w-4" />,
-        href: `${firmBase}/insights`,
+        href: `${firmBase}?tab=analytics`,
         group: "Firm",
       },
     )

@@ -845,9 +845,9 @@ export class GoogleDriveConnector {
             rootFolderId: folderId,
             parentFolderId: folderId,
           },
-          workspaceRootLocation: WorkspaceRootLocation.MY_DRIVE,
-          workspaceRootSharedDriveId: null,
-          workspaceRootSharedDriveName: null,
+          workspaceRootLocation: WorkspaceRootLocation.PERSONAL,
+          workspaceRootSharedStorageId: null,
+          workspaceRootSharedStorageName: null,
         },
       })
     }
@@ -890,18 +890,18 @@ export class GoogleDriveConnector {
       await prisma.connector.update({
         where: { id: connectionId },
         data: {
-          workspaceRootLocation: WorkspaceRootLocation.SHARED_DRIVE,
-          workspaceRootSharedDriveId: driveId,
-          workspaceRootSharedDriveName: sharedName,
+          workspaceRootLocation: WorkspaceRootLocation.SHARED,
+          workspaceRootSharedStorageId: driveId,
+          workspaceRootSharedStorageName: sharedName,
         },
       })
     } else {
       await prisma.connector.update({
         where: { id: connectionId },
         data: {
-          workspaceRootLocation: WorkspaceRootLocation.MY_DRIVE,
-          workspaceRootSharedDriveId: null,
-          workspaceRootSharedDriveName: null,
+          workspaceRootLocation: WorkspaceRootLocation.PERSONAL,
+          workspaceRootSharedStorageId: null,
+          workspaceRootSharedStorageName: null,
         },
       })
     }
@@ -1744,6 +1744,10 @@ export class GoogleDriveConnector {
       const updatePayload: Record<string, unknown> = { ...updateData }
       if (mergedSettings) {
         updatePayload.settings = mergedSettings
+      }
+      // Re-link firmId on the connector itself (may have been nulled by a replace-connector revoke)
+      if (organizationId) {
+        updatePayload.firmId = organizationId
       }
       // Update existing connector tokens
       const updated = await prisma.connector.update({
@@ -4132,17 +4136,22 @@ export class GoogleDriveConnector {
    * Handles pagination. Returns flat array of file IDs.
    */
   public async listTopLevelChildren(connectionId: string, parentId: string): Promise<string[]> {
+    const items = await this.listTopLevelChildrenWithNames(connectionId, parentId)
+    return items.map(i => i.id)
+  }
+
+  public async listTopLevelChildrenWithNames(connectionId: string, parentId: string): Promise<{ id: string; name: string }[]> {
     const connector = await prisma.connector.findUnique({ where: { id: connectionId } })
     if (!connector) throw new Error('Connector not found')
     const accessToken = this.getAccessTokenFromConnector(connector as ConnectorWithDecrypted)
 
-    const fileIds: string[] = []
+    const files: { id: string; name: string }[] = []
     let pageToken: string | undefined
 
     do {
       const params = new URLSearchParams({
         q: `'${parentId}' in parents and trashed = false`,
-        fields: 'nextPageToken,files(id)',
+        fields: 'nextPageToken,files(id,name)',
         pageSize: '1000',
         supportsAllDrives: 'true',
         includeItemsFromAllDrives: 'true',
@@ -4153,12 +4162,96 @@ export class GoogleDriveConnector {
         headers: { Authorization: `Bearer ${accessToken}` },
       })
       if (!res.ok) throw new Error(`Drive list failed: ${res.status}`)
-      const data = await res.json() as { files: { id: string }[]; nextPageToken?: string }
-      fileIds.push(...data.files.map(f => f.id))
+      const data = await res.json() as { files: { id: string; name: string }[]; nextPageToken?: string }
+      files.push(...data.files.map(f => ({ id: f.id, name: f.name ?? f.id })))
       pageToken = data.nextPageToken
     } while (pageToken)
 
-    return fileIds
+    return files
+  }
+
+  /**
+   * Walk up the Drive parent chain for a folder and return a human-readable breadcrumb array.
+   * E.g. ["My Drive", "firma", "_firmä_workspace_abc_"] or ["Shared drive · Acme", "workspace_abc"].
+   * Stops at the drive root (no more parents) or after MAX_DEPTH hops to bound API calls.
+   */
+  public async getFolderBreadcrumb(connectionId: string, folderId: string): Promise<string[]> {
+    const MAX_DEPTH = 6
+    const connector = await prisma.connector.findUnique({ where: { id: connectionId } })
+    if (!connector) throw new Error('Connector not found')
+    let accessToken = this.getAccessTokenFromConnector(connector as ConnectorWithDecrypted)
+    if (connector.tokenExpiresAt && connector.tokenExpiresAt < new Date()) {
+      accessToken = await this.refreshAccessToken(connectionId)
+    }
+
+    // Walk up collecting (id, name, parentId) for each node until we hit the Drive root.
+    // We collect all nodes first, then decide which to show as segments.
+    const nodes: { name: string; parentId: string | null; driveId: string | null }[] = []
+    let currentId = folderId
+    let sharedDriveLabel: string | null = null
+
+    for (let depth = 0; depth < MAX_DEPTH; depth++) {
+      // Re-check token expiry on each hop — long traversals can outlive a short-lived token.
+      const freshConnector = await prisma.connector.findUnique({ where: { id: connectionId }, select: { tokenExpiresAt: true } })
+      if (freshConnector?.tokenExpiresAt && freshConnector.tokenExpiresAt < new Date()) {
+        accessToken = await this.refreshAccessToken(connectionId)
+      }
+      const url = new URL(`https://www.googleapis.com/drive/v3/files/${currentId}`)
+      url.searchParams.set('fields', 'id,name,parents,driveId')
+      url.searchParams.set('supportsAllDrives', 'true')
+      const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${accessToken}` } })
+      if (!res.ok) {
+        logger.warn('[getFolderBreadcrumb] Drive API error mid-traversal — returning partial breadcrumb', {
+          connectionId, folderId: currentId, status: res.status, depth,
+        })
+        break
+      }
+      const meta = await res.json() as { id: string; name?: string; parents?: string[]; driveId?: string }
+
+      const parentId = meta.parents?.[0] ?? null
+      const driveId = meta.driveId ?? null
+
+      nodes.push({ name: meta.name ?? currentId, parentId, driveId })
+
+      // Shared drive — fetch drive name and stop
+      if (driveId) {
+        try {
+          const driveRes = await fetch(
+            `https://www.googleapis.com/drive/v3/drives/${driveId}?fields=id,name`,
+            { headers: { Authorization: `Bearer ${accessToken}` } }
+          )
+          const drive = driveRes.ok ? await driveRes.json() as { name?: string } : null
+          sharedDriveLabel = drive?.name ? `Shared drive · ${drive.name}` : 'Shared drive'
+        } catch {
+          sharedDriveLabel = 'Shared drive'
+        }
+        break
+      }
+
+      // No parent — we've reached the My Drive root node itself; don't include it as a segment
+      if (!parentId) break
+
+      currentId = parentId
+    }
+
+    // nodes[0] = target folder, nodes[last] = closest ancestor we fetched
+    // The last node is either the My Drive root (no parentId) — exclude it from segments —
+    // or we hit MAX_DEPTH. Either way, all nodes except possibly the last are real named folders.
+    // Determine which nodes are "real" named ancestors (not the Drive root).
+    // The Drive root has no parentId and its name is typically "My Drive" or a UUID-like string.
+    // Simpler rule: if the last node has no parentId and no driveId, it's the root — drop it.
+    const isLastNodeRoot = !nodes[nodes.length - 1]?.parentId && !nodes[nodes.length - 1]?.driveId
+    const namedNodes = isLastNodeRoot ? nodes.slice(0, -1) : nodes
+
+    const segments = namedNodes.map(n => n.name).reverse()
+
+    if (sharedDriveLabel) {
+      segments.unshift(sharedDriveLabel)
+    } else {
+      segments.unshift('My Drive')
+    }
+
+    return segments
   }
 
   /**

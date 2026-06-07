@@ -72,6 +72,16 @@ export class ConflictError extends ApiError {
 }
 
 /**
+ * Subscription revoked error (403) — firm locked after subscription ended.
+ */
+export class SubscriptionRevokedError extends ApiError {
+    constructor() {
+        super('Subscription required — this workspace is locked', 403, 'subscription_revoked')
+        this.name = 'SubscriptionRevokedError'
+    }
+}
+
+/**
  * Rate limit error (429)
  */
 export class RateLimitError extends ApiError {
@@ -111,16 +121,20 @@ export interface ErrorResponse {
 export function formatErrorResponse(error: Error | ApiError): ErrorResponse {
     const isDevelopment = process.env.NODE_ENV === 'development'
 
-    // Log the error
-    logger.error(
-        error.message,
-        error,
-        'API',
-        {
-            statusCode: error instanceof ApiError ? error.statusCode : 500,
-            code: error instanceof ApiError ? error.code : undefined,
-        }
-    )
+    // Subscription revoked is expected business logic (not a server fault) — log at info, not error
+    if (error instanceof SubscriptionRevokedError) {
+        logger.info('[api] subscription_revoked — workspace locked', { code: error.code })
+    } else {
+        logger.error(
+            error.message,
+            error,
+            'API',
+            {
+                statusCode: error instanceof ApiError ? error.statusCode : 500,
+                code: error instanceof ApiError ? error.code : undefined,
+            }
+        )
+    }
 
     // ApiError instances
     if (error instanceof ApiError) {

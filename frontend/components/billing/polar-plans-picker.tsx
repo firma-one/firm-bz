@@ -28,6 +28,7 @@ export type BillingCurrentPlanState = {
     subscriptionProductId?: string | null
     pricingModel: 'recurring_subscription' | 'one_time_purchase' | null
     periodEndIso: string | null
+    scheduledCancelAtIso?: string | null
     canOpenCustomerPortal?: boolean
     isFirmBillingAdmin?: boolean
 }

@@ -139,53 +139,104 @@ Two separate migrations: rename `googlePermissionId` + rename `WorkspaceRootLoca
 | `lib/connectors/types.ts` | **Low-Medium** | Extending `IConnectorStorageAdapter` or adding new interface — type errors surface at build time |
 | `lib/connectors/registry.ts` | **Low** | Additive only — adding `getConnectorMeta()` doesn't touch dispatch logic |
 
-**Key safeguard:** Treat `migrateWorkspaceRoot` as a completely separate sub-task from the other 16 Inngest call sites. Define the new migration adapter interface first, get it reviewed, then implement. Do not batch it with the mechanical Inngest swaps.
+**Key safeguard:** `migrateWorkspaceRoot` was intentionally left untouched in Phase 1b. It is the sole remaining GDrive-specific Inngest function and requires its own design phase (1c) before any implementation begins.
+
+**Also intentionally left GDrive-specific:** `populateSandboxSampleFiles` calls `googleDriveConnector.createGoogleDriveAdapter` directly. Sandbox population is inherently GDrive-only behavior — there is no generic equivalent and no OneDrive sandbox — so abstracting it is not required.
 
 ### Data Migrations (DML)
 
-3 of the 4 schema changes are DDL-only column renames. Only the enum rename requires a DML script because PostgreSQL cannot rename enum values in-place — the existing row in `Connector.workspaceRootLocation` must be updated to the new value before the old enum type can be dropped.
+The migration is at `prisma/migrations/20260604100000_multi_connector_schema_rename/migration.sql`.
 
-**Run this before the Prisma migration that renames the enum:**
+**Why a temp-column pattern instead of a direct USING cast:**
+PostgreSQL cannot cast between two enum types directly in `ALTER COLUMN ... TYPE ... USING`. The naive pattern (create new enum, cast column via USING) fails at runtime because the old column type creates a dependency that blocks `DROP TYPE`. The correct pattern is:
 
-```sql
--- 1. Create new enum with updated values
-CREATE TYPE "platform"."WorkspaceRootLocation_new" AS ENUM ('PERSONAL', 'SHARED');
+1. Add a temp text column
+2. Translate old enum values into it via CASE (`MY_DRIVE → PERSONAL`, `SHARED_DRIVE → SHARED`, `NULL → NULL`)
+3. Drop the old enum column (removes the type dependency)
+4. Drop the old enum type, create the new one
+5. Add the real column with the new enum type, populate from temp column
+6. Drop the temp column
 
--- 2. Migrate existing rows (MY_DRIVE → PERSONAL, SHARED_DRIVE → SHARED)
-UPDATE "platform"."connectors"
-SET "workspaceRootLocation" = CASE
-  WHEN "workspaceRootLocation"::text = 'MY_DRIVE'     THEN 'PERSONAL'
-  WHEN "workspaceRootLocation"::text = 'SHARED_DRIVE' THEN 'SHARED'
-END::text::"platform"."WorkspaceRootLocation_new"
-WHERE "workspaceRootLocation" IS NOT NULL;
-
--- 3. Swap column type to new enum, drop old type
-ALTER TABLE "platform"."connectors"
-  ALTER COLUMN "workspaceRootLocation"
-  TYPE "platform"."WorkspaceRootLocation_new"
-  USING "workspaceRootLocation"::text::"platform"."WorkspaceRootLocation_new";
-
-DROP TYPE "platform"."WorkspaceRootLocation";
-ALTER TYPE "platform"."WorkspaceRootLocation_new" RENAME TO "WorkspaceRootLocation";
-```
-
-The 3 DDL-only renames can be handled by a single Prisma migration after the DML above runs:
-- `workspaceRootSharedDriveId` → `workspaceRootSharedStorageId`
-- `workspaceRootSharedDriveName` → `workspaceRootSharedStorageName`
-- `EngagementDocumentSharingUser.googlePermissionId` → `connectorPermissionId`
+The whole sequence runs in a single `BEGIN`/`COMMIT` transaction — if anything fails mid-way, the database rolls back to its original state.
 
 **Execution order:**
-1. Run DML script above (enum rename + data update)
-2. Run Prisma migration (column renames + schema sync)
+1. Run migration SQL (all steps are in one transaction)
+2. Run `prisma generate` to regenerate the client
 3. Deploy updated application code
 
-### Regression Tests (Phase 1 gate)
+### Regression Tests (Phase 1a + 1b gate)
 1. GDrive OAuth connect → callback → workspace accessible (unchanged)
-2. File import (copy + shortcut mode) completes successfully
-3. Inngest `processIndexFileIntake` and `processIndexFilesInFolder` complete without errors
-4. Engagement folder permission grants work for GDrive connectors
-5. Verify `workspaceRootLocation` value on your connector record reads `PERSONAL` or `SHARED` (not `MY_DRIVE`/`SHARED_DRIVE`)
-6. `npm run build` and `npm test` pass clean
+2. Replace account: new email shown, old connector `status=REVOKED` and `firmId=null`, workspace unchanged
+3. File import (copy + shortcut mode) completes successfully
+4. Inngest `processIndexFileIntake` and `processIndexFilesInFolder` complete without errors
+5. Engagement folder permission grants work for GDrive connectors
+6. Verify `workspaceRootLocation` value on connector record reads `PERSONAL` or `SHARED`
+7. `tsc --noEmit` passes clean
+
+---
+
+## Phase 1c — Migrate `migrateWorkspaceRoot` to Registry
+
+**Goal:** The one remaining GDrive-specific Inngest function. This is the highest-regression-risk change in the entire plan — a broken workspace migration loses files or leaves a workspace permanently locked. It must be treated as its own design + implementation sub-task, not batched with anything else.
+
+**Why it wasn't done in 1b:** `migrateWorkspaceRoot` calls three methods that have no generic equivalent in `IConnectorStorageAdapter` or `IConnectorPermissionAdapter`:
+- `listTopLevelChildren(connectionId, parentId)` — uses Drive query syntax
+- `moveBatch(connectionId, batch, oldParent, newParent)` — uses the Drive Batch API (`addParents`/`removeParents`), multipart response parsing, shared drive support
+- `persistWorkspaceRootLocation(connectionId, rootFolderId)` — detects `PERSONAL` vs `SHARED` by inspecting Drive API `driveId` field
+
+None of these belong on a generic storage adapter. They are migration-specific, destructive, and provider-specific in their implementation.
+
+### Interface Design (do this first, review before implementing)
+
+Define `IConnectorMigrationAdapter` in `lib/connectors/types.ts`:
+
+```typescript
+export interface IConnectorMigrationAdapter {
+  /** List the direct children (one level deep) of a folder. Returns file IDs only. */
+  listTopLevelChildren(connectionId: string, parentFolderId: string): Promise<string[]>
+  /**
+   * Move a batch of items from oldParent to newParent.
+   * Returns failures (items that could not be moved) for partial-failure tracking.
+   */
+  moveBatch(
+    connectionId: string,
+    fileIds: string[],
+    oldParentFolderId: string,
+    newParentFolderId: string
+  ): Promise<{ failures: { id: string; error: string }[] }>
+  /**
+   * Inspect the new root folder and persist PERSONAL vs SHARED on the connector record.
+   * Called after all moves complete.
+   */
+  persistWorkspaceRootLocation(connectionId: string, rootFolderId: string): Promise<void>
+}
+```
+
+**Design decisions to resolve before implementing:**
+1. Should `IConnectorMigrationAdapter` extend `IConnectorPermissionAdapter`, or be entirely separate? (Recommendation: separate — migration is a one-shot admin op, not a per-request op)
+2. Does `moveBatch` need a `dryRun` flag for the estimate step, or should `estimate-migration` stay GDrive-specific behind a connector-type guard in the API route?
+3. `persistWorkspaceRootLocation` currently reads Drive API metadata to detect `driveId` (shared drive indicator). For OneDrive the equivalent is checking if the item lives in a personal drive vs a SharePoint site. The method signature is provider-agnostic but the internal implementation is entirely different — confirm this is acceptable before proceeding.
+
+### What changed
+
+| Area | Work | Files |
+|------|------|-------|
+| Interface | `IConnectorMigrationAdapter` added to `lib/connectors/types.ts` — 3 methods: `listTopLevelChildren`, `moveBatch`, `persistWorkspaceRootLocation` | `lib/connectors/types.ts` |
+| Registry | `getMigrationAdapter(connectionId)` added — dispatches to GDrive impl, wraps all 3 methods | `lib/connectors/registry.ts` |
+| Inngest | 3 direct `googleDriveConnector.*` calls in `migrateWorkspaceRoot` replaced with `getMigrationAdapter`. `getAccessToken` pre-flight now routes through `getConnectorInstance` (already on `IConnectorInstance`) | `lib/inngest/functions.ts` |
+| API route — `migrate-and-update-root` | `persistWorkspaceRootLocation` call replaced with `getMigrationAdapter(connId).persistWorkspaceRootLocation(...)` | `app/api/connectors/google-drive/route.ts` |
+| API route — `estimate-migration` | Gated behind explicit `connector.type !== 'GOOGLE_DRIVE'` check with a clear 400 error — it uses Drive query syntax directly and has no generic equivalent | `app/api/connectors/google-drive/route.ts` |
+
+**Design decision recorded:** `estimate-migration` stays GDrive-specific behind a type guard. It directly constructs a Drive API query (`'${id}' in parents and trashed = false`) — abstracting this would require a `countChildren(connectionId, folderId)` method on the migration adapter, which is only worth adding when a second provider needs it.
+
+**Also confirmed:** `populateSandboxSampleFiles` retains its direct `googleDriveConnector.createGoogleDriveAdapter` call. Sandbox population is GDrive-only — no abstraction needed.
+
+### Regression Tests (Phase 1c gate)
+1. Full workspace migration E2E: initiate → grace period → maintenance mode → files moved → root updated → workspace unlocked
+2. Partial failure case: one file fails to move → failure recorded, workspace still unlocks
+3. `estimate-migration` returns correct item count and time estimate
+4. GDrive connect + workspace access still works after the refactor (Phase 1a/1b regression)
+5. `tsc --noEmit` passes clean ✓
 
 ---
 

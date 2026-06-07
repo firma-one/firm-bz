@@ -368,8 +368,8 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
   const canShowViewAsDropdown = canUseViewAs
 
   // Active state helpers
-  const isInsightsActive = pathname.includes('/insights')
-  const isSettingsActive = !pathname.includes('/insights') && !pathname.includes('/connectors') && searchParams.get('tab') === 'settings'
+  const isInsightsActive = !pathname.includes('/connectors') && searchParams.get('tab') === 'analytics'
+  const isSettingsActive = !pathname.includes('/connectors') && searchParams.get('tab') === 'settings'
   const isSupportActive = pathname.startsWith('/d/support')
   const isRemindersPageActive = pathname.startsWith('/d/u/reminders')
   const isClientsActive =
@@ -507,13 +507,13 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                       />
                       {/* Tree sub-items: Clients + Analytics + Settings */}
                       <div className="ml-1 space-y-0.5">
-                        <Link href={baseUrl} className={`flex items-center transition-colors pl-2 pr-2 py-1.5 text-[0.8125rem] ${isClientsActive ? 'bg-primary/10 border-l-2 border-brand-accent text-primary font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}>
+                        <Link href={`${baseUrl}?tab=clients`} className={`flex items-center transition-colors pl-2 pr-2 py-1.5 text-[0.8125rem] ${isClientsActive ? 'bg-primary/10 border-l-2 border-brand-accent text-primary font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}>
                           <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-1.5" />
                           <Users className={`h-3.5 w-3.5 mr-2 shrink-0 ${isClientsActive ? 'text-primary' : 'text-[#45474c]'}`} />
                           <span>Clients</span>
                         </Link>
                         {canManageOrg && (
-                          <Link href={`${firmScopedNavBase}/insights`} className={`group/lock flex w-full items-center transition-colors pl-2 pr-3 py-1.5 text-[0.8125rem] ${isInsightsActive ? 'bg-primary/10 border-l-2 border-brand-accent text-primary font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}>
+                          <Link href={`${firmScopedNavBase}?tab=analytics`} className={`group/lock flex w-full items-center transition-colors pl-2 pr-3 py-1.5 text-[0.8125rem] ${isInsightsActive ? 'bg-primary/10 border-l-2 border-brand-accent text-primary font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}>
                             <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-1.5" />
                             <BarChart3 className={`h-3.5 w-3.5 mr-2 shrink-0 ${isInsightsActive ? 'text-primary' : 'text-[#45474c]'}`} />
                             <span>Analytics</span>
@@ -545,7 +545,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                       </Tooltip>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <Link href={baseUrl} className={navLinkClass(isClientsActive)}>
+                          <Link href={`${baseUrl}?tab=clients`} className={navLinkClass(isClientsActive)}>
                             <Users className={navIconClass(isClientsActive)} />
                           </Link>
                         </TooltipTrigger>
@@ -554,7 +554,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                       {canManageOrg && (
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <Link href={`${firmScopedNavBase}/insights`} className={navLinkClass(isInsightsActive)}>
+                            <Link href={`${firmScopedNavBase}?tab=analytics`} className={navLinkClass(isInsightsActive)}>
                               <BarChart3 className={navIconClass(isInsightsActive)} />
                             </Link>
                           </TooltipTrigger>

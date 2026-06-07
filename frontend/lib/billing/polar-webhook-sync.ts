@@ -169,6 +169,7 @@ export type PolarSubscriptionSyncResult = {
     subscriptionId: string | null
     productId: string | null
     status: SubscriptionStatus
+    scheduledCancelAt: Date | null
 }
 
 /**
@@ -177,7 +178,7 @@ export type PolarSubscriptionSyncResult = {
  */
 export async function syncFirmSubscriptionFromPolarEvent(
     payload: unknown,
-    options?: { statusOverride?: SubscriptionStatus }
+    options?: { statusOverride?: SubscriptionStatus; scheduledCancelAt?: Date | null }
 ): Promise<PolarSubscriptionSyncResult | null> {
     const body = getSubscriptionBodyFromWebhookPayload(payload)
     if (!body) {
@@ -198,6 +199,9 @@ export async function syncFirmSubscriptionFromPolarEvent(
 
     const anchorFirmId = await resolveBillingAnchorFirmId(resolvedFirmId)
     const status = options?.statusOverride ?? mapPolarSubscriptionStatusToDb(body.status)
+    // `undefined` means the caller didn't supply this option — preserve the existing DB value.
+    // `null` means the caller explicitly wants to clear it (e.g. uncanceled, immediate cancel).
+    const overrideScheduledCancelAt = options?.scheduledCancelAt
 
     const active = isSubscriptionAccessActive(status)
     const now = new Date()
@@ -245,6 +249,9 @@ export async function syncFirmSubscriptionFromPolarEvent(
                     provider: 'polar',
                     pricingModel: recurringModel,
                     currentPeriodEnd: details.periodEnd ?? null,
+                    // Only overwrite scheduledCancelAt when the caller explicitly supplied a value
+                    // (including null to clear it). Omit the field when undefined to preserve the DB value.
+                    ...(overrideScheduledCancelAt !== undefined ? { scheduledCancelAt: overrideScheduledCancelAt } : {}),
                     couponCode: details.couponCode ?? null,
                     polarCustomerId: details.customerId ?? null,
                     polarSubscriptionId: details.subscriptionId ?? null,
@@ -263,6 +270,7 @@ export async function syncFirmSubscriptionFromPolarEvent(
                     provider: 'polar',
                     pricingModel: recurringModel,
                     currentPeriodEnd: details.periodEnd ?? null,
+                    scheduledCancelAt: overrideScheduledCancelAt ?? null,
                     couponCode: details.couponCode ?? null,
                     polarCustomerId: details.customerId ?? null,
                     polarSubscriptionId: details.subscriptionId ?? null,
@@ -280,7 +288,7 @@ export async function syncFirmSubscriptionFromPolarEvent(
         await advanceOnboardingPastSubscribeForBillingAnchor(anchorFirmId, details.productId ?? null)
     }
 
-    logger.warn('Polar webhook synced firm subscription', {
+    logger.info('Polar webhook synced firm subscription', {
         status,
         resolvedFirmId,
         anchorFirmId,
@@ -296,5 +304,6 @@ export async function syncFirmSubscriptionFromPolarEvent(
         subscriptionId: details.subscriptionId,
         productId: details.productId,
         status,
+        scheduledCancelAt: overrideScheduledCancelAt ?? null,
     }
 }

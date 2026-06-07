@@ -41,6 +41,10 @@
   - Move "Choose Your Workspace" (onboarding step 0) from `/d/onboarding` to `/d/f/`
   - Returning users with multiple firms get AppSidebar chrome instead of OnboardingBar
 
+## Client Management
+
+- [ ] **Contact Follow-Up Date** — Client Settings › Contacts: add a "Follow Up" date field per contact; auto-creates a reminder assigned to all Firm Admins on save
+
 ## Reminders
 
 - [x] **Firm-Level Reminder Email Configuration** — [plan](../../.claude/plans/firm-reminder-email-config.md)
@@ -65,6 +69,25 @@ AI layer using Gemma 4 (HuggingFace Transformers, same runtime as release notes 
 - [ ] **Engagement Kickoff Checklist** — when engagement transitions to `ACTIVE`, Gemma generates a 5–8 item task checklist (tailored to contract type) stored in `engagement.settings.aiChecklist` and surfaced in the engagement overview
 
 - [ ] **Weekly Digest Notification** — Inngest cron every Monday 8am; Gemma-written brief covering last week's activity and top 3 priorities for the week, delivered as an in-app notification to firm admins
+
+## Email
+
+- [ ] **Firmaone Email Accounts**
+  - All notification emails should come from `no-reply@firmaone.com` so end users don't reply expecting a response
+  - Establish a country-neutral persona (e.g. `sam@firmaone.com`) for client-facing communication
+
+- [ ] **Email Document Link** — ActionMenu › Share › Email Link sends the document deeplink to a recipient
+
+## Easy Document View
+
+- [ ] **Browser Preview** — reuse the DOWNLOAD mechanism (bypasses Google secure link flow) to render a quick in-browser preview; intended for read-only viewing without Comments or Collaboration overhead
+
+## Bookmarks
+
+- [ ] **Bookmark Pages & Documents** — users can bookmark any app page (e.g. a specific engagement, client, or section) or document for quick access
+  - Bookmark button in the topbar or page header; bookmarks stored per-user in DB
+  - Dedicated "Bookmarks" section in the sidebar or command palette for quick navigation
+  - Bookmarks persist across sessions and are scoped to the firm the user is currently in
 
 ## Infrastructure / Maintenance
 

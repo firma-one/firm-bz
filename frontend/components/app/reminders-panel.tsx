@@ -77,25 +77,27 @@ function ReminderRow({ r, isPending, acting, onDone, onUndoDone, onHide, onShow,
             }`}
             style={{ borderLeftWidth: '3px', borderLeftColor: isPending ? '#C4572B' : hidden ? '#E8E8E8' : accent.border }}
         >
-            {/* Row 1: [icon + action + chevron] | undo/done button */}
-            <div className="flex items-center justify-between gap-2">
+            {/* Row 1: [icon + action] | done button (button aligns to top) */}
+            <div className="flex items-start justify-between gap-2">
                 <Tip label={r.entityName} position="bottom">
                 <a
                     href={r.ctaUrl ?? '#'}
-                    className="flex items-center gap-1.5 min-w-0 group/link"
+                    className="flex items-start gap-1.5 min-w-0 group/link"
                     onClick={onNavigate}
                 >
-                    <Icon className="h-3.5 w-3.5 shrink-0 text-[#45474c]" />
-                    <span className={`text-[0.8125rem] font-semibold truncate leading-snug transition-colors group-hover/link:text-[#C4572B] ${hidden || isPending ? 'text-[#45474c]' : 'text-[#1b1b1d]'} ${isPending ? 'line-through' : ''}`}>
-                        {r.action}
-                    </span>
-                    {r.note && (
-                        <span className="text-[11px] text-[#45474c] truncate ml-1 font-normal">{r.note}</span>
-                    )}
-                    <ChevronRight className="h-3 w-3 shrink-0 text-[#45474c]/40 group-hover/link:text-[#C4572B]/60 transition-colors" />
+                    <Icon className="h-3.5 w-3.5 shrink-0 text-[#45474c] mt-0.5" />
+                    <div className="min-w-0">
+                        <span className={`text-[0.8125rem] font-semibold line-clamp-2 leading-snug transition-colors group-hover/link:text-[#C4572B] ${hidden || isPending ? 'text-[#45474c]' : 'text-[#1b1b1d]'} ${isPending ? 'line-through' : ''}`}>
+                            {r.action}
+                        </span>
+                        {r.note && (
+                            <p className="text-[11px] text-[#45474c]/70 line-clamp-1 mt-0.5 font-normal">{r.note}</p>
+                        )}
+                    </div>
+                    <ChevronRight className="h-3 w-3 shrink-0 text-[#45474c]/40 group-hover/link:text-[#C4572B]/60 transition-colors mt-0.5" />
                 </a>
                 </Tip>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 shrink-0 mt-0.5">
                     {isPending ? (
                         <Tip label="Keep reminder" position="bottom-right">
                             <button

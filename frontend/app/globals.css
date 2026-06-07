@@ -670,6 +670,12 @@
   animation: deeplink-icon-pulse 1.35s ease-in-out infinite;
 }
 
+@keyframes migration-slide {
+  0% { transform: translateX(-100%); }
+  50% { transform: translateX(200%); }
+  100% { transform: translateX(200%); }
+}
+
 @layer base {
   * {
     @apply border-border;

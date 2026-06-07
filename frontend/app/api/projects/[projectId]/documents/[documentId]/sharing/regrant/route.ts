@@ -105,15 +105,15 @@ export async function POST(
 
         const drive = GoogleDriveConnector.getInstance()
 
-        if (sharingUser.googlePermissionId) {
+        if (sharingUser.connectorPermissionId) {
             try {
-                await drive.revokePermission(connectorId, fileInfo.externalId, sharingUser.googlePermissionId)
+                await drive.revokePermission(connectorId, fileInfo.externalId, sharingUser.connectorPermissionId)
             } catch (e) {
                 console.warn('revokePermission failed (stale permissionId?), continuing:', e)
             }
             await prisma.engagementDocumentSharingUser.update({
                 where: { id: sharingUser.id },
-                data: { googlePermissionId: null, updatedBy: user.id },
+                data: { connectorPermissionId: null, updatedBy: user.id },
             })
         }
 
@@ -196,9 +196,9 @@ export async function POST(
                 })
 
                 // 5. Revoke old permission on PDF if exists
-                if (sharingUser.googlePermissionId) {
+                if (sharingUser.connectorPermissionId) {
                     try {
-                        await drive.revokePermission(connectorId, pdfDriveId, sharingUser.googlePermissionId)
+                        await drive.revokePermission(connectorId, pdfDriveId, sharingUser.connectorPermissionId)
                     } catch (e) {
                         // Ignore revoke errors on PDF (may not exist yet)
                     }
@@ -271,7 +271,7 @@ export async function POST(
         await prisma.engagementDocumentSharingUser.update({
             where: { id: sharingUser.id },
             data: {
-                googlePermissionId: permissionId,
+                connectorPermissionId: permissionId,
                 sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED,
                 updatedBy: user.id,
             },

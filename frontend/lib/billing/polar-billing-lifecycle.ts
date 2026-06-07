@@ -2,6 +2,7 @@ import { Polar } from '@polar-sh/sdk'
 import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
 import { ensurePolarFreePlanForSandboxFirm } from '@/lib/billing/polar-free-plan'
+import { upsertFollowUpReminder } from '@/lib/actions/user-reminders'
 
 function polarServer(): 'production' | 'sandbox' {
     return process.env.POLAR_SERVER === 'production' ? 'production' : 'sandbox'
@@ -97,6 +98,111 @@ export type PaidSubscriptionSyncContext = {
     subscriptionId: string | null
     productId: string | null
     status: 'active' | 'trialing' | 'past_due' | 'canceled' | 'unpaid' | 'none'
+}
+
+/**
+ * Create a "Reactivate subscription" reminder for every firm_admin of the anchor billing group.
+ * Called when subscription.canceled arrives with a future ends_at (scheduled cancellation).
+ */
+export async function createSubscriptionCancellationRemindersForAdmins(
+    anchorFirmId: string,
+    cancelAt: Date
+): Promise<void> {
+    const admins = await prisma.firmMember.findMany({
+        where: {
+            firm: {
+                OR: [{ id: anchorFirmId }, { anchorFirmId }],
+                deletedAt: null,
+            },
+            role: 'firm_admin',
+        },
+        select: { userId: true },
+    })
+
+    const dateValue = cancelAt.toISOString().split('T')[0]
+
+    await Promise.all(
+        admins.map(({ userId }) =>
+            upsertFollowUpReminder({
+                userId,
+                entityKey: 'platform.firms',
+                entityValue: anchorFirmId,
+                action: 'Reactivate subscription before access ends',
+                dateKey: null,
+                dateValue,
+                entityName: 'Billing',
+                firmId: anchorFirmId,
+                ctaUrl: '/d/billing',
+                note: 'Subscription cancelled — non-sandbox firms lose access on this date.',
+            }).catch((e) =>
+                logger.error(
+                    '[polar-billing-lifecycle] Failed to create cancellation reminder',
+                    e instanceof Error ? e : new Error(String(e)),
+                    undefined,
+                    { anchorFirmId, userId }
+                )
+            )
+        )
+    )
+
+    logger.warn('[polar-billing-lifecycle] Created subscription cancellation reminders for admins', {
+        anchorFirmId,
+        adminCount: admins.length,
+        cancelAt: cancelAt.toISOString(),
+    })
+}
+
+/**
+ * Remove subscription cancellation reminders for all firm admins.
+ * Called on subscription.uncanceled or subscription.revoked (reminders no longer relevant).
+ */
+export async function clearSubscriptionCancellationRemindersForAdmins(
+    anchorFirmId: string
+): Promise<void> {
+    const admins = await prisma.firmMember.findMany({
+        where: {
+            firm: {
+                OR: [{ id: anchorFirmId }, { anchorFirmId }],
+                deletedAt: null,
+            },
+            role: 'firm_admin',
+        },
+        select: { userId: true },
+    })
+
+    // Load each admin's reminders and remove matching platform.firms entries for this anchor.
+    await Promise.all(
+        admins.map(async ({ userId }) => {
+            try {
+                const p = await prisma.userPersonalization.findUnique({
+                    where: { userId },
+                    select: { reminders: true },
+                })
+                if (!p) return
+                const items = Array.isArray(p.reminders) ? (p.reminders as any[]) : []
+                const filtered = items.filter(
+                    (r) => !(r.entityKey === 'platform.firms' && r.entityValue === anchorFirmId)
+                )
+                if (filtered.length === items.length) return
+                await prisma.userPersonalization.update({
+                    where: { userId },
+                    data: { reminders: filtered },
+                })
+            } catch (e) {
+                logger.error(
+                    '[polar-billing-lifecycle] Failed to clear cancellation reminder',
+                    e instanceof Error ? e : new Error(String(e)),
+                    undefined,
+                    { anchorFirmId, userId }
+                )
+            }
+        })
+    )
+
+    logger.warn('[polar-billing-lifecycle] Cleared subscription cancellation reminders for admins', {
+        anchorFirmId,
+        adminCount: admins.length,
+    })
 }
 
 /** When a paid (non-free) subscription becomes active/trialing, revoke all other active Polar subscriptions. */

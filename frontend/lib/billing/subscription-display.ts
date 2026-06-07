@@ -70,13 +70,15 @@ export function planNameForSummary(state: BillingCurrentPlanState): string {
 }
 
 /**
- * `Valid until:` value — renewal/trial end date, or `Unlimited` when not tied to a period end.
+ * `Valid until:` / `Access ends:` value — renewal/trial end date, or `Unlimited` when not tied to a period end.
  */
 export function validUntilForSummary(state: BillingCurrentPlanState): string {
     const st = (state.subscriptionStatus ?? '').toLowerCase()
 
-    if (state.periodEndIso) {
-        const d = new Date(state.periodEndIso)
+    // Prefer scheduledCancelAt when present — subscription is active but cancellation is scheduled.
+    const accessEndsIso = state.scheduledCancelAtIso ?? state.periodEndIso
+    if (accessEndsIso) {
+        const d = new Date(accessEndsIso)
         if (!Number.isNaN(d.getTime())) {
             return d.toLocaleDateString(undefined, { dateStyle: 'medium' })
         }
@@ -91,6 +93,11 @@ export function validUntilForSummary(state: BillingCurrentPlanState): string {
     }
 
     return upgradeCopy.currentPlanValidUntilUnlimited
+}
+
+/** True when the subscription is active but scheduled to cancel at period end. */
+export function isScheduledToCancel(state: BillingCurrentPlanState): boolean {
+    return Boolean(state.scheduledCancelAtIso)
 }
 
 export function currentPlanPeriodCaption(

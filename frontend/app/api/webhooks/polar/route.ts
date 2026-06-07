@@ -6,6 +6,8 @@ import { refreshBillingPlanForFirmGroupUsers } from '@/lib/billing/billing-user-
 import {
     maybeRevokeFreePolarAfterPaidSubscriptionSync,
     resyncSandboxFreePlanAfterPaidSubscriptionEnd,
+    createSubscriptionCancellationRemindersForAdmins,
+    clearSubscriptionCancellationRemindersForAdmins,
 } from '@/lib/billing/polar-billing-lifecycle'
 
 function getWebhookSecret(): string | null {
@@ -45,22 +47,45 @@ function buildHandler() {
             if (r) await maybeRevokeFreePolarAfterPaidSubscriptionSync(r)
         },
         onSubscriptionCanceled: async (payload) => {
-            const r = await syncFirmSubscriptionFromPolarEvent(payload, { statusOverride: 'canceled' })
-            if (r?.anchorFirmId) {
-                await resyncSandboxFreePlanAfterPaidSubscriptionEnd(r.anchorFirmId)
-                await refreshBillingPlanForFirmGroupUsers(r.anchorFirmId)
+            // Polar fires subscription.canceled immediately when cancellation is scheduled.
+            // If ends_at is in the future the subscription is still active until period end —
+            // keep active:true and record scheduledCancelAt for UI display.
+            // subscription.revoked fires at actual expiry and is the true deactivation signal.
+            // The SDK deserializes snake_case ends_at → camelCase endsAt (Date object).
+            const endsAt = payload.data.endsAt ?? null
+            const isFutureCancel = endsAt != null && endsAt >= new Date()
+
+            if (isFutureCancel) {
+                const r = await syncFirmSubscriptionFromPolarEvent(payload, {
+                    statusOverride: 'active',
+                    scheduledCancelAt: endsAt,
+                })
+                if (r) {
+                    await maybeRevokeFreePolarAfterPaidSubscriptionSync(r)
+                    await createSubscriptionCancellationRemindersForAdmins(r.anchorFirmId, endsAt)
+                }
+            } else {
+                const r = await syncFirmSubscriptionFromPolarEvent(payload, { statusOverride: 'canceled', scheduledCancelAt: null })
+                if (r?.anchorFirmId) {
+                    await resyncSandboxFreePlanAfterPaidSubscriptionEnd(r.anchorFirmId)
+                    await refreshBillingPlanForFirmGroupUsers(r.anchorFirmId)
+                }
             }
         },
         onSubscriptionRevoked: async (payload) => {
-            const r = await syncFirmSubscriptionFromPolarEvent(payload, { statusOverride: 'canceled' })
+            const r = await syncFirmSubscriptionFromPolarEvent(payload, { statusOverride: 'canceled', scheduledCancelAt: null })
             if (r?.anchorFirmId) {
                 await resyncSandboxFreePlanAfterPaidSubscriptionEnd(r.anchorFirmId)
                 await refreshBillingPlanForFirmGroupUsers(r.anchorFirmId)
+                await clearSubscriptionCancellationRemindersForAdmins(r.anchorFirmId)
             }
         },
         onSubscriptionUncanceled: async (payload) => {
-            const r = await syncFirmSubscriptionFromPolarEvent(payload, { statusOverride: 'active' })
-            if (r) await maybeRevokeFreePolarAfterPaidSubscriptionSync(r)
+            const r = await syncFirmSubscriptionFromPolarEvent(payload, { statusOverride: 'active', scheduledCancelAt: null })
+            if (r) {
+                await maybeRevokeFreePolarAfterPaidSubscriptionSync(r)
+                await clearSubscriptionCancellationRemindersForAdmins(r.anchorFirmId)
+            }
         },
         onPayload: async (payload) => {
             logger.warn('Polar webhook payload received', {
