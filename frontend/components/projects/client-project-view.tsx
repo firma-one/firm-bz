@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useTransition } from 'react'
+import { useState, useEffect, useTransition } from 'react'
 import { HierarchyClient, getIsOrgInternal } from '@/lib/actions/hierarchy'
 import { getProjectMemberSummaries, type ProjectMemberSummary } from '@/lib/actions/members'
 import { ProjectList } from './engagement-list'
@@ -37,6 +37,7 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
     const [isFirmInternal, setIsFirmInternal] = useState(false)
     const [memberSummaries, setMemberSummaries] = useState<Record<string, ProjectMemberSummary>>({})
     const [canManageClient, setCanManageClient] = useState(false)
+    const [isFirmOwner, setIsFirmOwner] = useState(false)
     const [isPendingRefresh, startRefresh] = useTransition()
 
     // Load view mode preference from localStorage on mount
@@ -57,7 +58,7 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
     const currentTab =
         tabParam === 'settings' && canManageClient
             ? 'settings'
-            : tabParam === 'contacts'
+            : tabParam === 'contacts' && isFirmOwner
                 ? 'contacts'
                 : tabParam === 'members' && canManageClient
                     ? 'members'
@@ -80,8 +81,11 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
         if (!resolvedFirmId || !client?.id) return
         fetch(`/api/permissions/firm?firmId=${resolvedFirmId}&clientId=${client.id}`)
             .then(res => res.json())
-            .then(data => setCanManageClient(data.canManageClient ?? false))
-            .catch(() => setCanManageClient(false))
+            .then(data => {
+                setCanManageClient(data.canManageClient ?? false)
+                setIsFirmOwner(data.isFirmOwner ?? false)
+            })
+            .catch(() => { setCanManageClient(false); setIsFirmOwner(false) })
     }, [firmId, clients, selectedClientSlug])
 
     useEffect(() => {
@@ -205,6 +209,7 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                                                 </span>
                                             )}
                                         </TabsTrigger>
+                                        {isFirmOwner && (
                                         <TabsTrigger
                                             value="contacts"
                                             className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
@@ -218,6 +223,7 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                                                 </span>
                                             )}
                                         </TabsTrigger>
+                                        )}
                                         {canManageClient && (
                                             <TabsTrigger
                                                 value="members"
@@ -304,6 +310,7 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                                     </div>
                                 </TabsContent>
 
+                                {isFirmOwner && (
                                 <TabsContent value="contacts" className="m-0 h-full">
                                     <div className="w-full py-2">
                                         <ClientContactsTab
@@ -314,6 +321,7 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                                         />
                                     </div>
                                 </TabsContent>
+                                )}
 
                                 {canManageClient && (
                                     <TabsContent value="members" className="m-0 h-full">

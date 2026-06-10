@@ -5,7 +5,7 @@ import { Briefcase, Clock, Copy, Check } from 'lucide-react'
 import { HierarchyClient } from '@/lib/actions/hierarchy'
 import { type ProjectMemberSummary } from '@/lib/actions/members'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+
 import { formatDistanceToNow } from 'date-fns'
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import {
@@ -158,7 +158,7 @@ function LeadAvatar({ user }: { user: ProfileBubblePopupUser }) {
 }
 
 export function ProjectList({ projects, orgSlug, clientSlug, clientStatus, viewMode = 'grid', isOrgInternal, memberSummaries = {}, isRefreshing = false }: ProjectListProps) {
-    const router = useRouter()
+
     const isProspect = clientStatus === 'PROSPECT'
     if (projects.length === 0 && !isRefreshing) {
         return (
@@ -210,7 +210,7 @@ export function ProjectList({ projects, orgSlug, clientSlug, clientStatus, viewM
                                 return (
                                     <tr key={project.id} className="group hover:bg-[#f3f4f6] transition-colors">
                                         <td className="px-4 py-3">
-                                            <Link href={`/d/f/${orgSlug}/c/${clientSlug}/e/${project.slug}/${isOrgInternal ? 'analytics' : 'files'}`} className="flex items-center gap-3">
+                                            <Link href={`/d/f/${orgSlug}/c/${clientSlug}/e/${project.slug}`} className="flex items-center gap-3">
                                                 <div className="h-8 w-8 bg-[#f3f4f6] text-[#45474c] rounded flex items-center justify-center">
                                                     <Briefcase className="h-4 w-4" />
                                                 </div>
@@ -315,7 +315,7 @@ export function ProjectList({ projects, orgSlug, clientSlug, clientStatus, viewM
                     return (
                         <Link
                             key={project.id}
-                            href={`/d/f/${orgSlug}/c/${clientSlug}/e/${project.slug}/${isOrgInternal ? 'analytics' : 'files'}`}
+                            href={`/d/f/${orgSlug}/c/${clientSlug}/e/${project.slug}`}
                             className={`group relative bg-white rounded p-5 shadow-md hover:shadow-lg transition-all duration-200 flex flex-col h-48 ${isProspect ? 'border border-dashed border-amber-300 hover:border-amber-400' : 'border border-[#e5e7eb] hover:border-primary/50'}`}
                         >
                             <div className="flex items-start justify-between mb-3">
