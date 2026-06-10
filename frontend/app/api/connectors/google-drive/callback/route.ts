@@ -5,6 +5,9 @@ import { prisma } from '@/lib/prisma'
 import { config, getRedirectUrl, getGoogleDriveOAuthServerCredentials } from '@/lib/config'
 import { logger } from '@/lib/logger'
 import { fetchWithTimeoutRetry, isTransientNetworkError } from '@/lib/fetch-with-timeout-retry'
+import { setupFirmFolder, ensureAppFolderStructure } from '@/lib/connectors/pockett-structure.service'
+import { createGoogleDriveAdapter } from '@/lib/connectors/adapters/google-drive-adapter'
+import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 
 const supabase = createClient(
   config.supabase.url,
@@ -88,11 +91,11 @@ export async function GET(request: NextRequest) {
     const oauthFailureBase = resolveOAuthFailureRedirectPath(state)
 
     // Exchange code for tokens (use same credential resolution as refreshAccessToken)
-    let clientId: string
+    let oauthClientId: string
     let clientSecret: string
     try {
       const creds = getGoogleDriveOAuthServerCredentials()
-      clientId = creds.clientId
+      oauthClientId = creds.clientId
       clientSecret = creds.clientSecret
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -106,7 +109,7 @@ export async function GET(request: NextRequest) {
     const redirectUri = config.googleDrive.redirectUri
 
     const tokenBody = new URLSearchParams({
-      client_id: clientId!,
+      client_id: oauthClientId!,
       client_secret: clientSecret!,
       code,
       grant_type: 'authorization_code',
@@ -219,6 +222,8 @@ export async function GET(request: NextRequest) {
     let rootFolderId: string | undefined = undefined
     let skipAutoFolder = false
     let replaceConnectorId: string | undefined = undefined
+    let clientId: string | undefined = undefined
+    let friendlyName: string | undefined = undefined
 
     try {
       if (state) {
@@ -229,6 +234,8 @@ export async function GET(request: NextRequest) {
         rootFolderId = decodedState.rootFolderId || undefined
         skipAutoFolder = decodedState.skipAutoFolder === true
         replaceConnectorId = decodedState.replaceConnectorId || undefined
+        clientId = decodedState.clientId || undefined
+        friendlyName = decodedState.friendlyName || undefined
       } else {
         throw new Error('No state provided')
       }
@@ -309,9 +316,29 @@ export async function GET(request: NextRequest) {
       // we still store the connection. The organization will be linked later.
       const tokenExpiresAt = new Date(Date.now() + tokens.expires_in * 1000)
 
-      // When replacing an existing connector, revoke it before creating the new one
-      // to avoid duplicate-connector state. We revoke regardless of whether the new
-      // account is the same or different — storeConnection upserts by (type, userId).
+      // When replacing an existing connector, verify the completing account matches
+      // the original — reconnect must restore the same Google account, not swap it.
+      if (replaceConnectorId) {
+        const existing = await prisma.connector.findUnique({
+          where: { id: replaceConnectorId },
+          select: { externalAccountId: true, settings: true },
+        })
+        if (existing) {
+          const existingEmail = (existing.settings as any)?.accountEmail as string | undefined
+          const emailMismatch = existingEmail && userInfo.email.toLowerCase() !== existingEmail.toLowerCase()
+          const idMismatch = existing.externalAccountId && userInfo.id !== existing.externalAccountId
+          if (emailMismatch || idMismatch) {
+            if (isPopup) {
+              const html = popupHtml({ ok: false, error: 'account_mismatch', nonce: stateNonce })
+              return new NextResponse(html, { headers: { 'Content-Type': 'text/html' } })
+            }
+            return NextResponse.redirect(
+              new URL(appPathWithError(resolveOAuthFailureRedirectPath(state), 'account_mismatch'), process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000')
+            )
+          }
+        }
+      }
+
       if (replaceConnectorId) {
         try {
           await prisma.connector.update({
@@ -337,25 +364,106 @@ export async function GET(request: NextRequest) {
         organization?.id, // Might be undefined
         userId,          // Supabase user ID (owner of the connector)
         userInfo.id,     // Google's unique account ID (externalAccountId)
-        userInfo.name,
+        friendlyName ?? userInfo.name,
         tokens.access_token,
         tokens.refresh_token,
         tokenExpiresAt,
         userInfo.picture,
         rootFolderId ?? undefined, // Use existing if reconnecting with picker; otherwise set below
-        userInfo.email
+        userInfo.email,
+        clientId,        // Links Client.connectorId after upsert
       )
 
-      // Simplified onboarding: if no root folder was provided (e.g. from picker), create default
-      // Skip for Shared Drive flow — the user will manually create and pick the folder.
-      if (!rootFolderId && !skipAutoFolder) {
+      const auditBuilder = audit(AUDIT_EVENT.STORAGE_CONNECTOR_ATTACHED)
+        .scope(clientId ? AUDIT_SCOPE.CLIENT : AUDIT_SCOPE.FIRM)
+        .firm(organization?.id ?? '')
+        .actor(userId)
+        .meta({ provider: 'google_drive', connectorId: connector.id, email: userInfo.email })
+      if (clientId) auditBuilder.client(clientId)
+      auditBuilder.fireAndForget()
+
+      // Simplified onboarding: if no root folder was provided (e.g. from picker), create default.
+      // For Shared Drive workspaces, drive.file scope cannot create folders inside a Shared Drive
+      // the app didn't originally create. Skip all auto-provisioning; the Migrate wizard's folder
+      // picker is the only flow that grants access to user-created Shared Drive folders.
+      const existingConnectorForCheck = await prisma.connector.findUnique({
+        where: { id: connector.id },
+        select: { workspaceRootLocation: true, settings: true }
+      })
+      const isSharedDriveWorkspace = existingConnectorForCheck?.workspaceRootLocation === 'SHARED'
+
+      // Resolve workspace root for My Drive only.
+      // Skip entirely for client connectors — the user must explicitly pick a workspace folder
+      // (My Drive or Shared Drive) via the Choose Folder button after connecting.
+      let resolvedWorkspaceRootId: string | undefined
+      logger.info('callback: provisioning gate', { rootFolderId: rootFolderId ?? null, skipAutoFolder, isSharedDriveWorkspace, clientId: clientId ?? null, hasOrg: !!organization })
+      if (!rootFolderId && !skipAutoFolder && !isSharedDriveWorkspace && !clientId) {
         try {
-          await googleDriveConnector.ensureDefaultWorkspaceRoot(connector.id, tokens.access_token)
+          resolvedWorkspaceRootId = await googleDriveConnector.ensureDefaultWorkspaceRoot(connector.id, tokens.access_token)
+          logger.info('callback: workspace root resolved', { resolvedWorkspaceRootId })
         } catch (workspaceErr) {
           logger.error('Failed to create default workspace folder', workspaceErr instanceof Error ? workspaceErr : new Error(String(workspaceErr)))
-          // Onboarding will still show Configure Workspace Home as fallback
         }
-      } else if (rootFolderId) {
+      }
+
+      // Provision client and engagement folders when we have a workspace root
+      if (resolvedWorkspaceRootId && clientId && organization) {
+        try {
+          const client = await prisma.client.findUnique({
+            where: { id: clientId },
+            select: { id: true, name: true, slug: true, firmId: true }
+          })
+          if (client) {
+            const driveAdapter = createGoogleDriveAdapter(async () => tokens.access_token)
+            // For Shared Drive workspaces, drive.file scope cannot create folders inside a
+            // Shared Drive the app didn't originally create. Skip setupFirmFolder; rely on
+            // firm.firmFolderId already being set from the original Migrate wizard setup.
+            if (!isSharedDriveWorkspace) {
+              const firm = await prisma.firm.findUnique({ where: { id: organization.id }, select: { firmFolderId: true } })
+              const prevOrgFolderId = (existingConnectorForCheck?.settings as any)?.orgFolderId as string | undefined
+              const workspaceChanged = !!prevOrgFolderId && prevOrgFolderId !== resolvedWorkspaceRootId
+              if (!firm?.firmFolderId || workspaceChanged) {
+                await setupFirmFolder(connector.id, resolvedWorkspaceRootId, driveAdapter, organization.id)
+              }
+            }
+            // Ensure [Client Name] folder exists under [Firm Name] and write Client.driveFolderId
+            await ensureAppFolderStructure(connector.id, client.name, client.slug, driveAdapter, organization.id)
+            logger.info('Created client folder in Drive', { clientId, clientSlug: client.slug, connectorId: connector.id })
+
+            // Provision Drive folders for all existing engagements that don't have one yet
+            const existingEngagements = await prisma.engagement.findMany({
+              where: { clientId: client.id, isDeleted: false, connectorRootFolderId: null },
+              select: { id: true, name: true, slug: true }
+            })
+            for (const eng of existingEngagements) {
+              try {
+                const result = await ensureAppFolderStructure(
+                  connector.id, client.name, client.slug, driveAdapter, organization.id,
+                  { projectName: eng.name, projectSlug: eng.slug }
+                )
+                if (result.projectId) {
+                  await prisma.engagement.update({
+                    where: { id: eng.id },
+                    data: { connectorRootFolderId: result.projectId }
+                  })
+                  logger.info('Provisioned Drive folder for existing engagement', { engagementId: eng.id, engagementSlug: eng.slug })
+                }
+              } catch (engErr) {
+                logger.error('Failed to provision Drive folder for existing engagement', engErr instanceof Error ? engErr : new Error(String(engErr)), `engagementId:${eng.id}`)
+                // Non-fatal — continue with next engagement
+              }
+            }
+          }
+        } catch (folderErr) {
+          logger.error(
+            'Failed to create client folder structure in Drive',
+            folderErr instanceof Error ? folderErr : new Error(String(folderErr))
+          )
+          // Non-fatal — file upload will trigger folder creation as fallback
+        }
+      }
+
+      if (rootFolderId) {
         try {
           await googleDriveConnector.persistWorkspaceRootLocation(connector.id, rootFolderId)
         } catch (locErr) {

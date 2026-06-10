@@ -450,7 +450,7 @@ export function FirmActionCenter({ firmId, firmSlug }: FirmActionCenterProps) {
                                 {overdueCount > 0 && (
                                     <button
                                         onClick={() => setAcView('overdue')}
-                                        className="w-full flex items-center justify-between p-3 bg-white rounded border border-[#d1d5db] shadow-sm hover:bg-red-50 hover:scale-[1.01] active:scale-[0.99] transition-all duration-150"
+                                        className="w-full flex items-center justify-between p-3 bg-white rounded border border-[#d1d5db] shadow-md hover:shadow-lg hover:bg-red-50 hover:scale-[1.01] active:scale-[0.99] transition-all duration-150"
                                     >
                                         <div className="flex items-center gap-3">
                                             <div className="p-2 rounded-lg bg-red-50">
@@ -470,7 +470,7 @@ export function FirmActionCenter({ firmId, firmSlug }: FirmActionCenterProps) {
                                 {upcomingCount > 0 && (
                                     <button
                                         onClick={() => setAcView('upcoming')}
-                                        className="w-full flex items-center justify-between p-3 bg-white rounded border border-[#d1d5db] shadow-sm hover:bg-amber-50 hover:scale-[1.01] active:scale-[0.99] transition-all duration-150"
+                                        className="w-full flex items-center justify-between p-3 bg-white rounded border border-[#d1d5db] shadow-md hover:shadow-lg hover:bg-amber-50 hover:scale-[1.01] active:scale-[0.99] transition-all duration-150"
                                     >
                                         <div className="flex items-center gap-3">
                                             <div className="p-2 rounded-lg bg-amber-50">
@@ -494,7 +494,7 @@ export function FirmActionCenter({ firmId, firmSlug }: FirmActionCenterProps) {
                         {threadsCount > 0 && (
                             <button
                                 onClick={() => setAcView('threads')}
-                                className="w-full flex items-center justify-between p-3 bg-white rounded border border-[#d1d5db] shadow-sm hover:bg-purple-50 hover:scale-[1.01] active:scale-[0.99] transition-all duration-150"
+                                className="w-full flex items-center justify-between p-3 bg-white rounded border border-[#d1d5db] shadow-md hover:shadow-lg hover:bg-purple-50 hover:scale-[1.01] active:scale-[0.99] transition-all duration-150"
                             >
                                 <div className="flex items-center gap-3">
                                     <div className="p-2 rounded-lg bg-purple-50">
@@ -561,7 +561,7 @@ export function FirmActionCenter({ firmId, firmSlug }: FirmActionCenterProps) {
                                             <button
                                                 key={key}
                                                 onClick={() => setAcView(key)}
-                                                className={`w-full flex items-center justify-between p-3 bg-white rounded border ${border} shadow-sm ${hover} hover:scale-[1.01] active:scale-[0.99] transition-all duration-150`}
+                                                className={`w-full flex items-center justify-between p-3 bg-white rounded border ${border} shadow-md hover:shadow-lg ${hover} hover:scale-[1.01] active:scale-[0.99] transition-all duration-150`}
                                             >
                                                 <div className="flex items-center gap-3">
                                                     <div className={`p-2 rounded-lg ${iconBg}`}>

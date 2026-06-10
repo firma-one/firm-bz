@@ -31,7 +31,7 @@ vi.mock('@/lib/prisma', () => ({
       update: (...a: unknown[]) => mockUpdate(...a),
       create: (...a: unknown[]) => mockCreate(...a),
     },
-    $queryRawUnsafe: (...a: unknown[]) => mockQueryRawUnsafe(...a),
+    $queryRaw: (...a: unknown[]) => mockQueryRawUnsafe(...a),
   },
 }))
 

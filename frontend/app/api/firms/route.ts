@@ -5,8 +5,6 @@ import {
   requireNonSandboxFirmCreationAccess,
   resolveBillingAnchorForNewSatelliteFirm,
 } from '@/lib/billing/firm-creation-gate'
-import { prisma } from '@/lib/prisma'
-import { googleDriveConnector } from '@/lib/google-drive-connector'
 
 const supabase = createClient(
   (process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321'),
@@ -43,48 +41,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Could not resolve billing subscription' }, { status: 500 })
     }
 
-    const billingAnchor = await prisma.firm.findUnique({
-      where: { id: billingAnchorId },
-      select: {
-        id: true,
-        connectorId: true,
-        connector: { select: { id: true, status: true, settings: true } },
-      },
-    })
-    if (!billingAnchor?.connectorId || billingAnchor.connector?.status !== 'ACTIVE') {
-      return NextResponse.json(
-        { error: 'Billing anchor has no active Google Drive connector. Reconnect Drive in your sandbox firm first.' },
-        { status: 400 }
-      )
-    }
-
     const firm = await FirmService.createFirmWithMember({
       userId: user.id,
       email,
       firstName,
       lastName,
       firmName,
-      connectorId: billingAnchor.connectorId,
       allowDomainAccess,
       allowedEmailDomain,
       anchorFirmId: billingAnchorId,
     })
-
-    const driveRootFolderId = await googleDriveConnector.resolveWorkspaceRootFolderId(billingAnchor.connectorId)
-    try {
-      await googleDriveConnector.setupOrgFolder(
-        billingAnchor.connectorId,
-        driveRootFolderId,
-        firm.id,
-        user.id
-      )
-    } catch (driveError) {
-      console.error('Failed to setup Drive folder for custom firm', driveError)
-      return NextResponse.json(
-        { error: 'Created firm, but failed to create Google Drive folder. Please retry.' },
-        { status: 500 }
-      )
-    }
 
     return NextResponse.json({ firm })
   } catch (error) {

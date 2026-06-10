@@ -4,6 +4,8 @@ import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { config, getGoogleDriveOAuthServerCredentials } from '@/lib/config'
 import { METADATA_FOLDER_NAME } from '@/lib/connectors/types'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
+import { ensureAppFolderStructure, setupFirmFolder } from '@/lib/connectors/pockett-structure.service'
+import { createGoogleDriveAdapter } from '@/lib/connectors/adapters/google-drive-adapter'
 import { getMigrationAdapter } from '@/lib/connectors/registry'
 import { userSettingsPlus } from '@/lib/user-settings-plus'
 import { safeInngestSend } from '@/lib/inngest/client'
@@ -54,11 +56,8 @@ export async function POST(request: NextRequest) {
 
       // Google Drive OAuth scopes
       const scopes = [
-        // `drive.file` is sufficient for creating/picking folders in both My Drive and Shared Drives.
-        // Limitation: migrating files the user added outside this app (not created via the app) will 403.
-        // The migration wizard's error handling already explains this to the user when it occurs.
         'https://www.googleapis.com/auth/drive.file',
-        'https://www.googleapis.com/auth/drive.appdata', // Application data folder
+        'https://www.googleapis.com/auth/drive.appdata',
         'https://www.googleapis.com/auth/userinfo.email',
         'https://www.googleapis.com/auth/userinfo.profile'
       ].join(' ')
@@ -74,11 +73,13 @@ export async function POST(request: NextRequest) {
       const stateObj = {
         userId,
         organizationId: body.organizationId,
+        ...(body.clientId && { clientId: body.clientId }),
         rootFolderId: rootFolderId || null,
         next: body.next || null,
         flow,
         skipAutoFolder: body.skipAutoFolder === true,
         ...(body.replaceConnectorId && { replaceConnectorId: body.replaceConnectorId }),
+        ...(body.friendlyName && { friendlyName: body.friendlyName }),
         ...(nonce && { nonce }),
         ...(flow === 'popup' && body.openerOrigin && { openerOrigin: body.openerOrigin })
       }
@@ -149,7 +150,18 @@ export async function POST(request: NextRequest) {
       let org = null
 
       if (connector) {
+        // Try firm-level connector first, then fall back to client-level connector
         org = await prisma.firm.findFirst({ where: { connectorId: connector.id } })
+        if (!org) {
+          // Client-level connector — find the firm via the linked client
+          const linkedClient = await prisma.client.findFirst({
+            where: { connectorId: connector.id },
+            select: { firmId: true }
+          })
+          if (linkedClient) {
+            org = await prisma.firm.findUnique({ where: { id: linkedClient.firmId } })
+          }
+        }
         stepOneOrgSlug = org?.slug ?? null
       }
 
@@ -168,6 +180,49 @@ export async function POST(request: NextRequest) {
       if (!orgSlug && org) {
         orgSlug = org.slug
       }
+
+      // Provision client folder + all existing engagement folders for the linked client
+      if (org && connector) {
+        try {
+          const linkedClient = await prisma.client.findFirst({
+            where: { connectorId: connector.id },
+            select: { id: true, name: true, slug: true }
+          })
+          if (linkedClient) {
+            const accessToken = await googleDriveConnector.getAccessToken(connector.id)
+            if (!accessToken) throw new Error('Could not get access token for connector')
+            const driveAdapter = createGoogleDriveAdapter(async () => accessToken)
+            await ensureAppFolderStructure(connector.id, linkedClient.name, linkedClient.slug, driveAdapter, org.id)
+            logger.info('finalize: provisioned client folder', { clientId: linkedClient.id, connectorId: connector.id })
+
+            const engagements = await prisma.engagement.findMany({
+              where: { clientId: linkedClient.id, isDeleted: false, connectorRootFolderId: null },
+              select: { id: true, name: true, slug: true }
+            })
+            for (const eng of engagements) {
+              try {
+                const engResult = await ensureAppFolderStructure(
+                  connector.id, linkedClient.name, linkedClient.slug, driveAdapter, org.id,
+                  { projectName: eng.name, projectSlug: eng.slug }
+                )
+                if (engResult.projectId) {
+                  await prisma.engagement.update({
+                    where: { id: eng.id },
+                    data: { connectorRootFolderId: engResult.projectId }
+                  })
+                  logger.info('finalize: provisioned engagement folder', { engagementId: eng.id })
+                }
+              } catch (engErr) {
+                logger.error('finalize: failed to provision engagement folder', engErr instanceof Error ? engErr : new Error(String(engErr)), `engagementId:${eng.id}`)
+              }
+            }
+          }
+        } catch (provErr) {
+          logger.error('finalize: failed to provision client/engagement folders', provErr instanceof Error ? provErr : new Error(String(provErr)))
+          // Non-fatal — folder structure can be retried
+        }
+      }
+
       if (org) {
         orgSlug = org.slug
         if (connectionId) {
@@ -201,7 +256,16 @@ export async function POST(request: NextRequest) {
       // We prioritize the orgFolderId and any doc folders found in settings
       const finalizeConnector = await (prisma as any).connector.findUnique({ where: { id: connectionId } })
       if (finalizeConnector) {
-        const finalizeOrg = await prisma.firm.findFirst({ where: { connectorId: finalizeConnector.id } })
+        let finalizeOrg = await prisma.firm.findFirst({ where: { connectorId: finalizeConnector.id } })
+        if (!finalizeOrg) {
+          const linkedClient = await prisma.client.findFirst({
+            where: { connectorId: finalizeConnector.id },
+            select: { firmId: true }
+          })
+          if (linkedClient) {
+            finalizeOrg = await prisma.firm.findUnique({ where: { id: linkedClient.firmId } })
+          }
+        }
         if (finalizeOrg) {
           const settings = (finalizeConnector.settings as any) || {}
           const rootFolderIds: string[] = []
@@ -280,7 +344,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
       }
 
-      const { connectionId, rootFolderId: rawRootId } = body
+      const { connectionId, rootFolderId: rawRootId, firmId: hintFirmId } = body
       // Guard against accidentally receiving a picker result object instead of a plain ID string
       const newRootId: string | undefined =
         rawRootId && typeof rawRootId === 'object' && 'id' in rawRootId
@@ -296,21 +360,93 @@ export async function POST(request: NextRequest) {
       }
 
       const prevSettings = (existing.settings as any) || {}
+      const prevRootId = prevSettings.rootFolderId as string | undefined
+      const workspaceChanged = !!prevRootId && prevRootId !== newRootId
+
+      // When the workspace root changes, all derived folder IDs are stale — clear them
+      // so ensureAppFolderStructure resolves fresh folders under the new workspace.
+      const newSettings: Record<string, unknown> = {
+        ...prevSettings,
+        rootFolderId: newRootId,
+        parentFolderId: newRootId,
+      }
+      if (workspaceChanged) {
+        delete newSettings.orgFolderId
+        delete newSettings.clientFolderIds
+        delete newSettings.projectFolderIds
+        delete newSettings.projectFolderSettings
+        delete newSettings.organizations
+      }
+
       await (prisma as any).connector.update({
         where: { id: connectionId },
-        data: {
-          settings: {
-            ...prevSettings,
-            rootFolderId: newRootId,
-            parentFolderId: newRootId,
-          },
-        },
+        data: { settings: newSettings },
       })
 
       try {
         await googleDriveConnector.persistWorkspaceRootLocation(connectionId, newRootId)
       } catch {
         // Location can be backfilled on next status fetch
+      }
+
+      // Provision firm/client/engagement folder hierarchy after workspace root is set
+      try {
+        const accessToken = await googleDriveConnector.getAccessToken(connectionId)
+        if (accessToken) {
+          const driveAdapter = createGoogleDriveAdapter(async () => accessToken)
+          // Find firm: try connector link first, then client link, then explicit firmId hint
+          let org = await prisma.firm.findFirst({ where: { connectorId: connectionId } })
+          if (!org) {
+            const linkedClient = await prisma.client.findFirst({
+              where: { connectorId: connectionId },
+              select: { firmId: true }
+            })
+            if (linkedClient) org = await prisma.firm.findUnique({ where: { id: linkedClient.firmId } })
+          }
+          if (!org && hintFirmId) {
+            org = await prisma.firm.findUnique({ where: { id: hintFirmId } })
+          }
+          if (org) {
+            // Always run setupFirmFolder when workspace root changes — stale firmFolderId
+            // from a previous workspace must be replaced with the new workspace's folder.
+            const firm = await prisma.firm.findUnique({ where: { id: org.id }, select: { firmFolderId: true } })
+            if (!firm?.firmFolderId || workspaceChanged) {
+              await setupFirmFolder(connectionId, newRootId, driveAdapter, org.id)
+            }
+            // Provision client folder + engagements
+            const linkedClient = await prisma.client.findFirst({
+              where: { connectorId: connectionId },
+              select: { id: true, name: true, slug: true }
+            })
+            if (linkedClient) {
+              await ensureAppFolderStructure(connectionId, linkedClient.name, linkedClient.slug, driveAdapter, org.id)
+              const engagements = await prisma.engagement.findMany({
+                where: { clientId: linkedClient.id, isDeleted: false, connectorRootFolderId: null },
+                select: { id: true, name: true, slug: true }
+              })
+              for (const eng of engagements) {
+                try {
+                  const engResult = await ensureAppFolderStructure(
+                    connectionId, linkedClient.name, linkedClient.slug, driveAdapter, org.id,
+                    { projectName: eng.name, projectSlug: eng.slug }
+                  )
+                  if (engResult.projectId) {
+                    await prisma.engagement.update({
+                      where: { id: eng.id },
+                      data: { connectorRootFolderId: engResult.projectId }
+                    })
+                  }
+                } catch (engErr) {
+                  logger.error('update-root-folder: failed to provision engagement', engErr instanceof Error ? engErr : new Error(String(engErr)), `engagementId:${eng.id}`)
+                }
+              }
+              logger.info('update-root-folder: provisioned hierarchy', { connectionId, orgId: org.id, clientId: linkedClient.id })
+            }
+          }
+        }
+      } catch (provErr) {
+        logger.error('update-root-folder: provisioning failed', provErr instanceof Error ? provErr : new Error(String(provErr)))
+        // Non-fatal — folder structure can be retried
       }
 
       return NextResponse.json({ success: true })
@@ -356,10 +492,46 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, folderId: folder.id })
     }
 
+    // Find-or-create a folder by name inside a parent (default: My Drive root).
+    // Idempotent — reuses existing folder if one already exists with that name.
+    // Does NOT update connector settings — caller handles the returned folderId.
+    if (action === 'ensure-folder') {
+      const { connectionId, name, parentId } = body
+      if (!connectionId || !name) {
+        return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 })
+      }
+      const accessToken = await googleDriveConnector.getAccessToken(connectionId)
+      if (!accessToken) {
+        return NextResponse.json({ error: 'Unauthorized/Expired' }, { status: 401 })
+      }
+      const folderId = await (googleDriveConnector as any).findOrCreateFolder(
+        accessToken,
+        name,
+        parentId ? [parentId] : ['root'],
+      )
+      return NextResponse.json({ folderId })
+    }
+
     if (action === 'folder-breadcrumb') {
+      const authHeader = request.headers.get('authorization')
+      if (!authHeader?.startsWith('Bearer ')) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+      const bcSupabase = createSupabaseAdmin(
+        process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321',
+        process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+      )
+      const bcUser = await bcSupabase.auth.getUser(authHeader.slice(7))
+      if (!bcUser?.data?.user?.id) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
       const { connectionId: bcConnId, folderId: bcFolderId } = body
       if (!bcConnId || !bcFolderId) {
         return NextResponse.json({ error: 'Missing connectionId or folderId' }, { status: 400 })
+      }
+      const bcConnector = await prisma.connector.findUnique({ where: { id: bcConnId } })
+      if (!bcConnector || bcConnector.userId !== bcUser.data.user.id) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
       }
       try {
         const path = await googleDriveConnector.getFolderBreadcrumb(bcConnId, bcFolderId)
@@ -457,10 +629,8 @@ export async function POST(request: NextRequest) {
         // Backfilled on status if needed
       }
 
-      logger.info('[migrate-and-update-root] guard check', { oldRoot, migNewRoot, sameFolder: oldRoot === migNewRoot, hasOldRoot: !!oldRoot })
       if (oldRoot && oldRoot !== migNewRoot) {
         const firm = await prisma.firm.findFirst({ where: { connectorId: migConnId } })
-        logger.info('[migrate-and-update-root] firm lookup', { firmId: firm?.id ?? null, connectorId: migConnId })
         if (firm) {
           const estimatedMinutes = typeof bodyEstMinutes === 'number' ? bodyEstMinutes : 5
           await setMigrationPending(firm.id, {
@@ -468,7 +638,6 @@ export async function POST(request: NextRequest) {
             estimatedStartMinutes: 2,
             initiatedBy: migUser.id,
           })
-          logger.info('[migrate-and-update-root] sending workspace.migrate.requested', { firmId: firm.id, oldRoot, migNewRoot, estimatedMinutes })
           await safeInngestSend('workspace.migrate.requested', {
             connectionId: migConnId,
             newRootFolderId: migNewRoot,
@@ -479,7 +648,6 @@ export async function POST(request: NextRequest) {
             estimatedMinutes,
             startedAt: new Date().toISOString(),
           })
-          logger.info('[migrate-and-update-root] safeInngestSend completed')
         }
       }
 
@@ -527,9 +695,11 @@ export async function GET(request: NextRequest) {
       const connectionIdFilter = searchParams.get('connectionId')
 
       const baseWhere = { userId: user.id, type: 'GOOGLE_DRIVE', status: 'ACTIVE' as const }
+      // When a specific connectionId is requested, fetch regardless of status so name/email
+      // are available for REVOKED connectors (token invalid but metadata still present).
       const connector = connectionIdFilter
         ? await (prisma as any).connector.findFirst({
-            where: { ...baseWhere, id: connectionIdFilter },
+            where: { userId: user.id, type: 'GOOGLE_DRIVE', id: connectionIdFilter },
           })
         : await (prisma as any).connector.findFirst({
             where: baseWhere,
@@ -602,7 +772,7 @@ export async function GET(request: NextRequest) {
       }
 
       return NextResponse.json({
-        isConnected: !!connector,
+        isConnected: !!connector && connector.status === 'ACTIVE',
         connector: connector
           ? {
               id: connector.id,

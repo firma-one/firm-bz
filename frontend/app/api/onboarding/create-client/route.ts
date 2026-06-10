@@ -4,7 +4,6 @@ import { logger } from '@/lib/logger'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { ClientService } from '@/lib/services/client.service'
 import { invalidateUserSettingsPlus } from '@/lib/actions/user-settings'
-import { googleDriveConnector } from '@/lib/google-drive-connector'
 
 export async function POST(request: NextRequest) {
     try {
@@ -46,37 +45,6 @@ export async function POST(request: NextRequest) {
             creatorUserId: user.id,
             sandboxOnly: !!sandboxOnly
         })
-
-        // 2. --- GOOGLE DRIVE FOLDER CREATION (The Better Way: Unified Service) ---
-        try {
-            // Check Firm for Drive folder info
-            const firm = await (prisma as any).firm.findUnique({
-                where: { id: resolvedFirmId },
-                select: { connectorId: true }
-            })
-
-            if (firm?.connectorId) {
-                logger.info('Ensuring Drive folder structure for Client', { clientName: client.name, firmId: resolvedFirmId })
-
-                // ensureAppFolderStructure handles:
-                // 1. Finding/creating client folder
-                // 2. Writing .pockett/meta.json (type: client)
-                // 3. Updating connector.settings
-                // 4. Updating client.driveFolderId in DB
-                await googleDriveConnector.ensureAppFolderStructure(
-                    firm.connectorId,
-                    client.name,
-                    client.slug,
-                    await googleDriveConnector.createGoogleDriveAdapter(firm.connectorId),
-                    resolvedFirmId
-                )
-
-                logger.info('Client Drive setup complete')
-            }
-        } catch (error) {
-            logger.error('Failed to setup Drive folder for Client', error as Error)
-        }
-        // ------------------------------------
 
         logger.info('Client created during onboarding (V2)', { clientId: client.id, firmId: resolvedFirmId })
 

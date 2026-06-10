@@ -131,6 +131,7 @@ export interface EngagementInsightsResponse {
   recentDocuments: RecentDocumentItem[]
   sensitiveFiles: SensitiveFileItem[]
   sharesProgress: SharesProgress
+  sharedDocsCount: number
   healthScore: EngagementHealthScore
 }
 
@@ -305,7 +306,7 @@ export async function GET(
     staleThreshold.setDate(today.getDate() - 180)
     const largeSizeThreshold = 50 * 1024 * 1024 // 50 MB
 
-    const [engagement, docs, comments, members, invitations, driveConnector, shares] = await Promise.all([
+    const [engagement, docs, comments, members, invitations, driveConnector, shares, sharedDocsCount] = await Promise.all([
       prisma.engagement.findUnique({
         where: { id: projectId },
         select: { dueDate: true, name: true, connectorRootFolderId: true, kickoffDate: true, createdAt: true },
@@ -358,6 +359,11 @@ export async function GET(
           slug: true,
         },
       }),
+      // Count of distinct documents that have been shared with at least one user
+      prisma.engagementDocumentSharingUser.groupBy({
+        by: ['projectDocumentId'],
+        where: { engagementId: projectId },
+      }).then(rows => rows.length),
     ])
 
     // External user IDs set
@@ -661,6 +667,7 @@ export async function GET(
       recentDocuments,
       sensitiveFiles,
       sharesProgress,
+      sharedDocsCount,
       healthScore,
     }
 

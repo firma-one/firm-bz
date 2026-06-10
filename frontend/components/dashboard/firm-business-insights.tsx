@@ -98,11 +98,11 @@ function EngagementDrillBar({ engagements, clientTotal, symbol, onBack, clientNa
     const shades = BAR_COLOR_SHADES[colorIndex % BAR_COLOR_SHADES.length]
 
     return (
-        <div className="animate-in fade-in slide-in-from-left-2 duration-200">
-            <div className="flex items-center gap-2 mb-3">
+        <div>
+            <div className="flex items-center gap-2 h-8 mb-3">
                 <button
                     onClick={onBack}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-gray-200 hover:bg-gray-300 active:scale-95 transition-all text-gray-700 font-medium text-xs"
+                    className="flex items-center gap-1.5 px-2.5 h-full rounded-lg bg-gray-200 hover:bg-gray-300 active:scale-95 transition-all text-gray-700 font-medium text-xs"
                 >
                     <ArrowLeft className="h-3.5 w-3.5" />
                     Back
@@ -144,19 +144,24 @@ function EngagementDrillBar({ engagements, clientTotal, symbol, onBack, clientNa
                     return (
                         <div
                             key={eng.engagementId}
-                            className={`flex items-center gap-1.5 transition-opacity ${hovered && hovered !== eng.engagementId ? 'opacity-40' : ''}`}
+                            className={`flex items-start gap-2 transition-opacity ${hovered && hovered !== eng.engagementId ? 'opacity-40' : ''}`}
                             onMouseEnter={() => setHovered(eng.engagementId)}
                             onMouseLeave={() => setHovered(null)}
                         >
-                            <div className={`w-2 h-2 rounded-full shrink-0 ${color.legend}`} />
-                            <span className="text-xs text-gray-700 font-medium">{eng.engagementName}</span>
-                            {hasValues && (
-                                <>
-                                    <span className={`text-xs font-semibold ${color.text}`}>{formatValue(eng.value, symbol)}</span>
-                                    {pct && <span className="text-xs text-gray-400">{pct}%</span>}
-                                </>
-                            )}
-                            {eng.closingSoon && <span className="text-[10px] font-medium text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">Soon</span>}
+                            <div className={`w-2 h-2 rounded-full shrink-0 mt-1 ${color.legend}`} />
+                            <div className="flex flex-col gap-0.5">
+                                <span className="text-xs text-gray-700 font-medium leading-tight">{eng.engagementName}</span>
+                                <div className="flex items-center gap-1.5">
+                                    {eng.contractType && <span className="text-xs font-medium text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{eng.contractType}</span>}
+                                    {hasValues && (
+                                        <>
+                                            <span className={`text-xs font-semibold ${color.text}`}>{formatValue(eng.value, symbol)}</span>
+                                            {pct && <span className="text-xs text-gray-400">{pct}%</span>}
+                                        </>
+                                    )}
+                                    {eng.closingSoon && <span className="text-[10px] font-medium text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">Soon</span>}
+                                </div>
+                            </div>
                         </div>
                     )
                 })}
@@ -168,28 +173,24 @@ function EngagementDrillBar({ engagements, clientTotal, symbol, onBack, clientNa
 function PipelineBar({ items, total, symbol }: { items: ClientPipelineItem[]; total: number; symbol: string }) {
     const [hovered, setHovered] = useState<string | null>(null)
     const [drillClient, setDrillClient] = useState<{ item: ClientPipelineItem; colorIndex: number } | null>(null)
+    const isDrilled = drillClient !== null
+    const hasItems = items.length > 0
+    const hasValues = total > 0
 
-    if (drillClient) {
-        return (
-            <EngagementDrillBar
-                engagements={drillClient.item.engagements}
-                clientTotal={drillClient.item.value}
-                symbol={symbol}
-                clientName={drillClient.item.clientName}
-                colorIndex={drillClient.colorIndex}
-                onBack={() => setDrillClient(null)}
-            />
-        )
-    }
-
-    if (items.length === 0 || total === 0) {
-        const hasItems = items.length > 0
-        return (
-            <div>
+    return (
+        <div className="relative overflow-hidden">
+            {/* Top-level view */}
+            <div className={`transition-all duration-250 ease-in-out ${isDrilled ? 'opacity-0 -translate-x-4 pointer-events-none absolute inset-x-0 top-0' : 'opacity-100 translate-x-0'}`}>
+                <div className="flex items-center gap-2 mb-3 h-8">
+                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">All Clients</span>
+                    {hasValues && <span className="ml-auto text-sm font-bold text-gray-900">{formatValue(total, symbol)}</span>}
+                </div>
                 <div className="relative h-5 w-full bg-gray-100 rounded-lg overflow-hidden flex mb-3">
                     {hasItems ? items.map((item, i) => {
                         const color = BAR_COLORS[i % BAR_COLORS.length]
-                        const pct = (item.engagementCount / items.reduce((s, x) => s + x.engagementCount, 0)) * 100
+                        const pct = hasValues
+                            ? (item.value / total) * 100
+                            : (item.engagementCount / items.reduce((s, x) => s + x.engagementCount, 0)) * 100
                         return (
                             <div
                                 key={item.clientId}
@@ -200,7 +201,8 @@ function PipelineBar({ items, total, symbol }: { items: ClientPipelineItem[]; to
                                 className={`h-full ${color.bar} relative group cursor-pointer transition-opacity ${hovered && hovered !== item.clientId ? 'opacity-50' : ''}`}
                             >
                                 <div className="absolute opacity-0 group-hover:opacity-100 bottom-full left-1/2 -translate-x-1/2 mb-2 px-2.5 py-1.5 bg-gray-900 text-white text-xs font-medium rounded-md whitespace-nowrap z-20 pointer-events-none shadow-lg">
-                                    {item.clientName} · {item.engagementCount} engagement{item.engagementCount !== 1 ? 's' : ''} · no value set · click to drill in
+                                    {item.clientName} · {hasValues ? `${formatValue(item.value, symbol)} (${pct.toFixed(1)}%)` : `${item.engagementCount} engagement${item.engagementCount !== 1 ? 's' : ''} · no value set`} · click to drill in
+                                    {hasValues && item.closingSoonValue > 0 && <span className="ml-1 opacity-70">· {formatValue(item.closingSoonValue, symbol)} closing soon</span>}
                                     <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
                                 </div>
                             </div>
@@ -210,66 +212,47 @@ function PipelineBar({ items, total, symbol }: { items: ClientPipelineItem[]; to
                 <div className="flex flex-wrap gap-x-4 gap-y-1.5">
                     {items.map((item, i) => {
                         const color = BAR_COLORS[i % BAR_COLORS.length]
+                        const pct = hasValues ? ((item.value / total) * 100).toFixed(0) : null
                         return (
                             <button
                                 key={item.clientId}
                                 onClick={() => setDrillClient({ item, colorIndex: i })}
-                                className="flex items-center gap-1.5 hover:opacity-70 transition-opacity"
+                                className={`flex items-start gap-2 transition-opacity hover:opacity-70 ${hovered && hovered !== item.clientId ? 'opacity-40' : ''}`}
+                                onMouseEnter={() => setHovered(item.clientId)}
+                                onMouseLeave={() => setHovered(null)}
                             >
-                                <div className={`w-2 h-2 rounded-full shrink-0 ${color.legend}`} />
-                                <span className="text-xs text-gray-600 font-medium">{item.clientName}</span>
-                                <span className="text-xs text-gray-400">{item.engagementCount} eng</span>
+                                <div className={`w-2 h-2 rounded-full shrink-0 mt-1 ${color.legend}`} />
+                                <div className="flex flex-col gap-0.5 text-left">
+                                    <span className="text-xs text-gray-700 font-medium leading-tight">{item.clientName}</span>
+                                    <div className="flex items-center gap-1.5">
+                                {item.value > 0 && pct ? (
+                                    <>
+                                        <span className={`text-xs font-semibold ${color.text}`}>{formatValue(item.value, symbol)}</span>
+                                        <span className="text-xs text-gray-400">{pct}%</span>
+                                    </>
+                                ) : (
+                                    <span className="text-xs text-gray-400 font-semibold">—</span>
+                                )}
+                                    </div>
+                                </div>
                             </button>
                         )
                     })}
                 </div>
             </div>
-        )
-    }
 
-    return (
-        <div>
-            <div className="relative h-5 w-full bg-gray-100 rounded-lg overflow-hidden flex mb-3">
-                {items.map((item, i) => {
-                    const pct = (item.value / total) * 100
-                    const color = BAR_COLORS[i % BAR_COLORS.length]
-                    return (
-                        <div
-                            key={item.clientId}
-                            style={{ width: `${pct}%` }}
-                            onMouseEnter={() => setHovered(item.clientId)}
-                            onMouseLeave={() => setHovered(null)}
-                            onClick={() => setDrillClient({ item, colorIndex: i })}
-                            className={`h-full ${color.bar} relative group cursor-pointer transition-opacity ${hovered && hovered !== item.clientId ? 'opacity-50' : ''}`}
-                        >
-                            <div className="absolute opacity-0 group-hover:opacity-100 bottom-full left-1/2 -translate-x-1/2 mb-2 px-2.5 py-1.5 bg-gray-900 text-white text-xs font-medium rounded-md whitespace-nowrap z-20 pointer-events-none shadow-lg">
-                                {item.clientName} · {formatValue(item.value, symbol)} ({pct.toFixed(1)}%) · click to drill in
-                                {item.closingSoonValue > 0 && <span className="ml-1 opacity-70">· {formatValue(item.closingSoonValue, symbol)} closing soon</span>}
-                                <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
-                            </div>
-                        </div>
-                    )
-                })}
-            </div>
-            <div className="flex flex-wrap gap-x-4 gap-y-1.5">
-                {items.map((item, i) => {
-                    const color = BAR_COLORS[i % BAR_COLORS.length]
-                    const pct = total > 0 ? ((item.value / total) * 100).toFixed(0) : '0'
-                    return (
-                        <button
-                            key={item.clientId}
-                            onClick={() => setDrillClient({ item, colorIndex: i })}
-                            className={`flex items-center gap-1.5 transition-opacity hover:opacity-70 ${hovered && hovered !== item.clientId ? 'opacity-40' : ''}`}
-                            onMouseEnter={() => setHovered(item.clientId)}
-                            onMouseLeave={() => setHovered(null)}
-                        >
-                            <div className={`w-2 h-2 rounded-full shrink-0 ${color.legend}`} />
-                            <span className="text-xs text-gray-700 font-medium">{item.clientName}</span>
-                            <span className={`text-xs font-semibold ${color.text}`}>{formatValue(item.value, symbol)}</span>
-                            <span className="text-xs text-gray-400">{pct}%</span>
-                        </button>
-                    )
-                })}
+            {/* Drill-down view */}
+            <div className={`transition-all duration-250 ease-in-out ${isDrilled ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-4 pointer-events-none absolute inset-x-0 top-0'}`}>
+                {drillClient && (
+                    <EngagementDrillBar
+                        engagements={drillClient.item.engagements}
+                        clientTotal={drillClient.item.value}
+                        symbol={symbol}
+                        clientName={drillClient.item.clientName}
+                        colorIndex={drillClient.colorIndex}
+                        onBack={() => setDrillClient(null)}
+                    />
+                )}
             </div>
         </div>
     )
@@ -375,7 +358,7 @@ export function FirmBusinessInsights({ firmId }: FirmBusinessInsightsProps) {
                             </span>
                         </div>
                     </div>
-                    <div className="bg-[#f3f4f6] rounded p-4 border border-gray-100">
+                    <div className="bg-white rounded p-4 border border-[#e5e7eb] shadow-md">
                         <PipelineBar items={data!.clientPipelineBreakdown} total={data?.pipelineValue ?? 0} symbol={data?.currencySymbol ?? ''} />
                     </div>
                 </div>
@@ -386,7 +369,7 @@ export function FirmBusinessInsights({ firmId }: FirmBusinessInsightsProps) {
                     <h3 className="text-sm font-semibold text-gray-500 mb-3 mt-5">Engagement Types</h3>
                     <div className="flex flex-wrap gap-2">
                         {data!.contractTypeBreakdown.map(({ type, count }) => (
-                            <div key={type} className="flex items-center gap-2 px-3 py-1.5 bg-[#f3f4f6] border border-gray-100 rounded">
+                            <div key={type} className="flex items-center gap-2 px-3 py-1.5 bg-[#f3f4f6] border border-gray-100 rounded shadow-md">
                                 <span className="text-sm font-semibold text-gray-900">{count}</span>
                                 <span className="text-xs text-gray-500">{type}</span>
                             </div>

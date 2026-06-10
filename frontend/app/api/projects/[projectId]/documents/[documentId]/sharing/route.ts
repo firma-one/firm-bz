@@ -8,6 +8,7 @@ import { getFileInfo } from '@/lib/file-utils'
 import { safeInngestSend } from '@/lib/inngest/client'
 import { resolveProjectContext } from '@/lib/resolve-project-context'
 import { canManageProject } from '@/lib/permission-helpers'
+import { resolveEngagementConnector } from '@/lib/connectors/resolve-client-connector'
 import { GoogleDriveConnector } from '@/lib/google-drive-connector'
 import { getPermissionAdapter } from '@/lib/connectors/registry'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
@@ -172,14 +173,13 @@ export async function PUT(
         if (sharedPdfDriveId) {
           let resolvedConnectorId = existing.connectorId
           if (!resolvedConnectorId) {
-            const org = await prisma.firm.findUnique({ where: { id: fileInfo.organizationId }, include: { connector: true, connectors: true } })
-            const active = [...(org?.connectors ?? []), ...(org?.connector ? [org.connector] : [])].find(c => c.status === 'ACTIVE')
-            if (active) resolvedConnectorId = active.id
+            const engagementConnector = await resolveEngagementConnector(projectId)
+            if (engagementConnector?.status === 'ACTIVE') resolvedConnectorId = engagementConnector.id
           }
           if (resolvedConnectorId) {
             try {
               const adapter = await getPermissionAdapter(resolvedConnectorId)
-              await adapter.trashFile(resolvedConnectorId, sharedPdfDriveId)
+              await adapter?.trashFile(resolvedConnectorId, sharedPdfDriveId)
             } catch {}
           }
         }
@@ -295,17 +295,13 @@ export async function PUT(
         if (pdfDriveId) {
           let resolvedConnectorId = updated.connectorId
           if (!resolvedConnectorId) {
-            const org = await prisma.firm.findUnique({
-              where: { id: fileInfo.organizationId },
-              include: { connector: true, connectors: true },
-            })
-            const active = [...(org?.connectors ?? []), ...(org?.connector ? [org.connector] : [])].find(c => c.status === 'ACTIVE')
-            if (active) resolvedConnectorId = active.id
+            const engagementConnector = await resolveEngagementConnector(projectId)
+            if (engagementConnector?.status === 'ACTIVE') resolvedConnectorId = engagementConnector.id
           }
           if (resolvedConnectorId) {
             try {
               const adapter = await getPermissionAdapter(resolvedConnectorId)
-              await adapter.trashFile(resolvedConnectorId, pdfDriveId)
+              await adapter?.trashFile(resolvedConnectorId, pdfDriveId)
             } catch (e) {
               console.error('Failed to trash system PDF on guest disable:', e)
             }
@@ -519,7 +515,7 @@ export async function DELETE(
       if (connector?.status === 'ACTIVE') {
         try {
           const adapter = await getPermissionAdapter(connector.id)
-          await adapter.trashFile(connector.id, sharedPdfDriveId)
+          await adapter?.trashFile(connector.id, sharedPdfDriveId)
         } catch (e) {
           console.error('Failed to trash system PDF file:', e)
         }

@@ -8,6 +8,7 @@ import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
 import { canViewProjectSettings as checkCanViewProjectSettings } from '@/lib/permission-helpers'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
+import { resolveClientConnector } from '@/lib/connectors/resolve-client-connector'
 import { logger } from '@/lib/logger'
 import { safeInngestSend } from '@/lib/inngest/client'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
@@ -196,7 +197,7 @@ export async function createEngagement(firmSlug: string, clientSlug: string, dat
     })
 
     // 7. Google Drive folder structure — required when a connector exists; failure rolls back the engagement
-    const connectorId = firm.connectorId
+    const { connectorId } = await resolveClientConnector(client.id)
     if (connectorId) {
         try {
             const result = await googleDriveConnector.ensureAppFolderStructure(
@@ -313,7 +314,7 @@ export async function getEngagementFolderIds(projectId: string) {
         throw new Error('Project not found')
     }
 
-    const connectorId = project.client.firm.connectorId
+    const connectorId = project.client.connectorId
     if (!connectorId) {
         return { generalFolderId: null, confidentialFolderId: null, stagingFolderId: null, isProjectLead: false }
     }
@@ -688,14 +689,11 @@ export async function deleteEngagement(projectId: string, firmSlug: string, clie
 
     // 2. Revoke Drive access
     if (project.connectorRootFolderId) {
-        const firm = await prisma.firm.findUnique({
-            where: { id: project.firmId },
-            select: { connectorId: true }
-        })
+        const { connectorId: clientConnectorId } = await resolveClientConnector(project.clientId)
 
-        if (firm?.connectorId) {
+        if (clientConnectorId) {
             try {
-                await googleDriveConnector.restrictFolderToOwnerOnly(firm.connectorId, project.connectorRootFolderId)
+                await googleDriveConnector.restrictFolderToOwnerOnly(clientConnectorId, project.connectorRootFolderId)
             } catch (e) {
                 logger.error('Error restricting Drive folders on project delete', e as Error)
             }
@@ -716,6 +714,51 @@ export async function deleteEngagement(projectId: string, firmSlug: string, clie
     }
 
     revalidatePath(`/d/f/${firmSlug}/c/${clientSlug}`)
+}
+
+/**
+ * Provisions a Google Drive folder structure for an existing engagement that was created
+ * before a connector was attached to the client. Safe to call multiple times — idempotent
+ * via ensureAppFolderStructure.
+ */
+export async function provisionEngagementDriveFolder(engagementId: string): Promise<{ connectorRootFolderId: string }> {
+    const supabase = await createSupabaseClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('Not authenticated')
+
+    const engagement = await prisma.engagement.findUnique({
+        where: { id: engagementId },
+        select: { id: true, name: true, slug: true, firmId: true, clientId: true, connectorRootFolderId: true }
+    })
+    if (!engagement) throw new Error('Engagement not found')
+    if (engagement.connectorRootFolderId) return { connectorRootFolderId: engagement.connectorRootFolderId }
+
+    const client = await prisma.client.findUnique({
+        where: { id: engagement.clientId },
+        select: { id: true, name: true, slug: true }
+    })
+    if (!client) throw new Error('Client not found')
+
+    const { connectorId } = await resolveClientConnector(client.id)
+    if (!connectorId) throw new Error('No connector found for this client')
+
+    const result = await googleDriveConnector.ensureAppFolderStructure(
+        connectorId,
+        client.name,
+        client.slug,
+        await googleDriveConnector.createGoogleDriveAdapter(connectorId),
+        engagement.firmId,
+        { projectName: engagement.name, projectSlug: engagement.slug }
+    )
+
+    if (!result.projectId) throw new Error('Drive folder creation returned no folder ID')
+
+    await prisma.engagement.update({
+        where: { id: engagement.id },
+        data: { connectorRootFolderId: result.projectId, updatedBy: user.id }
+    })
+
+    return { connectorRootFolderId: result.projectId }
 }
 
 // Backward-compatible aliases during Project -> Engagement rename rollout.

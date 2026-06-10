@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { SearchService } from '@/lib/services/search-service'
 import { logger } from '@/lib/logger'
-import { requireProjectManage } from '@/lib/api/project-auth'
+import { requireProjectManage } from '@/lib/api/engagement-auth'
 
 export async function POST(
     request: NextRequest,
@@ -20,22 +20,17 @@ export async function POST(
             where: { id: projectId },
             include: {
                 client: {
-                    include: {
-                        firm: {
-                            include: {
-                                connector: true
-                            }
-                        }
-                    }
+                    include: { connector: true }
                 }
             }
         })
 
-        if (!project || !project.client?.firm?.connector) {
+        const resolvedConnector = project?.client?.connector ?? null
+        if (!project || !resolvedConnector) {
             return NextResponse.json({ error: 'Project or active connector not found' }, { status: 404 })
         }
 
-        const connector = project.client.firm.connector
+        const connector = resolvedConnector
         const orgId = project.firmId
         const cliId = project.clientId
 

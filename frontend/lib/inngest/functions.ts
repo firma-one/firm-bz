@@ -4,10 +4,9 @@ import { googleDriveConnector } from "@/lib/google-drive-connector";
 import { getPermissionAdapter, getMigrationAdapter, getConnectorInstance } from "@/lib/connectors/registry";
 import { parseSettingsFromDb } from "@/lib/sharing-settings";
 import { logger } from "@/lib/logger";
-import { DocumentSharingPermissionStatus } from "@prisma/client";
+import { DocumentSharingPermissionStatus, Prisma } from "@prisma/client";
 import { grantEngagementDriveFolderAccess } from "@/lib/grant-engagement-drive-folder-access";
 import { safeInngestSend } from "./client";
-import { provisionSandboxHierarchyForFirm } from '@/lib/onboarding/onboarding-helper'
 import {
     setMaintenanceMode,
     setMigrationPending,
@@ -213,6 +212,7 @@ export const scanAndIndexProject = inngest.createFunction(
             const queue = [...rootFolderIds]
             const visited = new Set<string>()
             const adapter = await getPermissionAdapter(connectorId)
+            if (!adapter) return files
 
             for (const folderId of rootFolderIds) {
                 try {
@@ -341,33 +341,6 @@ export const populateSandboxSampleFiles = inngest.createFunction(
     }
 )
 
-/** Async sandbox provisioning: Drive + DB hierarchy + sample files (after create-sandbox sync). Polar free plan is sync-only on create-sandbox. */
-export const provisionSandboxHierarchy = inngest.createFunction(
-    { id: "provision-sandbox-hierarchy", triggers: [{ event: "sandbox.provision.requested" }] },
-    async ({ event, step }) => {
-        const payload = event.data as {
-            firmId: string
-            userId: string
-            userEmail: string
-            firstName?: string
-            lastName?: string
-            connectionId: string
-        }
-
-        await step.run('provision-hierarchy-and-drive', async () => {
-            await provisionSandboxHierarchyForFirm({
-                firmId: payload.firmId,
-                userId: payload.userId,
-                userEmail: payload.userEmail,
-                firstName: payload.firstName,
-                lastName: payload.lastName,
-                connectionId: payload.connectionId,
-            })
-        })
-
-        return { ok: true, firmId: payload.firmId }
-    }
-)
 
 /**
  * Reconciliation for file deletion (V2)
@@ -399,6 +372,7 @@ export const reconcileFileDeletion = inngest.createFunction(
             // Revoke all outstanding connector permissions for these docs
             if (connectorId) {
                 const adapter = await getPermissionAdapter(connectorId)
+                if (!adapter) return
                 const sharingUsers = await prisma.engagementDocumentSharingUser.findMany({
                     where: {
                         projectDocumentId: { in: docIds },
@@ -465,6 +439,7 @@ export const reconcileFolderDeletion = inngest.createFunction(
             // Revoke all outstanding connector permissions
             if (connectorId) {
                 const adapter = await getPermissionAdapter(connectorId)
+                if (!adapter) return
                 const sharingUsers = await prisma.engagementDocumentSharingUser.findMany({
                     where: {
                         projectDocumentId: doc.id,
@@ -538,6 +513,7 @@ export const revokeProjectSharing = inngest.createFunction(
 
         const revokeResults = await step.run("revoke-permissions", async () => {
             const adapter = await getPermissionAdapter(connectorId)
+            if (!adapter) return { successCount: 0, failureCount: 0 }
             let successCount = 0;
             let failureCount = 0;
             const BATCH_SIZE = 10;
@@ -587,11 +563,12 @@ export const revokeProjectSharing = inngest.createFunction(
             });
             if (members.length === 0) return { downgraded: 0 };
 
-            const userIds = members.map((m) => `'${m.userId}'`).join(",");
-            const authUsers = await prisma.$queryRawUnsafe<Array<{ id: string; email: string }>>(
-                `SELECT id::text, email FROM auth.users WHERE id IN (${userIds})`
+            const userIds = members.map((m) => m.userId);
+            const authUsers = await prisma.$queryRaw<Array<{ id: string; email: string }>>(
+                Prisma.sql`SELECT id::text, email FROM auth.users WHERE id = ANY(${userIds}::uuid[])`
             );
             const adapter = await getPermissionAdapter(cid)
+            if (!adapter) return { downgraded: 0 }
             const folderIds = await adapter.getEngagementFolderIds(cid, engagement.slug, {
                 projectName: engagement.name,
                 clientSlug: engagement.client.slug,
@@ -695,6 +672,7 @@ export const revokeByDisabledPersona = inngest.createFunction(
 
         const revokeResults = await step.run("revoke-permissions", async () => {
             const adapter = await getPermissionAdapter(connectorId)
+            if (!adapter) return { successCount: 0 }
             let successCount = 0;
             for (const user of usersToRevoke) {
                 if (user.connectorPermissionId) {
@@ -760,6 +738,7 @@ export const revokeByMemberPersonaChange = inngest.createFunction(
 
         const revokeResults = await step.run("revoke-permissions", async () => {
             const adapter = await getPermissionAdapter(connectorId)
+            if (!adapter) return { successCount: 0 }
             let successCount = 0;
             for (const { document, user } of sharesToRevoke) {
                 if (user.connectorPermissionId && document.externalId) {
@@ -864,6 +843,7 @@ export const grantPermissionsForNewMember = inngest.createFunction(
 
         const grantResults = await step.run("grant-permissions", async () => {
             const adapter = await getPermissionAdapter(connectorId)
+            if (!adapter) return { successCount: 0 }
             let successCount = 0;
             for (const doc of documentsToGrant) {
                 try {

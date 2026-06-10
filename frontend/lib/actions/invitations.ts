@@ -62,12 +62,20 @@ export async function inviteMember(projectId: string, email: string, personaId: 
         })
 
         const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invite/${token}`
-        await sendEmail(
-            email,
-            `Action required: Engagement access on ${BRAND_NAME}`,
-            `<p>You have been granted access to an engagement on ${BRAND_NAME}.</p>
-             <p>Click here to accept: <a href="${inviteUrl}">${inviteUrl}</a></p>`
-        )
+        try {
+            await sendEmail(
+                email,
+                `Action required: Engagement access on ${BRAND_NAME}`,
+                `<p>You have been granted access to an engagement on ${BRAND_NAME}.</p>
+                 <p>Click here to accept: <a href="${inviteUrl}">${inviteUrl}</a></p>`
+            )
+        } catch (err) {
+            logger.error('Invitation email failed', err instanceof Error ? err : new Error(String(err)), 'Email', { to: email })
+            await prisma.engagementInvitation.update({
+                where: { id: existing.id },
+                data: { status: InvitationStatus.ERROR, updatedAt: new Date() }
+            })
+        }
 
         upsertFollowUpReminder({
             userId: user.id,
@@ -97,12 +105,20 @@ export async function inviteMember(projectId: string, email: string, personaId: 
     })
 
     const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invite/${token}`
-    await sendEmail(
-        email,
-        `Action required: Engagement access on ${BRAND_NAME}`,
-        `<p>You have been granted access to an engagement on ${BRAND_NAME}.</p>
-         <p>Click here to accept: <a href="${inviteUrl}">${inviteUrl}</a></p>`
-    )
+    try {
+        await sendEmail(
+            email,
+            `Action required: Engagement access on ${BRAND_NAME}`,
+            `<p>You have been granted access to an engagement on ${BRAND_NAME}.</p>
+             <p>Click here to accept: <a href="${inviteUrl}">${inviteUrl}</a></p>`
+        )
+    } catch (err) {
+        logger.error('Invitation email failed', err instanceof Error ? err : new Error(String(err)), 'Email', { to: email })
+        await prisma.engagementInvitation.update({
+            where: { id: invite.id },
+            data: { status: InvitationStatus.ERROR, updatedAt: new Date() }
+        })
+    }
 
     upsertFollowUpReminder({
         userId: user.id,
@@ -141,12 +157,20 @@ export async function resendInvitation(invitationId: string) {
     })
 
     const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invite/${token}`
-    await sendEmail(
-        invite.email,
-        `Action required: Engagement access on ${BRAND_NAME}`,
-        `<p>You have been granted access to an engagement on ${BRAND_NAME}.</p>
-         <p>Click here to accept: <a href="${inviteUrl}">${inviteUrl}</a></p>`
-    )
+    try {
+        await sendEmail(
+            invite.email,
+            `Action required: Engagement access on ${BRAND_NAME}`,
+            `<p>You have been granted access to an engagement on ${BRAND_NAME}.</p>
+             <p>Click here to accept: <a href="${inviteUrl}">${inviteUrl}</a></p>`
+        )
+    } catch (err) {
+        logger.error('Resend invitation email failed', err instanceof Error ? err : new Error(String(err)), 'Email', { to: invite.email })
+        await prisma.engagementInvitation.update({
+            where: { id: invitationId },
+            data: { status: InvitationStatus.ERROR, updatedAt: new Date() }
+        })
+    }
 
     const engDetails = await prisma.engagement.findFirst({
         where: { id: invite.engagementId },

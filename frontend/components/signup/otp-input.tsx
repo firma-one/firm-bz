@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useImperativeHandle, useRef, useState, forwardRef } from 'react'
 
 interface OTPInputProps {
     value: string
@@ -114,7 +114,11 @@ function injectOTPStyles() {
     document.head.appendChild(style)
 }
 
-export function OTPInput({
+export interface OTPInputHandle {
+    focus: () => void
+}
+
+export const OTPInput = forwardRef<OTPInputHandle, OTPInputProps>(function OTPInput({
     value,
     onChange,
     onComplete,
@@ -123,9 +127,13 @@ export function OTPInput({
     length = 6,
     variant = 'light',
     slotsJustify = 'center',
-}: OTPInputProps) {
+}, ref) {
     const hiddenInputRef = useRef<HTMLInputElement>(null)
     const [isFocused, setIsFocused] = useState(false)
+
+    useImperativeHandle(ref, () => ({
+        focus: () => hiddenInputRef.current?.focus(),
+    }))
 
     useEffect(() => {
         injectOTPStyles()
@@ -222,4 +230,4 @@ export function OTPInput({
             </div>
         </div>
     )
-}
+})

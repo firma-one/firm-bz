@@ -1,7 +1,7 @@
 import type { EngagementRole, EngagementStatus } from '@prisma/client'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { getSharedAndAncestorIdsForPersona } from '@/lib/project-sharing-ids'
+import { getSharedAndAncestorIdsForPersona } from '@/lib/engagement-sharing-ids'
 
 export type EngagementMemberRow = {
   role: EngagementRole

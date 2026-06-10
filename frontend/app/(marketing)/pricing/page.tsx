@@ -366,11 +366,10 @@ export default function PricingPage() {
                                             <p className="text-sm text-[#45474c]">{platformEmail("sales")}</p>
                                         </div>
                                     )}
-                                    {billingPeriod === "annual" && displayPrice != null && (
-                                        <p className="mb-4 text-xs text-[#45474c]">Billed annually</p>
-                                    )}
-                                    {billingPeriod === "monthly" && displayPrice != null && (
-                                        <div className="mb-4 h-4" aria-hidden />
+                                    {displayPrice != null && (
+                                        <p className="mb-4 text-xs text-[#45474c]">
+                                            {billingPeriod === "annual" ? "Billed annually" : "Billed monthly"}
+                                        </p>
                                     )}
                                     {summary.length > 0 && (
                                         <div className="mb-5 space-y-1">

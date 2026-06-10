@@ -4,6 +4,7 @@ export type FirmOnboardingCheckRow = {
     id: string
     settings: unknown
     connectorId: string | null
+    sandboxOnly: boolean
 }
 
 /**
@@ -21,6 +22,10 @@ export async function isWorkspaceOnboardingComplete(firm: FirmOnboardingCheckRow
     if (onboarding.stage === 'completed') return true
     // Flow v3 uses currentStep 3 for "connect stage reached / provisioning" — do not treat as finished.
     if (flowV < 3 && (onboarding.currentStep === 3 || onboarding.currentStep === 4)) return true
+
+    // Sandbox firms (flow v3+) have no connector — onboarding is complete once they reach the
+    // subscribe step (Step 2). Drive is connected per-client later, not during onboarding.
+    if (firm.sandboxOnly && flowV >= 3) return true
 
     if (!firm.connectorId) return false
 

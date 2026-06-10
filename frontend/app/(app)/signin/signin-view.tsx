@@ -1,5 +1,6 @@
 'use client'
 
+import { useRef } from 'react'
 import Link from 'next/link'
 import Logo from '@/components/Logo'
 import { Button } from '@/components/ui/button'
@@ -8,7 +9,7 @@ import { KINETIC_AUTH_HERO_IMAGE } from '@/lib/marketing/kinetic-auth-hero'
 import { KINETIC_LANDING_HERO_BADGE } from '@/lib/marketing/target-audience-nav'
 import { ArrowLeft, ArrowRight, Check, Lock, Shield } from 'lucide-react'
 import { KineticFloatingEmailField } from '@/components/signup/kinetic-floating-email-field'
-import { OTPInput } from '@/components/signup/otp-input'
+import { OTPInput, type OTPInputHandle } from '@/components/signup/otp-input'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { Turnstile } from '@marsidev/react-turnstile'
 import { useSignInFlow } from './use-sign-in-flow'
@@ -23,6 +24,7 @@ const OUTLINE_SECONDARY =
   'w-full rounded-md border border-[#c6c6cc]/80 bg-white text-[15px] font-medium text-[#45474c] transition-all hover:border-[#9ea0a8] hover:bg-[#f6f3f4] hover:text-[#1b1b1d] active:scale-[0.98]'
 
 export function SigninView() {
+  const otpInputRef = useRef<OTPInputHandle>(null)
   const {
     step,
     email,
@@ -342,6 +344,7 @@ export function SigninView() {
                     )}
 
                     <OTPInput
+                      ref={otpInputRef}
                       value={otpCode}
                       onChange={setOtpCode}
                       onComplete={(code) => handleVerifyOTP(code)}
@@ -372,8 +375,10 @@ export function SigninView() {
                       <button
                         type="button"
                         onClick={() => {
+                          setOtpCode('')
                           setTurnstileToken(null)
                           setShowTurnstile(true)
+                          setTimeout(() => otpInputRef.current?.focus(), 0)
                         }}
                         disabled={loading}
                         className={`w-full text-sm font-medium text-[#76777d] transition-colors hover:text-[#1b1b1d] hover:underline ${H}`}

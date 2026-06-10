@@ -1693,7 +1693,9 @@ export class GoogleDriveConnector {
     avatarUrl?: string,
     rootFolderId?: string,
     /** Google account email (OAuth userinfo); stored in settings for UI and APIs. */
-    accountEmail?: string
+    accountEmail?: string,
+    /** Client to link after upsert. Sets Client.connectorId = connector.id. */
+    clientId?: string,
   ): Promise<Connector> {
 
     // Pass plaintext tokens - Prisma extension handles encryption automatically
@@ -1729,11 +1731,13 @@ export class GoogleDriveConnector {
       updateData.refreshToken = refreshToken // Plaintext - Prisma extension encrypts
     }
 
-    // Find existing connector by type + userId (one connector per Supabase user per integration)
+    // Dedup by (type, userId, externalAccountId) — allows one user to hold connectors for
+    // multiple distinct Google accounts (different externalAccountId = different Drive).
     const existingConnector = await prisma.connector.findFirst({
       where: {
         type: ConnectorType.GOOGLE_DRIVE,
-        userId
+        userId,
+        externalAccountId,
       }
     })
 
@@ -1754,11 +1758,11 @@ export class GoogleDriveConnector {
         where: { id: existingConnector.id },
         data: updatePayload as any,
       })
-      // Also ensure the organization is linked to this connector if provided
-      if (organizationId) {
-        await prisma.firm.update({
-          where: { id: organizationId },
-          data: { connectorId: existingConnector.id }
+      // Link client to this connector
+      if (clientId) {
+        await prisma.client.update({
+          where: { id: clientId },
+          data: { connectorId: existingConnector.id },
         })
       }
       return updated
@@ -1766,7 +1770,7 @@ export class GoogleDriveConnector {
 
     const initialSettings = mergeConnectorSettings(undefined) ?? {}
 
-    // Create new connector 
+    // Create new connector
     const newConnector = await prisma.connector.create({
       data: {
         type: ConnectorType.GOOGLE_DRIVE,
@@ -1779,16 +1783,17 @@ export class GoogleDriveConnector {
         tokenExpiresAt,
         status: ConnectorStatus.ACTIVE,
         settings: initialSettings,
+        ...(organizationId && { firmId: organizationId }),
         createdBy: userId,
         updatedBy: userId,
       }
     })
 
-    // Link the connector to the organization if provided
-    if (organizationId) {
-      await prisma.firm.update({
-        where: { id: organizationId },
-        data: { connectorId: newConnector.id }
+    // Link client to this connector
+    if (clientId) {
+      await prisma.client.update({
+        where: { id: clientId },
+        data: { connectorId: newConnector.id },
       })
     }
 

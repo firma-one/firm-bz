@@ -187,7 +187,7 @@ export async function POST(
     }
     await prisma.firm.update({
       where: { id: firmId },
-      data: { logoUrl: pockettLogoUrl, settings: { ...current, branding } },
+      data: { settings: { ...current, branding } },
     })
 
     return NextResponse.json({ logoUrl: pockettLogoUrl })
@@ -262,7 +262,7 @@ export async function DELETE(
     }
     await prisma.firm.update({
       where: { id: firmId },
-      data: { logoUrl: null, settings: { ...current, branding } },
+      data: { settings: { ...current, branding } },
     })
 
     return NextResponse.json({ ok: true })

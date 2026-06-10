@@ -16,6 +16,10 @@ export interface GooglePickerButtonProps {
     mode?: 'import' | 'select-folder'
     query?: string
     driveType?: 'My Drive' | 'Shared Drive'
+    /** Called when the picker is successfully opened — lets parent show a loading state immediately. */
+    onPickerOpen?: () => void
+    /** Called when the picker is cancelled without a selection. */
+    onPickerCancel?: () => void
 }
 
 export function GooglePickerButton({
@@ -26,7 +30,9 @@ export function GooglePickerButton({
     showSuccessToast = true,
     mode = 'import',
     query,
-    driveType
+    driveType,
+    onPickerOpen,
+    onPickerCancel,
 }: GooglePickerButtonProps) {
     const [loading, setLoading] = useState(false)
     const { addToast } = useToast()
@@ -174,6 +180,7 @@ export function GooglePickerButton({
                 callbackFunction: (data: any) => {
                     if (data.action === 'cancel') {
                         setLoading(false)
+                        onPickerCancel?.()
                     }
                     if (data.action === 'picked') {
                         const files = data.docs
@@ -188,13 +195,14 @@ export function GooglePickerButton({
                 }
             })
 
+            onPickerOpen?.()
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Failed to launch picker.'
             logger.error('Failed to launch picker', error as Error)
             addToast({ title: 'Google Drive picker', message, type: 'error' })
             setLoading(false)
         }
-    }, [connectionId, handleValues, addToast, mode, openPicker, driveType, query])
+    }, [connectionId, handleValues, addToast, mode, openPicker, driveType, query, onPickerOpen, onPickerCancel])
 
     return (
         <>

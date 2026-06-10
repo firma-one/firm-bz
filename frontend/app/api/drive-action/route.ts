@@ -7,6 +7,7 @@ import { safeInngestSend } from '@/lib/inngest/client'
 import { logger } from '@/lib/logger'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { blockIfEngagementFileMutationForbidden } from '@/lib/engagement-access'
+import { resolveEngagementConnector } from '@/lib/connectors/resolve-client-connector'
 
 const supabase = createClient(
     (process.env.NEXT_PUBLIC_SUPABASE_URL || "http://127.0.0.1:54321"),
@@ -30,7 +31,8 @@ export async function POST(request: NextRequest) {
 
         // 2. Parse Request Body
         const body = await request.json()
-        const { action, fileId, limit, permissionId, expirationTime, projectId: requestProjectId, fileName: requestFileName } = body
+        // projectId is the wire name sent by clients — aliased to engagementId internally
+        const { action, fileId, limit, permissionId, expirationTime, projectId: engagementId, fileName: requestFileName } = body
         // Optional: specific connectorId. If not provided, use default.
         let { connectorId } = body
 
@@ -38,52 +40,46 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Action is required' }, { status: 400 })
         }
 
-        // 3. Get Active Connectors — firm / client / engagement memberships (firm id = org scope)
-        const firmMemberships = await prisma.firmMember.findMany({
-            where: { userId: user.id },
-            select: { firmId: true },
-        })
-
-        const clientMemberships = await prisma.clientMember.findMany({
-            where: { userId: user.id },
-            include: { client: { select: { firmId: true } } },
-        })
-
-        const engagementMemberships = await prisma.engagementMember.findMany({
-            where: { userId: user.id },
-            include: { engagement: { select: { firmId: true } } },
-        })
-
-        const allOrgIds = Array.from(
-            new Set([
-                ...firmMemberships.map((m) => m.firmId),
-                ...clientMemberships.map((m) => m.client.firmId),
-                ...engagementMemberships.map((m) => m.engagement.firmId),
-            ])
-        )
-
-        const orgsWithConnectors = await prisma.firm.findMany({
-            where: {
-                id: { in: allOrgIds },
-                connector: {
-                    type: ConnectorType.GOOGLE_DRIVE,
-                    status: 'ACTIVE'
-                }
-            },
-            include: { connector: true }
-        })
-
-        if (orgsWithConnectors.length === 0) {
-            return NextResponse.json({ error: 'No active Google Drive connection found' }, { status: 404 })
+        // 3. Resolve connector via engagement → client.connector (source of truth)
+        // When no engagementId is provided, fall back to scanning the user's firm/client memberships.
+        let primaryConnector: any = null
+        if (engagementId) {
+            primaryConnector = await resolveEngagementConnector(engagementId)
         }
 
-        // Map connectors with their organization IDs for fallback logic
-        const connectors = orgsWithConnectors
-            .filter(o => o.connector)
-            .map(o => ({
-                ...o.connector!,
-                organizationId: o.id
-            }))
+        // Fallback: scan all memberships for any active connector (used for non-engagement-scoped actions)
+        let connectors: Array<any & { organizationId: string }> = []
+        if (!primaryConnector) {
+            const [firmMemberships, clientMemberships] = await Promise.all([
+                prisma.firmMember.findMany({ where: { userId: user.id }, select: { firmId: true } }),
+                prisma.clientMember.findMany({ where: { userId: user.id }, include: { client: { select: { firmId: true, connectorId: true } } } }),
+            ])
+            const allOrgIds = Array.from(new Set([
+                ...firmMemberships.map(m => m.firmId),
+                ...clientMemberships.map(m => m.client.firmId),
+            ]))
+            const [orgsWithConnectors, clientsWithConnectors] = await Promise.all([
+                prisma.firm.findMany({
+                    where: { id: { in: allOrgIds }, connector: { type: ConnectorType.GOOGLE_DRIVE, status: 'ACTIVE' } },
+                    include: { connector: true }
+                }),
+                prisma.client.findMany({
+                    where: { id: { in: clientMemberships.map(m => m.clientId) }, connector: { type: ConnectorType.GOOGLE_DRIVE, status: 'ACTIVE' } },
+                    include: { connector: true }
+                }),
+            ])
+            connectors = [
+                ...orgsWithConnectors.filter(o => o.connector).map(o => ({ ...o.connector!, organizationId: o.id })),
+                ...clientsWithConnectors.filter(c => c.connector).map(c => ({ ...c.connector!, organizationId: c.firmId })),
+            ]
+        } else {
+            const engagement = await prisma.engagement.findUnique({ where: { id: engagementId }, select: { firmId: true } })
+            connectors = [{ ...primaryConnector, organizationId: engagement?.firmId ?? '' }]
+        }
+
+        if (connectors.length === 0) {
+            return NextResponse.json({ error: 'No active storage connector found' }, { status: 404 })
+        }
 
         // 4. Perform Action
         let result
@@ -95,11 +91,10 @@ export async function POST(request: NextRequest) {
                 }
 
                 // Sandbox restriction: disallow deletes for sandbox orgs.
-                // Prefer project-scoped determination when available; otherwise infer via connector mapping.
-                const orgIdForTrash = requestProjectId
+                const orgIdForTrash = engagementId
                     ? (
                           await prisma.engagement.findFirst({
-                              where: { id: requestProjectId, isDeleted: false },
+                              where: { id: engagementId, isDeleted: false },
                               select: { firmId: true },
                           })
                       )?.firmId
@@ -117,8 +112,8 @@ export async function POST(request: NextRequest) {
                     }
                 }
 
-                if (typeof requestProjectId === 'string' && requestProjectId) {
-                    const closedDenied = await blockIfEngagementFileMutationForbidden(user.id, requestProjectId)
+                if (typeof engagementId === 'string' && engagementId) {
+                    const closedDenied = await blockIfEngagementFileMutationForbidden(user.id, engagementId)
                     if (closedDenied) return closedDenied
                 }
 
@@ -126,7 +121,7 @@ export async function POST(request: NextRequest) {
                 // Otherwise default to the first connector.
                 let targetId = connectorId || (connectors.length > 0 ? connectors[0].id : null)
                 if (!targetId) {
-                    return NextResponse.json({ error: 'No valid connector found' }, { status: 400 })
+                    return NextResponse.json({ error: 'No active storage connector found' }, { status: 400 })
                 }
 
                 let success = await googleDriveConnector.trashFile(targetId, fileId)
@@ -170,27 +165,27 @@ export async function POST(request: NextRequest) {
                     })
                 }
 
-                // Project-scoped audit: record file removed (moved to bin) when projectId is provided
-                if (requestProjectId) {
+                // Engagement-scoped audit: record file removed (moved to bin) when engagementId is provided
+                if (engagementId) {
                     try {
-                        const project = await prisma.engagement.findFirst({
-                            where: { id: requestProjectId, isDeleted: false },
+                        const engagement = await prisma.engagement.findFirst({
+                            where: { id: engagementId, isDeleted: false },
                             select: { firmId: true, clientId: true },
                         })
-                        if (project) {
+                        if (engagement) {
                             const doc = await prisma.engagementDocument.findFirst({
                                 where: {
-                                    engagementId: requestProjectId,
-                                    firmId: project.firmId,
+                                    engagementId,
+                                    firmId: engagement.firmId,
                                     externalId: fileId,
                                 },
                                 select: { id: true },
                             })
                             audit(AUDIT_EVENT.DOCUMENT_DELETED)
                                 .scope(AUDIT_SCOPE.DOCUMENT)
-                                .firm(project.firmId)
-                                .client(project.clientId)
-                                .engagement(requestProjectId)
+                                .firm(engagement.firmId)
+                                .client(engagement.clientId)
+                                .engagement(engagementId)
                                 .document(doc?.id)
                                 .actor(user.id)
                                 .meta({ fileName: requestFileName ?? fileId, reason: 'moved_to_bin' })

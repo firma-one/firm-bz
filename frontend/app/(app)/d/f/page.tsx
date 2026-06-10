@@ -196,17 +196,37 @@ export default function WorkspacePickerPage() {
 
                 {/* Member firms */}
                 {firms.length > 0 && (
-                    <div className="grid grid-cols-1 gap-3 mb-6 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="grid grid-cols-1 gap-4 mb-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                         {firms.map((firm) => (
                             <button
                                 key={firm.id}
                                 type="button"
-                                className={`group relative flex flex-col gap-4 p-5 rounded-[2px] border bg-white hover:border-primary/40 hover:shadow-md text-left transition-all ${firm.sandboxOnly ? 'border-dashed border-[#e5e7eb]' : 'border-[#e5e7eb]'}`}
+                                className={`group relative flex flex-col gap-4 p-5 rounded-[2px] border bg-white shadow-md hover:shadow-lg text-left transition-all overflow-hidden h-48 ${firm.sandboxOnly ? 'border-dashed border-[#e5e7eb] hover:border-[#e5e7eb]' : 'border-[#e5e7eb] hover:border-primary/40'}`}
                                 onClick={() => router.push(`/d/f/${firm.slug}`)}
                             >
+                                {/* Brand corner decoration — only for non-sandbox firms */}
+                                {!firm.sandboxOnly && (() => {
+                                    const accent = firm.themeColor ?? null
+                                    const solidFill = accent ?? 'hsl(var(--primary))'
+                                    const fadeFill = accent ?? 'hsl(var(--primary))'
+                                    return (
+                                        <svg className="absolute bottom-0 right-0 pointer-events-none" width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                            <polygon points="48,0 48,48 0,48" fill={fadeFill} fillOpacity="0.12" />
+                                            <polygon points="48,22 48,48 22,48" fill={solidFill} />
+                                        </svg>
+                                    )
+                                })()}
                                 <div className="flex items-start justify-between">
-                                    <div className="h-12 w-12 rounded-[2px] bg-[#f9f9fb] border border-[#e5e7eb] flex items-center justify-center flex-shrink-0">
-                                        <Building2 className="h-6 w-6 text-[#45474c]" />
+                                    <div
+                                        className={`h-12 w-12 rounded-[2px] flex items-center justify-center flex-shrink-0 overflow-hidden ${firm.sandboxOnly ? 'bg-[#f9f9fb] border border-[#e5e7eb]' : 'border'}`}
+                                        style={!firm.sandboxOnly && firm.themeColor
+                                            ? { backgroundColor: `${firm.themeColor}18`, borderColor: `${firm.themeColor}33` }
+                                            : !firm.sandboxOnly ? undefined : undefined}
+                                    >
+                                        {firm.logoUrl
+                                            ? <img src={firm.logoUrl} alt={firm.name} className="h-full w-full object-contain p-1" />
+                                            : <Building2 className={`h-6 w-6 ${firm.sandboxOnly ? 'text-[#45474c]' : 'text-primary'}`} style={!firm.sandboxOnly && firm.themeColor ? { color: firm.themeColor } : undefined} />
+                                        }
                                     </div>
                                 </div>
                                 <div>
@@ -218,7 +238,7 @@ export default function WorkspacePickerPage() {
                                                     <Box className="h-3.5 w-3.5 shrink-0 text-[#9ca3af]" aria-label="Sandbox firm" />
                                                 </TooltipTrigger>
                                                 <TooltipContent side="top" className="text-xs">
-                                                    Free Sandbox
+                                                    Sandbox Firm — no real client data
                                                 </TooltipContent>
                                             </Tooltip>
                                         )}
@@ -246,13 +266,13 @@ export default function WorkspacePickerPage() {
                                 </div>
                             </div>
                         )}
-                        <div className="grid grid-cols-1 gap-3 mb-6 sm:grid-cols-2 lg:grid-cols-3">
+                        <div className="grid grid-cols-1 gap-4 mb-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                             {joinableFirms.map((org) => (
                                 <button
                                     key={org.id}
                                     type="button"
                                     disabled={joiningId !== null}
-                                    className="group relative flex flex-col gap-4 p-5 rounded-[2px] border border-[#e5e7eb] bg-white hover:border-primary/40 hover:shadow-md text-left transition-all disabled:opacity-50"
+                                    className="group relative flex flex-col gap-4 p-5 rounded-[2px] border border-[#e5e7eb] bg-white shadow-md hover:shadow-lg hover:border-primary/40 text-left transition-all disabled:opacity-50 h-48"
                                     onClick={() => handleJoin(org)}
                                 >
                                     <div className="flex items-start justify-between">

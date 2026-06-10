@@ -81,7 +81,10 @@ function restrictIfSupported(
 
 /**
  * Determine the actual folder name to use for org folder.
- * If orgName collides with an existing folder in parentFolder, use slug instead.
+ * If orgName collides with an existing folder in parentFolder, check whether that folder
+ * is firma-managed (appProperties.firma_managed = 'true'). If it is, reuse the name so
+ * findOrCreateFolder picks it up — this handles the Remove → re-add with same workspace case.
+ * Only fall back to slug when the collision is with a folder we don't own.
  * Returns { folderName, collision } for audit trail.
  */
 export async function getOrgFolderName(
@@ -93,14 +96,22 @@ export async function getOrgFolderName(
 ): Promise<{ folderName: string; collision: boolean }> {
   try {
     const children = await adapter.listFolderChildren(connectionId, parentFolderId)
-    const nameExists = children.some((f) => f.name === orgName)
+    const colliding = children.find((f) => f.name === orgName)
 
-    if (nameExists) {
-      logger.warn(`Folder name collision detected: '${orgName}' already exists. Using slug: '${orgSlug}'`, 'PockettStructure', { parentFolderId, connectionId })
-      return { folderName: orgSlug, collision: true }
+    if (!colliding) {
+      return { folderName: orgName, collision: false }
     }
 
-    return { folderName: orgName, collision: false }
+    // If the colliding folder is firma-managed, reuse the name — findOrCreateFolder will pick it up.
+    // This handles Remove → re-add with the same workspace folder (firm.firmFolderId was nulled but Drive folder still exists).
+    const isFirmaManaged = (colliding as any).appProperties?.firma_managed === 'true'
+    if (isFirmaManaged) {
+      logger.warn(`Folder name collision: '${orgName}' is firma-managed — reusing existing folder`, 'PockettStructure', { parentFolderId, connectionId, folderId: colliding.id })
+      return { folderName: orgName, collision: false }
+    }
+
+    logger.warn(`Folder name collision detected: '${orgName}' already exists (not firma-managed). Using slug: '${orgSlug}'`, 'PockettStructure', { parentFolderId, connectionId })
+    return { folderName: orgSlug, collision: true }
   } catch (e) {
     logger.error(`Error checking folder collision: ${e instanceof Error ? e.message : String(e)}`, e instanceof Error ? e : new Error(String(e)))
     // On error, default to name (safer than forcing slug)
@@ -449,7 +460,7 @@ export async function importStructureFromDrive(
     }
     const clientFolderIds: Record<string, string> = {}
     const projectFolderIds: Record<string, string> = {}
-    const projectFolderSettings: Record<string, { generalFolderId?: string; confidentialFolderId?: string; stagingFolderId?: string }> = {}
+    const projectFolderSettings: Record<string, { generalFolderId?: string }> = {}
     const clientChildren = await adapter.listFolderChildren(connectionId, orgFolder.id)
     for (const clientFolder of clientChildren.filter((f) => f.name !== METADATA_FOLDER_NAME)) {
       const clientMeta = await readMetaFromFolder(adapter, connectionId, clientFolder.id)
@@ -570,7 +581,7 @@ export async function importStructureFromDrive(
             stagingId = doc.id
           }
         }
-        projectFolderSettings[project!.slug] = { generalFolderId: generalId, confidentialFolderId: confidentialId, stagingFolderId: stagingId }
+        projectFolderSettings[project!.slug] = { generalFolderId: generalId }
       }
     }
     settings.clientFolderIds = clientFolderIds
@@ -609,8 +620,6 @@ export interface ProjectFolderStructure {
   clientId: string
   projectId?: string
   generalFolderId?: string
-  confidentialFolderId?: string
-  stagingFolderId?: string
 }
 
 /**
@@ -689,9 +698,7 @@ export async function ensureAppFolderStructure(
   }
 
   let generalFolderId: string | undefined
-  let confidentialFolderId: string | undefined
-  let stagingFolderId: string | undefined
-  let projectSubfolders: { generalFolderId?: string; confidentialFolderId?: string; stagingFolderId?: string } | undefined
+  let projectSubfolders: { generalFolderId?: string } | undefined
 
   if (projectName && projectSlug && clientFolderId) {
     if (!projectFolderId) {
@@ -731,8 +738,6 @@ export async function ensureAppFolderStructure(
     if (projectFolderId && projectSlug) {
       const currentProjectSettings = projectFolderSettings[projectSlug] || {}
       generalFolderId = currentProjectSettings.generalFolderId
-      confidentialFolderId = currentProjectSettings.confidentialFolderId
-      stagingFolderId = currentProjectSettings.stagingFolderId
 
       const ensureDocumentFolder = async (
         config: typeof FOLDERS[keyof typeof FOLDERS],
@@ -764,13 +769,9 @@ export async function ensureAppFolderStructure(
         return id
       }
 
-      ;[generalFolderId, confidentialFolderId, stagingFolderId] = await Promise.all([
-        ensureDocumentFolder(FOLDERS.GENERAL, generalFolderId),
-        ensureDocumentFolder(FOLDERS.CONFIDENTIAL, confidentialFolderId),
-        ensureDocumentFolder(FOLDERS.STAGING, stagingFolderId),
-      ])
+      generalFolderId = await ensureDocumentFolder(FOLDERS.GENERAL, generalFolderId)
 
-      projectSubfolders = { generalFolderId, confidentialFolderId, stagingFolderId }
+      projectSubfolders = { generalFolderId }
     }
   }
 
@@ -808,7 +809,7 @@ export async function ensureAppFolderStructure(
     }
   })
 
-  return { rootId: rootFolderId || '', orgId: orgFolderId, clientId: clientFolderId, projectId: projectFolderId, generalFolderId, confidentialFolderId, stagingFolderId }
+  return { rootId: rootFolderId || '', orgId: orgFolderId, clientId: clientFolderId!, projectId: projectFolderId, generalFolderId }
 }
 
 // ---------------------------------------------------------------------------
@@ -825,7 +826,7 @@ export interface SandboxDriveClient {
 export interface SandboxDriveStructureResult {
   clientFolderIds: Record<string, string>
   projectFolderIds: Record<string, string>
-  projectFolderSettings: Record<string, { generalFolderId: string; stagingFolderId: string; confidentialFolderId: string }>
+  projectFolderSettings: Record<string, { generalFolderId: string }>
 }
 
 /**
@@ -886,17 +887,11 @@ export async function createSandboxDriveStructure(
         }
         return id
       }
-      const [generalFolderId, stagingFolderId, confidentialFolderId] = await Promise.all([
-        ensureDocFolder(FOLDERS.GENERAL),
-        ensureDocFolder(FOLDERS.STAGING),
-        ensureDocFolder(FOLDERS.CONFIDENTIAL),
-      ])
+      const generalFolderId = await ensureDocFolder(FOLDERS.GENERAL)
       return {
         projectSlug: p.projectSlug,
         projectFolderId,
         generalFolderId,
-        stagingFolderId,
-        confidentialFolderId,
       }
     })
   )
@@ -904,12 +899,10 @@ export async function createSandboxDriveStructure(
   const projectFolderIds: Record<string, string> = Object.fromEntries(
     projectResults.map((r) => [r.projectSlug, r.projectFolderId])
   )
-  const projectFolderSettings: Record<string, { generalFolderId: string; stagingFolderId: string; confidentialFolderId: string }> = {}
+  const projectFolderSettings: Record<string, { generalFolderId: string }> = {}
   for (const r of projectResults) {
     projectFolderSettings[r.projectSlug] = {
       generalFolderId: r.generalFolderId,
-      stagingFolderId: r.stagingFolderId,
-      confidentialFolderId: r.confidentialFolderId,
     }
   }
 

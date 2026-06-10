@@ -5,7 +5,7 @@ import { CheckCircle2, Clock, Folder, Maximize2, Minimize2, X, XCircle } from 'l
 import { useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
 import { useUploadProgress } from '@/lib/upload-progress-context'
-import { useFirmBranding } from '@/lib/use-firm-branding'
+import { useBranding } from '@/lib/use-branding'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { CoffeeIcon, type CoffeeIconHandle } from '@/components/ui/coffee-icon'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
@@ -33,7 +33,7 @@ export function UploadProgressPanel() {
     dismiss,
   } = useUploadProgress()
 
-  const branding = useFirmBranding()
+  const branding = useBranding()
   const coffeeIconRef = useRef<CoffeeIconHandle>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 

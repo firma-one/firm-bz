@@ -49,7 +49,12 @@ export function ClientDetailsModal({ client, open, onOpenChange }: ClientDetails
                         <div className="flex-1">
                             <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Status</div>
                             <div className="flex items-center gap-2">
-                                <span className="px-2.5 py-1 bg-green-100 text-green-700 text-sm font-medium rounded-full">
+                                <span className={`px-2.5 py-1 text-sm font-medium rounded-full ${
+                                    client.status === 'PROSPECT' ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-200' :
+                                    client.status === 'ON_HOLD'  ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-200' :
+                                    client.status === 'PAST'     ? 'bg-zinc-50 text-zinc-500 ring-1 ring-zinc-200' :
+                                    'bg-green-100 text-green-700'
+                                }`}>
                                     {formatClientStatus(client.status)}
                                 </span>
                             </div>

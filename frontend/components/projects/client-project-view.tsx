@@ -1,9 +1,9 @@
 'use client'
 
-import React, { useState, useEffect, useTransition } from 'react'
+import { useState, useEffect, useTransition } from 'react'
 import { HierarchyClient, getIsOrgInternal } from '@/lib/actions/hierarchy'
 import { getProjectMemberSummaries, type ProjectMemberSummary } from '@/lib/actions/members'
-import { ProjectList } from './project-list'
+import { ProjectList } from './engagement-list'
 import { ClientSettingsForm } from './client-settings-form'
 import type { LwCrmClientStatus } from '@/lib/actions/client'
 import { SquarePlus, ChevronRight, Building2, Users, Briefcase, LayoutGrid, List, Home, Settings, UserCog, Lock } from 'lucide-react'
@@ -37,6 +37,7 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
     const [isFirmInternal, setIsFirmInternal] = useState(false)
     const [memberSummaries, setMemberSummaries] = useState<Record<string, ProjectMemberSummary>>({})
     const [canManageClient, setCanManageClient] = useState(false)
+    const [isFirmOwner, setIsFirmOwner] = useState(false)
     const [isPendingRefresh, startRefresh] = useTransition()
 
     // Load view mode preference from localStorage on mount
@@ -57,7 +58,7 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
     const currentTab =
         tabParam === 'settings' && canManageClient
             ? 'settings'
-            : tabParam === 'contacts'
+            : tabParam === 'contacts' && isFirmOwner
                 ? 'contacts'
                 : tabParam === 'members' && canManageClient
                     ? 'members'
@@ -80,8 +81,11 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
         if (!resolvedFirmId || !client?.id) return
         fetch(`/api/permissions/firm?firmId=${resolvedFirmId}&clientId=${client.id}`)
             .then(res => res.json())
-            .then(data => setCanManageClient(data.canManageClient ?? false))
-            .catch(() => setCanManageClient(false))
+            .then(data => {
+                setCanManageClient(data.canManageClient ?? false)
+                setIsFirmOwner(data.isFirmOwner ?? false)
+            })
+            .catch(() => { setCanManageClient(false); setIsFirmOwner(false) })
     }, [firmId, clients, selectedClientSlug])
 
     useEffect(() => {
@@ -140,8 +144,11 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                         {/* Client Identity Header — sits directly on pearl bg */}
                         <div className="flex items-start justify-between gap-6 mb-6">
                             <div className="flex items-center gap-6">
-                                <div className="w-16 h-16 bg-white border border-[#e5e7eb] flex items-center justify-center rounded shadow-sm shrink-0">
-                                    <Users className="h-10 w-10 text-[#1b1b1d]" />
+                                <div className="w-16 h-16 bg-white border border-[#e5e7eb] flex items-center justify-center rounded shadow-sm shrink-0 overflow-hidden">
+                                    {selectedClient.brandLogoUrl
+                                        ? <img src={selectedClient.brandLogoUrl} alt={selectedClient.name} className="h-full w-full object-contain p-1.5" />
+                                        : <Users className="h-10 w-10 text-[#1b1b1d]" />
+                                    }
                                 </div>
                                 <div>
                                     <div className="flex items-center gap-3 flex-wrap">
@@ -161,7 +168,7 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                                         {selectedClient.status && (
                                             <span className={`px-2 py-0.5 rounded font-mono text-[10px] tracking-tight uppercase shrink-0 border ${
                                                 selectedClient.status === 'ACTIVE'   ? 'bg-[#f0edee] text-[#45474c] border-[#e5e7eb]' :
-                                                selectedClient.status === 'PROSPECT' ? 'bg-fuchsia-50 text-fuchsia-500 border-fuchsia-200' :
+                                                selectedClient.status === 'PROSPECT' ? 'bg-blue-50 text-blue-700 border-blue-200' :
                                                 selectedClient.status === 'ON_HOLD'  ? 'bg-amber-50 text-amber-700 border-amber-200' :
                                                 selectedClient.status === 'PAST'     ? 'bg-slate-100 text-slate-500 border-slate-200' :
                                                 'bg-[#f0edee] text-[#45474c] border-[#e5e7eb]'
@@ -202,6 +209,7 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                                                 </span>
                                             )}
                                         </TabsTrigger>
+                                        {isFirmOwner && (
                                         <TabsTrigger
                                             value="contacts"
                                             className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
@@ -215,6 +223,7 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                                                 </span>
                                             )}
                                         </TabsTrigger>
+                                        )}
                                         {canManageClient && (
                                             <TabsTrigger
                                                 value="members"
@@ -301,6 +310,7 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                                     </div>
                                 </TabsContent>
 
+                                {isFirmOwner && (
                                 <TabsContent value="contacts" className="m-0 h-full">
                                     <div className="w-full py-2">
                                         <ClientContactsTab
@@ -311,6 +321,7 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                                         />
                                     </div>
                                 </TabsContent>
+                                )}
 
                                 {canManageClient && (
                                     <TabsContent value="members" className="m-0 h-full">
@@ -332,7 +343,9 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                                             <ClientSettingsForm
                                             orgSlug={firmSlug}
                                             firmId={firmId ?? selectedClient.firmId}
+                                            clientId={selectedClient.id}
                                             clientSlug={selectedClient.slug}
+                                            connectorId={selectedClient.connectorId}
                                             initialName={selectedClient.name}
                                             initialIndustry={selectedClient.industry ?? undefined}
                                             initialStatus={(selectedClient.status as LwCrmClientStatus) ?? 'ACTIVE'}
@@ -349,12 +362,7 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                                             initialCompanySizeBracket={selectedClient.companySizeBracket ?? undefined}
                                             initialBillingAddress={selectedClient.billingAddress ?? undefined}
                                             firmSandboxOnly={firmSandboxOnly}
-                                            onSaved={() => {
-                                                const params = new URLSearchParams(searchParams.toString())
-                                                params.set('tab', 'projects')
-                                                router.push(`${pathname}?${params.toString()}`, { scroll: false })
-                                                router.refresh()
-                                            }}
+                                            onSaved={() => router.refresh()}
                                             />
                                         </div>
                                     </TabsContent>

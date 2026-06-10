@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
+import { resolveEngagementConnector } from '@/lib/connectors/resolve-client-connector'
 
 /**
  * GET /api/proxy/thumbnail/[externalId]
@@ -27,7 +28,7 @@ export async function GET(
 
         const indexRow = await prisma.engagementDocument.findFirst({
             where: { externalId, firmId },
-            select: { metadata: true, id: true },
+            select: { metadata: true, id: true, engagementId: true },
         })
 
         const metadata = (indexRow?.metadata as any) || {}
@@ -52,16 +53,13 @@ export async function GET(
         }
 
         // 3. If no stored URL, or the cached URL failed (e.g. 403 Expired), fetch fresh from Drive API
-        const org = await prisma.firm.findUnique({
-            where: { id: firmId },
-            include: { connector: true }
-        })
+        const connector = indexRow?.engagementId
+            ? await resolveEngagementConnector(indexRow.engagementId)
+            : null
 
-        if (!org?.connector || org.connector.type !== 'GOOGLE_DRIVE' || org.connector.status !== 'ACTIVE') {
-            return NextResponse.json({ error: 'No active Google Drive connector found' }, { status: 404 })
+        if (!connector || connector.type !== 'GOOGLE_DRIVE' || connector.status !== 'ACTIVE') {
+            return NextResponse.json({ error: 'No active storage connector found' }, { status: 404 })
         }
-
-        const connector = org.connector
 
         const { googleDriveConnector } = await import('@/lib/google-drive-connector')
         const meta = await googleDriveConnector.getFileMetadata(connector.id, externalId)

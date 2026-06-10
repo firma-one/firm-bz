@@ -22,6 +22,7 @@ export async function grantEngagementDriveFolderAccess(params: GrantParams): Pro
   if (!email?.trim()) return
 
   const adapter = await getPermissionAdapter(connectorId)
+  if (!adapter) return
 
   const folderIds = await adapter.getEngagementFolderIds(connectorId, engagementSlug, {
     projectName,

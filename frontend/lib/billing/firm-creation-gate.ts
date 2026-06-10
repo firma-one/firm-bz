@@ -22,30 +22,31 @@ export async function getEligibleSatelliteAnchorCandidates(
     })
     if (memberships.length === 0) return []
 
-    const out: EligibleSatelliteAnchor[] = []
-    const seenAnchors = new Set<string>()
-    for (const membership of memberships) {
-        const anchorId = await resolveBillingAnchorFirmId(membership.firmId)
-        if (!anchorId || seenAnchors.has(anchorId)) continue
-        seenAnchors.add(anchorId)
+    // Resolve all billing anchors in parallel, then deduplicate
+    const anchorIds = await Promise.all(memberships.map((m) => resolveBillingAnchorFirmId(m.firmId)))
+    const uniqueAnchorIds = Array.from(new Set(anchorIds.filter((id): id is string => !!id)))
+    if (uniqueAnchorIds.length === 0) return []
 
-        // User must be a firm_admin on the anchor to create satellites under it
-        const anchorMembership = await prisma.firmMember.findFirst({
-            where: { firmId: anchorId, userId, role: 'firm_admin' },
-            select: { id: true },
+    // Check each unique anchor in parallel: admin membership + caps
+    const results = await Promise.all(
+        uniqueAnchorIds.map(async (anchorId) => {
+            const [anchorMembership, anchor] = await Promise.all([
+                prisma.firmMember.findFirst({
+                    where: { firmId: anchorId, userId, role: 'firm_admin' },
+                    select: { id: true },
+                }),
+                loadAnchorForCaps(anchorId),
+            ])
+            if (!anchorMembership || !anchor || anchorUsesSandboxCapDefaults(anchor)) return null
+
+            const cap = effectiveFirmGroupCapForAnchor(anchor)
+            const used = await countBillableFirmsInBillingGroup(anchorId)
+            if (used < cap) return { anchorId, sandboxOnly: anchor.sandboxOnly }
+            return null
         })
-        if (!anchorMembership) continue
+    )
 
-        const anchor = await loadAnchorForCaps(anchorId)
-        if (!anchor || anchorUsesSandboxCapDefaults(anchor)) continue
-
-        const cap = effectiveFirmGroupCapForAnchor(anchor)
-        const used = await countBillableFirmsInBillingGroup(anchorId)
-        if (used < cap) {
-            out.push({ anchorId, sandboxOnly: anchor.sandboxOnly })
-        }
-    }
-    return out
+    return results.filter((r): r is EligibleSatelliteAnchor => r !== null)
 }
 
 /**
@@ -67,11 +68,8 @@ export async function userHasMembershipUnderAnchor(userId: string, anchorId: str
         where: { userId, firm: { deletedAt: null } },
         select: { firmId: true },
     })
-    for (const m of memberships) {
-        const a = await resolveBillingAnchorFirmId(m.firmId)
-        if (a === anchorId) return true
-    }
-    return false
+    const resolvedAnchorIds = await Promise.all(memberships.map((m) => resolveBillingAnchorFirmId(m.firmId)))
+    return resolvedAnchorIds.some((a) => a === anchorId)
 }
 
 /**
@@ -100,35 +98,36 @@ export async function getFirmCreationGateReason(userId: string): Promise<FirmCre
     })
     if (memberships.length === 0) return { reason: 'free_sandbox', cap: null }
 
-    let hasPaidSubscription = false
-    const seenAnchors = new Set<string>()
+    // Resolve all anchors in parallel, then deduplicate
+    const anchorIds = await Promise.all(memberships.map((m) => resolveBillingAnchorFirmId(m.firmId)))
+    const uniqueAnchorIds = Array.from(new Set(anchorIds.filter((id): id is string => !!id)))
+    if (uniqueAnchorIds.length === 0) return { reason: 'free_sandbox', cap: null }
 
-    for (const membership of memberships) {
-        const anchorId = await resolveBillingAnchorFirmId(membership.firmId)
-        if (!anchorId || seenAnchors.has(anchorId)) continue
-        seenAnchors.add(anchorId)
+    // Check each unique anchor in parallel: admin membership + caps
+    const anchorChecks = await Promise.all(
+        uniqueAnchorIds.map(async (anchorId) => {
+            const [anchorMembership, anchor] = await Promise.all([
+                prisma.firmMember.findFirst({
+                    where: { firmId: anchorId, userId, role: 'firm_admin' },
+                    select: { id: true },
+                }),
+                loadAnchorForCaps(anchorId),
+            ])
+            if (!anchorMembership || !anchor) return null
+            if (anchorUsesSandboxCapDefaults(anchor)) return null
 
-        const anchorMembership = await prisma.firmMember.findFirst({
-            where: { firmId: anchorId, userId, role: 'firm_admin' },
-            select: { id: true },
+            const cap = effectiveFirmGroupCapForAnchor(anchor)
+            const used = await countBillableFirmsInBillingGroup(anchorId)
+            return { cap, allowed: used < cap }
         })
-        if (!anchorMembership) continue
+    )
 
-        const anchor = await loadAnchorForCaps(anchorId)
-        if (!anchor) continue
+    const paidAnchors = anchorChecks.filter((r): r is { cap: number; allowed: boolean } => r !== null)
+    if (paidAnchors.length === 0) return { reason: 'free_sandbox', cap: null }
 
-        if (anchorUsesSandboxCapDefaults(anchor)) continue
-
-        hasPaidSubscription = true
-
-        const cap = effectiveFirmGroupCapForAnchor(anchor)
-        const used = await countBillableFirmsInBillingGroup(anchorId)
-        if (used < cap) return { reason: 'allowed', cap }
-        // At cap — return the cap value for messaging
-        return { reason: 'at_cap', cap }
-    }
-
-    return { reason: hasPaidSubscription ? 'at_cap' : 'free_sandbox', cap: null }
+    const allowedAnchor = paidAnchors.find((r) => r.allowed)
+    if (allowedAnchor) return { reason: 'allowed', cap: allowedAnchor.cap }
+    return { reason: 'at_cap', cap: paidAnchors[0].cap }
 }
 
 export async function requireNonSandboxFirmCreationAccess(userId: string): Promise<void> {

@@ -31,6 +31,12 @@ const SANDBOX_CLIENT_PRIMARY_CONTACTS: Record<
     phone: '+1 (555) 201-4400',
     notes: 'Primary marketing stakeholder for engagements.',
   },
+  'Meridian Capital': {
+    name: 'Casey Morgan',
+    title: 'Managing Director',
+    phone: '+1 (555) 512-7700',
+    notes: 'Key decision-maker for advisory scoping and deal structuring.',
+  },
   'Horizon FinTech': {
     name: 'Sam Rivera',
     title: 'Head of Growth',
@@ -286,8 +292,6 @@ async function finalizeSandboxDriveConnectorAndIndexing(
     projectName: p.projectName,
     rootFolderId: driveStructure.projectFolderIds[p.projectSlug],
     generalFolderId: driveStructure.projectFolderSettings[p.projectSlug]?.generalFolderId,
-    stagingFolderId: driveStructure.projectFolderSettings[p.projectSlug]?.stagingFolderId,
-    confidentialFolderId: driveStructure.projectFolderSettings[p.projectSlug]?.confidentialFolderId,
   }))
   if (populatePayload.length > 0) {
     safeInngestSend('sandbox.populate.sample-files.requested', {
@@ -675,4 +679,84 @@ export async function provisionSandboxHierarchyForFirm(input: {
       updatedBy: userId,
     },
   })
+}
+
+/**
+ * DB-only sandbox seeding: creates sample clients, engagements, and contacts from
+ * SANDBOX_HIERARCHY without requiring a Google Drive connector. Called during the
+ * shell-only onboarding path so the firm dashboard is populated on first load.
+ * Idempotent: skips clients/engagements that already exist.
+ */
+export async function seedSandboxClientsInDb(firmId: string, userId: string): Promise<void> {
+  for (const clientEntry of SANDBOX_HIERARCHY) {
+    const existing = await prisma.client.findFirst({
+      where: { firmId, name: clientEntry.clientName, deletedAt: null },
+      select: { id: true, slug: true },
+    })
+
+    const client =
+      existing ??
+      (await ClientService.createClient({
+        firmId,
+        name: clientEntry.clientName,
+        creatorUserId: userId,
+        sandboxOnly: true,
+      }))
+
+    if (!existing) {
+      await prisma.client.update({
+        where: { id: client.id },
+        data: {
+          status: (clientEntry.status ?? 'ACTIVE') as any,
+          industry: clientEntry.industry ?? null,
+          clientSinceDate: clientEntry.clientSinceDate ? new Date(clientEntry.clientSinceDate) : null,
+          followUpDate: clientEntry.followUpDate ? new Date(clientEntry.followUpDate) : null,
+        },
+      })
+    }
+
+    if (!existing) {
+      const preset = SANDBOX_CLIENT_PRIMARY_CONTACTS[clientEntry.clientName] ?? {
+        name: 'Alex Kim',
+        title: 'Primary contact',
+        phone: '+1 (555) 100-0000',
+        notes: 'Sample sandbox contact for demos.',
+      }
+      await prisma.clientContact.create({
+        data: {
+          firmId,
+          clientId: client.id,
+          name: preset.name,
+          email: `primary.${client.slug}@sandbox.firmaone.com`,
+          phone: preset.phone ?? null,
+          title: preset.title,
+          notes: preset.notes ?? null,
+          tags: [],
+          engagementId: null,
+          createdBy: userId,
+          updatedBy: userId,
+        },
+      })
+    }
+
+    for (const engagementEntry of clientEntry.engagements) {
+      const existingEngagement = await prisma.engagement.findFirst({
+        where: { clientId: client.id, isDeleted: false, name: { equals: engagementEntry.name, mode: 'insensitive' } },
+        select: { id: true },
+      })
+      if (!existingEngagement) {
+        const eng = await projectService.createProject(firmId, client.id, engagementEntry.name, userId, '', true, true)
+        if (engagementEntry.dueDate || engagementEntry.rateOrValue || engagementEntry.contractType) {
+          await prisma.engagement.update({
+            where: { id: eng.project.id },
+            data: {
+              dueDate: engagementEntry.dueDate ? new Date(engagementEntry.dueDate) : null,
+              rateOrValue: engagementEntry.rateOrValue ?? null,
+              contractType: engagementEntry.contractType ?? null,
+            },
+          })
+        }
+      }
+    }
+  }
 }

@@ -61,19 +61,20 @@ export function createGoogleDriveAdapter(getAccessToken: GetAccessToken): IConne
   }
 
   return {
-    async listFolderChildren(connectionId: string, folderId: string): Promise<Array<{ id: string; name: string; mimeType?: string }>> {
+    async listFolderChildren(connectionId: string, folderId: string): Promise<Array<{ id: string; name: string; mimeType?: string; appProperties?: Record<string, string> }>> {
       const token = await auth(connectionId)
       const q = `'${folderId.replace(/'/g, "\\'")}' in parents and trashed = false`
       const res = await fetch(
-        `${DRIVE_API}/files?q=${encodeURIComponent(q)}&fields=files(id,name,mimeType)&${DRIVE_OPTS}`,
+        `${DRIVE_API}/files?q=${encodeURIComponent(q)}&fields=files(id,name,mimeType,appProperties)&${DRIVE_OPTS}`,
         { headers: { Authorization: `Bearer ${token}` } }
       )
       if (!res.ok) return []
       const data = await res.json()
-      return (data.files || []).map((f: { id: string; name: string; mimeType?: string }) => ({
+      return (data.files || []).map((f: { id: string; name: string; mimeType?: string; appProperties?: Record<string, string> }) => ({
         id: f.id,
         name: f.name,
-        mimeType: f.mimeType
+        mimeType: f.mimeType,
+        appProperties: f.appProperties,
       }))
     },
 
@@ -317,17 +318,18 @@ export function createGoogleDriveAdapter(getAccessToken: GetAccessToken): IConne
 async function listFolderChildrenInternal(
   token: string,
   folderId: string
-): Promise<Array<{ id: string; name: string; mimeType?: string }>> {
+): Promise<Array<{ id: string; name: string; mimeType?: string; appProperties?: Record<string, string> }>> {
   const q = `'${folderId.replace(/'/g, "\\'")}' in parents and trashed = false`
   const res = await fetch(
-    `${DRIVE_API}/files?q=${encodeURIComponent(q)}&fields=files(id,name,mimeType)&${DRIVE_OPTS}`,
+    `${DRIVE_API}/files?q=${encodeURIComponent(q)}&fields=files(id,name,mimeType,appProperties)&${DRIVE_OPTS}`,
     { headers: { Authorization: `Bearer ${token}` } }
   )
   if (!res.ok) return []
   const data = await res.json()
-  return (data.files || []).map((f: { id: string; name: string; mimeType?: string }) => ({
+  return (data.files || []).map((f: { id: string; name: string; mimeType?: string; appProperties?: Record<string, string> }) => ({
     id: f.id,
     name: f.name,
-    mimeType: f.mimeType
+    mimeType: f.mimeType,
+    appProperties: f.appProperties,
   }))
 }

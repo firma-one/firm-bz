@@ -62,24 +62,27 @@ function buildItems(firmSlug: string | null, canManageOrg: boolean): CommandItem
   const items: CommandItem[] = []
 
   if (firmBase) {
-    items.push(
-      {
-        id: "clients",
-        label: "Clients",
-        description: "View all clients",
-        icon: <Users className="h-4 w-4" />,
-        href: firmBase,
-        group: "Firm",
-      },
-      {
-        id: "analytics",
-        label: "Analytics",
-        description: "Firm-wide insights and reporting",
-        icon: <BarChart3 className="h-4 w-4" />,
-        href: `${firmBase}?tab=analytics`,
-        group: "Firm",
-      },
-    )
+    if (canManageOrg) {
+      items.push(
+        {
+          id: "analytics",
+          label: "Overview",
+          description: "Firm-wide insights and reporting",
+          icon: <BarChart3 className="h-4 w-4" />,
+          href: `${firmBase}?tab=analytics`,
+          group: "Firm",
+          adminOnly: true,
+        },
+      )
+    }
+    items.push({
+      id: "clients",
+      label: "Clients",
+      description: "View all clients",
+      icon: <Users className="h-4 w-4" />,
+      href: firmBase,
+      group: "Firm",
+    })
     if (canManageOrg) {
       items.push({
         id: "settings",

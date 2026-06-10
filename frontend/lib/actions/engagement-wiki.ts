@@ -3,6 +3,7 @@
 import { prisma } from '@/lib/prisma'
 import { createClient } from '@/utils/supabase/server'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
+import { resolveClientConnector } from '@/lib/connectors/resolve-client-connector'
 
 export type WikiPage = {
   id: string
@@ -54,14 +55,16 @@ async function getEngagementDriveContext(engagementId: string): Promise<{ connec
   const engagement = await (prisma as any).engagement.findUnique({
     where: { id: engagementId },
     select: {
+      clientId: true,
       connectorRootFolderId: true,
-      firm: { select: { connectorId: true } },
     },
   })
-  if (!engagement?.firm?.connectorId) throw new Error('No active connector for this firm')
+  if (!engagement) throw new Error('Engagement not found')
   if (!engagement.connectorRootFolderId) throw new Error('No connector root folder for this engagement')
+  const { connectorId } = await resolveClientConnector(engagement.clientId)
+  if (!connectorId) throw new Error('No active connector for this client')
   return {
-    connectorId: engagement.firm.connectorId,
+    connectorId,
     connectorRootFolderId: engagement.connectorRootFolderId,
   }
 }

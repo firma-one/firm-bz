@@ -14,8 +14,15 @@ export interface SampleFolder {
 /** Sandbox client entry: client name + engagements (folder trees keyed by engagement name). */
 export interface SandboxClientEntry {
     clientName: string
+    status?: string
+    clientSinceDate?: string
+    followUpDate?: string
+    industry?: string
     engagements: Array<{
         name: string
+        contractType?: string
+        dueDate?: string
+        rateOrValue?: string
         structure: Record<string, SampleFolder>
     }>
 }
@@ -32,10 +39,35 @@ const sandboxConfig = sandboxHierarchyJson as SandboxConfig
 export const SANDBOX_FIRM_NAME_FALLBACK: string = sandboxConfig.firmName
 
 /**
- * Sandbox firm tree. Loaded from sandbox-hierarchy.json for easier maintenance.
- * Edit the JSON to change firm name, clients, engagements, and sample files without touching code.
+ * Resolve a date string that may contain a relative token like "today+12" or "today-5".
+ * Returns an ISO date string (YYYY-MM-DD). Plain dates pass through unchanged.
  */
-export const SANDBOX_HIERARCHY: SandboxClientEntry[] = sandboxConfig.clients
+function resolveRelativeDate(value: string | undefined): string | undefined {
+    if (!value) return value
+    const m = value.match(/^today([+-]\d+)?$/)
+    if (!m) return value
+    const offset = m[1] ? parseInt(m[1], 10) : 0
+    const d = new Date()
+    d.setDate(d.getDate() + offset)
+    return d.toISOString().slice(0, 10)
+}
+
+function resolveClientDates(client: SandboxClientEntry): SandboxClientEntry {
+    return {
+        ...client,
+        followUpDate: resolveRelativeDate(client.followUpDate),
+        engagements: client.engagements.map((e) => ({
+            ...e,
+            dueDate: resolveRelativeDate(e.dueDate),
+        })),
+    }
+}
+
+/**
+ * Sandbox firm tree. Loaded from sandbox-hierarchy.json for easier maintenance.
+ * Date fields support relative tokens: "today", "today+N", "today-N".
+ */
+export const SANDBOX_HIERARCHY: SandboxClientEntry[] = sandboxConfig.clients.map(resolveClientDates)
 
 /** Folder structure by engagement display name (for sample file population). */
 export const SANDBOX_ENGAGEMENT_FOLDER_DATA: Record<string, Record<string, SampleFolder>> =

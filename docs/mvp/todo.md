@@ -37,13 +37,19 @@
 
 - [ ] **Cleanup: remove Staging & Confidential folder creation from onboarding** — these folders are no longer surfaced in the UI; remove the Drive-side provisioning code that creates them during workspace setup
 
+- [ ] **Cleanup: connector client-level refactor — legacy removal** — [plan](../../.claude/plans/connector-client-level-cleanup.md)
+  - Remove `connector.settings.clientFolderIds` path once all clients have `driveFolderId` set
+  - Remove `Firm.connectorId` legacy FK and simplify `getConnections()` union in registry
+  - Remove `connector.settings.orgFolderId` redundancy (prefer `Firm.firmFolderId` exclusively)
+  - Pre-condition: live in production 2+ weeks with no folder resolution issues
+
 - [ ] **Workspace Picker Route** — [plan](../../.claude/plans/workspace-picker-route.md)
   - Move "Choose Your Workspace" (onboarding step 0) from `/d/onboarding` to `/d/f/`
   - Returning users with multiple firms get AppSidebar chrome instead of OnboardingBar
 
 ## Client Management
 
-- [ ] **Contact Follow-Up Date** — Client Settings › Contacts: add a "Follow Up" date field per contact; auto-creates a reminder assigned to all Firm Admins on save
+- [ ] **Contact Follow-Up Date** — [plan](../../.claude/plans/contact-follow-up-date.md) — Client Settings › Contacts: add a "Follow Up" date field per contact; auto-creates a reminder assigned to all Firm Admins on save
 
 ## Reminders
 

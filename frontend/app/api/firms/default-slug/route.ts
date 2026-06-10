@@ -18,6 +18,7 @@ export async function GET() {
               id: defaultFirm.id,
               settings: defaultFirm.settings,
               connectorId: defaultFirm.connectorId ?? null,
+              sandboxOnly: defaultFirm.sandboxOnly ?? false,
           })
         : false
     const isFirmAdmin = defaultFirm

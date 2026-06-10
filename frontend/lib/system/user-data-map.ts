@@ -283,6 +283,7 @@ export async function buildUserDataMap(identifier: string): Promise<UserDataMapR
             id: firm.id,
             settings: firm.settings,
             connectorId: firm.connectorId,
+            sandboxOnly: firm.sandboxOnly,
         })
         const anchorFirmId = await resolveBillingAnchorFirmId(firm.id)
         const anchorExists = Boolean(

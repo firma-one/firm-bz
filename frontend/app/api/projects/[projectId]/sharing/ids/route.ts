@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
-import { getSharedAndAncestorIdsForAllPersonas } from '@/lib/project-sharing-ids'
+import { getSharedAndAncestorIdsForAllPersonas } from '@/lib/engagement-sharing-ids'
 import { prisma } from '@/lib/prisma'
 
 /**

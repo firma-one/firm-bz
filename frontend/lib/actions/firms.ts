@@ -14,7 +14,6 @@ import {
 import { buildDefaultSandboxFirmName } from '@/lib/onboarding/sandbox-firm-name'
 import { isWorkspaceOnboardingComplete } from '@/lib/onboarding/workspace-onboarding-complete'
 import { SANDBOX_FIRM_NAME_FALLBACK } from '@/lib/services/sample-file-service'
-import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { mergeLeanAppMetadata } from '@/lib/auth/supabase-jwt-metadata'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 
@@ -25,6 +24,8 @@ export interface FirmOption {
     isDefault: boolean
     createdAt: string
     sandboxOnly: boolean
+    logoUrl?: string | null
+    themeColor?: string | null
 }
 
 export interface CreateFirmData {
@@ -87,13 +88,16 @@ export async function getUserFirms(): Promise<FirmOption[]> {
             // Find the current user's membership to check isDefault
             const membership = firm.members.find((m: any) => m.userId === user.id)
 
+            const branding = (firm.settings as Record<string, any>)?.branding ?? {}
             return {
                 id: firm.id,
                 name: firm.name,
                 slug: firm.slug,
                 isDefault: membership?.isDefault || false,
                 createdAt: (firm.createdAt || new Date()).toISOString(),
-                sandboxOnly: firm.sandboxOnly || false
+                sandboxOnly: firm.sandboxOnly || false,
+                logoUrl: (branding.logoData as string | null | undefined) ?? (branding.logoUrl as string | null | undefined) ?? null,
+                themeColor: (branding.primaryColor as string | null | undefined) ?? null,
             }
         })
     } catch (err) {
@@ -155,6 +159,7 @@ export async function getDefaultFirmWithOnboardingStatus(): Promise<{
               id: defaultFirm.id,
               settings: defaultFirm.settings,
               connectorId: defaultFirm.connectorId ?? null,
+              sandboxOnly: defaultFirm.sandboxOnly ?? false,
           })
         : false
 
@@ -198,6 +203,7 @@ export async function resolveDefaultFirmLandingPath(userId: string): Promise<str
         id: targetFirm.id,
         settings: targetFirm.settings,
         connectorId: targetFirm.connectorId ?? null,
+        sandboxOnly: targetFirm.sandboxOnly ?? false,
     })
 
     if (!onboardingComplete) {
@@ -250,18 +256,6 @@ export async function createFirm(data: CreateFirmData): Promise<FirmOption> {
         throw new Error('Could not attach your new firm to a billing subscription. Please try again.')
     }
 
-    const billingAnchor = await prisma.firm.findUnique({
-        where: { id: billingAnchorId },
-        select: {
-            id: true,
-            connectorId: true,
-            connector: { select: { id: true, status: true, settings: true } },
-        },
-    })
-    if (!billingAnchor?.connectorId || billingAnchor.connector?.status !== 'ACTIVE') {
-        throw new Error('Billing anchor has no active Google Drive connector. Reconnect Drive in your sandbox firm first.')
-    }
-
     const existingFirm = await prisma.firm.findFirst({
         where: {
             name: {
@@ -287,24 +281,10 @@ export async function createFirm(data: CreateFirmData): Promise<FirmOption> {
         email: user.email,
         firstName,
         lastName,
-        connectorId: billingAnchor.connectorId,
         allowDomainAccess: data.allowDomainAccess,
         allowedEmailDomain: data.allowedEmailDomain,
         anchorFirmId: billingAnchorId,
     })
-
-    const driveRootFolderId = await googleDriveConnector.resolveWorkspaceRootFolderId(billingAnchor.connectorId)
-    try {
-        await googleDriveConnector.setupOrgFolder(
-            billingAnchor.connectorId,
-            driveRootFolderId,
-            firm.id,
-            user.id
-        )
-    } catch (driveError) {
-        logger.error('Failed to create Drive folder for new custom firm', driveError as Error)
-        throw new Error('Created firm, but failed to create its Google Drive folder. Please retry.')
-    }
 
     // Set as default
     await FirmService.setDefaultFirm(user.id, firm.id)
@@ -388,6 +368,8 @@ export async function switchFirm(firmSlug: string): Promise<void> {
 }
 
 export interface FirmBranding {
+    name?: string | null
+    logoData?: string | null
     logoUrl?: string | null
     logoAspectRatio?: string | null
     subtext?: string | null
@@ -449,6 +431,8 @@ export async function updateFirm(
             const existing = (current.branding as Record<string, unknown>) ?? {}
             const branding = {
                 ...existing,
+                ...(data.branding.name !== undefined && { name: data.branding.name ?? null }),
+                ...(data.branding.logoData !== undefined && { logoData: data.branding.logoData ?? null }),
                 ...(data.branding.logoUrl !== undefined && { logoUrl: data.branding.logoUrl ?? null }),
                 ...(data.branding.logoAspectRatio !== undefined && { logoAspectRatio: data.branding.logoAspectRatio ?? null }),
                 ...(data.branding.subtext !== undefined && { subtext: data.branding.subtext ?? null }),
@@ -541,4 +525,165 @@ export async function deleteFirm(firmSlug: string): Promise<void> {
 
     await FirmService.deleteFirm(firm.id, user.id)
     revalidatePath('/d')
+}
+
+// ── Connector management (firm level) ──────────────────────────────────────
+
+export interface FirmConnectorRecord {
+    id: string
+    name: string
+    email: string
+    status: string
+    workspaceRootLocation: string | null
+    rootFolderId: string | null
+    attachedClients: { id: string; name: string }[]
+}
+
+export async function getFirmConnectors(firmId: string): Promise<FirmConnectorRecord[]> {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('Unauthorized')
+
+    const connectors = await prisma.connector.findMany({
+        where: { firmId },
+        orderBy: { createdAt: 'asc' },
+    })
+    if (connectors.length === 0) return []
+
+    const connectorIds = connectors.map(c => c.id)
+    const clients = await prisma.client.findMany({
+        where: { firmId, connectorId: { in: connectorIds }, deletedAt: null },
+        select: { id: true, name: true, connectorId: true },
+        orderBy: { name: 'asc' },
+    })
+
+    const clientsByConnector: Record<string, { id: string; name: string }[]> = {}
+    for (const c of clients) {
+        if (!c.connectorId) continue
+        if (!clientsByConnector[c.connectorId]) clientsByConnector[c.connectorId] = []
+        clientsByConnector[c.connectorId].push({ id: c.id, name: c.name })
+    }
+
+    return connectors.map(c => {
+        const settings = (c.settings ?? {}) as Record<string, unknown>
+        const email = (settings.accountEmail as string | undefined) ?? c.externalAccountId ?? ''
+        const rootFolderId = (settings.rootFolderId as string | undefined) ?? null
+        const workspaceRootLocation = (settings.workspaceRootLocation as string | undefined) ?? null
+        return {
+            id: c.id,
+            name: c.name ?? '',
+            email,
+            status: c.status,
+            workspaceRootLocation,
+            rootFolderId,
+            attachedClients: clientsByConnector[c.id] ?? [],
+        }
+    })
+}
+
+export async function disconnectFirmConnector({ connectorId, firmId }: { connectorId: string; firmId: string }): Promise<void> {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('Unauthorized')
+
+    const connector = await prisma.connector.findUnique({
+        where: { id: connectorId },
+        select: { firmId: true },
+    })
+    if (!connector) throw new Error('Connector not found')
+    if (connector.firmId !== firmId) throw new Error('Unauthorized')
+
+    await prisma.connector.update({
+        where: { id: connectorId },
+        data: { status: 'REVOKED', accessToken: '', refreshToken: null, tokenExpiresAt: null },
+    })
+
+    audit(AUDIT_EVENT.STORAGE_CONNECTOR_DETACHED)
+        .scope(AUDIT_SCOPE.FIRM)
+        .firm(firmId)
+        .actor(user.id)
+        .meta({ connectorId, action: 'disconnect' })
+        .fireAndForget()
+
+    revalidatePath('/d/f')
+}
+
+export async function removeFirmConnector({ connectorId }: { connectorId: string; firmId?: string }): Promise<void> {
+    const { removeConnector } = await import('@/lib/actions/connectors')
+    await removeConnector({ connectorId })
+}
+
+export async function renameFirmConnector({ connectorId, firmId, name }: { connectorId: string; firmId: string; name: string }): Promise<void> {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('Unauthorized')
+
+    const connector = await prisma.connector.findUnique({
+        where: { id: connectorId },
+        select: { firmId: true },
+    })
+    if (!connector) throw new Error('Connector not found')
+    if (connector.firmId !== firmId) throw new Error('Unauthorized')
+
+    await prisma.connector.update({
+        where: { id: connectorId },
+        data: { name: name.trim() },
+    })
+    revalidatePath('/d/f')
+}
+
+export interface FirmClientRecord {
+    id: string
+    name: string
+    connectorId: string | null
+}
+
+export async function getFirmAllClients(firmId: string): Promise<FirmClientRecord[]> {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('Unauthorized')
+
+    const clients = await prisma.client.findMany({
+        where: { firmId, deletedAt: null },
+        select: { id: true, name: true, connectorId: true },
+        orderBy: { name: 'asc' },
+    })
+    return clients.map(c => ({ id: c.id, name: c.name, connectorId: c.connectorId ?? null }))
+}
+
+export async function detachConnectorFromClient({ clientId, firmId }: { clientId: string; firmId: string }): Promise<void> {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('Unauthorized')
+
+    const client = await prisma.client.findUnique({
+        where: { id: clientId },
+        select: { firmId: true, connectorId: true },
+    })
+    if (!client) throw new Error('Client not found')
+    if (client.firmId !== firmId) throw new Error('Unauthorized')
+
+    // Clear engagement + document connector references so re-linking uses the new workspace
+    const engagements = await prisma.engagement.findMany({
+        where: { clientId },
+        select: { id: true },
+    })
+    const engagementIds = engagements.map(e => e.id)
+
+    if (engagementIds.length > 0) {
+        await prisma.engagementDocument.updateMany({
+            where: { engagementId: { in: engagementIds } },
+            data: { connectorId: null },
+        })
+        await prisma.engagement.updateMany({
+            where: { id: { in: engagementIds } },
+            data: { connectorRootFolderId: null },
+        })
+    }
+
+    await prisma.client.update({
+        where: { id: clientId },
+        data: { connectorId: null, driveFolderId: null },
+    })
+    revalidatePath('/d/f')
 }

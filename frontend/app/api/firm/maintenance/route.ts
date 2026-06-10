@@ -26,6 +26,15 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'firmId required' }, { status: 400 })
   }
 
+  const { prisma } = require('@/lib/prisma')
+  const getMember = await prisma.firmMember.findFirst({
+    where: { firmId, userId: user.id },
+    select: { id: true },
+  })
+  if (!getMember) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
   const [mode, pending, latestMigration] = await Promise.all([
     getMaintenanceMode(firmId),
     getMigrationPending(firmId),
@@ -38,7 +47,6 @@ export async function GET(request: NextRequest) {
   let migrationFiles: { fileId: string; fileName: string | null; status: string }[] = []
 
   if (latestMigration) {
-    const { prisma } = require('@/lib/prisma')
     const files = await prisma.firmWorkspaceMigrationFile.findMany({
       where: { migrationId: latestMigration.id },
       select: { fileId: true, fileName: true, status: true },
@@ -98,10 +106,15 @@ export async function POST(request: NextRequest) {
   }
 
   if (action === 'cancel-migration') {
-    // Only cancellable during grace period (pending_grace) — not once in_progress
+    // Atomic guard: only transition pending_grace → failed.
+    // Using updateMany with a status condition avoids a TOCTOU race where Inngest
+    // advances the migration to in_progress between our read and write.
     const migration = await getLatestMigration(firmId)
-    if (migration && migration.status === 'pending_grace') {
-      await updateMigrationStatus(migration.id, 'failed')
+    if (migration) {
+      await prisma.firmWorkspaceMigration.updateMany({
+        where: { id: migration.id, status: 'pending_grace' },
+        data: { status: 'failed' },
+      })
     }
     await setMigrationPending(firmId, null)
     await setMigrationState(firmId, null)
