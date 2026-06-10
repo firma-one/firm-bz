@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { usePathname } from 'next/navigation'
-import { Building2, Lock, Minus, CreditCard } from 'lucide-react'
+import { Lock, Minus, CreditCard } from 'lucide-react'
 import { useOnboarding } from '@/lib/onboarding-context'
 import { useAuth } from '@/lib/auth-context'
 import { getUserFirms } from '@/lib/actions/firms'
@@ -12,11 +12,10 @@ import { formatProfilePlanSubtitle } from '@/lib/billing/format-profile-plan-sub
 import { planNameForSummary } from '@/lib/billing/subscription-display'
 import type { BillingCurrentPlanState } from '@/components/billing/polar-plans-picker'
 import { ProfileSection } from '@/components/ui/profile-section'
-import { GoogleDriveIcon } from '@/components/ui/google-drive-icon'
 
 type Requirement = 'mandatory' | 'optional'
 
-/** Order: 1) Initialize → 2) Subscribe (optional) → 3) Connect Drive → 4) Finalize. */
+/** Order: 1) Initialize → 2) Subscribe (optional). Drive is connected per-client in Client Settings. */
 const ONBOARDING_STEPS: {
     id: number
     name: string
@@ -26,8 +25,6 @@ const ONBOARDING_STEPS: {
 }[] = [
     { id: 1, name: 'Initialize Workspace', requirement: 'mandatory', description: 'Anchor firm in your account', Icon: Lock },
     { id: 2, name: 'Subscribe to a plan', requirement: 'optional', description: 'Compare & choose a plan', Icon: CreditCard },
-    { id: 3, name: 'Connect Cloud Storage', requirement: 'mandatory', description: 'Bring your own Drive (non-custodial)', Icon: Lock },
-    { id: 4, name: 'Finalize Workspace', requirement: 'mandatory', description: 'Sandbox structure & background setup', Icon: Lock },
 ]
 
 function RequirementPill({ requirement }: { requirement: Requirement }) {
@@ -131,7 +128,7 @@ export function OnboardingSidebar() {
     const steps = ONBOARDING_STEPS.filter((s) => s.id !== 0)
 
     return (
-        <div className="flex flex-col h-full bg-[#f9f9fb] border-r border-[#e5e7eb] rounded-[2px] overflow-hidden">
+        <div className="flex flex-col h-full bg-white border-r border-[#e5e7eb] rounded-[2px] overflow-hidden">
             {/* Steps: fixed-height connectors in the timeline column (not stretched by copy height). */}
             <div className="flex-1 overflow-y-auto custom-scrollbar px-4 py-4 pt-4">
                 <div className="flex flex-col gap-0">
@@ -145,16 +142,8 @@ export function OnboardingSidebar() {
                         const segmentPast = currentStep !== null && currentStep > s.id
 
                         const iconForStep = () => {
-                            if (isCompleted) {
-                                if (s.id === 3) return <GoogleDriveIcon size={20} />
-                                if (s.id === 4) return <Building2 className="h-4 w-4 text-primary" />
-                                return <StepIcon className="h-4 w-4 text-primary" />
-                            }
-                            if (isSkipped) {
-                                return <Minus className="h-4 w-4 text-[#45474c]/50" strokeWidth={2.5} />
-                            }
-                            if (s.id === 3) return <GoogleDriveIcon size={16} />
-                            if (s.id === 4) return <Building2 className={`h-4 w-4 ${isActive ? 'text-[#45474c]' : 'text-[#45474c]/50'}`} />
+                            if (isCompleted) return <StepIcon className="h-4 w-4 text-primary" />
+                            if (isSkipped) return <Minus className="h-4 w-4 text-[#45474c]/50" strokeWidth={2.5} />
                             return <StepIcon className={`h-4 w-4 ${isActive ? 'text-[#45474c]' : 'text-[#45474c]/50'}`} />
                         }
 
@@ -170,10 +159,10 @@ export function OnboardingSidebar() {
                                         className={`relative z-[1] flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 bg-white transition-all ${isCompleted
                                             ? 'border-primary'
                                             : isSkipped
-                                              ? 'border-[#e5e7eb] bg-[#f9f9fb]'
+                                              ? 'border-[#e5e7eb] bg-white'
                                               : isActive
-                                                ? 'border-primary/40 bg-[#f9f9fb]'
-                                                : 'border-[#e5e7eb] bg-[#f9f9fb]'
+                                                ? 'border-primary/40 bg-white'
+                                                : 'border-[#e5e7eb] bg-white'
                                             }`}
                                     >
                                         {iconForStep()}

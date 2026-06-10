@@ -28,6 +28,11 @@ export type HierarchyClient = {
     linkedInUrl: string | null
     companySizeBracket: string | null
     billingAddress: string | null
+    connectorId: string | null
+    connectorEmail: string | null
+    connectorStatus: string | null
+    brandPrimaryColor: string | null
+    brandLogoUrl: string | null
     createdAt: Date
     updatedAt: Date
     engagements: {
@@ -108,6 +113,7 @@ export async function getFirmHierarchy(firmSlug: string): Promise<HierarchyClien
             ]
         },
         include: {
+            connector: { select: { status: true, settings: true } },
             engagements: {
                 where: { isDeleted: false, members: { some: { userId: user.id } } },
                 include: {
@@ -126,6 +132,19 @@ export async function getFirmHierarchy(firmSlug: string): Promise<HierarchyClien
         logger.warn('User has no firm membership, returning empty hierarchy', { userId: user.id, firmId })
         return []
     }
+
+    // Collect brandIds from client settings, batch-fetch brands
+    const brandIds = clients
+        .map((c: any) => (c.settings as Record<string, unknown>)?.brandId as string | undefined)
+        .filter((id: string | undefined): id is string => !!id)
+    const brands = brandIds.length > 0
+        ? await (prisma as any).brand.findMany({
+            where: { id: { in: brandIds } },
+            select: { id: true, primaryColor: true, logoData: true, logoUrl: true }
+          })
+        : []
+    type BrandRecord = { id: string; primaryColor: string | null; logoData: string | null; logoUrl: string | null }
+    const brandById = new Map<string, BrandRecord>((brands as BrandRecord[]).map((b) => [b.id, b]))
 
     const permissions: UserPermissions = settingsResult?.permissions || { firms: [] }
 
@@ -150,6 +169,11 @@ export async function getFirmHierarchy(firmSlug: string): Promise<HierarchyClien
         linkedInUrl: c.linkedInUrl ?? null,
         companySizeBracket: c.companySizeBracket ?? null,
         billingAddress: c.billingAddress ?? null,
+        connectorId: c.connectorId ?? null,
+        connectorEmail: (c.connector?.settings as { accountEmail?: string } | null)?.accountEmail ?? null,
+        connectorStatus: c.connector?.status ?? null,
+        brandPrimaryColor: (() => { const bid = (c.settings as Record<string, unknown>)?.brandId as string | undefined; return bid ? (brandById.get(bid)?.primaryColor ?? null) : null })(),
+        brandLogoUrl: (() => { const bid = (c.settings as Record<string, unknown>)?.brandId as string | undefined; if (!bid) return null; const b = brandById.get(bid); return b?.logoData ?? b?.logoUrl ?? null })(),
         createdAt: c.createdAt,
         updatedAt: c.updatedAt,
         engagements: c.engagements.map((p: any) => {
@@ -238,6 +262,8 @@ export async function getClients(firmSlug: string): Promise<ClientsWithFirmMeta>
                 expectedCloseDate: true, leadSource: true, internalMemo: true,
                 relationshipValue: true, clientSinceDate: true, linkedInUrl: true,
                 companySizeBracket: true, billingAddress: true,
+                connectorId: true, settings: true,
+                connector: { select: { status: true, settings: true } },
                 createdAt: true, updatedAt: true,
                 engagements: {
                     where: { isDeleted: false, members: { some: { userId: user.id } } },
@@ -250,7 +276,23 @@ export async function getClients(firmSlug: string): Promise<ClientsWithFirmMeta>
 
     if (!anyMembership) return { clients: [], firmId: firm.id, firmSandboxOnly: firm.sandboxOnly ?? false }
 
-    const clients: ClientSummary[] = rawClients.map((c: any) => ({
+    // Batch-fetch brands via brandId stored in client.settings
+    const clientBrandIds = rawClients
+        .map((c: any) => (c.settings as Record<string, unknown>)?.brandId as string | undefined)
+        .filter((id: string | undefined): id is string => !!id)
+    const clientBrands = clientBrandIds.length > 0
+        ? await (prisma as any).brand.findMany({
+            where: { id: { in: clientBrandIds } },
+            select: { id: true, primaryColor: true, logoData: true, logoUrl: true }
+          })
+        : []
+    type BrandRec = { id: string; primaryColor: string | null; logoData: string | null; logoUrl: string | null }
+    const clientBrandById = new Map<string, BrandRec>((clientBrands as BrandRec[]).map((b) => [b.id, b]))
+
+    const clients: ClientSummary[] = rawClients.map((c: any) => {
+        const bid = (c.settings as Record<string, unknown>)?.brandId as string | undefined
+        const brand = bid ? clientBrandById.get(bid) : undefined
+        return {
         id: c.id,
         name: c.name,
         slug: c.slug,
@@ -271,10 +313,16 @@ export async function getClients(firmSlug: string): Promise<ClientsWithFirmMeta>
         linkedInUrl: c.linkedInUrl ?? null,
         companySizeBracket: c.companySizeBracket ?? null,
         billingAddress: c.billingAddress ?? null,
+        connectorId: c.connectorId ?? null,
+        connectorEmail: (c.connector?.settings as { accountEmail?: string } | null)?.accountEmail ?? null,
+        connectorStatus: c.connector?.status ?? null,
+        brandPrimaryColor: brand?.primaryColor ?? null,
+        brandLogoUrl: brand?.logoData ?? brand?.logoUrl ?? null,
         createdAt: c.createdAt,
         updatedAt: c.updatedAt,
         engagements: c.engagements,
-    }))
+        }
+    })
 
     return { clients, firmId: firm.id, firmSandboxOnly: firm.sandboxOnly ?? false }
 }
@@ -324,6 +372,7 @@ export async function getClientWithEngagements(
             ]
         },
         include: {
+            connector: { select: { status: true, settings: true } },
             engagements: {
                 where: { isDeleted: false, members: { some: { userId: user.id } } },
                 include: { members: { where: { userId: user.id } } },
@@ -333,6 +382,21 @@ export async function getClientWithEngagements(
     })
 
     if (!c) return { client: null, firmId: firm.id, firmName: firm.name, firmSandboxOnly: firm.sandboxOnly ?? false }
+
+    // Fetch brand for this client if one is linked
+    const brandId = (c.settings as Record<string, unknown>)?.brandId as string | undefined
+    let brandPrimaryColor: string | null = null
+    let brandLogoUrl: string | null = null
+    if (brandId) {
+        const brand = await (prisma as any).brand.findUnique({
+            where: { id: brandId },
+            select: { primaryColor: true, logoData: true, logoUrl: true }
+        })
+        if (brand) {
+            brandPrimaryColor = brand.primaryColor ?? null
+            brandLogoUrl = brand.logoData ?? brand.logoUrl ?? null
+        }
+    }
 
     const permissions = settingsResult?.permissions || { firms: [] }
 
@@ -357,6 +421,11 @@ export async function getClientWithEngagements(
         linkedInUrl: (c as any).linkedInUrl ?? null,
         companySizeBracket: (c as any).companySizeBracket ?? null,
         billingAddress: (c as any).billingAddress ?? null,
+        connectorId: (c as any).connectorId ?? null,
+        connectorEmail: ((c as any).connector?.settings as { accountEmail?: string } | null)?.accountEmail ?? null,
+        connectorStatus: (c as any).connector?.status ?? null,
+        brandPrimaryColor,
+        brandLogoUrl,
         createdAt: c.createdAt,
         updatedAt: c.updatedAt,
         engagements: (c.engagements as any[]).map((p: any) => {

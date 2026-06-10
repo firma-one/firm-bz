@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from "@/lib/prisma"
 import { googleDriveConnector } from "@/lib/google-drive-connector"
 import { logger } from '@/lib/logger'
-import { requireProjectView } from '@/lib/api/project-auth'
+import { requireProjectView } from '@/lib/api/engagement-auth'
 import { getLock } from '@/lib/sharing-settings'
 
 export async function GET(
@@ -27,22 +27,17 @@ export async function GET(
             where: { id: projectId },
             include: {
                 client: {
-                    include: {
-                        firm: {
-                            include: {
-                                connector: true
-                            }
-                        }
-                    }
+                    include: { connector: true }
                 }
             }
         })
 
-        if (!project || !project.client?.firm?.connector) {
+        const resolvedConnector = project?.client?.connector ?? null
+        if (!project || !resolvedConnector) {
             return NextResponse.json({ error: 'Project or active connector not found' }, { status: 404 })
         }
 
-        const connector = project.client.firm.connector
+        const connector = resolvedConnector
 
         // 3. Resolve Project Folders from Connector Settings and search scope
         const settings = (connector.settings as any) || {}

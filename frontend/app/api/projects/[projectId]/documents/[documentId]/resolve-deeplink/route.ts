@@ -6,7 +6,7 @@ import { getFileInfo } from '@/lib/file-utils'
 import { prisma } from '@/lib/prisma'
 import { canAccessRbacAdmin } from '@/lib/permission-helpers'
 import { getViewAsPersonaFromCookie } from '@/lib/view-as-server'
-import { getSharedAndAncestorIdsForPersona } from '@/lib/project-sharing-ids'
+import { getSharedAndAncestorIdsForPersona } from '@/lib/engagement-sharing-ids'
 import { requireEngagementMember, isExternalEngagementRole } from '@/lib/engagement-access'
 import { SearchService } from '@/lib/services/search-service'
 
@@ -50,9 +50,7 @@ export async function GET(
           slug: true,
           client: {
             select: {
-              firm: {
-                select: { connector: { select: { settings: true } } }
-              }
+              connector: { select: { settings: true } }
             }
           }
         },
@@ -79,7 +77,7 @@ export async function GET(
     }
 
     // Resolve path + extract root folder IDs in parallel
-    const settings = (engagement?.client?.firm?.connector?.settings as any) || {}
+    const settings = (engagement?.client?.connector?.settings as any) || {}
     const engagementSlug = engagement?.slug
     const ps = engagementSlug && settings.projectFolderSettings
       ? settings.projectFolderSettings[engagementSlug] || {}

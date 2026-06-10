@@ -3,11 +3,12 @@ import { prisma } from '@/lib/prisma'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { getViewAsPersonaFromCookie } from '@/lib/view-as-server'
 import { canAccessRbacAdmin } from '@/lib/permission-helpers'
-import { getSharedAndAncestorIdsForPersona, isFolderUnderSharedFolderDB } from '@/lib/project-sharing-ids'
+import { getSharedAndAncestorIdsForPersona, isFolderUnderSharedFolderDB } from '@/lib/engagement-sharing-ids'
 import { safeInngestSend } from '@/lib/inngest/client'
 import { logger } from '@/lib/logger'
 import { GoogleDriveAuthError } from '@/lib/google-drive-connector'
 import { blockIfEngagementFileMutationForbidden } from '@/lib/engagement-access'
+import { resolveEngagementConnector } from '@/lib/connectors/resolve-client-connector'
 import { IndexingInterceptor } from '@/lib/services/indexing-interceptor'
 import { getLock, isDocumentPrivate } from '@/lib/sharing-settings'
 // GET: List linked files for a connector
@@ -128,7 +129,7 @@ export async function POST(request: NextRequest) {
         } catch {
             return NextResponse.json({ error: 'Invalid or empty JSON body' }, { status: 400 })
         }
-        const { action, folderId, projectId: bodyProjectId, viewAsPersonaSlug: bodyViewAs, pageSize: bodyPageSize } = body
+        const { action, folderId, projectId: bodyEngagementId, viewAsPersonaSlug: bodyViewAs, pageSize: bodyPageSize } = body
 
         if (action === 'list') {
             if (typeof folderId !== 'string' || !folderId) {
@@ -136,7 +137,7 @@ export async function POST(request: NextRequest) {
             }
 
             const { googleDriveConnector } = await import('@/lib/google-drive-connector')
-            type ProjectContext = {
+            type EngagementContext = {
                 projectId: string
                 clientId: string | null
                 generalFolderId: string | null
@@ -147,45 +148,39 @@ export async function POST(request: NextRequest) {
             }
 
             let connector: { id: string; accessToken: string } | null = null
-            let projectContext: ProjectContext | null = null
+            let engagementContext: EngagementContext | null = null
 
             // When projectId is provided, use the project's org connector and build context from project membership (eng_admin / eng_member see files)
-            if (bodyProjectId) {
-                const project = await prisma.engagement.findFirst({
-                    where: { id: bodyProjectId, isDeleted: false },
+            if (bodyEngagementId) {
+                const engagement = await prisma.engagement.findFirst({
+                    where: { id: bodyEngagementId, isDeleted: false },
                     include: {
                         client: {
-                            include: {
-                                firm: {
-                                    include: {
-                                        connector: true
-                                    }
-                                }
-                            }
+                            include: { connector: true }
                         },
                         members: {
                             where: { userId: user.id }
                         }
                     }
                 })
-                if (project) {
-                    connector = project.client.firm.connector ?? null
+                if (engagement) {
+                    connector = engagement.client.connector ?? null
                     if (connector) {
-                        const folderIds = await googleDriveConnector.getProjectFolderIds(connector.id, project.slug, {
-                            projectName: project.name,
-                            clientSlug: project.client.slug,
-                            clientName: project.client.name,
-                            projectFolderId: project.connectorRootFolderId
+                        const folderIds = await googleDriveConnector.getProjectFolderIds(connector.id, engagement.slug, {
+                            projectName: engagement.name,
+                            clientSlug: engagement.client.slug,
+                            clientName: engagement.client.name,
+                            projectFolderId: engagement.connectorRootFolderId
                         })
-                        const userMember = project.members[0]
-                        projectContext = {
-                            projectId: project.id,
-                            clientId: project.clientId,
+                        const userMember = engagement.members[0]
+                        engagementContext = {
+                            projectId: engagement.id,
+                            clientId: engagement.clientId,
                             generalFolderId: folderIds.generalFolderId,
                             confidentialFolderId: folderIds.confidentialFolderId,
                             personaName: userMember?.role ?? null,
                             personaSlug: userMember?.role ?? null,
-                            firmId: (project as any).client.firmId
+                            firmId: engagement.firmId
                         }
                     }
                 }
@@ -211,7 +206,7 @@ export async function POST(request: NextRequest) {
                 const allOrgIds = Array.from(new Set([
                     ...orgMemberships.map((m: any) => m.firmId),
                     ...clientMemberships.map((m: any) => m.client.firmId),
-                    ...projectMemberships.map((m: any) => m.engagement.client.firmId)
+                    ...projectMemberships.map((m: any) => m.engagement.firmId)
                 ]))
 
                 // Find firms with active GOOGLE_DRIVE connectors
@@ -243,12 +238,12 @@ export async function POST(request: NextRequest) {
             }
 
             if (!connector) {
-                return NextResponse.json({ error: 'No active Google Drive connection found' }, { status: 404 })
+                return NextResponse.json({ error: 'No active storage connector found' }, { status: 404 })
             }
 
-            // If we don't have projectContext yet (no bodyProjectId or project not found), resolve from folderId
-            if (!projectContext) {
-                const project = await prisma.engagement.findFirst({
+            // If we don't have engagementContext yet (no bodyEngagementId or project not found), resolve from folderId
+            if (!engagementContext) {
+                const engagement = await prisma.engagement.findFirst({
                     where: { connectorRootFolderId: folderId },
                     include: {
                         client: { select: { firmId: true } },
@@ -257,17 +252,17 @@ export async function POST(request: NextRequest) {
                         }
                     }
                 })
-                if (project) {
-                    const folderIds = await googleDriveConnector.getProjectFolderIds(connector.id, project.slug)
-                    const userMember = project.members[0]
-                    projectContext = {
-                        projectId: project.id,
-                        clientId: project.clientId,
+                if (engagement) {
+                    const folderIds = await googleDriveConnector.getProjectFolderIds(connector.id, engagement.slug)
+                    const userMember = engagement.members[0]
+                    engagementContext = {
+                        projectId: engagement.id,
+                        clientId: engagement.clientId,
                         generalFolderId: folderIds.generalFolderId,
                         confidentialFolderId: folderIds.confidentialFolderId,
                         personaName: userMember?.role ?? null,
                         personaSlug: userMember?.role ?? null,
-                        firmId: (project as any).client?.firmId ?? null
+                        firmId: engagement.client?.firmId ?? null
                     }
                 } else {
                     try {
@@ -286,7 +281,7 @@ export async function POST(request: NextRequest) {
                             if (parentProject) {
                                 const folderIds = await googleDriveConnector.getProjectFolderIds(connector.id, parentProject.slug)
                                 const userMember = parentProject.members[0]
-                                projectContext = {
+                                engagementContext = {
                                     projectId: parentProject.id,
                                     clientId: parentProject.clientId,
                                     generalFolderId: folderIds.generalFolderId,
@@ -309,9 +304,9 @@ export async function POST(request: NextRequest) {
             // Detect EC/Guest persona. Fast path: genuine member role requires no extra DB/cookie calls.
             // Slow path: view-as impersonation (RBAC admins only) — check body first, then cookie.
             let personaSlugToFilter: 'eng_ext_collaborator' | 'eng_viewer' | null = null
-            if (bodyProjectId) {
-                if (projectContext?.personaSlug === 'eng_ext_collaborator' || projectContext?.personaSlug === 'eng_viewer') {
-                    personaSlugToFilter = projectContext.personaSlug as 'eng_ext_collaborator' | 'eng_viewer'
+            if (bodyEngagementId) {
+                if (engagementContext?.personaSlug === 'eng_ext_collaborator' || engagementContext?.personaSlug === 'eng_viewer') {
+                    personaSlugToFilter = engagementContext.personaSlug as 'eng_ext_collaborator' | 'eng_viewer'
                 } else {
                     const bodyViewAsIsEC = bodyViewAs === 'eng_ext_collaborator' || bodyViewAs === 'eng_viewer'
                     const cookieViewAs = await getViewAsPersonaFromCookie()
@@ -329,11 +324,11 @@ export async function POST(request: NextRequest) {
 
             let files: any[] = []
 
-            if (personaSlugToFilter && projectContext) {
+            if (personaSlugToFilter && engagementContext) {
                 // EC/Guest: fully DB-driven listing — no Drive API call for listing.
                 // sharedIds/ancestorIds computed from engagement_documents (Drive authoritative for parents).
                 const { sharedIds, ancestorIds, parentMap } = await getSharedAndAncestorIdsForPersona(
-                    projectContext.projectId, personaSlugToFilter, { skipDescendants: true }
+                    engagementContext.projectId, personaSlugToFilter, { skipDescendants: true }
                 )
                 const allowSet = new Set([...sharedIds, ...ancestorIds])
                 const folderInShared = sharedIds.includes(folderId)
@@ -344,7 +339,7 @@ export async function POST(request: NextRequest) {
                 const [dbRows, intakeRows] = await Promise.all([
                     prisma.engagementDocument.findMany({
                         where: {
-                            engagementId: projectContext.projectId,
+                            engagementId: engagementContext.projectId,
                             parentId: folderId,
                             ...(folderInShared || folderUnderShared ? {} : { externalId: { in: Array.from(allowSet) } }),
                         },
@@ -353,7 +348,7 @@ export async function POST(request: NextRequest) {
                     // Also surface the EC/EV's own PENDING intake files/folders in this folder
                     prisma.engagementDocument.findMany({
                         where: {
-                            engagementId: projectContext.projectId,
+                            engagementId: engagementContext.projectId,
                             parentId: folderId,
                             settings: { path: ['lock', 'uploadedBy'], equals: user.id } as any,
                         },
@@ -367,7 +362,7 @@ export async function POST(request: NextRequest) {
                 const allRows = [...visibleDbRows, ...intakeRows]
                 const creatorIds = Array.from(new Set(allRows.map((r: any) => r.createdBy).filter(Boolean)))
                 const projectMembers = await prisma.engagementMember.findMany({
-                    where: { engagementId: projectContext.projectId },
+                    where: { engagementId: engagementContext.projectId },
                     select: { userId: true, role: true },
                 })
                 const memberRoleById = new Map<string, string>(projectMembers.map((m: any) => [m.userId, m.role]))
@@ -448,12 +443,12 @@ export async function POST(request: NextRequest) {
                     folderId,
                     listLimit,
                     userEmail,
-                    projectContext
+                    engagementContext
                 )
 
                 // Attach internal projectDocument UUIDs for UI deeplinks (never expose Drive id in URL).
                 // Also surface PENDING intake shadow rows not yet in the Drive listing.
-                if (bodyProjectId) {
+                if (bodyEngagementId) {
                     const driveIds = files.length > 0
                         ? Array.from(new Set(files.map((f: { id: string }) => f.id).filter(Boolean)))
                         : []
@@ -461,14 +456,14 @@ export async function POST(request: NextRequest) {
                     const [enrichRows, intakePendingRows] = await Promise.all([
                         driveIds.length > 0
                             ? prisma.engagementDocument.findMany({
-                                where: { engagementId: bodyProjectId, externalId: { in: driveIds } },
+                                where: { engagementId: bodyEngagementId, externalId: { in: driveIds } },
                                 select: { id: true, externalId: true, settings: true },
                             })
                             : [],
                         // All PENDING intake docs/folders in this folder (shadow rows for EL/internal)
                         prisma.engagementDocument.findMany({
                             where: {
-                                engagementId: bodyProjectId,
+                                engagementId: bodyEngagementId,
                                 parentId: folderId,
                                 settings: { path: ['lock', 'type'], equals: 'intake' } as any,
                             },
@@ -488,7 +483,7 @@ export async function POST(request: NextRequest) {
 
                     // Build email → engagement role map for owner role display
                     const elMembers = await prisma.engagementMember.findMany({
-                        where: { engagementId: bodyProjectId as string },
+                        where: { engagementId: bodyEngagementId as string },
                         select: { userId: true, role: true },
                     })
                     const elRoleById = new Map<string, string>(elMembers.map((m: any) => [m.userId, m.role]))
@@ -544,19 +539,20 @@ export async function POST(request: NextRequest) {
                 return NextResponse.json({ error: 'Missing folderId or name' }, { status: 400 })
             }
 
-            const membership = await prisma.firmMember.findFirst({
-                where: { userId: user.id },
-                orderBy: { isDefault: 'desc' },
-                include: {
-                    firm: {
-                        include: {
-                            connector: true
-                        }
-                    }
-                }
-            })
-            const connector = membership?.firm.connector
-            if (!connector) return NextResponse.json({ error: 'No active Google Drive connection found' }, { status: 404 })
+            let connector: any
+            let isSandbox = false
+            if (typeof bodyEngagementId === 'string' && bodyEngagementId) {
+                const [resolvedConnector, projectForSandbox] = await Promise.all([
+                    resolveEngagementConnector(bodyEngagementId),
+                    prisma.engagement.findUnique({
+                        where: { id: bodyEngagementId },
+                        select: { client: { select: { firm: { select: { sandboxOnly: true } } } } }
+                    })
+                ])
+                connector = resolvedConnector
+                isSandbox = projectForSandbox?.client?.firm?.sandboxOnly ?? false
+            }
+            if (!connector) return NextResponse.json({ error: 'No active storage connector found' }, { status: 404 })
 
             const { googleDriveConnector } = await import('@/lib/google-drive-connector')
 
@@ -569,7 +565,7 @@ export async function POST(request: NextRequest) {
             const mimeTypeStr = typeof mimeType === 'string' ? mimeType : 'application/vnd.google-apps.folder'
             // Sandbox: block native Google file creation (Doc/Sheet/etc.); allow plain folders only (incl. folder-upload structure).
             if (
-                membership?.firm.sandboxOnly &&
+                isSandbox &&
                 mimeTypeStr !== 'application/vnd.google-apps.folder'
             ) {
                 return NextResponse.json(
@@ -589,24 +585,24 @@ export async function POST(request: NextRequest) {
 
             // Index the newly created folder
             if (newFile && typeof newFile === 'object' && 'id' in newFile) {
-                let project = await prisma.engagement.findFirst({
+                let engagement = await prisma.engagement.findFirst({
                     where: { connectorRootFolderId: folderId },
                     select: { id: true, clientId: true, client: { select: { firmId: true } } }
                 })
 
-                if (!project && bodyProjectId) {
-                    project = await prisma.engagement.findUnique({
-                        where: { id: bodyProjectId as string },
+                if (!engagement && bodyEngagementId) {
+                    engagement = await prisma.engagement.findUnique({
+                        where: { id: bodyEngagementId as string },
                         select: { id: true, clientId: true, client: { select: { firmId: true } } }
                     })
                 }
 
-                const orgId = project?.client?.firmId || membership?.firmId
+                const orgId = engagement?.client?.firmId
                 if (orgId) {
                     await safeInngestSend('file.index.requested', {
                         organizationId: orgId,
-                        clientId: project?.clientId ?? null,
-                        projectId: project?.id ?? (bodyProjectId as string) ?? null,
+                        clientId: engagement?.clientId ?? null,
+                        projectId: engagement?.id ?? (bodyEngagementId as string) ?? null,
                         externalId: newFile.id as string,
                         fileName: name,
                     })
@@ -614,21 +610,21 @@ export async function POST(request: NextRequest) {
 
                 // If EC/EV user created this folder, immediately write DB record with intake lock
                 // so the folder is visible in their DB-driven file list
-                if (bodyProjectId) {
+                if (bodyEngagementId) {
                     const projectForRole = await prisma.engagement.findUnique({
-                        where: { id: bodyProjectId as string },
+                        where: { id: bodyEngagementId as string },
                         select: { members: { where: { userId: user.id }, select: { role: true } } }
                     })
                     const userRole = projectForRole?.members?.[0]?.role
                     if (userRole === 'eng_ext_collaborator' || userRole === 'eng_viewer') {
                         const now = new Date().toISOString()
-                        const folderOrgId = orgId ?? membership?.firmId
-                        const folderClientId = project?.clientId
+                        const folderOrgId = orgId
+                        const folderClientId = engagement?.clientId
                         if (folderOrgId && folderClientId) {
                             await prisma.engagementDocument.upsert({
                                 where: {
                                     engagementId_firmId_externalId: {
-                                        engagementId: bodyProjectId as string,
+                                        engagementId: bodyEngagementId as string,
                                         firmId: folderOrgId,
                                         externalId: newFile.id as string,
                                     }
@@ -637,7 +633,7 @@ export async function POST(request: NextRequest) {
                                     settings: { lock: { type: 'intake', uploadedBy: user.id, uploadedAt: now } } as object,
                                 },
                                 create: {
-                                    engagementId: bodyProjectId as string,
+                                    engagementId: bodyEngagementId as string,
                                     firmId: folderOrgId,
                                     clientId: folderClientId,
                                     externalId: newFile.id as string,
@@ -654,7 +650,7 @@ export async function POST(request: NextRequest) {
                             await safeInngestSend('file.index.requested', {
                                 organizationId: folderOrgId,
                                 clientId: folderClientId,
-                                projectId: bodyProjectId as string,
+                                projectId: bodyEngagementId as string,
                                 externalId: newFile.id as string,
                                 fileName: name,
                                 uploadedBy: user.id,
@@ -663,15 +659,15 @@ export async function POST(request: NextRequest) {
                             })
 
                             // Create intake reminders synchronously for all ELs
-                            const reminderId = `intake-${bodyProjectId as string}-${newFile.id as string}`
+                            const reminderId = `intake-${bodyEngagementId as string}-${newFile.id as string}`
                             const leads = await prisma.engagementMember.findMany({
-                                where: { engagementId: bodyProjectId as string, role: { in: ['eng_admin', 'eng_member'] } },
+                                where: { engagementId: bodyEngagementId as string, role: { in: ['eng_admin', 'eng_member'] } },
                                 select: { userId: true },
                             })
                             const reminderItem = {
                                 id: reminderId,
                                 entityKey: 'platform.engagements',
-                                entityValue: bodyProjectId as string,
+                                entityValue: bodyEngagementId as string,
                                 action: `Review folder: "${name}"`,
                                 dateKey: null,
                                 dateValue: null,
@@ -701,27 +697,17 @@ export async function POST(request: NextRequest) {
 
         if (action === 'duplicate') {
             const { fileId } = body
-            if (typeof bodyProjectId !== 'string' || !bodyProjectId || typeof fileId !== 'string' || !fileId) {
+            if (typeof bodyEngagementId !== 'string' || !bodyEngagementId || typeof fileId !== 'string' || !fileId) {
                 return NextResponse.json({ error: 'Missing projectId or fileId' }, { status: 400 })
             }
-            const dupDenied = await blockIfEngagementFileMutationForbidden(user.id, bodyProjectId)
+            const dupDenied = await blockIfEngagementFileMutationForbidden(user.id, bodyEngagementId)
             if (dupDenied) return dupDenied
-            const project = await prisma.engagement.findFirst({
-                where: { id: bodyProjectId, isDeleted: false },
-                include: {
-                    client: {
-                        include: {
-                            firm: {
-                                include: {
-                                    connector: true
-                                }
-                            }
-                        }
-                    }
-                }
-            })
-            const connector = project?.client?.firm?.connector
-            if (!connector) return NextResponse.json({ error: 'Project or connector not found' }, { status: 404 })
+            const [engagement, connector] = await Promise.all([
+                prisma.engagement.findFirst({ where: { id: bodyEngagementId, isDeleted: false }, select: { id: true, clientId: true, firmId: true } }),
+                resolveEngagementConnector(bodyEngagementId)
+            ])
+            if (!engagement) return NextResponse.json({ error: 'Engagement not found' }, { status: 404 })
+            if (!connector) return NextResponse.json({ error: 'No active storage connector found' }, { status: 404 })
 
             const { googleDriveConnector } = await import('@/lib/google-drive-connector')
             const meta = await googleDriveConnector.getFileMetadata(connector.id, fileId)
@@ -740,9 +726,9 @@ export async function POST(request: NextRequest) {
 
             // Index the duplicated file
             await safeInngestSend('file.index.requested', {
-                organizationId: project.client.firmId,
-                clientId: project.clientId,
-                projectId: project.id,
+                organizationId: engagement.firmId,
+                clientId: engagement.clientId,
+                projectId: engagement.id,
                 externalId: result.id,
                 fileName: newName,
             })
@@ -752,28 +738,18 @@ export async function POST(request: NextRequest) {
 
         if (action === 'copy' || action === 'move') {
             const { fileId, destinationFolderId } = body
-            if (typeof bodyProjectId !== 'string' || !bodyProjectId || typeof fileId !== 'string' || !fileId || typeof destinationFolderId !== 'string' || !destinationFolderId) {
+            if (typeof bodyEngagementId !== 'string' || !bodyEngagementId || typeof fileId !== 'string' || !fileId || typeof destinationFolderId !== 'string' || !destinationFolderId) {
                 return NextResponse.json({ error: 'Missing projectId, fileId, or destinationFolderId' }, { status: 400 })
             }
-            const copyMoveDenied = await blockIfEngagementFileMutationForbidden(user.id, bodyProjectId)
+            const copyMoveDenied = await blockIfEngagementFileMutationForbidden(user.id, bodyEngagementId)
             if (copyMoveDenied) return copyMoveDenied
 
-            const project = await prisma.engagement.findFirst({
-                where: { id: bodyProjectId, isDeleted: false },
-                include: {
-                    client: {
-                        include: {
-                            firm: {
-                                include: {
-                                    connector: true
-                                }
-                            }
-                        }
-                    }
-                }
-            })
-            const connector = project?.client?.firm?.connector
-            if (!connector) return NextResponse.json({ error: 'Project or connector not found' }, { status: 404 })
+            const [engagement, connector] = await Promise.all([
+                prisma.engagement.findFirst({ where: { id: bodyEngagementId, isDeleted: false }, select: { id: true, clientId: true, firmId: true } }),
+                resolveEngagementConnector(bodyEngagementId)
+            ])
+            if (!engagement) return NextResponse.json({ error: 'Engagement not found' }, { status: 404 })
+            if (!connector) return NextResponse.json({ error: 'No active storage connector found' }, { status: 404 })
 
             const { googleDriveConnector } = await import('@/lib/google-drive-connector')
             if (action === 'copy') {
@@ -792,7 +768,7 @@ export async function POST(request: NextRequest) {
                     if (sameName) {
                         await googleDriveConnector.trashFile(connector.id, sameName.id)
                         await safeInngestSend('file.delete.requested', {
-                            organizationId: project.client.firmId,
+                            organizationId: engagement.firmId,
                             externalId: sameName.id
                         })
                     }
@@ -803,9 +779,9 @@ export async function POST(request: NextRequest) {
 
                 // Index the copied file
                 await safeInngestSend('file.index.requested', {
-                    organizationId: project.client.firmId,
-                    clientId: project.clientId,
-                    projectId: project.id,
+                    organizationId: engagement.firmId,
+                    clientId: engagement.clientId,
+                    projectId: engagement.id,
                     externalId: result.id,
                     fileName: copyName || sourceName,
                 })
@@ -819,9 +795,9 @@ export async function POST(request: NextRequest) {
             const meta = await googleDriveConnector.getFileMetadata(connector.id, fileId)
             if (meta?.name) {
                 await safeInngestSend('file.index.requested', {
-                    organizationId: project.client.firmId,
-                    clientId: project.clientId,
-                    projectId: project.id,
+                    organizationId: engagement.firmId,
+                    clientId: engagement.clientId,
+                    projectId: engagement.id,
                     externalId: fileId,
                     fileName: meta.name,
                     parentId: meta.parents?.[0] ?? null,
@@ -833,42 +809,34 @@ export async function POST(request: NextRequest) {
 
         if (action === 'move-tree') {
             const { fileId, targetRoot } = body
-            if (typeof bodyProjectId !== 'string' || !bodyProjectId || typeof fileId !== 'string' || !fileId || typeof targetRoot !== 'string') {
+            if (typeof bodyEngagementId !== 'string' || !bodyEngagementId || typeof fileId !== 'string' || !fileId || typeof targetRoot !== 'string') {
                 return NextResponse.json({ error: 'Missing projectId, fileId, or targetRoot' }, { status: 400 })
             }
-            const treeDenied = await blockIfEngagementFileMutationForbidden(user.id, bodyProjectId)
+            const treeDenied = await blockIfEngagementFileMutationForbidden(user.id, bodyEngagementId)
             if (treeDenied) return treeDenied
             if (!['general', 'confidential', 'staging'].includes(targetRoot)) {
                 return NextResponse.json({ error: 'Invalid targetRoot' }, { status: 400 })
             }
 
             const { canManageProject } = await import('@/lib/permission-helpers')
-            const project = await prisma.engagement.findFirst({
-                where: { id: bodyProjectId, isDeleted: false },
-                include: {
-                    client: {
-                        include: {
-                            firm: {
-                                include: {
-                                    connector: true
-                                }
-                            }
-                        }
-                    }
-                }
-            })
-            if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
-            const canManage = await canManageProject(project.client.firmId, project.clientId, project.id)
+            const [engagement, connector] = await Promise.all([
+                prisma.engagement.findFirst({
+                    where: { id: bodyEngagementId, isDeleted: false },
+                    include: { client: { select: { slug: true, name: true, firmId: true, id: true } } }
+                }),
+                resolveEngagementConnector(bodyEngagementId)
+            ])
+            if (!engagement) return NextResponse.json({ error: 'Engagement not found' }, { status: 404 })
+            const canManage = await canManageProject(engagement.firmId, engagement.clientId, engagement.id)
             if (!canManage) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-            const connector = project.client.firm.connector
-            if (!connector) return NextResponse.json({ error: 'Connector not found' }, { status: 404 })
+            if (!connector) return NextResponse.json({ error: 'No active storage connector found' }, { status: 404 })
 
             const { googleDriveConnector } = await import('@/lib/google-drive-connector')
-            const folderIds = await googleDriveConnector.getProjectFolderIds(connector.id, project.slug, {
-                projectName: project.name,
-                clientSlug: project.client.slug,
-                clientName: project.client.name
+            const folderIds = await googleDriveConnector.getProjectFolderIds(connector.id, engagement.slug, {
+                projectName: engagement.name,
+                clientSlug: engagement.client.slug,
+                clientName: engagement.client.name
             })
             const generalFolderId = folderIds.generalFolderId
             const confidentialFolderId = folderIds.confidentialFolderId
@@ -910,9 +878,9 @@ export async function POST(request: NextRequest) {
 
             // Index the moved item
             await safeInngestSend('file.index.requested', {
-                organizationId: project.client.firmId,
-                clientId: project.clientId,
-                projectId: project.id,
+                organizationId: engagement.firmId,
+                clientId: engagement.clientId,
+                projectId: engagement.id,
                 externalId: fileId,
                 fileName: fileMeta?.name || 'Moved Folder',
                 parentId: destFolderId,
@@ -926,35 +894,35 @@ export async function POST(request: NextRequest) {
         if (action === 'cross-engagement-copy' || action === 'cross-engagement-move') {
             const { fileId, targetEngagementId } = body
             if (
-                typeof bodyProjectId !== 'string' || !bodyProjectId ||
+                typeof bodyEngagementId !== 'string' || !bodyEngagementId ||
                 typeof fileId !== 'string' || !fileId ||
                 typeof targetEngagementId !== 'string' || !targetEngagementId
             ) {
                 return NextResponse.json({ error: 'Missing projectId, fileId, or targetEngagementId' }, { status: 400 })
             }
 
-            const denied = await blockIfEngagementFileMutationForbidden(user.id, bodyProjectId)
+            const denied = await blockIfEngagementFileMutationForbidden(user.id, bodyEngagementId)
             if (denied) return denied
 
             // Also verify caller is a member of the target engagement
             const targetDenied = await blockIfEngagementFileMutationForbidden(user.id, targetEngagementId)
             if (targetDenied) return NextResponse.json({ error: 'No access to target engagement' }, { status: 403 })
 
-            const [sourceProject, targetProject] = await Promise.all([
+            const [sourceProject, targetProject, connector] = await Promise.all([
                 prisma.engagement.findFirst({
-                    where: { id: bodyProjectId, isDeleted: false },
-                    include: { client: { include: { firm: { include: { connector: true } } } } },
+                    where: { id: bodyEngagementId, isDeleted: false },
+                    include: { client: { select: { slug: true, name: true, firmId: true, id: true } } },
                 }),
                 prisma.engagement.findFirst({
                     where: { id: targetEngagementId, isDeleted: false },
-                    include: { client: { include: { firm: { include: { connector: true } } } } },
+                    include: { client: { select: { slug: true, name: true, firmId: true, id: true } } },
                 }),
+                resolveEngagementConnector(bodyEngagementId),
             ])
             if (!sourceProject || !targetProject)
                 return NextResponse.json({ error: 'Engagement not found' }, { status: 404 })
 
-            const connector = sourceProject.client.firm.connector
-            if (!connector) return NextResponse.json({ error: 'No connector found' }, { status: 404 })
+            if (!connector) return NextResponse.json({ error: 'No active storage connector found' }, { status: 404 })
 
             const { googleDriveConnector } = await import('@/lib/google-drive-connector')
             const targetFolderIds = await googleDriveConnector.getProjectFolderIds(connector.id, targetProject.slug, {
@@ -1009,7 +977,7 @@ export async function POST(request: NextRequest) {
             await prisma.engagementDocument.updateMany({
                 where: {
                     externalId: fileId,
-                    engagementId: bodyProjectId,
+                    engagementId: bodyEngagementId,
                     firmId: sourceProject.client.firmId,
                 },
                 data: {
@@ -1033,28 +1001,18 @@ export async function POST(request: NextRequest) {
 
         if (action === 'rename') {
             const { fileId, name: newName } = body
-            if (typeof bodyProjectId !== 'string' || !bodyProjectId || typeof fileId !== 'string' || !fileId || typeof newName !== 'string' || !newName.trim()) {
+            if (typeof bodyEngagementId !== 'string' || !bodyEngagementId || typeof fileId !== 'string' || !fileId || typeof newName !== 'string' || !newName.trim()) {
                 return NextResponse.json({ error: 'Missing projectId, fileId, or name' }, { status: 400 })
             }
-            const renameDenied = await blockIfEngagementFileMutationForbidden(user.id, bodyProjectId)
+            const renameDenied = await blockIfEngagementFileMutationForbidden(user.id, bodyEngagementId)
             if (renameDenied) return renameDenied
 
-            const project = await prisma.engagement.findFirst({
-                where: { id: bodyProjectId, isDeleted: false },
-                include: {
-                    client: {
-                        include: {
-                            firm: {
-                                include: {
-                                    connector: true
-                                }
-                            }
-                        }
-                    }
-                }
-            })
-            const connector = project?.client?.firm?.connector
-            if (!connector) return NextResponse.json({ error: 'Project or connector not found' }, { status: 404 })
+            const [engagement, connector] = await Promise.all([
+                prisma.engagement.findFirst({ where: { id: bodyEngagementId, isDeleted: false }, select: { id: true, clientId: true, firmId: true } }),
+                resolveEngagementConnector(bodyEngagementId)
+            ])
+            if (!engagement) return NextResponse.json({ error: 'Engagement not found' }, { status: 404 })
+            if (!connector) return NextResponse.json({ error: 'No active storage connector found' }, { status: 404 })
 
             const { googleDriveConnector } = await import('@/lib/google-drive-connector')
             const result = await googleDriveConnector.renameFile(connector.id, fileId, newName.trim())
@@ -1062,9 +1020,9 @@ export async function POST(request: NextRequest) {
 
             // Update vector index with new name
             await safeInngestSend('file.index.requested', {
-                organizationId: project.client.firmId,
-                clientId: project.clientId,
-                projectId: project.id,
+                organizationId: engagement.firmId,
+                clientId: engagement.clientId,
+                projectId: engagement.id,
                 externalId: fileId,
                 fileName: result.name,
             })

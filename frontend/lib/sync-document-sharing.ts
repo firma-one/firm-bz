@@ -1,4 +1,4 @@
-import { EngagementRole, DocumentSharingPermissionStatus } from '@prisma/client'
+import { EngagementRole, DocumentSharingPermissionStatus, Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getPermissionAdapter } from '@/lib/connectors/registry'
 import { logger } from '@/lib/logger'
@@ -43,10 +43,17 @@ export async function syncDocumentSharingUsers(projectDocumentId: string, actorI
     try {
       adapter = await getPermissionAdapter(connectorId)
     } catch (adapterErr) {
-      logger.warn('syncDocumentSharingUsers: no permission adapter for connector — skipping sync', {
+      logger.warn('syncDocumentSharingUsers: connector not found — skipping sync', {
         connectorId,
         organizationId: doc.firmId,
         error: adapterErr instanceof Error ? adapterErr.message : String(adapterErr),
+      })
+      return
+    }
+    if (!adapter) {
+      logger.warn('syncDocumentSharingUsers: no permission adapter for connector type — skipping sync', {
+        connectorId,
+        organizationId: doc.firmId,
       })
       return
     }
@@ -83,8 +90,8 @@ export async function syncDocumentSharingUsers(projectDocumentId: string, actorI
     if (externalCollaborators.length === 0) return
 
     const userIds = externalCollaborators.map((m) => m.userId)
-    const authUsers = await prisma.$queryRawUnsafe<Array<{ id: string; email: string }>>(
-      `SELECT id::text, email FROM auth.users WHERE id IN (${userIds.map((id: string) => `'${id}'`).join(',')})`
+    const authUsers = await prisma.$queryRaw<Array<{ id: string; email: string }>>(
+      Prisma.sql`SELECT id::text, email FROM auth.users WHERE id = ANY(${userIds}::uuid[])`
     )
 
     const userEmailMap = new Map(authUsers.map(u => [u.id, u.email]))

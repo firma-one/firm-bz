@@ -30,7 +30,7 @@ export interface UseSecureOpenDocumentOptions {
   projectId?: string
   /** Optional; used for modal thumbnail proxy when opening from project context. */
   firmId?: string
-  /** Optional log context for errors (e.g. 'ProjectShares', 'ProjectFileList'). */
+  /** Optional log context for errors (e.g. 'ProjectShares', 'EngagementFileList'). */
   logContext?: string
   /** When regrant fails (e.g. no sharing record), call with doc so caller can open link directly. */
   onRegrantFailed?: (doc: SecureOpenDocumentInput) => void

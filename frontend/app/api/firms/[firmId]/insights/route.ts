@@ -72,6 +72,7 @@ export interface EngagementPipelineItem {
   value: number
   closingSoon: boolean
   status: string
+  contractType: string | null
 }
 
 export interface ClientPipelineItem {
@@ -325,8 +326,21 @@ export async function GET(
       }
     }
 
-    // Per-client pipeline breakdown
+    // Per-client pipeline breakdown — seed with all active/prospect clients so zero-engagement clients still appear
     const clientPipelineMap = new Map<string, ClientPipelineItem>()
+    for (const c of clients) {
+      if (c.status === 'ACTIVE' || c.status === 'PROSPECT') {
+        clientPipelineMap.set(c.id, {
+          clientId: c.id,
+          clientName: c.name,
+          clientSlug: c.slug,
+          value: 0,
+          closingSoonValue: 0,
+          engagementCount: 0,
+          engagements: [],
+        })
+      }
+    }
     for (const e of engagements) {
       const val = e.rateOrValue ? Number(e.rateOrValue) : 0
       let closingSoon = false
@@ -353,6 +367,7 @@ export async function GET(
         value: val,
         closingSoon,
         status: e.status,
+        contractType: e.contractType ?? null,
       })
       clientPipelineMap.set(e.clientId, entry)
     }

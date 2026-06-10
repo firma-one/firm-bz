@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from "@/lib/prisma"
 import { SearchService } from '@/lib/services/search-service'
 import { logger } from '@/lib/logger'
-import { requireProjectView } from '@/lib/api/project-auth'
+import { requireProjectView } from '@/lib/api/engagement-auth'
 import { requireEngagementMember } from '@/lib/engagement-access'
 
 export async function GET(
@@ -30,9 +30,9 @@ export async function GET(
 
         const engagement = await prisma.engagement.findUnique({
             where: { id: projectId },
-            include: { client: { include: { firm: { include: { connector: true } } } } },
+            include: { client: { include: { connector: true } } },
         })
-        const settings = (engagement?.client?.firm?.connector?.settings as any) || {}
+        const settings = (engagement?.client?.connector?.settings as any) || {}
         const engagementSlug = engagement?.slug
         const ps =
             engagementSlug && settings.projectFolderSettings

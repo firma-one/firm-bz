@@ -17,7 +17,7 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { OTPInput } from '@/components/signup/otp-input'
+import { OTPInput, type OTPInputHandle } from '@/components/signup/otp-input'
 import { KineticFloatingEmailField } from '@/components/signup/kinetic-floating-email-field'
 import {
     SignupStepProgress,
@@ -108,6 +108,7 @@ export function SignupForm({
     const searchParams = useSearchParams()
     const firstNameInputRef = useRef<HTMLInputElement>(null)
     const emailInputRef = useRef<HTMLInputElement>(null)
+    const otpInputRef = useRef<OTPInputHandle>(null)
     const isSplitLight = layout === 'split-light'
 
     // Form state
@@ -925,6 +926,7 @@ export function SignupForm({
                     </div>
 
                     <OTPInput
+                        ref={otpInputRef}
                         value={otpCode}
                         onChange={setOtpCode}
                         onComplete={(code) => handleVerifyOTP(code)}
@@ -964,8 +966,10 @@ export function SignupForm({
                     <div className={`space-y-4 ${isSplitLight ? 'text-left' : 'text-center'}`}>
                         <button
                             onClick={() => {
+                                setOtpCode('')
                                 setTurnstileToken(null)
                                 setShowTurnstile(true)
+                                setTimeout(() => otpInputRef.current?.focus(), 0)
                             }}
                             disabled={loading}
                             className={`text-sm font-medium transition-colors hover:underline ${

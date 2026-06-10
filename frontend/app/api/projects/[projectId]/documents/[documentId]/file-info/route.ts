@@ -6,7 +6,7 @@ import { getFileInfo } from '@/lib/file-utils'
 import { prisma } from '@/lib/prisma'
 import { canAccessRbacAdmin } from '@/lib/permission-helpers'
 import { getViewAsPersonaFromCookie } from '@/lib/view-as-server'
-import { getSharedAndAncestorIdsForPersona } from '@/lib/project-sharing-ids'
+import { getSharedAndAncestorIdsForPersona } from '@/lib/engagement-sharing-ids'
 import { requireEngagementMember, getEngagementStatus, isExternalEngagementRole } from '@/lib/engagement-access'
 import { isDocumentFinalized } from '@/lib/sharing-settings'
 

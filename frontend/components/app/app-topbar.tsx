@@ -102,6 +102,7 @@ function TypewriterText({ isOpen }: { isOpen: boolean }) {
 
 // Cache firm branding by slug (in-memory for session)
 const brandingCache = new Map<string, { branding: OrganizationBranding | null; firmId?: string }>()
+const clientBrandingCache = new Map<string, OrganizationBranding | null>()
 
 const SESSION_STORAGE_KEY = (slug: string) => `fm_firm_branding_${slug}`
 
@@ -201,6 +202,7 @@ export function AppTopbar() {
   const [mounted, setMounted] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const currentSlugRef = useRef<string | null>(null)
+  const currentClientSlugRef = useRef<string | null>(null)
   const reloadBrandingRef = useRef<(() => Promise<void>) | null>(null)
 
   const [showBookmarksDropdown, setShowBookmarksDropdown] = useState(false)
@@ -251,7 +253,10 @@ export function AppTopbar() {
     if (cached) setBranding(cached)
   }, [pathname, slug])
 
-  // Load firm branding with caching
+  // Extract client slug from pathname for client brand overlay
+  const clientSlug = pathname?.match(/^\/d\/(?:o|f)\/[^/]+\/c\/([^/]+)/)?.[1] ?? null
+
+  // Load firm branding + optional client brand overlay with caching
   useEffect(() => {
     const loadFirmBranding = async () => {
       // Only show org branding on app routes under /d/ (dashboard)
@@ -259,6 +264,7 @@ export function AppTopbar() {
         setBranding(null)
         setLoading(false)
         currentSlugRef.current = null
+        currentClientSlugRef.current = null
         // Clear any injected brand CSS vars when leaving the dashboard
         document.documentElement.style.removeProperty('--primary')
         document.documentElement.style.removeProperty('--primary-foreground')
@@ -273,11 +279,14 @@ export function AppTopbar() {
         return
       }
 
-      // Check cache first - only refetch if slug changed
-      if (slug && currentSlugRef.current === slug && brandingCache.has(slug)) {
+      // Check firm cache first - only refetch if slug changed
+      if (slug && currentSlugRef.current === slug && brandingCache.has(slug) && currentClientSlugRef.current === clientSlug) {
         const cached = brandingCache.get(slug)!
-        setBranding(cached.branding)
-        if (pathname?.startsWith('/d')) injectBrandCssVars(cached.branding)
+        const clientCacheKey = slug && clientSlug ? `${slug}:${clientSlug}` : null
+        const clientBrand = clientCacheKey ? clientBrandingCache.get(clientCacheKey) : undefined
+        const effective = clientBrand !== undefined ? (clientBrand ?? cached.branding) : cached.branding
+        setBranding(effective)
+        if (pathname?.startsWith('/d')) injectBrandCssVars(effective)
         setLoading(false)
         return
       }
@@ -299,6 +308,8 @@ export function AppTopbar() {
           }
         })
 
+        let firmBranding: OrganizationBranding | null = null
+
         if (response.ok) {
           const data = await response.json()
           const org = data.organization || data.firm || data
@@ -307,11 +318,11 @@ export function AppTopbar() {
           const b = (settings.branding as Record<string, string | undefined>) || {}
 
           // Read exclusively from settings.branding — no column fallbacks
-          const brandingData: OrganizationBranding | null = (b.logoUrl || b.primaryColor || org?.name)
+          firmBranding = (b.logoUrl || b.logoData || b.primaryColor || org?.name)
             ? {
-              logoUrl: b.logoUrl ?? null,
+              logoUrl: b.logoData ?? b.logoUrl ?? null,
               logoAspectRatio: b.logoAspectRatio ?? null,
-              name: org?.name ?? null,
+              name: b.name ?? org?.name ?? null,
               subtext: b.subtext ?? null,
               themeColor: b.primaryColor ?? null,
               secondaryColor: b.secondaryColor ?? null,
@@ -319,18 +330,62 @@ export function AppTopbar() {
             }
             : null
 
-          setBranding(brandingData)
-
-          // Inject CSS vars + cache (in-memory + sessionStorage)
           if (slug) {
-            const payload = pathname?.startsWith('/d')
-              ? injectBrandCssVars(brandingData)
-              : brandingData ?? {}
-            brandingCache.set(slug, { branding: brandingData, firmId: org?.id })
+            brandingCache.set(slug, { branding: firmBranding, firmId: org?.id })
             currentSlugRef.current = slug
-            setBrandingInSession(slug, payload as SessionBrandingPayload)
-            window.dispatchEvent(new CustomEvent('firma-branding-reloaded'))
           }
+        }
+
+        // Client brand overlay — fetched when inside /c/[clientSlug]
+        let effective = firmBranding
+        if (clientSlug && slug) {
+          const clientCacheKey = `${slug}:${clientSlug}`
+          try {
+            const clientRes = await fetch(
+              `/api/clients/brand-by-slug?firmSlug=${encodeURIComponent(slug)}&clientSlug=${encodeURIComponent(clientSlug)}`,
+              { headers: { Authorization: `Bearer ${session.access_token}` } }
+            )
+            if (clientRes.ok) {
+              const { brand } = await clientRes.json()
+              const clientBrand: OrganizationBranding | null = brand
+                ? {
+                    logoUrl: brand.logoUrl ?? null,
+                    logoAspectRatio: brand.logoAspectRatio ?? null,
+                    name: brand.name ?? firmBranding?.name ?? null,
+                    subtext: brand.subtext ?? firmBranding?.subtext ?? null,
+                    themeColor: brand.primaryColor ?? firmBranding?.themeColor ?? null,
+                    secondaryColor: brand.secondaryColor ?? firmBranding?.secondaryColor ?? null,
+                    website: firmBranding?.website ?? null,
+                  }
+                : null
+              clientBrandingCache.set(clientCacheKey, clientBrand)
+              currentClientSlugRef.current = clientSlug
+              if (clientBrand) effective = clientBrand
+            }
+          } catch {
+            // ignore, fall back to firm branding
+          }
+        } else {
+          currentClientSlugRef.current = null
+        }
+
+        setBranding(effective)
+
+        // Inject CSS vars + cache (in-memory + sessionStorage)
+        if (slug) {
+          const payload = pathname?.startsWith('/d')
+            ? injectBrandCssVars(effective)
+            : effective ?? {}
+          setBrandingInSession(slug, payload as SessionBrandingPayload)
+          window.dispatchEvent(new CustomEvent('firm-branding-reloaded'))
+        } else {
+          // No firm selected — reset CSS vars to Firma defaults
+          document.documentElement.style.setProperty('--primary', '161 93% 31%')
+          document.documentElement.style.setProperty('--primary-foreground', '0 0% 98%')
+          document.documentElement.style.setProperty('--primary-rgb', '6, 150, 104')
+          document.documentElement.style.removeProperty('--brand-accent')
+          document.documentElement.style.removeProperty('--brand-accent-foreground')
+          setBranding(null)
         }
       } catch {
         // Silent fail
@@ -344,16 +399,24 @@ export function AppTopbar() {
         brandingCache.delete(slug)
         currentSlugRef.current = null
       }
+      if (slug && clientSlug) {
+        clientBrandingCache.delete(`${slug}:${clientSlug}`)
+        currentClientSlugRef.current = null
+      }
       return loadFirmBranding()
     }
 
     loadFirmBranding()
-  }, [user, pathname, slug])
+  }, [user, pathname, slug, clientSlug])
 
   useEffect(() => {
     const onBrandingUpdated = () => reloadBrandingRef.current?.()
     window.addEventListener('firm-branding-updated', onBrandingUpdated)
-    return () => window.removeEventListener('firm-branding-updated', onBrandingUpdated)
+    window.addEventListener('client-branding-updated', onBrandingUpdated)
+    return () => {
+      window.removeEventListener('firm-branding-updated', onBrandingUpdated)
+      window.removeEventListener('client-branding-updated', onBrandingUpdated)
+    }
   }, [])
 
   const loadNotifications = useCallback(async () => {
@@ -492,16 +555,18 @@ export function AppTopbar() {
       className={`flex h-full w-full items-center px-4 gap-4 ${!mounted ? 'invisible pointer-events-none' : ''}`}
       aria-hidden={!mounted}
     >
-      {/* Left: Org branding — only shown when org branding is loaded; Firma logo lives in the profile menu */}
+      {/* Left: Firma brand when no firm selected; org branding when inside a firm */}
       <div className="shrink-0 max-w-[280px] flex items-center pl-1">
-        {branding && (
+        {!slug ? (
+          <Logo size="lg" showText wordmarkClassName="font-headline text-2xl font-bold tracking-tighter" />
+        ) : branding ? (
           <Logo
             size="lg"
             showText
             branding={branding}
             wordmarkClassName="font-headline text-2xl font-bold tracking-tighter text-[#1b1b1d]"
           />
-        )}
+        ) : null}
       </div>
 
       {/* Center: Command palette trigger — hidden on onboarding */}

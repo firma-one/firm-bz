@@ -36,7 +36,7 @@ export async function DELETE(
     if (doc.connectorId && doc.externalId) {
       try {
         const adapter = await getPermissionAdapter(doc.connectorId)
-        await adapter.trashFile(doc.connectorId, doc.externalId)
+        await adapter?.trashFile(doc.connectorId, doc.externalId)
       } catch (trashErr) {
         console.error('Failed to trash file in connector storage', trashErr)
         // Non-fatal: the local record is still archived below

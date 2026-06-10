@@ -58,6 +58,7 @@ enum InvitationStatus {
   ACCEPTED
   JOINED
   EXPIRED
+  ERROR
 
   @@schema("platform")
 }
@@ -148,7 +149,7 @@ model Connector {
   type              ConnectorType   @default(GOOGLE_DRIVE)
   userId            String          @db.Uuid
   externalAccountId String
-  name              String?
+  name              String    @default("Default Connection")
   avatarUrl         String?
   accessToken       String
   refreshToken      String?
@@ -165,10 +166,11 @@ model Connector {
   /** Firm owner (new model). Legacy firm.connectorId flow may still be present during migration. */
   firmId            String?         @db.Uuid
 
-  firms Firm[] @relation("LegacyFirmConnector")
-  firm  Firm?  @relation("FirmConnectors", fields: [firmId], references: [id], onDelete: SetNull)
+  firms   Firm[]   @relation("LegacyFirmConnector")
+  firm    Firm?    @relation("FirmConnectors", fields: [firmId], references: [id], onDelete: SetNull)
+  clients Client[] @relation("ClientConnector")
 
-  @@unique([type, userId])
+  @@unique([type, userId, externalAccountId])
   @@index([firmId])
   @@map("connectors")
   @@schema("platform")
@@ -191,9 +193,6 @@ model Firm {
   /** Optional umbrella anchor: satellites point to an anchor firm id (one-level hierarchy). */
   anchorFirmId        String?  @db.Uuid
 
-  brandingSubtext    String?
-  logoUrl            String?
-  themeColorHex      String?
   connectorId        String?  @db.Uuid
   firmFolderId       String?
   sandboxOnly        Boolean  @default(false) @map("isAnchor")
@@ -315,6 +314,8 @@ model Client {
   settings       Json     @default("{}")
   sandboxOnly    Boolean  @default(false)
   driveFolderId  String?
+  /** The client's document-storage connector. Shared: multiple clients may reference one Connector. */
+  connectorId    String?  @db.Uuid
 
   followUpDate      DateTime?
   expectedCloseDate DateTime?
@@ -328,6 +329,7 @@ model Client {
   billingAddress     String?  @db.Text
 
   firm                Firm                @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  connector           Connector?          @relation("ClientConnector", fields: [connectorId], references: [id], onDelete: SetNull)
   engagements         Engagement[]
   members             ClientMember[]
   invitations         ClientInvitation[]
@@ -337,6 +339,7 @@ model Client {
   contacts            ClientContact[]
 
   @@unique([firmId, slug])
+  @@index([connectorId])
   @@map("clients")
   @@schema("platform")
 }
@@ -364,6 +367,23 @@ model ClientContact {
   @@unique([clientId, email])
   @@index([firmId, clientId])
   @@map("client_contacts")
+  @@schema("platform")
+}
+
+model Brand {
+  id              String   @id @default(cuid())
+  name            String
+  /// Base64 data URL for logo (e.g. data:image/png;base64,...)
+  logoData        String?
+  logoUrl         String?
+  logoAspectRatio String?
+  subtext         String?
+  primaryColor    String?
+  secondaryColor  String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("brands")
   @@schema("platform")
 }
 

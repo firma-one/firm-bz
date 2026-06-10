@@ -127,6 +127,18 @@ export async function getConnections(organizationId: string): Promise<ConnectorC
 }
 
 /**
+ * List all connections for a client (all connector types).
+ */
+export async function getClientConnections(clientId: string): Promise<ConnectorConnection[]> {
+  const client = await prisma.client.findUnique({
+    where: { id: clientId },
+    include: { connector: { select: CONNECTOR_SELECT } },
+  })
+  if (!client?.connector) return []
+  return [mapConnectorToConnection(client.connector)]
+}
+
+/**
  * Get the storage adapter for a connection (by connector id). Used by pockett-structure and callers that need folder/file ops.
  */
 export async function getStorageAdapter(connectionId: string): Promise<IConnectorStorageAdapter> {
@@ -164,26 +176,28 @@ export async function disconnectConnection(connectionId: string): Promise<void> 
 }
 
 /**
- * Permanently remove a connector record. Uses the appropriate connector instance for any cleanup, then deletes the record.
+ * @deprecated Do not call this directly — it bypasses all FK cleanup.
+ * Use `removeConnector` from `lib/actions/connectors` instead.
  */
-export async function removeConnection(connectionId: string): Promise<void> {
-  const connector = await prisma.connector.findUnique({ where: { id: connectionId } })
-  if (!connector) throw new Error('Connection not found')
-  const instance = getConnectorInstance(connector.type)
-  await instance.removeConnection(connectionId)
+export async function removeConnection(_connectionId: string): Promise<void> {
+  throw new Error(
+    '[removeConnection] Bypassed — use removeConnector() from lib/actions/connectors for all connector removal.'
+  )
 }
 
 /**
  * Get the permission adapter for a connection (by connector id).
- * Provides provider-agnostic access to permission grant/revoke/folder ops.
+ * Returns null when the connector type has no permission adapter (e.g. OneDrive — not yet
+ * implemented). Callers must skip gracefully rather than assume an adapter is always present.
+ * Throws only when the connection record itself is missing (data integrity error).
  */
-export async function getPermissionAdapter(connectionId: string): Promise<IConnectorPermissionAdapter> {
+export async function getPermissionAdapter(connectionId: string): Promise<IConnectorPermissionAdapter | null> {
   const connector = await prisma.connector.findUnique({ where: { id: connectionId } })
   if (!connector) throw new Error('Connection not found')
   if (connector.type === ConnectorType.GOOGLE_DRIVE) {
     return createGoogleDrivePermissionAdapter()
   }
-  throw new Error(`No permission adapter for connector type: ${connector.type}`)
+  return null
 }
 
 /**

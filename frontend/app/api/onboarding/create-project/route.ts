@@ -75,8 +75,6 @@ export async function POST(request: NextRequest) {
                 if (sandboxOnly && folderStructure) {
                     const subfoldersMap: Array<{ subName: string; subId: string | null }> = [
                         { subName: 'General', subId: folderStructure.generalFolderId || null },
-                        { subName: 'Staging', subId: folderStructure.stagingFolderId || null },
-                        { subName: 'Confidential', subId: folderStructure.confidentialFolderId || null },
                     ]
 
                     await Promise.all(

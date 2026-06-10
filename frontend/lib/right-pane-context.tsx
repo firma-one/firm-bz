@@ -28,7 +28,7 @@ type RightPaneContextValue = {
   headerSubtitle: string
   setHeaderSubtitle: (t: string) => void
   clearPane: () => void
-  /** Optional actions (e.g. Search icon) to show in the right panel header; set by page content (e.g. ProjectFileList). */
+  /** Optional actions (e.g. Search icon) to show in the right panel header; set by page content (e.g. EngagementFileList). */
   headerActions: ReactNode
   setHeaderActions: (node: ReactNode) => void
   /** True when inside RightPaneProvider (e.g. d/o layout); use to open in sidebar instead of sheet */

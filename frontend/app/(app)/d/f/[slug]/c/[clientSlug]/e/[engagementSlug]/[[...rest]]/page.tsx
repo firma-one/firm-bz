@@ -1,4 +1,4 @@
-import { ProjectWorkspace } from "@/components/projects/project-workspace"
+import { EngagementWorkspace } from "@/components/projects/engagement-workspace"
 import type { LwCrmEngagementStatus } from "@/lib/actions/project"
 import { getFirmHierarchy, getFirmName, type HierarchyClient } from "@/lib/actions/hierarchy"
 import { getProjectPersonas } from "@/lib/actions/personas"
@@ -12,8 +12,8 @@ import { createClient } from "@/utils/supabase/server"
 import { prisma, basePrisma } from "@/lib/prisma"
 import { notFound, redirect } from "next/navigation"
 import { ErrorBoundary } from "@/components/error-boundary"
-import type { ProjectPathSegments } from "@/components/projects/project-workspace"
-import { getAccessibleFileCountForPersona } from "@/lib/project-sharing-ids"
+import type { ProjectPathSegments } from "@/components/projects/engagement-workspace"
+import { getAccessibleFileCountForPersona } from "@/lib/engagement-sharing-ids"
 
 const VALID_TABS = new Set(['files', 'shares', 'comments', 'members', 'analytics', 'sources', 'audit', 'settings', 'wiki'])
 
@@ -116,6 +116,13 @@ export default async function EngagementPage({ params }: PageProps) {
 
   const ecGuestPersona = (projectRole === 'eng_ext_collaborator' || projectRole === 'eng_viewer') ? projectRole : null
 
+  const connectorMeta = client.connectorId
+    ? await prisma.connector.findUnique({ where: { id: client.connectorId }, select: { workspaceRootLocation: true, settings: true } })
+    : null
+  const connectorAccountEmail = connectorMeta
+    ? ((connectorMeta.settings as any)?.accountEmail as string | undefined) ?? null
+    : null
+
   const [fileCount, sharesCount, commentsCount, engMemberCount, engInviteCount, auditCount, wikiPageCount] = await Promise.all([
     ecGuestPersona
       ? getAccessibleFileCountForPersona(project.id, ecGuestPersona)
@@ -131,12 +138,15 @@ export default async function EngagementPage({ params }: PageProps) {
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
-      <ErrorBoundary context="ProjectWorkspace">
-        <ProjectWorkspace
+      <ErrorBoundary context="EngagementWorkspace">
+        <EngagementWorkspace
           orgSlug={slug}
           clientSlug={client.slug}
           projectId={project.id}
           connectorRootFolderId={project.connectorRootFolderId}
+          clientConnectorId={client.connectorId}
+          workspaceRootLocation={connectorMeta?.workspaceRootLocation ?? null}
+          connectorAccountEmail={connectorAccountEmail}
           orgName={orgName}
           clientName={client.name}
           projectName={project.name}

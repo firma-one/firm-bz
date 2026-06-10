@@ -145,7 +145,7 @@ export async function createSubscriptionCancellationRemindersForAdmins(
         )
     )
 
-    logger.warn('[polar-billing-lifecycle] Created subscription cancellation reminders for admins', {
+    logger.info('[polar-billing-lifecycle] Created subscription cancellation reminders for admins', {
         anchorFirmId,
         adminCount: admins.length,
         cancelAt: cancelAt.toISOString(),
@@ -199,7 +199,7 @@ export async function clearSubscriptionCancellationRemindersForAdmins(
         })
     )
 
-    logger.warn('[polar-billing-lifecycle] Cleared subscription cancellation reminders for admins', {
+    logger.info('[polar-billing-lifecycle] Cleared subscription cancellation reminders for admins', {
         anchorFirmId,
         adminCount: admins.length,
     })

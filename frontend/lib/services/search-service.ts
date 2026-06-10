@@ -36,11 +36,18 @@ export class SearchService {
 
         try {
             const { googleDriveConnector } = await import('../google-drive-connector')
-            const firm = await prisma.firm.findUnique({
-                where: { id: params.organizationId },
-                select: { id: true, connectorId: true }
-            })
-            const connectorId = firm?.connectorId
+            let connectorId: string | null = null
+            if (params.clientId) {
+                const { resolveClientConnector } = await import('../connectors/resolve-client-connector')
+                const resolved = await resolveClientConnector(params.clientId)
+                connectorId = resolved.connectorId
+            } else {
+                const firm = await prisma.firm.findUnique({
+                    where: { id: params.organizationId },
+                    select: { connectorId: true }
+                })
+                connectorId = firm?.connectorId ?? null
+            }
 
             let driveMetadata: any = {}
             let driveParentId = params.parentId || null

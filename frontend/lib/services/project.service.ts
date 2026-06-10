@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { generateProjectSlug } from '@/lib/slug-utils'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { logger } from '@/lib/logger'
+import { resolveClientConnector } from '@/lib/connectors/resolve-client-connector'
 
 /**
  * Service for managing projects in the V2 Platform schema.
@@ -101,15 +102,11 @@ export const projectService = {
         })
 
         // 4. Create Drive Folder Structure (V2 - Automated); skip when building sandbox in one batch (Option B)
-        let folderStructure: { projectId?: string; generalFolderId?: string; confidentialFolderId?: string; stagingFolderId?: string } | null = null
+        let folderStructure: { projectId?: string; generalFolderId?: string } | null = null
         if (!skipDriveStructure) {
         try {
-            const firm = await (prisma as any).firm.findUnique({
-                where: { id: firmId },
-                select: { connectorId: true }
-            })
+            const { connectorId } = await resolveClientConnector(clientId)
 
-            const connectorId = firm?.connectorId
             if (connectorId) {
                 const client = await (prisma as any).client.findUnique({
                     where: { id: clientId },
@@ -139,8 +136,6 @@ export const projectService = {
                     folderStructure = {
                         projectId: fs.projectId,
                         generalFolderId: fs.generalFolderId,
-                        confidentialFolderId: fs.confidentialFolderId,
-                        stagingFolderId: fs.stagingFolderId
                     }
                 }
             }

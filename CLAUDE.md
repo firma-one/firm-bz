@@ -10,6 +10,14 @@ After changes, offer to: 1) run build, 2) commit/push. **Never auto-execute**—
 
 **NEVER commit or push without explicit user approval.** Always present the proposed commit message and ask before running any `git commit` or `git push` command.
 
+## Prisma Migrations
+
+- **Always create a migration file** for any schema change — never apply SQL directly to the DB.
+- Use `npx prisma migrate dev --name <name> --create-only` to generate the file without applying it.
+- The user runs `npm run build` to apply migrations (same as production) — never run `prisma migrate dev` without `--create-only`.
+- Never edit a migration file after it has been applied — add a new migration instead.
+- This keeps local and production migration history in sync and prevents drift.
+
 ## Plans
 All plans must be created under `.claude/plans/` in the project root. Never save plans to `~/.claude/plans/` or any other location.
 

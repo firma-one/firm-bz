@@ -74,6 +74,8 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
   const [reminderModal, setReminderModal] = useState<{ messageId: string; content: string } | null>(null)
   // Map of userId → { reminderId, dateValue } for already-set reminders on this comment
   const [existingReminders, setExistingReminders] = useState<Map<string, { reminderId: string; dateValue: string | null }>>(new Map())
+  // Set of messageIds that have at least one active reminder (for dot indicator)
+  const [messagesWithReminders, setMessagesWithReminders] = useState<Set<string>>(new Set())
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const topSentinelRef = useRef<HTMLDivElement>(null)
@@ -460,6 +462,14 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
     const results = await Promise.allSettled(ops)
     const failed = results.filter((r) => r.status === 'rejected')
     if (failed.length > 0) throw new Error(`${failed.length} operation(s) failed`)
+    // Update dot indicator: add if any selected, remove if none remain
+    const messageId = reminderModal.messageId
+    const remainingCount = (existingReminders.size - deselected.length) + selected.length
+    setMessagesWithReminders((prev) => {
+      const next = new Set(prev)
+      remainingCount > 0 ? next.add(messageId) : next.delete(messageId)
+      return next
+    })
   }
 
   return (
@@ -1135,23 +1145,30 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                           <TooltipTrigger asChild>
                             <button
                               type="button"
-                              className="shrink-0 h-7 w-7 rounded-md hover:bg-orange-50 transition-colors inline-flex items-center justify-center"
+                              className="relative shrink-0 h-7 w-7 rounded-md hover:bg-orange-50 transition-colors inline-flex items-center justify-center"
                               style={{ color: '#C4572B' }}
                               aria-label="Assign reminder"
                               onClick={() => {
-                                setReminderModal({ messageId: msg.id, content: msg.content })
-                                // Fetch existing reminders — component pre-populates selection from this map
+                                // Fetch existing reminders first, then open modal so pre-population is correct
                                 fetch(`/api/projects/${engagementId}/documents/${documentId}/doc-comments/reminders?messageId=${encodeURIComponent(msg.id)}`)
                                   .then((r) => r.ok ? r.json() : null)
                                   .then((data) => {
                                     const map = new Map<string, { reminderId: string; dateValue: string | null }>()
                                     ;(data?.reminders ?? []).forEach((r: any) => map.set(r.userId, { reminderId: r.reminderId, dateValue: r.dateValue }))
                                     setExistingReminders(map)
+                                    if (map.size > 0) setMessagesWithReminders((prev) => new Set([...Array.from(prev), msg.id]))
+                                    setReminderModal({ messageId: msg.id, content: msg.content })
                                   })
-                                  .catch(() => setExistingReminders(new Map()))
+                                  .catch(() => {
+                                    setExistingReminders(new Map())
+                                    setReminderModal({ messageId: msg.id, content: msg.content })
+                                  })
                               }}
                             >
                               <CalendarClock className="h-4 w-4" />
+                              {messagesWithReminders.has(msg.id) && (
+                                <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full border border-white" style={{ backgroundColor: '#C4572B' }} />
+                              )}
                             </button>
                           </TooltipTrigger>
                           <TooltipContent side="top" className={LIGHT_TOOLTIP_CLASS}>

@@ -38,7 +38,7 @@ export function InsightCard({
     const t = THEME_STYLES[theme]
 
     return (
-        <div className={`bg-white border border-[#e5e7eb] rounded shadow-sm flex flex-col h-full ${className || ''}`}>
+        <div className={`bg-white border border-[#e5e7eb] rounded shadow-md flex flex-col h-full ${className || ''}`}>
 
             {/* Header */}
             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between rounded-t">
@@ -47,18 +47,20 @@ export function InsightCard({
                         <Icon className={`h-4.5 w-4.5 ${t.iconColor}`} />
                     </div>
                     <div>
-                        <h3 className="text-sm font-bold text-gray-900">{title}</h3>
+                        <div className="flex items-center gap-1.5">
+                            <h3 className="text-sm font-bold text-gray-900">{title}</h3>
+                            {count !== undefined && (
+                                <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                                    {count}
+                                </span>
+                            )}
+                        </div>
                         {subtext && <p className="text-xs text-gray-500 font-medium">{subtext}</p>}
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
                     {action}
                     {headerExtra}
-                    {count !== undefined && (
-                        <span className="px-2.5 py-0.5 bg-gray-100 text-gray-600 text-xs font-bold rounded-full border border-gray-200">
-                            {count}
-                        </span>
-                    )}
                 </div>
             </div>
 

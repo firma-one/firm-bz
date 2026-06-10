@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { IndexingInterceptor } from '@/lib/services/indexing-interceptor'
 import { logger } from '@/lib/logger'
-import { requireProjectManage } from '@/lib/api/project-auth'
+import { requireProjectManage } from '@/lib/api/engagement-auth'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 
 export async function POST(

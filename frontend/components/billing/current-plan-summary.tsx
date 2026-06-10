@@ -51,11 +51,11 @@ export function CurrentPlanSummary({
     }, [firmId, portalReturnPath])
 
     const labelClass = 'text-[#45474c]'
-    const valueClass = 'font-bold text-[#1b1b1d]'
+    const valueClass = 'font-bold text-primary'
     const shell = cn(
         variant === 'embedded'
-            ? 'rounded-[2px] border border-[#e5e7eb] bg-white px-3.5 py-3 sm:px-4'
-            : 'rounded-[2px] border border-[#e5e7eb] bg-white px-4 py-4 sm:px-5'
+            ? 'rounded-[2px] border-2 border-primary/30 bg-primary/5 px-4 py-4 sm:px-5 shadow-md'
+            : 'rounded-[2px] border-2 border-primary/30 bg-primary/5 px-4 py-4 sm:px-5 shadow-md'
     )
 
     if (loading) {

@@ -73,8 +73,10 @@ const EVENT_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: 'FIRM_MEMBER_ADDED', label: 'Workspace member added' },
   { value: 'FIRM_MEMBER_REMOVED', label: 'Workspace member removed' },
   { value: 'FIRM_MEMBER_ROLE_CHANGED', label: 'Workspace member role changed' },
-  { value: 'FIRM_CONNECTOR_ATTACHED', label: 'Drive connected' },
-  { value: 'FIRM_CONNECTOR_DETACHED', label: 'Drive disconnected' },
+  { value: 'FIRM_CONNECTOR_ATTACHED', label: 'Drive connected (legacy)' },
+  { value: 'FIRM_CONNECTOR_DETACHED', label: 'Drive disconnected (legacy)' },
+  { value: 'STORAGE_CONNECTOR_ATTACHED', label: 'Storage connector connected' },
+  { value: 'STORAGE_CONNECTOR_DETACHED', label: 'Storage connector disconnected' },
   // Client
   { value: 'CLIENT_CREATED', label: 'Client created' },
   { value: 'CLIENT_CHANGED', label: 'Client updated' },
@@ -153,6 +155,7 @@ const SCOPE_TO_EVENT_TYPES: Record<string, string[]> = {
     'CLIENT_CREATED', 'CLIENT_CHANGED', 'CLIENT_DELETED', 'CLIENT_SETTINGS_CHANGED',
     'CLIENT_CONTACT_CREATED', 'CLIENT_CONTACT_CHANGED', 'CLIENT_CONTACT_DELETED',
     'CLIENT_MEMBER_ADDED', 'CLIENT_MEMBER_REMOVED', 'CLIENT_MEMBER_ROLE_CHANGED',
+    'STORAGE_CONNECTOR_ATTACHED', 'STORAGE_CONNECTOR_DETACHED',
   ],
   ENGAGEMENT: [
     'ENGAGEMENT_CREATED', 'ENGAGEMENT_CHANGED', 'ENGAGEMENT_DELETED',

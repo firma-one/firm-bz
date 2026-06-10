@@ -628,13 +628,9 @@ function CatalogGroupedPriceDisplay({
                     {POLAR_MONTHLY_FREQ_LABEL}
                 </span>
             </span>
-            {billingPeriod === 'annual' ? (
-                <p className={cn('mt-1 text-xs', peachAmount ? 'text-[#7a5343]/85' : 'text-slate-500')}>
-                    Billed annually
-                </p>
-            ) : (
-                <div className={compact ? 'mt-1 h-3' : 'mt-1 h-4'} aria-hidden />
-            )}
+            <p className={cn('mt-1 text-xs', peachAmount ? 'text-[#7a5343]/85' : 'text-slate-500')}>
+                {billingPeriod === 'annual' ? 'Billed annually' : 'Billed monthly'}
+            </p>
         </div>
     )
 }
@@ -1337,16 +1333,21 @@ export function PolarPlansPicker({
                                                     <CatalogGroupedPriceDisplay
                                                         monthlyEquivCents={eqCents}
                                                         currency={selectedPlan.priceCurrency}
-                                                        billingPeriod={period}
+                                                        billingPeriod={annualV != null ? period : 'monthly'}
                                                         compact={compact}
                                                         peachAmount={blueAccentTrial}
                                                     />
                                                 ) : (
-                                                    <PlanPriceDisplay
-                                                        label={selectedPlan.priceLabel}
-                                                        compact={compact}
-                                                        peachAmount={blueAccentTrial}
-                                                    />
+                                                    <div className="min-w-0">
+                                                        <PlanPriceDisplay
+                                                            label={selectedPlan.priceLabel}
+                                                            compact={compact}
+                                                            peachAmount={blueAccentTrial}
+                                                        />
+                                                        <p className={cn('mt-1 text-xs', blueAccentTrial ? 'text-[#7a5343]/85' : 'text-slate-500')}>
+                                                            Billed monthly
+                                                        </p>
+                                                    </div>
                                                 )}
                                             </div>
                                         </div>
@@ -1546,13 +1547,16 @@ export function PolarPlansPicker({
                                             <h3 className={cn(planCardHeadingClass(compact), 'min-w-0', isCurrentPlan && 'pr-14')}>
                                                 {plan.name}
                                             </h3>
-                                            <p className="mt-2 min-w-0 leading-none">
+                                            <div className="mt-2 min-w-0 leading-none">
                                                 <PlanPriceDisplay
                                                     label={plan.priceLabel}
                                                     compact={compact}
                                                     peachAmount={blueAccentTrial}
                                                 />
-                                            </p>
+                                                <p className={cn('mt-1 text-xs', blueAccentTrial ? 'text-[#7a5343]/85' : 'text-slate-500')}>
+                                                    Billed monthly
+                                                </p>
+                                            </div>
                                         </div>
                                     )}
 

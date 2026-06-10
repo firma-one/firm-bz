@@ -26,6 +26,7 @@ import {
   Settings,
   Lock,
   Megaphone,
+  Bookmark,
 } from "lucide-react"
 import { WhatsNewModal } from "@/components/ui/whats-new-modal"
 import { useWhatsNew, type ReleaseMeta } from "@/lib/use-whats-new"
@@ -230,6 +231,11 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
   const [reminders, setReminders] = useState<ReminderWithContext[]>([])
   const [remindersLoading, setRemindersLoading] = useState(false)
 
+  // Bookmarks state
+  const [isBookmarksOpen, setIsBookmarksOpen] = useState(false)
+  const [bookmarks, setBookmarks] = useState<{ id: string; label?: string; url?: string; kind: string }[]>([])
+  const [bookmarksLoading, setBookmarksLoading] = useState(false)
+
   // Recents section collapse
   const [isRecentsOpen, setIsRecentsOpen] = useState(true)
   // Collapsed recents popover
@@ -275,6 +281,24 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
     window.addEventListener('firma-reminders-updated', h)
     return () => window.removeEventListener('firma-reminders-updated', h)
   }, [loadReminders])
+
+  const loadBookmarks = useCallback(async () => {
+    setBookmarksLoading(true)
+    try {
+      const res = await fetch('/api/bookmarks')
+      if (res.ok) {
+        const data = await res.json()
+        setBookmarks(data.bookmarks ?? [])
+      }
+    } finally { setBookmarksLoading(false) }
+  }, [])
+
+  useEffect(() => { loadBookmarks() }, [loadBookmarks])
+  useEffect(() => {
+    const h = () => loadBookmarks()
+    window.addEventListener('pockett-bookmarks-updated', h)
+    return () => window.removeEventListener('pockett-bookmarks-updated', h)
+  }, [loadBookmarks])
 
   async function handleReminderDone(id: string) {
     try {
@@ -368,8 +392,8 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
   const canShowViewAsDropdown = canUseViewAs
 
   // Active state helpers
-  const isInsightsActive = !pathname.includes('/connectors') && searchParams.get('tab') === 'analytics'
-  const isSettingsActive = !pathname.includes('/connectors') && searchParams.get('tab') === 'settings'
+  const isInsightsActive = searchParams.get('tab') === 'analytics'
+  const isSettingsActive = searchParams.get('tab') === 'settings'
   const isSupportActive = pathname.startsWith('/d/support')
   const isRemindersPageActive = pathname.startsWith('/d/u/reminders')
   const isClientsActive =
@@ -505,21 +529,21 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                         }}
                         compact
                       />
-                      {/* Tree sub-items: Clients + Analytics + Settings */}
+                      {/* Tree sub-items: Overview + Clients + Settings */}
                       <div className="ml-1 space-y-0.5">
+                        {canManageOrg && (
+                          <Link href={`${firmScopedNavBase}?tab=analytics`} className={`group/lock flex w-full items-center transition-colors pl-2 pr-3 py-1.5 text-[0.8125rem] ${isInsightsActive ? 'bg-primary/10 border-l-2 border-brand-accent text-primary font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}>
+                            <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-1.5" />
+                            <BarChart3 className={`h-3.5 w-3.5 mr-2 shrink-0 ${isInsightsActive ? 'text-primary' : 'text-[#45474c]'}`} />
+                            <span>Overview</span>
+                            <span title="Internal only" className="ml-auto flex items-center"><Lock className="w-2.5 h-2.5 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
+                          </Link>
+                        )}
                         <Link href={`${baseUrl}?tab=clients`} className={`flex items-center transition-colors pl-2 pr-2 py-1.5 text-[0.8125rem] ${isClientsActive ? 'bg-primary/10 border-l-2 border-brand-accent text-primary font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}>
                           <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-1.5" />
                           <Users className={`h-3.5 w-3.5 mr-2 shrink-0 ${isClientsActive ? 'text-primary' : 'text-[#45474c]'}`} />
                           <span>Clients</span>
                         </Link>
-                        {canManageOrg && (
-                          <Link href={`${firmScopedNavBase}?tab=analytics`} className={`group/lock flex w-full items-center transition-colors pl-2 pr-3 py-1.5 text-[0.8125rem] ${isInsightsActive ? 'bg-primary/10 border-l-2 border-brand-accent text-primary font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}>
-                            <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-1.5" />
-                            <BarChart3 className={`h-3.5 w-3.5 mr-2 shrink-0 ${isInsightsActive ? 'text-primary' : 'text-[#45474c]'}`} />
-                            <span>Analytics</span>
-                            <span title="Internal only" className="ml-auto flex items-center"><Lock className="w-2.5 h-2.5 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
-                          </Link>
-                        )}
                         {canManageOrg && (
                           <Link href={`${firmScopedNavBase}?tab=settings`} className={`group/lock flex w-full items-center transition-colors pl-2 pr-3 py-1.5 text-[0.8125rem] ${isSettingsActive ? 'bg-primary/10 border-l-2 border-brand-accent text-primary font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}>
                             <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-1.5" />
@@ -543,6 +567,16 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                         </TooltipTrigger>
                         <TooltipContent side="right">{firms.find(f => f.slug === selectedFirmSlug)?.name ?? 'Workspace'}</TooltipContent>
                       </Tooltip>
+                      {canManageOrg && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Link href={`${firmScopedNavBase}?tab=analytics`} className={navLinkClass(isInsightsActive)}>
+                              <BarChart3 className={navIconClass(isInsightsActive)} />
+                            </Link>
+                          </TooltipTrigger>
+                          <TooltipContent side="right">Overview</TooltipContent>
+                        </Tooltip>
+                      )}
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Link href={`${baseUrl}?tab=clients`} className={navLinkClass(isClientsActive)}>
@@ -551,16 +585,6 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                         </TooltipTrigger>
                         <TooltipContent side="right">Clients</TooltipContent>
                       </Tooltip>
-                      {canManageOrg && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Link href={`${firmScopedNavBase}?tab=analytics`} className={navLinkClass(isInsightsActive)}>
-                              <BarChart3 className={navIconClass(isInsightsActive)} />
-                            </Link>
-                          </TooltipTrigger>
-                          <TooltipContent side="right">Analytics</TooltipContent>
-                        </Tooltip>
-                      )}
                       {canManageOrg && (
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -821,6 +845,83 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
 
                   <SeparatorLine />
 
+                  {/* BOOKMARKS — expanded: inline accordion; collapsed: icon navigates */}
+                  {!isCollapsed ? (
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setIsBookmarksOpen((v) => !v)}
+                        className={`d-sidebar-section w-full flex items-center px-3 ${spaceTitle} hover:opacity-80 transition-opacity`}
+                      >
+                        <Bookmark className="h-3 w-3 mr-1.5 shrink-0 text-[#45474c]" />
+                        <span className="flex-1 text-left">Bookmarks</span>
+                        {bookmarks.length > 0 && (
+                          <span className="mr-1.5 min-w-[14px] h-3.5 px-1 text-white text-[8px] font-bold rounded-full flex items-center justify-center leading-none bg-primary">
+                            {bookmarks.length}
+                          </span>
+                        )}
+                        <ChevronDown className={`h-3 w-3 shrink-0 text-[#9ca3af] transition-transform duration-200 ${isBookmarksOpen ? 'rotate-180' : ''}`} />
+                      </button>
+
+                      <div className={`grid transition-all duration-200 ease-out ${isBookmarksOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
+                        <div className="overflow-hidden">
+                          <div className="ml-1 space-y-0.5 pt-0.5">
+                            {bookmarksLoading ? (
+                              <div className="pl-3 py-2 text-[0.75rem] text-[#9ca3af]">Loading…</div>
+                            ) : bookmarks.length === 0 ? (
+                              <div className="pl-3 py-2 text-[0.75rem] text-[#9ca3af]">No bookmarks</div>
+                            ) : (
+                              <>
+                                {bookmarks.slice(0, 3).map((b) => {
+                                  const href = b.url ?? '#'
+                                  const label = b.label ?? 'Untitled'
+                                  return (
+                                    <a
+                                      key={b.id}
+                                      href={href}
+                                      className="flex items-center gap-1 pl-2 pr-1 py-1.5 hover:bg-[#f9f9fb] group"
+                                    >
+                                      <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-0.5" />
+                                      <Bookmark className="h-3 w-3 shrink-0 text-[#45474c]" />
+                                      <span className="flex-1 min-w-0 text-[0.8125rem] font-medium text-[#45474c] truncate ml-1.5">{label}</span>
+                                    </a>
+                                  )
+                                })}
+                                {bookmarks.length > 3 && (
+                                  <Link
+                                    href="/d/u/bookmarks"
+                                    className="block pl-7 py-1.5 text-[0.75rem] text-primary hover:text-primary/80 font-medium"
+                                  >
+                                    {`Show more (${bookmarks.length}) →`}
+                                  </Link>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Link
+                          href="/d/u/bookmarks"
+                          className="relative flex items-center d-sidebar-nav transition-colors px-0 justify-center py-2 text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d]"
+                        >
+                          <Bookmark className="h-4 w-4 mx-auto" />
+                          {bookmarks.length > 0 && (
+                            <span className="absolute top-0.5 right-1 min-w-[14px] h-3.5 px-0.5 text-white text-[9px] font-bold rounded-full flex items-center justify-center leading-none bg-primary">
+                              {bookmarks.length}
+                            </span>
+                          )}
+                        </Link>
+                      </TooltipTrigger>
+                      <TooltipContent side="right">Bookmarks</TooltipContent>
+                    </Tooltip>
+                  )}
+
+                  <SeparatorLine />
+
                   {/* RESOURCES */}
                   <div className={isCollapsed ? 'w-full flex items-center gap-0.5' : 'pt-2'}>
                     {!isCollapsed && (
@@ -974,7 +1075,6 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                 isCollapsed={isCollapsed}
                 showBillingLink={canManageOrg}
                 billingHref={buildBillingPageHref({ firmSlug: billingFirmSlug, pathname })}
-                connectorsHref={canManageOrg && firmScopedNavBase ? `${firmScopedNavBase}/connectors` : undefined}
                 isSystemAdmin={isSystemAdmin}
                 {...(firms.length > 0 && billingFirmId
                   ? { planSubtitle: profilePlanSubtitle, planSubtitleLoading: billingPlanLoading }

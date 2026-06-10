@@ -128,6 +128,10 @@ interface DocumentActionMenuProps {
   isExternalViewer?: boolean
   /** Base URL for deeplink (e.g. ".../files"). Appended with #doc-file:{projectDocumentId}. Falls back to Drive URL if absent. */
   deeplinkBase?: string
+  /** When true, renders the menu visually but blocks all item clicks (sandbox preview mode). */
+  sandboxPreview?: boolean
+  /** Connector account email — appended as ?authuser= to Google Drive folder URLs. */
+  connectorAccountEmail?: string | null
 }
 
 export function DocumentActionMenu({
@@ -167,6 +171,8 @@ export function DocumentActionMenu({
   isExternalViewer,
   deeplinkBase,
   orgSlug,
+  sandboxPreview = false,
+  connectorAccountEmail,
 }: DocumentActionMenuProps) {
   const [showDueDatePicker, setShowDueDatePicker] = useState(false)
   const [showShareModalOpen, setShowShareModalOpen] = useState(false)
@@ -457,6 +463,9 @@ export function DocumentActionMenu({
           onClick={(e) => e.stopPropagation()}
           onCloseAutoFocus={(e) => e.preventDefault()} // Prevent focus jump causing scroll
         >
+          {sandboxPreview && (
+            <div className="absolute inset-0 z-10 rounded-[inherit] pointer-events-auto cursor-not-allowed bg-transparent" />
+          )}
           {/* Header Section */}
           <div className="p-4 border-b border-gray-200">
             <div className="flex items-center space-x-3">
@@ -1225,9 +1234,10 @@ export function DocumentActionMenu({
                       <DropdownMenuItem
                         onClick={() => {
                           const parentId = document.parents?.[0]
+                          const authParam = connectorAccountEmail ? `?authuser=${encodeURIComponent(connectorAccountEmail)}` : ''
                           const url = parentId
-                            ? `https://drive.google.com/drive/folders/${parentId}`
-                            : `https://drive.google.com/drive/my-drive`
+                            ? `https://drive.google.com/drive/folders/${parentId}${authParam}`
+                            : `https://drive.google.com/drive/my-drive${authParam}`
                           window.open(url, '_blank')
                         }}
                         className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
@@ -1242,6 +1252,11 @@ export function DocumentActionMenu({
               </>
             )}
           </div>
+          {sandboxPreview && (
+            <div className="px-3 py-2 border-t border-[#e5e7eb] bg-[#f9f9fb]">
+              <p className="text-[10px] text-[#9a9ba0] leading-snug">Actions are unavailable in sandbox preview.</p>
+            </div>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
 

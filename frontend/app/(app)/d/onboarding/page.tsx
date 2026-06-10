@@ -590,11 +590,11 @@ const OnboardingContent = () => {
             }
             markStepSkipped(2)
             setError(null)
-            setStep(3)
+            void handleFinish()
         } catch (e: unknown) {
             setError(e instanceof Error ? e.message : 'Failed to continue')
         }
-    }, [markStepSkipped])
+    }, [markStepSkipped, handleFinish])
 
     const afterCheckoutParam = searchParams.get('after_checkout')
     /** Strip `after_checkout` from the URL once the initial status check has finished (persist runs inside that check). */
@@ -659,7 +659,7 @@ const OnboardingContent = () => {
             setCreatingSandbox(false)
             setFinalizeTerminalSteps(buildFinalizeTerminalSteps(firmNameForSession))
             setFinalizeTerminalActiveIndex(0)
-            setStep(4)
+            void handleFinish()
 
             supabase.auth.refreshSession().catch((err) => logger.warn('Session refresh after sandbox provision', err))
             buildUserSettingsPlus().catch((err) => logger.warn('Cache rebuild after sandbox provision', err))
@@ -791,12 +791,12 @@ const OnboardingContent = () => {
                             setRootFolderId(fetchedRootId)
                         }
 
-                        // OAuth return: connector is saved — Finalize (Stage 4) runs sandbox DB/Drive work.
-                        setStep(4)
+                        // OAuth return: connector saved — onboarding complete; redirect to dashboard.
+                        void handleFinish()
                     }
                 } else if (errorParam) {
-                    setStep(3)
-                    setError(googleDriveOAuthPopupFailureMessage(errorParam))
+                    // Drive error param from legacy flow — just go to dashboard
+                    void handleFinish()
                 } else {
                     // 2. Normal load: Fetch connector status first so we have rootFolderId even when no org yet
                     // (callback ensures default workspace root in My Drive — see DEFAULT_WORKSPACE_FOLDER_NAME in google-drive-connector.ts — and sets rootFolderId; we must not show "My Drive vs Shared Drive")
@@ -963,36 +963,29 @@ const OnboardingContent = () => {
                                     if (flowV >= 3) {
                                         if (!subscribeSkipped && stage === 'awaiting_subscribe') {
                                             setStep(2)
-                                        } else if (!driveConnected || stage === 'awaiting_drive') {
-                                            // Stay on step 3 until folder is selected (stage advances past 'awaiting_drive' only after folder pick)
-                                            setStep(3)
-                                        } else if (stage === 'provisioning') {
-                                            const nm = String(resolvedOrg.name || SANDBOX_FIRM_NAME_FALLBACK)
-                                            setFinalizeTerminalSteps(buildFinalizeTerminalSteps(nm))
-                                            setFinalizeTerminalActiveIndex(0)
-                                            setStep(4)
-                                            driveProvisionStartedRef.current = true
                                         } else {
-                                            setStep(4)
+                                            // Drive/Finalize steps removed — onboarding ends at Subscribe.
+                                            void handleFinish()
                                         }
                                     } else {
-                                        if (!firmConnectorId || !fetchedRootId) {
-                                            setStep(3)
+                                        // Legacy flow (no flowV): if already connected, finish; otherwise subscribe step.
+                                        if (firmConnectorId && fetchedRootId) {
+                                            void handleFinish()
                                         } else {
                                             setStep(2)
                                         }
                                     }
                                 }
                             } else {
-                                // Could not create/find org — anchor first; if connector already has root, go straight to Connect
-                                setStep(normalLoadRootId ? 3 : 1)
+                                // Could not create/find org — anchor first
+                                if (normalLoadRootId) { void handleFinish() } else { setStep(1) }
                             }
                         } else {
-                            setStep(normalLoadRootId ? 3 : 1)
+                            if (normalLoadRootId) { void handleFinish() } else { setStep(1) }
                         }
                     } catch (err) {
                         logger.error("Failed to check org status", err as Error)
-                        setStep(normalLoadRootId ? 3 : 1)
+                        if (normalLoadRootId) { void handleFinish() } else { setStep(1) }
                     }
                 }
             } catch (err) {
@@ -1128,11 +1121,11 @@ const OnboardingContent = () => {
         void handleAttachConnectorAndProvisionSandbox()
     }, [step, isConnected, connectionDetails?.connectionId, handleAttachConnectorAndProvisionSandbox])
 
-    /** Stage 3 ends once the user has confirmed their drive location (My Drive or Shared Drive). */
+    /** Drive location confirmed — skip straight to finish (steps 3/4 removed). */
     useEffect(() => {
-        if (step !== 3 || !isConnected || !connectionDetails?.connectionId || !driveLocationConfirmed) return
-        setStep(4)
-    }, [step, isConnected, connectionDetails?.connectionId, driveLocationConfirmed])
+        if (!isConnected || !connectionDetails?.connectionId || !driveLocationConfirmed) return
+        void handleFinish()
+    }, [isConnected, connectionDetails?.connectionId, driveLocationConfirmed, handleFinish])
 
     // My Drive folder creation countdown → auto-confirm when it hits 0
     useEffect(() => {

@@ -1,6 +1,6 @@
 /**
  * Session storage keys and helpers for "last opened folder" in the project Files tab.
- * Shared by project-file-list (read/write on navigate) and project-workspace (write from Shares "Open in Files").
+ * Shared by engagement-file-list (read/write on navigate) and engagement-workspace (write from Shares "Open in Files").
  */
 
 export type BreadcrumbItem = {

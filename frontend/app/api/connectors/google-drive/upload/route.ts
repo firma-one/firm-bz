@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { isExternalEngagementRole } from '@/lib/engagement-access'
+import { resolveEngagementConnector } from '@/lib/connectors/resolve-client-connector'
 
 export async function POST(request: NextRequest) {
     try {
@@ -26,61 +27,53 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Invalid JSON body', details: err.message }, { status: 400 })
         }
 
-        const { name, mimeType, parentId: clientParentId, connectionId, fileId, projectId } = body
+        // projectId is the wire name sent by clients — aliased to engagementId internally
+        const { name, mimeType, parentId: clientParentId, connectionId, fileId, projectId: engagementId } = body
 
         if (!name || !mimeType) return NextResponse.json({ error: 'Missing name or mimeType' }, { status: 400 })
-        if (!clientParentId && !fileId && !projectId) return NextResponse.json({ error: 'No parent folder specified' }, { status: 400 })
+        if (!clientParentId && !fileId && !engagementId) return NextResponse.json({ error: 'No parent folder specified' }, { status: 400 })
 
         // 3. Find Connector + handle EC/EV access
         let connector: any
         let resolvedParentId: string | undefined = clientParentId
 
-        if (projectId) {
-            // Look up the project and the user's membership
-            const project = await prisma.engagement.findFirst({
-                where: { id: projectId, isDeleted: false },
-                include: {
-                    client: {
-                        include: {
-                            firm: { include: { connector: true } }
-                        }
-                    },
-                    members: { where: { userId: user.id } }
-                }
-            })
-            if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+        if (engagementId) {
+            const [resolvedConnector, engagement] = await Promise.all([
+                resolveEngagementConnector(engagementId),
+                prisma.engagement.findFirst({
+                    where: { id: engagementId, isDeleted: false },
+                    include: {
+                        client: { select: { slug: true, name: true } },
+                        members: { where: { userId: user.id } }
+                    }
+                })
+            ])
+            if (!engagement) return NextResponse.json({ error: 'Engagement not found' }, { status: 404 })
 
-            const member = project.members[0]
-            if (!member) return NextResponse.json({ error: 'Not a member of this project' }, { status: 403 })
+            const member = engagement.members[0]
+            if (!member) return NextResponse.json({ error: 'Not a member of this engagement' }, { status: 403 })
 
-            connector = project.client.firm.connector ?? undefined
-            if (!connector) return NextResponse.json({ error: 'No active Google Drive connection found' }, { status: 404 })
+            connector = resolvedConnector
+            if (!connector) return NextResponse.json({ error: 'No active storage connector found' }, { status: 404 })
 
             // EC/EV uploads: use generalFolderId only when no specific parentId was provided
             if (isExternalEngagementRole(member.role) && !clientParentId) {
-                const folderIds = await googleDriveConnector.getProjectFolderIds(connector.id, project.slug, {
-                    projectName: project.name,
-                    clientSlug: project.client.slug,
-                    clientName: project.client.name,
-                    projectFolderId: project.connectorRootFolderId
+                const folderIds = await googleDriveConnector.getProjectFolderIds(connector.id, engagement.slug, {
+                    projectName: engagement.name,
+                    clientSlug: engagement.client.slug,
+                    clientName: engagement.client.name,
+                    projectFolderId: engagement.connectorRootFolderId
                 })
                 if (!folderIds.generalFolderId) {
-                    return NextResponse.json({ error: 'General folder not configured for this project' }, { status: 400 })
+                    return NextResponse.json({ error: 'General folder not configured for this engagement' }, { status: 400 })
                 }
                 resolvedParentId = folderIds.generalFolderId
             }
         } else if (connectionId) {
             connector = await prisma.connector.findUnique({ where: { id: connectionId } })
-        } else {
-            const membership = await prisma.firmMember.findFirst({
-                where: { userId: user.id },
-                orderBy: { isDefault: 'desc' },
-                include: { firm: { include: { connector: true } } }
-            })
-            connector = membership?.firm?.connector ?? undefined
         }
 
-        if (!connector) return NextResponse.json({ error: 'No active Google Drive connection found' }, { status: 404 })
+        if (!connector) return NextResponse.json({ error: 'No active storage connector found' }, { status: 404 })
         if (!resolvedParentId && !fileId) return NextResponse.json({ error: 'No parent folder specified' }, { status: 400 })
 
         // 4. Get Resumable Upload URL

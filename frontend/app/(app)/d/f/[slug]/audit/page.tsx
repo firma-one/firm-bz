@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import { ProjectAuditPane } from '@/components/projects/project-audit-pane'
+import { EngagementAuditPane } from '@/components/projects/engagement-audit-pane'
 import { ErrorBoundary } from '@/components/error-boundary'
 
 export default async function OrgAuditPage({
@@ -30,7 +30,7 @@ export default async function OrgAuditPage({
       </div>
       <div className="flex-1 min-h-0">
         <ErrorBoundary context="OrgAudit">
-          <ProjectAuditPane
+          <EngagementAuditPane
             firmId={organization.id}
             exportTitle={organization.name}
           />

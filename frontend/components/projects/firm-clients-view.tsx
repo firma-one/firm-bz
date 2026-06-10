@@ -11,10 +11,9 @@ import { FirmMembersTab } from './members/firm-members-tab'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import Link from 'next/link'
 import { useSearchParams, usePathname, useRouter } from 'next/navigation'
-import { ProjectAuditPane } from './project-audit-pane'
+import { EngagementAuditPane } from './engagement-audit-pane'
 import { ErrorBoundary } from '@/components/error-boundary'
 import { FirmBusinessInsights } from '@/components/dashboard/firm-business-insights'
-import { DriveInsightsSection } from '@/components/dashboard/drive-insights-section'
 import { FirmActionCenter } from '@/components/dashboard/firm-action-center'
 
 interface FirmClientsViewProps {
@@ -33,6 +32,7 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
     const searchParams = useSearchParams()
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
     const [orgName, setOrgName] = useState<string | null>(null)
+    const [firmLogoUrl, setFirmLogoUrl] = useState<string | null>(null)
     const [isPendingRefresh, startRefresh] = useTransition()
     const [canCreateClient, setCanCreateClient] = useState(false)
     const [canViewOrgSettings, setCanViewOrgSettings] = useState(false)
@@ -68,6 +68,21 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
     // Fetch firm name
     useEffect(() => {
         getFirmName(orgSlug).then(setOrgName).catch(() => setOrgName(null))
+    }, [orgSlug])
+
+    // Read firm logo from sessionStorage (set by topbar branding loader)
+    useEffect(() => {
+        const readLogo = () => {
+            try {
+                const raw = sessionStorage.getItem(`fm_firm_branding_${orgSlug}`)
+                if (!raw) return
+                const parsed = JSON.parse(raw)
+                setFirmLogoUrl(parsed?.logoUrl ?? null)
+            } catch { /* ignore */ }
+        }
+        readLogo()
+        window.addEventListener('firm-branding-reloaded', readLogo)
+        return () => window.removeEventListener('firm-branding-reloaded', readLogo)
     }, [orgSlug])
 
     // Fetch permissions: canCreateClient (client scope can_manage), canViewOrgSettings (org scope can_manage)
@@ -121,8 +136,11 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
             {/* Firm Identity Header — architectural style, sits directly on pearl bg */}
             <div className="flex items-start justify-between gap-6 mb-6">
                 <div className="flex items-center gap-6">
-                    <div className="w-16 h-16 bg-white border border-[#e5e7eb] flex items-center justify-center rounded shadow-sm shrink-0">
-                        <Building2 className="h-10 w-10 text-[#1b1b1d]" />
+                    <div className="w-16 h-16 bg-white border border-[#e5e7eb] flex items-center justify-center rounded shadow-sm shrink-0 overflow-hidden">
+                        {firmLogoUrl
+                            ? <img src={firmLogoUrl} alt={orgName ?? 'Firm'} className="h-full w-full object-contain p-1.5" />
+                            : <Building2 className="h-10 w-10 text-[#1b1b1d]" />
+                        }
                     </div>
                     <div>
                         <div className="flex items-center gap-3 flex-wrap">
@@ -146,7 +164,7 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                                     className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                                 >
                                     <LayoutDashboard className="w-4 h-4 mr-2" />
-                                    Analytics
+                                    Overview
                                     <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
                                 </TabsTrigger>
                             )}
@@ -276,7 +294,7 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                         <TabsContent value="audit" className="m-0 h-full">
                             <div className="py-1 h-full">
                                 <ErrorBoundary context="OrgAuditTab">
-                                    <ProjectAuditPane
+                                    <EngagementAuditPane
                                         firmId={orgId ?? (clients.length > 0 ? clients[0].firmId : undefined)}
                                         exportTitle={orgName ?? 'firm'}
                                     />
@@ -295,7 +313,6 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                                             firmSlug={orgSlug}
                                         />
                                     </ErrorBoundary>
-                                    <DriveInsightsSection />
                                 </div>
                                 <FirmActionCenter
                                     firmId={orgId ?? clients[0]?.firmId ?? clients[0]?.firmId ?? ''}
@@ -313,6 +330,7 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                                     orgId={orgId}
                                     initialName={orgName ?? ''}
                                     firmSandboxOnly={firmSandboxOnly}
+                                    initialSection={(searchParams.get('section') as 'main' | 'branding' | 'appsettings' | 'storage' | 'danger') || undefined}
                                     onSaved={() => {
                                         const params = new URLSearchParams(searchParams.toString())
                                         params.set('tab', 'clients')

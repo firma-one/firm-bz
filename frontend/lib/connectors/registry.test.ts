@@ -121,13 +121,14 @@ describe('connector registry', () => {
     it('returns adapter with all IConnectorPermissionAdapter methods for GOOGLE_DRIVE', async () => {
       mockFindUnique.mockResolvedValue({ id: 'conn-1', type: ConnectorType.GOOGLE_DRIVE })
       const adapter = await getPermissionAdapter('conn-1')
-      expect(typeof adapter.grantFolderPermission).toBe('function')
-      expect(typeof adapter.revokePermission).toBe('function')
-      expect(typeof adapter.downgradeFolderUserPermissionToReader).toBe('function')
-      expect(typeof adapter.getEngagementFolderIds).toBe('function')
-      expect(typeof adapter.trashFile).toBe('function')
-      expect(typeof adapter.listFiles).toBe('function')
-      expect(typeof adapter.getFileMetadata).toBe('function')
+      expect(adapter).not.toBeNull()
+      expect(typeof adapter!.grantFolderPermission).toBe('function')
+      expect(typeof adapter!.revokePermission).toBe('function')
+      expect(typeof adapter!.downgradeFolderUserPermissionToReader).toBe('function')
+      expect(typeof adapter!.getEngagementFolderIds).toBe('function')
+      expect(typeof adapter!.trashFile).toBe('function')
+      expect(typeof adapter!.listFiles).toBe('function')
+      expect(typeof adapter!.getFileMetadata).toBe('function')
     })
 
     it('throws when connector is not found', async () => {
@@ -135,15 +136,15 @@ describe('connector registry', () => {
       await expect(getPermissionAdapter('missing')).rejects.toThrow('Connection not found')
     })
 
-    it('throws for connector types without a permission adapter', async () => {
+    it('returns null for connector types without a permission adapter', async () => {
       mockFindUnique.mockResolvedValue({ id: 'conn-2', type: ConnectorType.DROPBOX })
-      await expect(getPermissionAdapter('conn-2')).rejects.toThrow('No permission adapter')
+      await expect(getPermissionAdapter('conn-2')).resolves.toBeNull()
     })
 
     it('getEngagementFolderIds normalises undefined fields to null', async () => {
       mockFindUnique.mockResolvedValue({ id: 'conn-1', type: ConnectorType.GOOGLE_DRIVE })
       const adapter = await getPermissionAdapter('conn-1')
-      const ids = await adapter.getEngagementFolderIds('conn-1', 'eng-slug', {})
+      const ids = await adapter!.getEngagementFolderIds('conn-1', 'eng-slug', {})
       expect(ids).toEqual({
         generalFolderId: 'g',
         confidentialFolderId: 'c',
@@ -154,14 +155,14 @@ describe('connector registry', () => {
     it('trashFile returns void (does not surface boolean from GDrive)', async () => {
       mockFindUnique.mockResolvedValue({ id: 'conn-1', type: ConnectorType.GOOGLE_DRIVE })
       const adapter = await getPermissionAdapter('conn-1')
-      const result = await adapter.trashFile('conn-1', 'file-id')
+      const result = await adapter!.trashFile('conn-1', 'file-id')
       expect(result).toBeUndefined()
     })
 
-    // Contract test: adding ONEDRIVE here when Phase 2 ships will catch missing registration
-    it('throws for ONEDRIVE until Phase 2 is wired up', async () => {
+    // Contract test: update this when OneDrive Phase 2 ships a permission adapter
+    it('returns null for ONEDRIVE until Phase 2 is wired up', async () => {
       mockFindUnique.mockResolvedValue({ id: 'conn-3', type: ConnectorType.ONEDRIVE })
-      await expect(getPermissionAdapter('conn-3')).rejects.toThrow('No permission adapter')
+      await expect(getPermissionAdapter('conn-3')).resolves.toBeNull()
     })
   })
 

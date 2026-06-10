@@ -26,10 +26,11 @@ export default async function FirmSlugLayout({
     const { slug } = await params
 
     // Avoid infinite redirect: if the current request IS the locked page, let it render.
-    // proxy.ts sets x-invoke-path on every request — use that instead of middleware.
+    // Use x-url (set by Next.js on every request) with x-invoke-path as dev fallback.
     const headersList = await headers()
-    const pathname = headersList.get('x-invoke-path') ?? ''
-    if (pathname.endsWith('/subscription-locked')) {
+    const rawUrl = headersList.get('x-url') ?? headersList.get('x-invoke-path') ?? ''
+    const urlPathname = rawUrl.startsWith('http') ? new URL(rawUrl).pathname : rawUrl
+    if (urlPathname.endsWith('/subscription-locked')) {
         return <>{children}</>
     }
 

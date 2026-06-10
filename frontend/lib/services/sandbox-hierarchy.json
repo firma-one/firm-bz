@@ -3,9 +3,16 @@
   "clients": [
     {
       "clientName": "Acme Robotics",
+      "status": "ACTIVE",
+      "clientSinceDate": "2024-03-15",
+      "followUpDate": "today+4",
+      "industry": "Technology",
       "engagements": [
         {
           "name": "CMO Advisory & Leadership",
+          "contractType": "Retainer",
+          "dueDate": "today+12",
+          "rateOrValue": "18000",
           "structure": {
             "Staging": { "name": "Staging", "files": [{ "name": "Weekly Strategy Notes.md", "type": "md" }] },
             "Confidential": { "name": "Confidential", "files": [{ "name": "Revenue Forecast Model.xlsx", "type": "xlsx" }] },
@@ -20,6 +27,9 @@
         },
         {
           "name": "Marketing Strategy Engagement",
+          "contractType": "Fixed Price",
+          "dueDate": "today+45",
+          "rateOrValue": "12500",
           "structure": {
             "Staging": { "name": "Staging", "files": [{ "name": "Market Research Draft Notes.md", "type": "md" }] },
             "Confidential": { "name": "Confidential", "files": [{ "name": "Market Expansion Financial Model.xlsx", "type": "xlsx" }] },
@@ -28,6 +38,30 @@
               "subfolders": [
                 { "name": "01_Discovery", "files": [{ "name": "Discovery Workshop Notes.md", "type": "md" }] },
                 { "name": "02_GTM_Strategy", "files": [{ "name": "GTM Strategy Deck.pptx", "type": "pptx" }] }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "clientName": "Meridian Capital",
+      "status": "PROSPECT",
+      "followUpDate": "today-2",
+      "industry": "Financial Services",
+      "engagements": [
+        {
+          "name": "Financial Advisory Scoping",
+          "contractType": "Strategic Advisory",
+          "dueDate": "today-5",
+          "rateOrValue": "9500",
+          "structure": {
+            "Staging": { "name": "Staging", "files": [{ "name": "Scoping Notes.md", "type": "md" }] },
+            "Confidential": { "name": "Confidential", "files": [{ "name": "Fee Proposal.xlsx", "type": "xlsx" }] },
+            "General": {
+              "name": "General",
+              "subfolders": [
+                { "name": "01_Discovery", "files": [{ "name": "Initial Requirements.pdf", "type": "pdf" }] }
               ]
             }
           }

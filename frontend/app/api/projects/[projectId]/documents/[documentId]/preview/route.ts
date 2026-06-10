@@ -84,7 +84,7 @@ export async function GET(
         }
 
         if (!connector) {
-            return NextResponse.json({ error: 'No active Google Drive connector found' }, { status: 404 })
+            return NextResponse.json({ error: 'No active storage connector found' }, { status: 404 })
         }
 
         // 4. Get a fresh access token

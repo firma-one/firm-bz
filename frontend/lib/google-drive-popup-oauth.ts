@@ -42,6 +42,9 @@ export function googleDriveOAuthPopupFailureMessage(errorCode?: string): string 
   if (errorCode === 'token_exchange_failed' || errorCode === 'user_info_failed') {
     return 'Google could not finish sign-in. Try again in a moment.'
   }
+  if (errorCode === 'account_mismatch') {
+    return 'Wrong Google account. Reconnect must use the same account that was originally connected.'
+  }
   if (errorCode === 'oauth_not_configured') {
     return 'Google Drive sign-in is not configured on this server.'
   }
@@ -52,6 +55,8 @@ export function googleDriveOAuthPopupFailureMessage(errorCode?: string): string 
 export type InitiateGoogleDriveOAuthPopupParams = {
   userId: string
   organizationId?: string | null
+  /** Client to link after OAuth completes. Threads through state → callback → storeConnection. */
+  clientId?: string | null
   /** Post-OAuth redirect when not using popup close (server still receives `next` in state). */
   next?: string | null
   rootFolderId?: string | null
@@ -78,6 +83,7 @@ export async function initiateGoogleDriveOAuthPopup(
       action: 'initiate',
       userId: params.userId,
       organizationId: params.organizationId,
+      ...(params.clientId && { clientId: params.clientId }),
       next: params.next ?? null,
       rootFolderId: params.rootFolderId ?? null,
       skipAutoFolder: params.skipAutoFolder ?? false,
@@ -115,6 +121,12 @@ export type GoogleDriveOAuthPopupHandlers = {
 export type StartGoogleDriveOAuthPopupOptions = {
   /** Log prefix for debugging */
   logLabel?: string
+  /**
+   * Connector IDs that were already active BEFORE this OAuth flow started.
+   * The poll will ignore all of them and only fire onPollSuccess for a genuinely new connector.
+   * Without this, a pre-existing active connector causes the poll to fire immediately.
+   */
+  priorConnectorIds?: string[] | null
 }
 
 /**
@@ -132,6 +144,7 @@ export function startGoogleDriveOAuthPopup(
   const label = options?.logLabel ?? 'google_drive_oauth_popup'
   const appOrigin = typeof window !== 'undefined' ? window.location.origin : ''
   const expectedNonce = oauthNonce ?? null
+  const priorConnectorIds = new Set(options?.priorConnectorIds ?? [])
 
   let timeoutId: number | null = null
   let pollIntervalId: number | null = null
@@ -188,6 +201,8 @@ export function startGoogleDriveOAuthPopup(
       if (!statusRes.ok) return null
       const statusData = await statusRes.json()
       if (statusData.isConnected && statusData.connector?.id) {
+        // Ignore connectors that were already active before this flow started
+        if (priorConnectorIds.size > 0 && priorConnectorIds.has(statusData.connector.id)) return null
         return {
           id: statusData.connector.id,
           name: statusData.connector.name ?? null,

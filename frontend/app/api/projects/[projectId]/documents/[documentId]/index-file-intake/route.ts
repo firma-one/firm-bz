@@ -33,15 +33,13 @@ export async function POST(
       where: { id: projectId, isDeleted: false },
       include: {
         client: {
-          include: {
-            firm: { include: { connector: true } },
-          },
+          include: { connector: true },
         },
       },
     })
     if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
 
-    const connector = project.client.firm.connector
+    const connector = project.client.connector
     if (!connector) return NextResponse.json({ error: 'No active connector' }, { status: 500 })
 
     const now = new Date().toISOString()

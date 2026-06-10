@@ -133,7 +133,7 @@ export interface IConnectorPermissionAdapter {
  * Each connector (Google Drive, Dropbox, OneDrive) implements this.
  */
 export interface IConnectorStorageAdapter {
-  listFolderChildren(connectionId: string, folderId: string): Promise<Array<{ id: string; name: string }>>
+  listFolderChildren(connectionId: string, folderId: string): Promise<Array<{ id: string; name: string; appProperties?: Record<string, string> }>>
   readFileContent(connectionId: string, fileId: string): Promise<string | null>
   writeFile(connectionId: string, parentFolderId: string, fileName: string, content: string, mimeType?: string): Promise<void>
   /** Optional: upload binary content (e.g. images). Falls back to writeFile with string if not implemented. */

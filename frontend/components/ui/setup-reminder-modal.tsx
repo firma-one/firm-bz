@@ -91,13 +91,15 @@ function EmailRow({ email }: { email: string }) {
   return (
     <span className="flex items-center gap-1 text-[11px] text-slate-400 min-w-0">
       <span className="truncate">{email}</span>
-      <button
-        type="button"
+      <span
+        role="button"
+        tabIndex={0}
         onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(email); setCopied(true); setTimeout(() => setCopied(false), 1500) }}
-        className="shrink-0 p-0.5 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors"
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); navigator.clipboard.writeText(email); setCopied(true); setTimeout(() => setCopied(false), 1500) } }}
+        className="shrink-0 p-0.5 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
       >
         {copied ? <Check className="h-3 w-3 text-primary" /> : <Copy className="h-3 w-3" />}
-      </button>
+      </span>
     </span>
   )
 }
@@ -117,6 +119,8 @@ export function SetupReminderModal({
 }: SetupReminderModalProps) {
   const [mounted, setMounted] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [initialIds, setInitialIds] = useState<Set<string>>(new Set())
+  const [initialDate, setInitialDate] = useState<string>('')
   const [dateValue, setDateValue] = useState<string>('')
   const [submitting, setSubmitting] = useState(false)
   const [success, setSuccess] = useState(false)
@@ -126,9 +130,12 @@ export function SetupReminderModal({
   // Pre-populate when modal opens
   useEffect(() => {
     if (!open) return
-    setSelectedIds(new Set(existingReminders.keys()))
-    const firstDate = Array.from(existingReminders.values())[0]?.dateValue
-    setDateValue(firstDate ?? new Date().toISOString())
+    const ids = new Set(existingReminders.keys())
+    const firstDate = Array.from(existingReminders.values())[0]?.dateValue ?? new Date().toISOString()
+    setSelectedIds(ids)
+    setInitialIds(new Set(ids))
+    setDateValue(firstDate)
+    setInitialDate(firstDate)
     setSuccess(false)
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -183,8 +190,10 @@ export function SetupReminderModal({
   }
 
   const hasChanges =
-    selectedIds.size > 0 ||
-    Array.from(existingReminders.keys()).some((id) => !selectedIds.has(id))
+    selectedIds.size !== initialIds.size ||
+    Array.from(selectedIds).some((id) => !initialIds.has(id)) ||
+    Array.from(initialIds).some((id) => !selectedIds.has(id)) ||
+    (selectedIds.size > 0 && dateValue !== initialDate)
 
   if (!open || !mounted || typeof window === 'undefined') return null
 
@@ -247,7 +256,6 @@ export function SetupReminderModal({
                   {currentUser && (() => {
                     const selected = selectedIds.has(currentUser.userId)
                     const wasExisting = existingReminders.has(currentUser.userId)
-                    const willRemove = wasExisting && !selected
                     const initials = (currentUser.name || currentUser.email || '?').slice(0, 2).toUpperCase()
                     return (
                       <button
@@ -256,11 +264,9 @@ export function SetupReminderModal({
                         onClick={() => toggleMember(currentUser.userId)}
                         className={cn(
                           'flex items-center gap-2.5 px-2.5 py-2 rounded-[2px] text-left transition-colors w-full',
-                          willRemove
-                            ? 'bg-rose-50 text-rose-600 ring-1 ring-rose-200 line-through opacity-60'
-                            : selected
-                              ? 'bg-primary/10 text-primary ring-1 ring-primary/30'
-                              : 'hover:bg-slate-50 text-slate-800'
+                          selected
+                            ? 'bg-primary/10 text-primary ring-1 ring-primary/30'
+                            : 'hover:bg-slate-50 text-slate-800'
                         )}
                       >
                         <MemberAvatar name={currentUser.name || currentUser.email || 'Me'} avatarUrl={currentUser.avatarUrl} selected={selected} />
@@ -272,7 +278,7 @@ export function SetupReminderModal({
                         </div>
 
                         <div className="shrink-0 flex items-center gap-1">
-                          {wasExisting && !willRemove && <CalendarClock className="h-3 w-3 text-primary opacity-60" />}
+                          {wasExisting && selected && <CalendarClock className="h-3 w-3 text-primary opacity-60" />}
                           {selected ? <SquareCheck className="h-4 w-4 text-primary" /> : <Square className="h-4 w-4 text-slate-300" />}
                         </div>
                       </button>
@@ -287,7 +293,6 @@ export function SetupReminderModal({
                   {members.map((m) => {
                     const selected = selectedIds.has(m.userId)
                     const wasExisting = existingReminders.has(m.userId)
-                    const willRemove = wasExisting && !selected
                     const roleLabel = m.role ? (ROLE_DISPLAY[m.role] ?? m.role) : undefined
                     return (
                       <button
@@ -296,11 +301,9 @@ export function SetupReminderModal({
                         onClick={() => toggleMember(m.userId)}
                         className={cn(
                           'flex items-center gap-2.5 px-2.5 py-2 rounded-[2px] text-left transition-colors w-full',
-                          willRemove
-                            ? 'bg-rose-50 text-rose-600 ring-1 ring-rose-200 line-through opacity-60'
-                            : selected
-                              ? 'bg-primary/10 text-primary ring-1 ring-primary/30'
-                              : 'hover:bg-slate-50 text-slate-800'
+                          selected
+                            ? 'bg-primary/10 text-primary ring-1 ring-primary/30'
+                            : 'hover:bg-slate-50 text-slate-800'
                         )}
                       >
                         <MemberAvatar name={m.name || m.email || '?'} avatarUrl={m.avatarUrl} selected={selected} />
@@ -312,7 +315,7 @@ export function SetupReminderModal({
                         </div>
 
                         <div className="shrink-0 flex items-center gap-1">
-                          {wasExisting && !willRemove && <CalendarClock className="h-3 w-3 text-primary opacity-60" />}
+                          {wasExisting && selected && <CalendarClock className="h-3 w-3 text-primary opacity-60" />}
                           {selected ? <SquareCheck className="h-4 w-4 text-primary" /> : <Square className="h-4 w-4 text-slate-300" />}
                         </div>
                       </button>
@@ -338,20 +341,20 @@ export function SetupReminderModal({
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-1">
-              <Button variant="outline" size="sm" className="rounded-[2px]" onClick={handleClose}>
+              <Button variant="outline" size="sm" className="rounded-[2px] w-32 text-[10px] font-headline font-bold tracking-widest uppercase" onClick={handleClose}>
                 Cancel
               </Button>
               <Button
-                variant="blackCta"
+                variant="default"
                 size="sm"
-                className="rounded-[2px]"
-                disabled={submitting || !hasChanges || members.length === 0}
+                className="rounded-[2px] w-32 text-[10px] font-headline font-bold tracking-widest uppercase bg-primary hover:bg-primary hover:brightness-105"
+                disabled={submitting || !hasChanges}
                 onClick={() => void handleSubmit()}
               >
                 {submitting
                   ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
                   : <CalendarClock className="h-3.5 w-3.5 mr-1" />}
-                Setup
+                Save
               </Button>
             </div>
           </>

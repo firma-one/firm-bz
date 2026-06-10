@@ -1,11 +1,12 @@
 'use client'
 
 import React from 'react'
-import { Users, Clock, CalendarClock, Cog } from 'lucide-react'
+import { Users, Clock, CalendarClock } from 'lucide-react'
 import { ClientSummary } from '@/lib/actions/hierarchy'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { formatDistanceToNow } from 'date-fns'
+import { useBranding } from '@/lib/use-branding'
 
 interface ClientListProps {
     clients: ClientSummary[]
@@ -31,7 +32,7 @@ function clientStatusLabel(status: string | null | undefined): string {
 function clientStatusBadgeClass(status: string | null | undefined): string {
     switch (status) {
         case 'PROSPECT':
-            return 'bg-fuchsia-50 text-fuchsia-500 ring-1 ring-fuchsia-200'
+            return 'bg-blue-50 text-blue-700 ring-1 ring-blue-200'
         case 'ON_HOLD':
             return 'bg-amber-50 text-amber-500 ring-1 ring-amber-200'
         case 'PAST':
@@ -60,6 +61,8 @@ function getFollowUpChip(followUpDate: Date | null): { label: string; cls: strin
 
 export function ClientList({ clients, orgSlug, viewMode = 'grid', isRefreshing = false }: ClientListProps) {
     const router = useRouter()
+    const firmBranding = useBranding()
+    const firmAccent = firmBranding?.themeColor && /^#[0-9A-Fa-f]{6}$/.test(firmBranding.themeColor) ? firmBranding.themeColor : null
     if (clients.length === 0 && !isRefreshing) {
         return (
             <div className="flex flex-col items-center justify-center h-64 text-center border-2 border-dashed border-slate-200 rounded bg-slate-50/50">
@@ -152,28 +155,33 @@ export function ClientList({ clients, orgSlug, viewMode = 'grid', isRefreshing =
                     </div>
                 </div>
             )}
-            {clients.map((client) => (
+            {clients.map((client) => {
+                const accent = (client.brandPrimaryColor && /^#[0-9A-Fa-f]{6}$/.test(client.brandPrimaryColor) ? client.brandPrimaryColor : null) ?? firmAccent
+                const solidFill = accent ?? 'hsl(var(--primary))'
+                return (
                 <Link
                     key={client.id}
                     href={`/d/f/${orgSlug}/c/${client.slug}`}
-                    className={`group relative bg-white rounded p-5 hover:shadow-lg transition-all duration-200 flex flex-col h-48 ${client.status === 'PROSPECT' ? 'border border-dashed border-amber-300 hover:border-amber-400' : 'border border-[#e5e7eb] hover:border-primary/50'}`}
+                    className={`group relative bg-white rounded overflow-hidden shadow-md hover:shadow-lg transition-all duration-200 flex flex-col h-48 ${client.status === 'PROSPECT' ? 'border border-dashed border-[#e5e7eb] hover:border-[#d1d5db]' : 'border border-[#e5e7eb] hover:border-[#d1d5db]'}`}
                 >
+                    {/* Brand color corner cut — bottom-right triangle */}
+                    <svg className="absolute bottom-0 right-0 pointer-events-none" width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <polygon points="36,0 36,36 0,36" fill={solidFill} fillOpacity="0.12" />
+                        <polygon points="36,16 36,36 16,36" fill={solidFill} />
+                    </svg>
+                    <div className="flex flex-col flex-1 p-5">
                     <div className="flex items-start justify-between mb-3">
-                        <div className="h-10 w-10 bg-[#f3f4f6] text-[#45474c] rounded flex items-center justify-center group-hover:bg-primary/10 group-hover:text-primary transition-colors shrink-0">
-                            <Users className="h-5 w-5" />
+                        <div className="h-10 w-10 rounded flex items-center justify-center shrink-0 overflow-hidden border border-[#ebebed]"
+                            style={{ backgroundColor: accent ? `${accent}18` : '#f3f4f6', color: accent ?? '#45474c' }}>
+                            {client.brandLogoUrl
+                                ? <img src={client.brandLogoUrl} alt="" className="h-full w-full object-contain" />
+                                : <Users className="h-5 w-5" />
+                            }
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                             <span className={`shrink-0 px-2 py-0.5 rounded-sm text-xs font-medium ${clientStatusBadgeClass(client.status)}`}>
                                 {clientStatusLabel(client.status)}
                             </span>
-                            <button
-                                type="button"
-                                onClick={(e) => { e.preventDefault(); e.stopPropagation(); router.push(`/d/f/${orgSlug}/c/${client.slug}?tab=settings`) }}
-                                className="px-2 py-0.5 rounded-sm bg-[#f3f4f6] text-[#1b1b1d] ring-1 ring-[#e5e7eb] hover:bg-[#e5e7eb] transition-colors"
-                                title="Client settings"
-                            >
-                                <Cog className="h-3.5 w-3.5" />
-                            </button>
                         </div>
                     </div>
 
@@ -196,8 +204,10 @@ export function ClientList({ clients, orgSlug, viewMode = 'grid', isRefreshing =
                             {client.engagements.length} {client.engagements.length === 1 ? 'engagement' : 'engagements'}
                         </span>
                     </div>
+                    </div>
                 </Link>
-            ))}
+                )
+            })}
         </div>
     )
 }
