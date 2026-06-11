@@ -391,7 +391,7 @@ export function FirmSettingsForm({
 
     const mainSave = (
         <div className="flex items-center gap-3 pt-2">
-            <Button type="button" variant="greenCta" onClick={handleSave}
+            <Button type="button" variant="greenCta" onClick={() => void handleSave()}
                 disabled={isSandboxFirm || saving || !loaded || !mainDirty}
                 className="rounded-[2px] w-32 text-[10px] font-headline font-bold tracking-widest uppercase text-white">
                 {saving ? 'Saving…' : 'Save'}
