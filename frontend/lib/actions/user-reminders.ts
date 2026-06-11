@@ -383,6 +383,22 @@ function generateId(): string {
     return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 }
 
+/**
+ * Remove all reminders matching a given entityKey+entityValue from a specific user's account.
+ * Used when an invitation is accepted to clean up the invitor's "Invitation expiring" reminder.
+ */
+export async function removeRemindersByEntity(userId: string, entityKey: string, entityValue: string): Promise<void> {
+    const items = await loadItems(userId)
+    const toRemove = items.filter((r) => r.entityKey === entityKey && r.entityValue === entityValue)
+    if (toRemove.length === 0) return
+
+    for (const item of toRemove) {
+        await safeInngestSend('reminder.email.cancelled', { reminderId: item.id })
+        await safeInngestSend('reminder.recurring.cancelled', { reminderId: item.id })
+    }
+    await saveItems(userId, items.filter((r) => r.entityKey !== entityKey || r.entityValue !== entityValue))
+}
+
 /** Mark multiple reminders done at once. */
 export async function markAllRemindersDone(reminderIds: string[]): Promise<void> {
     for (const id of reminderIds) {

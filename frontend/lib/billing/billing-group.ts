@@ -84,3 +84,19 @@ export async function listFirmIdsInBillingGroup(anchorFirmId: string): Promise<s
     })
     return rows.map((row) => row.id)
 }
+
+/**
+ * Non-sandbox firm IDs in this billing group for entity cap counting.
+ * Sandbox firms are excluded so their demo data never counts against plan limits.
+ */
+export async function listBillableFirmIdsInBillingGroup(anchorFirmId: string): Promise<string[]> {
+    const rows = await prisma.firm.findMany({
+        where: {
+            OR: [{ id: anchorFirmId }, { anchorFirmId }],
+            deletedAt: null,
+            sandboxOnly: false,
+        },
+        select: { id: true },
+    })
+    return rows.map((row) => row.id)
+}

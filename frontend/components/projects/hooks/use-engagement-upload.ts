@@ -55,6 +55,26 @@ export function useEngagementUpload({
     const [overwriteSelections, setOverwriteSelections] = useState<Set<string>>(new Set())
     const [uploadProgress, setUploadProgress] = useState(0)
 
+    // Pre-flight document cap check — runs before any upload starts
+    const checkDocumentCap = async (count: number): Promise<boolean> => {
+        try {
+            const res = await fetch(`/api/billing/document-gate?projectId=${encodeURIComponent(projectId)}&count=${count}`)
+            if (!res.ok) return true // fail open on unexpected errors
+            const payload = await res.json() as { allowed: boolean; cap: number | null; current: number | null; available: number }
+            if (!payload.allowed) {
+                const { cap, current, available } = payload
+                const msg = count === 1
+                    ? `Your plan limit of ${cap} files has been reached (${current} used). Delete any unused file or upgrade to remove the limit.`
+                    : `This upload contains ${count} files, but your plan has a limit of ${cap}, with only ${available} slot${available !== 1 ? 's' : ''} left. Upload fewer files, within the available limit or upgrade to remove the limit.`
+                addToast({ type: 'error', title: 'File limit reached', message: msg, duration: 12000 })
+                return false
+            }
+        } catch {
+            // fail open — server will enforce the hard cap on indexing
+        }
+        return true
+    }
+
     // Core Upload Function (Direct to Drive)
     const uploadFile = async (
         file: File,
@@ -303,6 +323,10 @@ export function useEngagementUpload({
 
     // Queue Processor
     const processUploads = async (fileList: FileList) => {
+        const totalFiles = fileList.length
+        const capAllowed = await checkDocumentCap(totalFiles)
+        if (!capAllowed) return
+
         setIsUploading(true)
         setIsUploadModalOpen(true)
 
@@ -417,6 +441,15 @@ export function useEngagementUpload({
     }
 
     const processFolderUpload = async (fileList: FileList) => {
+        // Count only actual files (entries with a filename), not directory entries
+        const totalFiles = Array.from(fileList).filter(f => {
+            const rel = (f as File & { webkitRelativePath?: string }).webkitRelativePath || ''
+            const parts = rel.split('/')
+            return parts[parts.length - 1] !== ''
+        }).length
+        const capAllowed = await checkDocumentCap(totalFiles)
+        if (!capAllowed) return
+
         const currentFolderId = currentFolderIdRef.current
         if (!sessionRef.current?.access_token || !currentFolderId) return
         const token = sessionRef.current.access_token

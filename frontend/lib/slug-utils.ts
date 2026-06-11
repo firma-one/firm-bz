@@ -7,7 +7,6 @@
  * We use clean truncation without ellipsis for better URL compatibility.
  */
 
-const MAX_SLUG_LENGTH = 12 // Total characters including suffix
 
 /**
  * Generate a URL-friendly slug from a name
@@ -61,9 +60,7 @@ export function generateUniqueSlug(
  * Format: base (7 chars) + '-' + suffix (4 chars) = 12 total
  */
 export function generateFirmSlug(name: string): string {
-  // Remove "firm" word if present for cleaner slugs
-  const cleanedName = name.replace(/firm/gi, '').trim() || name
-  return generateUniqueSlug(cleanedName, 7, 4)
+  return generateUniqueSlug(name, 7, 4)
 }
 
 /**

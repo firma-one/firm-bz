@@ -97,6 +97,11 @@ AI layer using Gemma 4 (HuggingFace Transformers, same runtime as release notes 
 
 ## Infrastructure / Maintenance
 
+- [ ] **Refactor: Replace `sandboxOnly` with `isAnchorFirm()`** — [plan](../../.claude/plans/refactor-is-anchor-firm.md)
+  - `Firm.sandboxOnly` maps to DB column `isAnchor`; the two names are used interchangeably across 165+ references
+  - `isAnchorFirm()` utility added to `lib/billing/effective-billing-caps.ts`; all new code should use it
+  - Migrate existing reads in batches: billing/server layer first, then UI components
+
 - [ ] **Unit Tests** — critical business logic coverage
   - Invite flow: token verification, email match, permission fallback (engagementMember DB check)
   - Reminder system: `upsertFollowUpReminder` upsert/dedup, `markReminderDone` cleanup, `entityTableKey` resolver mapping

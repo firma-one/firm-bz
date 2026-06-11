@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { resolveBillingAnchorFirmId, listBillableFirmIdsInBillingGroup } from '@/lib/billing/billing-group'
-import { getEntitledEngagementsCapForFirm } from '@/lib/billing/subscription-metadata'
+import { getActiveSubscriptionMetadataForFirm, parseEntitledClients } from '@/lib/billing/subscription-metadata'
 
 export async function GET(request: NextRequest) {
     const supabase = await createClient()
@@ -28,15 +28,12 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const cap = await getEntitledEngagementsCapForFirm(membership.firmId)
     const anchorFirmId = await resolveBillingAnchorFirmId(membership.firmId)
+    const metadata = await getActiveSubscriptionMetadataForFirm(anchorFirmId)
+    const cap = parseEntitledClients(metadata)
     const firmIds = await listBillableFirmIdsInBillingGroup(anchorFirmId)
-    const count = await prisma.engagement.count({
-        where: {
-            firmId: { in: firmIds },
-            deletedAt: null,
-            isDeleted: false,
-        },
+    const count = await prisma.client.count({
+        where: { firmId: { in: firmIds }, deletedAt: null },
     })
 
     const allowed = cap == null ? true : count < cap
@@ -47,4 +44,3 @@ export async function GET(request: NextRequest) {
         anchorFirmId,
     })
 }
-

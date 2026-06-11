@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { requireEngagementMember, isExternalEngagementRole } from '@/lib/engagement-access'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { safeInngestSend } from '@/lib/inngest/client'
+import { assertWithinDocumentCap } from '@/lib/billing/effective-billing-caps'
 
 /**
  * POST /api/projects/[projectId]/documents/[documentId]/index-file-intake
@@ -44,6 +45,9 @@ export async function POST(
 
     const now = new Date().toISOString()
     const intakeLock = { type: 'intake', uploadedBy: user.id, uploadedAt: now }
+
+    // Gate before any DB writes — ensures cap is checked before record creation
+    await assertWithinDocumentCap(project.client.firmId, 1)
 
     // Try to find an existing record first (happy path — Inngest already indexed it)
     const existing = await prisma.engagementDocument.findFirst({

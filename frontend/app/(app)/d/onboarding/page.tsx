@@ -13,7 +13,6 @@ import { GoogleSharedDriveIcon } from "@/components/ui/google-shared-drive-icon"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useOnboarding } from "@/lib/onboarding-context"
 import { SANDBOX_HIERARCHY, SANDBOX_FIRM_NAME_FALLBACK } from "@/lib/services/sample-file-service"
-import { buildDefaultSandboxFirmName } from "@/lib/onboarding/sandbox-firm-name"
 import { BRAND_NAME } from "@/config/brand"
 import { logger } from '@/lib/logger'
 import { buildUserSettingsPlus } from '@/lib/actions/user-settings'
@@ -134,8 +133,8 @@ function SandboxHierarchyPreview({
 function buildFinalizeTerminalSteps(firmName: string): string[] {
     return [
         'Queueing workspace build (runs in the background)…',
-        'Preparing sandbox folder structure on your Drive…',
-        `Creating sandbox firm: ${firmName}…`,
+        'Preparing Demo firm folder structure on your Drive…',
+        `Creating Demo firm: ${firmName}…`,
         ...SANDBOX_HIERARCHY.flatMap((client) => [
             `Setting up client: ${client.clientName}…`,
             ...client.engagements.map((e) => `Creating engagement: ${e.name}…`),
@@ -306,20 +305,6 @@ const OnboardingContent = () => {
     /** Countdown seconds on Step 4 CTA before auto-navigation (after last progress step). */
     const [finalizeAutoNavSeconds, setFinalizeAutoNavSeconds] = useState<number | null>(null)
     const shellPrepareInFlightRef = useRef(false)
-
-    useEffect(() => {
-        if (!user) return
-        setSandboxFirmName((prev) =>
-            prev === SANDBOX_FIRM_NAME_FALLBACK
-                ? buildDefaultSandboxFirmName(
-                      (user.user_metadata as Record<string, unknown> | undefined)?.first_name as
-                          | string
-                          | undefined,
-                      SANDBOX_FIRM_NAME_FALLBACK
-                  )
-                : prev
-        )
-    }, [user?.id])
 
     // Step 3: Subscribe (import removed)
     const [orgName, setOrgName] = useState("")
@@ -1715,7 +1700,7 @@ const OnboardingContent = () => {
                                 <LoadingSpinner size="lg" className="mb-4" />
                                 <p className="text-[0.8125rem] font-semibold text-[#1b1b1d]">Initializing workspace…</p>
                                 <p className="text-xs text-[#45474c]/60 mt-2 max-w-sm">
-                                    This only takes a moment. Sandbox folders and sample data run in the background after you connect Google Drive.
+                                    This only takes a moment. Demo firm folders and sample data run in the background after you connect Google Drive.
                                 </p>
                                 {error && (
                                     <div className="mt-6 w-full max-w-md p-4 bg-red-50 border border-red-200 rounded-[2px] text-[0.8125rem] text-red-700 flex items-start gap-3 text-left">
@@ -1772,7 +1757,7 @@ const OnboardingContent = () => {
                                             <StepRequirementBadge kind="mandatory" />
                                         </div>
                                         <p className="text-[0.8125rem] text-[#45474c]">
-                                            We&apos;re creating your sandbox firm structure, clients, and engagements on your Drive. This runs in the background—you can continue when you&apos;re ready.
+                                            We&apos;re creating your Demo firm structure, clients, and engagements on your Drive. This runs in the background—you can continue when you&apos;re ready.
                                         </p>
                                     </div>
                                 </div>
@@ -1785,7 +1770,7 @@ const OnboardingContent = () => {
                                             </div>
                                             <div className="min-w-0 flex-1">
                                                 <div className="flex flex-wrap items-baseline justify-between gap-2 gap-y-1">
-                                                    <p className="font-semibold text-[#1b1b1d]">Building your sandbox</p>
+                                                    <p className="font-semibold text-[#1b1b1d]">Building your Demo firm</p>
                                                     {finalizeTerminalSteps.length > 0 ? (
                                                         <span className="text-[11px] font-medium tabular-nums text-[#45474c]">
                                                             {finalizeTerminalActiveIndex} of {finalizeTerminalSteps.length} complete

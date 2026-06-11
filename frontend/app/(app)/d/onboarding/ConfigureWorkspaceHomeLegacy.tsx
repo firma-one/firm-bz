@@ -333,7 +333,7 @@ export function ConfigureWorkspaceHomeLegacy({
               onClick={() => setStep(2)}
               className="w-full py-6 bg-slate-900 text-white hover:bg-slate-800 rounded-xl font-bold transition-all shadow-lg active:scale-[0.98] cta-hover-arrow flex items-center justify-center gap-2"
             >
-              Continue to Sandbox Setup
+              Continue to Demo Firm Setup
               <ArrowRight className="h-5 w-5 animate-arrow" />
             </Button>
           </div>

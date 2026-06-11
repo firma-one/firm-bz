@@ -76,7 +76,7 @@ export function BillingCheckoutFootnote({ dense }: { dense?: boolean }) {
         <p
             className={cn(
                 'leading-relaxed',
-                dense ? 'text-[11px] text-slate-500' : 'text-xs text-slate-600'
+                dense ? 'text-[11px] text-slate-600' : 'text-xs text-slate-700'
             )}
         >
             {upgradeCopy.billingCheckoutIntro}{' '}
@@ -90,11 +90,18 @@ export function BillingRefundPolicyNote({ compact }: { compact?: boolean }) {
     return (
         <p
             className={cn(
-                'leading-relaxed text-slate-500',
+                'leading-relaxed text-slate-600',
                 compact ? 'text-xs' : 'text-xs sm:text-xs'
             )}
         >
-            {upgradeCopy.billingRefundPolicyNote}
+            {upgradeCopy.billingRefundPolicyNoteIntro}{' '}
+            <Link
+                href="/d/support"
+                className="font-medium underline underline-offset-2 text-slate-700 decoration-slate-300/80 hover:text-slate-900 hover:decoration-slate-400"
+            >
+                contact support
+            </Link>
+            {upgradeCopy.billingRefundPolicyNoteOutro}
         </p>
     )
 }

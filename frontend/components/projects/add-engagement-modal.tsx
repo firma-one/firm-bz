@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import {
     Dialog,
     DialogContent,
@@ -64,8 +65,8 @@ export function AddEngagementModal({ firmSlug, clientSlug, firmSandboxOnly = fal
                     const cap = typeof payload.cap === 'number' ? payload.cap : null
                     const count = typeof payload.count === 'number' ? payload.count : null
                     setCapMessage(cap != null && count != null
-                        ? `Engagement limit reached (${count}/${cap}). Upgrade to add more.`
-                        : 'Engagement limit reached. Upgrade to add more.')
+                        ? `You have consumed the entitlements on your plan (${count} of ${cap}). Upgrade to add more.`
+                        : 'You have consumed the entitlements on your plan. Upgrade to add more.')
                 } else {
                     setCapMessage(null)
                 }
@@ -211,8 +212,13 @@ export function AddEngagementModal({ firmSlug, clientSlug, firmSandboxOnly = fal
                                 </div>
                             )}
                             {capBlocked && capMessage && (
-                                <div className="bg-amber-50 border border-amber-200 text-amber-800 text-xs px-3 py-2 rounded">
-                                    {capMessage}
+                                <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs px-3 py-2 rounded mb-3 flex items-center gap-2">
+                                    <Lock className="h-3.5 w-3.5 shrink-0 text-rose-500" />
+                                    <span>
+                                        {capMessage.split('Upgrade')[0]}
+                                        <Link href="/d/billing" className="font-semibold underline underline-offset-2 hover:text-rose-900">Upgrade</Link>
+                                        {capMessage.split('Upgrade')[1]}
+                                    </span>
                                 </div>
                             )}
 

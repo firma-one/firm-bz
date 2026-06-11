@@ -104,7 +104,7 @@ export function InviteMemberModal({ projectId, open, onOpenChange, personas, pre
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-[500px]">
                 <DialogHeader>
-                    <DialogTitle>Invite to Project</DialogTitle>
+                    <DialogTitle>Invite to Engagement</DialogTitle>
                 </DialogHeader>
 
                 <form onSubmit={handleSubmit} className="space-y-6 pt-4">

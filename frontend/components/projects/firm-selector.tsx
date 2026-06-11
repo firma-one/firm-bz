@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useMemo, useState } from 'react'
-import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Building2, SquarePlus, ChevronDown, ChevronUp, Info, Box } from 'lucide-react'
 import {
@@ -14,9 +13,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { FirmSwitchDialog } from './firm-switch-dialog'
 import { AddFirmModal } from './add-firm-modal'
 import { useAuth } from '@/lib/auth-context'
-import { useCanCreateAdditionalFirm } from '@/lib/hooks/use-can-create-additional-firm'
 import { validateCheckoutReturnTo } from '@/lib/billing/checkout-return-path'
-import { upgradeCopy } from '@/lib/billing/upgrade-copy'
 import { buildBillingPageHref } from '@/lib/billing/build-billing-page-href'
 
 const ADD_FIRM_VALUE = '__create__'
@@ -39,9 +36,7 @@ interface FirmSelectorProps {
 
 export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className, compact }: FirmSelectorProps) {
     const { user } = useAuth()
-    const { canCreateAdditionalFirm, loadingEntitlement, gateReason, gateCap } = useCanCreateAdditionalFirm(user?.id)
-    const addFirmDisabled = !user?.id || loadingEntitlement || !canCreateAdditionalFirm
-    const showAddFirmUpgradeHint = Boolean(user?.id) && !loadingEntitlement && !canCreateAdditionalFirm
+    const addFirmDisabled = !user?.id
 
     const pathname = usePathname()
     const [switchDialogOpen, setSwitchDialogOpen] = useState(false)
@@ -128,12 +123,12 @@ export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className,
                         {selectedOrg?.sandboxOnly && (
                             <Tooltip>
                                 <TooltipTrigger asChild>
-                                    <span className="shrink-0 flex items-center" aria-label="Sandbox firm">
+                                    <span className="shrink-0 flex items-center" aria-label="Demo firm">
                                         <Box className="h-3.5 w-3.5 text-[#9ca3af]" />
                                     </span>
                                 </TooltipTrigger>
                                 <TooltipContent side="top" className="text-xs">
-                                    Sandbox Firm — no real client data
+                                    Demo Firm — contains sample data
                                 </TooltipContent>
                             </Tooltip>
                         )}
@@ -160,12 +155,12 @@ export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className,
                                 {selectedOrg?.sandboxOnly && (
                                     <Tooltip>
                                         <TooltipTrigger asChild>
-                                            <span className="shrink-0 flex items-center" aria-label="Sandbox firm">
+                                            <span className="shrink-0 flex items-center" aria-label="Demo firm">
                                                 <Box className="h-3.5 w-3.5 text-[#9ca3af]" />
                                             </span>
                                         </TooltipTrigger>
                                         <TooltipContent side="top" className="text-xs">
-                                            Sandbox Firm — no real client data
+                                            Demo Firm — contains sample data
                                         </TooltipContent>
                                     </Tooltip>
                                 )}
@@ -185,70 +180,24 @@ export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className,
                     viewportClassName="p-1"
                     data-firm-selector
                 >
-                    {showAddFirmUpgradeHint ? (
-                        <div
-                            className="w-full max-w-full border-b border-[#e5e7eb] bg-[#f3f4f6] px-3 py-2.5"
-                            onPointerDown={(e) => e.stopPropagation()}
-                            role="presentation"
+                    <div
+                        className="px-2.5 py-2 border-b border-[#e5e7eb]"
+                        onPointerDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+                        role="presentation"
+                    >
+                        <button
+                            type="button"
+                            disabled={addFirmDisabled}
+                            onClick={() => {
+                                setIsSelectOpen(false)
+                                setAddOrgModalOpen(true)
+                            }}
+                            className="flex w-full items-center justify-center gap-2 rounded-[2px] border-0 bg-primary px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition-all hover:brightness-110 hover:shadow-[0_6px_16px_-4px_rgba(0,0,0,0.20),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 active:shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:brightness-100 disabled:hover:shadow-sm disabled:hover:translate-y-0"
                         >
-                            <div className="flex items-start gap-2 min-w-0">
-                                <SquarePlus className="h-4 w-4 shrink-0 text-[#45474c] translate-y-0.5" aria-hidden />
-                                <div className="min-w-0 flex-1 text-left">
-                                    <p className="text-sm font-medium text-[#1b1b1d] leading-snug">
-                                        {gateReason === 'at_cap' ? 'Firm limit reached' : upgradeCopy.dropdownHeadline}
-                                    </p>
-                                    <p className="text-xs text-[#45474c] leading-snug mt-1.5">
-                                        {gateReason === 'at_cap'
-                                            ? `Your plan allows ${gateCap ?? firms.length} firm workspace${(gateCap ?? firms.length) === 1 ? '' : 's'}. Contact us to increase your limit.`
-                                            : upgradeCopy.dropdownBody}
-                                    </p>
-                                    {gateReason === 'at_cap' ? (
-                                        <a
-                                            href="mailto:support@firmaone.com"
-                                            className="mt-2 inline-block text-xs font-semibold text-primary underline-offset-2 hover:underline text-left"
-                                        >
-                                            Contact support
-                                        </a>
-                                    ) : (
-                                        <Link
-                                            href={buildBillingPageHref({
-                                                firmSlug: firmForBilling?.slug ?? null,
-                                                pathname: pathname ?? null,
-                                            })}
-                                            className="mt-2 inline-block text-xs font-semibold text-primary hover:text-primary underline-offset-2 hover:underline text-left"
-                                        >
-                                            {upgradeCopy.dropdownAction}
-                                        </Link>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    ) : (
-                        <div
-                            className="px-2.5 py-2 border-b border-[#e5e7eb]"
-                            onPointerDown={(e) => { e.preventDefault(); e.stopPropagation() }}
-                            role="presentation"
-                        >
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setIsSelectOpen(false)
-                                    if (addFirmDisabled) {
-                                        window.location.assign(buildBillingPageHref({
-                                            firmSlug: firmForBilling?.slug ?? null,
-                                            pathname: pathname ?? null,
-                                        }))
-                                    } else {
-                                        setAddOrgModalOpen(true)
-                                    }
-                                }}
-                                className="flex w-full items-center justify-center gap-2 rounded-[2px] border-0 bg-primary px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition-all hover:brightness-110 hover:shadow-[0_6px_16px_-4px_rgba(0,0,0,0.20),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 active:shadow-sm"
-                            >
-                                <SquarePlus className="h-4 w-4" aria-hidden />
-                                Add Firm
-                            </button>
-                        </div>
-                    )}
+                            <SquarePlus className="h-4 w-4" aria-hidden />
+                            Add Firm
+                        </button>
+                    </div>
                     {firms.map((org) => (
                         <SelectItem
                             key={org.id}
@@ -276,10 +225,10 @@ export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className,
                                 {org.sandboxOnly && (
                                     <Tooltip>
                                         <TooltipTrigger asChild>
-                                            <Box className="h-3.5 w-3.5 shrink-0 text-[#9ca3af]" aria-label="Sandbox firm" />
+                                            <Box className="h-3.5 w-3.5 shrink-0 text-[#9ca3af]" aria-label="Demo firm" />
                                         </TooltipTrigger>
                                         <TooltipContent side="top" className="text-xs">
-                                            Sandbox Firm — no real client data
+                                            Demo Firm — contains sample data
                                         </TooltipContent>
                                     </Tooltip>
                                 )}

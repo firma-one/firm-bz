@@ -1,11 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/utils/supabase/server'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { prisma } from '@/lib/prisma'
 import { IndexingInterceptor } from '@/lib/services/indexing-interceptor'
+import { assertWithinDocumentCap } from '@/lib/billing/effective-billing-caps'
 import { logger } from '@/lib/logger'
 
 export async function POST(request: NextRequest) {
     try {
+        const supabase = await createClient()
+        const { data: { user }, error: authError } = await supabase.auth.getUser()
+        if (authError || !user) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        }
+
         const body = await request.json()
         const { connectionId, fileIds, mode, parentId, userToken } = body // Extract userToken
 
@@ -14,6 +22,15 @@ export async function POST(request: NextRequest) {
                 { error: 'Missing required params' },
                 { status: 400 }
             )
+        }
+
+        // Enforce document cap before any Drive operations
+        const folderMeta = await prisma.engagementDocument.findFirst({
+            where: { externalId: parentId },
+            select: { firmId: true },
+        })
+        if (folderMeta?.firmId) {
+            await assertWithinDocumentCap(folderMeta.firmId, fileIds.length)
         }
 
         // Sandbox: import from Google Drive is allowed (Add → Import); other creation paths are restricted in UI + linked-files API.

@@ -11,6 +11,7 @@ import { blockIfEngagementFileMutationForbidden } from '@/lib/engagement-access'
 import { resolveEngagementConnector } from '@/lib/connectors/resolve-client-connector'
 import { IndexingInterceptor } from '@/lib/services/indexing-interceptor'
 import { getLock, isDocumentPrivate } from '@/lib/sharing-settings'
+import { assertWithinDocumentCap } from '@/lib/billing/effective-billing-caps'
 // GET: List linked files for a connector
 export async function GET(request: NextRequest) {
     try {
@@ -598,15 +599,17 @@ export async function POST(request: NextRequest) {
                 }
 
                 const orgId = engagement?.client?.firmId
-                if (orgId) {
-                    await safeInngestSend('file.index.requested', {
-                        organizationId: orgId,
-                        clientId: engagement?.clientId ?? null,
-                        projectId: engagement?.id ?? (bodyEngagementId as string) ?? null,
-                        externalId: newFile.id as string,
-                        fileName: name,
-                    })
+                if (!orgId) {
+                    return NextResponse.json({ error: 'Could not resolve firm for this folder' }, { status: 400 })
                 }
+                await assertWithinDocumentCap(orgId, 1)
+                await safeInngestSend('file.index.requested', {
+                    organizationId: orgId,
+                    clientId: engagement?.clientId ?? null,
+                    projectId: engagement?.id ?? (bodyEngagementId as string) ?? null,
+                    externalId: newFile.id as string,
+                    fileName: name,
+                })
 
                 // If EC/EV user created this folder, immediately write DB record with intake lock
                 // so the folder is visible in their DB-driven file list
@@ -721,6 +724,7 @@ export async function POST(request: NextRequest) {
             const lastDot = base.lastIndexOf('.')
             const newName = lastDot > 0 ? `${base.slice(0, lastDot)}_${randomSuffix}${base.slice(lastDot)}` : `${base}_${randomSuffix}`
 
+            await assertWithinDocumentCap(engagement.firmId, 1)
             const result = await googleDriveConnector.copyFile(connector.id, fileId, parentId, newName)
             if (!result) return NextResponse.json({ error: 'Failed to duplicate file' }, { status: 500 })
 
@@ -774,6 +778,7 @@ export async function POST(request: NextRequest) {
                     }
                     copyName = sourceName
                 }
+                await assertWithinDocumentCap(engagement.firmId, 1)
                 const result = await googleDriveConnector.copyFile(connector.id, fileId, destinationFolderId, copyName)
                 if (!result) return NextResponse.json({ error: 'Failed to copy file' }, { status: 500 })
 
@@ -955,6 +960,7 @@ export async function POST(request: NextRequest) {
                     return NextResponse.json({ success: true, count: copiedItems.length })
                 }
 
+                await assertWithinDocumentCap(targetProject.client.firmId, 1)
                 const result = await googleDriveConnector.copyFile(connector.id, fileId, destFolderId, fileName)
                 if (!result) return NextResponse.json({ error: 'Failed to copy file' }, { status: 500 })
 

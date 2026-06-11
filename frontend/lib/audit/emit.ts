@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import type { AuditScope, AuditEvent } from './constants'
+import { loadAnchorForCaps, effectiveAuditDays } from '@/lib/billing/effective-billing-caps'
 
 export interface AuditEventParams {
   firmId: string
@@ -39,4 +40,25 @@ export async function emitAuditEvent(params: AuditEventParams): Promise<void> {
       eventAt,
     },
   })
+
+  // Fire-and-forget rolling purge — do not await, never block the caller
+  void purgeStaleAuditEvents(firmId)
+}
+
+async function purgeStaleAuditEvents(firmId: string): Promise<void> {
+  try {
+    const anchor = await loadAnchorForCaps(firmId)
+    if (!anchor) return
+    const days = effectiveAuditDays(anchor)
+    if (days === null) return  // unlimited — keep all history
+
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - days)
+
+    await prisma.platformAuditEvent.deleteMany({
+      where: { firmId, eventAt: { lt: cutoff } },
+    })
+  } catch {
+    // Purge failures must never surface to callers
+  }
 }

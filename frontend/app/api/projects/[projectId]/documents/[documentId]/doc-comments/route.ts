@@ -6,6 +6,25 @@ import { canViewProject } from '@/lib/permission-helpers'
 import { getProjectDocumentContext } from '@/lib/file-utils'
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { requireEngagementMember, externalMemberCanAccessDocument } from '@/lib/engagement-access'
+import { loadAnchorForCaps, effectiveCommentHistoryDays } from '@/lib/billing/effective-billing-caps'
+
+async function purgeStaleDocComments(firmId: string): Promise<void> {
+  try {
+    const anchor = await loadAnchorForCaps(firmId)
+    if (!anchor) return
+    const days = effectiveCommentHistoryDays(anchor)
+    if (days === null) return  // unlimited — keep all history
+
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - days)
+
+    await prisma.docCommentMessage.deleteMany({
+      where: { firmId, createdAt: { lt: cutoff } },
+    })
+  } catch {
+    // Purge failures must never surface to callers
+  }
+}
 
 /**
  * GET /api/projects/[projectId]/documents/[documentId]/doc-comments
@@ -166,6 +185,9 @@ export async function POST(
         settings: true,
       },
     })
+
+    // Fire-and-forget rolling purge — do not await, never block the caller
+    void purgeStaleDocComments(ctx.orgId)
 
     // Create reminder for tagged recipient
     if (isReminder && recipientId) {

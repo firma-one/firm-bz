@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, type User } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
-import { buildDefaultSandboxFirmName } from '@/lib/onboarding/sandbox-firm-name'
 import { SANDBOX_FIRM_NAME_FALLBACK } from '@/lib/services/sample-file-service'
 import { FirmService } from '@/lib/firm-service'
 import { prisma } from '@/lib/prisma'
@@ -127,9 +126,7 @@ export async function POST(request: NextRequest) {
     const { sandboxFirmName: bodyFirmName, sandboxOrgName: legacyOrgName } = body
     const sandboxFirmNameRaw = (typeof bodyFirmName === 'string' ? bodyFirmName : legacyOrgName) as string | undefined
 
-    const resolvedFirmName =
-      (sandboxFirmNameRaw || '').trim() ||
-      buildDefaultSandboxFirmName(user.user_metadata?.first_name as string | undefined, SANDBOX_FIRM_NAME_FALLBACK)
+    const resolvedFirmName = (sandboxFirmNameRaw || '').trim() || SANDBOX_FIRM_NAME_FALLBACK
 
     logger.info('Sandbox create: shell firm + DB seed', { userId: user.id, sandboxFirmName: resolvedFirmName })
 

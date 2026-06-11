@@ -6,28 +6,34 @@ import {
 import {
     resolveBillingAnchorFirmId,
     countBillableFirmsInBillingGroup,
-    listFirmIdsInBillingGroup,
+    listBillableFirmIdsInBillingGroup,
 } from '@/lib/billing/billing-group'
-import { pricingModelFromRecurringFlag } from '@/lib/billing/pricing-model'
-import { parseEntitledFirms, parseEntitledEngagements } from '@/lib/billing/subscription-metadata'
+import { parseEntitledFirms, parseEntitledEngagements, parseEntitledClients, parseEntitledClientContacts, parseEntitledDocuments, parseEntitledAuditDays, parseEntitledCommentHistoryDays } from '@/lib/billing/subscription-metadata'
 
-const RECURRING_PRICING_MODEL = pricingModelFromRecurringFlag(true)
+// Sandbox (demo) firms keep full audit history so seeded demo data is visible,
+// regardless of entitledAuditDays in metadata (which is 0 for the free plan).
+const SANDBOX_AUDIT_DAYS = null
 
-const SANDBOX_ENGAGEMENT_CAP = 100_000
-const SANDBOX_FIRM_CAP = 1
+/**
+ * Returns true when a firm is a platform anchor/demo firm.
+ * DB column: `isAnchor` (Prisma alias: `sandboxOnly`).
+ * Exported here to avoid a circular dependency with lib/firm-service.ts.
+ * The full refactor to migrate all 165 `sandboxOnly` references is tracked in
+ * .claude/plans/refactor-is-anchor-firm.md
+ */
+export function isAnchorFirm(firm: { sandboxOnly: boolean }): boolean {
+    return firm.sandboxOnly === true
+}
 
 function enforceBillingCaps(): boolean {
-    return (
-        process.env.ENFORCE_BILLING_CAPS === 'true' ||
-        process.env.ENFORCE_BILLING_GATES === 'true'
-    )
+    return process.env.ENFORCE_BILLING_GATES === 'true'
 }
 
 function planFirmCapFallback(plan: string | null): number {
     const p = (plan ?? '').toLowerCase()
     if (/enterprise/.test(p)) return 100
-    if (/business/.test(p)) return 10
-    if (/pro/.test(p)) return 5
+    if (/business/.test(p)) return 3
+    if (/pro/.test(p)) return 1
     return 1  // Standard + unknown
 }
 
@@ -45,52 +51,98 @@ export type AnchorCapsRow = {
     subscriptionStatus: string | null
     subscriptionPlan: string | null
     pricingModel: string | null
+    hasPolarSubscriptionId: boolean
     entitledFirms: number | null
     entitledEngagements: number | null
+    entitledClients: number | null
+    entitledClientContacts: number | null
+    entitledDocuments: number | null
+    entitledAuditDays: number | null
+    entitledCommentHistoryDays: number | null
     capsLocked: boolean
 }
 
 export async function loadAnchorForCaps(firmId: string): Promise<AnchorCapsRow | null> {
     const anchorId = await resolveBillingAnchorFirmId(firmId)
-    const firm = await prisma.firm.findUnique({
-        where: { id: anchorId },
-        select: { id: true, sandboxOnly: true },
-    })
-    if (!firm) return null
+    const [anchor, requestingFirm] = await Promise.all([
+        prisma.firm.findUnique({ where: { id: anchorId }, select: { id: true, sandboxOnly: true } }),
+        anchorId !== firmId
+            ? prisma.firm.findUnique({ where: { id: firmId }, select: { sandboxOnly: true } })
+            : null,
+    ])
+    if (!anchor) return null
+    // Use the requesting firm's own isAnchor flag — not the anchor's — so a real firm
+    // grouped under a sandbox anchor still gets its plan entitlements enforced.
+    const sandboxOnly = requestingFirm != null ? isAnchorFirm(requestingFirm) : isAnchorFirm(anchor)
     const sub = await getActiveSubscriptionForFirm(anchorId)
     const settings = (sub?.settings ?? {}) as Record<string, unknown>
     const meta = (settings.metadata ?? {}) as Record<string, unknown>
     return {
-        id: firm.id,
-        sandboxOnly: firm.sandboxOnly,
+        id: anchor.id,
+        sandboxOnly,
         subscriptionStatus: subscriptionAccessStatusLabel(sub),
         subscriptionPlan: sub?.plan ?? null,
         pricingModel: sub?.pricingModel ?? null,
+        hasPolarSubscriptionId: Boolean(sub?.polarSubscriptionId),
         entitledFirms: parseEntitledFirms(meta),
         entitledEngagements: parseEntitledEngagements(meta),
+        entitledClients: parseEntitledClients(meta),
+        entitledClientContacts: parseEntitledClientContacts(meta),
+        entitledDocuments: parseEntitledDocuments(meta),
+        entitledAuditDays: parseEntitledAuditDays(meta),
+        entitledCommentHistoryDays: parseEntitledCommentHistoryDays(meta),
         capsLocked: settings.capsLocked === true,
     }
 }
 
-/** True when anchor should use sandbox demo caps (free sandbox), not paid graduation on same row. */
+/**
+ * True when anchor should use sandbox demo caps (free sandbox), not paid caps.
+ * Uses hasPolarSubscriptionId as the discriminator — free plan provisioning always writes
+ * polarSubscriptionId=null regardless of whether the Polar free product is one-time or recurring.
+ */
 export function anchorUsesSandboxCapDefaults(anchor: AnchorCapsRow): boolean {
-    if (!anchor.sandboxOnly) return false
-    if (anchor.pricingModel === RECURRING_PRICING_MODEL) return false
+    if (!isAnchorFirm(anchor)) return false
+    if (anchor.hasPolarSubscriptionId) return false
     return true
 }
 
 export function effectiveActiveEngagementCap(anchor: AnchorCapsRow): number {
-    if (anchorUsesSandboxCapDefaults(anchor)) return SANDBOX_ENGAGEMENT_CAP
-    if (anchor.entitledEngagements != null && anchor.entitledEngagements >= 0) {
-        return anchor.entitledEngagements
-    }
-    return planEngagementCapFallback(anchor.subscriptionPlan)
+    if (anchor.entitledEngagements != null && anchor.entitledEngagements >= 0) return anchor.entitledEngagements
+    return anchorUsesSandboxCapDefaults(anchor) ? 1 : planEngagementCapFallback(anchor.subscriptionPlan)
 }
 
 export function effectiveFirmGroupCapForAnchor(anchor: AnchorCapsRow): number {
-    if (anchorUsesSandboxCapDefaults(anchor)) return SANDBOX_FIRM_CAP
     if (anchor.entitledFirms != null && anchor.entitledFirms >= 1) return anchor.entitledFirms
-    return planFirmCapFallback(anchor.subscriptionPlan)
+    return anchorUsesSandboxCapDefaults(anchor) ? 1 : planFirmCapFallback(anchor.subscriptionPlan)
+}
+
+export function effectiveClientCap(anchor: AnchorCapsRow): number | null {
+    if (anchor.entitledClients != null && anchor.entitledClients >= 0) return anchor.entitledClients
+    return null
+}
+
+export function effectiveClientContactCap(anchor: AnchorCapsRow): number | null {
+    if (anchor.entitledClientContacts != null && anchor.entitledClientContacts >= 0) return anchor.entitledClientContacts
+    return null
+}
+
+export function effectiveDocumentCap(anchor: AnchorCapsRow): number | null {
+    if (anchor.entitledDocuments != null && anchor.entitledDocuments >= 0) return anchor.entitledDocuments
+    return null
+}
+
+/** Returns the audit retention window in days, or null for unlimited. 0 = no history. */
+export function effectiveAuditDays(anchor: AnchorCapsRow): number | null {
+    // Sandbox demo firms always keep unlimited history regardless of plan metadata
+    if (anchorUsesSandboxCapDefaults(anchor)) return SANDBOX_AUDIT_DAYS
+    if (anchor.entitledAuditDays != null && anchor.entitledAuditDays >= 0) return anchor.entitledAuditDays
+    return null
+}
+
+/** Returns the comment history retention window in days, or null for unlimited. 0 = no history. */
+export function effectiveCommentHistoryDays(anchor: AnchorCapsRow): number | null {
+    if (anchor.entitledCommentHistoryDays != null && anchor.entitledCommentHistoryDays >= 0) return anchor.entitledCommentHistoryDays
+    return null
 }
 
 export async function assertWithinActiveEngagementCap(workspaceFirmId: string): Promise<void> {
@@ -98,10 +150,14 @@ export async function assertWithinActiveEngagementCap(workspaceFirmId: string): 
 
     const anchor = await loadAnchorForCaps(workspaceFirmId)
     if (!anchor) throw new Error('Firm not found')
-    if (anchorUsesSandboxCapDefaults(anchor)) return
+
+    // For sandbox anchors (free plan), enforce entitledEngagements from metadata
+    // against billable (non-sandbox) firms only — sandbox firm engagements don't count.
+    const isSandboxAnchor = anchorUsesSandboxCapDefaults(anchor)
+    if (isSandboxAnchor && (anchor.entitledEngagements == null || anchor.entitledEngagements < 0)) return
 
     const cap = effectiveActiveEngagementCap(anchor)
-    const groupFirmIds = await listFirmIdsInBillingGroup(anchor.id)
+    const groupFirmIds = await listBillableFirmIdsInBillingGroup(anchor.id)
     const count = await prisma.engagement.count({
         where: {
             firmId: { in: groupFirmIds },
@@ -116,18 +172,90 @@ export async function assertWithinActiveEngagementCap(workspaceFirmId: string): 
     }
 }
 
-/** Firm workspaces allowed for this billing anchor (anchor + satellites). */
+/** Firm workspaces allowed for this billing anchor (anchor + satellites). Sandbox firm excluded from count. */
 export async function assertWithinFirmGroupCap(anchorFirmId: string): Promise<void> {
     if (!enforceBillingCaps()) return
 
     const anchor = await loadAnchorForCaps(anchorFirmId)
-    if (!anchor || anchorUsesSandboxCapDefaults(anchor)) return
+    if (!anchor) return
 
-    const cap = effectiveFirmGroupCapForAnchor(anchor)
+    // For free plan (sandbox defaults): cap comes from entitledFirms (non-sandbox firms only).
+    // For paid plan: cap comes from effectiveFirmGroupCapForAnchor.
+    const cap = anchorUsesSandboxCapDefaults(anchor)
+        ? (anchor.entitledFirms ?? 1)
+        : effectiveFirmGroupCapForAnchor(anchor)
+
     const n = await countBillableFirmsInBillingGroup(anchorFirmId)
     if (n >= cap) {
         throw new Error(
-            `Your subscription allows ${cap} firm workspace${cap === 1 ? '' : 's'}. Upgrade or contact support to add more.`
+            `Your plan allows ${cap} firm workspace${cap === 1 ? '' : 's'}. Upgrade or contact support to add more.`
+        )
+    }
+}
+
+export async function assertWithinClientCap(firmId: string): Promise<void> {
+    if (!enforceBillingCaps()) return
+
+    const anchor = await loadAnchorForCaps(firmId)
+    if (!anchor) return
+    if (anchorUsesSandboxCapDefaults(anchor) && (anchor.entitledClients == null || anchor.entitledClients < 0)) return
+
+    const cap = effectiveClientCap(anchor)
+    if (cap === null) return
+
+    const groupFirmIds = await listBillableFirmIdsInBillingGroup(anchor.id)
+    const count = await prisma.client.count({
+        where: { firmId: { in: groupFirmIds }, deletedAt: null },
+    })
+    if (count >= cap) {
+        throw new Error(
+            `Your plan allows ${cap} client${cap === 1 ? '' : 's'}. Upgrade to add more.`
+        )
+    }
+}
+
+export async function assertWithinClientContactCap(firmId: string): Promise<void> {
+    if (!enforceBillingCaps()) return
+
+    const anchor = await loadAnchorForCaps(firmId)
+    if (!anchor) return
+    if (anchorUsesSandboxCapDefaults(anchor) && (anchor.entitledClientContacts == null || anchor.entitledClientContacts < 0)) return
+
+    const cap = effectiveClientContactCap(anchor)
+    if (cap === null) return
+
+    const groupFirmIds = await listBillableFirmIdsInBillingGroup(anchor.id)
+    const count = await prisma.clientContact.count({
+        where: { firmId: { in: groupFirmIds } },
+    })
+    if (count >= cap) {
+        throw new Error(
+            `Your plan allows ${cap} client contact${cap === 1 ? '' : 's'} across all clients. Upgrade to add more.`
+        )
+    }
+}
+
+/**
+ * Check document cap before indexing. Pass batchSize > 1 for batch uploads so
+ * the entire batch is rejected upfront if it would exceed the cap.
+ */
+export async function assertWithinDocumentCap(firmId: string, batchSize = 1): Promise<void> {
+    if (!enforceBillingCaps()) return
+
+    const anchor = await loadAnchorForCaps(firmId)
+    if (!anchor) return
+    if (anchorUsesSandboxCapDefaults(anchor) && (anchor.entitledDocuments == null || anchor.entitledDocuments < 0)) return
+
+    const cap = effectiveDocumentCap(anchor)
+    if (cap === null) return
+
+    const groupFirmIds = await listBillableFirmIdsInBillingGroup(anchor.id)
+    const count = await prisma.engagementDocument.count({
+        where: { firmId: { in: groupFirmIds }, isFolder: false },
+    })
+    if (count + batchSize > cap) {
+        throw new Error(
+            `Your plan allows ${cap} file${cap === 1 ? '' : 's'} and folder${cap === 1 ? '' : 's'}. You have ${count} indexed. Upgrade to add more.`
         )
     }
 }

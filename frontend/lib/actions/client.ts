@@ -9,6 +9,7 @@ import { resolveClientConnector } from '@/lib/connectors/resolve-client-connecto
 import type { ClientStatus } from '@prisma/client'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { upsertFollowUpReminder } from '@/lib/actions/user-reminders'
+import { assertWithinClientCap, assertWithinClientContactCap } from '@/lib/billing/effective-billing-caps'
 
 export type LwCrmClientStatus = 'PROSPECT' | 'ACTIVE' | 'ON_HOLD' | 'PAST'
 
@@ -57,6 +58,7 @@ export async function createClient(organizationSlug: string, data: CreateClientD
 
     const { requireAccess } = await import('@/lib/billing/subscription-gate')
     await requireAccess(firm.id, 'clients.create')
+    await assertWithinClientCap(firm.id)
 
     const membership = firm.members[0]
     if (!membership) {
@@ -444,6 +446,7 @@ export async function createClientContact(
     if (error || !user) throw new Error('Unauthorized')
     const { firmId, clientId } = await assertCanManageClient(organizationSlug, clientSlug)
     if (!data.name?.trim()) throw new Error('Name is required')
+    await assertWithinClientContactCap(firmId)
 
     const contact = await prisma.clientContact.create({
         data: {

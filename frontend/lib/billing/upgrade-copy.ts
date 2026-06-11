@@ -5,7 +5,7 @@ export const upgradeCopy = {
     sheetTitle: 'Add a custom firm',
     /** Centered upgrade modal title */
     upgradeDialogTitle: 'Add a custom firm',
-    upgradeDialogBody: `Your free plan includes a sandbox firm for exploration and demos. Pick a plan below—you will finish on a secure hosted checkout page, then return to your workspace.`,
+    upgradeDialogBody: `Your free plan includes a Demo firm and 1 real firm. Pick a plan below to take off the training wheels—you will finish on a secure hosted checkout page, then return to your workspace.`,
     planPickerCta: 'Continue to checkout',
     /** Hosted checkout when changing paid plan without customer portal */
     planPickerSwitchPlanCta: 'Switch plan',
@@ -21,40 +21,42 @@ export const upgradeCopy = {
     currentPlanLabelValidUntil: 'Valid until',
     currentPlanLabelAccessEnds: 'Access ends',
     currentPlanValidUntilUnlimited: 'Unlimited',
-    scheduledCancelWarning: 'Subscription cancelled — access to non-sandbox firms ends on',
+    scheduledCancelWarning: 'Subscription cancelled — access to custom firms ends on',
     scheduledCancelWarningTrail: '. Reactivate before this date to keep access.',
     /** https://polar.sh — linked from billing UI */
     polarShUrl: 'https://polar.sh',
     polarLinkLabel: 'Polar',
     polarTooltip: `Polar is a billing and checkout platform. Card payments run on Stripe-backed infrastructure—you never enter card details inside ${BRAND_NAME}.`,
     /** Footnote (Polar link injected between intro and outro in BillingCheckoutFootnote). */
-    billingCheckoutIntro: `You’ll pay on a secure, encrypted checkout hosted by our billing partner`,
-    billingCheckoutOutro: `. Payments run on Stripe-backed infrastructure—${BRAND_NAME} never collects or stores your full card number. When checkout completes, you’ll return here automatically.`,
+    billingCheckoutIntro: `You'll pay on a secure, encrypted checkout hosted by our billing partner`,
+    billingCheckoutOutro: `. Payments run on Stripe-backed infrastructure—${BRAND_NAME} never collects or stores your full card number. When checkout completes, you'll return here automatically.`,
     /** Shown under the Compare plans control (portal pair or top-of-picker link). */
-    billingFooterHelp: 'Use Compare plans for tiers and limits. For help with charges or invoices, contact support at',
+    billingFooterHelp: 'Use Compare plans for tiers and limits.',
     planPickerEmpty:
         'No subscription plans are available here right now. Open the full pricing page or try again later.',
-    planPickerMissingFirm: 'We couldn’t determine which workspace to bill. Select a firm from the list, then open “How to upgrade” again.',
-    sheetBody: `Your free plan includes a sandbox firm for exploration and demos. To add custom firms for day-to-day business and client work, upgrade to a paid plan on ${BRAND_NAME}.`,
+    planPickerMissingFirm: "We couldn't determine which workspace to bill. Select a firm from the list, then open \"How to upgrade\" again.",
+    sheetBody: `Your free plan includes a Demo firm and 1 real firm. To add more firms for day-to-day business and client work, upgrade to a paid plan on ${BRAND_NAME}.`,
     sheetAfterCheckout: 'You will finish checkout in the browser, then return to this workspace.',
     dropdownHeadline: 'Add firm',
     dropdownBody:
-        'Sandbox is included on the free plan. Each additional custom firm requires an active subscription.',
+        'Demo firm is included on the free plan. Each custom firm requires an active subscription.',
     dropdownAction: 'How to upgrade',
-    billingTitle: 'Upgrade for custom firms',
+    billingTitle: 'Scale as you grow',
     /** Single page `<h1>` for `/d/billing` and onboarding subscribe step (shared). */
     billingPageTitle: 'Billing & plans',
     /** In-card heading above workspace name (avoids duplicating the page title). */
     billingCardWorkspaceHeading: 'This workspace',
-    billingHeadline: 'Grow beyond the sandbox',
-    billingBody: `Your sandbox remains available on the free tier. Subscribe to add custom firms for production use. When checkout completes, you’ll return to the workspace you started from.`,
-    billingTrustLine1: 'Hosted checkout',
-    billingTrustLine1Detail: `Your card is entered only on our billing partner’s secure page—not inside ${BRAND_NAME}.`,
+    billingHeadline: 'Scale as you grow',
+    billingBody: `Your current plan includes limits on firms, clients, engagements and documents.`,
+    billingBodyLine2: `Your Demo firm is always available on all plans. Upgrade to increase your limits.`,
+    billingCheckoutReturnNote: `When checkout completes, you\'ll return to the workspace you started from.`,
+    billingTrustLine1: 'Secure Checkout',
+    billingTrustLine1Detail: `Your card is entered only on our billing partner's secure page—not inside ${BRAND_NAME}.`,
     billingTrustLine2: 'Workspace stays linked',
     billingTrustLine2Detail: 'This upgrade applies to the workspace shown below.',
-    billingTrustLine3: 'Clear pricing',
+    billingTrustLine3: 'Pricing before tax',
     billingTrustLine3Detail:
-        'The price and billing period on each plan match what you will confirm at checkout.',
+        'Prices shown exclude local taxes, which are calculated and confirmed at checkout.',
     billingIncludedLabel: 'Included on free tier',
     billingRecommendedBadge: 'Recommended',
     /** react-joyride: onboarding billing — step 1 highlights Skip, then the chosen plan card. */
@@ -81,8 +83,8 @@ export const upgradeCopy = {
     checkoutHintJoyrideBody:
         'Click your avatar at the bottom of the sidebar, then choose Billing to compare plans and complete checkout.',
     checkoutHintJoyrideDone: 'Got it',
-    freeSandboxFootnote: 'No checkout needed—keep exploring in your sandbox.',
-    addFirmModalHint: `The free plan includes your sandbox. Subscribe to add custom firms for your business.`,
+    freeSandboxFootnote: 'No checkout needed—keep exploring your Demo firm.',
+    addFirmModalHint: `The free plan includes your Demo firm. Subscribe to add custom firms for your business.`,
     ctaContinueBilling: 'Continue to billing',
     ctaComparePlans: 'Compare plans',
     /** Onboarding billing step — defer subscribe and continue setup (e.g. connect Drive). */
@@ -113,6 +115,7 @@ export const upgradeCopy = {
     checkoutSuccessReceiptLine:
         'A receipt is also emailed to the address you used at checkout. Use Download invoice below if you need a PDF right away.',
     /** Refund policy note shown on billing page */
-    billingRefundPolicyNote:
-        'If you experience any billing issues or accidental duplicate charges, contact us and we\'ll process a refund promptly. Note: valid subscription orders cannot be refunded per Firma\'s billing policy.',
+    billingRefundPolicyNoteIntro: 'For billing issues or accidental duplicate charges,',
+    billingRefundPolicyNoteOutro:
+        '. Note: valid subscription orders cannot be refunded per Firma\'s billing policy.',
 } as const

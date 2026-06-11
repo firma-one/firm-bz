@@ -8,7 +8,6 @@ import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { safeInngestSend } from '@/lib/inngest/client'
 import { SANDBOX_FIRM_NAME_FALLBACK, SANDBOX_HIERARCHY } from '@/lib/services/sample-file-service'
-import { buildDefaultSandboxFirmName } from '@/lib/onboarding/sandbox-firm-name'
 import {
   findSandboxFirmUnderWorkspaceRoot,
   type SandboxDriveClient,
@@ -77,8 +76,8 @@ function isLegacySandboxFirmName(name: string | null | undefined): boolean {
   )
 }
 
-function getSandboxFirmNameForAdmin(input: SandboxOnboardingInput): string {
-  return buildDefaultSandboxFirmName(input.firstName, SANDBOX_FIRM_NAME_FALLBACK)
+function getSandboxFirmNameForAdmin(_input: SandboxOnboardingInput): string {
+  return SANDBOX_FIRM_NAME_FALLBACK
 }
 
 async function normalizeSandboxFirmNameForAdmin(
@@ -320,7 +319,7 @@ export async function runSandboxOnboarding(
   const trimmedFirmName = (input.sandboxFirmName || '').trim()
   const name =
     trimmedFirmName ||
-    buildDefaultSandboxFirmName(input.firstName, SANDBOX_FIRM_NAME_FALLBACK)
+    SANDBOX_FIRM_NAME_FALLBACK
 
   const connector = await (prisma as any).connector.findUnique({ where: { id: connectionId } })
   if (!connector || connector.status !== 'ACTIVE') {

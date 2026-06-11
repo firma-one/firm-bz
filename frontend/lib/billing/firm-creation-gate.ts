@@ -4,7 +4,21 @@ import {
     anchorUsesSandboxCapDefaults,
     effectiveFirmGroupCapForAnchor,
     loadAnchorForCaps,
+    type AnchorCapsRow,
 } from '@/lib/billing/effective-billing-caps'
+
+/**
+ * Cap on non-sandbox firms for this anchor, accounting for free plan entitlements.
+ * Free plan (sandbox cap defaults): uses entitledFirms from metadata (default 1).
+ * Paid plan: uses effectiveFirmGroupCapForAnchor (which excludes sandbox from cap).
+ */
+function effectiveCustomFirmCap(anchor: AnchorCapsRow): number {
+    if (anchorUsesSandboxCapDefaults(anchor)) {
+        // Free plan: entitledFirms covers only non-sandbox (custom) firms
+        return anchor.entitledFirms ?? 1
+    }
+    return effectiveFirmGroupCapForAnchor(anchor)
+}
 
 export type EligibleSatelliteAnchor = { anchorId: string; sandboxOnly: boolean }
 
@@ -37,9 +51,9 @@ export async function getEligibleSatelliteAnchorCandidates(
                 }),
                 loadAnchorForCaps(anchorId),
             ])
-            if (!anchorMembership || !anchor || anchorUsesSandboxCapDefaults(anchor)) return null
+            if (!anchorMembership || !anchor) return null
 
-            const cap = effectiveFirmGroupCapForAnchor(anchor)
+            const cap = effectiveCustomFirmCap(anchor)
             const used = await countBillableFirmsInBillingGroup(anchorId)
             if (used < cap) return { anchorId, sandboxOnly: anchor.sandboxOnly }
             return null
@@ -114,9 +128,8 @@ export async function getFirmCreationGateReason(userId: string): Promise<FirmCre
                 loadAnchorForCaps(anchorId),
             ])
             if (!anchorMembership || !anchor) return null
-            if (anchorUsesSandboxCapDefaults(anchor)) return null
 
-            const cap = effectiveFirmGroupCapForAnchor(anchor)
+            const cap = effectiveCustomFirmCap(anchor)
             const used = await countBillableFirmsInBillingGroup(anchorId)
             return { cap, allowed: used < cap }
         })

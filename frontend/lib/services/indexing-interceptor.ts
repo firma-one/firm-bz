@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { safeInngestSend } from '../inngest/client'
-import { logger } from '../logger'
+import { assertWithinDocumentCap } from '@/lib/billing/effective-billing-caps'
 
 export class IndexingInterceptor {
     /**
@@ -14,11 +14,13 @@ export class IndexingInterceptor {
         fileName: string
         parentId?: string
     }) {
+        await assertWithinDocumentCap(params.organizationId, 1)
         await safeInngestSend('file.index.requested', params)
     }
 
     /**
      * Intercepts a batch of file operations for indexing by sending an Inngest event.
+     * Entire batch is rejected upfront if it would exceed the cap.
      */
     static async indexBatch(_request: NextRequest, params: {
         organizationId: string
@@ -28,6 +30,7 @@ export class IndexingInterceptor {
     }) {
         if (!params.files.length) return
 
+        await assertWithinDocumentCap(params.organizationId, params.files.length)
         await safeInngestSend('file.index.batch.requested', params)
     }
 }

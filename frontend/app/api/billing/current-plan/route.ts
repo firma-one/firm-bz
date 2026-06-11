@@ -6,7 +6,8 @@ import {
     getActiveSubscriptionForFirm,
     subscriptionAccessStatusLabel,
 } from '@/lib/billing/active-billing-subscription'
-import { resolveBillingAnchorFirmId } from '@/lib/billing/billing-group'
+import { resolveBillingAnchorFirmId, listBillableFirmIdsInBillingGroup } from '@/lib/billing/billing-group'
+import { loadAnchorForCaps, anchorUsesSandboxCapDefaults } from '@/lib/billing/effective-billing-caps'
 
 function polarServer(): 'production' | 'sandbox' {
     return process.env.POLAR_SERVER === 'production' ? 'production' : 'sandbox'
@@ -161,6 +162,46 @@ export async function GET(request: Request) {
 
     const isFirmBillingAdmin = membership.role === 'firm_admin'
 
+    // Load entitlements for the summary strip — read raw metadata so manual SYS_ADMIN overrides are reflected
+    const anchor = await loadAnchorForCaps(anchorId)
+    const entitlements = anchor ? {
+        firms: anchor.entitledFirms,
+        clients: anchor.entitledClients,
+        clientContacts: anchor.entitledClientContacts,
+        engagements: anchor.entitledEngagements,
+        documents: anchor.entitledDocuments,
+        auditDays: anchor.entitledAuditDays,
+        commentHistoryDays: anchor.entitledCommentHistoryDays,
+        isFreePlan: anchorUsesSandboxCapDefaults(anchor),
+    } : null
+
+    // Usage counts — only query what has a cap (null cap = unlimited, no need to count)
+    const billableFirmIds = await listBillableFirmIdsInBillingGroup(anchorId)
+    const [usedFirms, usedClients, usedEngagements, usedDocuments, usedClientContacts] = await Promise.all([
+        anchor?.entitledFirms != null
+            ? prisma.firm.count({ where: { OR: [{ id: anchorId }, { anchorFirmId: anchorId }], deletedAt: null, sandboxOnly: false } })
+            : Promise.resolve(null),
+        anchor?.entitledClients != null
+            ? prisma.client.count({ where: { firmId: { in: billableFirmIds }, deletedAt: null } })
+            : Promise.resolve(null),
+        anchor?.entitledEngagements != null
+            ? prisma.engagement.count({ where: { firmId: { in: billableFirmIds }, deletedAt: null, isDeleted: false } })
+            : Promise.resolve(null),
+        anchor?.entitledDocuments != null
+            ? prisma.engagementDocument.count({ where: { firmId: { in: billableFirmIds }, isFolder: false } })
+            : Promise.resolve(null),
+        anchor?.entitledClientContacts != null
+            ? prisma.clientContact.count({ where: { client: { firmId: { in: billableFirmIds } } } })
+            : Promise.resolve(null),
+    ])
+    const usage = {
+        firms: usedFirms,
+        clients: usedClients,
+        engagements: usedEngagements,
+        documents: usedDocuments,
+        clientContacts: usedClientContacts,
+    }
+
     return NextResponse.json(
         {
             current: {
@@ -172,6 +213,8 @@ export async function GET(request: Request) {
                 scheduledCancelAtIso: anchorSub?.scheduledCancelAt?.toISOString() ?? null,
                 canOpenCustomerPortal: canOpenCustomerPortal || ['active', 'trialing', 'past_due'].includes(normalizedStatus),
                 isFirmBillingAdmin,
+                entitlements,
+                usage,
             },
         },
         {

@@ -11,9 +11,7 @@ import {
     requireNonSandboxFirmCreationAccess,
     resolveBillingAnchorForNewSatelliteFirm,
 } from '@/lib/billing/firm-creation-gate'
-import { buildDefaultSandboxFirmName } from '@/lib/onboarding/sandbox-firm-name'
 import { isWorkspaceOnboardingComplete } from '@/lib/onboarding/workspace-onboarding-complete'
-import { SANDBOX_FIRM_NAME_FALLBACK } from '@/lib/services/sample-file-service'
 import { mergeLeanAppMetadata } from '@/lib/auth/supabase-jwt-metadata'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 
@@ -49,40 +47,6 @@ export async function getUserFirms(): Promise<FirmOption[]> {
 
     try {
         const firms = await FirmService.getUserFirms(user.id)
-        const firstName =
-            String(user.user_metadata?.first_name || '').trim() ||
-            String(user.user_metadata?.full_name || '').trim().split(/\s+/).filter(Boolean)[0] ||
-            String(user.email || '').split('@')[0] ||
-            ''
-        const desiredSandboxName = buildDefaultSandboxFirmName(firstName, SANDBOX_FIRM_NAME_FALLBACK)
-        const isLegacySandboxName = (name: string) => {
-            const normalized = String(name || '').trim().toLowerCase()
-            return (
-                normalized === 'pockett inc' ||
-                normalized === 'sandbox firm' ||
-                normalized === SANDBOX_FIRM_NAME_FALLBACK.trim().toLowerCase()
-            )
-        }
-
-        for (const firm of firms as any[]) {
-            const membership = firm.members?.find((m: any) => m.userId === user.id)
-            if (!firm?.sandboxOnly) continue
-            if (membership?.role !== 'firm_admin') continue
-            if (!isLegacySandboxName(firm.name)) continue
-            if ((firm.name || '').trim() === desiredSandboxName) continue
-            try {
-                await prisma.firm.update({
-                    where: { id: firm.id },
-                    data: { name: desiredSandboxName, updatedBy: user.id },
-                })
-                firm.name = desiredSandboxName
-            } catch (e) {
-                logger.warn('Could not normalize legacy sandbox firm name', {
-                    firmId: firm.id,
-                    message: e instanceof Error ? e.message : String(e),
-                })
-            }
-        }
 
         return firms.map((firm: any) => {
             // Find the current user's membership to check isDefault

@@ -1,7 +1,8 @@
 'use client'
 
-import React, { useState, useRef } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import {
     Dialog,
     DialogContent,
@@ -59,10 +60,39 @@ export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigg
     const [companySizeBracket, setCompanySizeBracket] = useState('')
     const [billingAddress, setBillingAddress] = useState('')
     const [error, setError] = useState<string | null>(null)
+    const [capBlocked, setCapBlocked] = useState(false)
+    const [capMessage, setCapMessage] = useState<string | null>(null)
 
     const router = useRouter()
+
+    useEffect(() => {
+        let mounted = true
+        const run = async () => {
+            try {
+                const response = await fetch(`/api/billing/client-gate?firmSlug=${encodeURIComponent(orgSlug)}`)
+                if (!response.ok) return
+                const payload = (await response.json()) as { allowed?: boolean; cap?: number | null; count?: number }
+                if (!mounted) return
+                const blocked = payload.allowed === false
+                setCapBlocked(blocked)
+                if (blocked) {
+                    const cap = typeof payload.cap === 'number' ? payload.cap : null
+                    const count = typeof payload.count === 'number' ? payload.count : null
+                    setCapMessage(cap != null && count != null
+                        ? `You have consumed the entitlements on your plan (${count} of ${cap}). Upgrade to add more.`
+                        : 'You have consumed the entitlements on your plan. Upgrade to add more.')
+                } else {
+                    setCapMessage(null)
+                }
+            } catch { /* best effort */ }
+        }
+        run()
+        return () => { mounted = false }
+    }, [orgSlug])
+
     const orgSandbox = useOrgSandbox()
     const isSandboxFirm = Boolean(firmSandboxOnly || orgSandbox?.sandboxOnly)
+    const isDisabled = isSandboxFirm || isLoading || capBlocked
 
     const commitTag = (raw: string) => {
         const value = raw.trim().toLowerCase().replace(/\s+/g, '-')
@@ -113,7 +143,7 @@ export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigg
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
 
-        if (isSandboxFirm) return
+        if (isSandboxFirm || capBlocked) return
 
         const finalTags = tagInput.trim()
             ? Array.from(new Set([...tags, tagInput.trim().toLowerCase().replace(/\s+/g, '-')]))
@@ -197,6 +227,16 @@ export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigg
                     <form onSubmit={handleSubmit}>
                         <div className="p-5">
                             {isSandboxFirm && <SandboxInfoBanner />}
+                            {capBlocked && capMessage && (
+                                <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs px-3 py-2 rounded mb-3 flex items-center gap-2">
+                                    <Lock className="h-3.5 w-3.5 shrink-0 text-rose-500" />
+                                    <span>
+                                        {capMessage.split('Upgrade')[0]}
+                                        <Link href="/d/billing" className="font-semibold underline underline-offset-2 hover:text-rose-900">Upgrade</Link>
+                                        {capMessage.split('Upgrade')[1]}
+                                    </span>
+                                </div>
+                            )}
                             {error && (
                                 <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs px-3 py-2 rounded mb-3">
                                     {error}
@@ -215,13 +255,13 @@ export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigg
                                             <label htmlFor="new-client-name" className={fieldLabel}>
                                                 <span className="inline-flex items-center gap-1"><User className="h-3 w-3" /> Name <span className="text-red-500 normal-case tracking-normal font-sans">*</span></span>
                                             </label>
-                                            <Input id="new-client-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Acme Corp" required={!isSandboxFirm} disabled={isSandboxFirm || isLoading} className={inputCls} />
+                                            <Input id="new-client-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Acme Corp" required={!isSandboxFirm} disabled={isDisabled} className={inputCls} />
                                         </div>
                                         <div>
                                             <label htmlFor="new-client-status" className={fieldLabel}>
                                                 <span className="inline-flex items-center gap-1"><Activity className="h-3 w-3" /> Status <span className="text-red-500 normal-case tracking-normal font-sans">*</span></span>
                                             </label>
-                                            <Select value={status} onValueChange={(v) => setStatus(v as LwCrmClientStatus)} disabled={isSandboxFirm || isLoading}>
+                                            <Select value={status} onValueChange={(v) => setStatus(v as LwCrmClientStatus)} disabled={isDisabled}>
                                                 <SelectTrigger id="new-client-status" className={inputCls}>
                                                     <SelectValue />
                                                 </SelectTrigger>
@@ -245,42 +285,42 @@ export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigg
                                         <label htmlFor="new-client-industry" className={fieldLabel}>
                                             <span className="inline-flex items-center gap-1"><Building2 className="h-3 w-3" /> Industry</span>
                                         </label>
-                                        <Input id="new-client-industry" value={industry} onChange={(e) => setIndustry(e.target.value)} placeholder="e.g. Technology" disabled={isSandboxFirm || isLoading} className={inputCls} />
+                                        <Input id="new-client-industry" value={industry} onChange={(e) => setIndustry(e.target.value)} placeholder="e.g. Technology" disabled={isDisabled} className={inputCls} />
                                     </div>
 
                                     <div>
                                         <label htmlFor="new-client-company-size" className={fieldLabel}>
                                             <span className="inline-flex items-center gap-1"><Users2 className="h-3 w-3" /> Company size</span>
                                         </label>
-                                        <SelectWithCustomEntry id="new-client-company-size" value={companySizeBracket} onChange={setCompanySizeBracket} options={['<10', '11–50', '51–200', '201–1000', '1000+']} placeholder="Select bracket…" customEntryHint="Custom…" disabled={isSandboxFirm || isLoading} />
+                                        <SelectWithCustomEntry id="new-client-company-size" value={companySizeBracket} onChange={setCompanySizeBracket} options={['<10', '11–50', '51–200', '201–1000', '1000+']} placeholder="Select bracket…" customEntryHint="Custom…" disabled={isDisabled} />
                                     </div>
 
                                     <div>
                                         <label htmlFor="new-client-website" className={fieldLabel}>
                                             <span className="inline-flex items-center gap-1"><Globe className="h-3 w-3" /> Website</span>
                                         </label>
-                                        <Input id="new-client-website" value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://…" disabled={isSandboxFirm || isLoading} className={inputCls} />
+                                        <Input id="new-client-website" value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://…" disabled={isDisabled} className={inputCls} />
                                     </div>
 
                                     <div>
                                         <label htmlFor="new-client-linkedin" className={fieldLabel}>
                                             <span className="inline-flex items-center gap-1"><Linkedin className="h-3 w-3" /> LinkedIn</span>
                                         </label>
-                                        <Input id="new-client-linkedin" value={linkedInUrl} onChange={(e) => setLinkedInUrl(e.target.value)} placeholder="https://linkedin.com/company/…" disabled={isSandboxFirm || isLoading} className={inputCls} />
+                                        <Input id="new-client-linkedin" value={linkedInUrl} onChange={(e) => setLinkedInUrl(e.target.value)} placeholder="https://linkedin.com/company/…" disabled={isDisabled} className={inputCls} />
                                     </div>
 
                                     <div>
                                         <label htmlFor="new-client-billing" className={fieldLabel}>
                                             <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" /> Billing address</span>
                                         </label>
-                                        <textarea id="new-client-billing" value={billingAddress} onChange={(e) => setBillingAddress(e.target.value)} placeholder={"123 Main St\nCity, State ZIP\nCountry"} rows={2} disabled={isSandboxFirm || isLoading} className={textareaCls} />
+                                        <textarea id="new-client-billing" value={billingAddress} onChange={(e) => setBillingAddress(e.target.value)} placeholder={"123 Main St\nCity, State ZIP\nCountry"} rows={2} disabled={isDisabled} className={textareaCls} />
                                     </div>
 
                                     <div>
                                         <label htmlFor="new-client-description" className={fieldLabel}>
                                             <span className="inline-flex items-center gap-1"><FileText className="h-3 w-3" /> Notes</span>
                                         </label>
-                                        <textarea id="new-client-description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Additional details about the client" rows={2} disabled={isSandboxFirm || isLoading} className={textareaCls} />
+                                        <textarea id="new-client-description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Additional details about the client" rows={2} disabled={isDisabled} className={textareaCls} />
                                     </div>
                                 </div>
 
@@ -294,7 +334,7 @@ export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigg
                                             <label htmlFor="new-client-lead-source" className={fieldLabel}>
                                                 <span className="inline-flex items-center gap-1"><Share2 className="h-3 w-3" /> Lead source</span>
                                             </label>
-                                            <SelectWithCustomEntry id="new-client-lead-source" value={leadSource} onChange={setLeadSource} options={['Referral', 'Inbound', 'Outbound', 'Conference', 'Existing Network']} placeholder="Select source…" customEntryHint="Other…" disabled={isSandboxFirm || isLoading} />
+                                            <SelectWithCustomEntry id="new-client-lead-source" value={leadSource} onChange={setLeadSource} options={['Referral', 'Inbound', 'Outbound', 'Conference', 'Existing Network']} placeholder="Select source…" customEntryHint="Other…" disabled={isDisabled} />
                                             <p className="mt-1 text-[10px] text-[#9a9ba0]">How did you acquire the lead?</p>
                                         </div>
                                         <div>
@@ -302,20 +342,20 @@ export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigg
                                                 <span className="inline-flex items-center gap-1"><Tag className="h-3 w-3" /> Tags</span>
                                             </label>
                                             <div
-                                                className={`flex flex-wrap gap-1.5 min-h-[36px] w-full rounded border px-3 py-2 transition-colors cursor-text ${isSandboxFirm || isLoading ? 'border-[#e5e7eb] bg-[#f9f9fb] opacity-50 cursor-not-allowed' : 'border-[#e5e7eb] bg-white focus-within:ring-1 focus-within:ring-primary focus-within:border-primary'}`}
+                                                className={`flex flex-wrap gap-1.5 min-h-[36px] w-full rounded border px-3 py-2 transition-colors cursor-text ${isDisabled ? 'border-[#e5e7eb] bg-[#f9f9fb] opacity-50 cursor-not-allowed' : 'border-[#e5e7eb] bg-white focus-within:ring-1 focus-within:ring-primary focus-within:border-primary'}`}
                                                 onClick={() => tagInputRef.current?.focus()}
                                             >
                                                 {tags.map((tag) => (
                                                     <span key={tag} className="inline-flex items-center gap-1 rounded bg-[#f3f4f6] border border-[#e5e7eb] px-2 py-0.5 text-[11px] font-medium text-[#45474c]">
                                                         {tag}
-                                                        {!isSandboxFirm && !isLoading && (
+                                                        {!isDisabled && (
                                                             <button type="button" onClick={(e) => { e.stopPropagation(); removeTag(tag) }} className="text-[#9a9ba0] hover:text-[#1b1b1d] transition-colors" aria-label={`Remove ${tag}`}>
                                                                 <X className="h-3 w-3" />
                                                             </button>
                                                         )}
                                                     </span>
                                                 ))}
-                                                <input ref={tagInputRef} id="new-client-tags" value={tagInput} onChange={handleTagChange} onKeyDown={handleTagKeyDown} onBlur={() => { if (tagInput.trim()) commitTag(tagInput) }} placeholder={tags.length === 0 ? 'Type a tag, press Enter or comma…' : ''} disabled={isSandboxFirm || isLoading} className="flex-1 min-w-[120px] bg-transparent outline-none placeholder:text-[#9a9ba0] text-[#1b1b1d] text-xs disabled:cursor-not-allowed" />
+                                                <input ref={tagInputRef} id="new-client-tags" value={tagInput} onChange={handleTagChange} onKeyDown={handleTagKeyDown} onBlur={() => { if (tagInput.trim()) commitTag(tagInput) }} placeholder={tags.length === 0 ? 'Type a tag, press Enter or comma…' : ''} disabled={isDisabled} className="flex-1 min-w-[120px] bg-transparent outline-none placeholder:text-[#9a9ba0] text-[#1b1b1d] text-xs disabled:cursor-not-allowed" />
                                                 <CornerDownLeft className="h-3 w-3 text-primary shrink-0 self-center ml-1" />
                                             </div>
                                         </div>
@@ -327,21 +367,21 @@ export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigg
                                             <label className={fieldLabel}>
                                                 <span className="inline-flex items-center gap-1"><CalendarClock className="h-3 w-3" /> Follow-up date</span>
                                             </label>
-                                            <DateTimePicker value={followUpDate} onChange={setFollowUpDate} placeholder="Select date" disabled={isSandboxFirm || isLoading} defaultTime="09:00" />
+                                            <DateTimePicker value={followUpDate} onChange={setFollowUpDate} placeholder="Select date" disabled={isDisabled} defaultTime="09:00" />
                                             <p className="mt-1 text-[10px] text-[#9a9ba0]">When to next follow up?</p>
                                         </div>
                                         <div>
                                             <label className={fieldLabel}>
                                                 <span className="inline-flex items-center gap-1"><CalendarCheck className="h-3 w-3" /> Lead conversion date</span>
                                             </label>
-                                            <DateTimePicker value={expectedCloseDate} onChange={setExpectedCloseDate} placeholder="Select date" disabled={isSandboxFirm || isLoading || status !== 'PROSPECT'} defaultTime="17:00" />
+                                            <DateTimePicker value={expectedCloseDate} onChange={setExpectedCloseDate} placeholder="Select date" disabled={isDisabled || status !== 'PROSPECT'} defaultTime="17:00" />
                                             <p className="mt-1 text-[10px] text-[#9a9ba0]">When do you expect to convert the lead?</p>
                                         </div>
                                         <div>
                                             <label className={fieldLabel}>
                                                 <span className="inline-flex items-center gap-1"><CalendarCheck className="h-3 w-3" /> Client onboarding date</span>
                                             </label>
-                                            <DateTimePicker value={clientSinceDate} onChange={setClientSinceDate} placeholder="Select date" disabled={isSandboxFirm || isLoading || status === 'PROSPECT'} defaultTime="00:00" />
+                                            <DateTimePicker value={clientSinceDate} onChange={setClientSinceDate} placeholder="Select date" disabled={isDisabled || status === 'PROSPECT'} defaultTime="00:00" />
                                             <p className="mt-1 text-[10px] text-[#9a9ba0]">When did the formal business relationship start?</p>
                                         </div>
                                     </div>
@@ -351,7 +391,7 @@ export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigg
                                         <label htmlFor="new-client-memo" className={fieldLabel}>
                                             <span className="inline-flex items-center gap-1"><Lock className="h-3 w-3" /> Internal memo <span className="normal-case tracking-normal font-sans text-[#9a9ba0]">— internal only</span></span>
                                         </label>
-                                        <textarea id="new-client-memo" value={internalMemo} onChange={(e) => setInternalMemo(e.target.value)} placeholder="Private notes, call summaries, relationship context…" rows={2} disabled={isSandboxFirm || isLoading} className={textareaCls} />
+                                        <textarea id="new-client-memo" value={internalMemo} onChange={(e) => setInternalMemo(e.target.value)} placeholder="Private notes, call summaries, relationship context…" rows={2} disabled={isDisabled} className={textareaCls} />
                                     </div>
                                 </div>
 
@@ -366,7 +406,7 @@ export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigg
                             <Button
                                 variant="greenCta"
                                 type="submit"
-                                disabled={isSandboxFirm || isLoading || !name.trim()}
+                                disabled={isDisabled || !name.trim()}
                                 className="rounded-[2px] w-32 text-[10px] font-headline font-bold tracking-widest uppercase text-white"
                             >
                                 {isLoading ? <LoadingSpinner size="sm" /> : 'Create'}

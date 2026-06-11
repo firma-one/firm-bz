@@ -368,7 +368,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
     const showSandboxPickerToast = useCallback(() => {
         addToast({
             type: 'error',
-            title: 'Sandbox',
+            title: 'Demo Firm',
             message: SANDBOX_OPERATION_MESSAGE,
             duration: 8000,
         })
@@ -1237,6 +1237,22 @@ const handleRefresh = async () => {
         setImportLoading(true)
         try {
             logger.debug(`[Frontend] Import Confirm. FolderId: ${currentFolderId}`)
+
+            // Pre-flight cap check before any Drive operations
+            const gateRes = await fetch(`/api/billing/document-gate?projectId=${encodeURIComponent(projectId)}&count=${importedFiles.length}`)
+            if (gateRes.ok) {
+                const gate = await gateRes.json() as { allowed: boolean; cap: number | null; current: number | null; available: number }
+                if (!gate.allowed) {
+                    const { cap, current, available } = gate
+                    const count = importedFiles.length
+                    const msg = count === 1
+                        ? `Your plan limit of ${cap} files has been reached (${current} used). Delete any unused file or upgrade to remove the limit.`
+                        : `This import contains ${count} files, but your plan has a limit of ${cap}, with only ${available} slot${available !== 1 ? 's' : ''} left. Import fewer files, within the available limit or upgrade to remove the limit.`
+                    setError(msg)
+                    setImportLoading(false)
+                    return
+                }
+            }
 
             // Fetch connection info
             const tokenRes = await fetch('/api/connectors/google-drive?action=token', {

@@ -89,6 +89,16 @@ export function useEngagementFileOps({
 
     const handleDuplicate = useCallback(async (doc: DriveFile) => {
         if (!sessionRef.current?.access_token) return
+        try {
+            const gateRes = await fetch(`/api/billing/document-gate?projectId=${encodeURIComponent(projectId)}&count=1`)
+            if (gateRes.ok) {
+                const gate = await gateRes.json()
+                if (!gate.allowed) {
+                    addToast({ type: 'error', title: 'Document limit reached', message: `Your plan limit of ${gate.cap} files has been reached (${gate.current} used). Delete any unused file or upgrade to remove the limit.`, duration: 12000 })
+                    return
+                }
+            }
+        } catch { /* fail-open */ }
         startProcessing(doc.id)
         try {
             const res = await fetch('/api/connectors/google-drive/linked-files', {
@@ -132,7 +142,7 @@ export function useEngagementFileOps({
                 type: 'error',
                 title: 'Sandbox',
                 message: SANDBOX_OPERATION_MESSAGE,
-                duration: 8000,
+                duration: 12000,
             } as any)
             setTrashConfirmTarget(null)
             return
@@ -241,6 +251,20 @@ export function useEngagementFileOps({
         const action = actionOverride || copyMoveAction
 
         if (!target || !sessionRef.current?.access_token) return
+
+        if (action === 'copy') {
+            try {
+                const gateRes = await fetch(`/api/billing/document-gate?projectId=${encodeURIComponent(projectId)}&count=1`)
+                if (gateRes.ok) {
+                    const gate = await gateRes.json()
+                    if (!gate.allowed) {
+                        addToast({ type: 'error', title: 'Document limit reached', message: `Your plan limit of ${gate.cap} files has been reached (${gate.current} used). Delete any unused file or upgrade to remove the limit.`, duration: 12000 })
+                        return
+                    }
+                }
+            } catch { /* fail-open */ }
+        }
+
         setCopyMoveSubmittingFolderId(destinationFolderId)
         startProcessing(target.id)
         try {
@@ -556,6 +580,19 @@ export function useEngagementFileOps({
 
     const handleCrossEngagementSubmit = useCallback(async () => {
         if (!crossEngagementTarget || !crossEngagementSelectedId || !sessionRef.current?.access_token) return
+
+        // Check cap on the target engagement (where the file will land)
+        try {
+            const gateRes = await fetch(`/api/billing/document-gate?projectId=${encodeURIComponent(crossEngagementSelectedId)}&count=1`)
+            if (gateRes.ok) {
+                const gate = await gateRes.json()
+                if (!gate.allowed) {
+                    addToast({ type: 'error', title: 'Document limit reached', message: `Your plan limit of ${gate.cap} files has been reached (${gate.current} used). Delete any unused file or upgrade to remove the limit.`, duration: 12000 })
+                    return
+                }
+            }
+        } catch { /* fail-open */ }
+
         setCrossEngagementSubmitting(true)
         startProcessing(crossEngagementTarget.id)
         try {

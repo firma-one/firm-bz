@@ -64,7 +64,7 @@ export function OnboardingSidebar() {
 
     const profilePlanSubtitle = useMemo(() => {
         if (!billingPlanState) return formatProfilePlanSubtitle(null, { sandboxOnly: billingSandboxOnly })
-        return planNameForSummary(billingPlanState)
+        return `${planNameForSummary(billingPlanState)} plan`
     }, [billingPlanState, billingSandboxOnly])
 
     useEffect(() => {

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { RefreshCw } from 'lucide-react'
 import { getProjectMembers } from '@/lib/actions/members'
 import { getProjectPersonas } from '@/lib/actions/personas'
 import { MemberList } from './member-list'
@@ -59,6 +60,14 @@ export function EngagementMembersTab({ projectId, orgSlug, canManage = false }: 
                                     {members.length + invitations.length}
                                 </span>
                             )}
+                            <button
+                                onClick={refreshData}
+                                disabled={isLoading}
+                                title="Refresh members"
+                                className="text-slate-400 hover:text-slate-600 disabled:opacity-40 transition-colors"
+                            >
+                                <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+                            </button>
                         </h2>
                         <p className="mt-0.5 text-sm text-slate-500">Manage access and roles for this project.</p>
                     </div>

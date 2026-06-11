@@ -12,6 +12,8 @@ export interface PricingComparisonRow {
     tooltip?: string
     /** Rich layout for the comparison-table tooltip (see pricing page). */
     tooltipLayout?: PricingComparisonTooltipLayout
+    /** Optional icon key rendered inline after the feature label. */
+    featureIcon?: 'google-drive' | 'onedrive'
     /** planId -> value */
     values: Record<string, PlanValue>
 }
@@ -30,9 +32,9 @@ export interface PricingPlan {
     priceBilledAnnually?: number
     prevPrice?: string
     duration: string
-    /** Firms covered per subscription (marketing cards + comparison). Defaults to 1 when omitted. */
+    /** Firms covered (marketing cards + comparison). Defaults to 1 when omitted. */
     firmsIncluded?: number
-    /** Cap for concurrent active engagements per subscription; pricing UI shows with firms line. */
+    /** Cap for concurrent active engagements; pricing UI shows with firms line. */
     projectsIncluded?: number
     cta: string | null
     ctaVariant?: 'black' | 'gray'
@@ -43,27 +45,29 @@ export interface PricingPlan {
 }
 
 function firmLineForCard(firms: number): string {
-    return firms === 1 ? '1 firm per subscription' : `${firms} firms per subscription`
+    return firms === 1 ? '1 firm' : `${firms} firms`
 }
 
 /** Lines under the plan title on the pricing page (firm scope + engagement cap). */
 export function planCardUsageSummary(plan: PricingPlan): string[] {
     if (plan.id === 'Enterprise') {
-        return ['Custom firm package', 'Engagement limits negotiated']
+        return ['Custom firms · Unlimited clients', 'Engagement limits negotiated']
     }
-    if (plan.projectsIncluded != null) {
-        const firms = plan.firmsIncluded ?? 1
-        return [
-            firmLineForCard(firms),
-            `${plan.projectsIncluded} active engagements per subscription`,
-        ]
+    if (plan.id === 'Business') {
+        return ['3 firms · 20 clients', '50 active engagements']
+    }
+    if (plan.id === 'Pro') {
+        return ['1 firm · 10 clients', '25 active engagements']
+    }
+    if (plan.id === 'Standard') {
+        return ['1 firm · 3 clients', '10 active engagements']
     }
     return []
 }
 
-/** Free Sandbox card — same usage framing as the comparison table Sandbox column. */
+/** Free Demo card — same usage framing as the comparison table Sandbox column. */
 export function sandboxPlanUsageSummary(): string[] {
-    return ['1 firm per subscription', '10 active engagements per subscription']
+    return ['1 firm · 1 client', '1 active engagement', '20 documents']
 }
 
 /**
@@ -105,7 +109,7 @@ export const PRICING_PLANS: PricingPlan[] = [
         firmsIncluded: 1,
         projectsIncluded: 10,
         description:
-            'Full client portal on your existing Google Drive—engagements, personas, and feedback in one place.',
+            'Take off the training wheels. Full client portal on your existing Google Drive—engagements, personas, and feedback in one place.',
         price: '$49',
         priceBilledAnnually: 39,
         duration: '/month',
@@ -118,7 +122,7 @@ export const PRICING_PLANS: PricingPlan[] = [
     {
         id: 'Pro',
         title: 'Pro',
-        firmsIncluded: 5,
+        firmsIncluded: 1,
         projectsIncluded: 25,
         description: 'For growing firms needing advanced review and templates.',
         price: '$99',
@@ -133,7 +137,7 @@ export const PRICING_PLANS: PricingPlan[] = [
     {
         id: 'Business',
         title: 'Business',
-        firmsIncluded: 10,
+        firmsIncluded: 3,
         projectsIncluded: 50,
         description: 'For established firms and mid-size agencies.',
         price: '$149',
@@ -169,21 +173,43 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
         name: "USAGE",
         rows: [
             {
-                feature: "Firms per subscription",
+                feature: "Demo firm",
+                tooltip: "A pre-loaded firm workspace with sample clients, engagements, and documents — included on all plans for exploration and demos. Does not count toward your firm limit.",
+                values: {
+                    Sandbox: true,
+                    Standard: true,
+                    Pro: true,
+                    Business: true,
+                    Enterprise: true,
+                },
+            },
+            {
+                feature: "Firms",
                 tooltip: "Each Standard–Business subscription covers one firm workspace (one billable Pockett firm). Another legal entity or separate firm usually means another subscription. Enterprise: multiple firms and consolidated billing—contact sales.",
                 values: {
                     Sandbox: "1",
                     Standard: "1",
-                    Pro: "5",
-                    Business: "10",
+                    Pro: "1",
+                    Business: "3",
                     Enterprise: "Custom",
                 },
             },
             {
-                feature: "Active engagements per subscription",
-                tooltip: "Maximum concurrent open engagements included with that subscription (per covered firm workspace). Closed or deleted engagements do not count. Enterprise includes a negotiated cap (often up to 100).",
+                feature: "Clients",
+                tooltip: "Maximum number of client records per firm workspace.",
                 values: {
-                    Sandbox: "10",
+                    Sandbox: "1",
+                    Standard: "3",
+                    Pro: "10",
+                    Business: "20",
+                    Enterprise: "Unlimited",
+                },
+            },
+            {
+                feature: "Engagements",
+                tooltip: "Maximum concurrent active engagements included with that subscription (per covered firm workspace). Closed or deleted engagements do not count. Enterprise includes a negotiated cap (often up to 100).",
+                values: {
+                    Sandbox: "1",
                     Standard: "10",
                     Pro: "25",
                     Business: "50",
@@ -191,26 +217,25 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
                 },
             },
             {
-                feature: "Unlimited internal users",
-                tooltip: "No per-seat fee for Firm Administrator, Firm Member, Client Administrator, Engagement Lead, and Contributor (Internal).",
-                values: { Sandbox: false, Standard: true, Pro: true, Business: true, Enterprise: true },
-            },
-            {
-                feature: "Unlimited external users",
-                tooltip: "No per-seat fee for Contributor (External) or Viewer (External).",
-                values: { Sandbox: false, Standard: true, Pro: true, Business: true, Enterprise: true },
-            },
-            {
-                feature: "Document Version history",
-                tooltip:
-                    "Each plan column shows how long prior document revisions stay available to view or restore. Older revisions roll off after that window except on Enterprise (Unlimited).",
+                feature: "Documents",
+                tooltip: "Maximum number of indexed files and folders per firm workspace. Paid plans are unlimited.",
                 values: {
-                    Sandbox: false,
-                    Standard: "30 days",
-                    Pro: "90 days",
-                    Business: "365 days",
+                    Sandbox: "20",
+                    Standard: "Unlimited",
+                    Pro: "Unlimited",
+                    Business: "Unlimited",
                     Enterprise: "Unlimited",
                 },
+            },
+            {
+                feature: "Internal users",
+                tooltip: "No per-seat fee for Firm Administrator, Firm Member, Client Administrator, Engagement Lead, and Contributor (Internal).",
+                values: { Sandbox: false, Standard: "Unlimited", Pro: "Unlimited", Business: "Unlimited", Enterprise: "Unlimited" },
+            },
+            {
+                feature: "External users",
+                tooltip: "No per-seat fee for Contributor (External) or Viewer (External).",
+                values: { Sandbox: false, Standard: "Unlimited", Pro: "Unlimited", Business: "Unlimited", Enterprise: "Unlimited" },
             },
         ],
     },
@@ -220,7 +245,14 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
             {
                 feature: "Bring your own Google Drive",
                 tooltip: "Your files stay in your Google Drive. We don't store or copy them. Non-custodial: no migration, no new storage; we add the portal on top.",
+                featureIcon: 'google-drive',
                 values: { Sandbox: true, Standard: true, Pro: true, Business: true, Enterprise: true },
+            },
+            {
+                feature: "Bring your own OneDrive",
+                tooltip: "Connect your Microsoft OneDrive or SharePoint as the storage backend for your firm portal.",
+                featureIcon: 'onedrive',
+                values: { Sandbox: "Coming soon", Standard: "Coming soon", Pro: "Coming soon", Business: "Coming soon", Enterprise: "Coming soon" },
             },
             {
                 feature: "Custom branded client portal",
@@ -240,7 +272,28 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
                 values: { Sandbox: true, Standard: true, Pro: true, Business: true, Enterprise: true },
             },
             {
-                feature: "Engagement activity audit",
+                feature: "Document — Never Share tags",
+                tooltip: "Tag internal files so they never reach clients — prevents accidental sharing of sensitive documents.",
+                values: { Sandbox: true, Standard: true, Pro: true, Business: true, Enterprise: true },
+            },
+            {
+                feature: "Automated follow-ups & reminders",
+                tooltip: "Automated consolidated client follow-up emails on pending documents. Custom follow-up templates and scheduling.",
+                values: { Sandbox: true, Standard: true, Pro: true, Business: true, Enterprise: true },
+            },
+            {
+                feature: "Full Audit Trail",
+                tooltip: "Append-only audit trail capturing user & system activity at Firm, Client, Engagement, and Document levels — including lifecycle events, membership changes, sharing actions, and per-document access tracking. Each column shows how long events are retained.",
+                values: {
+                    Sandbox: false,
+                    Standard: "30 days",
+                    Pro: "90 days",
+                    Business: "365 days",
+                    Enterprise: "Unlimited",
+                },
+            },
+            {
+                feature: "Document version history",
                 tooltip:
                     "Append-only engagement audit trail: lifecycle, membership, sharing, and key document events—in the Audit tab. Each column shows how long those audit events are retained.",
                 values: { Sandbox: false, Standard: "30 days", Pro: "90 days", Business: "365 days", Enterprise: "Unlimited" },
@@ -248,12 +301,12 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
             {
                 feature: "Document comment thread (feedback & approvals)",
                 tooltip: "One thread per file for comments, feedback, and approvals—shared with everyone on the engagement. Replace scattered email and chat with a single place where the conversation stays with the work. Each column shows how long comment history is retained.",
-                values: { Sandbox: false, Standard: "30 days", Pro: "90 days", Business: "365 days", Enterprise: "Unlimited" },
+                values: { Sandbox: "15 days", Standard: "60 days", Pro: "90 days", Business: "365 days", Enterprise: "Unlimited" },
             },
             {
                 feature: "One-click engagement closure",
                 tooltip: "Revoke client and external access when an engagement ends. Lock folders to view-only; remove guest members automatically.",
-                values: { Sandbox: false, Standard: true, Pro: true, Business: true, Enterprise: true },
+                values: { Sandbox: true, Standard: true, Pro: true, Business: true, Enterprise: true },
             },
         ],
     },
@@ -276,17 +329,6 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
         name: "ADVANCED",
         rows: [
             {
-                feature: "Document access tracking",
-                tooltip:
-                    "Per-document visibility into who accessed files and when—beyond the engagement-level activity audit. Included from Pro; not on Standard. Each plan column shows how long access events are retained.",
-                values: { Sandbox: false, Standard: false, Pro: "90 days", Business: "365 days", Enterprise: "Unlimited" },
-            },
-            {
-                feature: "Custom subdomain",
-                tooltip: `${customSubdomainTooltip}.`,
-                values: { Sandbox: false, Standard: false, Pro: true, Business: true, Enterprise: true },
-            },
-            {
                 feature: "Engagement & Document templates",
                 tooltip: "Pre-configured engagement & document templates with folder structures. Duplicate engagements and choose templates for common use cases.",
                 values: { Sandbox: false, Standard: false, Pro: true, Business: true, Enterprise: true },
@@ -302,14 +344,9 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
                 values: { Sandbox: false, Standard: false, Pro: true, Business: true, Enterprise: true },
             },
             {
-                feature: "Self-destruct timers & Never Share tags",
-                tooltip: "Protect sensitive files: set expiry on shared links; tag internal files so they never reach clients.",
-                values: { Sandbox: false, Standard: false, Pro: false, Business: true, Enterprise: true },
-            },
-            {
-                feature: "Automated follow-ups & reminders",
-                tooltip: "Automated consolidated client follow-up emails on pending documents. Custom follow-up templates and scheduling.",
-                values: { Sandbox: false, Standard: false, Pro: false, Business: true, Enterprise: true },
+                feature: "Custom subdomain",
+                tooltip: `${customSubdomainTooltip}.`,
+                values: { Sandbox: false, Standard: false, Pro: true, Business: true, Enterprise: true },
             },
             {
                 feature: "Custom DNS domain",
@@ -347,9 +384,29 @@ export function getPricingComparisonBulletsForPlan(planId: PricingPlanColumnId):
     return bullets
 }
 
-/** First line of Profile → What's included for sandbox — aligns with /pricing hero + FAQ (trial of Standard). */
+/**
+ * Highlights for the Free plan card (billing page + plan picker).
+ * Derived from the same PRICING_COMPARISON matrix as the /pricing page Sandbox column,
+ * so they stay in sync automatically.
+ */
+export function getSandboxPlanHighlights(): string[] {
+    const bullets: string[] = []
+    for (const category of PRICING_COMPARISON) {
+        for (const row of category.rows) {
+            const v = row.values[PRICING_SANDBOX_COLUMN_ID]
+            if (v === true) {
+                bullets.push(row.feature)
+            } else if (typeof v === 'string' && v.trim()) {
+                bullets.push(`${row.feature}: ${v}`)
+            }
+        }
+    }
+    return bullets
+}
+
+/** First line of Profile → What's included for the free plan. */
 export const PRICING_SANDBOX_PROFILE_LEAD =
-    'Free sandbox — no credit card required. Unlock full features with a 30-day trial of Standard when you\'re ready.'
+    'Free plan — no credit card required. Upgrade to Standard and take off the training wheels.'
 
 /** Sandbox workspace: same facts as /pricing (Standard column) plus hero line. */
 export function getProfileBillingSandboxInclusions(): string[] {
