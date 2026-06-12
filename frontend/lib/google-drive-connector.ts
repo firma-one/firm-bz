@@ -3569,7 +3569,7 @@ export class GoogleDriveConnector {
     const ignoreIds = await this.resolveIgnoreIds(connectionId, accessToken)
     const nameExclusionsList = ignoreParser.getPatterns().map(p => `not name = '${p.replace(/'/g, "\\'")}'`).join(' and ')
     const parentExclusionsList = ignoreIds.map(id => `not '${id.replace(/'/g, "\\'")}' in parents`).join(' and ')
-    let q = `'${folderId}' in parents and trashed = false`
+    let q = `'${folderId}' in parents and trashed = false and ${FIRMA_MANAGED_EXCLUDE_QUERY}`
     if (nameExclusionsList) q += ` and ${nameExclusionsList}`
     if (parentExclusionsList) q += ` and ${parentExclusionsList}`
 

@@ -8,6 +8,7 @@ import { DocumentIcon } from "@/components/ui/document-icon"
 import { UserAvatarWithTooltip } from "@/components/ui/user-avatar-with-tooltip"
 import { formatFileSize, formatSmartDateTime } from "@/lib/utils"
 import { DocumentEditPanelContent, DocumentPreviewPanelContent, getDocumentEditUrl } from "@/components/files/document-edit-sheet"
+import { DocumentBlobPreviewPane } from "@/components/files/document-blob-preview-pane"
 import { useRightPane } from "@/lib/right-pane-context"
 import { DocumentActivityPane } from "@/components/files/document-activity-pane"
 import { DocumentHistoryPane } from "@/components/files/document-history-pane"
@@ -402,11 +403,12 @@ export function DocumentActionMenu({
       }
 
       const filename: string = doc.name
+      const effectiveProjectId = doc.projectId ?? projectId
 
-      if (doc.projectId && doc.id) {
+      if (effectiveProjectId && doc.id) {
         // Shared document: server resolves connector + PDF/original.
         // May involve PDF generation — show progress indicator while waiting.
-        const downloadUrl = `/api/projects/${doc.projectId}/documents/${encodeURIComponent(doc.id)}/download-share`
+        const downloadUrl = `/api/projects/${effectiveProjectId}/documents/${encodeURIComponent(doc.id)}/download-share`
         const taskId = addTask(filename)
         try {
           const res = await fetch(downloadUrl)

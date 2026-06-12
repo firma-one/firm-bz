@@ -2,7 +2,7 @@ import { EngagementWorkspace } from "@/components/projects/engagement-workspace"
 import type { LwCrmEngagementStatus } from "@/lib/actions/project"
 import { getFirmHierarchy, getFirmName, type HierarchyClient } from "@/lib/actions/hierarchy"
 import { getProjectPersonas } from "@/lib/actions/personas"
-import { canViewProject, canAccessRbacAdmin, getProjectPersona } from "@/lib/permission-helpers"
+import { canViewProject, canAccessRbacAdmin, canManageOrganization, getProjectPersona } from "@/lib/permission-helpers"
 import { getViewAsPersonaFromCookie } from "@/lib/view-as-server"
 import {
   resolveProjectCapabilitiesForUser,
@@ -85,6 +85,7 @@ export default async function EngagementPage({ params }: PageProps) {
   const canViewInternalTabs = capabilities['project:can_view_internal'] ?? false
   const canEdit = capabilities['project:can_edit'] ?? false
   const canManage = canViewSettings
+  const isFirmAdmin = await canManageOrganization(org.id)
   const enableBetaFeatures = (org.settings as Record<string, unknown> | null)?.enableBetaFeatures === true
 
   const defaultTab = canViewInternalTabs ? 'analytics' : 'files'
@@ -155,6 +156,7 @@ export default async function EngagementPage({ params }: PageProps) {
           canViewInternalTabs={canViewInternalTabs}
           canEdit={canEdit}
           canManage={canManage}
+          isFirmAdmin={isFirmAdmin}
           restrictToSharedOnly={restrictToSharedOnly}
           isExternalViewer={projectRole === 'eng_viewer'}
           projectDescription={project.description ?? undefined}

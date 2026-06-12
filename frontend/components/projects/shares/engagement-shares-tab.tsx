@@ -16,7 +16,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core'
-import { Share2, User, Lock, ListTodo, Loader2, CheckCircle, Eye, GripVertical, FolderOpen, Clock, Copy, Check, Search, MessageCircle, Link2, X, RefreshCw, ChevronDown, Filter } from 'lucide-react'
+import { Share2, User, Lock, ListTodo, Loader2, CheckCircle, Eye, GripVertical, FolderOpen, Clock, Copy, Check, Search, MessageCircle, Link2, ScanEye, X, RefreshCw, ChevronDown, Filter } from 'lucide-react'
 import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
 import { DocumentBreadcrumb } from '@/components/ui/document-breadcrumb'
 import { DocumentIcon } from '@/components/ui/document-icon'
@@ -43,6 +43,7 @@ import { useSecureOpenDocument } from '@/lib/use-secure-open-document'
 import { logger } from '@/lib/logger'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import { DocumentDocCommentsPane } from '@/components/projects/document-doc-comments-pane'
+import { DocumentBlobPreviewPane } from '@/components/files/document-blob-preview-pane'
 import { formatDistanceToNow } from 'date-fns'
 import { cn } from '@/lib/utils'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -201,6 +202,7 @@ function DraggableCard({
   handleSecureOpen,
   isRegrantingId,
   onOpenComments,
+  onOpenPreview,
   extCollaboratorLabel,
   viewerLabel,
   onParentFolderClick,
@@ -223,6 +225,7 @@ function DraggableCard({
   handleSecureOpen: (share: ShareRecord) => void
   isRegrantingId: string | null
   onOpenComments?: (share: ShareRecord) => void
+  onOpenPreview?: (share: ShareRecord) => void
   extCollaboratorLabel: string
   viewerLabel: string
   onParentFolderClick?: (parentId: string, parentName: string) => void
@@ -280,6 +283,7 @@ function DraggableCard({
         isRegrantingId={isRegrantingId}
         onClickTitle={() => handleSecureOpen(share)}
         onOpenComments={onOpenComments}
+        onOpenPreview={onOpenPreview}
         extCollaboratorLabel={extCollaboratorLabel}
         viewerLabel={viewerLabel}
         onParentFolderClick={onParentFolderClick}
@@ -308,6 +312,7 @@ function ShareCardContent({
   handleSecureOpen,
   isRegrantingId,
   onOpenComments,
+  onOpenPreview,
   extCollaboratorLabel,
   viewerLabel,
   onParentFolderClick,
@@ -330,6 +335,7 @@ function ShareCardContent({
   handleSecureOpen: (share: ShareRecord) => void
   isRegrantingId: string | null
   onOpenComments?: (share: ShareRecord) => void
+  onOpenPreview?: (share: ShareRecord) => void
   extCollaboratorLabel: string
   viewerLabel: string
   onParentFolderClick?: (parentId: string, parentName: string) => void
@@ -414,6 +420,22 @@ function ShareCardContent({
                 <TooltipContent side="top" className="text-xs">Comments</TooltipContent>
               </Tooltip>
             </TooltipProvider>
+            {!share.documentMimeType?.includes('folder') && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      className="p-1 rounded hover:bg-[#f3f4f6] text-[#9a9ba0] hover:text-[#45474c] transition-colors"
+                      onClick={(e) => { e.stopPropagation(); onOpenPreview?.(share) }}
+                    >
+                      <ScanEye className="h-3.5 w-3.5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-xs">Preview</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
             <DocumentActionMenu
               document={getDocumentForMenu(share)}
               showShareModal={canManage}
@@ -598,6 +620,7 @@ function SharesListView({
   extCollaboratorLabel,
   viewerLabel,
   onOpenComments,
+  onOpenPreview,
   onParentFolderClick,
   isExternalPersona,
   isExternalViewer,
@@ -615,6 +638,7 @@ function SharesListView({
   extCollaboratorLabel: string
   viewerLabel: string
   onOpenComments?: (share: ShareRecord) => void
+  onOpenPreview?: (share: ShareRecord) => void
   onParentFolderClick?: (parentId: string, parentName: string) => void
   isExternalPersona?: boolean
   isExternalViewer?: boolean
@@ -782,6 +806,22 @@ function SharesListView({
                     </Tooltip>
                   </TooltipProvider>
                 )}
+                {!isFolder && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          className="h-7 w-7 rounded-md inline-flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                          onClick={(e) => { e.stopPropagation(); onOpenPreview?.(share) }}
+                        >
+                          <ScanEye className="h-4 w-4" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="text-xs">Preview</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
                 {isFolder && onOpenInFilesForFolder && (
                   <TooltipProvider>
                     <Tooltip>
@@ -830,6 +870,7 @@ function SharesGridView({
   extCollaboratorLabel,
   viewerLabel,
   onOpenComments,
+  onOpenPreview,
   onParentFolderClick,
   isExternalPersona,
   isExternalViewer,
@@ -847,6 +888,7 @@ function SharesGridView({
   extCollaboratorLabel: string
   viewerLabel: string
   onOpenComments?: (share: ShareRecord) => void
+  onOpenPreview?: (share: ShareRecord) => void
   onParentFolderClick?: (parentId: string, parentName: string) => void
   isExternalPersona?: boolean
   isExternalViewer?: boolean
@@ -854,7 +896,7 @@ function SharesGridView({
   generalFolderId?: string | null
 }) {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 py-2">
+    <div className="flex flex-wrap gap-4 py-2">
       {shares.map((share) => (
         <ShareCard
           key={share.id}
@@ -869,6 +911,7 @@ function SharesGridView({
           extCollaboratorLabel={extCollaboratorLabel}
           viewerLabel={viewerLabel}
           onOpenComments={onOpenComments}
+          onOpenPreview={onOpenPreview}
           onParentFolderClick={onParentFolderClick}
           isExternalPersona={isExternalPersona}
           isExternalViewer={isExternalViewer}
@@ -892,6 +935,7 @@ function ShareCard({
   extCollaboratorLabel,
   viewerLabel,
   onOpenComments,
+  onOpenPreview,
   onParentFolderClick,
   isExternalPersona,
   isExternalViewer,
@@ -909,6 +953,7 @@ function ShareCard({
   extCollaboratorLabel: string
   viewerLabel: string
   onOpenComments?: (share: ShareRecord) => void
+  onOpenPreview?: (share: ShareRecord) => void
   onParentFolderClick?: (parentId: string, parentName: string) => void
   isExternalPersona?: boolean
   isExternalViewer?: boolean
@@ -918,7 +963,7 @@ function ShareCard({
   const isFolder = share.documentMimeType?.includes('folder')
   const [linkCopied, setLinkCopied] = useState(false)
 
-  const handleOpenPreview = () => handleSecureOpen(share)
+  const handleOpenSecure = () => handleSecureOpen(share)
 
   // Proxy URL — avoids Google CDN 429 by routing through our backend with OAuth token
   const proxyThumbnailUrl = share.thumbnailLink
@@ -932,7 +977,7 @@ function ShareCard({
       animate={{ opacity: 1, y: 0 }}
       whileHover={{ y: -2, boxShadow: '0 8px 24px -4px rgba(0,0,0,0.10)' }}
       transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-      className="group relative bg-white rounded border border-[#e5e7eb] shadow-sm overflow-hidden flex flex-col h-full"
+      className="group relative bg-white rounded border border-[#e5e7eb] shadow-sm overflow-hidden flex flex-col w-[260px]"
     >
       {/* Thumbnail / Large Icon Area */}
       <div
@@ -940,7 +985,7 @@ function ShareCard({
           "aspect-[16/10] bg-slate-50 border-b border-slate-100 cursor-pointer overflow-hidden relative group/thumb",
           !proxyThumbnailUrl && "flex items-center justify-center"
         )}
-        onClick={handleOpenPreview}
+        onClick={handleOpenSecure}
       >
         {proxyThumbnailUrl ? (
           <div className="w-full h-full relative">
@@ -991,7 +1036,7 @@ function ShareCard({
             <h3
               className="font-semibold text-[#1b1b1d] text-[13px] leading-tight truncate cursor-pointer hover:text-primary transition-colors"
               title={share.documentName}
-              onClick={handleOpenPreview}
+              onClick={handleOpenSecure}
             >
               {share.documentName}
             </h3>
@@ -1051,6 +1096,22 @@ function ShareCard({
                     </button>
                   </TooltipTrigger>
                   <TooltipContent side="top" className="text-xs">Comments</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+            {!isFolder && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors"
+                      onClick={(e) => { e.stopPropagation(); onOpenPreview?.(share) }}
+                    >
+                      <ScanEye className="h-4 w-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-xs">Preview</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
             )}
@@ -1441,6 +1502,21 @@ export function EngagementSharesTab({
     [rightPane]
   )
 
+  const handleOpenPreview = useCallback(
+    (share: ShareRecord) => {
+      rightPane.setTitle(share.documentName || 'Preview')
+      rightPane.setHeaderSubtitle('')
+      rightPane.setHeaderIcon(<ScanEye className="h-4 w-4" />)
+      rightPane.setContent(
+        <DocumentBlobPreviewPane
+          document={{ id: share.documentId, name: share.documentName }}
+          projectId={share.projectId}
+        />
+      )
+    },
+    [rightPane]
+  )
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Toolbar: on background, outside the card */}
@@ -1583,6 +1659,7 @@ export function EngagementSharesTab({
               extCollaboratorLabel={projExtCollaborator}
               viewerLabel={projViewer}
               onOpenComments={handleOpenComments}
+              onOpenPreview={handleOpenPreview}
               onParentFolderClick={onOpenInFiles ? handleOpenParentFolder : undefined}
               isExternalPersona={restrictToSharedOnly}
               isExternalViewer={isExternalViewer}
@@ -1602,6 +1679,7 @@ export function EngagementSharesTab({
               extCollaboratorLabel={projExtCollaborator}
               viewerLabel={projViewer}
               onOpenComments={handleOpenComments}
+              onOpenPreview={handleOpenPreview}
               onParentFolderClick={onOpenInFiles ? handleOpenParentFolder : undefined}
               isExternalPersona={restrictToSharedOnly}
               isExternalViewer={isExternalViewer}
@@ -1649,6 +1727,7 @@ export function EngagementSharesTab({
                               handleSecureOpen={handleSecureOpenShare}
                               isRegrantingId={isRegrantingId}
                               onOpenComments={handleOpenComments}
+                              onOpenPreview={handleOpenPreview}
                               extCollaboratorLabel={projExtCollaborator}
                               viewerLabel={projViewer}
                               onParentFolderClick={onOpenInFiles ? handleOpenParentFolder : undefined}
@@ -1689,6 +1768,7 @@ export function EngagementSharesTab({
                           handleSecureOpen={handleSecureOpenShare}
                           isRegrantingId={isRegrantingId}
                           onOpenComments={handleOpenComments}
+                          onOpenPreview={handleOpenPreview}
                           extCollaboratorLabel={projExtCollaborator}
                           viewerLabel={projViewer}
                           onParentFolderClick={onOpenInFiles ? handleOpenParentFolder : undefined}

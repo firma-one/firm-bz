@@ -31,3 +31,37 @@ export async function resolveEngagementConnector(engagementId: string): Promise<
   if (!engagement) return null
   return engagement.client.connector as Connector | null
 }
+
+/**
+ * Resolve a connectorId for an engagement using the priority chain:
+ *   documentConnectorId (if provided) → client connector → firm connector
+ *
+ * Used by API routes that need a Drive connector to serve a file. Pass the
+ * document's own connectorId as the first argument when available so we
+ * prefer the connector that originally indexed the file.
+ *
+ * Returns null if no active connector is found at any level.
+ */
+export async function resolveEngagementConnectorId(
+  engagementId: string,
+  documentConnectorId?: string | null,
+): Promise<string | null> {
+  if (documentConnectorId) return documentConnectorId
+
+  const engagement = await prisma.engagement.findUnique({
+    where: { id: engagementId },
+    select: {
+      firmId: true,
+      client: { select: { connectorId: true } },
+    },
+  })
+  if (!engagement) return null
+
+  if (engagement.client.connectorId) return engagement.client.connectorId
+
+  const firm = await prisma.firm.findUnique({
+    where: { id: engagement.firmId },
+    select: { connectorId: true },
+  })
+  return firm?.connectorId ?? null
+}

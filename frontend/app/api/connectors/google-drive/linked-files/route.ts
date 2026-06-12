@@ -582,6 +582,25 @@ export async function POST(request: NextRequest) {
                     { status: 403 }
                 )
             }
+
+            // Resolve engagement before creating the Drive file so a cap breach
+            // never leaves an orphaned file in Drive.
+            let engagement = await prisma.engagement.findFirst({
+                where: { connectorRootFolderId: folderId },
+                select: { id: true, clientId: true, client: { select: { firmId: true } } }
+            })
+            if (!engagement && bodyEngagementId) {
+                engagement = await prisma.engagement.findUnique({
+                    where: { id: bodyEngagementId as string },
+                    select: { id: true, clientId: true, client: { select: { firmId: true } } }
+                })
+            }
+            const orgId = engagement?.client?.firmId
+            if (!orgId) {
+                return NextResponse.json({ error: 'Could not resolve firm for this folder' }, { status: 400 })
+            }
+            await assertWithinDocumentCap(orgId, 1)
+
             const newFile = await googleDriveConnector.createDriveFile(accessToken, {
                 name,
                 mimeType: mimeTypeStr,
@@ -594,23 +613,6 @@ export async function POST(request: NextRequest) {
 
             // Index the newly created folder
             if (newFile && typeof newFile === 'object' && 'id' in newFile) {
-                let engagement = await prisma.engagement.findFirst({
-                    where: { connectorRootFolderId: folderId },
-                    select: { id: true, clientId: true, client: { select: { firmId: true } } }
-                })
-
-                if (!engagement && bodyEngagementId) {
-                    engagement = await prisma.engagement.findUnique({
-                        where: { id: bodyEngagementId as string },
-                        select: { id: true, clientId: true, client: { select: { firmId: true } } }
-                    })
-                }
-
-                const orgId = engagement?.client?.firmId
-                if (!orgId) {
-                    return NextResponse.json({ error: 'Could not resolve firm for this folder' }, { status: 400 })
-                }
-                await assertWithinDocumentCap(orgId, 1)
                 await safeInngestSend('file.index.requested', {
                     organizationId: orgId,
                     clientId: engagement?.clientId ?? null,
@@ -1057,6 +1059,10 @@ export async function POST(request: NextRequest) {
                 },
                 { status }
             )
+        }
+        // Billing cap errors have a user-friendly message — surface them as 402
+        if (error instanceof Error && error.message.includes('Your plan allows')) {
+            return NextResponse.json({ error: error.message }, { status: 402 })
         }
         console.error('Linked Files API Error:', error)
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })

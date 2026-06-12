@@ -23,6 +23,7 @@ interface UseEngagementFileOpsOptions {
     stopProcessing: (id: string) => void
     setFiles: React.Dispatch<React.SetStateAction<DriveFile[]>>
     orgSandbox?: { sandboxOnly?: boolean } | null
+    refreshFileCount?: () => void
 }
 
 export function useEngagementFileOps({
@@ -39,6 +40,7 @@ export function useEngagementFileOps({
     stopProcessing,
     setFiles,
     orgSandbox,
+    refreshFileCount,
 }: UseEngagementFileOpsOptions) {
     const { addToast } = useToast()
 
@@ -117,12 +119,13 @@ export function useEngagementFileOps({
             addToast({ type: 'success', title: 'Duplicated', message: `${doc.name} duplicated with a unique name` })
             const currentFolderId = currentFolderIdRef.current
             if (currentFolderId) fetchFiles(currentFolderId, true)
+            refreshFileCount?.()
         } catch (e: any) {
             addToast({ type: 'error', title: 'Error', message: e?.message || 'Something went wrong' })
         } finally {
             stopProcessing(doc.id)
         }
-    }, [projectId, currentFolderIdRef, fetchFiles, addToast, startProcessing, stopProcessing])
+    }, [projectId, currentFolderIdRef, fetchFiles, addToast, startProcessing, stopProcessing, refreshFileCount])
 
     // Step 1: open confirm dialog
     const handleTrash = useCallback((doc: DriveFile) => {
@@ -178,6 +181,7 @@ export function useEngagementFileOps({
             setTrashConfirmTarget(null)
             const currentFolderId = currentFolderIdRef.current
             if (currentFolderId) fetchFiles(currentFolderId, true)
+            refreshFileCount?.()
         } catch (e: any) {
             addToast({ type: 'error', title: 'Error', message: e?.message || 'Something went wrong' })
             setTrashConfirmTarget(null)
@@ -292,13 +296,14 @@ export function useEngagementFileOps({
             setCopyMoveTarget(null)
             const currentFolderId = currentFolderIdRef.current
             if (currentFolderId) fetchFiles(currentFolderId, true)
+            if (action === 'copy') refreshFileCount?.()
         } catch (e: any) {
             addToast({ type: 'error', title: 'Error', message: e?.message || 'Something went wrong' })
         } finally {
             setCopyMoveSubmittingFolderId(null)
             stopProcessing(target.id)
         }
-    }, [copyMoveTarget, copyMoveAction, copyMoveKeepBoth, projectId, currentFolderIdRef, fetchFiles, addToast, startProcessing, stopProcessing])
+    }, [copyMoveTarget, copyMoveAction, copyMoveKeepBoth, projectId, currentFolderIdRef, fetchFiles, addToast, startProcessing, stopProcessing, refreshFileCount])
 
     const handleMoveTree = useCallback(async (doc: DriveFile, targetRoot: 'general' | 'confidential' | 'staging') => {
         if (!sessionRef.current?.access_token) return

@@ -23,6 +23,7 @@ interface UseEngagementUploadOptions {
     restrictToSharedOnly: boolean
     isSandboxFirm: boolean
     fetchFiles: (folderId: string, silent?: boolean) => Promise<void>
+    refreshFileCount?: () => void
 }
 
 export function useEngagementUpload({
@@ -34,6 +35,7 @@ export function useEngagementUpload({
     restrictToSharedOnly,
     isSandboxFirm,
     fetchFiles,
+    refreshFileCount,
 }: UseEngagementUploadOptions) {
     const {
         uploadQueue,
@@ -302,6 +304,7 @@ export function useEngagementUpload({
         // Refresh
         const currentFolderId = currentFolderIdRef.current
         if (currentFolderId) fetchFiles(currentFolderId, true)
+        refreshFileCount?.()
 
         setIsUploading(false)
         if (uploadOverlayDismissedRef.current && (completedCount > 0 || errorCount > 0)) {
@@ -404,6 +407,7 @@ export function useEngagementUpload({
 
                 const currentFolderId = currentFolderIdRef.current
                 if (currentFolderId) fetchFiles(currentFolderId, true)
+                refreshFileCount?.()
             }
             setIsUploading(false)
             if (uploadOverlayDismissedRef.current && (completedCount > 0 || errorCount > 0)) {
@@ -555,6 +559,7 @@ export function useEngagementUpload({
         }
         const latestFolderId = currentFolderIdRef.current
         if (latestFolderId) fetchFiles(latestFolderId, true)
+        refreshFileCount?.()
         setIsUploading(false)
         if (uploadOverlayDismissedRef.current) {
             const total = fileEntries.length
