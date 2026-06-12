@@ -186,6 +186,10 @@ export interface DriveFile {
   id: string
   /** Internal projectDocument UUID (never shown to end-users as Drive id). Present for files indexed into engagement_documents. */
   projectDocumentId?: string
+  /** Indexing status of the engagementDocument record. Absent when no record exists yet. */
+  indexingStatus?: 'PROCESSING' | 'PROCESSED' | 'ERROR' | 'ARCHIVED'
+  /** Due date set on the engagementDocument record. ISO string. */
+  dueDate?: string | null
   name: string
   mimeType: string
   webViewLink: string

@@ -3,7 +3,7 @@
 import React from 'react'
 import {
     Folder, Share2, Inbox, CheckCircle2, Trash2, Lock, FolderLock, FolderUp,
-    MessageCircle, Link2, MoreVertical, CircleChevronLeft
+    MessageCircle, Link2, MoreVertical, CircleChevronLeft, Loader2, Bookmark
 } from 'lucide-react'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { SharedFolderIcon } from '@/components/ui/folder-shared-icon'
@@ -97,6 +97,8 @@ export interface EngagementFileRowProps {
     onAddToast: (toast: { type: string; title: string; message: string }) => void
     /** Connector account email — passed to DocumentActionMenu for Google Drive authuser param. */
     connectorAccountEmail?: string | null
+    /** Bookmark record id if this document is bookmarked by the current user; undefined otherwise. */
+    bookmarkId?: string
 }
 
 export function EngagementFileRow({
@@ -163,6 +165,7 @@ export function EngagementFileRow({
     onOpenVersionPane,
     onAddToast,
     connectorAccountEmail,
+    bookmarkId,
 }: EngagementFileRowProps) {
     const isDeeplinkHighlight = file.id === highlightedFileId
     const isFolder = (file.mimeType ?? (file as { type?: string }).type) === 'application/vnd.google-apps.folder'
@@ -182,7 +185,21 @@ export function EngagementFileRow({
     const locked = file.lock?.type === 'finalize'
     const canMutateFile = canEdit && !locked && !isIntakeRow
     const canOrganizeTree = canManage && !locked && !isIntakeRow
-    const notIndexed = !isFolder && !file.projectDocumentId
+    const isIndexing = !isFolder && !!file.projectDocumentId && file.indexingStatus === 'PROCESSING'
+
+    async function handleRemoveBookmark(e: React.MouseEvent) {
+        e.stopPropagation()
+        try {
+            await fetch('/api/bookmarks', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: bookmarkId }),
+            })
+            window.dispatchEvent(new CustomEvent('pockett-bookmarks-updated'))
+        } catch {
+            onAddToast({ type: 'error', title: 'Error', message: 'Failed to remove bookmark.' })
+        }
+    }
 
     return (
         <div
@@ -195,7 +212,7 @@ export function EngagementFileRow({
             onDragOver={(e) => onDragOver(e, file)}
             onDragLeave={onDragLeave}
             onDrop={(e) => onDrop(e, file)}
-            style={{ gridTemplateColumns: 'minmax(0, 1fr) 10% 10% 14% 12% 8%' }}
+            style={{ gridTemplateColumns: 'minmax(0, 1fr) 10% 10% 14% 12% 10% 8%' }}
             className={cn(
                 "group grid gap-4 h-10 pl-3 pr-2 transition-all items-center cursor-default relative text-[0.8125rem]",
                 isFolder && selectedFileIdsSize === 0 && "cursor-pointer",
@@ -319,6 +336,21 @@ export function EngagementFileRow({
 
             {/* Badges */}
             <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                    {bookmarkId && (
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <button
+                                    type="button"
+                                    className="h-7 w-7 inline-flex items-center justify-center rounded-md text-primary hover:bg-red-50 hover:text-red-500 transition-colors"
+                                    aria-label="Remove bookmark"
+                                    onClick={handleRemoveBookmark}
+                                >
+                                    <Bookmark className="h-4 w-4 fill-current" />
+                                </button>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="text-xs">Bookmarked — click to remove</TooltipContent>
+                        </Tooltip>
+                    )}
                     {showBadge ? (
                         <Tooltip>
                             <TooltipTrigger asChild>
@@ -472,15 +504,12 @@ export function EngagementFileRow({
                                     )}
                                     aria-label="Open comments"
                                     aria-pressed={file.id === activeCommentDocId}
-                                    disabled={!isFolder && !file.projectDocumentId}
                                     onClick={() => onOpenComments(file)}
                                 >
                                     <MessageCircle className="h-4 w-4" />
                                 </button>
                             </TooltipTrigger>
-                            <TooltipContent side="top" className="text-xs">
-                                {!isFolder && !file.projectDocumentId ? 'Unavailable until indexed' : 'Comments'}
-                            </TooltipContent>
+                            <TooltipContent side="top" className="text-xs">Comments</TooltipContent>
                         </Tooltip>
                     )}
 
@@ -513,59 +542,53 @@ export function EngagementFileRow({
                             {file.projectDocumentId ? 'Copy link' : 'Unavailable until indexed'}
                         </TooltipContent>
                     </Tooltip>
-                    {(() => {
-                        return (
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <span>
-                                    <span className={cn(notIndexed && 'pointer-events-none opacity-40 inline-flex')}>
-                            <DocumentActionMenu
-                                document={file}
-                                triggerIcon={<MoreVertical className="h-4 w-4" />}
-                                deeplinkBase={typeof window !== 'undefined' ? window.location.href.replace(/#.*$/, '') : ''}
-                                showShareModal={isProjectLead && !isIntakeRow}
-                                isEngagementLead={isProjectLead}
-                                isExternalUser={isEC || isGuest}
-                                isExternalViewer={isGuest}
-                                projectId={projectId}
-                                orgSlug={orgSlug}
-                                onShareSaved={onShareSaved}
-                                canManage={canOrganizeTree}
-                                currentFolderType={currentFolderType}
-                                onOpenCommentPane={(docId) => onOpenCommentPane(docId)}
-                                onOpenInfoPane={(docId) => onOpenInfoPane(docId)}
-                                onOpenActivityPane={(docId) => onOpenActivityPane(docId)}
-                                onOpenVersionPane={(docId) => onOpenVersionPane(docId)}
-                                onRenameDocument={canMutateFile ? (doc) => onOpenRename(doc as DriveFile) : undefined}
-                                onDuplicateDocument={canMutateFile ? (doc) => onDuplicate(doc as DriveFile) : undefined}
-                                onCopyDocument={generalFolderId && canMutateFile ? (doc) => onOpenCopyMove(doc as DriveFile, 'copy') : undefined}
-                                onMoveDocument={generalFolderId && canMutateFile ? (doc) => onOpenCopyMove(doc as DriveFile, 'move') : undefined}
-                                onCrossEngagementCopy={isProjectLead && canMutateFile ? (doc) => onOpenCrossEngagement(doc as DriveFile) : undefined}
-                                onDeleteDocument={canMutateFile ? (doc) => onTrash(doc as DriveFile) : undefined}
-                                onMakePrivate={canOrganizeTree && !file.isPrivate ? () => onPrivacy(file, true) : undefined}
-                                onMakePublic={canOrganizeTree && file.isPrivate ? () => onPrivacy(file, false) : undefined}
-                                onOpenChange={(open) => onActionMenuOpenChange(open)}
-                                onApproveFolder={isProjectLead && isFolder && isIntakeRow ? () => onFolderIntakeAction(file, 'approve-folder') : undefined}
-                                onRejectFolder={isProjectLead && isFolder && isIntakeRow ? () => onFolderIntakeAction(file, 'reject-folder') : undefined}
-                                onWithdrawFolder={(isEC || isGuest) && isFolder && isOwnIntake ? () => onFolderIntakeAction(file, 'withdraw-folder') : undefined}
-                                onOpenDocument={(doc) => {
-                                    const d = doc as DriveFile
-                                    const docId = d.id ?? file.id
-                                    onOpenDocument(d)
-                                }}
-                                connectorAccountEmail={connectorAccountEmail}
-                            />
-                                    </span>
-                                    </span>
-                                </TooltipTrigger>
-                                {notIndexed && (
-                                    <TooltipContent side="top" className="text-xs">
-                                        Unavailable until indexed
-                                    </TooltipContent>
-                                )}
-                            </Tooltip>
-                        )
-                    })()}
+
+                    {isIndexing && (
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <span className="h-7 w-7 inline-flex items-center justify-center text-slate-400">
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="text-xs">Indexing in progress</TooltipContent>
+                        </Tooltip>
+                    )}
+
+                    <DocumentActionMenu
+                        document={file}
+                        triggerIcon={<MoreVertical className="h-4 w-4" />}
+                        deeplinkBase={typeof window !== 'undefined' ? window.location.href.replace(/#.*$/, '') : ''}
+                        showShareModal={isProjectLead && !isIntakeRow}
+                        isEngagementLead={isProjectLead}
+                        isExternalUser={isEC || isGuest}
+                        isExternalViewer={isGuest}
+                        projectId={projectId}
+                        orgSlug={orgSlug}
+                        onShareSaved={onShareSaved}
+                        canManage={canOrganizeTree}
+                        currentFolderType={currentFolderType}
+                        onOpenCommentPane={(docId) => onOpenCommentPane(docId)}
+                        onOpenInfoPane={(docId) => onOpenInfoPane(docId)}
+                        onOpenActivityPane={(docId) => onOpenActivityPane(docId)}
+                        onOpenVersionPane={(docId) => onOpenVersionPane(docId)}
+                        onRenameDocument={canMutateFile ? (doc) => onOpenRename(doc as DriveFile) : undefined}
+                        onDuplicateDocument={canMutateFile ? (doc) => onDuplicate(doc as DriveFile) : undefined}
+                        onCopyDocument={generalFolderId && canMutateFile ? (doc) => onOpenCopyMove(doc as DriveFile, 'copy') : undefined}
+                        onMoveDocument={generalFolderId && canMutateFile ? (doc) => onOpenCopyMove(doc as DriveFile, 'move') : undefined}
+                        onCrossEngagementCopy={isProjectLead && canMutateFile ? (doc) => onOpenCrossEngagement(doc as DriveFile) : undefined}
+                        onDeleteDocument={canMutateFile ? (doc) => onTrash(doc as DriveFile) : undefined}
+                        onMakePrivate={canOrganizeTree && !file.isPrivate ? () => onPrivacy(file, true) : undefined}
+                        onMakePublic={canOrganizeTree && file.isPrivate ? () => onPrivacy(file, false) : undefined}
+                        onOpenChange={(open) => onActionMenuOpenChange(open)}
+                        onApproveFolder={isProjectLead && isFolder && isIntakeRow ? () => onFolderIntakeAction(file, 'approve-folder') : undefined}
+                        onRejectFolder={isProjectLead && isFolder && isIntakeRow ? () => onFolderIntakeAction(file, 'reject-folder') : undefined}
+                        onWithdrawFolder={(isEC || isGuest) && isFolder && isOwnIntake ? () => onFolderIntakeAction(file, 'withdraw-folder') : undefined}
+                        onOpenDocument={(doc) => {
+                            const d = doc as DriveFile
+                            onOpenDocument(d)
+                        }}
+                        connectorAccountEmail={connectorAccountEmail}
+                    />
                 </div>
             </div>
 
@@ -619,6 +642,44 @@ export function EngagementFileRow({
                     />
                 ) : (
                     <span className="text-[0.8125rem] text-[#45474c]">—</span>
+                )}
+            </div>
+
+            {/* Due Date Column */}
+            <div>
+                {!isFolder && file.dueDate ? (() => {
+                    const due = new Date(file.dueDate)
+                    const now = Date.now()
+                    const diffMs = due.getTime() - now
+                    const diffDays = diffMs / 86400000
+                    const isUrgent = diffDays >= 0 && diffDays <= 7
+                    const isOverdue = diffDays < 0
+
+                    let relativeLabel: string
+                    if (isOverdue) {
+                        const days = Math.floor(-diffDays)
+                        relativeLabel = days === 0 ? 'today' : days === 1 ? '1d overdue' : `${days}d overdue`
+                    } else {
+                        const days = Math.floor(diffDays)
+                        relativeLabel = days === 0 ? 'today' : days === 1 ? 'in 1d' : `in ${days}d`
+                    }
+
+                    const colorClass = isOverdue || isUrgent ? 'text-red-500' : 'text-[#45474c]'
+                    const iconColor = isOverdue || isUrgent ? 'text-red-300 hover:text-red-500' : 'text-[#e5e7eb] hover:text-[#45474c]'
+
+                    return (
+                        <RelativeDateTime
+                            date={file.dueDate}
+                            displayFormat="short"
+                            textClassName={`text-[0.8125rem] ${colorClass}`}
+                            iconClassName={iconColor}
+                            tooltipSide="top"
+                            tooltipPrefix="Due on:"
+                            overrideDisplayText={relativeLabel}
+                        />
+                    )
+                })() : (
+                    <span className="text-[0.8125rem] text-[#45474c]/40">—</span>
                 )}
             </div>
 

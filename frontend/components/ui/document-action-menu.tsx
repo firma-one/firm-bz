@@ -33,6 +33,7 @@ import {
   Info,
   Eye,
   X,
+  XSquare,
   FolderLock,
   FolderUp,
   MessageSquare,
@@ -176,6 +177,7 @@ export function DocumentActionMenu({
 }: DocumentActionMenuProps) {
   const [showDueDatePicker, setShowDueDatePicker] = useState(false)
   const [showShareModalOpen, setShowShareModalOpen] = useState(false)
+  const [existingBookmarkId, setExistingBookmarkId] = useState<string | null>(null)
   /** Drive id or project document UUID — disables Finalize row while request in flight */
   const [finalizeLockActiveId, setFinalizeLockActiveId] = useState<string | null>(null)
   const [selectedDueDate, setSelectedDueDate] = useState<string>("")
@@ -209,10 +211,8 @@ export function DocumentActionMenu({
     setTimeout(() => setHasCopiedName(false), 2000)
   }
 
-  // Handle due date selection
+  // Handle due date selection — empty string means clear
   const handleDueDateChange = async (dateTime: string) => {
-    if (!dateTime) return
-
     try {
       if (!projectId) {
         addToast({ type: 'error', title: 'Unavailable', message: 'Project context is required to set a due date.' })
@@ -226,10 +226,10 @@ export function DocumentActionMenu({
         return
       }
 
-      const res = await fetch(`/api/projects/${projectId}/documents/${encodeURIComponent(document.id)}/due-date`, {
+      const res = await fetch(`/api/projects/${projectId}/documents/${encodeURIComponent(documentIdForProjectApis)}/due-date`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify({ dueDate: dateTime }),
+        body: JSON.stringify({ dueDate: dateTime || null }),
       })
 
       if (!res.ok) {
@@ -237,14 +237,14 @@ export function DocumentActionMenu({
         throw new Error(err.error ?? 'Failed to update due date')
       }
 
-      document.dueDate = dateTime
+      document.dueDate = dateTime || null
       setSelectedDueDate(dateTime)
       setShowDueDatePicker(false)
 
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('pockett-notifications-updated'))
       }
-      addToast({ type: 'success', title: 'Saved', message: 'Due date updated.' })
+      addToast({ type: 'success', title: 'Saved', message: dateTime ? 'Due date updated.' : 'Due date cleared.' })
     } catch (error) {
       addToast({
         type: 'error',
@@ -446,7 +446,26 @@ export function DocumentActionMenu({
 
   return (
     <>
-      <DropdownMenu onOpenChange={onOpenChange}>
+      <DropdownMenu onOpenChange={async (open) => {
+        onOpenChange?.(open)
+        if (open) {
+          const projectDocumentId = (document as any)?.projectDocumentId as string | undefined
+          if (projectDocumentId) {
+            try {
+              const { getSession } = await import('@/lib/supabase')
+              const session = await getSession()
+              if (session?.access_token) {
+                const res = await fetch('/api/bookmarks', { headers: { Authorization: `Bearer ${session.access_token}` } })
+                if (res.ok) {
+                  const data = await res.json()
+                  const match = (data.bookmarks ?? []).find((b: any) => b.kind === 'document' && b.documentId === projectDocumentId)
+                  setExistingBookmarkId(match?.id ?? null)
+                }
+              }
+            } catch { /* non-critical */ }
+          }
+        }
+      }}>
         <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
           <Button
             variant="ghost"
@@ -1083,8 +1102,6 @@ export function DocumentActionMenu({
                       return
                     }
                     try {
-                      // Prefer in-app deep link targeting (resolved at click-time from projectId + projectDocumentId).
-                      // Fallback url is optional (e.g. external link bookmarks).
                       const projectDocumentId = (document as any)?.projectDocumentId as string | undefined
                       const { getSession } = await import('@/lib/supabase')
                       const session = await getSession()
@@ -1093,38 +1110,52 @@ export function DocumentActionMenu({
                         return
                       }
                       if (!projectId || !projectDocumentId) {
-                        addToast({ type: 'error', title: 'Unavailable', message: 'This file is not indexed yet, so it cannot be bookmarked.' })
+                        addToast({ type: 'error', title: 'Unavailable', message: 'This file cannot be bookmarked yet. Please try again shortly.' })
                         return
                       }
-                      const res = await fetch('/api/bookmarks', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-                        body: JSON.stringify({
-                          bookmark: {
-                            kind: 'document',
-                            label: document.name ?? 'Document',
-                            url: undefined,
-                            projectId: projectId,
-                            documentId: projectDocumentId,
-                          },
-                        }),
-                      })
-                      if (!res.ok) {
-                        const err = await res.json().catch(() => ({}))
-                        throw new Error(err.error ?? 'Failed to bookmark')
+                      if (existingBookmarkId) {
+                        // Remove
+                        const res = await fetch('/api/bookmarks', {
+                          method: 'DELETE',
+                          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+                          body: JSON.stringify({ id: existingBookmarkId }),
+                        })
+                        if (!res.ok) throw new Error('Failed to remove bookmark')
+                        setExistingBookmarkId(null)
+                        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('pockett-bookmarks-updated'))
+                        addToast({ type: 'success', title: 'Removed', message: 'Bookmark removed.' })
+                      } else {
+                        // Add
+                        const res = await fetch('/api/bookmarks', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+                          body: JSON.stringify({
+                            bookmark: {
+                              kind: 'document',
+                              label: document.name ?? 'Document',
+                              url: undefined,
+                              projectId: projectId,
+                              documentId: projectDocumentId,
+                            },
+                          }),
+                        })
+                        if (!res.ok) {
+                          const err = await res.json().catch(() => ({}))
+                          throw new Error(err.error ?? 'Failed to bookmark')
+                        }
+                        const data = await res.json()
+                        setExistingBookmarkId(data.bookmark?.id ?? null)
+                        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('pockett-bookmarks-updated'))
+                        addToast({ type: 'success', title: 'Bookmarked', message: 'Saved to your bookmarks.' })
                       }
-                      if (typeof window !== 'undefined') {
-                        window.dispatchEvent(new CustomEvent('pockett-bookmarks-updated'))
-                      }
-                      addToast({ type: 'success', title: 'Bookmarked', message: 'Saved to your bookmarks.' })
                     } catch (e) {
-                      addToast({ type: 'error', title: 'Failed', message: e instanceof Error ? e.message : 'Failed to bookmark.' })
+                      addToast({ type: 'error', title: 'Failed', message: e instanceof Error ? e.message : 'Failed to update bookmark.' })
                     }
                   }}
                   className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
                 >
-                  <Bookmark className="h-4 w-4 text-gray-600" />
-                  <span>Bookmark</span>
+                  <Bookmark className={`h-4 w-4 ${existingBookmarkId ? 'fill-current text-primary' : 'text-gray-600'}`} />
+                  <span>{existingBookmarkId ? 'Remove bookmark' : 'Bookmark'}</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => setShowDueDatePicker(true)}
@@ -1330,13 +1361,13 @@ export function DocumentActionMenu({
           onClick={() => setShowDueDatePicker(false)}
         >
           <div
-            className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 modal-content z-[1000000]"
+            className="bg-white rounded-[2px] shadow-xl max-w-md w-full mx-4 modal-content z-[1000000]"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="p-4 border-b border-gray-200">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                  <div className="w-10 h-10 bg-orange-100 rounded-[2px] flex items-center justify-center">
                     <Calendar className="h-5 w-5 text-orange-600" />
                   </div>
                   <div>
@@ -1350,15 +1381,15 @@ export function DocumentActionMenu({
                 </div>
                 <button
                   onClick={() => setShowDueDatePicker(false)}
-                  className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100 transition-colors"
+                  className="text-gray-400 hover:text-gray-600 p-1 rounded-[2px] hover:bg-gray-100 transition-colors"
                 >
-                  <X className="h-5 w-5" />
+                  <XSquare className="h-5 w-5" />
                 </button>
               </div>
             </div>
 
             <div className="p-4">
-              <div className="mb-4">
+              <div className="mb-2">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Select due date and time
                 </label>
@@ -1368,16 +1399,6 @@ export function DocumentActionMenu({
                   placeholder="Choose date and time"
                   className="w-full"
                 />
-              </div>
-
-              <div className="flex items-center justify-end space-x-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowDueDatePicker(false)}
-                >
-                  Cancel
-                </Button>
               </div>
             </div>
           </div>

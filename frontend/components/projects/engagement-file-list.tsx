@@ -166,10 +166,35 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
     const [ancestorFolderIdsForGuest, setAncestorFolderIdsForGuest] = useState<Set<string>>(new Set())
     const [sharedByMeExternalIds, setSharedByMeExternalIds] = useState<Set<string>>(new Set())
     const [filterShared, setFilterShared] = useState<'all' | 'by_me' | 'by_others' | 'with_collaborator' | 'with_viewer' | 'pending_intake'>('all')
+    const [bookmarkIdByDocumentId, setBookmarkIdByDocumentId] = useState<Map<string, string>>(new Map())
 
     useEffect(() => {
         sessionRef.current = session
     }, [session])
+
+    useEffect(() => {
+        const fetchBookmarks = async () => {
+            const token = sessionRef.current?.access_token
+            if (!token) return
+            try {
+                const res = await fetch('/api/bookmarks', { headers: { Authorization: `Bearer ${token}` } })
+                if (!res.ok) return
+                const data = await res.json()
+                const map = new Map<string, string>(
+                    (data.bookmarks ?? [])
+                        .filter((b: { documentId?: string; id: string }) => b.documentId)
+                        .map((b: { documentId: string; id: string }) => [b.documentId, b.id])
+                )
+                setBookmarkIdByDocumentId(map)
+            } catch {
+                // non-critical; leave empty
+            }
+        }
+        fetchBookmarks()
+        const handler = () => fetchBookmarks()
+        window.addEventListener('pockett-bookmarks-updated', handler)
+        return () => window.removeEventListener('pockett-bookmarks-updated', handler)
+    }, [])
 
     useEffect(() => {
         // Clear row highlight when the right pane closes or switches away from specific panes.
@@ -2085,7 +2110,7 @@ const handleRefresh = async () => {
 
                 {/* Fixed Table Header (Compact) */}
                 <div className="sticky top-0 bg-white border-b border-[#e5e7eb] pl-3 pr-2 py-2.5 shrink-0 z-10 group">
-                    <div className="grid gap-4 items-center" style={{ gridTemplateColumns: 'minmax(0, 1fr) 10% 10% 14% 12% 8%' }}>
+                    <div className="grid gap-4 items-center" style={{ gridTemplateColumns: 'minmax(0, 1fr) 10% 10% 14% 12% 10% 8%' }}>
                         <div className="flex items-center gap-3">
                             {/* Select-all checkbox — visible on hover of header or when in selection mode */}
                             <div
@@ -2109,6 +2134,7 @@ const handleRefresh = async () => {
                         <div className="col-span-2 flex items-center justify-center"><TableHeader label="Quick" /></div>
                         <div className="flex items-center"><TableHeader label="Owner" /></div>
                         <div className="flex items-center"><TableHeader label="Date modified" /></div>
+                        <div className="flex items-center"><TableHeader label="Due date" /></div>
                         <div className="flex items-center"><TableHeader label="File size" /></div>
                     </div>
                 </div>
@@ -2329,6 +2355,7 @@ const handleRefresh = async () => {
                                     onOpenVersionPane={(docId) => setActiveVersionDocId(docId)}
                                     onAddToast={(toast) => addToast(toast as any)}
                                     connectorAccountEmail={connectorAccountEmail}
+                                    bookmarkId={bookmarkIdByDocumentId.get(file.projectDocumentId ?? '')}
                                 />
                             ))}
                         </div>

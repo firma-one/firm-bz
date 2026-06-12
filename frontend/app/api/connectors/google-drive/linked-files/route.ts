@@ -344,7 +344,7 @@ export async function POST(request: NextRequest) {
                             parentId: folderId,
                             ...(folderInShared || folderUnderShared ? {} : { externalId: { in: Array.from(allowSet) } }),
                         },
-                        select: { id: true, externalId: true, fileName: true, mimeType: true, fileSize: true, isFolder: true, metadata: true, settings: true, createdBy: true },
+                        select: { id: true, externalId: true, fileName: true, mimeType: true, fileSize: true, isFolder: true, metadata: true, settings: true, createdBy: true, status: true, dueDate: true },
                     }),
                     // Also surface the EC/EV's own PENDING intake files/folders in this folder
                     prisma.engagementDocument.findMany({
@@ -353,7 +353,7 @@ export async function POST(request: NextRequest) {
                             parentId: folderId,
                             settings: { path: ['lock', 'uploadedBy'], equals: user.id } as any,
                         },
-                        select: { id: true, externalId: true, fileName: true, mimeType: true, fileSize: true, isFolder: true, metadata: true, settings: true, createdBy: true },
+                        select: { id: true, externalId: true, fileName: true, mimeType: true, fileSize: true, isFolder: true, metadata: true, settings: true, createdBy: true, status: true, dueDate: true },
                     }),
                 ])
 
@@ -429,6 +429,8 @@ export async function POST(request: NextRequest) {
                     isFolder: row.isFolder,
                     connectorId: connector.id,
                     projectDocumentId: row.id,
+                    indexingStatus: row.status ?? undefined,
+                    dueDate: row.dueDate ? (row.dueDate as Date).toISOString() : null,
                     lock: getLock(row.settings),
                 })}
                 for (const row of allRows) {
@@ -458,7 +460,7 @@ export async function POST(request: NextRequest) {
                         driveIds.length > 0
                             ? prisma.engagementDocument.findMany({
                                 where: { engagementId: bodyEngagementId, externalId: { in: driveIds } },
-                                select: { id: true, externalId: true, settings: true },
+                                select: { id: true, externalId: true, settings: true, status: true, dueDate: true },
                             })
                             : [],
                         // All PENDING intake docs/folders in this folder (shadow rows for EL/internal)
@@ -468,11 +470,13 @@ export async function POST(request: NextRequest) {
                                 parentId: folderId,
                                 settings: { path: ['lock', 'type'], equals: 'intake' } as any,
                             },
-                            select: { id: true, externalId: true, fileName: true, mimeType: true, fileSize: true, isFolder: true, metadata: true, settings: true },
+                            select: { id: true, externalId: true, fileName: true, mimeType: true, fileSize: true, isFolder: true, metadata: true, settings: true, status: true, dueDate: true },
                         }),
                     ])
 
                     const internalByExternal = new Map<string, string>(enrichRows.map((r: any) => [r.externalId, r.id]))
+                    const statusByExternal = new Map<string, string>(enrichRows.map((r: any) => [r.externalId, r.status]))
+                    const dueDateByExternal = new Map<string, string | null>(enrichRows.map((r: any) => [r.externalId, r.dueDate ? (r.dueDate as Date).toISOString() : null]))
                     const lockByExternal = new Map<string, any>(enrichRows.map((r: any) => [r.externalId, getLock(r.settings)]))
                     const sharedExternalByExternal = new Map<string, boolean>(enrichRows.map((r: any) => {
                         const s = (r.settings as Record<string, any>) || {}
@@ -501,6 +505,8 @@ export async function POST(request: NextRequest) {
                     files = files.map((f: any) => ({
                         ...f,
                         projectDocumentId: internalByExternal.get(f.id) ?? undefined,
+                        indexingStatus: statusByExternal.get(f.id) ?? undefined,
+                        dueDate: dueDateByExternal.get(f.id) ?? null,
                         lock: lockByExternal.get(f.id) ?? null,
                         isPrivate: lockByExternal.get(f.id)?.type === 'private',
                         isSharedWithExternal: sharedExternalByExternal.get(f.id) ?? false,
@@ -524,6 +530,8 @@ export async function POST(request: NextRequest) {
                                 isFolder: row.isFolder ?? false,
                                 connectorId: connector.id,
                                 projectDocumentId: row.id,
+                                indexingStatus: row.status ?? undefined,
+                                dueDate: row.dueDate ? (row.dueDate as Date).toISOString() : null,
                                 lock: getLock(row.settings),
                             })
                         }
