@@ -230,12 +230,12 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
             {
                 feature: "Internal users",
                 tooltip: "No per-seat fee for Firm Administrator, Firm Member, Client Administrator, Engagement Lead, and Contributor (Internal).",
-                values: { Sandbox: false, Standard: "Unlimited", Pro: "Unlimited", Business: "Unlimited", Enterprise: "Unlimited" },
+                values: { Sandbox: "2", Standard: "Unlimited", Pro: "Unlimited", Business: "Unlimited", Enterprise: "Unlimited" },
             },
             {
                 feature: "External users",
                 tooltip: "No per-seat fee for Contributor (External) or Viewer (External).",
-                values: { Sandbox: false, Standard: "Unlimited", Pro: "Unlimited", Business: "Unlimited", Enterprise: "Unlimited" },
+                values: { Sandbox: "2", Standard: "Unlimited", Pro: "Unlimited", Business: "Unlimited", Enterprise: "Unlimited" },
             },
         ],
     },
