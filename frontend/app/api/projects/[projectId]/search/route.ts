@@ -26,7 +26,7 @@ export async function GET(
 
         const project = await prisma.engagement.findUnique({
             where: { id: projectId },
-            select: { slug: true, firmId: true },
+            select: { slug: true, firmId: true, clientId: true },
         })
         if (!project) {
             return NextResponse.json({ error: 'Project or active connector not found' }, { status: 404 })
