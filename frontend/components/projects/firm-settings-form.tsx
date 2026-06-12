@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Input } from '@/components/ui/input'
 import { updateFirm, deleteFirm } from '@/lib/actions/firms'
 import { useRouter } from 'next/navigation'
@@ -813,35 +814,20 @@ export function FirmSettingsForm({
                 </div>
             </section>
 
-            <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
-                <DialogContent className="sm:max-w-[440px] rounded">
-                    <DialogHeader>
-                        <DialogTitle>Delete firm?</DialogTitle>
-                        <DialogDescription className="text-[#45474c]">
-                            Permanently delete this organization? All clients, projects, and members will be removed. This cannot be undone.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter className="gap-2 sm:gap-0">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            className="rounded border-[#e5e7eb]"
-                            disabled={deleting}
-                            onClick={() => setDeleteConfirmOpen(false)}
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            type="button"
-                            variant="destructive"
-                            disabled={isSandboxFirm || deleting}
-                            onClick={() => void performDeleteFirm()}
-                        >
-                            {deleting ? 'Deleting…' : 'Delete firm'}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            <ConfirmDialog
+                open={deleteConfirmOpen}
+                onOpenChange={setDeleteConfirmOpen}
+                icon={<Trash2 className="h-3.5 w-3.5" />}
+                iconVariant="red"
+                title="Delete firm"
+                subtitle="This action cannot be undone."
+                description="Permanently delete this organization? All clients, projects, and members will be removed. This cannot be undone."
+                confirmLabel="Delete firm"
+                confirmVariant="red"
+                onCancel={() => setDeleteConfirmOpen(false)}
+                onConfirm={() => void performDeleteFirm()}
+                loading={deleting}
+            />
         </div>
     )
 }

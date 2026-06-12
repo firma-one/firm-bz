@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Input } from '@/components/ui/input'
 import { updateClient, deleteClient, upsertClientBrand, type LwCrmClientStatus } from '@/lib/actions/client'
 import { getFirmMembers } from '@/lib/actions/firm-members'
@@ -939,24 +940,20 @@ export function ClientSettingsForm({
                     </div>
             </section>
 
-            <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
-                <DialogContent className="sm:max-w-[440px]">
-                    <DialogHeader>
-                        <DialogTitle>Delete client?</DialogTitle>
-                        <DialogDescription>
-                            Permanently delete this client? All engagements and members will be removed. This cannot be undone.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter>
-                        <Button type="button" variant="outline" className="rounded-[2px]" disabled={deleting} onClick={() => setDeleteConfirmOpen(false)}>
-                            Cancel
-                        </Button>
-                        <Button type="button" disabled={isSandboxFirm || deleting} onClick={() => void performDeleteClient()} className="rounded-[2px] bg-red-700 text-white hover:bg-red-800 border-0 text-[10px] font-headline font-bold tracking-widest uppercase">
-                            {deleting ? 'Deleting…' : 'Delete client'}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            <ConfirmDialog
+                open={deleteConfirmOpen}
+                onOpenChange={setDeleteConfirmOpen}
+                icon={<Trash2 className="h-3.5 w-3.5" />}
+                iconVariant="red"
+                title="Delete client"
+                subtitle="This action cannot be undone."
+                description="Permanently delete this client? All engagements and members will be removed. This cannot be undone."
+                confirmLabel="Delete client"
+                confirmVariant="red"
+                onCancel={() => setDeleteConfirmOpen(false)}
+                onConfirm={() => void performDeleteClient()}
+                loading={deleting}
+            />
         </div>
     )
 }

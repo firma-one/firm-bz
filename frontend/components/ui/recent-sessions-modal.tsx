@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { X, Clock, MessageSquare, Trash2 } from 'lucide-react'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { Button } from '@/components/ui/button'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import {
   Dialog,
   DialogContent,
@@ -216,29 +217,20 @@ export function RecentSessionsModal({ isOpen, onClose, onLoadSession }: RecentSe
         )}
       </div>
 
-      <Dialog open={clearAllConfirmOpen} onOpenChange={setClearAllConfirmOpen}>
-        <DialogContent className="z-[100] sm:max-w-[440px]">
-          <DialogHeader>
-            <DialogTitle>Clear all chat sessions?</DialogTitle>
-            <DialogDescription className="text-slate-600">
-              This removes every stored session from this browser. This cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button type="button" variant="outline" disabled={clearingAll} onClick={() => setClearAllConfirmOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              disabled={clearingAll}
-              onClick={() => void performClearAllSessions()}
-            >
-              {clearingAll ? 'Clearing…' : 'Clear all'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDialog
+        open={clearAllConfirmOpen}
+        onOpenChange={setClearAllConfirmOpen}
+        icon={<Trash2 className="h-3.5 w-3.5" />}
+        iconVariant="red"
+        title="Clear all chat sessions"
+        subtitle="Stored sessions will be removed from this browser."
+        description="This removes every stored session from this browser. This cannot be undone."
+        confirmLabel="Clear all"
+        confirmVariant="red"
+        onCancel={() => setClearAllConfirmOpen(false)}
+        onConfirm={() => void performClearAllSessions()}
+        loading={clearingAll}
+      />
     </div>
   )
 }

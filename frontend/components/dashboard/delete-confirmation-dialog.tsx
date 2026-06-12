@@ -1,14 +1,7 @@
 "use client"
 
 import { Trash2 } from "lucide-react"
-import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogDescription,
-    DialogFooter,
-} from "@/components/ui/dialog"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { formatFileSize } from "@/lib/utils"
 
 interface DeleteConfirmationDialogProps {
@@ -24,42 +17,21 @@ export function DeleteConfirmationDialog({
     onClose,
     onConfirm,
     count,
-    totalSize
+    totalSize,
 }: DeleteConfirmationDialogProps) {
     return (
-        <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-            <DialogContent className="sm:max-w-sm">
-                <div className="flex flex-col items-center text-center gap-4 pt-4">
-                    <div className="p-4 rounded-full bg-red-50 mb-1">
-                        <Trash2 className="h-6 w-6 text-red-600" />
-                    </div>
-
-                    <DialogHeader>
-                        <DialogTitle className="text-center text-lg font-bold text-gray-900">
-                            Move {count} files to Trash?
-                        </DialogTitle>
-                        <DialogDescription className="text-center text-sm text-gray-500 mt-2 leading-relaxed">
-                            You are about to remove <span className="font-semibold text-gray-900">{formatFileSize(totalSize)}</span> of data.
-                            Items in trash are deleted forever after 30 days.
-                        </DialogDescription>
-                    </DialogHeader>
-                </div>
-
-                <DialogFooter className="grid grid-cols-2 gap-3 mt-4 w-full">
-                    <button
-                        onClick={onClose}
-                        className="w-full px-4 py-2.5 text-sm font-semibold text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 rounded-xl transition-colors outline-none focus:ring-2 focus:ring-gray-200"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        onClick={onConfirm}
-                        className="w-full px-4 py-2.5 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-xl transition-all shadow-sm shadow-red-200 active:scale-95 outline-none focus:ring-2 focus:ring-red-200"
-                    >
-                        Delete
-                    </button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+        <ConfirmDialog
+            open={isOpen}
+            onOpenChange={(open) => !open && onClose()}
+            icon={<Trash2 className="h-3.5 w-3.5" />}
+            iconVariant="red"
+            title={`Move ${count} file${count === 1 ? '' : 's'} to Trash`}
+            subtitle="Items in Trash are deleted forever after 30 days."
+            description={<>You are about to remove <span className="font-semibold text-[#1b1b1d]">{formatFileSize(totalSize)}</span> of data. Items in Trash are deleted forever after 30 days.</>}
+            confirmLabel="Delete"
+            confirmVariant="red"
+            onCancel={onClose}
+            onConfirm={onConfirm}
+        />
     )
 }

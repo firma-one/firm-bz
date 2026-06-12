@@ -1,18 +1,17 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Persona } from '@prisma/client'
 import { inviteMember } from '@/lib/actions/invitations'
-import { Badge } from '@/components/ui/badge'
 import { SandboxInfoBanner } from '@/components/ui/sandbox-info-banner'
-import { Users, Shield, Briefcase, Eye, CheckCircle2 } from 'lucide-react'
-import { ROLES } from '@/lib/roles'
+import { Shield, Briefcase, Eye, CheckCircle2, UserPlus, Users } from 'lucide-react'
 import { useOrgSandbox } from '@/lib/use-org-sandbox'
+import { LoadingSpinner } from '@/components/ui/loading-spinner'
 
 type ProjectPersonaWithRole = Persona & {
     rbacPersona: {
@@ -100,84 +99,108 @@ export function InviteMemberModal({ projectId, open, onOpenChange, personas, pre
         return <Briefcase className="h-4 w-4" />
     }
 
+    const fieldLabel = 'font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] block mb-1'
+    const inputCls = 'border-[#e5e7eb] text-[#1b1b1d] text-xs font-normal placeholder:text-[#9a9ba0] rounded focus-visible:ring-1 focus-visible:ring-primary focus-visible:border-primary disabled:opacity-50 disabled:cursor-not-allowed'
+
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[500px]">
-                <DialogHeader>
-                    <DialogTitle>Invite to Engagement</DialogTitle>
-                </DialogHeader>
+            <DialogContent className="sm:max-w-[480px] border-[#e5e7eb] p-0 gap-0 rounded-[2px] bg-[#f9f9fb]">
+                <VisuallyHidden><DialogTitle>Invite to Engagement</DialogTitle></VisuallyHidden>
 
-                <form onSubmit={handleSubmit} className="space-y-6 pt-4">
-                    {isSandboxFirm && <SandboxInfoBanner />}
-                    {/* Email Input */}
-                    <div className="space-y-2">
-                        <Label htmlFor="email" className={isSandboxFirm ? 'text-slate-500' : undefined}>Email Address</Label>
-                        <div className="relative">
-                            <Input
-                                id="email"
-                                type="text"
-                                placeholder="colleague@example.com"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                disabled={isSandboxFirm}
-                                className={`disabled:cursor-not-allowed disabled:opacity-60 ${emailError ? 'border-red-400 focus-visible:ring-red-400' : ''} ${email && !emailError ? 'pr-9' : ''}`}
-                            />
-                            {email && !emailError && (
-                                <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-green-500 pointer-events-none" />
-                            )}
-                        </div>
-                        {emailError && (
-                            <p className="text-xs text-red-500">{emailError}</p>
-                        )}
+                {/* Header */}
+                <div className="px-5 py-4 border-b border-[#e5e7eb] bg-white flex items-start gap-3">
+                    <div className="mt-0.5 h-7 w-7 rounded bg-primary/10 flex items-center justify-center shrink-0">
+                        <UserPlus className="h-3.5 w-3.5 text-primary" />
                     </div>
+                    <div>
+                        <p className="text-sm font-semibold text-[#1b1b1d] leading-tight">Invite to Engagement</p>
+                        <p className="text-xs text-[#45474c] mt-0.5">Send an invitation to collaborate on this engagement.</p>
+                    </div>
+                </div>
 
-                    {/* Persona Selection */}
-                    <div className="space-y-2">
-                        <Label className={isSandboxFirm ? 'text-slate-500' : undefined}>Role (Persona)</Label>
-                        <Select value={selectedPersonaId} onValueChange={setSelectedPersonaId} required={!isSandboxFirm} disabled={isSandboxFirm}>
-                            <SelectTrigger className="disabled:cursor-not-allowed disabled:opacity-60">
-                                <SelectValue placeholder="Select a persona" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {personas.map((p) => (
-                                    <SelectItem key={p.id} value={p.id}>
-                                        <span className="font-medium">{p.displayName}</span>
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                <form onSubmit={handleSubmit}>
+                    <div className="p-5 space-y-3">
+                        {isSandboxFirm && <SandboxInfoBanner />}
 
-                        {/* Persona Description Preview */}
-                        {selectedPersona && (
-                            <div className="mt-2 bg-slate-50 p-3 rounded-lg border border-slate-200 text-sm">
-                                <div className="flex items-center gap-2 font-medium text-slate-900 mb-1">
-                                    {getPersonaIcon(selectedPersona.displayName)}
-                                    {selectedPersona.displayName}
-                                </div>
-
-                                <div className="flex gap-2">
-                                    <Badge variant="outline" className="text-xs bg-white">
-                                        {selectedPersona.rbacPersona?.role?.slug === 'eng_admin' ? 'Manage' :
-                                            selectedPersona.rbacPersona?.role?.slug === 'eng_member' || selectedPersona.rbacPersona?.role?.slug === 'eng_ext_collaborator' ? 'Edit' : 'View'}
-                                    </Badge>
-                                    <Badge variant="secondary" className="text-xs">
-                                        {selectedPersona.rbacPersona?.role?.slug === 'firm_member' || selectedPersona.rbacPersona?.role?.slug === 'firm_admin' ? 'Internal' : 'Guest'}
-                                    </Badge>
-                                </div>
+                        {error && (
+                            <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs px-3 py-2 rounded">
+                                {error}
                             </div>
                         )}
+
+                        {/* Email Input */}
+                        <div>
+                            <label htmlFor="invite-email" className={fieldLabel}>Email Address</label>
+                            <div className="relative">
+                                <Input
+                                    id="invite-email"
+                                    type="text"
+                                    placeholder="colleague@example.com"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    disabled={isSandboxFirm}
+                                    className={`${inputCls} ${emailError ? 'border-red-400 focus-visible:ring-red-400' : ''} ${email && !emailError ? 'pr-9' : ''}`}
+                                />
+                                {email && !emailError && (
+                                    <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-green-500 pointer-events-none" />
+                                )}
+                            </div>
+                            {emailError && (
+                                <p className="mt-1 text-[10px] text-red-500">{emailError}</p>
+                            )}
+                        </div>
+
+                        {/* Persona Selection */}
+                        <div>
+                            <label className={fieldLabel}>Role (Persona)</label>
+                            <Select value={selectedPersonaId} onValueChange={setSelectedPersonaId} required={!isSandboxFirm} disabled={isSandboxFirm}>
+                                <SelectTrigger className={inputCls}>
+                                    <SelectValue placeholder="Select a persona" />
+                                </SelectTrigger>
+                                <SelectContent className="rounded-[2px] border border-[#e5e7eb] bg-white shadow-md py-0.5 min-w-[var(--radix-select-trigger-width)]">
+                                    {personas.map((p) => (
+                                        <SelectItem key={p.id} value={p.id} className="cursor-pointer rounded-none py-1 px-2.5 !text-[0.8125rem] text-[#45474c] outline-none focus:bg-[#f9f9fb] data-[state=checked]:bg-primary/10 data-[state=checked]:border-l-2 data-[state=checked]:border-brand-accent data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-[#f9f9fb]">
+                                            {p.displayName}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+
+                            {/* Persona preview */}
+                            {selectedPersona && (
+                                <div className="mt-2 bg-white border border-[#e5e7eb] rounded p-3 flex items-start gap-2.5">
+                                    <div className="mt-0.5 shrink-0 text-[#45474c]">
+                                        {getPersonaIcon(selectedPersona.displayName)}
+                                    </div>
+                                    <div>
+                                        <p className="text-xs font-semibold text-[#1b1b1d]">{selectedPersona.displayName}</p>
+                                        <div className="flex gap-1.5 mt-1">
+                                            <span className="inline-flex items-center rounded bg-[#f3f4f6] border border-[#e5e7eb] px-2 py-0.5 text-[10px] font-medium text-[#45474c]">
+                                                {selectedPersona.rbacPersona?.role?.slug === 'eng_admin' ? 'Manage' :
+                                                    selectedPersona.rbacPersona?.role?.slug === 'eng_member' || selectedPersona.rbacPersona?.role?.slug === 'eng_ext_collaborator' ? 'Edit' : 'View'}
+                                            </span>
+                                            <span className="inline-flex items-center rounded bg-[#f3f4f6] border border-[#e5e7eb] px-2 py-0.5 text-[10px] font-medium text-[#45474c]">
+                                                {selectedPersona.rbacPersona?.role?.slug === 'firm_member' || selectedPersona.rbacPersona?.role?.slug === 'firm_admin' ? 'Internal' : 'Guest'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     </div>
 
-                    {error && (
-                        <p className="text-sm text-red-500 bg-red-50 p-2 rounded">{error}</p>
-                    )}
-
-                    <div className="flex justify-end gap-3">
-                        <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                    {/* Footer */}
+                    <div className="px-5 py-3 border-t border-[#e5e7eb] bg-white flex items-center justify-end gap-3">
+                        <Button type="button" variant="outline" className="rounded-[2px] w-28 text-[10px] font-headline font-bold tracking-widest uppercase" onClick={() => onOpenChange(false)}>
                             Cancel
                         </Button>
-                        <Button type="submit" variant="blackCta" disabled={isSandboxFirm || isSubmitting || !selectedPersonaId || !email || !!emailError}>
-                            {isSubmitting ? 'Sending...' : 'Send Invitation'}
+                        <Button
+                            type="submit"
+                            variant="greenCta"
+                            disabled={isSandboxFirm || isSubmitting || !selectedPersonaId || !email || !!emailError}
+                            className="rounded-[2px] w-36 text-[10px] font-headline font-bold tracking-widest uppercase text-white"
+                        >
+                            {isSubmitting ? <LoadingSpinner size="sm" /> : 'Send Invitation'}
                         </Button>
                     </div>
                 </form>

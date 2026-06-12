@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { CoffeeIcon, type CoffeeIconHandle } from "@/components/ui/coffee-icon"
 import { SquarePlus, Upload, FolderUp, X, Folder, File as FileIcon, ArrowUp, ArrowDown, ChevronRight, Search, List as ListIcon, LayoutGrid, Filter, ChevronDown, User, FileText, FileSpreadsheet, Presentation, ListChecks, PenTool, Map as MapIcon, LayoutTemplate, FileCode, AlertCircle, ShieldCheck, Maximize2, Minimize2, CheckCircle2, XCircle, Trash2, Layout, Code, Laptop, RefreshCw, Info, Share2, Layers, Building2, Users, Briefcase, Lock, FolderLock, Inbox, Sparkles, Link2, MessageCircle, CircleChevronLeft, Download, MoreVertical, Clock } from 'lucide-react'
 import Fuse from 'fuse.js'
@@ -2819,75 +2820,76 @@ const handleRefresh = async () => {
                 </Dialog>
 
                 {/* Move to Bin confirmation dialog */}
-                <Dialog open={!!trashConfirmTarget} onOpenChange={(open) => { if (!open) setTrashConfirmTarget(null) }}>
-                    <DialogContent className="max-w-sm gap-5 p-5 border-slate-200">
-                        <DialogHeader className="space-y-3">
-                            <DialogTitle className="text-slate-900 flex items-center gap-2.5">
-                                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-red-50 ring-1 ring-red-200">
-                                    <Trash2 className="h-3.5 w-3.5 text-red-500" />
-                                </div>
-                                Move to Bin?
-                            </DialogTitle>
-                            <DialogDescription className="text-slate-500 text-xs leading-relaxed">
-                                <span className="font-semibold text-slate-800">{trashConfirmTarget?.name}</span>
-                                {' '}will be moved to your Google Drive Bin. Items in the Bin are permanently deleted after 30 days.
-                            </DialogDescription>
-                        </DialogHeader>
-                        <div className="flex justify-end gap-2">
+                <ConfirmDialog
+                    open={!!trashConfirmTarget}
+                    onOpenChange={(open) => { if (!open) setTrashConfirmTarget(null) }}
+                    icon={<Trash2 className="h-3.5 w-3.5" />}
+                    iconVariant="red"
+                    title="Move to Bin"
+                    subtitle="This file will be moved to Google Drive Bin."
+                    description={<><span className="font-semibold text-[#1b1b1d]">{trashConfirmTarget?.name}</span>{' '}will be moved to your Google Drive Bin. Items in the Bin are permanently deleted after 30 days.</>}
+                    confirmLabel="Move to Bin"
+                    confirmVariant="red"
+                    onCancel={() => setTrashConfirmTarget(null)}
+                    onConfirm={handleTrashConfirmed}
+                    loading={trashConfirming}
+                />
+
+                {/* Return to Draft confirmation */}
+                <ConfirmDialog
+                    open={!!unlockConfirmFile}
+                    onOpenChange={(open) => { if (!open) setUnlockConfirmFile(null) }}
+                    icon={<FileText className="h-3.5 w-3.5" />}
+                    iconVariant="primary"
+                    title="Return to Draft"
+                    subtitle="Unlock this document for further edits."
+                    description={<><span className="font-semibold text-[#1b1b1d]">{unlockConfirmFile?.name}</span>{' '}will be unlocked. All collaborators will regain their prior access level based on their role and sharing settings.</>}
+                    confirmLabel="Return to Draft"
+                    confirmVariant="primary"
+                    onCancel={() => setUnlockConfirmFile(null)}
+                    onConfirm={() => unlockConfirmFile && handleUnlockFromBadge(unlockConfirmFile)}
+                    loading={unlockInProgress}
+                />
+
+                {/* Revoke external access confirmation */}
+                <Dialog open={!!unshareConfirmFile} onOpenChange={(open) => { if (!open) setUnshareConfirmFile(null) }}>
+                    <DialogContent className="sm:max-w-sm border-[#e5e7eb] p-0 gap-0 rounded-[2px] bg-[#f9f9fb]">
+                        <VisuallyHidden><DialogTitle>Revoke external access</DialogTitle></VisuallyHidden>
+                        {/* Header */}
+                        <div className="px-5 py-4 border-b border-[#e5e7eb] bg-white flex items-start gap-3">
+                            <div className="mt-0.5 h-7 w-7 rounded bg-red-50 ring-1 ring-red-200 flex items-center justify-center shrink-0">
+                                <Link2 className="h-3.5 w-3.5 text-red-500" />
+                            </div>
+                            <div>
+                                <p className="text-[11px] font-headline font-bold tracking-widest uppercase text-[#1b1b1d] leading-tight">Revoke external access</p>
+                                <p className="text-xs text-[#45474c] mt-0.5">Remove sharing for all external collaborators.</p>
+                            </div>
+                        </div>
+                        {/* Body */}
+                        <div className="p-5">
+                            <p className="text-xs text-[#45474c] leading-relaxed">
+                                <span className="font-semibold text-[#1b1b1d]">{unshareConfirmFile?.name}</span>
+                                {' '}will be unshared. All external collaborators and viewers will lose access, and any secure links sent by email will no longer work.
+                            </p>
+                        </div>
+                        {/* Footer */}
+                        <div className="px-5 py-3 border-t border-[#e5e7eb] bg-white flex items-center justify-end gap-2">
                             <Button
                                 variant="outline"
-                                size="sm"
-                                onClick={() => setTrashConfirmTarget(null)}
-                                disabled={trashConfirming}
-                                className="border-slate-200 text-slate-700 hover:bg-slate-50"
+                                onClick={() => setUnshareConfirmFile(null)}
+                                disabled={unshareInProgress}
+                                className="rounded-[2px] text-[10px] font-headline font-bold tracking-widest uppercase border-[#e5e7eb] text-[#45474c] hover:bg-[#f9f9fb]"
                             >
                                 Cancel
                             </Button>
                             <Button
-                                size="sm"
-                                onClick={handleTrashConfirmed}
-                                disabled={trashConfirming}
-                                className="bg-red-600 hover:bg-red-700 text-white shadow-sm"
+                                onClick={() => unshareConfirmFile && handleUnshare(unshareConfirmFile)}
+                                disabled={unshareInProgress}
+                                className="rounded-[2px] bg-red-600 hover:bg-red-700 text-white text-[10px] font-headline font-bold tracking-widest uppercase shadow-sm"
                             >
-                                {trashConfirming ? <LoadingSpinner className="h-3.5 w-3.5" /> : 'Move to Bin'}
+                                {unshareInProgress ? <LoadingSpinner className="h-3.5 w-3.5" /> : 'Revoke Access'}
                             </Button>
                         </div>
-                    </DialogContent>
-                </Dialog>
-
-                {/* Return to Draft confirmation */}
-                <Dialog open={!!unlockConfirmFile} onOpenChange={(open) => { if (!open) setUnlockConfirmFile(null) }}>
-                    <DialogContent className="max-w-sm">
-                        <DialogHeader>
-                            <DialogTitle>Return to Draft?</DialogTitle>
-                            <DialogDescription>
-                                <span className="font-medium">{unlockConfirmFile?.name}</span> will be unlocked. All collaborators will regain their prior access level based on their role and sharing settings.
-                            </DialogDescription>
-                        </DialogHeader>
-                        <DialogFooter>
-                            <Button variant="outline" size="sm" onClick={() => setUnlockConfirmFile(null)} disabled={unlockInProgress}>Cancel</Button>
-                            <Button variant="blackCta" size="sm" onClick={() => unlockConfirmFile && handleUnlockFromBadge(unlockConfirmFile)} disabled={unlockInProgress}>
-                                {unlockInProgress ? <LoadingSpinner className="h-4 w-4" /> : 'Return to Draft'}
-                            </Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
-
-                {/* Revoke external access confirmation */}
-                <Dialog open={!!unshareConfirmFile} onOpenChange={(open) => { if (!open) setUnshareConfirmFile(null) }}>
-                    <DialogContent className="max-w-sm">
-                        <DialogHeader>
-                            <DialogTitle>Revoke external access?</DialogTitle>
-                            <DialogDescription>
-                                <span className="font-medium">{unshareConfirmFile?.name}</span> will be unshared. All external collaborators and viewers will lose access, and any secure links sent by email will no longer work.
-                            </DialogDescription>
-                        </DialogHeader>
-                        <DialogFooter>
-                            <Button variant="outline" size="sm" onClick={() => setUnshareConfirmFile(null)} disabled={unshareInProgress}>Cancel</Button>
-                            <Button variant="blackCta" size="sm" onClick={() => unshareConfirmFile && handleUnshare(unshareConfirmFile)} disabled={unshareInProgress}>
-                                {unshareInProgress ? <LoadingSpinner className="h-4 w-4" /> : 'Revoke Access'}
-                            </Button>
-                        </DialogFooter>
                     </DialogContent>
                 </Dialog>
 

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { Activity, AlertCircle, ArrowUpRight, CheckCircle2, Loader2, RotateCw, Copy, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useAuth } from '@/lib/auth-context'
 import { useRouter } from 'next/navigation'
@@ -427,25 +428,19 @@ export default function IntegrationsPage() {
         )}
       </section>
 
-      {/* Confirm Dialog */}
-      <Dialog open={showConfirm} onOpenChange={setShowConfirm}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Resume Provisioning?</DialogTitle>
-            <DialogDescription>
-              This will re-enqueue Inngest jobs for {selectedFirms.size} firm{selectedFirms.size === 1 ? '' : 's'}. The provisioning process will start immediately.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowConfirm(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleReprovision}>
-              Resume Provisioning
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDialog
+        open={showConfirm}
+        onOpenChange={setShowConfirm}
+        icon={<RotateCw className="h-3.5 w-3.5" />}
+        iconVariant="primary"
+        title="Resume Provisioning"
+        subtitle="Inngest jobs will be re-enqueued immediately."
+        description={`This will re-enqueue Inngest jobs for ${selectedFirms.size} firm${selectedFirms.size === 1 ? '' : 's'}. The provisioning process will start immediately.`}
+        confirmLabel="Resume Provisioning"
+        confirmVariant="primary"
+        onCancel={() => setShowConfirm(false)}
+        onConfirm={handleReprovision}
+      />
     </div>
   )
 }

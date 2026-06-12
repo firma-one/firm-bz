@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { Button } from '@/components/ui/button'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/toast'
@@ -472,62 +473,37 @@ export function ClientContactsTab({
         </DialogContent>
       </Dialog>
 
-      <Dialog
+      <ConfirmDialog
         open={contactToDelete !== null}
-        onOpenChange={(open) => {
-          if (!open) setContactToDelete(null)
+        onOpenChange={(open) => { if (!open) setContactToDelete(null) }}
+        icon={<Trash2 className="h-3.5 w-3.5" />}
+        iconVariant="red"
+        title="Delete contact"
+        subtitle="This action cannot be undone."
+        description={contactToDelete ? <>This will permanently remove <span className="font-semibold text-[#1b1b1d]">{contactToDelete.name}</span> from this client. This cannot be undone.</> : ''}
+        confirmLabel="Delete contact"
+        confirmVariant="red"
+        onCancel={() => setContactToDelete(null)}
+        onConfirm={() => {
+          if (!contactToDelete) return
+          const id = contactToDelete.id
+          startTransition(async () => {
+            try {
+              await deleteClientContact(orgSlug, clientSlug, id)
+              addToast({ type: 'success', title: 'Deleted', message: 'Contact deleted.' })
+              setContactToDelete(null)
+              await refresh()
+            } catch (e) {
+              addToast({
+                type: 'error',
+                title: 'Failed',
+                message: e instanceof Error ? e.message : 'Could not delete contact.',
+              })
+            }
+          })
         }}
-      >
-        <DialogContent className="sm:max-w-[440px]">
-          <DialogHeader>
-            <DialogTitle>Delete contact?</DialogTitle>
-            <DialogDescription className="text-slate-600">
-              {contactToDelete ? (
-                <>
-                  This will permanently remove <span className="font-medium text-slate-800">{contactToDelete.name}</span>{' '}
-                  from this client. This cannot be undone.
-                </>
-              ) : null}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button
-              type="button"
-              variant="outline"
-              className="border-slate-200 text-slate-700 hover:bg-slate-50"
-              disabled={isPending}
-              onClick={() => setContactToDelete(null)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              disabled={!canManage || isPending || !contactToDelete}
-              onClick={() => {
-                if (!contactToDelete) return
-                const id = contactToDelete.id
-                startTransition(async () => {
-                  try {
-                    await deleteClientContact(orgSlug, clientSlug, id)
-                    addToast({ type: 'success', title: 'Deleted', message: 'Contact deleted.' })
-                    setContactToDelete(null)
-                    await refresh()
-                  } catch (e) {
-                    addToast({
-                      type: 'error',
-                      title: 'Failed',
-                      message: e instanceof Error ? e.message : 'Could not delete contact.',
-                    })
-                  }
-                })
-              }}
-            >
-              Delete contact
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        loading={isPending}
+      />
     </div>
   )
 }
