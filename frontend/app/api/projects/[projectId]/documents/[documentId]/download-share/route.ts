@@ -7,6 +7,7 @@ import { getFileInfo } from '@/lib/file-utils'
 import { requireEngagementMember } from '@/lib/engagement-access'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { applyDiagonalWatermark } from '@/lib/watermark-pdf'
+import { resolveEngagementConnectorId } from '@/lib/connectors/resolve-client-connector'
 
 /**
  * GET /api/projects/[projectId]/documents/[documentId]/download-share
@@ -17,7 +18,7 @@ import { applyDiagonalWatermark } from '@/lib/watermark-pdf'
  * connectorId is resolved server-side from the firm — never trusted from the client.
  */
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ projectId: string; documentId: string }> }
 ) {
   try {
@@ -26,6 +27,7 @@ export async function GET(
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const { projectId, documentId } = await params
+    const isPreview = request.nextUrl.searchParams.get('preview') === 'true'
 
     const projectMember = await requireEngagementMember(projectId, user.id)
     if (!projectMember) return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -50,25 +52,17 @@ export async function GET(
     const isGuest = projectMember.role === 'eng_viewer'
     const isEC = projectMember.role === 'eng_ext_collaborator'
 
-    // Enforce allowDownload per persona
-    if (isGuest && !settings.share?.guest?.options?.allowDownload) {
-      return NextResponse.json({ error: 'Download not permitted' }, { status: 403 })
-    }
-    if (isEC && !settings.share?.externalCollaborator?.options?.allowDownload) {
-      return NextResponse.json({ error: 'Download not permitted' }, { status: 403 })
-    }
-
-    // Resolve connector from the firm
-    let connectorId = document.connectorId
-    if (!connectorId) {
-      const org = await prisma.firm.findUnique({
-        where: { id: fileInfo.organizationId },
-        include: { connector: true },
-      })
-      if (org?.connector?.type === 'GOOGLE_DRIVE' && org.connector.status === 'ACTIVE') {
-        connectorId = org.connector.id
+    // Enforce allowDownload per persona (preview bypasses this — viewing is always permitted)
+    if (!isPreview) {
+      if (isGuest && !settings.share?.guest?.options?.allowDownload) {
+        return NextResponse.json({ error: 'Download not permitted' }, { status: 403 })
+      }
+      if (isEC && !settings.share?.externalCollaborator?.options?.allowDownload) {
+        return NextResponse.json({ error: 'Download not permitted' }, { status: 403 })
       }
     }
+
+    const connectorId = await resolveEngagementConnectorId(projectId, document.connectorId)
     if (!connectorId) return NextResponse.json({ error: 'No active Drive connector' }, { status: 500 })
 
     const drive = GoogleDriveConnector.getInstance()
@@ -88,9 +82,13 @@ export async function GET(
         const encodedFilename = encodeURIComponent(filename).replace(/['()]/g, escape).replace(/\*/g, '%2A')
         const headers = new Headers()
         headers.set('Content-Type', mimeType || 'application/pdf')
-        headers.set('Content-Disposition', `attachment; filename="${filename.replace(/"/g, '')}"; filename*=UTF-8''${encodedFilename}`)
-        if (size && size !== '0') headers.set('Content-Length', size)
-        audit(AUDIT_EVENT.DOCUMENT_DOWNLOADED)
+        if (isPreview) {
+          headers.set('Content-Disposition', 'inline')
+        } else {
+          headers.set('Content-Disposition', `attachment; filename="${filename.replace(/"/g, '')}"; filename*=UTF-8''${encodedFilename}`)
+          if (size && size !== '0') headers.set('Content-Length', size)
+        }
+        audit(isPreview ? AUDIT_EVENT.DOCUMENT_OPENED : AUDIT_EVENT.DOCUMENT_DOWNLOADED)
           .scope(AUDIT_SCOPE.DOCUMENT)
           .firm(fileInfo.organizationId)
           .client(document.clientId ?? undefined)
@@ -150,7 +148,7 @@ export async function GET(
       headers.set('Content-Type', 'application/pdf')
       headers.set('Content-Disposition', `attachment; filename="${filename.replace(/"/g, '')}"; filename*=UTF-8''${encodedFilename}`)
       headers.set('Content-Length', pdfBuffer.length.toString())
-      audit(AUDIT_EVENT.DOCUMENT_DOWNLOADED)
+      audit(isPreview ? AUDIT_EVENT.DOCUMENT_OPENED : AUDIT_EVENT.DOCUMENT_DOWNLOADED)
         .scope(AUDIT_SCOPE.DOCUMENT)
         .firm(fileInfo.organizationId)
         .engagement(projectId)
@@ -162,6 +160,23 @@ export async function GET(
     }
 
     // Original-file path (EC or Guest with sharePdfOnly=false)
+    // For preview: export to PDF so the browser can render it inline (covers DOCX, Sheets, Slides etc.)
+    if (isPreview) {
+      const pdfBytes = await drive.exportFileToPdf(connectorId, fileInfo.externalId)
+      const headers = new Headers()
+      headers.set('Content-Type', 'application/pdf')
+      headers.set('Content-Disposition', 'inline')
+      audit(AUDIT_EVENT.DOCUMENT_OPENED)
+        .scope(AUDIT_SCOPE.DOCUMENT)
+        .firm(fileInfo.organizationId)
+        .engagement(projectId)
+        .document(document.id)
+        .actor(user.id)
+        .meta({ fileId: fileInfo.externalId, usedPdf: true })
+        .fireAndForget()
+      return new NextResponse(new Uint8Array(pdfBytes), { status: 200, headers })
+    }
+
     const { stream, mimeType, size, name } = await drive.downloadFile(connectorId, fileInfo.externalId)
     const filename = name || document.fileName || 'document'
     const encodedFilename = encodeURIComponent(filename).replace(/['()]/g, escape).replace(/\*/g, '%2A')

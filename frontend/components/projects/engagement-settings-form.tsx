@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Input } from '@/components/ui/input'
 import { updateProject, deleteProject } from '@/lib/actions/project'
 import type { LwCrmEngagementStatus } from '@/lib/actions/project'
@@ -428,30 +429,20 @@ export function EngagementSettingsForm({
                 )}
             </section>
 
-            <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-                <DialogContent className="max-w-md">
-                    <VisuallyHidden><DialogTitle>Delete engagement</DialogTitle></VisuallyHidden>
-                    <DialogHeader>
-                        <DialogTitle>Delete engagement?</DialogTitle>
-                        <DialogDescription>
-                            Permanently delete this engagement? All members will be removed and Drive access revoked. The folder remains in Google Drive for the firm admin. This cannot be undone.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter>
-                        <Button type="button" variant="outline" className="rounded-[2px] w-32 text-[10px] font-headline font-bold tracking-widests uppercase" onClick={() => setIsDeleteDialogOpen(false)} disabled={deleting}>
-                            Cancel
-                        </Button>
-                        <Button
-                            type="button"
-                            onClick={handleDeleteProject}
-                            disabled={deleting}
-                            className="rounded-[2px] bg-red-700 text-white hover:bg-red-800 border-0 text-[10px] font-headline font-bold tracking-widest uppercase"
-                        >
-                            {deleting ? 'Deleting…' : 'Delete engagement'}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            <ConfirmDialog
+                open={isDeleteDialogOpen}
+                onOpenChange={setIsDeleteDialogOpen}
+                icon={<AlertTriangle className="h-3.5 w-3.5" />}
+                iconVariant="red"
+                title="Delete engagement"
+                subtitle="This action cannot be undone."
+                description="Permanently delete this engagement? All members will be removed and Drive access revoked. The folder remains in Google Drive for the firm admin. This cannot be undone."
+                confirmLabel="Delete engagement"
+                confirmVariant="red"
+                onCancel={() => setIsDeleteDialogOpen(false)}
+                onConfirm={handleDeleteProject}
+                loading={deleting}
+            />
         </div>
     )
 }

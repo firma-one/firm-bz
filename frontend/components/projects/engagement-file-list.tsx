@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { CoffeeIcon, type CoffeeIconHandle } from "@/components/ui/coffee-icon"
 import { SquarePlus, Upload, FolderUp, X, Folder, File as FileIcon, ArrowUp, ArrowDown, ChevronRight, Search, List as ListIcon, LayoutGrid, Filter, ChevronDown, User, FileText, FileSpreadsheet, Presentation, ListChecks, PenTool, Map as MapIcon, LayoutTemplate, FileCode, AlertCircle, ShieldCheck, Maximize2, Minimize2, CheckCircle2, XCircle, Trash2, Layout, Code, Laptop, RefreshCw, Info, Share2, Layers, Building2, Users, Briefcase, Lock, FolderLock, Inbox, Sparkles, Link2, MessageCircle, CircleChevronLeft, Download, MoreVertical, Clock } from 'lucide-react'
 import Fuse from 'fuse.js'
@@ -11,6 +12,7 @@ import { DocumentIcon } from '@/components/ui/document-icon'
 import { SharedFolderIcon } from '@/components/ui/folder-shared-icon'
 import { DocumentActionMenu } from '@/components/ui/document-action-menu'
 import { DocumentPreviewPanelContent } from '@/components/files/document-edit-sheet'
+import { DocumentBlobPreviewPane } from '@/components/files/document-blob-preview-pane'
 import { DocumentDocCommentsPane } from '@/components/projects/document-doc-comments-pane'
 import { formatFileSize } from '@/lib/utils'
 import { DriveFile } from '@/lib/types'
@@ -24,6 +26,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { logger } from '@/lib/logger'
 import { useToast } from '@/components/ui/toast'
 import { useOrgSandbox } from '@/lib/use-org-sandbox'
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
 import {
     Dialog,
     DialogContent,
@@ -77,6 +80,7 @@ interface EngagementFileListProps {
     projectName?: string
     canEdit?: boolean
     canManage?: boolean
+    isFirmAdmin?: boolean
     /** When true (e.g. user is eng_ext_collaborator or eng_viewer), only show files/folders that are shared to External Collaborator or Guest. */
     restrictToSharedOnly?: boolean
     /** Optional; used for secure-open modal thumbnail. */
@@ -94,6 +98,8 @@ interface EngagementFileListProps {
     workspaceRootLocation?: string | null
     /** Connector account email — passed to DocumentActionMenu for Google Drive authuser param. */
     connectorAccountEmail?: string | null
+    /** Called whenever the file count changes (uploads, deletes, creates) so the tab badge stays live. */
+    onFileCountChange?: (count: number) => void
 }
 
 type SortByOption = 'name' | 'modifiedTime' | 'modifiedTimeByMe' | 'viewedByMeTime'
@@ -113,9 +119,22 @@ type ConflictItem = {
 
 const VIEW_AS_SHARED_ONLY_PERSONAS = ['eng_ext_collaborator', 'eng_viewer']
 
-export function EngagementFileList({ projectId, connectorRootFolderId, clientConnectorId, workspaceRootLocation, rootFolderName = 'Engagement Files', orgName, clientName, projectName, canEdit = false, canManage = false, restrictToSharedOnly = false, firmId, orgSlug, firmSandboxOnly = false, navSlot, clientSlug, connectorAccountEmail }: EngagementFileListProps) {
+export function EngagementFileList({ projectId, connectorRootFolderId, clientConnectorId, workspaceRootLocation, rootFolderName = 'Engagement Files', orgName, clientName, projectName, canEdit = false, canManage = false, isFirmAdmin = false, restrictToSharedOnly = false, firmId, orgSlug, firmSandboxOnly = false, navSlot, clientSlug, connectorAccountEmail, onFileCountChange }: EngagementFileListProps) {
     const { session } = useAuth()
     const sessionRef = useRef(session)
+    const onFileCountChangeRef = useRef(onFileCountChange)
+    useEffect(() => { onFileCountChangeRef.current = onFileCountChange }, [onFileCountChange])
+
+    const refreshFileCount = useCallback(async () => {
+        if (!onFileCountChangeRef.current) return
+        try {
+            const res = await fetch(`/api/projects/${projectId}/documents/count`)
+            if (res.ok) {
+                const { count } = await res.json()
+                onFileCountChangeRef.current(count)
+            }
+        } catch { /* best-effort */ }
+    }, [projectId])
     const orgSandbox = useOrgSandbox()
     const isSandboxFirm = Boolean(firmSandboxOnly || orgSandbox?.sandboxOnly)
     const { viewAsPersonaSlug } = useViewAs()
@@ -124,6 +143,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
     const [activeInfoDocId, setActiveInfoDocId] = useState<string | null>(null)
     const [activeActivityDocId, setActiveActivityDocId] = useState<string | null>(null)
     const [activeVersionDocId, setActiveVersionDocId] = useState<string | null>(null)
+    const [activePreviewDocId, setActivePreviewDocId] = useState<string | null>(null)
     const lastHandledDeeplinkHashRef = useRef<string>('')
     // Cache resolve-deeplink/file-info results per hash to avoid re-fetching on every effect re-run.
     const deeplinkResolvedCacheRef = useRef<Record<string, {
@@ -166,10 +186,35 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
     const [ancestorFolderIdsForGuest, setAncestorFolderIdsForGuest] = useState<Set<string>>(new Set())
     const [sharedByMeExternalIds, setSharedByMeExternalIds] = useState<Set<string>>(new Set())
     const [filterShared, setFilterShared] = useState<'all' | 'by_me' | 'by_others' | 'with_collaborator' | 'with_viewer' | 'pending_intake'>('all')
+    const [bookmarkIdByDocumentId, setBookmarkIdByDocumentId] = useState<Map<string, string>>(new Map())
 
     useEffect(() => {
         sessionRef.current = session
     }, [session])
+
+    useEffect(() => {
+        const fetchBookmarks = async () => {
+            const token = sessionRef.current?.access_token
+            if (!token) return
+            try {
+                const res = await fetch('/api/bookmarks', { headers: { Authorization: `Bearer ${token}` } })
+                if (!res.ok) return
+                const data = await res.json()
+                const map = new Map<string, string>(
+                    (data.bookmarks ?? [])
+                        .filter((b: { documentId?: string; id: string }) => b.documentId)
+                        .map((b: { documentId: string; id: string }) => [b.documentId, b.id])
+                )
+                setBookmarkIdByDocumentId(map)
+            } catch {
+                // non-critical; leave empty
+            }
+        }
+        fetchBookmarks()
+        const handler = () => fetchBookmarks()
+        window.addEventListener('pockett-bookmarks-updated', handler)
+        return () => window.removeEventListener('pockett-bookmarks-updated', handler)
+    }, [])
 
     useEffect(() => {
         // Clear row highlight when the right pane closes or switches away from specific panes.
@@ -185,6 +230,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
         if (!isInfoPane) setActiveInfoDocId(null)
         if (!isActivityPane) setActiveActivityDocId(null)
         if (!isVersionPane) setActiveVersionDocId(null)
+        if (!rightPane.content) setActivePreviewDocId(null)
     }, [rightPane.content, rightPane.title])
 
     /** Same behavior as DocumentActionMenu → Comment (direct right pane; no URL hash). */
@@ -207,6 +253,20 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
                 />
             )
             rightPane.setExpanded?.(false)
+        },
+        [rightPane, projectId]
+    )
+
+    const openPreviewForFile = useCallback(
+        (fileId: string, file: DriveFile) => {
+            if (!rightPane.hasRightPane) return
+            setActivePreviewDocId(fileId)
+            rightPane.setTitle(file.name || 'Preview')
+            rightPane.setHeaderActions(null)
+            rightPane.setHeaderIcon(null)
+            rightPane.setHeaderSubtitle('')
+            rightPane.setPaneSize('medium')
+            rightPane.setContent(<DocumentBlobPreviewPane document={file} projectId={projectId} />)
         },
         [rightPane, projectId]
     )
@@ -368,7 +428,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
     const showSandboxPickerToast = useCallback(() => {
         addToast({
             type: 'error',
-            title: 'Sandbox',
+            title: 'Demo Firm',
             message: SANDBOX_OPERATION_MESSAGE,
             duration: 8000,
         })
@@ -382,6 +442,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
     const [isCreateItemOpen, setIsCreateItemOpen] = useState(false)
     const [createItemType, setCreateItemType] = useState<CreateItemType>('folder')
     const [newItemName, setNewItemName] = useState('')
+    const isCreatingRef = useRef(false)
     const fileInputRef = useRef<HTMLInputElement>(null)
     const folderInputRef = useRef<HTMLInputElement>(null)
 
@@ -900,6 +961,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
         restrictToSharedOnly,
         isSandboxFirm,
         fetchFiles,
+        refreshFileCount,
     })
 
     // File operations hook
@@ -964,6 +1026,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
         stopProcessing,
         setFiles,
         orgSandbox,
+        refreshFileCount,
     })
 
     // Drag & drop hook
@@ -1093,10 +1156,12 @@ const handleRefresh = async () => {
 
     const handleCreateItem = async () => {
         if (!newItemName.trim() || !session?.access_token) return
+        if (isCreatingRef.current) return
         if (isSandboxFirm) {
             showSandboxPickerToast()
             return
         }
+        isCreatingRef.current = true
         setLoading(true)
         try {
             let mimeType = 'application/vnd.google-apps.folder'
@@ -1139,14 +1204,26 @@ const handleRefresh = async () => {
                     projectId
                 })
             })
-            if (!res.ok) throw new Error(`Create ${createItemType} failed`)
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({}))
+                const msg = body?.error || `Create ${createItemType} failed`
+                addToast({ type: 'error', title: 'Could not create file', message: msg })
+                setIsCreateItemOpen(false)
+                setNewItemName('')
+                setLoading(false)
+                isCreatingRef.current = false
+                return
+            }
 
             setIsCreateItemOpen(false)
             setNewItemName('')
+            isCreatingRef.current = false
             if (currentFolderId) fetchFiles(currentFolderId)
+            refreshFileCount()
         } catch (err: any) {
             logger.error(err)
-            setError(err.message)
+            isCreatingRef.current = false
+            addToast({ type: 'error', title: 'Could not create file', message: err.message })
             setLoading(false)
         }
     }
@@ -1238,6 +1315,22 @@ const handleRefresh = async () => {
         try {
             logger.debug(`[Frontend] Import Confirm. FolderId: ${currentFolderId}`)
 
+            // Pre-flight cap check before any Drive operations
+            const gateRes = await fetch(`/api/billing/document-gate?projectId=${encodeURIComponent(projectId)}&count=${importedFiles.length}`)
+            if (gateRes.ok) {
+                const gate = await gateRes.json() as { allowed: boolean; cap: number | null; current: number | null; available: number }
+                if (!gate.allowed) {
+                    const { cap, current, available } = gate
+                    const count = importedFiles.length
+                    const msg = count === 1
+                        ? `Your plan limit of ${cap} files has been reached (${current} used). Delete any unused file or upgrade to remove the limit.`
+                        : `This import contains ${count} files, but your plan has a limit of ${cap}, with only ${available} slot${available !== 1 ? 's' : ''} left. Import fewer files, within the available limit or upgrade to remove the limit.`
+                    setError(msg)
+                    setImportLoading(false)
+                    return
+                }
+            }
+
             // Fetch connection info
             const tokenRes = await fetch('/api/connectors/google-drive?action=token', {
                 headers: { Authorization: `Bearer ${sessionRef.current?.access_token}` }
@@ -1268,6 +1361,7 @@ const handleRefresh = async () => {
             // Success
             setIsImportDialogOpen(false)
             if (currentFolderId) fetchFiles(currentFolderId, true)
+            refreshFileCount()
 
         } catch (err: any) {
             logger.error(err)
@@ -1604,11 +1698,11 @@ const handleRefresh = async () => {
                                         </>
                                     )}
 
-                                    {!restrictToSharedOnly ? (
+                                    {isFirmAdmin ? (
                                         <>
                                         <DropdownMenuSeparator />
 
-                                        {/* Import from Google Drive (expandable) — internal users only */}
+                                        {/* Import from Google Drive (expandable) — firm admins only */}
                                         <div
                                             role="button"
                                             tabIndex={0}
@@ -2069,7 +2163,7 @@ const handleRefresh = async () => {
 
                 {/* Fixed Table Header (Compact) */}
                 <div className="sticky top-0 bg-white border-b border-[#e5e7eb] pl-3 pr-2 py-2.5 shrink-0 z-10 group">
-                    <div className="grid gap-4 items-center" style={{ gridTemplateColumns: 'minmax(0, 1fr) 10% 10% 14% 12% 8%' }}>
+                    <div className="grid gap-4 items-center" style={{ gridTemplateColumns: 'minmax(0, 1fr) minmax(124px, 10%) 10% 14% 12% 10% 8%' }}>
                         <div className="flex items-center gap-3">
                             {/* Select-all checkbox — visible on hover of header or when in selection mode */}
                             <div
@@ -2093,6 +2187,7 @@ const handleRefresh = async () => {
                         <div className="col-span-2 flex items-center justify-center"><TableHeader label="Quick" /></div>
                         <div className="flex items-center"><TableHeader label="Owner" /></div>
                         <div className="flex items-center"><TableHeader label="Date modified" /></div>
+                        <div className="flex items-center"><TableHeader label="Due date" /></div>
                         <div className="flex items-center"><TableHeader label="File size" /></div>
                     </div>
                 </div>
@@ -2245,6 +2340,7 @@ const handleRefresh = async () => {
                                     activeInfoDocId={activeInfoDocId}
                                     activeActivityDocId={activeActivityDocId}
                                     activeVersionDocId={activeVersionDocId}
+                                    activePreviewDocId={activePreviewDocId}
                                     highlightedFileId={highlightedFileId}
                                     onClearHighlight={() => setHighlightedFileId(null)}
                                     draggedItem={draggedItem}
@@ -2311,8 +2407,11 @@ const handleRefresh = async () => {
                                     onOpenInfoPane={(docId) => setActiveInfoDocId(docId)}
                                     onOpenActivityPane={(docId) => setActiveActivityDocId(docId)}
                                     onOpenVersionPane={(docId) => setActiveVersionDocId(docId)}
+                                    onOpenPreviewPane={(docId) => openPreviewForFile(docId, file)}
                                     onAddToast={(toast) => addToast(toast as any)}
                                     connectorAccountEmail={connectorAccountEmail}
+                                    bookmarkId={bookmarkIdByDocumentId.get(file.projectDocumentId ?? '')}
+                                    hideBadges={rightPane.content != null && rightPane.paneSize === 'medium'}
                                 />
                             ))}
                         </div>
@@ -2608,36 +2707,43 @@ const handleRefresh = async () => {
                 </Dialog>
 
                 {/* Create Item Dialog */}
-                <Dialog open={isCreateItemOpen} onOpenChange={setIsCreateItemOpen}>
-                    <DialogContent className="border-slate-200">
-                        <DialogHeader>
-                            <DialogTitle className="text-slate-900">
-                                {createItemType === 'folder' ? 'New Folder' :
-                                    createItemType === 'doc' ? 'New Google Doc' :
-                                        createItemType === 'sheet' ? 'New Google Sheet' :
-                                            createItemType === 'slide' ? 'New Google Slide' :
-                                                createItemType === 'form' ? 'New Google Form' :
-                                                    createItemType === 'drawing' ? 'New Google Drawing' :
-                                                        createItemType === 'map' ? 'New Google Map' :
-                                                            createItemType === 'site' ? 'New Google Site' :
-                                                                'New Google Script'}
-                            </DialogTitle>
-                        </DialogHeader>
-                        <div className="grid gap-4 py-4">
+                <Dialog open={isCreateItemOpen} onOpenChange={(open) => { if (!loading) setIsCreateItemOpen(open) }}>
+                    <DialogContent className="sm:max-w-[440px] border-[#e5e7eb] p-0 gap-0 rounded-[2px]">
+                        <VisuallyHidden><DialogTitle>
+                            {createItemType === 'folder' ? 'New Folder' : createItemType === 'doc' ? 'New Google Doc' : createItemType === 'sheet' ? 'New Google Sheet' : createItemType === 'slide' ? 'New Google Slide' : createItemType === 'form' ? 'New Google Form' : createItemType === 'drawing' ? 'New Google Drawing' : createItemType === 'map' ? 'New Google Map' : createItemType === 'site' ? 'New Google Site' : 'New Google Script'}
+                        </DialogTitle></VisuallyHidden>
+                        {/* Header */}
+                        <div className="px-5 py-4 border-b border-[#e5e7eb] bg-white flex items-start gap-3">
+                            <div className="mt-0.5 h-7 w-7 rounded bg-primary/10 flex items-center justify-center shrink-0">
+                                {createItemType === 'folder' ? <Folder className="h-3.5 w-3.5 text-primary" /> : createItemType === 'sheet' ? <FileSpreadsheet className="h-3.5 w-3.5 text-primary" /> : createItemType === 'slide' ? <Presentation className="h-3.5 w-3.5 text-primary" /> : createItemType === 'form' ? <ListChecks className="h-3.5 w-3.5 text-primary" /> : createItemType === 'drawing' ? <PenTool className="h-3.5 w-3.5 text-primary" /> : createItemType === 'map' ? <MapIcon className="h-3.5 w-3.5 text-primary" /> : createItemType === 'script' ? <FileCode className="h-3.5 w-3.5 text-primary" /> : <FileText className="h-3.5 w-3.5 text-primary" />}
+                            </div>
+                            <div>
+                                <p className="text-sm font-semibold text-[#1b1b1d] leading-tight">
+                                    {createItemType === 'folder' ? 'New Folder' : createItemType === 'doc' ? 'New Google Doc' : createItemType === 'sheet' ? 'New Google Sheet' : createItemType === 'slide' ? 'New Google Slide' : createItemType === 'form' ? 'New Google Form' : createItemType === 'drawing' ? 'New Google Drawing' : createItemType === 'map' ? 'New Google Map' : createItemType === 'site' ? 'New Google Site' : 'New Google Script'}
+                                </p>
+                                <p className="text-xs text-[#45474c] mt-0.5">Enter a name to create this {createItemType === 'folder' ? 'folder' : 'file'} in the current location.</p>
+                            </div>
+                        </div>
+                        {/* Body */}
+                        <div className="px-5 py-4 bg-[#f9f9fb]">
+                            <label className="font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] block mb-1">
+                                {createItemType === 'folder' ? 'Folder Name' : 'Document Name'}
+                            </label>
                             <Input
-                                id="name"
-                                placeholder={createItemType === 'folder' ? "Folder Name" : "Document Name"}
+                                autoFocus
+                                placeholder={createItemType === 'folder' ? 'e.g. Q4 Deliverables' : 'e.g. Meeting Notes'}
                                 value={newItemName}
                                 onChange={(e) => setNewItemName(e.target.value)}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter') handleCreateItem()
-                                }}
-                                className="border-slate-200 text-slate-900 placeholder:text-slate-400 focus-visible:ring-slate-400"
+                                onKeyDown={(e) => { if (e.key === 'Enter') handleCreateItem() }}
+                                className="border-[#e5e7eb] text-[#1b1b1d] text-xs font-normal placeholder:text-[#9a9ba0] rounded focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
                             />
                         </div>
-                        <div className="flex justify-end gap-3">
-                            <Button variant="outline" className="border-slate-200 text-slate-700 hover:bg-slate-50" onClick={() => setIsCreateItemOpen(false)}>Cancel</Button>
-                            <Button className="bg-slate-900 text-white hover:bg-slate-800" onClick={handleCreateItem} disabled={!newItemName.trim()}>Create</Button>
+                        {/* Footer */}
+                        <div className="px-5 py-3 border-t border-[#e5e7eb] bg-white flex items-center justify-end gap-3">
+                            <Button type="button" variant="outline" className="rounded-[2px] w-24 text-[10px] font-headline font-bold tracking-widest uppercase" onClick={() => setIsCreateItemOpen(false)} disabled={loading}>Cancel</Button>
+                            <Button type="button" variant="greenCta" className="min-w-[7rem] text-[10px] font-headline font-bold tracking-widest uppercase" onClick={handleCreateItem} disabled={!newItemName.trim() || loading}>
+                                {loading ? <><LoadingSpinner className="h-3 w-3 mr-1.5" />Creating…</> : 'Create'}
+                            </Button>
                         </div>
                     </DialogContent>
                 </Dialog>
@@ -2714,75 +2820,76 @@ const handleRefresh = async () => {
                 </Dialog>
 
                 {/* Move to Bin confirmation dialog */}
-                <Dialog open={!!trashConfirmTarget} onOpenChange={(open) => { if (!open) setTrashConfirmTarget(null) }}>
-                    <DialogContent className="max-w-sm gap-5 p-5 border-slate-200">
-                        <DialogHeader className="space-y-3">
-                            <DialogTitle className="text-slate-900 flex items-center gap-2.5">
-                                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-red-50 ring-1 ring-red-200">
-                                    <Trash2 className="h-3.5 w-3.5 text-red-500" />
-                                </div>
-                                Move to Bin?
-                            </DialogTitle>
-                            <DialogDescription className="text-slate-500 text-xs leading-relaxed">
-                                <span className="font-semibold text-slate-800">{trashConfirmTarget?.name}</span>
-                                {' '}will be moved to your Google Drive Bin. Items in the Bin are permanently deleted after 30 days.
-                            </DialogDescription>
-                        </DialogHeader>
-                        <div className="flex justify-end gap-2">
+                <ConfirmDialog
+                    open={!!trashConfirmTarget}
+                    onOpenChange={(open) => { if (!open) setTrashConfirmTarget(null) }}
+                    icon={<Trash2 className="h-3.5 w-3.5" />}
+                    iconVariant="red"
+                    title="Move to Bin"
+                    subtitle="This file will be moved to Google Drive Bin."
+                    description={<><span className="font-semibold text-[#1b1b1d]">{trashConfirmTarget?.name}</span>{' '}will be moved to your Google Drive Bin. Items in the Bin are permanently deleted after 30 days.</>}
+                    confirmLabel="Move to Bin"
+                    confirmVariant="red"
+                    onCancel={() => setTrashConfirmTarget(null)}
+                    onConfirm={handleTrashConfirmed}
+                    loading={trashConfirming}
+                />
+
+                {/* Return to Draft confirmation */}
+                <ConfirmDialog
+                    open={!!unlockConfirmFile}
+                    onOpenChange={(open) => { if (!open) setUnlockConfirmFile(null) }}
+                    icon={<FileText className="h-3.5 w-3.5" />}
+                    iconVariant="primary"
+                    title="Return to Draft"
+                    subtitle="Unlock this document for further edits."
+                    description={<><span className="font-semibold text-[#1b1b1d]">{unlockConfirmFile?.name}</span>{' '}will be unlocked. All collaborators will regain their prior access level based on their role and sharing settings.</>}
+                    confirmLabel="Return to Draft"
+                    confirmVariant="primary"
+                    onCancel={() => setUnlockConfirmFile(null)}
+                    onConfirm={() => unlockConfirmFile && handleUnlockFromBadge(unlockConfirmFile)}
+                    loading={unlockInProgress}
+                />
+
+                {/* Revoke external access confirmation */}
+                <Dialog open={!!unshareConfirmFile} onOpenChange={(open) => { if (!open) setUnshareConfirmFile(null) }}>
+                    <DialogContent className="sm:max-w-sm border-[#e5e7eb] p-0 gap-0 rounded-[2px] bg-[#f9f9fb]">
+                        <VisuallyHidden><DialogTitle>Revoke external access</DialogTitle></VisuallyHidden>
+                        {/* Header */}
+                        <div className="px-5 py-4 border-b border-[#e5e7eb] bg-white flex items-start gap-3">
+                            <div className="mt-0.5 h-7 w-7 rounded bg-red-50 ring-1 ring-red-200 flex items-center justify-center shrink-0">
+                                <Link2 className="h-3.5 w-3.5 text-red-500" />
+                            </div>
+                            <div>
+                                <p className="text-[11px] font-headline font-bold tracking-widest uppercase text-[#1b1b1d] leading-tight">Revoke external access</p>
+                                <p className="text-xs text-[#45474c] mt-0.5">Remove sharing for all external collaborators.</p>
+                            </div>
+                        </div>
+                        {/* Body */}
+                        <div className="p-5">
+                            <p className="text-xs text-[#45474c] leading-relaxed">
+                                <span className="font-semibold text-[#1b1b1d]">{unshareConfirmFile?.name}</span>
+                                {' '}will be unshared. All external collaborators and viewers will lose access, and any secure links sent by email will no longer work.
+                            </p>
+                        </div>
+                        {/* Footer */}
+                        <div className="px-5 py-3 border-t border-[#e5e7eb] bg-white flex items-center justify-end gap-2">
                             <Button
                                 variant="outline"
-                                size="sm"
-                                onClick={() => setTrashConfirmTarget(null)}
-                                disabled={trashConfirming}
-                                className="border-slate-200 text-slate-700 hover:bg-slate-50"
+                                onClick={() => setUnshareConfirmFile(null)}
+                                disabled={unshareInProgress}
+                                className="rounded-[2px] text-[10px] font-headline font-bold tracking-widest uppercase border-[#e5e7eb] text-[#45474c] hover:bg-[#f9f9fb]"
                             >
                                 Cancel
                             </Button>
                             <Button
-                                size="sm"
-                                onClick={handleTrashConfirmed}
-                                disabled={trashConfirming}
-                                className="bg-red-600 hover:bg-red-700 text-white shadow-sm"
+                                onClick={() => unshareConfirmFile && handleUnshare(unshareConfirmFile)}
+                                disabled={unshareInProgress}
+                                className="rounded-[2px] bg-red-600 hover:bg-red-700 text-white text-[10px] font-headline font-bold tracking-widest uppercase shadow-sm"
                             >
-                                {trashConfirming ? <LoadingSpinner className="h-3.5 w-3.5" /> : 'Move to Bin'}
+                                {unshareInProgress ? <LoadingSpinner className="h-3.5 w-3.5" /> : 'Revoke Access'}
                             </Button>
                         </div>
-                    </DialogContent>
-                </Dialog>
-
-                {/* Return to Draft confirmation */}
-                <Dialog open={!!unlockConfirmFile} onOpenChange={(open) => { if (!open) setUnlockConfirmFile(null) }}>
-                    <DialogContent className="max-w-sm">
-                        <DialogHeader>
-                            <DialogTitle>Return to Draft?</DialogTitle>
-                            <DialogDescription>
-                                <span className="font-medium">{unlockConfirmFile?.name}</span> will be unlocked. All collaborators will regain their prior access level based on their role and sharing settings.
-                            </DialogDescription>
-                        </DialogHeader>
-                        <DialogFooter>
-                            <Button variant="outline" size="sm" onClick={() => setUnlockConfirmFile(null)} disabled={unlockInProgress}>Cancel</Button>
-                            <Button variant="blackCta" size="sm" onClick={() => unlockConfirmFile && handleUnlockFromBadge(unlockConfirmFile)} disabled={unlockInProgress}>
-                                {unlockInProgress ? <LoadingSpinner className="h-4 w-4" /> : 'Return to Draft'}
-                            </Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
-
-                {/* Revoke external access confirmation */}
-                <Dialog open={!!unshareConfirmFile} onOpenChange={(open) => { if (!open) setUnshareConfirmFile(null) }}>
-                    <DialogContent className="max-w-sm">
-                        <DialogHeader>
-                            <DialogTitle>Revoke external access?</DialogTitle>
-                            <DialogDescription>
-                                <span className="font-medium">{unshareConfirmFile?.name}</span> will be unshared. All external collaborators and viewers will lose access, and any secure links sent by email will no longer work.
-                            </DialogDescription>
-                        </DialogHeader>
-                        <DialogFooter>
-                            <Button variant="outline" size="sm" onClick={() => setUnshareConfirmFile(null)} disabled={unshareInProgress}>Cancel</Button>
-                            <Button variant="blackCta" size="sm" onClick={() => unshareConfirmFile && handleUnshare(unshareConfirmFile)} disabled={unshareInProgress}>
-                                {unshareInProgress ? <LoadingSpinner className="h-4 w-4" /> : 'Revoke Access'}
-                            </Button>
-                        </DialogFooter>
                     </DialogContent>
                 </Dialog>
 

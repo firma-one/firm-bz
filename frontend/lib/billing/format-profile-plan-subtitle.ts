@@ -14,7 +14,7 @@ export function formatProfilePlanSubtitle(
     options?: { sandboxOnly?: boolean }
 ): string {
     const plan = state?.subscriptionPlan?.trim()
-    if (plan) return withBrandName(plan)
+    if (plan) return `${withBrandName(plan)} plan`
 
     const status = (state?.subscriptionStatus ?? '').toLowerCase()
     const pricing = state?.pricingModel

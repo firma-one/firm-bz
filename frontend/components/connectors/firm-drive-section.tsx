@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Button } from '@/components/ui/button'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Dialog,
@@ -710,62 +711,44 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false }: Fir
         />
 
         {/* Disconnect confirmation */}
-        <Dialog open={!!disconnectTarget} onOpenChange={(open) => { if (!open) setDisconnectTarget(null) }}>
-          <DialogContent className="sm:max-w-[440px]">
-            <DialogHeader>
-              <DialogTitle>Disconnect Google Drive?</DialogTitle>
-              <DialogDescription>
-                This will revoke the live session. You can reconnect the same account afterwards.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button type="button" variant="outline" className="rounded-[2px] text-[10px] font-headline font-bold tracking-widest uppercase" onClick={() => setDisconnectTarget(null)}>
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                className="rounded-[2px] bg-red-700 text-white hover:bg-red-800 border-0 text-[10px] font-headline font-bold tracking-widest uppercase"
-                onClick={() => { const t = disconnectTarget; setDisconnectTarget(null); if (t) void handleDisconnect(t) }}
-              >
-                Disconnect
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <ConfirmDialog
+          open={!!disconnectTarget}
+          onOpenChange={(open) => { if (!open) setDisconnectTarget(null) }}
+          icon={<Unplug className="h-3.5 w-3.5" />}
+          iconVariant="red"
+          title="Disconnect Google Drive"
+          subtitle="The live session will be revoked."
+          description="This will revoke the live session. You can reconnect the same account afterwards."
+          confirmLabel="Disconnect"
+          confirmVariant="red"
+          onCancel={() => setDisconnectTarget(null)}
+          onConfirm={() => { const t = disconnectTarget; setDisconnectTarget(null); if (t) void handleDisconnect(t) }}
+        />
 
         {/* Remove confirmation */}
-        <Dialog open={!!removeTarget} onOpenChange={(open) => { if (!open) setRemoveTarget(null) }}>
-          <DialogContent className="sm:max-w-[440px]">
-            <DialogHeader>
-              <DialogTitle>Remove connector?</DialogTitle>
-              <DialogDescription>
-                Permanently delete this Google Drive connection. This cannot be undone.
-              </DialogDescription>
-            </DialogHeader>
-            {removeTarget && removeTarget.attachedClients.length > 0 && (
-              <div className="flex gap-2.5 rounded-[2px] border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
-                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
-                <span>
-                  This connector is attached to{' '}
-                  <span className="font-semibold">{removeTarget.attachedClients.map(c => c.name).join(', ')}</span>.
-                  Removing it will detach all of these clients — they will need a new connector set up.
-                </span>
-              </div>
-            )}
-            <DialogFooter>
-              <Button type="button" variant="outline" className="rounded-[2px]" onClick={() => setRemoveTarget(null)}>
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                className="rounded-[2px] bg-red-700 text-white hover:bg-red-800 border-0 text-[10px] font-headline font-bold tracking-widest uppercase"
-                onClick={() => { const t = removeTarget; setRemoveTarget(null); if (t) void handleRemove(t) }}
-              >
-                Remove
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <ConfirmDialog
+          open={!!removeTarget}
+          onOpenChange={(open) => { if (!open) setRemoveTarget(null) }}
+          icon={<Trash2 className="h-3.5 w-3.5" />}
+          iconVariant="red"
+          title="Remove connector"
+          subtitle="This action cannot be undone."
+          description="Permanently delete this Google Drive connection. This cannot be undone."
+          extra={removeTarget && removeTarget.attachedClients.length > 0 ? (
+            <div className="flex gap-2.5 rounded-[2px] border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
+              <span>
+                This connector is attached to{' '}
+                <span className="font-semibold">{removeTarget.attachedClients.map(c => c.name).join(', ')}</span>.
+                Removing it will detach all of these clients — they will need a new connector set up.
+              </span>
+            </div>
+          ) : undefined}
+          confirmLabel="Remove"
+          confirmVariant="red"
+          onCancel={() => setRemoveTarget(null)}
+          onConfirm={() => { const t = removeTarget; setRemoveTarget(null); if (t) void handleRemove(t) }}
+        />
       </div>
     </TooltipProvider>
   )

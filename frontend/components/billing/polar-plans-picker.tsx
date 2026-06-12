@@ -11,17 +11,35 @@ import { openPolarCustomerPortalSession } from '@/lib/billing/open-polar-custome
 import { buildPolarCheckoutHref } from '@/lib/billing/polar-checkout-href'
 import { upgradeCopy } from '@/lib/billing/upgrade-copy'
 import { BRAND_NAME } from '@/config/brand'
-import { getPricingComparisonBulletsForPlan, type PricingPlanColumnId } from '@/config/pricing'
-import { BillingCheckoutFootnote, BillingPolarExplainInline, BillingRefundPolicyNote } from '@/components/billing/billing-polar-inline'
+import { getPricingComparisonBulletsForPlan, getSandboxPlanHighlights, type PricingPlanColumnId } from '@/config/pricing'
+import { BillingPolarExplainInline } from '@/components/billing/billing-polar-inline'
 import { Button, buttonVariants } from '@/components/ui/button'
-import { EmailInline } from '@/components/ui/email-inline'
-import { PLATFORM_SUPPORT_EMAIL } from '@/config/platform-emails'
+
 import { persistCheckoutIntent, readCheckoutIntent, type CheckoutPlanName } from '@/lib/marketing/checkout-intent'
 import { cn } from '@/lib/utils'
-import { Check, ChevronDown, ChevronUp, CreditCard, ExternalLink, Loader2, Rows3 } from 'lucide-react'
+import { Building2, Check, ChevronDown, ChevronUp, CreditCard, ExternalLink, Loader2, Lock, Receipt, Rows3 } from 'lucide-react'
 import { EVENTS, Joyride, STATUS, type Controls, type EventData } from 'react-joyride'
 
 type CatalogJson = { items?: BillingCatalogPlan[]; error?: string }
+export type BillingPlanEntitlements = {
+    firms: number | null
+    clients: number | null
+    clientContacts: number | null
+    engagements: number | null
+    documents: number | null
+    auditDays: number | null
+    commentHistoryDays: number | null
+    isFreePlan: boolean
+}
+
+export type BillingPlanUsage = {
+    firms: number | null
+    clients: number | null
+    engagements: number | null
+    documents: number | null
+    clientContacts: number | null
+}
+
 export type BillingCurrentPlanState = {
     subscriptionStatus: string | null
     subscriptionPlan: string | null
@@ -31,6 +49,8 @@ export type BillingCurrentPlanState = {
     scheduledCancelAtIso?: string | null
     canOpenCustomerPortal?: boolean
     isFirmBillingAdmin?: boolean
+    entitlements?: BillingPlanEntitlements | null
+    usage?: BillingPlanUsage | null
 }
 
 interface PolarPlansPickerProps {
@@ -320,13 +340,7 @@ function ActivePlanCornerPatch({
     )
 }
 
-const sandboxPlanHighlights = [
-    '1 sandbox firm workspace included',
-    'Demo clients and engagements preloaded',
-    'Document storage and folder structure previews',
-    'Safe environment for testing workflows',
-    'No production custom firms on free tier',
-]
+const sandboxPlanHighlights = getSandboxPlanHighlights()
 
 function PlanHighlightsScroll({
     lines,
@@ -671,22 +685,37 @@ function ComparePlansPricingLink({
     )
 }
 
-function BillingFaqInlineLink({ className, blueAccentTrial }: { className?: string; blueAccentTrial?: boolean }) {
+function BillingFaqInlineLink({
+    density,
+    className,
+    blueAccentTrial,
+}: {
+    density: 'default' | 'compact'
+    className?: string
+    blueAccentTrial?: boolean
+}) {
+    const compact = density === 'compact'
     return (
         <Link
-            href="/pricing#faq"
+            href="/resources/faq"
             target="_blank"
             rel="noopener noreferrer"
             className={cn(
-                'inline-flex items-center gap-1 font-medium underline underline-offset-2',
+                buttonVariants({ variant: 'outline', size: compact ? 'sm' : 'default' }),
+                'inline-flex shrink-0 items-center justify-center gap-2 bg-white font-medium shadow-sm transition-colors',
                 blueAccentTrial
-                    ? 'text-[#7a5343] decoration-[#ECC0AA]/75 hover:text-[#5c3f32] hover:decoration-[#c49a82]'
-                    : 'text-slate-600 decoration-slate-300/80 hover:text-slate-900 hover:decoration-slate-400',
+                    ? cn(
+                          '!border-[#c49a82] !bg-[#ECC0AA] !text-[#3d2a22] !shadow-[0_2px_8px_-2px_rgba(236,192,170,0.45)]',
+                          'hover:!border-[#b07d62] hover:!bg-[#f0d0be] hover:!text-[#241814]'
+                      )
+                    : 'border-slate-300 text-slate-800 hover:border-slate-400 hover:bg-slate-50',
+                compact ? 'h-9 px-3 text-xs' : 'h-10 px-4 text-sm',
+                'w-full sm:w-auto',
                 className
             )}
         >
+            <ExternalLink className={cn('opacity-70', compact ? 'h-3 w-3' : 'h-3.5 w-3.5')} aria-hidden />
             FAQs
-            <ExternalLink className="h-3.5 w-3.5 opacity-70" aria-hidden />
         </Link>
     )
 }
@@ -1114,66 +1143,18 @@ export function PolarPlansPicker({
                     {upgradeCopy.billingPortalAdminOnlyHint}
                 </div>
             ) : null}
-            <div className={billingTrustPanelClass(compact, blueAccentTrial)}>
-                {showPortalButton ? (
+            {showPortalButton ? (
+                <div className={billingTrustPanelClass(compact, blueAccentTrial)}>
                     <p className={cn('text-sm leading-relaxed text-slate-700', compact && 'text-xs')}>
                         <span>{upgradeCopy.billingPortalCombinedIntroPrefix}</span>
                         <BillingPolarExplainInline className="mx-0.5" />
                         <span>{upgradeCopy.billingPortalCombinedIntroSuffix}</span>
                     </p>
-                ) : (
-                    <BillingCheckoutFootnote dense={compact} />
-                )}
-                <div
-                    className={cn(
-                        'mt-4 border-t pt-4',
-                        compact && 'mt-3 pt-3',
-                        blueAccentTrial
-                            ? compact
-                                ? 'border-[#ECC0AA]/30'
-                                : 'border-[#ECC0AA]/35'
-                            : compact
-                              ? 'border-slate-200/50'
-                              : 'border-slate-200/60'
-                    )}
-                />
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
-                    <p
-                        className={cn(
-                            'min-w-0 flex-1 text-left text-xs leading-relaxed',
-                            blueAccentTrial ? 'text-[#7a5343]/80' : 'text-slate-500',
-                            compact && 'text-[11px]'
-                        )}
-                    >
-                        <span>{upgradeCopy.billingFooterHelp}</span>{' '}
-                        <EmailInline email={PLATFORM_SUPPORT_EMAIL} className="mx-1" />
-                        <span className="sr-only">.</span>{' '}
-                        <BillingFaqInlineLink className="ml-1" blueAccentTrial={blueAccentTrial} />
-                    </p>
-                    <ComparePlansPricingLink
-                        density={density}
-                        className="w-full shrink-0 sm:w-auto sm:self-start"
-                        blueAccentTrial={blueAccentTrial}
-                    />
+                    {portalError ? (
+                        <p className="mt-3 text-sm text-red-600">{portalError}</p>
+                    ) : null}
                 </div>
-                {showPortalButton && portalError ? (
-                    <p className="mt-3 text-sm text-red-600">{portalError}</p>
-                ) : null}
-                <div
-                    className={cn(
-                        'mt-4 border-t pt-4',
-                        compact && 'mt-3 pt-3',
-                        blueAccentTrial
-                            ? compact
-                                ? 'border-[#ECC0AA]/30'
-                                : 'border-[#ECC0AA]/35'
-                            : compact
-                              ? 'border-slate-200/50'
-                              : 'border-slate-200/60'
-                    )}
-                />
-                <BillingRefundPolicyNote compact={compact} />
-            </div>
+            ) : null}
             <ul className="grid grid-cols-1 gap-5 pt-2 lg:grid-cols-2 lg:items-stretch lg:gap-6">
                 {visiblePlanRows?.map((row) => {
                     if (row.kind === 'group') {
@@ -1250,8 +1231,8 @@ export function PolarPlansPicker({
                                         isIntentHighlight &&
                                             !enableCheckoutIntentJoyride &&
                                             (blueAccentTrial
-                                                ? 'ring-2 ring-[#b88972]/60 ring-offset-2 ring-offset-white'
-                                                : 'ring-2 ring-emerald-600/40 ring-offset-2 ring-offset-white')
+                                                ? 'border-2 border-[#b88972]/60'
+                                                : 'border-2 border-emerald-600/40')
                                     )}
                                 >
                                     {isCurrentPlan && (
@@ -1517,8 +1498,8 @@ export function PolarPlansPicker({
                                     isIntentHighlight &&
                                         !enableCheckoutIntentJoyride &&
                                         (blueAccentTrial
-                                            ? 'ring-2 ring-[#b88972]/60 ring-offset-2 ring-offset-white'
-                                            : 'ring-2 ring-emerald-600/40 ring-offset-2 ring-offset-white')
+                                            ? 'border-2 border-[#b88972]/60'
+                                            : 'border-2 border-emerald-600/40')
                                 )}
                             >
                                 {isCurrentPlan && !isFreeTier && (

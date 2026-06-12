@@ -42,6 +42,7 @@ interface EngagementWorkspaceProps {
     canViewInternalTabs?: boolean
     canEdit?: boolean
     canManage?: boolean
+    isFirmAdmin?: boolean
     /** When true (eng_ext_collaborator/eng_viewer), only show shared docs in file list */
     restrictToSharedOnly?: boolean
     /** When true (eng_viewer only), shows Accept Document option in document action menu */
@@ -94,6 +95,7 @@ export function EngagementWorkspace({
     canViewInternalTabs = false,
     canEdit = false,
     canManage = false,
+    isFirmAdmin = false,
     restrictToSharedOnly = false,
     isExternalViewer = false,
     projectDescription,
@@ -124,6 +126,8 @@ export function EngagementWorkspace({
     const pathname = usePathname()
     const router = useRouter()
     const { viewAsPersonaSlug } = useViewAs()
+    const [liveFileCount, setLiveFileCount] = useState<number | undefined>(fileCount)
+    useEffect(() => { setLiveFileCount(fileCount) }, [fileCount])
     const [filesNavSlot, setFilesNavSlot] = useState<HTMLDivElement | null>(null)
     const tabsScrollRef = useRef<HTMLDivElement>(null)
     const [canScrollLeft, setCanScrollLeft] = useState(false)
@@ -323,9 +327,9 @@ export function EngagementWorkspace({
                             >
                                 <Folder className="w-4 h-4 mr-2" />
                                 Files
-                                {fileCount !== undefined && fileCount > 0 && (
+                                {liveFileCount !== undefined && liveFileCount > 0 && (
                                     <span className="ml-2 font-mono text-[10px] font-bold bg-primary text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
-                                        {fileCount}
+                                        {liveFileCount}
                                     </span>
                                 )}
                             </TabsTrigger>
@@ -476,6 +480,7 @@ export function EngagementWorkspace({
                                         projectName={projectName}
                                         canEdit={canEdit}
                                         canManage={canManage}
+                                        isFirmAdmin={isFirmAdmin}
                                         restrictToSharedOnly={restrictToSharedOnly}
                                         firmId={firmId}
                                         orgSlug={orgSlug}
@@ -483,6 +488,7 @@ export function EngagementWorkspace({
                                         navSlot={filesNavSlot}
                                         clientSlug={clientSlug}
                                         connectorAccountEmail={connectorAccountEmail}
+                                        onFileCountChange={setLiveFileCount}
                                     />
                                 </EngagementSearchProvider>
                             </ErrorBoundary>

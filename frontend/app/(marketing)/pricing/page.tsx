@@ -14,7 +14,7 @@ import { Header } from "@/components/layout/Header"
 import { Footer } from "@/components/layout/Footer"
 import { Fragment, useEffect, useState } from "react"
 import { cn } from "@/lib/utils"
-import type { PlanValue, PricingPlan, PricingPlanColumnId } from "@/config/pricing"
+import type { PlanValue, PricingPlan, PricingPlanColumnId, PricingComparisonRow } from "@/config/pricing"
 import { platformEmail } from "@/config/platform-domain"
 import { BRAND_NAME } from "@/config/brand"
 import { CONTACT_HREF_SALES_INQUIRY } from "@/lib/marketing/contact-inquiry"
@@ -25,6 +25,26 @@ import { PricingEngagementPersonasTooltip } from "@/components/marketing/pricing
 import { PricingFirmClientEngagementHierarchyVisual } from "@/components/marketing/pricing-firm-client-engagement-hierarchy-visual"
 import { KineticMarketingBadge, kineticSectionLeadClassName } from "@/components/kinetic/kinetic-section-intro"
 import { FaqGrid } from "@/components/faq/FaqGrid"
+function FeatureIcon({ icon }: { icon?: 'google-drive' | 'onedrive' }) {
+    if (icon === 'google-drive') return (
+        <svg className="inline-block ml-1.5 h-5 w-5 shrink-0 align-middle" viewBox="0 0 87.3 78" aria-label="Google Drive">
+            <path d="M6.6 66.85l3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8H0a15.3 15.3 0 001.95 7.6z" fill="#0066da"/>
+            <path d="M43.65 25L29.9 1.2a9.5 9.5 0 00-3.3 3.3L1.95 49.6A15.2 15.2 0 000 57.2h27.5z" fill="#00ac47"/>
+            <path d="M73.55 76.8a9.5 9.5 0 003.3-3.3l1.6-2.75 7.65-13.25A15.3 15.3 0 0087.3 50H59.75L73.55 76.8z" fill="#ea4335"/>
+            <path d="M43.65 25L57.4 1.2A15.5 15.5 0 0049.8 0H37.5a15.5 15.5 0 00-7.6 1.2z" fill="#00832d"/>
+            <path d="M59.75 50H87.3a15.3 15.3 0 00-1.95-7.6L61.6 4.5a9.5 9.5 0 00-3.3-3.3L43.65 25z" fill="#2684fc"/>
+            <path d="M27.5 50L13.75 76.8a15.5 15.5 0 007.6 1.2h44.6a15.5 15.5 0 007.6-1.2L59.75 50z" fill="#ffba00"/>
+        </svg>
+    )
+    if (icon === 'onedrive') return (
+        <svg className="inline-block ml-1.5 h-5 w-5 shrink-0 align-middle" viewBox="0 0 24 24" aria-label="OneDrive">
+            <path d="M14.116 7.113a5.617 5.617 0 00-10.005 2.68A4.385 4.385 0 004.39 18H13.5a3.5 3.5 0 000-7h-.23a5.62 5.62 0 00.846-3.887z" fill="#0078d4"/>
+            <path d="M14.116 7.113A5.617 5.617 0 0119.5 10.5h.1A4.4 4.4 0 0124 14.9 4.4 4.4 0 0119.6 19.3H13.5a3.5 3.5 0 000-7h-.23a5.62 5.62 0 00.846-4.187z" fill="#1490df"/>
+            <path d="M8.5 18H19.6A4.4 4.4 0 0024 13.6a4.4 4.4 0 00-4.4-4.4 4.36 4.36 0 00-1.3.2 5.6 5.6 0 00-4.186-2.287A5.617 5.617 0 004.11 9.793a4.385 4.385 0 00.28 8.207z" fill="#28a8e0"/>
+        </svg>
+    )
+    return null
+}
 
 const H = "[font-family:var(--font-kinetic-headline),system-ui,sans-serif]"
 const B = "[font-family:var(--font-kinetic-body),system-ui,sans-serif]"
@@ -82,8 +102,6 @@ function checkoutPlanFromPricingPlanId(id: string): CheckoutPlanName {
     if (id === "Enterprise") return "Enterprise"
     return "Standard"
 }
-
-type PricingComparisonRow = (typeof PRICING_COMPARISON)[number]["rows"][number]
 
 function PricingComparisonTooltipBody({ row }: { row: PricingComparisonRow }) {
     if (row.tooltipLayout === "hierarchy-sample") {
@@ -184,56 +202,54 @@ export default function PricingPage() {
                                     </p>
                                     <p>
                                         <span className={KINETIC_LEAD_MARKER}>
-                                            Bring your own Google Drive—non-custodial
+                                            The engagement is the center of client work — not the file.
                                         </span>
-                                        . Your documents stay where they are; we add the portal. No migration, no new
-                                        storage. Professional client portal with engagement personas and feedback
-                                        tracking.
+                                        {" "}Organize client deliverables into structured, reusable engagement systems on top of the tools you already use.
                                     </p>
 
-                                </div>
-                                <div
-                                    className="inline-flex w-fit shrink-0 items-stretch gap-1 rounded-none border border-[#9ea0a8]/45 bg-[#cfd1d9] p-1 shadow-[inset_0_1px_3px_rgba(15,23,42,0.12)]"
-                                    role="group"
-                                    aria-label="Billing period"
-                                >
-                                    <button
-                                        type="button"
-                                        onClick={() => setBillingPeriod("annual")}
-                                        className={cn(
-                                            "rounded-none px-5 py-2.5 text-xs font-bold uppercase tracking-widest transition-all duration-200 min-h-[44px]",
-                                            H,
-                                            billingPeriod === "annual"
-                                                ? "bg-white text-[#1b1b1d] shadow-[0_2px_8px_rgba(15,23,42,0.14),0_0_0_1px_rgba(15,23,42,0.06)]"
-                                                : "text-[#3f4149] hover:bg-white/35 hover:text-[#1b1b1d]",
-                                        )}
-                                    >
-                                        Annual{" "}
-                                        <span className="ml-1 font-bold text-[#006e16]" aria-hidden>
-                                            20% off
-                                        </span>
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setBillingPeriod("monthly")}
-                                        className={cn(
-                                            "rounded-none px-5 py-2.5 text-xs font-bold uppercase tracking-widest transition-all duration-200 min-h-[44px]",
-                                            H,
-                                            billingPeriod === "monthly"
-                                                ? "bg-white text-[#1b1b1d] shadow-[0_2px_8px_rgba(15,23,42,0.14),0_0_0_1px_rgba(15,23,42,0.06)]"
-                                                : "text-[#3f4149] hover:bg-white/35 hover:text-[#1b1b1d]",
-                                        )}
-                                    >
-                                        Monthly
-                                    </button>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </section>
 
-                {/* PRICING / FAQs toggle */}
-                <div className={cn(MARKETING_PAGE_SHELL, "mb-10 flex justify-center")}>
+                {/* Control bar — Annual/Monthly left, Pricing/FAQs right */}
+                <div className={cn(MARKETING_PAGE_SHELL, "mb-10 flex items-center justify-between gap-4")}>
+                    <div
+                        className={cn("inline-flex w-fit shrink-0 items-stretch gap-1 rounded-none border border-[#9ea0a8]/45 bg-[#cfd1d9] p-1 shadow-[inset_0_1px_3px_rgba(15,23,42,0.12)]", activeTab === "faq" && "invisible")}
+                        role="group"
+                        aria-label="Billing period"
+                    >
+                        <button
+                            type="button"
+                            onClick={() => setBillingPeriod("annual")}
+                            className={cn(
+                                "rounded-none px-5 py-2.5 text-xs font-bold uppercase tracking-widest transition-all duration-200 min-h-[44px]",
+                                H,
+                                billingPeriod === "annual"
+                                    ? "bg-white text-[#1b1b1d] shadow-[0_2px_8px_rgba(15,23,42,0.14),0_0_0_1px_rgba(15,23,42,0.06)]"
+                                    : "text-[#3f4149] hover:bg-white/35 hover:text-[#1b1b1d]",
+                            )}
+                        >
+                            Annual{" "}
+                            <span className="ml-1 font-bold text-[#006e16]" aria-hidden>
+                                20% off
+                            </span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setBillingPeriod("monthly")}
+                            className={cn(
+                                "rounded-none px-5 py-2.5 text-xs font-bold uppercase tracking-widest transition-all duration-200 min-h-[44px]",
+                                H,
+                                billingPeriod === "monthly"
+                                    ? "bg-white text-[#1b1b1d] shadow-[0_2px_8px_rgba(15,23,42,0.14),0_0_0_1px_rgba(15,23,42,0.06)]"
+                                    : "text-[#3f4149] hover:bg-white/35 hover:text-[#1b1b1d]",
+                            )}
+                        >
+                            Monthly
+                        </button>
+                    </div>
                     <div className="inline-flex items-center gap-1 rounded border border-[#c6c6cc]/40 bg-white p-1 shadow-sm">
                         <button
                             type="button"
@@ -277,19 +293,22 @@ export default function PricingPage() {
                         >
                             <div
                                 className={cn(
-                                    "mb-1 text-sm font-bold uppercase tracking-[0.18em] text-[#1b1b1d]",
+                                    "mb-4 text-sm font-bold uppercase tracking-[0.18em] text-[#006e16]",
                                     H,
                                 )}
                             >
-                                Sandbox
+                                Free
                             </div>
-                            <p className={cn("mb-4 text-[10px] font-bold uppercase tracking-[0.2em] text-[#006e16]", H)}>
-                                Free · No card required
-                            </p>
                             <div className="mb-2 flex items-baseline gap-1">
-                                <span className={cn("text-4xl font-bold tracking-tight text-[#1b1b1d]", H)}>Free</span>
+                                <span className={cn("text-4xl font-bold tracking-tight text-[#1b1b1d]", H)}>$0</span>
+                                <span className="text-sm text-[#45474c]">/month</span>
                             </div>
-                            <p className="mb-4 text-xs text-[#45474c]">Explore {BRAND_NAME} on your terms</p>
+                            <p className={cn("mb-0.5 text-xs text-[#006e16] font-semibold", H)}>
+                                Free forever
+                            </p>
+                            <p className="mb-4 text-xs text-[#45474c]">
+                                No credit card required
+                            </p>
                             <div className="mb-5 space-y-1">
                                 {sandboxPlanUsageSummary().map((line, idx) => (
                                     <p key={idx} className="text-sm text-[#45474c]">
@@ -298,9 +317,7 @@ export default function PricingPage() {
                                 ))}
                             </div>
                             <p className="mb-8 flex-grow text-sm leading-relaxed text-[#45474c]">
-                                Explore the portal, firm hierarchy, and engagements on your Drive—no card. Step up to a{" "}
-                                <strong className="font-semibold text-[#1b1b1d]">30-day Standard trial</strong> when you
-                                are ready.
+                                Explore the portal with your Demo firm. You can also create your own firm and start using the app right away (limits apply) — no card required.
                             </p>
                             <div className="mt-auto">
                                 <Link
@@ -429,7 +446,7 @@ export default function PricingPage() {
                     <TooltipProvider delayDuration={0}>
                         <div className="lg:hidden">
                             <p className={cn("mb-4 text-sm leading-relaxed text-[#45474c]", B)}>
-                                Select a column to compare. Sandbox is always shown as a reference when a paid plan is
+                                Select a column to compare. Demo is always shown as a reference when a paid plan is
                                 selected.
                             </p>
                             <div
@@ -450,7 +467,7 @@ export default function PricingPage() {
                                             : "border-[#c6c6cc]/40 bg-white text-[#45474c] hover:border-[#006e16]/40",
                                     )}
                                 >
-                                    Sandbox
+                                    Demo
                                 </button>
                                 {PRICING_PLANS.map((plan) => (
                                     <button
@@ -501,7 +518,7 @@ export default function PricingPage() {
                                                     >
                                                         <div className="flex items-start justify-between gap-2">
                                                             <span className="font-medium leading-snug text-[#1b1b1d]">
-                                                                {row.feature}
+                                                                {row.feature}{row.featureIcon && <FeatureIcon icon={row.featureIcon} />}
                                                             </span>
                                                             {row.tooltip ? (
                                                                 <Tooltip>
@@ -519,7 +536,7 @@ export default function PricingPage() {
                                                         <div className="mt-3 flex flex-col gap-1 border-t border-[#eae7e9] pt-3">
                                                             <span className={cn("text-[10px] font-bold uppercase tracking-widest text-[#45474c]", H)}>
                                                                 {mobileMatrixColumn === PRICING_SANDBOX_COLUMN_ID
-                                                                    ? "Sandbox"
+                                                                    ? "Demo"
                                                                     : PRICING_PLANS.find((p) => p.id === mobileMatrixColumn)
                                                                           ?.title ?? mobileMatrixColumn}
                                                             </span>
@@ -538,7 +555,7 @@ export default function PricingPage() {
                                                                         H,
                                                                     )}
                                                                 >
-                                                                    vs Sandbox
+                                                                    vs Demo
                                                                 </span>
                                                                 <div className="flex justify-start">
                                                                     <PricingMatrixCell
@@ -576,7 +593,7 @@ export default function PricingPage() {
                                                     H,
                                                 )}
                                             >
-                                                Free sandbox
+                                                Free
                                             </th>
                                             {PRICING_PLANS.map((plan) => (
                                                 <th
@@ -618,7 +635,7 @@ export default function PricingPage() {
                                                             <td className="border-r border-[#c6c6cc]/15 p-4 align-middle md:p-6">
                                                                 <div className="flex items-start justify-between gap-2">
                                                                     <span className="font-medium leading-snug text-[#1b1b1d]">
-                                                                        {row.feature}
+                                                                        {row.feature}{row.featureIcon && <FeatureIcon icon={row.featureIcon} />}
                                                                     </span>
                                                                     {row.tooltip && (
                                                                         <Tooltip>
@@ -700,11 +717,10 @@ export default function PricingPage() {
                                         H,
                                     )}
                                 >
-                                    Bring your own Drive. Setup your client portal atop your Drive.
+                                    Bring your own Storage Drive. Setup your client portal atop your Drive.
                                 </h2>
                                 <p className="mt-4 text-lg text-[#bfc6da]">
-                                    Open a sandbox in minutes, then move to a Standard trial when your firm is ready to
-                                    ship.
+                                    Start with a Demo firm or create your own — no card required. Upgrade to Standard and take off the training wheels.
                                 </p>
                             </div>
                             <div className="flex w-full flex-col gap-4 sm:flex-row sm:w-auto">

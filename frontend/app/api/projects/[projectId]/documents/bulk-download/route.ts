@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { requireEngagementMember } from '@/lib/engagement-access'
+import { resolveEngagementConnectorId } from '@/lib/connectors/resolve-client-connector'
 
 const MAX_FILES = 100
 
@@ -30,15 +31,11 @@ export async function POST(
 
     const engagement = await prisma.engagement.findUnique({
       where: { id: projectId },
-      select: { firmId: true, name: true },
+      select: { firmId: true, name: true, clientId: true },
     })
     if (!engagement) return NextResponse.json({ error: 'Engagement not found' }, { status: 404 })
 
-    const firm = await prisma.firm.findUnique({
-      where: { id: engagement.firmId },
-      select: { connectorId: true },
-    })
-    const connectorId = firm?.connectorId
+    const connectorId = await resolveEngagementConnectorId(projectId)
     if (!connectorId) return NextResponse.json({ error: 'No connector found' }, { status: 500 })
 
     const { googleDriveConnector } = await import('@/lib/google-drive-connector')

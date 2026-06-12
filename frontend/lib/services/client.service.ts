@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { getRlsPrisma } from '@/lib/prisma-server'
 import { logger } from '@/lib/logger'
+import { assertWithinClientCap } from '@/lib/billing/effective-billing-caps'
 
 export interface ClientWithMembers {
     id: string
@@ -70,6 +71,7 @@ export class ClientService {
         sandboxOnly?: boolean
         settings?: any
     }): Promise<ClientWithMembers> {
+        await assertWithinClientCap(data.firmId)
         const { generateClientSlug } = await import('@/lib/slug-utils')
         const slug = await generateClientSlug(data.name)
 

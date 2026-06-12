@@ -97,6 +97,11 @@ AI layer using Gemma 4 (HuggingFace Transformers, same runtime as release notes 
 
 ## Infrastructure / Maintenance
 
+- [ ] **Refactor: Replace `sandboxOnly` with `isAnchorFirm()`** — [plan](../../.claude/plans/refactor-is-anchor-firm.md)
+  - `Firm.sandboxOnly` maps to DB column `isAnchor`; the two names are used interchangeably across 165+ references
+  - `isAnchorFirm()` utility added to `lib/billing/effective-billing-caps.ts`; all new code should use it
+  - Migrate existing reads in batches: billing/server layer first, then UI components
+
 - [ ] **Unit Tests** — critical business logic coverage
   - Invite flow: token verification, email match, permission fallback (engagementMember DB check)
   - Reminder system: `upsertFollowUpReminder` upsert/dedup, `markReminderDone` cleanup, `entityTableKey` resolver mapping
@@ -108,6 +113,12 @@ AI layer using Gemma 4 (HuggingFace Transformers, same runtime as release notes 
   - Setup Reminder: open modal, select assignee, set date, submit → reminder appears in topbar panel
   - Document finalize + unlock cycle
   - File upload (intake) → EL approval → document moves to General
+
+- [ ] **QA Test Scenarios** — [file-list, sharing & preview](../qa/file-list-test-scenarios.md)
+  - Covers: duplicate PDF prevention, preview disposition fix, connector resolution fallback chain, EV/EC preview auth, Shares tab Preview icon (grid/list/board), folder session persistence
+
+- [ ] **QA Test Scenarios** — [confirmation dialogs](../qa/confirmation-dialog-tests.md)
+  - Covers: ConfirmDialog component baseline + all 17 call sites (file ops, members, contacts, connectors, settings, dashboard, chat, system admin)
 
 - [ ] **Prisma 7 Upgrade** — [plan](../../.claude/plans/prisma-7-upgrade.md)
   - Phase 1 (now, zero risk): create `frontend/prisma.config.ts`, remove deprecated `package.json#prisma` seed key

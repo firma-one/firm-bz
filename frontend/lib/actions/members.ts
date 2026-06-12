@@ -43,7 +43,7 @@ export async function getProjectMembers(projectId: string) {
     const invitations = await prisma.engagementInvitation.findMany({
         where: {
             engagementId: projectId,
-            status: { not: InvitationStatus.JOINED }
+            status: { notIn: [InvitationStatus.JOINED, InvitationStatus.SUPERSEDED] }
         },
         include: { persona: true },
         orderBy: { createdAt: 'desc' }
@@ -191,6 +191,22 @@ export async function removeMember(memberId: string) {
         }
 
         await prisma.engagementMember.delete({ where: { id: memberId } })
+
+        // Mark invitation as SUPERSEDED so the member can be re-invited
+        if (member.userId) {
+            try {
+                const { data: { user: memberUser } } = await supabaseAdmin.auth.admin.getUserById(member.userId)
+                const memberEmail = memberUser?.email
+                if (memberEmail) {
+                    await prisma.engagementInvitation.updateMany({
+                        where: { engagementId: member.engagementId, email: memberEmail, status: InvitationStatus.JOINED },
+                        data: { status: InvitationStatus.SUPERSEDED },
+                    })
+                }
+            } catch (error) {
+                logger.error('Error superseding invitation on member removal', error as Error)
+            }
+        }
 
         audit(AUDIT_EVENT.ENGAGEMENT_MEMBER_REMOVED)
             .scope(AUDIT_SCOPE.ENGAGEMENT)

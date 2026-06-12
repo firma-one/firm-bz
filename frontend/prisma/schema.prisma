@@ -59,6 +59,7 @@ enum InvitationStatus {
   JOINED
   EXPIRED
   ERROR
+  SUPERSEDED
 
   @@schema("platform")
 }

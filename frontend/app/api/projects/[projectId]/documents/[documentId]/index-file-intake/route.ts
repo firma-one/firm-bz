@@ -4,6 +4,8 @@ import { prisma } from '@/lib/prisma'
 import { requireEngagementMember, isExternalEngagementRole } from '@/lib/engagement-access'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { safeInngestSend } from '@/lib/inngest/client'
+import { assertWithinDocumentCap } from '@/lib/billing/effective-billing-caps'
+import { resolveEngagementConnectorId } from '@/lib/connectors/resolve-client-connector'
 
 /**
  * POST /api/projects/[projectId]/documents/[documentId]/index-file-intake
@@ -28,22 +30,23 @@ export async function POST(
       return NextResponse.json({ error: 'Only EC/EV members can submit files for intake' }, { status: 403 })
     }
 
-    // Load project with connector so we can upsert the record if Inngest hasn't run yet
+    // Load project so we can upsert the record if Inngest hasn't run yet
     const project = await prisma.engagement.findFirst({
       where: { id: projectId, isDeleted: false },
-      include: {
-        client: {
-          include: { connector: true },
-        },
-      },
+      include: { client: { select: { firmId: true, slug: true, name: true } } },
     })
     if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
 
-    const connector = project.client.connector
+    const connectorId = await resolveEngagementConnectorId(projectId)
+    if (!connectorId) return NextResponse.json({ error: 'No active connector' }, { status: 500 })
+    const connector = await prisma.connector.findUnique({ where: { id: connectorId } })
     if (!connector) return NextResponse.json({ error: 'No active connector' }, { status: 500 })
 
     const now = new Date().toISOString()
     const intakeLock = { type: 'intake', uploadedBy: user.id, uploadedAt: now }
+
+    // Gate before any DB writes — ensures cap is checked before record creation
+    await assertWithinDocumentCap(project.client.firmId, 1)
 
     // Try to find an existing record first (happy path — Inngest already indexed it)
     const existing = await prisma.engagementDocument.findFirst({

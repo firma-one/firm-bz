@@ -2,10 +2,11 @@
 
 import { prisma } from "@/lib/prisma"
 import { createClient } from "@/utils/supabase/server"
-import { upsertFollowUpReminder } from '@/lib/actions/user-reminders'
+import { upsertFollowUpReminder, removeRemindersByEntity } from '@/lib/actions/user-reminders'
 import { sendEmail } from '@/lib/email'
 import { logger } from '@/lib/logger'
 import { BRAND_NAME } from '@/config/brand'
+import { renderInviteEmail } from '@/lib/email-templates/invite'
 import { safeInngestSend } from '@/lib/inngest/client'
 import { grantEngagementDriveFolderAccess } from '@/lib/grant-engagement-drive-folder-access'
 import { invalidateUserSettingsPlus } from '@/lib/actions/user-settings'
@@ -24,7 +25,7 @@ export async function inviteMember(projectId: string, email: string, personaId: 
     // Sandbox restriction: disallow invites for sandbox orgs
     const projectOrg = await prisma.engagement.findFirst({
         where: { id: projectId, isDeleted: false },
-        select: { slug: true, client: { select: { slug: true, firm: { select: { id: true, slug: true, sandboxOnly: true } } } } },
+        select: { slug: true, name: true, client: { select: { slug: true, name: true, firm: { select: { id: true, slug: true, name: true, sandboxOnly: true } } } } },
     })
     if (projectOrg?.client?.firm?.sandboxOnly) {
         throw new Error('Inviting members is restricted for Sandbox Organizations. Upgrade to invite teammates.')
@@ -47,7 +48,7 @@ export async function inviteMember(projectId: string, email: string, personaId: 
 
     if (existing) {
         if (existing.status === InvitationStatus.JOINED) {
-            throw new Error("User has already joined the project")
+            throw new Error("User has already joined the engagement")
         }
 
         await prisma.engagementInvitation.update({
@@ -63,12 +64,13 @@ export async function inviteMember(projectId: string, email: string, personaId: 
 
         const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invite/${token}`
         try {
-            await sendEmail(
-                email,
-                `Action required: Engagement access on ${BRAND_NAME}`,
-                `<p>You have been granted access to an engagement on ${BRAND_NAME}.</p>
-                 <p>Click here to accept: <a href="${inviteUrl}">${inviteUrl}</a></p>`
-            )
+            const { subject, html } = renderInviteEmail({
+                firmName: projectOrg?.client?.firm?.name ?? BRAND_NAME,
+                engagementName: projectOrg?.name,
+                clientName: projectOrg?.client?.name,
+                inviteUrl,
+            })
+            await sendEmail(email, subject, html)
         } catch (err) {
             logger.error('Invitation email failed', err instanceof Error ? err : new Error(String(err)), 'Email', { to: email })
             await prisma.engagementInvitation.update({
@@ -106,12 +108,13 @@ export async function inviteMember(projectId: string, email: string, personaId: 
 
     const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invite/${token}`
     try {
-        await sendEmail(
-            email,
-            `Action required: Engagement access on ${BRAND_NAME}`,
-            `<p>You have been granted access to an engagement on ${BRAND_NAME}.</p>
-             <p>Click here to accept: <a href="${inviteUrl}">${inviteUrl}</a></p>`
-        )
+        const { subject, html } = renderInviteEmail({
+            firmName: projectOrg?.client?.firm?.name ?? BRAND_NAME,
+            engagementName: projectOrg?.name,
+            clientName: projectOrg?.client?.name,
+            inviteUrl,
+        })
+        await sendEmail(email, subject, html)
     } catch (err) {
         logger.error('Invitation email failed', err instanceof Error ? err : new Error(String(err)), 'Email', { to: email })
         await prisma.engagementInvitation.update({
@@ -157,13 +160,18 @@ export async function resendInvitation(invitationId: string) {
     })
 
     const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invite/${token}`
+    const engDetails = await prisma.engagement.findFirst({
+        where: { id: invite.engagementId },
+        select: { slug: true, name: true, client: { select: { slug: true, name: true, firm: { select: { id: true, slug: true, name: true } } } } },
+    })
     try {
-        await sendEmail(
-            invite.email,
-            `Action required: Engagement access on ${BRAND_NAME}`,
-            `<p>You have been granted access to an engagement on ${BRAND_NAME}.</p>
-             <p>Click here to accept: <a href="${inviteUrl}">${inviteUrl}</a></p>`
-        )
+        const { subject, html } = renderInviteEmail({
+            firmName: engDetails?.client?.firm?.name ?? BRAND_NAME,
+            engagementName: engDetails?.name,
+            clientName: engDetails?.client?.name,
+            inviteUrl,
+        })
+        await sendEmail(invite.email, subject, html)
     } catch (err) {
         logger.error('Resend invitation email failed', err instanceof Error ? err : new Error(String(err)), 'Email', { to: invite.email })
         await prisma.engagementInvitation.update({
@@ -171,11 +179,6 @@ export async function resendInvitation(invitationId: string) {
             data: { status: InvitationStatus.ERROR, updatedAt: new Date() }
         })
     }
-
-    const engDetails = await prisma.engagement.findFirst({
-        where: { id: invite.engagementId },
-        select: { slug: true, client: { select: { slug: true, firm: { select: { id: true, slug: true } } } } },
-    })
     upsertFollowUpReminder({
         userId: user.id,
         entityKey: 'platform.engagement_invitations.id',
@@ -388,6 +391,9 @@ export async function acceptInvitation(token: string): Promise<{ success: true; 
             })
         }
         await invalidateUserSettingsPlus(user.id)
+        if (invite.createdBy) {
+            await removeRemindersByEntity(invite.createdBy, 'platform.firm_invitations.id', invite.id).catch(() => {})
+        }
         if (!existing && !hadDefaultFirm) {
             try {
                 const adminClient = createAdminClient()
@@ -443,6 +449,9 @@ export async function acceptInvitation(token: string): Promise<{ success: true; 
             })
         }
         await invalidateUserSettingsPlus(user.id)
+        if (invite.createdBy) {
+            await removeRemindersByEntity(invite.createdBy, 'platform.client_invitations.id', invite.id).catch(() => {})
+        }
         return { success: true, redirectUrl: `/d/f/${invite.client.firm.slug}/c/${invite.client.slug}` }
     }
 
@@ -529,6 +538,10 @@ export async function acceptInvitation(token: string): Promise<{ success: true; 
     })
 
     await invalidateUserSettingsPlus(user.id)
+
+    if (invite.createdBy) {
+        await removeRemindersByEntity(invite.createdBy, 'platform.engagement_invitations.id', invite.id).catch(() => {})
+    }
 
     if (newFirmMemberCreated && newFirmIsDefault) {
         try {

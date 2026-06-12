@@ -38,6 +38,7 @@ export interface FirmWithMembers {
   connectorId?: string | null
   createdAt: Date
   sandboxOnly: boolean
+  createdBy?: string | null
   members: {
     id: string
     userId: string
@@ -63,6 +64,7 @@ export class FirmService {
       connectorId: firm.connectorId,
       createdAt: firm.createdAt,
       sandboxOnly: firm.sandboxOnly,
+      createdBy: firm.createdBy ?? null,
       members: firm.members
         ? firm.members.map((m: any) => ({
             id: m.id,
@@ -250,5 +252,14 @@ export class FirmService {
     const { generateFirmSlug } = await import('@/lib/slug-utils')
     return generateFirmSlug(name)
   }
+}
+
+/**
+ * Returns true when the firm is a platform anchor/demo firm.
+ * The DB column is `isAnchor`, surfaced by Prisma as `sandboxOnly`.
+ * Use this everywhere instead of reading `sandboxOnly` directly.
+ */
+export function isAnchorFirm(firm: { sandboxOnly: boolean }): boolean {
+    return firm.sandboxOnly === true
 }
 

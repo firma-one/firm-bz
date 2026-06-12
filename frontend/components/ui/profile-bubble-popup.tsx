@@ -127,8 +127,7 @@ export function ProfileBubblePopupContent({
                                     className="min-w-0 truncate text-[11px] text-slate-700"
                                     title={menuPlanLine ?? undefined}
                                 >
-                                    <span className="font-medium text-slate-500">Plan:</span>{' '}
-                                    <span className="font-semibold text-slate-900">{menuPlanLine || '—'}</span>
+                                    <span className="text-slate-700">{menuPlanLine || '—'}</span>
                                 </span>
                                 <button
                                     type="button"

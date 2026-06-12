@@ -218,12 +218,13 @@ function labelForPrice(
         (price.type === 'recurring' && amountNum != null)
 
     if (fixedOrRecurring && amountNum != null) {
-        const base = formatMoney(amountNum, currency)
         const interval = polarRecurringIntervalFromApi(price, product)
         const recurring =
             product.is_recurring === true ||
             price.type === 'recurring' ||
             Boolean(interval)
+        if (!recurring && amountNum === 0) return 'Free'
+        const base = formatMoney(amountNum, currency)
         if (recurring && interval && INTERVAL_SUFFIX[interval]) {
             return `${base} ${INTERVAL_SUFFIX[interval]}`
         }

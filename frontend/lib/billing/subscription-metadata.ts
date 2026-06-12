@@ -53,6 +53,52 @@ export function parseEntitledFirms(meta: JsonRecord): number | null {
     return parsed
 }
 
+/** Returns null when unlimited (-1) or not configured. */
+export function parseEntitledClients(meta: JsonRecord): number | null {
+    const raw = meta['entitledClients'] ?? meta['entitiledClients']
+    const parsed = parseIntLike(raw)
+    if (parsed == null || parsed < 0) return null
+    return parsed
+}
+
+/** Returns null when unlimited (-1) or not configured. Handles typo keys from early Polar product setup. */
+export function parseEntitledClientContacts(meta: JsonRecord): number | null {
+    const raw = meta['entitledClientContacts'] ?? meta['entitiledClientContacts'] ?? meta['entitiledClientConta']
+    const parsed = parseIntLike(raw)
+    if (parsed == null || parsed < 0) return null
+    return parsed
+}
+
+/** Returns null when unlimited (-1) or not configured. */
+export function parseEntitledDocuments(meta: JsonRecord): number | null {
+    const raw = meta['entitledDocuments'] ?? meta['entitiledDocuments']
+    const parsed = parseIntLike(raw)
+    if (parsed == null || parsed < 0) return null
+    return parsed
+}
+
+/**
+ * Returns null when unlimited (-1) or not configured.
+ * 0 = no history (purge all on every insert), N = keep last N days.
+ */
+export function parseEntitledAuditDays(meta: JsonRecord): number | null {
+    const raw = meta['entitledAuditDays']
+    const parsed = parseIntLike(raw)
+    if (parsed == null || parsed < 0) return null
+    return parsed
+}
+
+/**
+ * Returns null when unlimited (-1) or not configured.
+ * 0 = no history, N = keep last N days of comment history.
+ */
+export function parseEntitledCommentHistoryDays(meta: JsonRecord): number | null {
+    const raw = meta['entitledCommentHistoryDays']
+    const parsed = parseIntLike(raw)
+    if (parsed == null || parsed < 0) return null
+    return parsed
+}
+
 /**
  * Returns null when unlimited (-1) or not configured.
  */

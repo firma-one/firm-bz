@@ -2,8 +2,9 @@
 
 import React, { useState } from 'react'
 import { Button } from "@/components/ui/button"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { MoreHorizontal, Mail, Clock, Trash2, SquarePlus, UserCog, User, UserCircle, Info } from 'lucide-react'
+import { MoreHorizontal, Mail, Clock, Trash2, SquarePlus, UserCog, User, UserCircle, Info, UserMinus } from 'lucide-react'
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -436,43 +437,34 @@ export function MemberList({ members, invitations, personas, onRefresh, canManag
                     </DialogContent>
                 </Dialog>
 
-                <Dialog open={memberIdToRemove !== null} onOpenChange={(open) => !open && setMemberIdToRemove(null)}>
-                    <DialogContent className="sm:max-w-[440px]">
-                        <DialogHeader>
-                            <DialogTitle>Remove member?</DialogTitle>
-                            <DialogDescription className="text-slate-600">
-                                This will remove the user&apos;s access to this project. This cannot be undone.
-                            </DialogDescription>
-                        </DialogHeader>
-                        <DialogFooter className="gap-2 sm:gap-0">
-                            <Button type="button" variant="outline" onClick={() => setMemberIdToRemove(null)}>
-                                Cancel
-                            </Button>
-                            <Button type="button" variant="destructive" onClick={() => void executeRemoveMember()}>
-                                Remove member
-                            </Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
+                <ConfirmDialog
+                    open={memberIdToRemove !== null}
+                    onOpenChange={(open) => !open && setMemberIdToRemove(null)}
+                    icon={<UserMinus className="h-3.5 w-3.5" />}
+                    iconVariant="red"
+                    title="Remove member"
+                    subtitle="This action cannot be undone."
+                    description="This will remove the user's access to this project. This cannot be undone."
+                    confirmLabel="Remove member"
+                    confirmVariant="red"
+                    onCancel={() => setMemberIdToRemove(null)}
+                    onConfirm={() => void executeRemoveMember()}
+                />
 
-                <Dialog open={inviteIdToRevoke !== null} onOpenChange={(open) => !open && setInviteIdToRevoke(null)}>
-                    <DialogContent className="sm:max-w-[440px]">
-                        <DialogHeader>
-                            <DialogTitle>Cancel invitation?</DialogTitle>
-                            <DialogDescription className="text-slate-600">
-                                This invitation will be revoked. You can send a new invite later if needed.
-                            </DialogDescription>
-                        </DialogHeader>
-                        <DialogFooter className="gap-2 sm:gap-0">
-                            <Button type="button" variant="outline" onClick={() => setInviteIdToRevoke(null)}>
-                                Keep invitation
-                            </Button>
-                            <Button type="button" variant="destructive" onClick={() => void executeRevokeInvite()}>
-                                Cancel invitation
-                            </Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
+                <ConfirmDialog
+                    open={inviteIdToRevoke !== null}
+                    onOpenChange={(open) => !open && setInviteIdToRevoke(null)}
+                    icon={<Mail className="h-3.5 w-3.5" />}
+                    iconVariant="red"
+                    title="Cancel invitation"
+                    subtitle="The invitation will be revoked."
+                    description="This invitation will be revoked. You can send a new invite later if needed."
+                    cancelLabel="Keep invitation"
+                    confirmLabel="Cancel invitation"
+                    confirmVariant="red"
+                    onCancel={() => setInviteIdToRevoke(null)}
+                    onConfirm={() => void executeRevokeInvite()}
+                />
             </div>
         
     )

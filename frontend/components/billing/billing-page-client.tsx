@@ -1,11 +1,13 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { Building2, CreditCard, Loader2, Lock, Receipt } from 'lucide-react'
+import { Building2, CreditCard, ExternalLink, HelpCircle, Loader2, Receipt, Rows3 } from 'lucide-react'
 import { getUserFirms } from '@/lib/actions/firms'
 import { validateCheckoutReturnTo } from '@/lib/billing/checkout-return-path'
 import { upgradeCopy } from '@/lib/billing/upgrade-copy'
+import { BillingPolarExplainInline, BillingRefundPolicyNote, PolarBillingLogo } from '@/components/billing/billing-polar-inline'
 import { CurrentPlanSummary } from '@/components/billing/current-plan-summary'
 import { PolarPlansPicker, type BillingCurrentPlanState } from '@/components/billing/polar-plans-picker'
 import { fetchBillingCurrentPlan } from '@/lib/billing/fetch-billing-current-plan'
@@ -13,23 +15,6 @@ import { shouldShowSandboxUpgradeMarketing } from '@/lib/billing/subscription-di
 import { PageBreadcrumb } from '@/components/ui/page-breadcrumb'
 import { cn } from '@/lib/utils'
 
-const trustItems = [
-    {
-        icon: Lock,
-        title: upgradeCopy.billingTrustLine1,
-        detail: upgradeCopy.billingTrustLine1Detail,
-    },
-    {
-        icon: Building2,
-        title: upgradeCopy.billingTrustLine2,
-        detail: upgradeCopy.billingTrustLine2Detail,
-    },
-    {
-        icon: Receipt,
-        title: upgradeCopy.billingTrustLine3,
-        detail: upgradeCopy.billingTrustLine3Detail,
-    },
-] as const
 
 const cardSurface = cn(
     'rounded-[2px] border border-[#e5e7eb] bg-white shadow-sm'
@@ -314,8 +299,9 @@ export function BillingPageClient({
                         <p className="text-[0.8125rem] font-bold text-[#1b1b1d]">
                             {upgradeCopy.billingHeadline}
                         </p>
-                        <p className="text-xs font-medium text-[#45474c]">{upgradeCopy.billingTitle}</p>
-                        <p className="max-w-2xl text-xs leading-relaxed text-[#45474c]">{upgradeCopy.billingBody}</p>
+                        <p className="max-w-2xl text-xs leading-relaxed text-[#45474c]">
+                            {upgradeCopy.billingBody}<br />{upgradeCopy.billingBodyLine2}
+                        </p>
                     </>
                 ) : null}
                 {paidPlanIntent && (
@@ -330,65 +316,110 @@ export function BillingPageClient({
                 )}
             </header>
 
-            <ul className="grid gap-4 sm:grid-cols-3">
-                {trustItems.map(({ icon: Icon, title, detail }) => (
-                    <li key={title} className={cn('flex gap-3 p-4 sm:p-5', cardSurface)}>
-                        <span className={trustIconTileClass}>
-                            <Icon className="h-5 w-5" aria-hidden />
-                        </span>
-                        <div className="min-w-0">
-                            <p className="text-[0.8125rem] font-bold text-[#1b1b1d]">{title}</p>
-                            <p className="mt-0.5 text-xs leading-relaxed text-[#45474c]">{detail}</p>
+            <ul className="grid gap-4 sm:grid-cols-2">
+                {/* Secure Checkout */}
+                <li className={cn('flex gap-3 p-4 sm:p-5', cardSurface)}>
+                    <span className={trustIconTileClass}>
+                        <PolarBillingLogo className="h-5 w-5" aria-hidden />
+                    </span>
+                    <div className="min-w-0 flex gap-4">
+                        <div className="flex-1 min-w-0">
+                            <p className="text-[0.8125rem] font-bold text-[#1b1b1d]">{upgradeCopy.billingTrustLine1}</p>
+                            <p className="mt-1 text-xs leading-relaxed text-[#45474c]">{upgradeCopy.billingTrustLine1Detail}</p>
                         </div>
-                    </li>
-                ))}
+                        <div className="w-px self-stretch bg-[#e5e7eb] shrink-0" aria-hidden />
+                        <div className="flex-1 min-w-0">
+                            <p className="text-xs leading-relaxed text-[#45474c]">
+                                {upgradeCopy.billingCheckoutIntro}{' '}
+                                <BillingPolarExplainInline className="mx-px" />
+                                {upgradeCopy.billingCheckoutOutro}
+                            </p>
+                        </div>
+                    </div>
+                </li>
+                {/* Pricing & Billing */}
+                <li className={cn('flex gap-3 p-4 sm:p-5', cardSurface)}>
+                    <span className={trustIconTileClass}>
+                        <Receipt className="h-5 w-5" aria-hidden />
+                    </span>
+                    <div className="min-w-0 flex gap-4">
+                        <div className="flex-1 min-w-0 flex flex-col gap-2">
+                            <p className="text-[0.8125rem] font-bold text-[#1b1b1d]">{upgradeCopy.billingTrustLine3}</p>
+                            <p className="text-xs leading-relaxed text-[#45474c]">{upgradeCopy.billingTrustLine3Detail}</p>
+                            <Link
+                                href="/pricing"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="mt-auto inline-flex w-full items-center gap-1.5 rounded-[2px] border border-[#e5e7eb] bg-white px-3 py-1.5 text-xs font-medium text-[#1b1b1d] shadow-sm hover:bg-[#f9f9fb]"
+                            >
+                                <Rows3 className="h-3.5 w-3.5 opacity-70" aria-hidden />
+                                {upgradeCopy.ctaComparePlans}
+                                <ExternalLink className="ml-auto h-3 w-3 opacity-60" aria-hidden />
+                            </Link>
+                        </div>
+                        <div className="w-px self-stretch bg-[#e5e7eb] shrink-0" aria-hidden />
+                        <div className="flex-1 min-w-0 flex flex-col gap-2">
+                            <div className="text-xs leading-relaxed text-[#45474c]">
+                                <BillingRefundPolicyNote />
+                            </div>
+                            <Link
+                                href="/resources/faq"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="mt-auto inline-flex w-full items-center gap-1.5 rounded-[2px] border border-[#e5e7eb] bg-white px-3 py-1.5 text-xs font-medium text-[#1b1b1d] shadow-sm hover:bg-[#f9f9fb]"
+                            >
+                                <HelpCircle className="h-3.5 w-3.5 opacity-70" aria-hidden />
+                                FAQs
+                                <ExternalLink className="ml-auto h-3 w-3 opacity-60" aria-hidden />
+                            </Link>
+                        </div>
+                    </div>
+                </li>
             </ul>
 
-            <section className={cn('overflow-hidden', cardSurface)}>
-                <div className="border-b border-[#e5e7eb] bg-[#f9f9fb] px-5 py-5 sm:px-7 sm:py-6">
-                    <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between sm:gap-6 lg:gap-8">
-                        <div className="flex min-w-0 flex-1 items-start gap-3.5">
-                            <span className={trustIconTileClass}>
-                                <CreditCard className="h-5 w-5" aria-hidden />
-                            </span>
-                            <div className="min-w-0">
-                                <h2 className="text-[0.8125rem] font-bold text-[#1b1b1d]">
-                                    {upgradeCopy.billingCardWorkspaceHeading}
-                                </h2>
-                                <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.2em] text-[#45474c]">
-                                    Workspace
-                                </p>
-                                {loadError ? (
-                                    <p className="mt-1 text-sm text-red-600">{loadError}</p>
-                                ) : !firms.length ? (
-                                    <p className="mt-1 text-sm text-slate-600">
-                                        No workspaces found. Open the app from a firm first.
-                                    </p>
-                                ) : selectedFirm ? (
-                                    <p className="mt-0.5 text-[0.8125rem] text-[#1b1b1d]">
-                                        <span className="font-bold">{selectedFirm.name}</span>
-                                        <span className="font-mono text-xs text-[#45474c]">
-                                            {' '}
-                                            /{selectedFirm.slug}
-                                        </span>
-                                    </p>
-                                ) : null}
-                            </div>
-                        </div>
-                        {selectedFirm ? (
-                            <div className="w-full shrink-0 sm:max-w-[min(100%,30rem)] lg:max-w-[34rem] sm:pt-0">
-                                <CurrentPlanSummary
-                                    firmId={selectedFirm.id}
-                                    portalReturnPath={portalReturnPath}
-                                    currentPlanState={currentPlanState}
-                                    loading={!currentPlanFetchCompleted || currentPlanLoading}
-                                    variant="embedded"
-                                />
-                            </div>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-stretch sm:gap-4">
+                <div className="flex min-w-0 items-start gap-3.5 sm:w-1/4 sm:shrink-0 rounded-[2px] border-2 border-primary/30 bg-primary/5 px-4 py-4 sm:px-5 shadow-md">
+                    <span className={trustIconTileClass}>
+                        <CreditCard className="h-5 w-5" aria-hidden />
+                    </span>
+                    <div className="min-w-0">
+                        <h2 className="text-[0.8125rem] font-bold text-[#1b1b1d]">
+                            {upgradeCopy.billingCardWorkspaceHeading}
+                        </h2>
+                        <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.2em] text-[#45474c]">
+                            Workspace
+                        </p>
+                        {loadError ? (
+                            <p className="mt-1 text-sm text-red-600">{loadError}</p>
+                        ) : !firms.length ? (
+                            <p className="mt-1 text-sm text-slate-600">
+                                No workspaces found. Open the app from a firm first.
+                            </p>
+                        ) : selectedFirm ? (
+                            <p className="mt-0.5 text-[0.8125rem] text-[#1b1b1d]">
+                                <span className="font-bold">{selectedFirm.name}</span>
+                                <span className="font-mono text-xs text-[#45474c]">
+                                    {' '}
+                                    /{selectedFirm.slug}
+                                </span>
+                            </p>
                         ) : null}
                     </div>
                 </div>
+                {selectedFirm ? (
+                    <div className="flex-1 min-w-0">
+                        <CurrentPlanSummary
+                            firmId={selectedFirm.id}
+                            portalReturnPath={portalReturnPath}
+                            currentPlanState={currentPlanState}
+                            loading={!currentPlanFetchCompleted || currentPlanLoading}
+                            variant="embedded"
+                        />
+                    </div>
+                ) : null}
+            </div>
 
+            <section className={cn('overflow-hidden', cardSurface)}>
                 <div className="space-y-6 px-5 py-6 sm:px-7 sm:py-7">
                     {selectedFirm ? (
                         <PolarPlansPicker

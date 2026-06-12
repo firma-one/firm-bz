@@ -164,7 +164,12 @@ async function persistFirmWithLifetimeFreePlan(
                     metadata: {
                         ...polarPlanMetadataFlat,
                         entitledFirms: '1',
-                        entitledEngagements: 100_000,
+                        entitledEngagements: 1,
+                        entitledClients: '1',
+                        entitledClientContacts: '5',
+                        entitledDocuments: '20',
+                        entitledAuditDays: '0',
+                        entitledCommentHistoryDays: '15',
                         source: 'polar_free_product_sync',
                         polarProductId: polarProduct.id,
                         polarProduct: polarProductSnapshot,

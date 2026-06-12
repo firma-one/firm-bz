@@ -448,7 +448,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
 
   const profilePlanSubtitle = useMemo(() => {
     if (!billingPlanState) return formatProfilePlanSubtitle(null, { sandboxOnly: billingSandboxOnly })
-    return planNameForSummary(billingPlanState)
+    return `${planNameForSummary(billingPlanState)} plan`
   }, [billingPlanState, billingSandboxOnly])
 
   const spaceTitle = 'mb-2'

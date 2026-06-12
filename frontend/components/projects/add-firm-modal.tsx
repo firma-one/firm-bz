@@ -1,7 +1,7 @@
 'use client'
 
-import React, { useState } from 'react'
-import { useRouter, usePathname } from 'next/navigation'
+import React, { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden"
@@ -11,11 +11,6 @@ import { Building2, FileText, Globe, Linkedin, Lock, MapPin, SquarePlus, Users2 
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { SelectWithCustomEntry } from "@/components/ui/select-with-custom-entry"
 import { createFirm, updateFirm } from '@/lib/actions/firms'
-import { useAuth } from '@/lib/auth-context'
-import { useCanCreateAdditionalFirm } from '@/lib/hooks/use-can-create-additional-firm'
-import { buildAppBillingHref } from '@/lib/billing/billing-links'
-import { validateCheckoutReturnTo } from '@/lib/billing/checkout-return-path'
-import { upgradeCopy } from '@/lib/billing/upgrade-copy'
 
 const fieldLabel = 'font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] block mb-1'
 const inputCls = 'border-[#e5e7eb] text-[#1b1b1d] text-xs font-normal placeholder:text-[#9a9ba0] rounded focus-visible:ring-1 focus-visible:ring-primary focus-visible:border-primary disabled:opacity-50 disabled:cursor-not-allowed'
@@ -28,10 +23,32 @@ interface AddFirmModalProps {
 }
 
 export function AddFirmModal({ trigger, open: controlledOpen, onOpenChange: controlledOnOpenChange }: AddFirmModalProps) {
-    const { user } = useAuth()
-    const { canCreateAdditionalFirm, loadingEntitlement } = useCanCreateAdditionalFirm(user?.id)
-    const addDisabled = !user?.id || loadingEntitlement || !canCreateAdditionalFirm
-    const showUpgradeHint = Boolean(user?.id) && !loadingEntitlement && !canCreateAdditionalFirm
+    const [capBlocked, setCapBlocked] = useState(false)
+    const [capMessage, setCapMessage] = useState<string | null>(null)
+
+    useEffect(() => {
+        let mounted = true
+        const run = async () => {
+            try {
+                const response = await fetch('/api/billing/firm-gate')
+                if (!response.ok) return
+                const payload = (await response.json()) as { allowed?: boolean; reason?: string; cap?: number | null }
+                if (!mounted) return
+                const blocked = payload.allowed === false
+                setCapBlocked(blocked)
+                if (blocked) {
+                    const cap = typeof payload.cap === 'number' ? payload.cap : null
+                    setCapMessage(cap != null
+                        ? `You have consumed the entitlements on your plan (${cap} of ${cap}). Upgrade to add more.`
+                        : 'You have consumed the entitlements on your plan. Upgrade to add more.')
+                } else {
+                    setCapMessage(null)
+                }
+            } catch { /* best effort */ }
+        }
+        run()
+        return () => { mounted = false }
+    }, [])
 
     const [internalOpen, setInternalOpen] = useState(false)
     const isControlled = controlledOpen !== undefined && controlledOnOpenChange !== undefined
@@ -40,6 +57,7 @@ export function AddFirmModal({ trigger, open: controlledOpen, onOpenChange: cont
 
     const [creating, setCreating] = useState(false)
     const [error, setError] = useState<string | null>(null)
+
 
     // Details
     const [name, setName] = useState('')
@@ -54,16 +72,9 @@ export function AddFirmModal({ trigger, open: controlledOpen, onOpenChange: cont
     const [notes, setNotes] = useState('')
 
     const router = useRouter()
-    const pathname = usePathname()
-    const billingHref = (() => {
-        const m = pathname?.match(/\/d\/(?:f|o)\/([^/]+)/)
-        const slug = m?.[1]
-        if (!slug) return `/d/billing?returnTo=%2Fd%2Ff%2F`
-        const returnPath = validateCheckoutReturnTo(pathname ?? null) ?? `/d/f/${slug}`
-        return buildAppBillingHref({ firmSlug: slug, returnPath })
-    })()
 
-    const isFormDisabled = creating
+    const isFormDisabled = creating || capBlocked
+    const isDismissDisabled = creating
 
     const resetForm = () => {
         setError(null)
@@ -74,14 +85,14 @@ export function AddFirmModal({ trigger, open: controlledOpen, onOpenChange: cont
     }
 
     const handleOpenChange = (newOpen: boolean) => {
-        if (isFormDisabled) return
-        if (newOpen && addDisabled) { setOpen(false); return }
+        if (isDismissDisabled) return
         setOpen(newOpen)
         if (!newOpen) resetForm()
     }
 
     const handleCreate = async (e: React.SyntheticEvent) => {
         e.preventDefault()
+        if (capBlocked) return
         setCreating(true)
         setError(null)
         try {
@@ -107,17 +118,16 @@ export function AddFirmModal({ trigger, open: controlledOpen, onOpenChange: cont
     }
 
     const renderTrigger = () => {
-        if (trigger && React.isValidElement(trigger))
-            return React.cloneElement(trigger as React.ReactElement<{ disabled?: boolean }>, { disabled: addDisabled })
+        if (trigger && React.isValidElement(trigger)) return trigger
         return (
-            <Button variant="blackCta" size="sm" className="gap-2" disabled={addDisabled}>
+            <Button variant="blackCta" size="sm" className="gap-2">
                 <SquarePlus className="h-4 w-4" /> New Firm
             </Button>
         )
     }
 
     return (
-        <div className="inline-flex flex-col items-end gap-1">
+        <div className="inline-flex">
             <Dialog open={open} onOpenChange={handleOpenChange}>
                 {!isControlled && <DialogTrigger asChild>{renderTrigger()}</DialogTrigger>}
 
@@ -135,6 +145,16 @@ export function AddFirmModal({ trigger, open: controlledOpen, onOpenChange: cont
                         </div>
                     </div>
 
+                    {capBlocked && capMessage && (
+                        <div className="mx-4 mt-4 bg-rose-50 border border-rose-200 text-rose-700 text-xs px-3 py-2 rounded flex items-center gap-2">
+                            <Lock className="h-3.5 w-3.5 shrink-0 text-rose-500" />
+                            <span>
+                                {capMessage.split('Upgrade')[0]}
+                                <Link href="/d/billing" className="font-semibold underline underline-offset-2 hover:text-rose-900">Upgrade</Link>
+                                {capMessage.split('Upgrade')[1]}
+                            </span>
+                        </div>
+                    )}
                     {error && (
                         <div className="mx-4 mt-4 bg-rose-50 border border-rose-200 text-rose-700 text-xs px-3 py-2 rounded">
                             {error}
@@ -213,7 +233,7 @@ export function AddFirmModal({ trigger, open: controlledOpen, onOpenChange: cont
                             <Button type="button" variant="outline"
                                 className="rounded-[2px] w-32 text-[10px] font-headline font-bold tracking-widest uppercase"
                                 onClick={() => handleOpenChange(false)}
-                                disabled={isFormDisabled}>
+                                disabled={isDismissDisabled}>
                                 Cancel
                             </Button>
                             <Button type="submit"
@@ -226,15 +246,6 @@ export function AddFirmModal({ trigger, open: controlledOpen, onOpenChange: cont
                     </form>
                 </DialogContent>
             </Dialog>
-
-            {!isControlled && showUpgradeHint && (
-                <p className="text-xs text-slate-600 text-right max-w-[240px] leading-snug ml-auto">
-                    {upgradeCopy.addFirmModalHint}{' '}
-                    <Link href={billingHref} className="font-semibold text-purple-700 underline underline-offset-2 hover:text-purple-800">
-                        {upgradeCopy.ctaContinueBilling}
-                    </Link>
-                </p>
-            )}
         </div>
     )
 }

@@ -51,6 +51,8 @@ export function RelativeDateTime({
   tooltipSide = 'top',
   iconOnly = false,
   displayFormat = 'relative',
+  tooltipPrefix,
+  overrideDisplayText,
 }: {
   date: Date | string
   className?: string
@@ -59,16 +61,19 @@ export function RelativeDateTime({
   tooltipSide?: 'top' | 'bottom' | 'left' | 'right'
   iconOnly?: boolean
   displayFormat?: RelativeDateTimeFormat
+  tooltipPrefix?: string
+  overrideDisplayText?: string
 }) {
   const relative = useMemo(() => formatRelativeTime(date), [date])
   const full = useMemo(() => formatVerboseDateTimeWithTZ(date), [date])
 
   const displayText = useMemo(() => {
+    if (overrideDisplayText) return overrideDisplayText
     if (displayFormat === 'short') return formatShortDate(date)
     if (displayFormat === 'iso') return formatISODate(date)
     if (displayFormat === 'verbose') return `${relative} · ${full}`
     return relative
-  }, [displayFormat, date, relative, full])
+  }, [overrideDisplayText, displayFormat, date, relative, full])
 
   const isMonoFormat = displayFormat === 'iso'
 
@@ -93,7 +98,7 @@ export function RelativeDateTime({
         </span>
       </TooltipTrigger>
       <TooltipContent side={tooltipSide} className={LIGHT_TOOLTIP_CLASS}>
-        {`${relative} · ${full}`}
+        {tooltipPrefix ? `${tooltipPrefix} ${full}` : `${relative} · ${full}`}
       </TooltipContent>
     </Tooltip>
   )

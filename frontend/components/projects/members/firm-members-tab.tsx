@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { getFirmMembers, resendFirmInvitation, revokeFirmInvitation } from '@/lib/actions/firm-members'
 import { FirmInviteModal } from './firm-invite-modal'
 import { Button } from '@/components/ui/button'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Mail, Clock, MoreHorizontal, SquarePlus, Trash2, RefreshCw } from 'lucide-react'
 import {
@@ -235,24 +236,20 @@ export function FirmMembersTab({ firmId, orgSlug, canManage = false }: FirmMembe
                 onSuccess={refreshData}
             />
 
-            <Dialog open={inviteToRevokeId !== null} onOpenChange={(open) => !open && setInviteToRevokeId(null)}>
-                <DialogContent className="sm:max-w-[440px]">
-                    <DialogHeader>
-                        <DialogTitle>Cancel invitation?</DialogTitle>
-                        <DialogDescription className="text-slate-600">
-                            This invitation will be revoked. You can send a new invite later if needed.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter className="gap-2 sm:gap-0">
-                        <Button type="button" variant="outline" onClick={() => setInviteToRevokeId(null)}>
-                            Keep invitation
-                        </Button>
-                        <Button type="button" variant="destructive" onClick={() => void executeRevokeInvite()}>
-                            Cancel invitation
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            <ConfirmDialog
+                open={inviteToRevokeId !== null}
+                onOpenChange={(open) => !open && setInviteToRevokeId(null)}
+                icon={<Mail className="h-3.5 w-3.5" />}
+                iconVariant="red"
+                title="Cancel invitation"
+                subtitle="The invitation will be revoked."
+                description="This invitation will be revoked. You can send a new invite later if needed."
+                cancelLabel="Keep invitation"
+                confirmLabel="Cancel invitation"
+                confirmVariant="red"
+                onCancel={() => setInviteToRevokeId(null)}
+                onConfirm={() => void executeRevokeInvite()}
+            />
         </div>
     )
 }

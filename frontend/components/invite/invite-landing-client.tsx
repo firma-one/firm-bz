@@ -32,7 +32,7 @@ function joinLabel(invitation: VerifyInvitationResult): string {
         case 'client':
             return 'Joining Client...'
         case 'engagement':
-            return 'Joining Project...'
+            return 'Joining Engagement...'
     }
 }
 
@@ -50,7 +50,7 @@ export function InviteLandingClient({ invitation, userEmail }: InviteLandingProp
                 setStatus('REDIRECTING')
                 const target = 'redirectUrl' in invitation && invitation.redirectUrl ? invitation.redirectUrl : '/d'
                 if (userEmail) router.push(target)
-                else router.push(`/signin?redirect=${encodeURIComponent(target)}`)
+                else router.push(`/signin?redirect=${encodeURIComponent(target)}&email=${encodeURIComponent(invitation.email)}`)
                 return
             }
 

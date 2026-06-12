@@ -4,6 +4,7 @@ import { googleDriveConnector } from "@/lib/google-drive-connector"
 import { logger } from '@/lib/logger'
 import { requireProjectView } from '@/lib/api/engagement-auth'
 import { getLock } from '@/lib/sharing-settings'
+import { resolveEngagementConnectorId } from '@/lib/connectors/resolve-client-connector'
 
 export async function GET(
     request: NextRequest,
@@ -25,19 +26,20 @@ export async function GET(
 
         const project = await prisma.engagement.findUnique({
             where: { id: projectId },
-            include: {
-                client: {
-                    include: { connector: true }
-                }
-            }
+            select: { slug: true, firmId: true, clientId: true },
         })
-
-        const resolvedConnector = project?.client?.connector ?? null
-        if (!project || !resolvedConnector) {
+        if (!project) {
             return NextResponse.json({ error: 'Project or active connector not found' }, { status: 404 })
         }
 
-        const connector = resolvedConnector
+        const connectorId = await resolveEngagementConnectorId(projectId)
+        if (!connectorId) {
+            return NextResponse.json({ error: 'Project or active connector not found' }, { status: 404 })
+        }
+        const connector = await prisma.connector.findUnique({ where: { id: connectorId } })
+        if (!connector) {
+            return NextResponse.json({ error: 'Project or active connector not found' }, { status: 404 })
+        }
 
         // 3. Resolve Project Folders from Connector Settings and search scope
         const settings = (connector.settings as any) || {}

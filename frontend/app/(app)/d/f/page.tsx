@@ -1,41 +1,21 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Building2, ArrowRight, Loader2, SquarePlus, Box, Home, ChevronRight, LayoutGrid } from 'lucide-react'
 import { getDomainOnboardingOptionsForCurrentUser, joinOrganizationByDomain, type DomainOnboardingOptions, type DomainOrgOption } from '@/lib/actions/domain-onboarding'
-import { getUserFirms, getCanCreateAdditionalFirm, getFirmCreationGateReasonForCurrentUser, type FirmOption } from '@/lib/actions/firms'
-import type { FirmCreationGateReason } from '@/lib/billing/firm-creation-gate'
+import { getUserFirms, type FirmOption } from '@/lib/actions/firms'
 import { BRAND_NAME } from '@/config/brand'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AddFirmModal } from '@/components/projects/add-firm-modal'
-import { buildBillingPageHref } from '@/lib/billing/build-billing-page-href'
-import { upgradeCopy } from '@/lib/billing/upgrade-copy'
-import Link from 'next/link'
 
 export default function WorkspacePickerPage() {
     const router = useRouter()
     const [firms, setFirms] = useState<FirmOption[]>([])
     const [domainOptions, setDomainOptions] = useState<DomainOnboardingOptions | null>(null)
-    const [canCreate, setCanCreate] = useState<boolean | null>(null)
-    const [gateReason, setGateReason] = useState<FirmCreationGateReason | null>(null)
-    const [gateCap, setGateCap] = useState<number | null>(null)
     const [addFirmOpen, setAddFirmOpen] = useState(false)
-    const [upgradeHintOpen, setUpgradeHintOpen] = useState(false)
-    const upgradeHintRef = useRef<HTMLDivElement>(null)
-
-    useEffect(() => {
-        if (!upgradeHintOpen) return
-        function handleClickOutside(e: MouseEvent) {
-            if (upgradeHintRef.current && !upgradeHintRef.current.contains(e.target as Node)) {
-                setUpgradeHintOpen(false)
-            }
-        }
-        document.addEventListener('mousedown', handleClickOutside)
-        return () => document.removeEventListener('mousedown', handleClickOutside)
-    }, [upgradeHintOpen])
     const [loading, setLoading] = useState(true)
     const [joiningId, setJoiningId] = useState<string | null>(null)
     const [joinError, setJoinError] = useState<string | null>(null)
@@ -50,23 +30,7 @@ export default function WorkspacePickerPage() {
             setDomainOptions(opts)
             setLoading(false)
         }
-        async function loadEntitlement() {
-            try {
-                const [canCreateFirm, result] = await Promise.all([
-                    getCanCreateAdditionalFirm(),
-                    getFirmCreationGateReasonForCurrentUser(),
-                ])
-                setCanCreate(canCreateFirm)
-                setGateReason(result.reason)
-                setGateCap(result.cap)
-            } catch {
-                setCanCreate(false)
-                setGateReason('free_sandbox')
-                setGateCap(null)
-            }
-        }
         void load()
-        void loadEntitlement()
     }, [])
 
     if (loading) {
@@ -133,61 +97,14 @@ export default function WorkspacePickerPage() {
                                 )}
                             </TabsTrigger>
                         </TabsList>
-                        {canCreate === false ? (
-                            <div className="relative" ref={upgradeHintRef}>
-                                <button
-                                    type="button"
-                                    className="inline-flex items-center gap-2 px-4 py-2 rounded-[2px] border border-[#e5e7eb] bg-[#f3f4f6] text-[#45474c] font-medium text-[0.8125rem] transition-all hover:bg-[#ebebed]"
-                                    onClick={() => setUpgradeHintOpen(v => !v)}
-                                >
-                                    <SquarePlus className="h-4 w-4" />
-                                    Create new Firm
-                                </button>
-                                {upgradeHintOpen && (
-                                    <div className="absolute right-0 top-full mt-1 z-50 w-64 rounded-[2px] border border-[#e5e7eb] bg-[#f3f4f6] p-3 shadow-md">
-                                        <div className="flex items-start gap-2">
-                                            <SquarePlus className="h-4 w-4 shrink-0 text-[#45474c] translate-y-0.5" aria-hidden />
-                                            <div>
-                                                <p className="text-sm font-medium text-[#1b1b1d] leading-snug">
-                                                    {gateReason === 'at_cap' ? 'Firm limit reached' : upgradeCopy.dropdownHeadline}
-                                                </p>
-                                                <p className="text-xs text-[#45474c] leading-snug mt-1.5">
-                                                    {gateReason === 'at_cap'
-                                                        ? `Your plan allows ${gateCap ?? firms.length} firm workspace${(gateCap ?? firms.length) === 1 ? '' : 's'}. Contact us to increase your limit.`
-                                                        : upgradeCopy.dropdownBody}
-                                                </p>
-                                                {gateReason === 'at_cap' ? (
-                                                    <a
-                                                        href="mailto:support@firmaone.com"
-                                                        className="mt-2 inline-block text-xs font-semibold text-primary hover:underline underline-offset-2"
-                                                        onClick={() => setUpgradeHintOpen(false)}
-                                                    >
-                                                        Contact support
-                                                    </a>
-                                                ) : (
-                                                    <Link
-                                                        href={buildBillingPageHref({ firmSlug: firms[0]?.slug ?? null, pathname: '/d/f/' })}
-                                                        className="mt-2 inline-block text-xs font-semibold text-primary hover:underline underline-offset-2"
-                                                        onClick={() => setUpgradeHintOpen(false)}
-                                                    >
-                                                        {upgradeCopy.dropdownAction}
-                                                    </Link>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        ) : canCreate === true ? (
-                            <button
-                                type="button"
-                                className="inline-flex items-center gap-2 px-4 py-2 rounded-[2px] bg-primary hover:brightness-110 text-primary-foreground font-medium text-[0.8125rem] transition-all shadow-[0_1px_2px_rgba(0,0,0,0.25)]"
-                                onClick={() => setAddFirmOpen(true)}
-                            >
-                                <SquarePlus className="h-4 w-4" />
-                                Create new Firm
-                            </button>
-                        ) : null}
+                        <button
+                            type="button"
+                            className="inline-flex items-center gap-2 px-4 py-2 rounded-[2px] bg-primary hover:brightness-110 text-primary-foreground font-medium text-[0.8125rem] transition-all shadow-[0_1px_2px_rgba(0,0,0,0.25)]"
+                            onClick={() => setAddFirmOpen(true)}
+                        >
+                            <SquarePlus className="h-4 w-4" />
+                            Create new Firm
+                        </button>
                     </div>
                 </div>
 
@@ -204,8 +121,13 @@ export default function WorkspacePickerPage() {
                                 className={`group relative flex flex-col gap-4 p-5 rounded-[2px] border bg-white shadow-md hover:shadow-lg text-left transition-all overflow-hidden h-48 ${firm.sandboxOnly ? 'border-dashed border-[#e5e7eb] hover:border-[#e5e7eb]' : 'border-[#e5e7eb] hover:border-primary/40'}`}
                                 onClick={() => router.push(`/d/f/${firm.slug}`)}
                             >
-                                {/* Brand corner decoration — only for non-sandbox firms */}
-                                {!firm.sandboxOnly && (() => {
+                                {/* Brand corner decoration */}
+                                {firm.sandboxOnly ? (
+                                    <svg className="absolute bottom-0 right-0 pointer-events-none" width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <polygon points="48,0 48,48 0,48" fill="#9ca3af" fillOpacity="0.18" />
+                                        <polygon points="48,22 48,48 22,48" fill="#6b7280" />
+                                    </svg>
+                                ) : (() => {
                                     const accent = firm.themeColor ?? null
                                     const solidFill = accent ?? 'hsl(var(--primary))'
                                     const fadeFill = accent ?? 'hsl(var(--primary))'
@@ -235,17 +157,17 @@ export default function WorkspacePickerPage() {
                                         {firm.sandboxOnly && (
                                             <Tooltip>
                                                 <TooltipTrigger asChild>
-                                                    <Box className="h-3.5 w-3.5 shrink-0 text-[#9ca3af]" aria-label="Sandbox firm" />
+                                                    <Box className="h-3.5 w-3.5 shrink-0 text-[#9ca3af]" aria-label="Demo firm" />
                                                 </TooltipTrigger>
                                                 <TooltipContent side="top" className="text-xs">
-                                                    Sandbox Firm — no real client data
+                                                    Demo Firm — contains sample data
                                                 </TooltipContent>
                                             </Tooltip>
                                         )}
                                     </div>
                                     <p className="text-xs text-[#45474c]/70">You&apos;re already a member</p>
                                 </div>
-                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-primary bg-primary/10 px-2 py-0.5 rounded-sm w-fit">
+                                <span className={`inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-sm w-fit ${firm.sandboxOnly ? 'text-[#6b7280] bg-[#9ca3af]/20' : 'text-primary bg-primary/10'}`}>
                                     Continue <ArrowRight className="h-2.5 w-2.5 transition-transform group-hover:translate-x-0.5" />
                                 </span>
                             </button>
@@ -304,9 +226,7 @@ export default function WorkspacePickerPage() {
                 </div>
                 </TabsContent>
             </Tabs>
-            {canCreate === true && (
-                <AddFirmModal open={addFirmOpen} onOpenChange={setAddFirmOpen} />
-            )}
+            <AddFirmModal open={addFirmOpen} onOpenChange={setAddFirmOpen} />
         </div>
         </TooltipProvider>
     )

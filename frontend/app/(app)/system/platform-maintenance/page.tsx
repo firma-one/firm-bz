@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Shield, ChevronRight, Wrench, AlertTriangle, Timer } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { DateTimePicker } from '@/components/ui/date-time-picker'
@@ -268,28 +269,19 @@ export default function PlatformMaintenancePage() {
         </div>
       )}
 
-      {/* Confirm dialog */}
-      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-amber-500" />
-              {confirmTitle}
-            </DialogTitle>
-            <DialogDescription>{confirmDescription}</DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setConfirmOpen(false)}>Cancel</Button>
-            <Button
-              size="sm"
-              onClick={() => void handleConfirm()}
-              className={(!isActive && !isGrace) ? 'bg-amber-600 hover:bg-amber-700 text-white border-0' : ''}
-            >
-              {isActive ? 'Yes, disable' : isGrace ? 'Yes, cancel grace period' : 'Yes, start grace period'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        icon={<AlertTriangle className="h-3.5 w-3.5" />}
+        iconVariant="amber"
+        title={confirmTitle}
+        description={confirmDescription}
+        confirmLabel={isActive ? 'Yes, disable' : isGrace ? 'Yes, cancel grace period' : 'Yes, start grace period'}
+        confirmVariant={(!isActive && !isGrace) ? 'amber' : 'red'}
+        onCancel={() => setConfirmOpen(false)}
+        onConfirm={() => void handleConfirm()}
+        loading={saving}
+      />
     </div>
   )
 }

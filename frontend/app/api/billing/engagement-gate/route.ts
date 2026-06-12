@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
-import { resolveBillingAnchorFirmId, listFirmIdsInBillingGroup } from '@/lib/billing/billing-group'
+import { resolveBillingAnchorFirmId, listBillableFirmIdsInBillingGroup } from '@/lib/billing/billing-group'
 import { getEntitledEngagementsCapForFirm } from '@/lib/billing/subscription-metadata'
 
 export async function GET(request: NextRequest) {
@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
 
     const cap = await getEntitledEngagementsCapForFirm(membership.firmId)
     const anchorFirmId = await resolveBillingAnchorFirmId(membership.firmId)
-    const firmIds = await listFirmIdsInBillingGroup(anchorFirmId)
+    const firmIds = await listBillableFirmIdsInBillingGroup(anchorFirmId)
     const count = await prisma.engagement.count({
         where: {
             firmId: { in: firmIds },

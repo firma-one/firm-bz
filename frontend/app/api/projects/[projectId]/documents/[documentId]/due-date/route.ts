@@ -86,6 +86,7 @@ export async function PATCH(
 
     return NextResponse.json({ success: true, dueDate: dueDate ? dueDate.toISOString() : null })
   } catch (e) {
+    console.error('due-date PATCH error', e)
     return NextResponse.json({ error: 'Failed to update due date' }, { status: 500 })
   }
 }

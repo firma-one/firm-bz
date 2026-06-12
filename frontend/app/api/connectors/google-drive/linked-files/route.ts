@@ -11,6 +11,7 @@ import { blockIfEngagementFileMutationForbidden } from '@/lib/engagement-access'
 import { resolveEngagementConnector } from '@/lib/connectors/resolve-client-connector'
 import { IndexingInterceptor } from '@/lib/services/indexing-interceptor'
 import { getLock, isDocumentPrivate } from '@/lib/sharing-settings'
+import { assertWithinDocumentCap } from '@/lib/billing/effective-billing-caps'
 // GET: List linked files for a connector
 export async function GET(request: NextRequest) {
     try {
@@ -343,7 +344,7 @@ export async function POST(request: NextRequest) {
                             parentId: folderId,
                             ...(folderInShared || folderUnderShared ? {} : { externalId: { in: Array.from(allowSet) } }),
                         },
-                        select: { id: true, externalId: true, fileName: true, mimeType: true, fileSize: true, isFolder: true, metadata: true, settings: true, createdBy: true },
+                        select: { id: true, externalId: true, fileName: true, mimeType: true, fileSize: true, isFolder: true, metadata: true, settings: true, createdBy: true, status: true, dueDate: true },
                     }),
                     // Also surface the EC/EV's own PENDING intake files/folders in this folder
                     prisma.engagementDocument.findMany({
@@ -352,7 +353,7 @@ export async function POST(request: NextRequest) {
                             parentId: folderId,
                             settings: { path: ['lock', 'uploadedBy'], equals: user.id } as any,
                         },
-                        select: { id: true, externalId: true, fileName: true, mimeType: true, fileSize: true, isFolder: true, metadata: true, settings: true, createdBy: true },
+                        select: { id: true, externalId: true, fileName: true, mimeType: true, fileSize: true, isFolder: true, metadata: true, settings: true, createdBy: true, status: true, dueDate: true },
                     }),
                 ])
 
@@ -428,6 +429,8 @@ export async function POST(request: NextRequest) {
                     isFolder: row.isFolder,
                     connectorId: connector.id,
                     projectDocumentId: row.id,
+                    indexingStatus: row.status ?? undefined,
+                    dueDate: row.dueDate ? (row.dueDate as Date).toISOString() : null,
                     lock: getLock(row.settings),
                 })}
                 for (const row of allRows) {
@@ -457,7 +460,7 @@ export async function POST(request: NextRequest) {
                         driveIds.length > 0
                             ? prisma.engagementDocument.findMany({
                                 where: { engagementId: bodyEngagementId, externalId: { in: driveIds } },
-                                select: { id: true, externalId: true, settings: true },
+                                select: { id: true, externalId: true, settings: true, status: true, dueDate: true },
                             })
                             : [],
                         // All PENDING intake docs/folders in this folder (shadow rows for EL/internal)
@@ -467,11 +470,13 @@ export async function POST(request: NextRequest) {
                                 parentId: folderId,
                                 settings: { path: ['lock', 'type'], equals: 'intake' } as any,
                             },
-                            select: { id: true, externalId: true, fileName: true, mimeType: true, fileSize: true, isFolder: true, metadata: true, settings: true },
+                            select: { id: true, externalId: true, fileName: true, mimeType: true, fileSize: true, isFolder: true, metadata: true, settings: true, status: true, dueDate: true },
                         }),
                     ])
 
                     const internalByExternal = new Map<string, string>(enrichRows.map((r: any) => [r.externalId, r.id]))
+                    const statusByExternal = new Map<string, string>(enrichRows.map((r: any) => [r.externalId, r.status]))
+                    const dueDateByExternal = new Map<string, string | null>(enrichRows.map((r: any) => [r.externalId, r.dueDate ? (r.dueDate as Date).toISOString() : null]))
                     const lockByExternal = new Map<string, any>(enrichRows.map((r: any) => [r.externalId, getLock(r.settings)]))
                     const sharedExternalByExternal = new Map<string, boolean>(enrichRows.map((r: any) => {
                         const s = (r.settings as Record<string, any>) || {}
@@ -500,6 +505,8 @@ export async function POST(request: NextRequest) {
                     files = files.map((f: any) => ({
                         ...f,
                         projectDocumentId: internalByExternal.get(f.id) ?? undefined,
+                        indexingStatus: statusByExternal.get(f.id) ?? undefined,
+                        dueDate: dueDateByExternal.get(f.id) ?? null,
                         lock: lockByExternal.get(f.id) ?? null,
                         isPrivate: lockByExternal.get(f.id)?.type === 'private',
                         isSharedWithExternal: sharedExternalByExternal.get(f.id) ?? false,
@@ -523,6 +530,8 @@ export async function POST(request: NextRequest) {
                                 isFolder: row.isFolder ?? false,
                                 connectorId: connector.id,
                                 projectDocumentId: row.id,
+                                indexingStatus: row.status ?? undefined,
+                                dueDate: row.dueDate ? (row.dueDate as Date).toISOString() : null,
                                 lock: getLock(row.settings),
                             })
                         }
@@ -573,6 +582,25 @@ export async function POST(request: NextRequest) {
                     { status: 403 }
                 )
             }
+
+            // Resolve engagement before creating the Drive file so a cap breach
+            // never leaves an orphaned file in Drive.
+            let engagement = await prisma.engagement.findFirst({
+                where: { connectorRootFolderId: folderId },
+                select: { id: true, clientId: true, client: { select: { firmId: true } } }
+            })
+            if (!engagement && bodyEngagementId) {
+                engagement = await prisma.engagement.findUnique({
+                    where: { id: bodyEngagementId as string },
+                    select: { id: true, clientId: true, client: { select: { firmId: true } } }
+                })
+            }
+            const orgId = engagement?.client?.firmId
+            if (!orgId) {
+                return NextResponse.json({ error: 'Could not resolve firm for this folder' }, { status: 400 })
+            }
+            await assertWithinDocumentCap(orgId, 1)
+
             const newFile = await googleDriveConnector.createDriveFile(accessToken, {
                 name,
                 mimeType: mimeTypeStr,
@@ -585,28 +613,13 @@ export async function POST(request: NextRequest) {
 
             // Index the newly created folder
             if (newFile && typeof newFile === 'object' && 'id' in newFile) {
-                let engagement = await prisma.engagement.findFirst({
-                    where: { connectorRootFolderId: folderId },
-                    select: { id: true, clientId: true, client: { select: { firmId: true } } }
+                await safeInngestSend('file.index.requested', {
+                    organizationId: orgId,
+                    clientId: engagement?.clientId ?? null,
+                    projectId: engagement?.id ?? (bodyEngagementId as string) ?? null,
+                    externalId: newFile.id as string,
+                    fileName: name,
                 })
-
-                if (!engagement && bodyEngagementId) {
-                    engagement = await prisma.engagement.findUnique({
-                        where: { id: bodyEngagementId as string },
-                        select: { id: true, clientId: true, client: { select: { firmId: true } } }
-                    })
-                }
-
-                const orgId = engagement?.client?.firmId
-                if (orgId) {
-                    await safeInngestSend('file.index.requested', {
-                        organizationId: orgId,
-                        clientId: engagement?.clientId ?? null,
-                        projectId: engagement?.id ?? (bodyEngagementId as string) ?? null,
-                        externalId: newFile.id as string,
-                        fileName: name,
-                    })
-                }
 
                 // If EC/EV user created this folder, immediately write DB record with intake lock
                 // so the folder is visible in their DB-driven file list
@@ -721,6 +734,7 @@ export async function POST(request: NextRequest) {
             const lastDot = base.lastIndexOf('.')
             const newName = lastDot > 0 ? `${base.slice(0, lastDot)}_${randomSuffix}${base.slice(lastDot)}` : `${base}_${randomSuffix}`
 
+            await assertWithinDocumentCap(engagement.firmId, 1)
             const result = await googleDriveConnector.copyFile(connector.id, fileId, parentId, newName)
             if (!result) return NextResponse.json({ error: 'Failed to duplicate file' }, { status: 500 })
 
@@ -774,6 +788,7 @@ export async function POST(request: NextRequest) {
                     }
                     copyName = sourceName
                 }
+                await assertWithinDocumentCap(engagement.firmId, 1)
                 const result = await googleDriveConnector.copyFile(connector.id, fileId, destinationFolderId, copyName)
                 if (!result) return NextResponse.json({ error: 'Failed to copy file' }, { status: 500 })
 
@@ -955,6 +970,7 @@ export async function POST(request: NextRequest) {
                     return NextResponse.json({ success: true, count: copiedItems.length })
                 }
 
+                await assertWithinDocumentCap(targetProject.client.firmId, 1)
                 const result = await googleDriveConnector.copyFile(connector.id, fileId, destFolderId, fileName)
                 if (!result) return NextResponse.json({ error: 'Failed to copy file' }, { status: 500 })
 
@@ -1043,6 +1059,10 @@ export async function POST(request: NextRequest) {
                 },
                 { status }
             )
+        }
+        // Billing cap errors have a user-friendly message — surface them as 402
+        if (error instanceof Error && error.message.includes('Your plan allows')) {
+            return NextResponse.json({ error: error.message }, { status: 402 })
         }
         console.error('Linked Files API Error:', error)
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })

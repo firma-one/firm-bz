@@ -63,7 +63,7 @@ export default function FAQPage() {
                                     className="inline [font-size:inherit] [line-height:inherit]"
                                     gradient
                                 />
-                                &apos;s features, security, and Google Drive integration.
+                                &apos;s features, security, and Storage Drive integration.
                             </p>
                         }
                         descriptionClassName=""

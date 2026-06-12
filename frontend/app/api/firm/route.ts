@@ -31,7 +31,13 @@ export async function GET(request: NextRequest) {
 
     if (!firm) return NextResponse.json({ firm: null })
 
-    return NextResponse.json({ firm })
+    let creatorEmail: string | null = null
+    if (firm.createdBy) {
+      const { data: creatorUser } = await supabase.auth.admin.getUserById(firm.createdBy)
+      creatorEmail = creatorUser?.user?.email ?? null
+    }
+
+    return NextResponse.json({ firm: { ...firm, creatorEmail } })
   } catch (error) {
     console.error('Firm API error:', error)
     return NextResponse.json({ error: 'Failed to load firm' }, { status: 500 })

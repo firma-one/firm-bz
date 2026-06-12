@@ -83,13 +83,13 @@ export const FAQ_DATA: FAQItem[] = [
   },
   {
     question: "Can I add more engagements?",
-    answer: "Standard includes 10 active engagements per firm, Pro 25, Business 50, and Enterprise typically up to 100 (negotiated). Need more? Contact us for custom capacity.",
-    displayAnswer: "Standard includes <strong>10</strong> active engagements per firm, Pro <strong>25</strong>, Business <strong>50</strong>, and Enterprise typically up to <strong>100</strong> (negotiated). Need more? Contact us for custom capacity.",
+    answer: "Free includes 1 active engagement, Standard 10, Pro 25, Business 50, and Enterprise typically up to 100 (negotiated). Need more? Contact us for custom capacity.",
+    displayAnswer: "Free includes <strong>1</strong> active engagement, Standard <strong>10</strong>, Pro <strong>25</strong>, Business <strong>50</strong>, and Enterprise typically up to <strong>100</strong> (negotiated). Need more? Contact us for custom capacity.",
     category: "Billing",
   },
   {
     question: "What if I need more than one firm?",
-    answer: "Standard, Pro, and Business each cover one firm workspace. For an additional legal entity or a completely separate firm, add another subscription—or talk to us about Enterprise for multiple firms under one agreement and consolidated billing.",
+    answer: "Standard and Pro each cover 1 firm workspace. Business covers 3 firms. For additional firms beyond your plan's included count, add another subscription — or talk to us about Enterprise for custom multi-firm arrangements and consolidated billing.",
     category: "Billing",
   },
   {
@@ -100,7 +100,7 @@ export const FAQ_DATA: FAQItem[] = [
   },
   {
     question: "What happens if I exceed my engagement limit?",
-    answer: "Your plan includes a set number of active engagements per firm (Standard 10, Pro 25, Business 50, Enterprise per contract). Close engagements you no longer need to free up slots, upgrade tiers, or contact us for higher capacity.",
+    answer: "Your plan includes a set number of active engagements per firm (Free 1, Standard 10, Pro 25, Business 50, Enterprise per contract). Close engagements you no longer need to free up slots, upgrade tiers, or contact us for higher capacity.",
     category: "Billing",
   },
   {
@@ -110,20 +110,20 @@ export const FAQ_DATA: FAQItem[] = [
     category: "Billing",
   },
   {
-    question: "Is there a free trial?",
-    answer: `Yes. You can explore ${BRAND_NAME} with a limited sandbox account — no credit card required. When you're ready to unlock full features, you can start a 30-day trial of the Standard plan. A credit card is required to begin the paid plan trial, though you won't be charged until the trial period ends. All checkout details are shown in Polar before you confirm.`,
-    displayAnswer: `Yes. You can explore ${brandNameInlineHtml()} with a <strong>limited sandbox account</strong> — no credit card required. When you're ready to unlock full features, you can start a <strong>30-day trial of the Standard plan</strong>. A credit card is required to begin the paid plan trial, though <strong>you won't be charged until the trial period ends</strong>. All checkout details are shown in [[POLAR_LINK]] before you confirm.`,
+    question: "Is there a free plan?",
+    answer: `Yes. ${BRAND_NAME} includes a free plan with a Demo firm and 1 real firm — no credit card required. When you're ready to remove limits, upgrade to Standard. All checkout details are shown in Polar before you confirm.`,
+    displayAnswer: `Yes. ${brandNameInlineHtml()} includes a <strong>free plan</strong> with a Demo firm and 1 real firm — no credit card required. When you're ready to remove limits, <strong>upgrade to Standard and take off the training wheels</strong>. All checkout details are shown in [[POLAR_LINK]] before you confirm.`,
     category: "Billing",
   },
   {
-    question: `What does "bring your own Google Drive" mean?`,
-    answer: `Your files stay in your Google Drive—we don't host a second copy of your documents for standard workflows. ${BRAND_NAME} adds the client portal, engagement structure, and permissions on top. There's no bulk migration to a new storage product: you keep working from Drive with a professional delivery layer.`,
-    displayAnswer: `Your files stay in your <strong>Google Drive</strong>—we don't host a second copy of your documents. ${brandNameInlineHtml()} adds the client portal, engagement structure, and permissions on top. <strong>No bulk migration</strong>: you keep working from Drive with a professional delivery layer.`,
+    question: `What does "bring your own Storage Drive" mean?`,
+    answer: `Your files stay in your own storage — Google Drive today, with OneDrive coming soon. ${BRAND_NAME} adds the client portal, engagement structure, and permissions on top without storing a second copy of your documents. There's no bulk migration: you keep working from your existing Drive with a professional delivery layer.`,
+    displayAnswer: `Your files stay in your own storage — <strong>Google Drive</strong> today, with <strong>OneDrive coming soon</strong>. ${brandNameInlineHtml()} adds the client portal, engagement structure, and permissions on top without storing a second copy of your documents. <strong>No bulk migration</strong>: you keep working from your existing Drive with a professional delivery layer.`,
     category: "Billing",
   },
   {
-    question: "How does the free sandbox differ from paid plans?",
-    answer: "The sandbox lets you explore the product with no credit card. Core engagement and portal capabilities align with what we show for Standard in the comparison matrix; higher tiers add Pro/Business/Enterprise features such as templates, automation, custom DNS, or SSO. When you're ready for production billing, start a Standard trial or choose a paid tier.",
+    question: "What's included in the free plan?",
+    answer: "The free plan includes a Demo firm (with sample data for exploration) and 1 real firm for production use — no credit card required. Limits apply: 1 active engagement, 1 client, and 20 documents. Paid plans remove those limits and unlock additional features such as templates, advanced review workflows, custom DNS, and SSO.",
     category: "Billing",
   },
   {

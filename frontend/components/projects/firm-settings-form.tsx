@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Input } from '@/components/ui/input'
 import { updateFirm, deleteFirm } from '@/lib/actions/firms'
 import { useRouter } from 'next/navigation'
@@ -183,8 +184,22 @@ export function FirmSettingsForm({
                     setRecurringEnabled(rc.recurring?.enabled ?? true)
                     setRecurringFrequencyDays(rc.recurring?.frequencyDays ?? 1)
                     setStartDaysBeforeDue(rc.recurring?.startDaysBeforeDue ?? 7)
-                    setAllowDomainAccess(firm.allowDomainAccess === true)
-                    setAllowedEmailDomain(firm.allowedEmailDomain ?? '')
+                    const savedDomainAccess = firm.allowDomainAccess === true
+                    const savedDomain = firm.allowedEmailDomain ?? ''
+                    if (!savedDomainAccess && !savedDomain) {
+                        const creatorEmail = (data.creatorEmail as string | null) ?? ''
+                        const userDomain = creatorEmail.split('@')[1] ?? ''
+                        if (userDomain && !PUBLIC_EMAIL_DOMAINS.has(userDomain.toLowerCase())) {
+                            setAllowDomainAccess(true)
+                            setAllowedEmailDomain(userDomain)
+                        } else {
+                            setAllowDomainAccess(false)
+                            setAllowedEmailDomain('')
+                        }
+                    } else {
+                        setAllowDomainAccess(savedDomainAccess)
+                        setAllowedEmailDomain(savedDomain)
+                    }
                     setMainDirty(false)
                     setAppDirty(false)
                     const savedCode = c.code ?? ''
@@ -295,7 +310,7 @@ export function FirmSettingsForm({
         }
     }
 
-    const handleSave = async () => {
+    const handleSave = async ({ skipNavigation = false }: { skipNavigation?: boolean } = {}) => {
         if (isSandboxFirm) return
         if (!name.trim()) {
             addToast({ type: 'error', title: 'Required', message: 'Firm name is required.' })
@@ -342,7 +357,7 @@ export function FirmSettingsForm({
                     setTimeout(resolve, 1500)
                 })
             }
-            onSaved?.()
+            if (!skipNavigation) onSaved?.()
         } catch (e: unknown) {
             addToast({
                 type: 'error',
@@ -377,7 +392,7 @@ export function FirmSettingsForm({
 
     const mainSave = (
         <div className="flex items-center gap-3 pt-2">
-            <Button type="button" variant="greenCta" onClick={handleSave}
+            <Button type="button" variant="greenCta" onClick={() => void handleSave()}
                 disabled={isSandboxFirm || saving || !loaded || !mainDirty}
                 className="rounded-[2px] w-32 text-[10px] font-headline font-bold tracking-widest uppercase text-white">
                 {saving ? 'Saving…' : 'Save'}
@@ -387,7 +402,7 @@ export function FirmSettingsForm({
 
     const appSave = (
         <div className="flex items-center gap-3 pt-2">
-            <Button type="button" variant="greenCta" onClick={handleSave}
+            <Button type="button" variant="greenCta" onClick={() => void handleSave({ skipNavigation: true })}
                 disabled={isSandboxFirm || saving || !loaded || !appDirty}
                 className="rounded-[2px] w-32 text-[10px] font-headline font-bold tracking-widest uppercase text-white">
                 {saving ? 'Saving…' : 'Save'}
@@ -799,35 +814,20 @@ export function FirmSettingsForm({
                 </div>
             </section>
 
-            <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
-                <DialogContent className="sm:max-w-[440px] rounded">
-                    <DialogHeader>
-                        <DialogTitle>Delete firm?</DialogTitle>
-                        <DialogDescription className="text-[#45474c]">
-                            Permanently delete this organization? All clients, projects, and members will be removed. This cannot be undone.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter className="gap-2 sm:gap-0">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            className="rounded border-[#e5e7eb]"
-                            disabled={deleting}
-                            onClick={() => setDeleteConfirmOpen(false)}
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            type="button"
-                            variant="destructive"
-                            disabled={isSandboxFirm || deleting}
-                            onClick={() => void performDeleteFirm()}
-                        >
-                            {deleting ? 'Deleting…' : 'Delete firm'}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            <ConfirmDialog
+                open={deleteConfirmOpen}
+                onOpenChange={setDeleteConfirmOpen}
+                icon={<Trash2 className="h-3.5 w-3.5" />}
+                iconVariant="red"
+                title="Delete firm"
+                subtitle="This action cannot be undone."
+                description="Permanently delete this organization? All clients, projects, and members will be removed. This cannot be undone."
+                confirmLabel="Delete firm"
+                confirmVariant="red"
+                onCancel={() => setDeleteConfirmOpen(false)}
+                onConfirm={() => void performDeleteFirm()}
+                loading={deleting}
+            />
         </div>
     )
 }

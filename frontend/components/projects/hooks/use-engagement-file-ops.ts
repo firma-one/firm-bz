@@ -23,6 +23,7 @@ interface UseEngagementFileOpsOptions {
     stopProcessing: (id: string) => void
     setFiles: React.Dispatch<React.SetStateAction<DriveFile[]>>
     orgSandbox?: { sandboxOnly?: boolean } | null
+    refreshFileCount?: () => void
 }
 
 export function useEngagementFileOps({
@@ -39,6 +40,7 @@ export function useEngagementFileOps({
     stopProcessing,
     setFiles,
     orgSandbox,
+    refreshFileCount,
 }: UseEngagementFileOpsOptions) {
     const { addToast } = useToast()
 
@@ -89,6 +91,16 @@ export function useEngagementFileOps({
 
     const handleDuplicate = useCallback(async (doc: DriveFile) => {
         if (!sessionRef.current?.access_token) return
+        try {
+            const gateRes = await fetch(`/api/billing/document-gate?projectId=${encodeURIComponent(projectId)}&count=1`)
+            if (gateRes.ok) {
+                const gate = await gateRes.json()
+                if (!gate.allowed) {
+                    addToast({ type: 'error', title: 'Document limit reached', message: `Your plan limit of ${gate.cap} files has been reached (${gate.current} used). Delete any unused file or upgrade to remove the limit.`, duration: 12000 })
+                    return
+                }
+            }
+        } catch { /* fail-open */ }
         startProcessing(doc.id)
         try {
             const res = await fetch('/api/connectors/google-drive/linked-files', {
@@ -107,12 +119,13 @@ export function useEngagementFileOps({
             addToast({ type: 'success', title: 'Duplicated', message: `${doc.name} duplicated with a unique name` })
             const currentFolderId = currentFolderIdRef.current
             if (currentFolderId) fetchFiles(currentFolderId, true)
+            refreshFileCount?.()
         } catch (e: any) {
             addToast({ type: 'error', title: 'Error', message: e?.message || 'Something went wrong' })
         } finally {
             stopProcessing(doc.id)
         }
-    }, [projectId, currentFolderIdRef, fetchFiles, addToast, startProcessing, stopProcessing])
+    }, [projectId, currentFolderIdRef, fetchFiles, addToast, startProcessing, stopProcessing, refreshFileCount])
 
     // Step 1: open confirm dialog
     const handleTrash = useCallback((doc: DriveFile) => {
@@ -132,7 +145,7 @@ export function useEngagementFileOps({
                 type: 'error',
                 title: 'Sandbox',
                 message: SANDBOX_OPERATION_MESSAGE,
-                duration: 8000,
+                duration: 12000,
             } as any)
             setTrashConfirmTarget(null)
             return
@@ -168,6 +181,7 @@ export function useEngagementFileOps({
             setTrashConfirmTarget(null)
             const currentFolderId = currentFolderIdRef.current
             if (currentFolderId) fetchFiles(currentFolderId, true)
+            refreshFileCount?.()
         } catch (e: any) {
             addToast({ type: 'error', title: 'Error', message: e?.message || 'Something went wrong' })
             setTrashConfirmTarget(null)
@@ -241,6 +255,20 @@ export function useEngagementFileOps({
         const action = actionOverride || copyMoveAction
 
         if (!target || !sessionRef.current?.access_token) return
+
+        if (action === 'copy') {
+            try {
+                const gateRes = await fetch(`/api/billing/document-gate?projectId=${encodeURIComponent(projectId)}&count=1`)
+                if (gateRes.ok) {
+                    const gate = await gateRes.json()
+                    if (!gate.allowed) {
+                        addToast({ type: 'error', title: 'Document limit reached', message: `Your plan limit of ${gate.cap} files has been reached (${gate.current} used). Delete any unused file or upgrade to remove the limit.`, duration: 12000 })
+                        return
+                    }
+                }
+            } catch { /* fail-open */ }
+        }
+
         setCopyMoveSubmittingFolderId(destinationFolderId)
         startProcessing(target.id)
         try {
@@ -268,13 +296,14 @@ export function useEngagementFileOps({
             setCopyMoveTarget(null)
             const currentFolderId = currentFolderIdRef.current
             if (currentFolderId) fetchFiles(currentFolderId, true)
+            if (action === 'copy') refreshFileCount?.()
         } catch (e: any) {
             addToast({ type: 'error', title: 'Error', message: e?.message || 'Something went wrong' })
         } finally {
             setCopyMoveSubmittingFolderId(null)
             stopProcessing(target.id)
         }
-    }, [copyMoveTarget, copyMoveAction, copyMoveKeepBoth, projectId, currentFolderIdRef, fetchFiles, addToast, startProcessing, stopProcessing])
+    }, [copyMoveTarget, copyMoveAction, copyMoveKeepBoth, projectId, currentFolderIdRef, fetchFiles, addToast, startProcessing, stopProcessing, refreshFileCount])
 
     const handleMoveTree = useCallback(async (doc: DriveFile, targetRoot: 'general' | 'confidential' | 'staging') => {
         if (!sessionRef.current?.access_token) return
@@ -556,6 +585,19 @@ export function useEngagementFileOps({
 
     const handleCrossEngagementSubmit = useCallback(async () => {
         if (!crossEngagementTarget || !crossEngagementSelectedId || !sessionRef.current?.access_token) return
+
+        // Check cap on the target engagement (where the file will land)
+        try {
+            const gateRes = await fetch(`/api/billing/document-gate?projectId=${encodeURIComponent(crossEngagementSelectedId)}&count=1`)
+            if (gateRes.ok) {
+                const gate = await gateRes.json()
+                if (!gate.allowed) {
+                    addToast({ type: 'error', title: 'Document limit reached', message: `Your plan limit of ${gate.cap} files has been reached (${gate.current} used). Delete any unused file or upgrade to remove the limit.`, duration: 12000 })
+                    return
+                }
+            }
+        } catch { /* fail-open */ }
+
         setCrossEngagementSubmitting(true)
         startProcessing(crossEngagementTarget.id)
         try {
