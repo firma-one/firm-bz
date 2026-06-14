@@ -1,9 +1,9 @@
 import { createAdminClient } from '@/utils/supabase/admin'
 import { prisma } from '@/lib/prisma'
 import { isWorkspaceOnboardingComplete } from '@/lib/onboarding/workspace-onboarding-complete'
-import { resolveBillingAnchorFirmId } from '@/lib/billing/billing-group'
+import { resolveGroupId } from '@/lib/billing/billing-group'
 import {
-    getActiveSubscriptionForFirm,
+    getActiveSubscriptionForGroup,
     subscriptionAccessStatusLabel,
 } from '@/lib/billing/active-billing-subscription'
 import { isSystemAdminEmail } from '@/lib/system/admin-check'
@@ -40,7 +40,7 @@ export type UserDataMapFirmEntry = {
     onboardingIsCompleteFlag: boolean
     computedOnboardingComplete: boolean
     billing: {
-        anchorFirmId: string
+        groupId: string
         anchorExists: boolean
         activeSubscription: {
             status: string | null
@@ -196,14 +196,15 @@ function buildFindings(params: {
     for (const firm of firms) {
         if (!firm.billing.anchorExists) {
             findings.push({
-                id: `missing-anchor-${firm.id}`,
+                id: `missing-group-${firm.id}`,
                 severity: 'warning',
-                title: `Billing anchor is missing for firm ${firm.slug}`,
-                evidence: `anchorFirmId=${firm.billing.anchorFirmId} does not exist`,
+                title: `Billing group is missing for firm ${firm.slug}`,
+                evidence: `groupId=${firm.billing.groupId} does not exist`,
                 recommendedActionType: 'repair',
                 sqlPreview: [
-                    '-- Repoint to a valid anchor or clear broken anchor relationship',
-                    `UPDATE platform.firms SET "anchorFirmId" = NULL WHERE "id" = '${firm.id}'::uuid;`,
+                    '-- Repoint to a valid group — groupId is non-nullable, create a group first',
+                    `-- INSERT INTO platform.groups (name, "createdAt", "updatedAt") VALUES ('Recovered Group', now(), now()) RETURNING id;`,
+                    `-- UPDATE platform.firms SET "groupId" = '<new_group_uuid>'::uuid WHERE "id" = '${firm.id}'::uuid;`,
                 ].join('\n'),
             })
         }
@@ -285,14 +286,13 @@ export async function buildUserDataMap(identifier: string): Promise<UserDataMapR
             connectorId: firm.connectorId,
             sandboxOnly: firm.sandboxOnly,
         })
-        const anchorFirmId = await resolveBillingAnchorFirmId(firm.id)
-        const anchorExists = Boolean(
-            await prisma.firm.findUnique({
-                where: { id: anchorFirmId },
-                select: { id: true },
-            })
-        )
-        const activeSubscription = anchorExists ? await getActiveSubscriptionForFirm(anchorFirmId) : null
+        const groupId = await resolveGroupId(firm.id)
+        const sandboxFirm = await prisma.firm.findFirst({
+            where: { groupId, sandboxOnly: true, deletedAt: null },
+            select: { id: true },
+        })
+        const anchorExists = Boolean(sandboxFirm)
+        const activeSubscription = await getActiveSubscriptionForGroup(groupId)
 
         const [clients, engagements, documents, firmInvites, clientInvites, engagementInvites, notifForFirm] =
             await Promise.all([
@@ -317,7 +317,7 @@ export async function buildUserDataMap(identifier: string): Promise<UserDataMapR
             onboardingIsCompleteFlag: onboardingBits.isComplete,
             computedOnboardingComplete: onboardingComplete,
             billing: {
-                anchorFirmId,
+                groupId,
                 anchorExists,
                 activeSubscription: activeSubscription
                     ? {

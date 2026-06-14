@@ -2,7 +2,7 @@ import { prisma } from './prisma'
 import { User } from '@supabase/supabase-js'
 import { logger } from './logger'
 import { assertWithinFirmGroupCap } from '@/lib/billing/effective-billing-caps'
-import { userHasMembershipUnderAnchor } from '@/lib/billing/firm-creation-gate'
+import { userHasMembershipInGroup } from '@/lib/billing/firm-creation-gate'
 
 export interface CreateFirmData {
   userId: string
@@ -10,6 +10,8 @@ export interface CreateFirmData {
   firstName: string
   lastName: string
   firmName: string
+  /** The group this firm belongs to for billing purposes. */
+  groupId: string
   /** When true, users with allowedEmailDomain can join firm without invite (firm member only). */
   allowDomainAccess?: boolean
   /** Email domain (e.g. "acme.com") to allow; stored lowercase. */
@@ -20,8 +22,6 @@ export interface CreateFirmData {
   connectorId?: string | null
   /** Whether this is a sandbox firm. */
   sandboxOnly?: boolean
-  /** When set, this firm is a satellite under this anchor for billing purposes. */
-  anchorFirmId?: string | null
 }
 
 export interface FirmWithMembers {
@@ -83,23 +83,13 @@ export class FirmService {
     const { generateFirmSlug } = await import('@/lib/slug-utils')
     const slug = await generateFirmSlug(data.firmName)
 
-    const billingAnchorId = data.anchorFirmId?.trim() || null
-    if (billingAnchorId) {
-      const anchorRow = await prisma.firm.findUnique({
-        where: { id: billingAnchorId },
-        select: { anchorFirmId: true },
-      })
-      if (!anchorRow) {
-        throw new Error('Billing anchor firm not found.')
-      }
-      if (anchorRow.anchorFirmId) {
-        throw new Error('Nested anchor hierarchies are not supported.')
-      }
-      const allowed = await userHasMembershipUnderAnchor(data.userId, billingAnchorId)
+    const groupId = data.groupId
+    if (!data.sandboxOnly) {
+      const allowed = await userHasMembershipInGroup(data.userId, groupId)
       if (!allowed) {
-        throw new Error('You cannot attach this workspace to that billing subscription.')
+        throw new Error('You cannot attach this workspace to that billing group.')
       }
-      await assertWithinFirmGroupCap(billingAnchorId)
+      await assertWithinFirmGroupCap(groupId)
     }
 
     const firm = await (prisma as any).$transaction(async (tx: any) => {
@@ -113,7 +103,7 @@ export class FirmService {
           firmFolderId: data.firmFolderId,
           connectorId: data.connectorId,
           sandboxOnly: data.sandboxOnly ?? false,
-          anchorFirmId: billingAnchorId,
+          groupId,
           createdBy: data.userId,
           updatedBy: data.userId,
         },
@@ -159,13 +149,22 @@ export class FirmService {
 
     const firstName = user.user_metadata?.full_name?.split(' ')[0] || user.email!.split('@')[0]
     const lastName = user.user_metadata?.full_name?.split(' ').slice(1).join(' ') || ''
+    const firmName = `${firstName}'s Firm`
+
+    const group = await (prisma as any).group.create({
+      data: { name: firmName, createdBy: user.id },
+    })
+    await (prisma as any).groupMember.create({
+      data: { groupId: group.id, userId: user.id, role: 'GROUP_ADMIN' },
+    })
 
     return this.createFirmWithMember({
       userId: user.id,
       email: user.email!,
       firstName,
       lastName,
-      firmName: `${firstName}'s Firm`,
+      firmName,
+      groupId: group.id,
     })
   }
 

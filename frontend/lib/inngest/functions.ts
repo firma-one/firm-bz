@@ -777,11 +777,8 @@ export const grantPermissionsForNewMember = inngest.createFunction(
         const { projectId, organizationId, userId, email, personaSlug } = event.data;
 
         const connectorId = await step.run("fetch-connector", async () => {
-            const firm = await prisma.firm.findUnique({
-                where: { id: organizationId },
-                select: { connectorId: true }
-            })
-            return firm?.connectorId;
+            const { resolveEngagementConnectorId } = await import('@/lib/connectors/resolve-client-connector')
+            return resolveEngagementConnectorId(projectId)
         });
 
         if (!connectorId) return { message: "No connector" };

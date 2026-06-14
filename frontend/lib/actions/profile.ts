@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/utils/supabase/server'
 import { profileCopy } from '@/lib/profile-copy'
 import { prisma } from '@/lib/prisma'
-import { resolveBillingAnchorFirmId } from '@/lib/billing/billing-group'
+import { resolveGroupId } from '@/lib/billing/billing-group'
 import { updatePolarCustomerNameByExternalId } from '@/lib/billing/polar-customers'
 import { logger } from '@/lib/logger'
 
@@ -65,9 +65,9 @@ export async function updateProfileNames(
                 select: { firmId: true },
             })
             if (membership?.firmId) {
-                const anchorFirmId = await resolveBillingAnchorFirmId(membership.firmId)
+                const groupId = await resolveGroupId(membership.firmId)
                 await updatePolarCustomerNameByExternalId({
-                    externalId: anchorFirmId,
+                    externalId: groupId,
                     name: fullName,
                 })
             }

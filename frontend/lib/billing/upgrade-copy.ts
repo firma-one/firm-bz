@@ -45,7 +45,7 @@ export const upgradeCopy = {
     /** Single page `<h1>` for `/d/billing` and onboarding subscribe step (shared). */
     billingPageTitle: 'Billing & plans',
     /** In-card heading above workspace name (avoids duplicating the page title). */
-    billingCardWorkspaceHeading: 'This workspace',
+    billingCardWorkspaceHeading: 'Billing Entity',
     billingHeadline: 'Scale as you grow',
     billingBody: `Your current plan includes limits on firms, clients, engagements and documents.`,
     billingBodyLine2: `Your Demo firm is always available on all plans. Upgrade to increase your limits.`,

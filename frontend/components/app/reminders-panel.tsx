@@ -97,30 +97,7 @@ function ReminderRow({ r, isPending, acting, onDone, onUndoDone, onHide, onShow,
                     <ChevronRight className="h-3 w-3 shrink-0 text-[#45474c]/40 group-hover/link:text-[#C4572B]/60 transition-colors mt-0.5" />
                 </a>
                 </Tip>
-                <div className="flex items-center gap-1 shrink-0 mt-0.5">
-                    {isPending ? (
-                        <Tip label="Keep reminder" position="bottom-right">
-                            <button
-                                type="button"
-                                onClick={() => onUndoDone(r.id)}
-                                className="shrink-0 h-6 w-6 inline-flex items-center justify-center rounded-[2px] border border-[#C4572B]/30 bg-white text-[#C4572B]/60 hover:text-[#C4572B] hover:border-[#C4572B] transition-colors"
-                            >
-                                <Undo2 className="h-3 w-3" />
-                            </button>
-                        </Tip>
-                    ) : (
-                        <Tip label="Mark done" position="bottom-right">
-                            <button
-                                type="button"
-                                disabled={acting === r.id}
-                                onClick={() => onDone(r.id)}
-                                className="shrink-0 h-6 w-6 inline-flex items-center justify-center rounded-[2px] border border-[#e5e7eb] bg-white text-[#45474c]/50 hover:text-emerald-600 hover:border-emerald-300 disabled:opacity-40 transition-colors"
-                            >
-                                <CheckCircle2 className="h-3 w-3" />
-                            </button>
-                        </Tip>
-                    )}
-                    {/* Hide/Show button — hidden from UI until UX is validated; restore when needed
+                {/* Hide/Show button — hidden from UI until UX is validated; restore when needed
                     <Tip label={hidden ? 'Show reminder' : 'Hide reminder'} position="bottom-right">
                         <button
                             type="button"
@@ -132,7 +109,6 @@ function ReminderRow({ r, isPending, acting, onDone, onUndoDone, onHide, onShow,
                         </button>
                     </Tip>
                     */}
-                </div>
             </div>
             {/* Row 2: due date or pending countdown */}
             {isPending ? (

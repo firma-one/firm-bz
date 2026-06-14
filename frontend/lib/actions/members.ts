@@ -9,6 +9,7 @@ import { logger } from '@/lib/logger'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { safeInngestSend } from '@/lib/inngest/client'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
+import { removeRemindersByEntity } from '@/lib/actions/user-reminders'
 
 // Admin Client for fetching user details
 const supabaseAdmin = createSupabaseAdmin(
@@ -192,6 +193,21 @@ export async function removeMember(memberId: string) {
 
         await prisma.engagementMember.delete({ where: { id: memberId } })
 
+        // If the user has no remaining engagement memberships in this firm, remove their firm_members row.
+        // EC/EV users get a firm_members row on invite acceptance but are not true firm members.
+        const firmId = member.engagement.client.firmId
+        const remainingEngagements = await prisma.engagementMember.count({
+            where: {
+                userId: member.userId,
+                engagement: { client: { firmId } },
+            },
+        })
+        if (remainingEngagements === 0) {
+            await prisma.firmMember.deleteMany({
+                where: { userId: member.userId, firmId },
+            })
+        }
+
         // Mark invitation as SUPERSEDED so the member can be re-invited
         if (member.userId) {
             try {
@@ -228,7 +244,14 @@ export async function removeMember(memberId: string) {
 
 export async function revokeInvitation(invitationId: string) {
     try {
+        const invite = await prisma.engagementInvitation.findUnique({
+            where: { id: invitationId },
+            select: { createdBy: true },
+        })
         await prisma.engagementInvitation.delete({ where: { id: invitationId } })
+        if (invite?.createdBy) {
+            await removeRemindersByEntity(invite.createdBy, 'platform.engagement_invitations.id', invitationId).catch(() => {})
+        }
         revalidatePath('/d/f/[slug]/c/[clientSlug]/e/[engagementSlug]')
     } catch (error) {
         logger.error('Failed to revoke invitation', error as Error)

@@ -96,6 +96,21 @@ export async function POST(request: NextRequest) {
                 : null
 
         const { newOrg } = await prisma.$transaction(async (tx) => {
+            const group = await tx.group.create({
+                data: {
+                    name: organizationName,
+                    createdBy: userId!,
+                },
+            })
+
+            await tx.groupMember.create({
+                data: {
+                    groupId: group.id,
+                    userId: userId!,
+                    role: 'GROUP_ADMIN',
+                },
+            })
+
             const firm = await tx.firm.create({
                 data: {
                     id: newOrgId,
@@ -104,6 +119,7 @@ export async function POST(request: NextRequest) {
                     allowDomainAccess: allowDomainAccess === true,
                     allowedEmailDomain: domainNormalized,
                     settings: {},
+                    groupId: group.id,
                 },
             })
 

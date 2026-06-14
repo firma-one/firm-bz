@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
             connectorId: connectionId,
             allowDomainAccess: allowDomainAccess ?? true,
             sandboxOnly: false,
-            anchorFirmId: billingAnchorId,
+            groupId: billingAnchorId,
         })
 
         if (connectionId) {

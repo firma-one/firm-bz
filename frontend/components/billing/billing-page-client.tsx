@@ -387,7 +387,7 @@ export function BillingPageClient({
                             {upgradeCopy.billingCardWorkspaceHeading}
                         </h2>
                         <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.2em] text-[#45474c]">
-                            Workspace
+                            Firm Group
                         </p>
                         {loadError ? (
                             <p className="mt-1 text-sm text-red-600">{loadError}</p>
@@ -396,12 +396,8 @@ export function BillingPageClient({
                                 No workspaces found. Open the app from a firm first.
                             </p>
                         ) : selectedFirm ? (
-                            <p className="mt-0.5 text-[0.8125rem] text-[#1b1b1d]">
-                                <span className="font-bold">{selectedFirm.name}</span>
-                                <span className="font-mono text-xs text-[#45474c]">
-                                    {' '}
-                                    /{selectedFirm.slug}
-                                </span>
+                            <p className="mt-0.5 text-[0.8125rem] font-bold text-[#1b1b1d]">
+                                {selectedFirm.groupName ?? selectedFirm.name}
                             </p>
                         ) : null}
                     </div>

@@ -1,4 +1,4 @@
-# Plan: Document ActionMenu → "Preview" item
+googlecl# Plan: Document ActionMenu → "Preview" item
 
 ## Context
 

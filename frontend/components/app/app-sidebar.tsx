@@ -528,6 +528,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                           router.push(`/d/f/${firmSlug}`)
                         }}
                         compact
+                        isFirmAdmin={role === 'FIRM_ADMIN'}
                       />
                       {/* Tree sub-items: Overview + Clients + Settings */}
                       <div className="ml-1 space-y-0.5">

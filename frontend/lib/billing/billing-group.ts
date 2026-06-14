@@ -1,101 +1,79 @@
 import { prisma } from '@/lib/prisma'
 import {
-    getActiveSubscriptionForFirm,
+    getActiveSubscriptionForGroup,
     subscriptionAccessStatusLabel,
 } from '@/lib/billing/active-billing-subscription'
 
-/**
- * Firm that holds the Polar subscription and billing state for this workspace.
- * Satellites inherit access from their anchor.
- */
-export async function resolveBillingAnchorFirmId(firmId: string): Promise<string> {
+/** Resolve the groupId for a given firmId. */
+export async function resolveGroupId(firmId: string): Promise<string> {
     const firm = await prisma.firm.findUnique({
         where: { id: firmId },
-        select: { anchorFirmId: true },
+        select: { groupId: true },
     })
-    if (!firm) return firmId
-    return firm.anchorFirmId ?? firmId
+    if (!firm) throw new Error(`Firm not found: ${firmId}`)
+    return firm.groupId
 }
 
-export type BillingAnchorRow = {
+export type BillingGroupRow = {
     id: string
     subscriptionStatus: string | null
     sandboxOnly: boolean
-    anchorFirmId: string | null
+    groupId: string
 }
 
 /**
- * Load the firm row used for subscription / gating (anchor if this firm is a satellite).
+ * Load the firm row used for subscription / gating.
+ * Subscription is looked up on the sandbox firm in the group (the billing root).
  */
-export async function getFirmRowForBillingGate(firmId: string): Promise<BillingAnchorRow | null> {
+export async function getFirmRowForBillingGate(firmId: string): Promise<BillingGroupRow | null> {
     const firm = await prisma.firm.findUnique({
         where: { id: firmId },
-        select: { id: true, sandboxOnly: true, anchorFirmId: true },
+        select: { id: true, sandboxOnly: true, groupId: true },
     })
     if (!firm) return null
 
-    const anchorId = firm.anchorFirmId ?? firm.id
-    if (anchorId === firm.id) {
-        const sub = await getActiveSubscriptionForFirm(firm.id)
-        return { id: firm.id, sandboxOnly: firm.sandboxOnly, anchorFirmId: firm.anchorFirmId, subscriptionStatus: subscriptionAccessStatusLabel(sub) }
+    const sub = await getActiveSubscriptionForGroup(firm.groupId)
+    return {
+        id: firm.id,
+        sandboxOnly: firm.sandboxOnly,
+        groupId: firm.groupId,
+        subscriptionStatus: subscriptionAccessStatusLabel(sub),
     }
-
-    const anchor = await prisma.firm.findUnique({
-        where: { id: anchorId },
-        select: { id: true, sandboxOnly: true, anchorFirmId: true },
-    })
-    if (!anchor) return null
-    const sub = await getActiveSubscriptionForFirm(anchor.id)
-    return { id: anchor.id, sandboxOnly: anchor.sandboxOnly, anchorFirmId: anchor.anchorFirmId, subscriptionStatus: subscriptionAccessStatusLabel(sub) }
 }
 
-/** Total firms in this billing group (anchor + satellites). */
-export async function countFirmsInBillingGroup(anchorFirmId: string): Promise<number> {
+/** Total firms in this billing group. */
+export async function countFirmsInBillingGroup(groupId: string): Promise<number> {
     return prisma.firm.count({
-        where: {
-            OR: [{ id: anchorFirmId }, { anchorFirmId }],
-            deletedAt: null,
-        },
+        where: { groupId, deletedAt: null },
     })
 }
 
 /**
- * Non-sandbox firms in this billing group counted against the plan's firm cap.
- * The sandbox/anchor firm itself does not consume a firm slot.
+ * Non-sandbox firms counted against the plan's firm cap.
+ * The sandbox firm does not consume a firm slot.
  */
-export async function countBillableFirmsInBillingGroup(anchorFirmId: string): Promise<number> {
+export async function countBillableFirmsInBillingGroup(groupId: string): Promise<number> {
     return prisma.firm.count({
-        where: {
-            OR: [{ id: anchorFirmId }, { anchorFirmId }],
-            deletedAt: null,
-            sandboxOnly: false,
-        },
+        where: { groupId, deletedAt: null, sandboxOnly: false },
     })
 }
 
-/** Returns firm ids under this anchor umbrella (anchor + one-level satellites). */
-export async function listFirmIdsInBillingGroup(anchorFirmId: string): Promise<string[]> {
+/** All firm IDs in this billing group. */
+export async function listFirmIdsInBillingGroup(groupId: string): Promise<string[]> {
     const rows = await prisma.firm.findMany({
-        where: {
-            OR: [{ id: anchorFirmId }, { anchorFirmId }],
-            deletedAt: null,
-        },
+        where: { groupId, deletedAt: null },
         select: { id: true },
     })
     return rows.map((row) => row.id)
 }
 
 /**
- * Non-sandbox firm IDs in this billing group for entity cap counting.
- * Sandbox firms are excluded so their demo data never counts against plan limits.
+ * Non-sandbox firm IDs for entity cap counting.
+ * Sandbox firms are excluded so demo data never counts against plan limits.
  */
-export async function listBillableFirmIdsInBillingGroup(anchorFirmId: string): Promise<string[]> {
+export async function listBillableFirmIdsInBillingGroup(groupId: string): Promise<string[]> {
     const rows = await prisma.firm.findMany({
-        where: {
-            OR: [{ id: anchorFirmId }, { anchorFirmId }],
-            deletedAt: null,
-            sandboxOnly: false,
-        },
+        where: { groupId, deletedAt: null, sandboxOnly: false },
         select: { id: true },
     })
     return rows.map((row) => row.id)

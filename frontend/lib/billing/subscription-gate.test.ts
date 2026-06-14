@@ -9,12 +9,12 @@ vi.mock('@/lib/logger', () => ({
 
 const mockGetFirmRow = vi.mocked(billingGroup.getFirmRowForBillingGate)
 
-function makeOrg(overrides: Partial<billingGroup.BillingAnchorRow> = {}): billingGroup.BillingAnchorRow {
+function makeOrg(overrides: Partial<billingGroup.BillingGroupRow> = {}): billingGroup.BillingGroupRow {
     return {
         id: 'firm-1',
         subscriptionStatus: 'active',
         sandboxOnly: false,
-        anchorFirmId: null,
+        groupId: 'group-1',
         ...overrides,
     }
 }
@@ -92,7 +92,6 @@ describe('checkFirmSubscriptionAccess', () => {
             id: 'anchor-1',
             sandboxOnly: true,
             subscriptionStatus: 'canceled',
-            anchorFirmId: null,
         }))
         expect(await checkFirmSubscriptionAccess('satellite-firm-id')).toBe(true)
     })
