@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
-import { getActiveSubscriptionForFirm } from '@/lib/billing/active-billing-subscription'
-import { resolveBillingAnchorFirmId } from '@/lib/billing/billing-group'
+import { getActiveSubscriptionForGroup } from '@/lib/billing/active-billing-subscription'
+import { resolveGroupId } from '@/lib/billing/billing-group'
 
 export async function GET() {
     const supabase = await createClient()
@@ -19,17 +19,15 @@ export async function GET() {
     if (!membership?.firmId) return NextResponse.json({ shouldShow: false })
     if (membership.role !== 'firm_admin') return NextResponse.json({ shouldShow: false, isFirmAdmin: false })
 
-    const anchorFirmId = await resolveBillingAnchorFirmId(membership.firmId)
-    const anchor = await prisma.firm.findUnique({
-        where: { id: anchorFirmId },
-        select: {
-            settings: true,
-        },
+    const groupId = await resolveGroupId(membership.firmId)
+    const sandboxFirm = await prisma.firm.findFirst({
+        where: { groupId, sandboxOnly: true, deletedAt: null },
+        select: { id: true, settings: true },
     })
-    if (!anchor) return NextResponse.json({ shouldShow: false })
+    if (!sandboxFirm) return NextResponse.json({ shouldShow: false })
 
-    const activeSub = await getActiveSubscriptionForFirm(anchorFirmId)
-    const settings = (anchor.settings as Record<string, unknown> | null) ?? {}
+    const activeSub = await getActiveSubscriptionForGroup(groupId)
+    const settings = (sandboxFirm.settings as Record<string, unknown> | null) ?? {}
     const onboarding = (settings.onboarding as Record<string, unknown> | undefined) ?? {}
     const subscription = (onboarding.subscription as Record<string, unknown> | undefined) ?? {}
     const paidPlan = subscription.paidPlan

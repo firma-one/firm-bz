@@ -37,8 +37,8 @@ function buildHandler() {
             if (r) {
                 await maybeRevokeFreePolarAfterPaidSubscriptionSync(r)
                 if (r.status === 'canceled') {
-                    await resyncSandboxFreePlanAfterPaidSubscriptionEnd(r.anchorFirmId)
-                    await refreshBillingPlanForFirmGroupUsers(r.anchorFirmId)
+                    await resyncSandboxFreePlanAfterPaidSubscriptionEnd(r.groupId)
+                    await refreshBillingPlanForFirmGroupUsers(r.groupId)
                 }
             }
         },
@@ -62,29 +62,29 @@ function buildHandler() {
                 })
                 if (r) {
                     await maybeRevokeFreePolarAfterPaidSubscriptionSync(r)
-                    await createSubscriptionCancellationRemindersForAdmins(r.anchorFirmId, endsAt)
+                    await createSubscriptionCancellationRemindersForAdmins(r.groupId, endsAt)
                 }
             } else {
                 const r = await syncFirmSubscriptionFromPolarEvent(payload, { statusOverride: 'canceled', scheduledCancelAt: null })
-                if (r?.anchorFirmId) {
-                    await resyncSandboxFreePlanAfterPaidSubscriptionEnd(r.anchorFirmId)
-                    await refreshBillingPlanForFirmGroupUsers(r.anchorFirmId)
+                if (r?.groupId) {
+                    await resyncSandboxFreePlanAfterPaidSubscriptionEnd(r.groupId)
+                    await refreshBillingPlanForFirmGroupUsers(r.groupId)
                 }
             }
         },
         onSubscriptionRevoked: async (payload) => {
             const r = await syncFirmSubscriptionFromPolarEvent(payload, { statusOverride: 'canceled', scheduledCancelAt: null })
-            if (r?.anchorFirmId) {
-                await resyncSandboxFreePlanAfterPaidSubscriptionEnd(r.anchorFirmId)
-                await refreshBillingPlanForFirmGroupUsers(r.anchorFirmId)
-                await clearSubscriptionCancellationRemindersForAdmins(r.anchorFirmId)
+            if (r?.groupId) {
+                await resyncSandboxFreePlanAfterPaidSubscriptionEnd(r.groupId)
+                await refreshBillingPlanForFirmGroupUsers(r.groupId)
+                await clearSubscriptionCancellationRemindersForAdmins(r.groupId)
             }
         },
         onSubscriptionUncanceled: async (payload) => {
             const r = await syncFirmSubscriptionFromPolarEvent(payload, { statusOverride: 'active', scheduledCancelAt: null })
             if (r) {
                 await maybeRevokeFreePolarAfterPaidSubscriptionSync(r)
-                await clearSubscriptionCancellationRemindersForAdmins(r.anchorFirmId)
+                await clearSubscriptionCancellationRemindersForAdmins(r.groupId)
             }
         },
         onPayload: async (payload) => {

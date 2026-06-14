@@ -1,10 +1,10 @@
 import { Polar } from '@polar-sh/sdk'
 import { prisma } from '@/lib/prisma'
 import {
-    getActiveSubscriptionForFirm,
+    getActiveSubscriptionForGroup,
     subscriptionAccessStatusLabel,
 } from '@/lib/billing/active-billing-subscription'
-import { resolveBillingAnchorFirmId } from '@/lib/billing/billing-group'
+import { resolveGroupId } from '@/lib/billing/billing-group'
 
 export type BillingProfilePayload = {
     /** Viewer’s role on workspace firm; portal/cancel are firm_admin-only. */
@@ -85,9 +85,9 @@ async function buildPayload(
     })
     const viewerIsFirmBillingAdmin = viewerMembership?.role === 'firm_admin'
 
-    const anchorId = await resolveBillingAnchorFirmId(workspaceFirm.id)
-    const anchor = await prisma.firm.findUnique({
-        where: { id: anchorId },
+    const groupId = await resolveGroupId(workspaceFirm.id)
+    const anchor = await prisma.firm.findFirst({
+        where: { groupId, sandboxOnly: true, deletedAt: null },
         select: {
             id: true,
             name: true,
@@ -115,7 +115,7 @@ async function buildPayload(
         }
     }
 
-    const activeSub = await getActiveSubscriptionForFirm(anchor.id)
+    const activeSub = await getActiveSubscriptionForGroup(groupId)
     let periodEnd = activeSub?.currentPeriodEnd ?? null
     const polarSubscriptionId = activeSub?.polarSubscriptionId ?? null
     const shouldFetchPolarPeriod = Boolean(polarSubscriptionId) && !periodEnd

@@ -14,6 +14,7 @@ import {
   ChevronsUpDown,
   Filter,
   RotateCw,
+  Clock,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -39,7 +40,7 @@ function entityIcon(entityKey: string): React.ElementType {
 }
 
 type StatusFilter = 'all' | 'overdue' | 'today' | 'upcoming' | 'no-date'
-type EntityFilter = 'all' | 'client' | 'engagement'
+type EntityFilter = 'all' | 'client' | 'engagement' | 'invitation' | 'connector' | 'billing'
 type SortField = 'date' | 'name'
 type SortDir = 'asc' | 'desc'
 
@@ -55,13 +56,17 @@ const ENTITY_LABELS: Record<EntityFilter, string> = {
   all: 'All types',
   client: 'Client',
   engagement: 'Engagement',
+  invitation: 'Invitation',
+  connector: 'Connector',
+  billing: 'Billing',
 }
 
-const STATUS_COLORS: Record<ReminderWithContext['labelStyle'], string> = {
-  slate:  'bg-[#f3f4f6] text-[#45474c]',
-  amber:  'bg-[#FDF0EA] text-[#C4572B]',
-  orange: 'bg-[#FBDDD1] text-[#A33D1E]',
-  red:    'bg-[#F9C8BE] text-[#7A2414]',
+function statusBadgeClass(delta: number | null): string {
+  if (delta === null) return 'bg-[#f3f4f6] text-[#6b7280]'
+  if (delta > 0)      return 'bg-[#dbeafe] text-[#1d4ed8]'   // upcoming — blue
+  if (delta === 0)    return 'bg-[#fef3c7] text-[#b45309]'   // due today — amber
+  if (delta === -1)   return 'bg-[#ffedd5] text-[#c2410c]'   // 1 day overdue — orange
+  return 'bg-[#fee2e2] text-[#b91c1c]'                       // overdue — red
 }
 
 function matchesStatusFilter(r: ReminderWithContext, f: StatusFilter): boolean {
@@ -76,11 +81,14 @@ function matchesStatusFilter(r: ReminderWithContext, f: StatusFilter): boolean {
 function matchesEntityFilter(r: ReminderWithContext, f: EntityFilter): boolean {
   if (f === 'all') return true
   if (f === 'client') return r.entityKey.includes('clients')
-  if (f === 'engagement') return r.entityKey.includes('engagement')
+  if (f === 'engagement') return r.entityKey === 'platform.engagements.id'
+  if (f === 'invitation') return r.entityKey.includes('invitations')
+  if (f === 'connector') return r.entityKey.includes('connectors')
+  if (f === 'billing') return r.entityKey.includes('groups')
   return true
 }
 
-const COLS = '1fr 14% 13% 13% 14% 9%'
+const COLS = '1fr 14% 16% 14% 9%'
 
 type Props = { initialReminders: ReminderWithContext[] }
 
@@ -210,12 +218,11 @@ export function RemindersTable({ initialReminders }: Props) {
               Any type
             </DropdownMenuCheckboxItem>
             <DropdownMenuSeparator />
-            <DropdownMenuCheckboxItem checked={entityFilter === 'client'} onCheckedChange={() => setEntityFilter(entityFilter === 'client' ? 'all' : 'client')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
-              Client
-            </DropdownMenuCheckboxItem>
-            <DropdownMenuCheckboxItem checked={entityFilter === 'engagement'} onCheckedChange={() => setEntityFilter(entityFilter === 'engagement' ? 'all' : 'engagement')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
-              Engagement
-            </DropdownMenuCheckboxItem>
+            {(['client', 'engagement', 'invitation', 'connector', 'billing'] as EntityFilter[]).map((key) => (
+              <DropdownMenuCheckboxItem key={key} checked={entityFilter === key} onCheckedChange={() => setEntityFilter(entityFilter === key ? 'all' : key)} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
+                {ENTITY_LABELS[key]}
+              </DropdownMenuCheckboxItem>
+            ))}
           </DropdownMenuContent>
         </DropdownMenu>
 
@@ -225,13 +232,9 @@ export function RemindersTable({ initialReminders }: Props) {
           </button>
         )}
 
-        <div className="ml-auto flex items-center gap-2">
-          <span className="text-[0.8125rem] text-[#45474c]">
-            {filtered.length} {filtered.length === 1 ? 'reminder' : 'reminders'}
-          </span>
-          <button type="button" disabled={refreshing} onClick={handleRefresh} className="inline-flex items-center gap-1.5 h-8 px-2.5 text-xs rounded-[2px] border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-900 disabled:opacity-40 transition-colors">
+        <div className="ml-auto">
+          <button type="button" disabled={refreshing} onClick={handleRefresh} title="Refresh" className="inline-flex items-center justify-center h-7 w-7 rounded-[4px] bg-white text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-40 transition-colors">
             <RotateCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-            Refresh
           </button>
         </div>
       </div>
@@ -256,9 +259,8 @@ export function RemindersTable({ initialReminders }: Props) {
             onClick={() => toggleSort('date')}
             className="flex items-center gap-1 h-9 text-[0.8125rem] font-medium text-[#45474c] select-none hover:opacity-100 text-left transition-opacity"
           >
-            Due date <SortIcon field="date" />
+            Status <SortIcon field="date" />
           </button>
-          <span className="text-[0.8125rem] font-medium text-[#45474c] select-none">Status</span>
           <span className="text-[0.8125rem] font-medium text-[#45474c] select-none">Note</span>
           <span className="text-[0.8125rem] font-medium text-[#45474c] select-none" />
         </div>
@@ -285,14 +287,12 @@ export function RemindersTable({ initialReminders }: Props) {
                   </span>
                 </a>
                 <span className="text-[0.8125rem] text-[#45474c] truncate">{r.action}</span>
-                <span className="text-[0.8125rem] text-[#45474c]">
-                  {r.dateValue
-                    ? new Date(r.dateValue).toLocaleDateString('en-GB', { year: 'numeric', month: 'short', day: 'numeric' })
-                    : <span className="text-[#9ca3af]">—</span>
-                  }
-                </span>
-                <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold leading-none w-fit ${STATUS_COLORS[r.labelStyle]}`}>
-                  {r.label || 'No date'}
+                <span
+                  title={r.dateValue ? new Date(r.dateValue).toLocaleDateString('en-GB', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }) : undefined}
+                  className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-semibold leading-none w-fit ${statusBadgeClass(r.delta)}`}
+                >
+                  <Clock className="h-3.5 w-3.5 shrink-0" />
+                  {r.label || <span className="text-[#9ca3af] font-normal">No date</span>}
                 </span>
                 <span className="text-[0.8125rem] text-[#45474c] truncate">
                   {r.note || <span className="text-[#9ca3af]">—</span>}

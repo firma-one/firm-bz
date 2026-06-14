@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
-import { resolveBillingAnchorFirmId, listBillableFirmIdsInBillingGroup } from '@/lib/billing/billing-group'
+import { resolveGroupId, listBillableFirmIdsInBillingGroup } from '@/lib/billing/billing-group'
 import { getActiveSubscriptionMetadataForFirm, parseEntitledDocuments } from '@/lib/billing/subscription-metadata'
 
 export async function GET(request: NextRequest) {
@@ -40,8 +40,8 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const anchorFirmId = await resolveBillingAnchorFirmId(engagement.firmId)
-    const metadata = await getActiveSubscriptionMetadataForFirm(anchorFirmId)
+    const groupId = await resolveGroupId(engagement.firmId)
+    const metadata = await getActiveSubscriptionMetadataForFirm(engagement.firmId)
     const cap = parseEntitledDocuments(metadata)
 
     // No cap configured — unlimited
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ allowed: true, cap: null, current: null, count })
     }
 
-    const firmIds = await listBillableFirmIdsInBillingGroup(anchorFirmId)
+    const firmIds = await listBillableFirmIdsInBillingGroup(groupId)
     const current = await prisma.engagementDocument.count({
         where: { firmId: { in: firmIds }, isFolder: false },
     })

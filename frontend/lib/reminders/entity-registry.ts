@@ -68,7 +68,7 @@ registerEntityResolver('platform.engagement_invitations', async (id) => {
         name: inv?.email ?? '',
         slug: null,
         firmSlug,
-        ctaUrl: firmSlug && clientSlug && engSlug ? `/d/f/${firmSlug}/c/${clientSlug}/e/${engSlug}` : null,
+        ctaUrl: firmSlug && clientSlug && engSlug ? `/d/f/${firmSlug}/c/${clientSlug}/e/${engSlug}/members` : null,
     }
 })
 

@@ -24,6 +24,8 @@ export interface FirmOption {
     sandboxOnly: boolean
     logoUrl?: string | null
     themeColor?: string | null
+    groupId?: string | null
+    groupName?: string | null
 }
 
 export interface CreateFirmData {
@@ -46,12 +48,22 @@ export async function getUserFirms(): Promise<FirmOption[]> {
     const user = session.user
 
     try {
-        const firms = await FirmService.getUserFirms(user.id)
+        const memberships = await (prisma as any).firmMember.findMany({
+            where: { userId: user.id },
+            include: {
+                firm: {
+                    include: {
+                        members: true,
+                        group: { select: { id: true, name: true } },
+                    },
+                },
+            },
+            orderBy: { firm: { createdAt: 'asc' } },
+        })
 
-        return firms.map((firm: any) => {
-            // Find the current user's membership to check isDefault
-            const membership = firm.members.find((m: any) => m.userId === user.id)
-
+        return memberships.map((m: any) => {
+            const firm = m.firm
+            const membership = firm.members.find((mem: any) => mem.userId === user.id)
             const branding = (firm.settings as Record<string, any>)?.branding ?? {}
             return {
                 id: firm.id,
@@ -62,6 +74,8 @@ export async function getUserFirms(): Promise<FirmOption[]> {
                 sandboxOnly: firm.sandboxOnly || false,
                 logoUrl: (branding.logoData as string | null | undefined) ?? (branding.logoUrl as string | null | undefined) ?? null,
                 themeColor: (branding.primaryColor as string | null | undefined) ?? null,
+                groupId: firm.groupId ?? null,
+                groupName: firm.group?.name ?? null,
             }
         })
     } catch (err) {
@@ -258,7 +272,7 @@ export async function createFirm(data: CreateFirmData): Promise<FirmOption> {
         lastName,
         allowDomainAccess: data.allowDomainAccess,
         allowedEmailDomain: data.allowedEmailDomain,
-        anchorFirmId: billingAnchorId,
+        groupId: billingAnchorId,
     })
 
     // Set as default

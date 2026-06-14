@@ -296,7 +296,7 @@ export default function UserDataMapPage() {
                                                 firm.computedOnboardingComplete ? 'complete' : 'incomplete'
                                             })`}
                                         />
-                                        <DataRow label="Billing anchor" value={firm.billing.anchorFirmId} mono />
+                                        <DataRow label="Billing group" value={firm.billing.groupId} mono />
                                         <DataRow
                                             label="Active subscription"
                                             value={firm.billing.activeSubscription?.status ?? 'none'}

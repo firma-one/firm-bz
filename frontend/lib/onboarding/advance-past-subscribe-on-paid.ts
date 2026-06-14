@@ -7,7 +7,7 @@ import { logger } from '@/lib/logger'
  * step to "connect Drive" so onboarding resumes at stage 3 without relying on URL flags.
  */
 export async function advanceOnboardingPastSubscribeForBillingAnchor(
-    anchorFirmId: string,
+    groupId: string,
     productId: string | null
 ): Promise<void> {
     const freeId = process.env.POLAR_FREE_PRODUCT_ID?.trim()
@@ -15,7 +15,7 @@ export async function advanceOnboardingPastSubscribeForBillingAnchor(
         return
     }
 
-    const firmIds = await listFirmIdsInBillingGroup(anchorFirmId)
+    const firmIds = await listFirmIdsInBillingGroup(groupId)
     const firms = await prisma.firm.findMany({
         where: { id: { in: firmIds } },
         select: { id: true, settings: true },
@@ -48,7 +48,7 @@ export async function advanceOnboardingPastSubscribeForBillingAnchor(
         })
         logger.info('Onboarding: advanced past subscribe after paid subscription (webhook)', {
             firmId: f.id,
-            anchorFirmId,
+            groupId,
         })
     }
 }

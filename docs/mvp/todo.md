@@ -29,6 +29,13 @@
   - Reminder triggered for Engagement Lead to review and move approved files to `General`
   - On EL move: Staging copy removed, audit event `DOCUMENT_MOVED` recorded
 
+- [ ] **Intake: PENDING_APPROVAL Queue on Shares Tab** — [plan](../../.claude/plans/intake-pending-approval-shares.md) — **VERY HIGH**
+  - Add `PENDING_APPROVAL` to `DocumentSharingPermissionStatus` enum
+  - On EC/EV upload: create `engagement_document_sharing_users` row with `PENDING_APPROVAL` immediately
+  - Shares tab shows pending intakes in muted style with inline Approve / Reject — EL gets a single cross-folder queue
+  - On approve: flip row to `GRANTED` + set `slug` atomically; on reject: cascade delete handles cleanup
+  - Guard `syncDocumentSharingUsers` from overwriting `PENDING_APPROVAL` rows
+
 - [x] **File/Folder operations**
   - [x] Copy to another Engagement — files/folders land in target's General folder; Firm › Client › Engagement picker with tree UI; Move intentionally deferred (non-atomic Drive + DB op)
   - [x] Bulk select & download files or select folder & download
@@ -119,6 +126,10 @@ AI layer using Gemma 4 (HuggingFace Transformers, same runtime as release notes 
 
 - [ ] **QA Test Scenarios** — [confirmation dialogs](../qa/confirmation-dialog-tests.md)
   - Covers: ConfirmDialog component baseline + all 17 call sites (file ops, members, contacts, connectors, settings, dashboard, chat, system admin)
+
+- [ ] **QA Test Scenarios** — [groups billing refactor](../qa/group-refactor-tests.md)
+  - Covers: new-user onboarding group creation, subscription isolation across groups, gate routes cap enforcement, Polar webhook groupId resolution chain, free-plan resync, cancellation reminders, migration SQL integrity
+  - **Known bug B-1:** `firmId: groupId` in `polar-billing-lifecycle.ts:146` — cancellation reminders use default email config instead of firm's custom config
 
 - [ ] **Prisma 7 Upgrade** — [plan](../../.claude/plans/prisma-7-upgrade.md)
   - Phase 1 (now, zero risk): create `frontend/prisma.config.ts`, remove deprecated `package.json#prisma` seed key

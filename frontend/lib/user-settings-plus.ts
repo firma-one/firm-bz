@@ -144,10 +144,39 @@ class UserSettingsPlusCache {
     const { getCapabilitiesForPersona } = await import('./permissions/persona-map')
     const { capabilitySetToScopes } = await import('./permissions/capability-utils')
 
-    // Fetch V2 firm memberships - use role (FirmRole enum)
-    const firmMemberships = await prisma.firmMember.findMany({
+    // Primary query: walk up from engagement_members → engagement → client → firm.
+    // This is correct-by-definition — any user with an engagement membership gets their
+    // firm in the output regardless of whether a firm_members row exists.
+    const engagementMemberships = await prisma.engagementMember.findMany({
       where: { userId },
-      include: {
+      select: {
+        role: true,
+        engagement: {
+          select: {
+            id: true,
+            isDeleted: true,
+            client: {
+              select: {
+                id: true,
+                firmId: true,
+                members: {
+                  where: { userId },
+                  select: { persona: { select: { slug: true } } }
+                }
+              }
+            }
+          }
+        }
+      }
+    })
+
+    // Additive query: firm_admin users may not be on individual engagements but still
+    // need broad firm-level access (they see all clients/engagements in the firm).
+    const firmMemberships = await prisma.firmMember.findMany({
+      where: { userId, role: 'firm_admin' },
+      select: {
+        firmId: true,
+        isDefault: true,
         firm: {
           select: {
             id: true,
@@ -164,15 +193,8 @@ class UserSettingsPlusCache {
                   include: { persona: true }
                 },
                 engagements: {
-                  where: {
-                    members: { some: { userId } },
-                    isDeleted: false
-                  },
-                  include: {
-                    members: {
-                      where: { userId }
-                    }
-                  }
+                  where: { members: { some: { userId } }, isDeleted: false },
+                  include: { members: { where: { userId } } }
                 }
               }
             }
@@ -181,17 +203,83 @@ class UserSettingsPlusCache {
       }
     })
 
+    // Also fetch isDefault for all firm_member rows (needed for the isDefault flag on non-admin firms)
+    const allFirmMemberships = await prisma.firmMember.findMany({
+      where: { userId },
+      select: { firmId: true, isDefault: true, role: true }
+    })
+    const firmMemberByFirmId = new Map(allFirmMemberships.map((m) => [m.firmId, m]))
+
+    // Build firms map from engagement memberships (bottom-up)
+    type FirmBuild = {
+      firmId: string
+      clientMap: Map<string, { clientPersonaSlug: string | null; projectMap: Map<string, { role: string }> }>
+    }
+    const firmBuildMap = new Map<string, FirmBuild>()
+
+    for (const em of engagementMemberships) {
+      if (!em.engagement || em.engagement.isDeleted) continue
+      const { client } = em.engagement
+      if (!client) continue
+
+      if (!firmBuildMap.has(client.firmId)) {
+        firmBuildMap.set(client.firmId, { firmId: client.firmId, clientMap: new Map() })
+      }
+      const firmBuild = firmBuildMap.get(client.firmId)!
+
+      if (!firmBuild.clientMap.has(client.id)) {
+        const clientMember = client.members[0]
+        firmBuild.clientMap.set(client.id, {
+          clientPersonaSlug: clientMember?.persona?.slug ?? null,
+          projectMap: new Map()
+        })
+      }
+      firmBuild.clientMap.get(client.id)!.projectMap.set(em.engagement.id, { role: em.role })
+    }
+
     const firms: FirmPermissions[] = []
+    const coveredFirmIds = new Set<string>()
 
-    for (const firmMember of firmMemberships) {
-      const orgId = firmMember.firm.id
-      const roleSlug = firmMember.role
-      const orgPersonas: string[] = [roleSlug]
-
-      const orgScopes = capabilitySetToScopes(getCapabilitiesForPersona(roleSlug))
+    // Emit firms from engagement-based build
+    for (const [firmId, build] of Array.from(firmBuildMap)) {
+      coveredFirmIds.add(firmId)
+      const membership = firmMemberByFirmId.get(firmId)
+      const firmRole = membership?.role ?? 'eng_viewer'
 
       const clients: ClientPermissions[] = []
-      for (const client of firmMember.firm.clients) {
+      for (const [clientId, clientBuild] of Array.from(build.clientMap)) {
+        const projects: ProjectPermissions[] = []
+        for (const [projectId, projectBuild] of Array.from(clientBuild.projectMap)) {
+          projects.push({
+            id: projectId,
+            persona: projectBuild.role,
+            scopes: capabilitySetToScopes(getCapabilitiesForPersona(projectBuild.role))
+          })
+        }
+        clients.push({
+          id: clientId,
+          scopes: capabilitySetToScopes(getCapabilitiesForPersona(clientBuild.clientPersonaSlug ?? undefined)),
+          projects
+        })
+      }
+
+      firms.push({
+        id: firmId,
+        role: firmRole,
+        personas: [firmRole],
+        scopes: capabilitySetToScopes(getCapabilitiesForPersona(firmRole)),
+        isDefault: membership?.isDefault ?? false,
+        clients
+      })
+    }
+
+    // Additive pass: firm_admin users — add any firms not already covered by engagement memberships
+    for (const fm of firmMemberships) {
+      if (coveredFirmIds.has(fm.firm.id)) continue
+      coveredFirmIds.add(fm.firm.id)
+
+      const clients: ClientPermissions[] = []
+      for (const client of fm.firm.clients) {
         const clientMember = client.members.find((m: any) => m.userId === userId)
         const clientScopes = capabilitySetToScopes(getCapabilitiesForPersona(clientMember?.persona?.slug))
 
@@ -199,29 +287,23 @@ class UserSettingsPlusCache {
         for (const project of client.engagements) {
           const projectMember = project.members.find((m: any) => m.userId === userId)
           if (!projectMember?.role) continue
-
           projects.push({
             id: project.id,
             persona: projectMember.role,
             scopes: capabilitySetToScopes(getCapabilitiesForPersona(projectMember.role))
           })
         }
-
         if (clientMember || projects.length > 0) {
-          clients.push({
-            id: client.id,
-            scopes: clientScopes,
-            projects
-          })
+          clients.push({ id: client.id, scopes: clientScopes, projects })
         }
       }
 
       firms.push({
-        id: orgId,
-        role: roleSlug,
-        personas: orgPersonas,
-        scopes: orgScopes,
-        isDefault: firmMember.isDefault || false,
+        id: fm.firm.id,
+        role: 'firm_admin',
+        personas: ['firm_admin'],
+        scopes: capabilitySetToScopes(getCapabilitiesForPersona('firm_admin')),
+        isDefault: fm.isDefault,
         clients
       })
     }
@@ -303,7 +385,8 @@ class UserSettingsPlusCache {
         firm: {
           select: {
             id: true,
-            anchorFirmId: true,
+            groupId: true,
+            sandboxOnly: true,
           },
         },
       },
@@ -311,40 +394,34 @@ class UserSettingsPlusCache {
 
     if (memberships.length === 0) return {}
 
-    const anchorIds = Array.from(
-      new Set(
-        memberships.map((m) => m.firm.anchorFirmId ?? m.firm.id)
-      )
-    )
-
+    const groupIds = Array.from(new Set(memberships.map((m) => m.firm.groupId)))
     const activeSubs = await prisma.subscription.findMany({
       where: {
-        firmId: { in: anchorIds },
+        groupId: { in: groupIds },
         active: true,
         deletedAt: null,
       },
       select: {
-        firmId: true,
+        groupId: true,
         settings: true,
         createdAt: true,
       },
       orderBy: { createdAt: 'desc' },
     })
 
-    const metadataByAnchor = new Map<string, Record<string, unknown>>()
+    const metadataByGroup = new Map<string, Record<string, unknown>>()
     for (const sub of activeSubs) {
-      if (metadataByAnchor.has(sub.firmId)) continue
+      if (metadataByGroup.has(sub.groupId)) continue
       const settings = (sub.settings as Record<string, unknown> | null) ?? {}
       const metadata = settings && typeof settings === 'object'
         ? ((settings as Record<string, unknown>).metadata as Record<string, unknown> | undefined)
         : undefined
-      metadataByAnchor.set(sub.firmId, metadata && typeof metadata === 'object' ? metadata : {})
+      metadataByGroup.set(sub.groupId, metadata && typeof metadata === 'object' ? metadata : {})
     }
 
     const out: Record<string, Record<string, unknown>> = {}
     for (const membership of memberships) {
-      const anchorId = membership.firm.anchorFirmId ?? membership.firm.id
-      out[membership.firmId] = metadataByAnchor.get(anchorId) ?? {}
+      out[membership.firmId] = metadataByGroup.get(membership.firm.groupId) ?? {}
     }
     return out
   }

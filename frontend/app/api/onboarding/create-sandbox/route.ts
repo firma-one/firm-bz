@@ -27,8 +27,9 @@ async function findOrCreateSandboxShellFirm(params: {
   userId: string
   user: User
   resolvedFirmName: string
+  groupName: string
 }): Promise<SandboxFirmRow> {
-  const { userId, user, resolvedFirmName } = params
+  const { userId, user, resolvedFirmName, groupName } = params
 
   let firm = await prisma.firm.findFirst({
     where: {
@@ -41,12 +42,23 @@ async function findOrCreateSandboxShellFirm(params: {
   })
 
   if (!firm) {
+    const group = await (prisma as any).group.create({
+      data: {
+        name: groupName,
+        createdBy: userId,
+        updatedBy: userId,
+        members: {
+          create: { userId, role: 'GROUP_ADMIN' },
+        },
+      },
+    })
     const created = await FirmService.createFirmWithMember({
       userId,
       email: user.email || '',
       firstName: (user.user_metadata?.first_name as string) || '',
       lastName: (user.user_metadata?.last_name as string) || '',
       firmName: resolvedFirmName,
+      groupId: group.id,
       connectorId: null,
       allowDomainAccess: false,
       sandboxOnly: true,
@@ -126,11 +138,13 @@ export async function POST(request: NextRequest) {
     const { sandboxFirmName: bodyFirmName, sandboxOrgName: legacyOrgName } = body
     const sandboxFirmNameRaw = (typeof bodyFirmName === 'string' ? bodyFirmName : legacyOrgName) as string | undefined
 
-    const resolvedFirmName = (sandboxFirmNameRaw || '').trim() || SANDBOX_FIRM_NAME_FALLBACK
+    const firstName = (user.user_metadata?.first_name as string | undefined)?.trim() || ''
+    const firmGroupName = firstName ? `${firstName}'s Firm Group` : SANDBOX_FIRM_NAME_FALLBACK
+    const resolvedFirmName = (sandboxFirmNameRaw || '').trim() || firmGroupName
 
     logger.info('Sandbox create: shell firm + DB seed', { userId: user.id, sandboxFirmName: resolvedFirmName })
 
-    const firm = await findOrCreateSandboxShellFirm({ userId: user.id, user, resolvedFirmName })
+    const firm = await findOrCreateSandboxShellFirm({ userId: user.id, user, resolvedFirmName, groupName: firmGroupName })
 
     const customerName =
       [user.user_metadata?.first_name, user.user_metadata?.last_name]

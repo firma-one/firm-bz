@@ -1,10 +1,10 @@
 import { prisma } from '@/lib/prisma'
 import {
-    getActiveSubscriptionForFirm,
+    getActiveSubscriptionForGroup,
     subscriptionAccessStatusLabel,
 } from '@/lib/billing/active-billing-subscription'
 import {
-    resolveBillingAnchorFirmId,
+    resolveGroupId,
     countBillableFirmsInBillingGroup,
     listBillableFirmIdsInBillingGroup,
 } from '@/lib/billing/billing-group'
@@ -47,6 +47,7 @@ function planEngagementCapFallback(plan: string | null): number {
 
 export type AnchorCapsRow = {
     id: string
+    groupId: string
     sandboxOnly: boolean
     subscriptionStatus: string | null
     subscriptionPlan: string | null
@@ -63,23 +64,16 @@ export type AnchorCapsRow = {
 }
 
 export async function loadAnchorForCaps(firmId: string): Promise<AnchorCapsRow | null> {
-    const anchorId = await resolveBillingAnchorFirmId(firmId)
-    const [anchor, requestingFirm] = await Promise.all([
-        prisma.firm.findUnique({ where: { id: anchorId }, select: { id: true, sandboxOnly: true } }),
-        anchorId !== firmId
-            ? prisma.firm.findUnique({ where: { id: firmId }, select: { sandboxOnly: true } })
-            : null,
-    ])
-    if (!anchor) return null
-    // Use the requesting firm's own isAnchor flag — not the anchor's — so a real firm
-    // grouped under a sandbox anchor still gets its plan entitlements enforced.
-    const sandboxOnly = requestingFirm != null ? isAnchorFirm(requestingFirm) : isAnchorFirm(anchor)
-    const sub = await getActiveSubscriptionForFirm(anchorId)
+    const groupId = await resolveGroupId(firmId)
+    const requestingFirm = await prisma.firm.findUnique({ where: { id: firmId }, select: { id: true, sandboxOnly: true } })
+    if (!requestingFirm) return null
+    const sub = await getActiveSubscriptionForGroup(groupId)
     const settings = (sub?.settings ?? {}) as Record<string, unknown>
     const meta = (settings.metadata ?? {}) as Record<string, unknown>
     return {
-        id: anchor.id,
-        sandboxOnly,
+        id: requestingFirm.id,
+        groupId,
+        sandboxOnly: isAnchorFirm(requestingFirm),
         subscriptionStatus: subscriptionAccessStatusLabel(sub),
         subscriptionPlan: sub?.plan ?? null,
         pricingModel: sub?.pricingModel ?? null,
@@ -157,7 +151,7 @@ export async function assertWithinActiveEngagementCap(workspaceFirmId: string): 
     if (isSandboxAnchor && (anchor.entitledEngagements == null || anchor.entitledEngagements < 0)) return
 
     const cap = effectiveActiveEngagementCap(anchor)
-    const groupFirmIds = await listBillableFirmIdsInBillingGroup(anchor.id)
+    const groupFirmIds = await listBillableFirmIdsInBillingGroup(anchor.groupId)
     const count = await prisma.engagement.count({
         where: {
             firmId: { in: groupFirmIds },
@@ -172,20 +166,25 @@ export async function assertWithinActiveEngagementCap(workspaceFirmId: string): 
     }
 }
 
-/** Firm workspaces allowed for this billing anchor (anchor + satellites). Sandbox firm excluded from count. */
-export async function assertWithinFirmGroupCap(anchorFirmId: string): Promise<void> {
+/** Firm workspaces allowed for this billing group. Sandbox firm excluded from count. */
+export async function assertWithinFirmGroupCap(groupId: string): Promise<void> {
     if (!enforceBillingCaps()) return
 
-    const anchor = await loadAnchorForCaps(anchorFirmId)
+    // Find the sandbox firm in the group to load caps from
+    const sandboxFirm = await prisma.firm.findFirst({
+        where: { groupId, sandboxOnly: true, deletedAt: null },
+        select: { id: true },
+    })
+    if (!sandboxFirm) return
+
+    const anchor = await loadAnchorForCaps(sandboxFirm.id)
     if (!anchor) return
 
-    // For free plan (sandbox defaults): cap comes from entitledFirms (non-sandbox firms only).
-    // For paid plan: cap comes from effectiveFirmGroupCapForAnchor.
     const cap = anchorUsesSandboxCapDefaults(anchor)
         ? (anchor.entitledFirms ?? 1)
         : effectiveFirmGroupCapForAnchor(anchor)
 
-    const n = await countBillableFirmsInBillingGroup(anchorFirmId)
+    const n = await countBillableFirmsInBillingGroup(groupId)
     if (n >= cap) {
         throw new Error(
             `Your plan allows ${cap} firm workspace${cap === 1 ? '' : 's'}. Upgrade or contact support to add more.`
@@ -203,7 +202,7 @@ export async function assertWithinClientCap(firmId: string): Promise<void> {
     const cap = effectiveClientCap(anchor)
     if (cap === null) return
 
-    const groupFirmIds = await listBillableFirmIdsInBillingGroup(anchor.id)
+    const groupFirmIds = await listBillableFirmIdsInBillingGroup(anchor.groupId)
     const count = await prisma.client.count({
         where: { firmId: { in: groupFirmIds }, deletedAt: null },
     })
@@ -224,7 +223,7 @@ export async function assertWithinClientContactCap(firmId: string): Promise<void
     const cap = effectiveClientContactCap(anchor)
     if (cap === null) return
 
-    const groupFirmIds = await listBillableFirmIdsInBillingGroup(anchor.id)
+    const groupFirmIds = await listBillableFirmIdsInBillingGroup(anchor.groupId)
     const count = await prisma.clientContact.count({
         where: { firmId: { in: groupFirmIds } },
     })
@@ -249,7 +248,7 @@ export async function assertWithinDocumentCap(firmId: string, batchSize = 1): Pr
     const cap = effectiveDocumentCap(anchor)
     if (cap === null) return
 
-    const groupFirmIds = await listBillableFirmIdsInBillingGroup(anchor.id)
+    const groupFirmIds = await listBillableFirmIdsInBillingGroup(anchor.groupId)
     const count = await prisma.engagementDocument.count({
         where: { firmId: { in: groupFirmIds }, isFolder: false },
     })

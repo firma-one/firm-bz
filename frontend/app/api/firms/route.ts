@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
       firmName,
       allowDomainAccess,
       allowedEmailDomain,
-      anchorFirmId: billingAnchorId,
+      groupId: billingAnchorId,
     })
 
     return NextResponse.json({ firm })

@@ -131,6 +131,7 @@ enum NotificationPriority {
 }
 
 enum DocumentSharingPermissionStatus {
+  PENDING_APPROVAL
   GRANTED
   REVOKED
 
@@ -177,6 +178,40 @@ model Connector {
   @@schema("platform")
 }
 
+model Group {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String
+  settings  Json     @default("{}")
+  createdBy String?  @db.Uuid
+  createdAt DateTime @default(now())
+  updatedBy String?  @db.Uuid
+  updatedAt DateTime @updatedAt
+
+  firms         Firm[]
+  members       GroupMember[]
+  subscriptions Subscription[]
+
+  @@map("groups")
+  @@schema("platform")
+}
+
+model GroupMember {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  groupId   String   @db.Uuid
+  userId    String   @db.Uuid
+  role      String   @default("GROUP_MEMBER")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+  @@index([groupId])
+  @@index([userId])
+  @@map("group_members")
+  @@schema("platform")
+}
+
 model Firm {
   id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name               String
@@ -191,18 +226,15 @@ model Firm {
   settings           Json     @default("{}")
   allowDomainAccess  Boolean  @default(false)
   allowedEmailDomain String?
-  /** Optional umbrella anchor: satellites point to an anchor firm id (one-level hierarchy). */
-  anchorFirmId        String?  @db.Uuid
+  groupId            String   @db.Uuid
 
   connectorId        String?  @db.Uuid
   firmFolderId       String?
   sandboxOnly        Boolean  @default(false) @map("isAnchor")
 
+  group             Group             @relation(fields: [groupId], references: [id])
   connector         Connector?        @relation("LegacyFirmConnector", fields: [connectorId], references: [id])
   connectors        Connector[]       @relation("FirmConnectors")
-  anchorFirm        Firm?             @relation("FirmAnchorHierarchy", fields: [anchorFirmId], references: [id], onDelete: SetNull)
-  anchoredFirms     Firm[]            @relation("FirmAnchorHierarchy")
-  subscriptions             Subscription[]
   clients           Client[]
   engagements       Engagement[]
   members           FirmMember[]
@@ -212,7 +244,7 @@ model Firm {
   platformAuditEvents PlatformAuditEvent[]
   workspaceMigrations FirmWorkspaceMigration[]
 
-  @@index([anchorFirmId])
+  @@index([groupId])
   @@map("firms")
   @@schema("platform")
 }
@@ -269,7 +301,7 @@ model Subscription {
   updatedBy          String?   @db.Uuid
   deletedAt          DateTime? @db.Timestamptz(6)
   deactivatedAt      DateTime? @db.Timestamptz(6)
-  firmId             String    @db.Uuid
+  groupId            String    @db.Uuid
   provider           String?   @default("polar")
   plan               String?
   /** `recurring_subscription` | `one_time_purchase` — mirrors Polar product recurrence for caps/UI. */
@@ -283,9 +315,9 @@ model Subscription {
   active             Boolean   @default(true)
   settings           Json      @default("{}")
 
-  firm               Firm      @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  group              Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
-  @@index([firmId, active])
+  @@index([groupId, active])
   @@index([polarCustomerId])
   @@index([polarSubscriptionId])
   @@map("subscriptions")

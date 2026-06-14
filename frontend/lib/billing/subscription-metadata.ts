@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import { resolveBillingAnchorFirmId } from '@/lib/billing/billing-group'
+import { resolveGroupId } from '@/lib/billing/billing-group'
 
 type JsonRecord = Record<string, unknown>
 
@@ -17,10 +17,10 @@ function parseIntLike(value: unknown): number | null {
 }
 
 export async function getActiveSubscriptionMetadataForFirm(firmId: string): Promise<JsonRecord> {
-    const anchorFirmId = await resolveBillingAnchorFirmId(firmId)
+    const groupId = await resolveGroupId(firmId)
     const row = await prisma.subscription.findFirst({
         where: {
-            firmId: anchorFirmId,
+            groupId,
             active: true,
             deletedAt: null,
         },

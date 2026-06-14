@@ -102,7 +102,8 @@ export async function inviteMember(projectId: string, email: string, personaId: 
             personaId,
             token,
             status: InvitationStatus.PENDING,
-            expireAt
+            expireAt,
+            createdBy: user.id,
         }
     })
 
@@ -392,7 +393,7 @@ export async function acceptInvitation(token: string): Promise<{ success: true; 
         }
         await invalidateUserSettingsPlus(user.id)
         if (invite.createdBy) {
-            await removeRemindersByEntity(invite.createdBy, 'platform.firm_invitations.id', invite.id).catch(() => {})
+            await removeRemindersByEntity(invite.createdBy, 'platform.firm_invitations', invite.id).catch(() => {})
         }
         if (!existing && !hadDefaultFirm) {
             try {

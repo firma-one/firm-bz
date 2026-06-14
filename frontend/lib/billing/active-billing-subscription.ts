@@ -1,10 +1,10 @@
 import { prisma } from '@/lib/prisma'
 import type { Subscription } from '@prisma/client'
 
-/** Active billing row for a firm (at most one; partial unique index + webhook maintain). */
-export async function getActiveSubscriptionForFirm(firmId: string): Promise<Subscription | null> {
+/** Active billing row for a group (at most one; partial unique index + webhook maintain). */
+export async function getActiveSubscriptionForGroup(groupId: string): Promise<Subscription | null> {
     return prisma.subscription.findFirst({
-        where: { firmId, active: true, deletedAt: null },
+        where: { groupId, active: true, deletedAt: null },
         orderBy: { updatedAt: 'desc' },
     })
 }
@@ -15,20 +15,20 @@ export function subscriptionAccessStatusLabel(sub: Pick<Subscription, 'active'> 
     return 'active'
 }
 
-export async function findFirmIdByPolarCustomerId(customerId: string): Promise<string | null> {
+export async function findGroupIdByPolarCustomerId(customerId: string): Promise<string | null> {
     const row = await prisma.subscription.findFirst({
         where: { polarCustomerId: customerId, deletedAt: null },
         orderBy: { updatedAt: 'desc' },
-        select: { firmId: true },
+        select: { groupId: true },
     })
-    return row?.firmId ?? null
+    return row?.groupId ?? null
 }
 
-export async function findFirmIdByPolarSubscriptionId(subscriptionId: string): Promise<string | null> {
+export async function findGroupIdByPolarSubscriptionId(subscriptionId: string): Promise<string | null> {
     const row = await prisma.subscription.findFirst({
         where: { polarSubscriptionId: subscriptionId, deletedAt: null },
         orderBy: { updatedAt: 'desc' },
-        select: { firmId: true },
+        select: { groupId: true },
     })
-    return row?.firmId ?? null
+    return row?.groupId ?? null
 }

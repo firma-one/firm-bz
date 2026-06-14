@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Polar } from '@polar-sh/sdk'
 import { prisma } from '@/lib/prisma'
 import { createClient } from '@/utils/supabase/server'
-import { getActiveSubscriptionForFirm } from '@/lib/billing/active-billing-subscription'
-import { resolveBillingAnchorFirmId } from '@/lib/billing/billing-group'
+import { getActiveSubscriptionForGroup } from '@/lib/billing/active-billing-subscription'
+import { resolveGroupId } from '@/lib/billing/billing-group'
 import { refreshBillingPlanForFirmGroupUsers } from '@/lib/billing/billing-user-session-sync'
 function polarServer(): 'production' | 'sandbox' {
     return process.env.POLAR_SERVER === 'production' ? 'production' : 'sandbox'
@@ -43,8 +43,8 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Only firm admins can cancel subscriptions.' }, { status: 403 })
     }
 
-    const anchorId = await resolveBillingAnchorFirmId(firmId)
-    const activeSub = await getActiveSubscriptionForFirm(anchorId)
+    const groupId = await resolveGroupId(firmId)
+    const activeSub = await getActiveSubscriptionForGroup(groupId)
     if (!activeSub?.polarSubscriptionId) {
         return NextResponse.json(
             { error: 'No active recurring subscription found for this workspace.' },
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
         },
     })
 
-    await refreshBillingPlanForFirmGroupUsers(anchorId)
+    await refreshBillingPlanForFirmGroupUsers(groupId)
 
     return NextResponse.json({
         ok: true,

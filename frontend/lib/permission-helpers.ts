@@ -217,9 +217,10 @@ export async function checkProjectPermission(
     if (dbFirmMembership?.role === 'firm_admin') {
       return true
     }
-    // Only internal roles fall back here — EC/EV access is covered by userSettingsPlus scopes.
-    const internalEngagementRoles = ['eng_admin', 'eng_member']
-    if (dbEngagementMembership && internalEngagementRoles.includes(dbEngagementMembership.role)) {
+    // All engagement roles grant can_view. Include EC/EV here so the fallback is correct
+    // even when the UserSettingsPlus cache is stale or cross-pod invalidation hasn't propagated.
+    const viewableEngagementRoles = ['eng_admin', 'eng_member', 'eng_ext_collaborator', 'eng_viewer']
+    if (dbEngagementMembership && viewableEngagementRoles.includes(dbEngagementMembership.role)) {
       return true
     }
   } catch (dbError) {

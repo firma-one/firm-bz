@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
 import { ensurePolarFreePlanForSandboxFirm } from '@/lib/billing/polar-free-plan'
 import { upsertFollowUpReminder } from '@/lib/actions/user-reminders'
+import { createAdminClient } from '@/utils/supabase/admin'
 
 function polarServer(): 'production' | 'sandbox' {
     return process.env.POLAR_SERVER === 'production' ? 'production' : 'sandbox'
@@ -19,7 +20,7 @@ function polarClient(): Polar | null {
  * on the same customer (both free and other paid duplicates) to prevent double-subscriptions.
  */
 export async function revokeAllOtherPolarSubscriptions(params: {
-    anchorFirmId: string
+    groupId: string
     keepSubscriptionId: string
 }): Promise<void> {
     const polar = polarClient()
@@ -30,10 +31,10 @@ export async function revokeAllOtherPolarSubscriptions(params: {
 
     let state: Awaited<ReturnType<Polar['customers']['getStateExternal']>>
     try {
-        state = await polar.customers.getStateExternal({ externalId: params.anchorFirmId })
+        state = await polar.customers.getStateExternal({ externalId: params.groupId })
     } catch (e) {
         logger.warn('[polar-billing-lifecycle] getStateExternal failed; cannot revoke subscriptions', {
-            anchorFirmId: params.anchorFirmId,
+            groupId: params.groupId,
             message: e instanceof Error ? e.message : String(e),
         })
         return
@@ -45,7 +46,7 @@ export async function revokeAllOtherPolarSubscriptions(params: {
         try {
             await polar.subscriptions.revoke({ id: sub.id })
             logger.warn('[polar-billing-lifecycle] Revoked duplicate Polar subscription', {
-                anchorFirmId: params.anchorFirmId,
+                groupId: params.groupId,
                 revokedSubscriptionId: sub.id,
                 revokedProductId: sub.productId,
                 keptSubscriptionId: params.keepSubscriptionId,
@@ -55,7 +56,7 @@ export async function revokeAllOtherPolarSubscriptions(params: {
                 '[polar-billing-lifecycle] Failed to revoke Polar subscription',
                 e instanceof Error ? e : new Error(String(e)),
                 undefined,
-                { anchorFirmId: params.anchorFirmId, subscriptionId: sub.id }
+                { groupId: params.groupId, subscriptionId: sub.id }
             )
         }
     }
@@ -65,36 +66,50 @@ export async function revokeAllOtherPolarSubscriptions(params: {
  * When a paid subscription ends (canceled/revoked), re-provision the sandbox anchor’s free Polar
  * subscription so the firm row can show an active free tier again.
  */
-export async function resyncSandboxFreePlanAfterPaidSubscriptionEnd(anchorFirmId: string): Promise<void> {
-    const firm = await prisma.firm.findFirst({
-        where: { id: anchorFirmId, deletedAt: null },
-        select: { sandboxOnly: true },
+export async function resyncSandboxFreePlanAfterPaidSubscriptionEnd(groupId: string): Promise<void> {
+    const sandboxFirm = await prisma.firm.findFirst({
+        where: { groupId, sandboxOnly: true, deletedAt: null },
+        select: { id: true },
     })
-    if (!firm?.sandboxOnly) return
+    if (!sandboxFirm) return
 
-    // Users/emails live in Supabase, not Prisma; free-plan restore uses existing Polar customer when present.
-    const userEmail = `billing-resync+${anchorFirmId.replace(/-/g, '').slice(0, 12)}@sandbox.invalid`
+    // Look up the group admin's email from GroupMember + Supabase.
+    let userEmail = `billing-resync+${groupId.replace(/-/g, '').slice(0, 12)}@sandbox.invalid`
+    try {
+        const adminMember = await prisma.groupMember.findFirst({
+            where: { groupId, role: 'GROUP_ADMIN' },
+            select: { userId: true },
+        })
+        if (adminMember) {
+            const supabase = createAdminClient()
+            const { data } = await supabase.auth.admin.getUserById(adminMember.userId)
+            if (data.user?.email) userEmail = data.user.email
+        }
+    } catch {
+        // Fall back to synthetic email — Polar will find the existing customer by externalId.
+    }
 
     try {
         await ensurePolarFreePlanForSandboxFirm({
-            firmId: anchorFirmId,
+            firmId: sandboxFirm.id,
             userEmail,
         })
         logger.warn('[polar-billing-lifecycle] Resynced sandbox free Polar plan after paid subscription ended', {
-            anchorFirmId,
+            groupId,
+            sandboxFirmId: sandboxFirm.id,
         })
     } catch (e) {
         logger.error(
             '[polar-billing-lifecycle] Failed to resync sandbox free plan after paid subscription ended',
             e instanceof Error ? e : new Error(String(e)),
             undefined,
-            { anchorFirmId }
+            { groupId }
         )
     }
 }
 
 export type PaidSubscriptionSyncContext = {
-    anchorFirmId: string
+    groupId: string
     subscriptionId: string | null
     productId: string | null
     status: 'active' | 'trialing' | 'past_due' | 'canceled' | 'unpaid' | 'none'
@@ -105,33 +120,30 @@ export type PaidSubscriptionSyncContext = {
  * Called when subscription.canceled arrives with a future ends_at (scheduled cancellation).
  */
 export async function createSubscriptionCancellationRemindersForAdmins(
-    anchorFirmId: string,
+    groupId: string,
     cancelAt: Date
 ): Promise<void> {
     const admins = await prisma.firmMember.findMany({
         where: {
-            firm: {
-                OR: [{ id: anchorFirmId }, { anchorFirmId }],
-                deletedAt: null,
-            },
+            firm: { groupId, deletedAt: null },
             role: 'firm_admin',
         },
-        select: { userId: true },
+        select: { userId: true, firmId: true },
     })
 
     const dateValue = cancelAt.toISOString().split('T')[0]
 
     await Promise.all(
-        admins.map(({ userId }) =>
+        admins.map(({ userId, firmId }) =>
             upsertFollowUpReminder({
                 userId,
-                entityKey: 'platform.firms',
-                entityValue: anchorFirmId,
+                entityKey: 'platform.groups',
+                entityValue: groupId,
                 action: 'Reactivate subscription before access ends',
                 dateKey: null,
                 dateValue,
                 entityName: 'Billing',
-                firmId: anchorFirmId,
+                firmId,
                 ctaUrl: '/d/billing',
                 note: 'Subscription cancelled — non-sandbox firms lose access on this date.',
             }).catch((e) =>
@@ -139,14 +151,14 @@ export async function createSubscriptionCancellationRemindersForAdmins(
                     '[polar-billing-lifecycle] Failed to create cancellation reminder',
                     e instanceof Error ? e : new Error(String(e)),
                     undefined,
-                    { anchorFirmId, userId }
+                    { groupId, userId }
                 )
             )
         )
     )
 
     logger.info('[polar-billing-lifecycle] Created subscription cancellation reminders for admins', {
-        anchorFirmId,
+        groupId,
         adminCount: admins.length,
         cancelAt: cancelAt.toISOString(),
     })
@@ -157,20 +169,16 @@ export async function createSubscriptionCancellationRemindersForAdmins(
  * Called on subscription.uncanceled or subscription.revoked (reminders no longer relevant).
  */
 export async function clearSubscriptionCancellationRemindersForAdmins(
-    anchorFirmId: string
+    groupId: string
 ): Promise<void> {
     const admins = await prisma.firmMember.findMany({
         where: {
-            firm: {
-                OR: [{ id: anchorFirmId }, { anchorFirmId }],
-                deletedAt: null,
-            },
+            firm: { groupId, deletedAt: null },
             role: 'firm_admin',
         },
         select: { userId: true },
     })
 
-    // Load each admin's reminders and remove matching platform.firms entries for this anchor.
     await Promise.all(
         admins.map(async ({ userId }) => {
             try {
@@ -181,7 +189,7 @@ export async function clearSubscriptionCancellationRemindersForAdmins(
                 if (!p) return
                 const items = Array.isArray(p.reminders) ? (p.reminders as any[]) : []
                 const filtered = items.filter(
-                    (r) => !(r.entityKey === 'platform.firms' && r.entityValue === anchorFirmId)
+                    (r) => !(r.entityKey === 'platform.groups' && r.entityValue === groupId)
                 )
                 if (filtered.length === items.length) return
                 await prisma.userPersonalization.update({
@@ -193,14 +201,14 @@ export async function clearSubscriptionCancellationRemindersForAdmins(
                     '[polar-billing-lifecycle] Failed to clear cancellation reminder',
                     e instanceof Error ? e : new Error(String(e)),
                     undefined,
-                    { anchorFirmId, userId }
+                    { groupId, userId }
                 )
             }
         })
     )
 
     logger.info('[polar-billing-lifecycle] Cleared subscription cancellation reminders for admins', {
-        anchorFirmId,
+        groupId,
         adminCount: admins.length,
     })
 }
@@ -213,7 +221,7 @@ export async function maybeRevokeFreePolarAfterPaidSubscriptionSync(ctx: PaidSub
     if (ctx.status !== 'active' && ctx.status !== 'trialing') return
 
     await revokeAllOtherPolarSubscriptions({
-        anchorFirmId: ctx.anchorFirmId,
+        groupId: ctx.groupId,
         keepSubscriptionId: ctx.subscriptionId,
     })
 }

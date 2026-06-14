@@ -79,6 +79,31 @@ CREATE TABLE "platform"."connectors" (
 );
 
 -- CreateTable
+CREATE TABLE "platform"."groups" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "name" TEXT NOT NULL,
+    "settings" JSONB NOT NULL DEFAULT '{}',
+    "createdBy" UUID,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedBy" UUID,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "groups_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "platform"."group_members" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "groupId" UUID NOT NULL,
+    "userId" UUID NOT NULL,
+    "role" TEXT NOT NULL DEFAULT 'GROUP_MEMBER',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "group_members_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "platform"."firms" (
     "id" UUID NOT NULL DEFAULT gen_random_uuid(),
     "name" TEXT NOT NULL,
@@ -96,7 +121,7 @@ CREATE TABLE "platform"."firms" (
     "billingGroupFirmCap" INTEGER,
     "billingActiveEngagementCap" INTEGER,
     "billingCapsLocked" BOOLEAN NOT NULL DEFAULT false,
-    "anchorFirmId" UUID,
+    "groupId" UUID NOT NULL,
     "brandingSubtext" TEXT,
     "logoUrl" TEXT,
     "themeColorHex" TEXT,
@@ -116,7 +141,7 @@ CREATE TABLE "platform"."subscriptions" (
     "updatedBy" UUID,
     "deletedAt" TIMESTAMPTZ(6),
     "deactivatedAt" TIMESTAMPTZ(6),
-    "firmId" UUID NOT NULL,
+    "groupId" UUID NOT NULL,
     "provider" TEXT DEFAULT 'polar',
     "plan" TEXT,
     "pricingModel" TEXT,
@@ -511,10 +536,19 @@ CREATE UNIQUE INDEX "firms_slug_key" ON "platform"."firms"("slug");
 CREATE INDEX "firms_billingSharesSubscriptionFromFirmId_idx" ON "platform"."firms"("billingSharesSubscriptionFromFirmId");
 
 -- CreateIndex
-CREATE INDEX "firms_anchorFirmId_idx" ON "platform"."firms"("anchorFirmId");
+CREATE INDEX "group_members_groupId_idx" ON "platform"."group_members"("groupId");
 
 -- CreateIndex
-CREATE INDEX "subscriptions_firmId_active_idx" ON "platform"."subscriptions"("firmId", "active");
+CREATE INDEX "group_members_userId_idx" ON "platform"."group_members"("userId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "group_members_groupId_userId_key" ON "platform"."group_members"("groupId", "userId");
+
+-- CreateIndex
+CREATE INDEX "firms_groupId_idx" ON "platform"."firms"("groupId");
+
+-- CreateIndex
+CREATE INDEX "subscriptions_groupId_active_idx" ON "platform"."subscriptions"("groupId", "active");
 
 -- CreateIndex
 CREATE INDEX "subscriptions_polarCustomerId_idx" ON "platform"."subscriptions"("polarCustomerId");
@@ -622,13 +656,16 @@ ALTER TABLE "platform"."connectors" ADD CONSTRAINT "connectors_firmId_fkey" FORE
 ALTER TABLE "platform"."firms" ADD CONSTRAINT "firms_connectorId_fkey" FOREIGN KEY ("connectorId") REFERENCES "platform"."connectors"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "platform"."firms" ADD CONSTRAINT "firms_anchorFirmId_fkey" FOREIGN KEY ("anchorFirmId") REFERENCES "platform"."firms"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "platform"."group_members" ADD CONSTRAINT "group_members_groupId_fkey" FOREIGN KEY ("groupId") REFERENCES "platform"."groups"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "platform"."firms" ADD CONSTRAINT "firms_groupId_fkey" FOREIGN KEY ("groupId") REFERENCES "platform"."groups"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "platform"."firms" ADD CONSTRAINT "firms_billingSharesSubscriptionFromFirmId_fkey" FOREIGN KEY ("billingSharesSubscriptionFromFirmId") REFERENCES "platform"."firms"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "platform"."subscriptions" ADD CONSTRAINT "subscriptions_firmId_fkey" FOREIGN KEY ("firmId") REFERENCES "platform"."firms"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "platform"."subscriptions" ADD CONSTRAINT "subscriptions_groupId_fkey" FOREIGN KEY ("groupId") REFERENCES "platform"."groups"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "platform"."clients" ADD CONSTRAINT "clients_firmId_fkey" FOREIGN KEY ("firmId") REFERENCES "platform"."firms"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -726,6 +763,6 @@ ALTER TABLE "platform"."platform_audit_events" ADD CONSTRAINT "platform_audit_ev
 -- AddForeignKey
 ALTER TABLE "platform"."platform_audit_events" ADD CONSTRAINT "platform_audit_events_projectDocumentId_fkey" FOREIGN KEY ("projectDocumentId") REFERENCES "platform"."engagement_documents"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
--- At most one active, non-deleted subscription row per firm (webhook + free-tier provisioning).
-CREATE UNIQUE INDEX "subscriptions_one_active_per_firm" ON "platform"."subscriptions" ("firmId")
+-- At most one active, non-deleted subscription row per group (webhook + free-tier provisioning).
+CREATE UNIQUE INDEX "subscriptions_one_active_per_group" ON "platform"."subscriptions" ("groupId")
 WHERE "active" = true AND "deletedAt" IS NULL;

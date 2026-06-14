@@ -19,6 +19,8 @@ export type ReminderItem = {
     hiddenAt: string | null  // null = visible
     createdAt: string        // ISO date
     note?: string | null     // optional user note
+    entityName?: string      // cached fallback — used when entity is deleted
+    ctaUrl?: string | null   // cached fallback — used when entity is deleted
 }
 
 // ─── Context shape returned to UI ────────────────────────────────────────────
@@ -119,7 +121,13 @@ export async function getUserReminders(): Promise<ReminderWithContext[]> {
     const resolved = await Promise.all(
         inWindow.map(async (item): Promise<ReminderWithContext | null> => {
             const ctx = await resolveEntity(item.entityKey, item.entityValue)?.catch(() => null) ?? null
-            if (!ctx) return null
+
+            // Fall back to cached name/ctaUrl when entity has been deleted
+            const entityName = (ctx?.name || item.entityName) ?? ''
+            const ctaUrl = ctx?.ctaUrl ?? item.ctaUrl ?? null
+
+            // Drop the reminder only if we have no name at all (no cache either)
+            if (!entityName) return null
 
             let delta: number | null = null
             let label = ''
@@ -142,10 +150,10 @@ export async function getUserReminders(): Promise<ReminderWithContext[]> {
                 dateValue: item.dateValue,
                 hiddenAt: item.hiddenAt,
                 note: item.note ?? null,
-                entityName: ctx.name,
-                entitySlug: ctx.slug,
-                firmSlug: ctx.firmSlug,
-                ctaUrl: ctx.ctaUrl,
+                entityName,
+                entitySlug: ctx?.slug ?? null,
+                firmSlug: ctx?.firmSlug ?? null,
+                ctaUrl,
                 delta,
                 label,
                 labelStyle,
@@ -223,6 +231,8 @@ export async function upsertFollowUpReminder(params: {
             hiddenAt: null,
             createdAt: new Date().toISOString(),
             note: params.note ?? null,
+            entityName: params.entityName,
+            ctaUrl: params.ctaUrl,
         }
         await saveItems(params.userId, [...items, newItem])
         await scheduleReminderEmail(id, params)

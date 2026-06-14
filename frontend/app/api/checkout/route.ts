@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { createClient } from '@/utils/supabase/server'
 import { validateCheckoutReturnTo } from '@/lib/billing/checkout-return-path'
-import { resolveBillingAnchorFirmId } from '@/lib/billing/billing-group'
+import { resolveGroupId } from '@/lib/billing/billing-group'
 
 function polarServer(): 'sandbox' | 'production' {
     return process.env.POLAR_SERVER === 'production' ? 'production' : 'sandbox'
@@ -86,13 +86,13 @@ async function checkoutHandler(request: NextRequest) {
     }
 
     if (!reqUrl.searchParams.get('customerExternalId')) {
-        const anchorFirmId = await resolveBillingAnchorFirmId(firmId)
-        reqUrl.searchParams.set('customerExternalId', anchorFirmId)
+        const groupId = await resolveGroupId(firmId)
+        reqUrl.searchParams.set('customerExternalId', groupId)
     }
 
     if (!reqUrl.searchParams.get('metadata')) {
-        const anchorFirmId = await resolveBillingAnchorFirmId(firmId)
-        reqUrl.searchParams.set('metadata', JSON.stringify({ firmId: anchorFirmId }))
+        const groupId = await resolveGroupId(firmId)
+        reqUrl.searchParams.set('metadata', JSON.stringify({ groupId }))
     }
 
     const returnToRaw = reqUrl.searchParams.get('returnTo')
