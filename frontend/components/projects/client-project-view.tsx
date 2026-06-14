@@ -283,7 +283,7 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                                                         className="h-auto px-4 py-1.5 rounded-[2px] bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-primary hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1.5"
                                                     >
                                                         <SquarePlus className="h-3.5 w-3.5" />
-                                                        New Engagement
+                                                        Add Engagement
                                                     </Button>
                                                 }
                                             />

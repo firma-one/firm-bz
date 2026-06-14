@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Building2, ArrowRight, Loader2, SquarePlus, Box, Home, ChevronRight, LayoutGrid } from 'lucide-react'
 import { getDomainOnboardingOptionsForCurrentUser, joinOrganizationByDomain, type DomainOnboardingOptions, type DomainOrgOption } from '@/lib/actions/domain-onboarding'
-import { getUserFirms, type FirmOption } from '@/lib/actions/firms'
+import { getUserFirms, getIsAdminOnAnyFirm, type FirmOption } from '@/lib/actions/firms'
 import { BRAND_NAME } from '@/config/brand'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
@@ -15,6 +15,7 @@ export default function WorkspacePickerPage() {
     const router = useRouter()
     const [firms, setFirms] = useState<FirmOption[]>([])
     const [domainOptions, setDomainOptions] = useState<DomainOnboardingOptions | null>(null)
+    const [isAdminOnAnyFirm, setIsAdminOnAnyFirm] = useState(false)
     const [addFirmOpen, setAddFirmOpen] = useState(false)
     const [loading, setLoading] = useState(true)
     const [joiningId, setJoiningId] = useState<string | null>(null)
@@ -22,12 +23,14 @@ export default function WorkspacePickerPage() {
 
     useEffect(() => {
         async function load() {
-            const [userFirms, opts] = await Promise.all([
+            const [userFirms, opts, isAdmin] = await Promise.all([
                 getUserFirms(),
                 getDomainOnboardingOptionsForCurrentUser(),
+                getIsAdminOnAnyFirm(),
             ])
             setFirms(userFirms)
             setDomainOptions(opts)
+            setIsAdminOnAnyFirm(isAdmin)
             setLoading(false)
         }
         void load()
@@ -97,14 +100,16 @@ export default function WorkspacePickerPage() {
                                 )}
                             </TabsTrigger>
                         </TabsList>
+                        {isAdminOnAnyFirm && (
                         <button
                             type="button"
-                            className="inline-flex items-center gap-2 px-4 py-2 rounded-[2px] bg-primary hover:brightness-110 text-primary-foreground font-medium text-[0.8125rem] transition-all shadow-[0_1px_2px_rgba(0,0,0,0.25)]"
+                            className="h-auto px-4 py-1.5 rounded-[2px] bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:brightness-105 shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all inline-flex items-center gap-1.5"
                             onClick={() => setAddFirmOpen(true)}
                         >
-                            <SquarePlus className="h-4 w-4" />
-                            Create new Firm
+                            <SquarePlus className="h-3.5 w-3.5" />
+                            Add Firm
                         </button>
+                        )}
                     </div>
                 </div>
 

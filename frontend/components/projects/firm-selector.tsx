@@ -32,9 +32,10 @@ interface FirmSelectorProps {
     onFirmChange: (firmSlug: string) => void
     className?: string
     compact?: boolean
+    isFirmAdmin?: boolean
 }
 
-export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className, compact }: FirmSelectorProps) {
+export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className, compact, isFirmAdmin = false }: FirmSelectorProps) {
     const { user } = useAuth()
     const addFirmDisabled = !user?.id
 
@@ -180,6 +181,7 @@ export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className,
                     viewportClassName="p-1"
                     data-firm-selector
                 >
+                    {isFirmAdmin && (
                     <div
                         className="px-2.5 py-2 border-b border-[#e5e7eb]"
                         onPointerDown={(e) => { e.preventDefault(); e.stopPropagation() }}
@@ -192,12 +194,13 @@ export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className,
                                 setIsSelectOpen(false)
                                 setAddOrgModalOpen(true)
                             }}
-                            className="flex w-full items-center justify-center gap-2 rounded-[2px] border-0 bg-primary px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition-all hover:brightness-110 hover:shadow-[0_6px_16px_-4px_rgba(0,0,0,0.20),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 active:shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:brightness-100 disabled:hover:shadow-sm disabled:hover:translate-y-0"
+                            className="flex w-full items-center justify-center gap-1.5 rounded-[2px] border-0 bg-primary px-3 py-1.5 text-[10px] font-headline font-bold tracking-widest uppercase text-white shadow-sm transition-all hover:brightness-105 hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 active:shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:brightness-100 disabled:hover:shadow-sm disabled:hover:translate-y-0"
                         >
-                            <SquarePlus className="h-4 w-4" aria-hidden />
-                            Add Firm
+                            <SquarePlus className="h-3.5 w-3.5" aria-hidden />
+                            ADD FIRM
                         </button>
                     </div>
+                    )}
                     {firms.map((org) => (
                         <SelectItem
                             key={org.id}

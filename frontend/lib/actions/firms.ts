@@ -89,6 +89,17 @@ export async function getFirmCreationGateReasonForCurrentUser(): Promise<import(
     return getFirmCreationGateReason(user.id)
 }
 
+export async function getIsAdminOnAnyFirm(): Promise<boolean> {
+    const supabase = await createClient()
+    const { data: { user }, error } = await supabase.auth.getUser()
+    if (error || !user) return false
+    const membership = await prisma.firmMember.findFirst({
+        where: { userId: user.id, role: 'firm_admin', firm: { deletedAt: null } },
+        select: { id: true },
+    })
+    return membership !== null
+}
+
 /**
  * Get the default firm slug for the current user
  */
