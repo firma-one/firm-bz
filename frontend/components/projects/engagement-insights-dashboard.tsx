@@ -1115,7 +1115,7 @@ export function EngagementInsightsDashboard({
                             // const deliveryItem = data.sharesProgress?.total > 0
                             //     ? { pct: Math.round((data.sharesProgress.done / data.sharesProgress.total) * 100), total: data.sharesProgress.total, done: data.sharesProgress.done }
                             //     : null
-                            const deliveryItem = null
+                            const deliveryItem = null as { pct: number; total: number; done: number } | null
                             const totalDeducted = penalties.reduce((s, p) => s + p.points, 0)
                             return (
                                 <div className="bg-white rounded border border-[#e5e7eb] overflow-hidden shadow-md">
