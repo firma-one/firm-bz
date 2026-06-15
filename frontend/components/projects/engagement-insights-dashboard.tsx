@@ -408,6 +408,7 @@ function EngagementActionCenter({ data, loading, engagementBase, projectId, setR
     const threadCount = threadItems.length
     const sharingItems = data?.pendingInvitations ?? []
     const sharingCount = sharingItems.length
+    const pendingSharesCount = data?.pendingApprovalSharesCount ?? 0
     const sensitiveItems = (data?.sensitiveFiles ?? []).filter(f => !reviewedSensitiveIds.has(f.documentId))
     const sensitiveCount = sensitiveItems.length
     const staleItems = data?.storageHealth.staleFiles ?? []
@@ -434,7 +435,7 @@ function EngagementActionCenter({ data, loading, engagementBase, projectId, setR
     }
 
     const isDrillView = acView === 'threads' || acView === 'sharing' || acView === 'sensitive' || acView === 'storage'
-    const drillViewLabel: Record<string, string> = { threads: 'Threads', sharing: 'Sharing', sensitive: 'Sensitive', storage: 'Storage' }
+    const drillViewLabel: Record<string, string> = { threads: 'Threads', sharing: 'Invitations', sensitive: 'Sensitive', storage: 'Storage' }
     const drillViewCount: Record<string, number> = { threads: threadCount, sharing: sharingCount, sensitive: sensitiveCount, storage: storageCount }
     const drillViewBadge: Record<string, string> = {
         threads: 'bg-blue-100 text-blue-700',
@@ -553,7 +554,7 @@ function EngagementActionCenter({ data, loading, engagementBase, projectId, setR
                             <div className="flex flex-col gap-2">
                                 {([
                                     { key: 'threads' as const, icon: MessageCircle, label: 'Threads', count: threadCount, sub: threadCount > 0 ? `${threadCount} unanswered thread${threadCount > 1 ? 's' : ''}` : 'No unanswered threads', active: { border: 'border-[#d1d5db]', hover: 'hover:bg-blue-50', text: 'text-blue-700', iconBg: 'bg-blue-50', iconText: 'text-blue-600', chevron: 'text-blue-400', num: 'text-blue-600' } },
-                                    { key: 'sharing' as const, icon: Share2, label: 'Sharing', count: sharingCount, sub: sharingCount > 0 ? `${sharingCount} invitation${sharingCount > 1 ? 's' : ''} pending` : 'No pending invites', active: { border: 'border-[#d1d5db]', hover: 'hover:bg-indigo-50', text: 'text-indigo-700', iconBg: 'bg-indigo-50', iconText: 'text-indigo-600', chevron: 'text-indigo-400', num: 'text-indigo-600' } },
+                                    { key: 'sharing' as const, icon: Share2, label: 'Invitations', count: sharingCount, sub: sharingCount > 0 ? `${sharingCount} invitation${sharingCount > 1 ? 's' : ''} pending` : 'No pending invites', active: { border: 'border-[#d1d5db]', hover: 'hover:bg-indigo-50', text: 'text-indigo-700', iconBg: 'bg-indigo-50', iconText: 'text-indigo-600', chevron: 'text-indigo-400', num: 'text-indigo-600' } },
                                     { key: 'sensitive' as const, icon: FileWarning, label: 'Sensitive', count: sensitiveCount, sub: sensitiveCount > 0 ? `${sensitiveCount} file${sensitiveCount > 1 ? 's' : ''} flagged` : 'No sensitive files', active: { border: 'border-[#d1d5db]', hover: 'hover:bg-orange-50', text: 'text-orange-700', iconBg: 'bg-orange-50', iconText: 'text-orange-600', chevron: 'text-orange-400', num: 'text-orange-600' } },
                                     { key: 'storage' as const, icon: HardDrive, label: 'Storage', count: storageCount, sub: storageCount > 0 ? [data?.storageHealth.staleCount ? `${data.storageHealth.staleCount} stale` : '', data?.storageHealth.largeCount ? `${data.storageHealth.largeCount} large` : '', duplicateCount ? `${duplicateCount} duplicate${duplicateCount > 1 ? 's' : ''}` : ''].filter(Boolean).join(' · ') : 'Storage looks healthy', active: { border: 'border-[#d1d5db]', hover: 'hover:bg-blue-50', text: 'text-[#5A78FF]', iconBg: 'bg-blue-50', iconText: 'text-[#5A78FF]', chevron: 'text-[#5A78FF]/50', num: 'text-[#5A78FF]' } },
                                 ] as const).map(({ key, icon: Icon, label, count, sub, active }) => {
@@ -585,6 +586,36 @@ function EngagementActionCenter({ data, loading, engagementBase, projectId, setR
                                         </button>
                                     )
                                 })}
+                                {/* Shares pending approval — links directly to Shares tab */}
+                                {(() => {
+                                    const isAlert = pendingSharesCount > 0
+                                    const border = 'border-[#d1d5db]'
+                                    const hover = isAlert ? 'hover:bg-violet-50' : 'hover:bg-green-50'
+                                    const textColor = isAlert ? 'text-violet-700' : 'text-gray-700'
+                                    const iconBg = isAlert ? 'bg-violet-50' : 'bg-green-50'
+                                    const iconText = isAlert ? 'text-violet-600' : 'text-green-600'
+                                    const chevronColor = isAlert ? 'text-violet-400' : 'text-gray-400'
+                                    const numColor = isAlert ? 'text-violet-600' : 'text-gray-500'
+                                    const sub = isAlert ? `${pendingSharesCount} share${pendingSharesCount > 1 ? 's' : ''} pending approval` : 'No pending approvals'
+                                    return (
+                                        <Link
+                                            href={`${engagementBase}/shares`}
+                                            className={`w-full flex items-center justify-between p-3 bg-white rounded border ${border} shadow-md hover:shadow-lg ${hover} hover:scale-[1.01] active:scale-[0.99] transition-all duration-150`}
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <div className={`p-2 rounded-lg ${iconBg}`}><Share2 className={`h-4 w-4 ${iconText}`} /></div>
+                                                <div className="text-left">
+                                                    <p className={`text-sm font-semibold ${textColor}`}>Shares</p>
+                                                    <p className="text-xs text-gray-500">{sub}</p>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-1.5">
+                                                <span className={`text-lg font-bold ${numColor}`}>{pendingSharesCount}</span>
+                                                <ChevronRight className={`h-4 w-4 ${chevronColor}`} />
+                                            </div>
+                                        </Link>
+                                    )
+                                })()}
                             </div>
                         </div>
                     </div>
@@ -1080,9 +1111,11 @@ export function EngagementInsightsDashboard({
                             const barColor = hs.level === 'good' ? 'bg-green-500' : hs.level === 'warning' ? 'bg-amber-500' : 'bg-red-500'
                             const severityLabel = (pts: number) => pts >= 15 ? { text: 'HIGH', cls: 'bg-red-50 text-red-600 border-red-100' } : pts >= 8 ? { text: 'MED', cls: 'bg-amber-50 text-amber-600 border-amber-100' } : { text: 'LOW', cls: 'bg-slate-50 text-slate-500 border-slate-200' }
                             const deductClass = (pts: number) => pts >= 15 ? 'text-red-600 font-bold' : pts >= 8 ? 'text-amber-600 font-semibold' : 'text-slate-400 font-medium'
-                            const deliveryItem = data.sharesProgress?.total > 0
-                                ? { pct: Math.round((data.sharesProgress.done / data.sharesProgress.total) * 100), total: data.sharesProgress.total, done: data.sharesProgress.done }
-                                : null
+                            // TODO: re-enable when Shares board graduates from beta
+                            // const deliveryItem = data.sharesProgress?.total > 0
+                            //     ? { pct: Math.round((data.sharesProgress.done / data.sharesProgress.total) * 100), total: data.sharesProgress.total, done: data.sharesProgress.done }
+                            //     : null
+                            const deliveryItem = null
                             const totalDeducted = penalties.reduce((s, p) => s + p.points, 0)
                             return (
                                 <div className="bg-white rounded border border-[#e5e7eb] overflow-hidden shadow-md">

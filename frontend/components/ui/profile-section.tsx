@@ -244,7 +244,7 @@ export function ProfileSection({
                     className="d-sidebar-nav flex w-full items-center gap-2 rounded px-3 py-2.5 text-[#45474c] transition-colors hover:bg-[#f3f4f6] hover:text-[#1b1b1d]"
                   >
                     <Building2 className="h-4 w-4 shrink-0" aria-hidden />
-                    Switch Workspace
+                    Switch Firm
                   </Link>
                   <button
                     type="button"

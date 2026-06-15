@@ -92,32 +92,32 @@ export async function POST(
       docId = created.id
     }
 
-    // Write PENDING sharing row — this is the intake queue entry
-    await (prisma.engagementDocumentSharingUser as any).upsert({
-      where: { projectDocumentId_userId: { projectDocumentId: docId, userId: user.id } },
-      create: {
-        projectDocumentId: docId,
-        engagementId: projectId,
-        userId: user.id,
-        email: user.email ?? '',
-        sharingPermissionStatus: 'PENDING',
-      },
-      update: { sharingPermissionStatus: 'PENDING' },
-    })
-
-    // Only create EL reminders if this file is the first PENDING item from this user in this
-    // engagement. Files uploaded inside a pending folder are covered by the folder's reminder.
-    const otherPendingRow = await (prisma.engagementDocumentSharingUser as any).findFirst({
+    // Only write a PENDING row + reminder if this user has no existing PENDING item in this
+    // engagement. Files uploaded inside a pending folder are covered by the folder's PENDING row.
+    const existingPendingRow = await (prisma.engagementDocumentSharingUser as any).findFirst({
       where: {
         engagementId: projectId,
         userId: user.id,
         sharingPermissionStatus: 'PENDING',
-        projectDocumentId: { not: docId },
       },
       select: { id: true },
     })
 
-    if (!otherPendingRow) {
+    if (!existingPendingRow) {
+      await (prisma.engagementDocumentSharingUser as any).upsert({
+        where: { projectDocumentId_userId: { projectDocumentId: docId, userId: user.id } },
+        create: {
+          projectDocumentId: docId,
+          engagementId: projectId,
+          userId: user.id,
+          email: user.email ?? '',
+          sharingPermissionStatus: 'PENDING',
+        },
+        update: { sharingPermissionStatus: 'PENDING' },
+      })
+    }
+
+    if (!existingPendingRow) {
       const reminderId = `intake-${projectId}-${externalId}`
       const leads = await prisma.engagementMember.findMany({
         where: { engagementId: projectId, role: { in: ['eng_admin', 'eng_member'] } },

@@ -162,12 +162,11 @@ export async function PATCH(
         })
         await (prisma as any).notification.deleteMany({ where: { dedupeKey: `intake-pending:${projectId}:${folderDoc.externalId}` } })
 
-        // Approve all descendants: slugs + Inngest
+        // Approve all descendants: update settings + Inngest (no slug — only root appears on Shares)
         await Promise.all(subtreeDocs.map(async (doc) => {
-          const slug = generateShareSlug(doc.fileName ?? doc.externalId, doc.id.slice(0, 8))
           await prisma.engagementDocument.update({
             where: { id: doc.id },
-            data: { settings: docSettings as object, slug, updatedAt: new Date() },
+            data: { settings: docSettings as object, updatedAt: new Date() },
           })
           await safeInngestSend('file.index.requested', {
             projectId, externalId: doc.externalId, organizationId: doc.firmId, fileName: doc.fileName,

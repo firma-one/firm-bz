@@ -54,10 +54,7 @@ export async function GET(
     const shares = await (prisma.engagementDocument as any).findMany({
       where: {
         engagementId: projectId,
-        OR: [
-          { slug: { not: null } },
-          { isFolder: true, sharingUsers: { some: { sharingPermissionStatus: 'PENDING' } } },
-        ],
+        sharingUsers: { some: { sharingPermissionStatus: { in: ['GRANTED', 'PENDING'] } } },
       },
       orderBy: { createdAt: 'desc' },
       include: {
