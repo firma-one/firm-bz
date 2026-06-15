@@ -130,6 +130,8 @@ interface DocumentActionMenuProps {
   isExternalViewer?: boolean
   /** Base URL for deeplink (e.g. ".../files"). Appended with #doc-file:{projectDocumentId}. Falls back to Drive URL if absent. */
   deeplinkBase?: string
+  /** When true, renders the trigger button but blocks opening the menu (e.g. pending intake rows). */
+  disabled?: boolean
   /** When true, renders the menu visually but blocks all item clicks (sandbox preview mode). */
   sandboxPreview?: boolean
   /** Connector account email — appended as ?authuser= to Google Drive folder URLs. */
@@ -173,6 +175,7 @@ export function DocumentActionMenu({
   isExternalViewer,
   deeplinkBase,
   orgSlug,
+  disabled = false,
   sandboxPreview = false,
   connectorAccountEmail,
 }: DocumentActionMenuProps) {
@@ -468,11 +471,12 @@ export function DocumentActionMenu({
           }
         }
       }}>
-        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()} disabled={disabled}>
           <Button
             variant="ghost"
             size="sm"
-            className="text-gray-600 hover:text-gray-800 hover:bg-gray-50 h-8 w-8 p-0"
+            disabled={disabled}
+            className="text-gray-600 hover:text-gray-800 hover:bg-gray-50 h-8 w-8 p-0 disabled:opacity-30 disabled:cursor-not-allowed"
             title="More actions"
           >
             {triggerIcon ?? <MoreHorizontal className="h-4 w-4" />}

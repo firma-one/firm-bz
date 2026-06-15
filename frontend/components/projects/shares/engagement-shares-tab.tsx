@@ -16,7 +16,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core'
-import { Share2, User, Lock, ListTodo, Loader2, CheckCircle, Eye, GripVertical, FolderOpen, Clock, Copy, Check, Search, MessageCircle, Link2, ScanEye, X, RefreshCw, ChevronDown, Filter } from 'lucide-react'
+import { Share2, User, Lock, ListTodo, Loader2, CheckCircle, Eye, GripVertical, FolderOpen, Clock, Copy, Check, Search, MessageCircle, Link2, ScanEye, X, RefreshCw, ChevronDown, Filter, CheckCircle2, Trash2 } from 'lucide-react'
 import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
 import { DocumentBreadcrumb } from '@/components/ui/document-breadcrumb'
 import { DocumentIcon } from '@/components/ui/document-icon'
@@ -91,6 +91,8 @@ interface ShareRecord {
     email: string | null
     sessionId: string | null
   }>
+  pendingApproval?: boolean
+  pendingUploaderId?: string | null
   /** Used internally when grouping into lanes for stable sort order. */
   _orderIndex?: number
 }
@@ -210,6 +212,9 @@ function DraggableCard({
   isExternalViewer,
   deeplinkBase,
   generalFolderId,
+  currentUserId,
+  onIntakeAction,
+  intakeActionInProgress,
 }: {
   id: string
   share: ShareRecord
@@ -233,6 +238,9 @@ function DraggableCard({
   isExternalViewer?: boolean
   deeplinkBase?: string
   generalFolderId?: string | null
+  currentUserId?: string | null
+  onIntakeAction?: (documentId: string, action: string) => void
+  intakeActionInProgress?: string | null
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id })
   const { setNodeRef: setDropRef, isOver } = useDroppable({ id })
@@ -291,6 +299,9 @@ function DraggableCard({
         isExternalViewer={isExternalViewer}
         deeplinkBase={deeplinkBase}
         generalFolderId={generalFolderId}
+        currentUserId={currentUserId}
+        onIntakeAction={onIntakeAction}
+        intakeActionInProgress={intakeActionInProgress}
       />
     </motion.div>
   )
@@ -320,6 +331,9 @@ function ShareCardContent({
   isExternalViewer,
   deeplinkBase,
   generalFolderId,
+  currentUserId,
+  onIntakeAction,
+  intakeActionInProgress,
 }: {
   share: ShareRecord
   iconPillBg: string
@@ -343,14 +357,23 @@ function ShareCardContent({
   isExternalViewer?: boolean
   deeplinkBase?: string
   generalFolderId?: string | null
+  currentUserId?: string | null
+  onIntakeAction?: (documentId: string, action: string) => void
+  intakeActionInProgress?: string | null
 }) {
   const latestComment = share.comments?.[0]
   const isFinalized = !!share.finalizedAt
   const [linkCopied, setLinkCopied] = useState(false)
+  const isPending = !!share.pendingApproval
+  const isOwnPending = isPending && !!currentUserId && share.pendingUploaderId === currentUserId
+  const isFolder = share.documentMimeType?.includes('folder')
+  const intakeApproveAction = isFolder ? 'approve-folder' : 'approve'
+  const intakeRejectAction = isFolder ? 'reject-folder' : 'reject'
+  const intakeWithdrawAction = isFolder ? 'withdraw-folder' : 'withdraw'
 
   return (
     <>
-      <div className="bg-[#f9f9fb] border-b border-[#e5e7eb]">
+      <div className={cn('bg-[#f9f9fb] border-b border-[#e5e7eb]', isPending && 'opacity-80')}>
         <div className="flex items-center gap-2.5 px-3 pt-2.5 pb-2">
           <div className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded', iconPillBg)}>
             {share.documentMimeType?.includes('folder') ? (
@@ -367,15 +390,61 @@ function ShareCardContent({
             >
               {share.documentName}
             </div>
-            <DocumentBreadcrumb
-              parentName={share.parentName ?? (generalFolderId ? 'General' : null)}
-              parentId={share.parentId ?? generalFolderId ?? null}
-              onFolderClick={onParentFolderClick}
-            />
+            {isPending ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary/10 text-primary border border-primary/30">
+                    <Share2 className="h-2.5 w-2.5" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="top">Pending Review</TooltipContent>
+              </Tooltip>
+            ) : (
+              <DocumentBreadcrumb
+                parentName={share.parentName ?? (generalFolderId ? 'General' : null)}
+                parentId={share.parentId ?? generalFolderId ?? null}
+                onFolderClick={onParentFolderClick}
+              />
+            )}
           </div>
         </div>
       </div>
-      <div className="px-3 pb-3 pt-2 bg-white space-y-1.5">
+      {/* Intake actions — shown instead of normal content when pending */}
+      {isPending && (
+        <div className="px-3 py-3 bg-white border-b border-[#e5e7eb] space-y-2" onClick={(e) => e.stopPropagation()}>
+          {canManage && !isExternalPersona && (
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={intakeActionInProgress === share.documentId}
+                onClick={() => onIntakeAction?.(share.documentId, intakeApproveAction)}
+                className="flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium rounded bg-primary text-white hover:bg-primary/90 disabled:opacity-50 transition-colors"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" /> Approve
+              </button>
+              <button
+                type="button"
+                disabled={intakeActionInProgress === share.documentId}
+                onClick={() => onIntakeAction?.(share.documentId, intakeRejectAction)}
+                className="flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium rounded bg-[#fef2f2] text-[#991b1b] hover:bg-[#fee2e2] disabled:opacity-50 transition-colors"
+              >
+                <Trash2 className="h-3.5 w-3.5" /> Reject
+              </button>
+            </div>
+          )}
+          {isExternalPersona && isOwnPending && (
+            <button
+              type="button"
+              disabled={intakeActionInProgress === share.documentId}
+              onClick={() => onIntakeAction?.(share.documentId, intakeWithdrawAction)}
+              className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium rounded bg-[#fef2f2] text-[#991b1b] hover:bg-[#fee2e2] disabled:opacity-50 transition-colors"
+            >
+              <X className="h-3.5 w-3.5" /> Withdraw Request
+            </button>
+          )}
+        </div>
+      )}
+      <div className={cn('px-3 pb-3 pt-2 bg-white space-y-1.5', isPending && 'opacity-60')}>
         {/* Datetime + quick links */}
         <div className="flex items-center justify-between">
           <RelativeDateTime
@@ -390,15 +459,15 @@ function ShareCardContent({
                 <TooltipTrigger asChild>
                   <button
                     type="button"
-                    className="p-1 rounded hover:bg-[#f3f4f6] text-[#9a9ba0] hover:text-[#45474c] transition-colors"
+                    className="p-1 rounded hover:bg-[#f3f4f6] text-[#9a9ba0] hover:text-[#45474c] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                     onClick={(e) => {
                       e.stopPropagation()
-                      if (!deeplinkBase || !share.documentId) return
+                      if (isPending || !deeplinkBase || !share.documentId) return
                       navigator.clipboard.writeText(`${deeplinkBase}#doc-file:${share.documentId}`)
                       setLinkCopied(true)
                       setTimeout(() => setLinkCopied(false), 1500)
                     }}
-                    disabled={!deeplinkBase || !share.documentId}
+                    disabled={isPending || !deeplinkBase || !share.documentId}
                   >
                     {linkCopied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Link2 className="h-3.5 w-3.5" />}
                   </button>
@@ -406,35 +475,39 @@ function ShareCardContent({
                 <TooltipContent side="top" className="text-xs">{deeplinkBase && share.documentId ? 'Copy link' : 'No link available'}</TooltipContent>
               </Tooltip>
             </TooltipProvider>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    className="p-1 rounded hover:bg-[#f3f4f6] text-[#9a9ba0] hover:text-[#45474c] transition-colors"
-                    onClick={(e) => { e.stopPropagation(); onOpenComments?.(share) }}
-                  >
-                    <MessageCircle className="h-3.5 w-3.5" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="text-xs">Comments</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-            {!share.documentMimeType?.includes('folder') && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      className="p-1 rounded hover:bg-[#f3f4f6] text-[#9a9ba0] hover:text-[#45474c] transition-colors"
-                      onClick={(e) => { e.stopPropagation(); onOpenPreview?.(share) }}
-                    >
-                      <ScanEye className="h-3.5 w-3.5" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="text-xs">Preview</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+            {!isPending && (
+              <>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        className="p-1 rounded hover:bg-[#f3f4f6] text-[#9a9ba0] hover:text-[#45474c] transition-colors"
+                        onClick={(e) => { e.stopPropagation(); onOpenComments?.(share) }}
+                      >
+                        <MessageCircle className="h-3.5 w-3.5" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="text-xs">Comments</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                {!share.documentMimeType?.includes('folder') && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          className="p-1 rounded hover:bg-[#f3f4f6] text-[#9a9ba0] hover:text-[#45474c] transition-colors"
+                          onClick={(e) => { e.stopPropagation(); onOpenPreview?.(share) }}
+                        >
+                          <ScanEye className="h-3.5 w-3.5" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="text-xs">Preview</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
+              </>
             )}
             <DocumentActionMenu
               document={getDocumentForMenu(share)}
@@ -444,13 +517,16 @@ function ShareCardContent({
               onOpenDocument={() => handleSecureOpen(share)}
               isExternalUser={isExternalPersona}
               isExternalViewer={isExternalViewer}
+              disabled={isPending}
             />
             {isRegrantingId === share.id && <LoadingSpinner size="sm" className="min-h-0 ml-0.5" />}
           </div>
         </div>
         {/* Shared by */}
         <div className="flex items-center gap-1.5">
-          <span className="text-[10px] text-[#9a9ba0] w-14 shrink-0 whitespace-nowrap">Shared by</span>
+          <span className="text-[10px] text-[#9a9ba0] w-14 shrink-0 whitespace-nowrap">
+            {isPending ? 'Uploaded by' : 'Shared by'}
+          </span>
           <TooltipProvider>
             <ProfileBubbleWithPopup
               name={share.createdByName || share.createdByEmail || 'Team Member'}
@@ -460,8 +536,8 @@ function ShareCardContent({
             />
           </TooltipProvider>
         </div>
-        {/* Shared with */}
-        {(share.settings?.externalCollaborator || share.settings?.guest) && (
+        {/* Shared with — hide when pending */}
+        {!isPending && (share.settings?.externalCollaborator || share.settings?.guest) && (
           <div className="flex items-center gap-1.5">
             <span className="text-[10px] text-[#9a9ba0] w-14 shrink-0 whitespace-nowrap">Shared with</span>
             <div className="flex items-center gap-1">
@@ -489,7 +565,7 @@ function ShareCardContent({
           </div>
         )}
       </div>
-      {showActions && (canManage && isDoneLane && !isFinalized || isFinalized) && (
+      {!isPending && showActions && (canManage && isDoneLane && !isFinalized || isFinalized) && (
         <div className="px-3 pb-2.5 pt-1.5 flex items-center gap-2 border-t border-[#e5e7eb] bg-white" onClick={(e) => e.stopPropagation()}>
           {canManage && isDoneLane && !isFinalized && (
             <Button
@@ -626,6 +702,9 @@ function SharesListView({
   isExternalViewer,
   deeplinkBase,
   generalFolderId,
+  currentUserId,
+  onIntakeAction,
+  intakeActionInProgress,
 }: {
   shares: ShareRecord[]
   formatDate: (s: string) => string
@@ -644,6 +723,9 @@ function SharesListView({
   isExternalViewer?: boolean
   deeplinkBase?: string
   generalFolderId?: string | null
+  currentUserId?: string | null
+  onIntakeAction?: (documentId: string, action: string) => void
+  intakeActionInProgress?: string | null
 }) {
   const [actionMenuOpenShareId, setActionMenuOpenShareId] = useState<string | null>(null)
   const [linkCopiedId, setLinkCopiedId] = useState<string | null>(null)
@@ -673,6 +755,11 @@ function SharesListView({
           const samePerson = share.updatedBy && share.updatedBy === share.createdBy
           const showCreatorProfile = !isModified || (isModified && !samePerson)
           const showModifierProfile = isModified && share.updatedBy && !samePerson
+          const isPending = !!share.pendingApproval
+          const isOwnPending = isPending && !!currentUserId && share.pendingUploaderId === currentUserId
+          const intakeApproveAction = isFolder ? 'approve-folder' : 'approve'
+          const intakeRejectAction = isFolder ? 'reject-folder' : 'reject'
+          const intakeWithdrawAction = isFolder ? 'withdraw-folder' : 'withdraw'
 
           return (
             <div
@@ -680,6 +767,7 @@ function SharesListView({
               className={cn(
                 'group grid gap-4 pl-3 pr-2 py-2 items-center cursor-default transition-colors text-[0.8125rem]',
                 'hover:bg-[#f9f9fb]',
+                isPending && 'opacity-70 border-dashed',
                 actionMenuOpenShareId === share.id && 'bg-[#f3f4f6]'
               )}
               style={{ gridTemplateColumns: COL_TEMPLATE }}
@@ -701,37 +789,84 @@ function SharesListView({
                   >
                     {share.documentName}
                   </span>
-                  <DocumentBreadcrumb
-                    parentName={share.parentName ?? (generalFolderId ? 'General' : null)}
-                    parentId={share.parentId ?? generalFolderId ?? null}
-                    onFolderClick={onParentFolderClick}
-                  />
+                  {isPending ? (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="inline-flex items-center w-fit shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary/10 text-primary border border-primary/30">
+                            <Share2 className="h-2.5 w-2.5" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top">Pending Review</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  ) : (
+                    <DocumentBreadcrumb
+                      parentName={share.parentName ?? (generalFolderId ? 'General' : null)}
+                      parentId={share.parentId ?? generalFolderId ?? null}
+                      onFolderClick={onParentFolderClick}
+                    />
+                  )}
                 </div>
               </div>
 
-              {/* Shared with column */}
+              {/* Shared with column — intake action buttons when pending */}
               <div className="flex items-center gap-1">
-                {ec && (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div className="h-5 px-1.5 rounded bg-primary/10 text-primary flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EC</div>
-                      </TooltipTrigger>
-                      <TooltipContent side="top" className="text-xs">{extCollaboratorLabel}</TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+                {isPending ? (
+                  canManage && !isExternalPersona ? (
+                    <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        disabled={intakeActionInProgress === share.documentId}
+                        onClick={() => onIntakeAction?.(share.documentId, intakeApproveAction)}
+                        className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded bg-primary text-white hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                      >
+                        <CheckCircle2 className="h-3 w-3" /> Approve
+                      </button>
+                      <button
+                        type="button"
+                        disabled={intakeActionInProgress === share.documentId}
+                        onClick={() => onIntakeAction?.(share.documentId, intakeRejectAction)}
+                        className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded bg-[#fef2f2] text-[#991b1b] hover:bg-[#fee2e2] disabled:opacity-50 transition-colors"
+                      >
+                        <Trash2 className="h-3 w-3" /> Reject
+                      </button>
+                    </div>
+                  ) : isOwnPending ? (
+                    <button
+                      type="button"
+                      disabled={intakeActionInProgress === share.documentId}
+                      onClick={(e) => { e.stopPropagation(); onIntakeAction?.(share.documentId, intakeWithdrawAction) }}
+                      className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded bg-[#fef2f2] text-[#991b1b] hover:bg-[#fee2e2] disabled:opacity-50 transition-colors"
+                    >
+                      <X className="h-3 w-3" /> Withdraw Request
+                    </button>
+                  ) : null
+                ) : (
+                  <>
+                    {ec && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="h-5 px-1.5 rounded bg-primary/10 text-primary flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EC</div>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="text-xs">{extCollaboratorLabel}</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+                    {guest && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="h-5 px-1.5 rounded bg-[#f3f4f6] text-[#45474c] flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EV</div>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="text-xs">{viewerLabel}</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+                    {!ec && !guest && <span className="text-[11px] text-slate-300">—</span>}
+                  </>
                 )}
-                {guest && (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div className="h-5 px-1.5 rounded bg-[#f3f4f6] text-[#45474c] flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EV</div>
-                      </TooltipTrigger>
-                      <TooltipContent side="top" className="text-xs">{viewerLabel}</TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                )}
-                {!ec && !guest && <span className="text-[11px] text-slate-300">—</span>}
               </div>
 
               {/* Shared by column */}
@@ -774,15 +909,15 @@ function SharesListView({
                     <TooltipTrigger asChild>
                       <button
                         type="button"
-                        className="h-7 w-7 rounded-md inline-flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-40 transition-colors"
+                        className="h-7 w-7 rounded-md inline-flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                         onClick={(e) => {
                           e.stopPropagation()
-                          if (!deeplinkBase || !share.documentId) return
+                          if (isPending || !deeplinkBase || !share.documentId) return
                           navigator.clipboard.writeText(`${deeplinkBase}#doc-file:${share.documentId}`)
                           setLinkCopiedId(share.id)
                           setTimeout(() => setLinkCopiedId(null), 1500)
                         }}
-                        disabled={!deeplinkBase || !share.documentId}
+                        disabled={isPending || !deeplinkBase || !share.documentId}
                       >
                         {linkCopiedId === share.id ? <Check className="h-4 w-4 text-primary" /> : <Link2 className="h-4 w-4" />}
                       </button>
@@ -790,7 +925,7 @@ function SharesListView({
                     <TooltipContent side="top" className="text-xs">{deeplinkBase && share.documentId ? 'Copy link' : 'No link'}</TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
-                {!isFolder && (
+                {!isPending && !isFolder && (
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -806,7 +941,7 @@ function SharesListView({
                     </Tooltip>
                   </TooltipProvider>
                 )}
-                {!isFolder && (
+                {!isPending && !isFolder && (
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -829,7 +964,7 @@ function SharesListView({
                         <button
                           type="button"
                           className="h-7 w-7 rounded-md inline-flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
-                          onClick={() => onOpenInFilesForFolder(share)}
+                          onClick={(e) => { e.stopPropagation(); onOpenInFilesForFolder(share) }}
                         >
                           <FolderOpen className="h-4 w-4" />
                         </button>
@@ -847,6 +982,7 @@ function SharesListView({
                   onOpenDocument={() => handleSecureOpen(share)}
                   isExternalUser={isExternalPersona}
                   isExternalViewer={isExternalViewer}
+                  disabled={isPending}
                 />
                 {isRegrantingId === share.id && <LoadingSpinner size="sm" className="min-h-0 ml-0.5" />}
               </div>
@@ -876,6 +1012,9 @@ function SharesGridView({
   isExternalViewer,
   deeplinkBase,
   generalFolderId,
+  currentUserId,
+  onIntakeAction,
+  intakeActionInProgress,
 }: {
   shares: ShareRecord[]
   formatDate: (s: string) => string
@@ -894,6 +1033,9 @@ function SharesGridView({
   isExternalViewer?: boolean
   deeplinkBase?: string
   generalFolderId?: string | null
+  currentUserId?: string | null
+  onIntakeAction?: (documentId: string, action: string) => void
+  intakeActionInProgress?: string | null
 }) {
   return (
     <div className="flex flex-wrap gap-4 py-2">
@@ -917,6 +1059,9 @@ function SharesGridView({
           isExternalViewer={isExternalViewer}
           deeplinkBase={deeplinkBase}
           generalFolderId={generalFolderId}
+          currentUserId={currentUserId}
+          onIntakeAction={onIntakeAction}
+          intakeActionInProgress={intakeActionInProgress}
         />
       ))}
     </div>
@@ -941,6 +1086,9 @@ function ShareCard({
   isExternalViewer,
   deeplinkBase,
   generalFolderId,
+  currentUserId,
+  onIntakeAction,
+  intakeActionInProgress,
 }: {
   share: ShareRecord
   formatDate: (s: string) => string
@@ -959,9 +1107,17 @@ function ShareCard({
   isExternalViewer?: boolean
   deeplinkBase?: string
   generalFolderId?: string | null
+  currentUserId?: string | null
+  onIntakeAction?: (documentId: string, action: string) => void
+  intakeActionInProgress?: string | null
 }) {
   const isFolder = share.documentMimeType?.includes('folder')
   const [linkCopied, setLinkCopied] = useState(false)
+  const isPending = !!share.pendingApproval
+  const isOwnPending = isPending && !!currentUserId && share.pendingUploaderId === currentUserId
+  const intakeApproveAction = isFolder ? 'approve-folder' : 'approve'
+  const intakeRejectAction = isFolder ? 'reject-folder' : 'reject'
+  const intakeWithdrawAction = isFolder ? 'withdraw-folder' : 'withdraw'
 
   const handleOpenSecure = () => handleSecureOpen(share)
 
@@ -975,18 +1131,23 @@ function ShareCard({
       layout
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      whileHover={{ y: -2, boxShadow: '0 8px 24px -4px rgba(0,0,0,0.10)' }}
+      whileHover={isPending ? {} : { y: -2, boxShadow: '0 8px 24px -4px rgba(0,0,0,0.10)' }}
       transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-      className="group relative bg-white rounded border border-[#e5e7eb] shadow-sm overflow-hidden flex flex-col w-[260px]"
+      className={cn(
+        'group relative bg-white rounded border shadow-sm overflow-hidden flex flex-col w-[260px]',
+        isPending ? 'border-dashed border-amber-200 opacity-70' : 'border-[#e5e7eb]'
+      )}
     >
       {/* Thumbnail / Large Icon Area */}
       <div
         className={cn(
-          "aspect-[16/10] bg-slate-50 border-b border-slate-100 cursor-pointer overflow-hidden relative group/thumb",
+          "aspect-[16/10] bg-slate-50 border-b border-slate-100 overflow-hidden relative group/thumb",
+          !isPending && "cursor-pointer",
           !proxyThumbnailUrl && "flex items-center justify-center"
         )}
-        onClick={handleOpenSecure}
-      >
+        onClick={isPending ? undefined : handleOpenSecure}
+        >
+
         {proxyThumbnailUrl ? (
           <div className="w-full h-full relative">
             <img
@@ -1034,9 +1195,9 @@ function ShareCard({
           <DocumentIcon mimeType={share.documentMimeType ?? undefined} className="w-7 h-7 shrink-0 mt-0.5" />
           <div className="flex flex-col min-w-0 flex-1">
             <h3
-              className="font-semibold text-[#1b1b1d] text-[13px] leading-tight truncate cursor-pointer hover:text-primary transition-colors"
+              className={cn("font-semibold text-[#1b1b1d] text-[13px] leading-tight truncate transition-colors", !isPending && "cursor-pointer hover:text-primary")}
               title={share.documentName}
-              onClick={handleOpenSecure}
+              onClick={isPending ? undefined : handleOpenSecure}
             >
               {share.documentName}
             </h3>
@@ -1067,15 +1228,15 @@ function ShareCard({
                 <TooltipTrigger asChild>
                   <button
                     type="button"
-                    className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors"
+                    className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                     onClick={(e) => {
                       e.stopPropagation()
-                      if (!deeplinkBase || !share.documentId) return
+                      if (isPending || !deeplinkBase || !share.documentId) return
                       navigator.clipboard.writeText(`${deeplinkBase}#doc-file:${share.documentId}`)
                       setLinkCopied(true)
                       setTimeout(() => setLinkCopied(false), 1500)
                     }}
-                    disabled={!deeplinkBase || !share.documentId}
+                    disabled={isPending || !deeplinkBase || !share.documentId}
                   >
                     {linkCopied ? <Check className="h-4 w-4 text-emerald-600" /> : <Link2 className="h-4 w-4" />}
                   </button>
@@ -1083,7 +1244,7 @@ function ShareCard({
                 <TooltipContent side="top" className="text-xs">{deeplinkBase && share.documentId ? 'Copy link' : 'No link available'}</TooltipContent>
               </Tooltip>
             </TooltipProvider>
-            {!isFolder && (
+            {!isPending && !isFolder && (
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -1099,7 +1260,7 @@ function ShareCard({
                 </Tooltip>
               </TooltipProvider>
             )}
-            {!isFolder && (
+            {!isPending && !isFolder && (
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -1115,6 +1276,22 @@ function ShareCard({
                 </Tooltip>
               </TooltipProvider>
             )}
+            {isFolder && onOpenInFilesForFolder && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors"
+                      onClick={(e) => { e.stopPropagation(); onOpenInFilesForFolder(share) }}
+                    >
+                      <FolderOpen className="h-4 w-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-xs">Open in Files</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
             <DocumentActionMenu
               document={getDocumentForMenu(share)}
               showShareModal={canManage}
@@ -1123,6 +1300,7 @@ function ShareCard({
               onOpenDocument={() => handleSecureOpen(share)}
               isExternalUser={isExternalPersona}
               isExternalViewer={isExternalViewer}
+              disabled={isPending}
             />
             {isRegrantingId === share.id && (
               <LoadingSpinner size="sm" className="min-h-0 ml-1" />
@@ -1130,7 +1308,55 @@ function ShareCard({
           </div>
         </div>
 
-        {/* Shared by / Shared with rows */}
+        {/* Intake action buttons (pending state) */}
+        {isPending && (
+          <div className="mt-3 pt-3 -mx-4 px-4 border-t border-[#e5e7eb] space-y-2 pointer-events-auto" onClick={(e) => e.stopPropagation()}>
+            {canManage && !isExternalPersona && (
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={intakeActionInProgress === share.documentId}
+                  onClick={() => onIntakeAction?.(share.documentId, intakeApproveAction)}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium rounded bg-primary text-white hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Approve
+                </button>
+                <button
+                  type="button"
+                  disabled={intakeActionInProgress === share.documentId}
+                  onClick={() => onIntakeAction?.(share.documentId, intakeRejectAction)}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium rounded bg-[#fef2f2] text-[#991b1b] hover:bg-[#fee2e2] disabled:opacity-50 transition-colors"
+                >
+                  <Trash2 className="h-3.5 w-3.5" /> Reject
+                </button>
+              </div>
+            )}
+            {isExternalPersona && isOwnPending && (
+              <button
+                type="button"
+                disabled={intakeActionInProgress === share.documentId}
+                onClick={() => onIntakeAction?.(share.documentId, intakeWithdrawAction)}
+                className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium rounded bg-[#fef2f2] text-[#991b1b] hover:bg-[#fee2e2] disabled:opacity-50 transition-colors"
+              >
+                <X className="h-3.5 w-3.5" /> Withdraw Request
+              </button>
+            )}
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-[#9a9ba0] w-14 shrink-0 whitespace-nowrap">Uploaded by</span>
+              <TooltipProvider>
+                <ProfileBubbleWithPopup
+                  name={share.createdByName || share.createdByEmail || 'Team Member'}
+                  email={share.createdByEmail || ''}
+                  avatarUrl={share.createdByAvatarUrl}
+                  size="default"
+                />
+              </TooltipProvider>
+            </div>
+          </div>
+        )}
+
+        {/* Shared by / Shared with rows (non-pending state) */}
+        {!isPending && (
         <div className="mt-3 pt-3 -mx-4 px-4 border-t border-[#e5e7eb] space-y-1.5">
           <div className="flex items-center gap-2">
             <span className="text-[10px] text-[#9a9ba0] w-14 shrink-0 whitespace-nowrap">Shared by</span>
@@ -1171,6 +1397,7 @@ function ShareCard({
             </div>
           )}
         </div>
+        )}
       </div>
 
     </motion.div>
@@ -1201,13 +1428,15 @@ export function EngagementSharesTab({
   const [detailShareId, setDetailShareId] = useState<string | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
-  const [filterShared, setFilterShared] = useState<'all' | 'by_me' | 'by_others' | 'with_collaborator' | 'with_viewer'>('all')
+  const [filterShared, setFilterShared] = useState<'all' | 'by_me' | 'by_others' | 'with_collaborator' | 'with_viewer' | 'pending_approval'>('all')
   const [filterSharedOpen, setFilterSharedOpen] = useState(false)
   const [filterTypes, setFilterTypes] = useState<Set<string>>(new Set())
   const [filterTypeOpen, setFilterTypeOpen] = useState(false)
   const [filterModified, setFilterModified] = useState<'any' | '7d' | '30d' | 'year'>('any')
   const [filterModifiedOpen, setFilterModifiedOpen] = useState(false)
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [intakeActionInProgress, setIntakeActionInProgress] = useState<string | null>(null)
 
   const {
     handleSecureOpen,
@@ -1253,6 +1482,7 @@ export function EngagementSharesTab({
     refreshData()
     supabase.auth.getSession().then(({ data: { session } }) => {
       setCurrentUserEmail(session?.user?.email ?? null)
+      setCurrentUserId(session?.user?.id ?? null)
     })
   }, [refreshData])
 
@@ -1289,6 +1519,26 @@ export function EngagementSharesTab({
       setFinalizingId(null)
     }
   }
+
+  const handleIntakeAction = useCallback(async (documentId: string, action: string) => {
+    if (intakeActionInProgress) return
+    setIntakeActionInProgress(documentId)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch(`/api/projects/${projectId}/documents/${encodeURIComponent(documentId)}/intake`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${session?.access_token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      })
+      if (!res.ok) {
+        logger.error('Intake action failed', new Error(await res.text()), 'SharesTab', { documentId, action })
+        return
+      }
+      await refreshData()
+    } finally {
+      setIntakeActionInProgress(null)
+    }
+  }, [projectId, refreshData, intakeActionInProgress])
 
   const formatDate = (dateString: string) => {
     try {
@@ -1481,6 +1731,7 @@ export function EngagementSharesTab({
     if (filterShared === 'by_others') return !currentUserEmail || s.createdByEmail !== currentUserEmail
     if (filterShared === 'with_collaborator') return !!s.settings.externalCollaborator
     if (filterShared === 'with_viewer') return !!s.settings.guest
+    if (filterShared === 'pending_approval') return !!s.pendingApproval
     return true
   })
 
@@ -1570,6 +1821,8 @@ export function EngagementSharesTab({
               <DropdownMenuCheckboxItem checked={filterShared === 'by_others'} onCheckedChange={() => setFilterShared(filterShared === 'by_others' ? 'all' : 'by_others')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Shared by others</DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem checked={filterShared === 'with_collaborator'} onCheckedChange={() => setFilterShared(filterShared === 'with_collaborator' ? 'all' : 'with_collaborator')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Shared with Collaborator (External)</DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem checked={filterShared === 'with_viewer'} onCheckedChange={() => setFilterShared(filterShared === 'with_viewer' ? 'all' : 'with_viewer')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Shared with Viewer (External)</DropdownMenuCheckboxItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuCheckboxItem checked={filterShared === 'pending_approval'} onCheckedChange={() => setFilterShared(filterShared === 'pending_approval' ? 'all' : 'pending_approval')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Pending Approval</DropdownMenuCheckboxItem>
             </DropdownMenuContent>
           </DropdownMenu>
 
@@ -1665,6 +1918,9 @@ export function EngagementSharesTab({
               isExternalViewer={isExternalViewer}
               deeplinkBase={deeplinkBase}
               generalFolderId={generalFolderId}
+              currentUserId={currentUserId}
+              onIntakeAction={handleIntakeAction}
+              intakeActionInProgress={intakeActionInProgress}
             />
           ) : viewMode === 'list' ? (
             <SharesListView
@@ -1685,6 +1941,9 @@ export function EngagementSharesTab({
               isExternalViewer={isExternalViewer}
               deeplinkBase={deeplinkBase}
               generalFolderId={generalFolderId}
+              currentUserId={currentUserId}
+              onIntakeAction={handleIntakeAction}
+              intakeActionInProgress={intakeActionInProgress}
             />
           ) : (
             <>
@@ -1735,6 +1994,9 @@ export function EngagementSharesTab({
                               isExternalViewer={isExternalViewer}
                               deeplinkBase={deeplinkBase}
                               generalFolderId={generalFolderId}
+                              currentUserId={currentUserId}
+                              onIntakeAction={handleIntakeAction}
+                              intakeActionInProgress={intakeActionInProgress}
                             />
                           ))}
                         </AnimatePresence>

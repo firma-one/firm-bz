@@ -2554,9 +2554,14 @@ export class GoogleDriveConnector {
         body: JSON.stringify({ trashed: true })
       })
 
-      return res.ok
+      if (!res.ok) {
+        const body = await res.text().catch(() => '')
+        logger.error(`Failed to trash file ${fileId} via connector ${connectorId}: HTTP ${res.status}: ${body}`, new Error(`HTTP ${res.status}`))
+        return false
+      }
+      return true
     } catch (error) {
-      logger.error('Failed to trash file', error as Error)
+      logger.error(`Failed to trash file ${fileId} via connector ${connectorId}`, error as Error)
       return false
     }
   }

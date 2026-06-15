@@ -44,7 +44,7 @@ CREATE TYPE "platform"."EngagementStatus" AS ENUM ('PLANNED', 'ACTIVE', 'COMPLET
 CREATE TYPE "platform"."NotificationPriority" AS ENUM ('INFO', 'WARNING', 'CRITICAL');
 
 -- CreateEnum
-CREATE TYPE "platform"."DocumentSharingPermissionStatus" AS ENUM ('GRANTED', 'REVOKED');
+CREATE TYPE "platform"."DocumentSharingPermissionStatus" AS ENUM ('PENDING', 'GRANTED', 'REVOKED');
 
 -- CreateEnum
 CREATE TYPE "platform"."PlatformAuditScope" AS ENUM ('PROJECT');

@@ -2,7 +2,7 @@
 
 import React from 'react'
 import {
-    Folder, Share2, Inbox, CheckCircle2, Trash2, Lock, FolderLock, FolderUp,
+    Folder, Share2, Lock, FolderLock, FolderUp,
     MessageCircle, Link2, ScanEye, MoreVertical, CircleChevronLeft, Loader2, Bookmark
 } from 'lucide-react'
 import { DocumentIcon } from '@/components/ui/document-icon'
@@ -56,9 +56,7 @@ export interface EngagementFileRowProps {
     generalFolderId: string | null
     projectId: string
     orgSlug?: string
-    firmId?: string
     // Current session user
-    sessionUserId?: string
     sessionUserEmail?: string
     // Shared IDs
     sharedExternalIds: Set<string>
@@ -73,10 +71,6 @@ export interface EngagementFileRowProps {
     // Processing
     processingFileIds: Set<string>
     isRegrantingId: string | null
-    // Intake
-    intakeActionInProgress: string | null
-    expandedIntakeBadgeId: string | null
-    onSetExpandedIntakeBadgeId: (id: string | null) => void
     // File operation handlers
     onOpenComments: (file: DriveFile) => void
     onOpenRename: (doc: DriveFile) => void
@@ -86,10 +80,7 @@ export interface EngagementFileRowProps {
     onTrash: (doc: DriveFile) => void
     onPrivacy: (file: DriveFile, makePrivate: boolean) => void
     onShareSaved: () => void
-    onUnshareConfirm: (file: DriveFile) => void
     onUnlockConfirm: (file: DriveFile) => void
-    onIntakeAction: (file: DriveFile, action: 'approve' | 'reject' | 'withdraw') => void
-    onFolderIntakeAction: (file: DriveFile, action: 'approve-folder' | 'reject-folder' | 'withdraw-folder') => void
     onOpenDocument: (doc: DriveFile) => void
     onOpenCommentPane: (docId: string) => void
     onOpenInfoPane: (docId: string) => void
@@ -135,8 +126,6 @@ export function EngagementFileRow({
     generalFolderId,
     projectId,
     orgSlug,
-    firmId,
-    sessionUserId,
     sessionUserEmail,
     sharedExternalIds,
     ancestorFolderIds,
@@ -148,9 +137,6 @@ export function EngagementFileRow({
     onActionMenuOpenChange,
     processingFileIds,
     isRegrantingId,
-    intakeActionInProgress,
-    expandedIntakeBadgeId,
-    onSetExpandedIntakeBadgeId,
     onOpenComments,
     onOpenRename,
     onDuplicate,
@@ -159,10 +145,7 @@ export function EngagementFileRow({
     onTrash,
     onPrivacy,
     onShareSaved,
-    onUnshareConfirm,
     onUnlockConfirm,
-    onIntakeAction,
-    onFolderIntakeAction,
     onOpenDocument,
     onOpenCommentPane,
     onOpenInfoPane,
@@ -176,9 +159,7 @@ export function EngagementFileRow({
 }: EngagementFileRowProps) {
     const isDeeplinkHighlight = file.id === highlightedFileId
     const isFolder = (file.mimeType ?? (file as { type?: string }).type) === 'application/vnd.google-apps.folder'
-    const intakeLock = file.lock?.type === 'intake' ? file.lock : null
-    const isIntakeRow = !!intakeLock
-    const isOwnIntake = intakeLock?.uploadedBy === sessionUserId
+    const isIntakeRow = !!file.isPendingApproval
     // isEC/isGuest: covers both genuine EC/EV users (restrictToSharedOnly=true) and admin view-as impersonation
     const isEC = restrictToSharedOnly ? canEdit : viewAsPersonaSlug === 'eng_ext_collaborator'
     const isGuest = restrictToSharedOnly ? !canEdit : viewAsPersonaSlug === 'eng_viewer'
@@ -342,7 +323,7 @@ export function EngagementFileRow({
             </div>
 
             {/* Badges — hidden when hideBadges=true (e.g. medium pane) to prevent icon overflow */}
-            <div className={cn("flex items-center justify-end gap-1", hideBadges && "invisible")} onClick={(e) => e.stopPropagation()}>
+            <div className={cn("flex items-center justify-end gap-1 pr-2", hideBadges && "invisible")} onClick={(e) => e.stopPropagation()}>
                     {bookmarkId && (
                         <Tooltip>
                             <TooltipTrigger asChild>
@@ -358,96 +339,27 @@ export function EngagementFileRow({
                             <TooltipContent side="top" className="text-xs">Bookmarked — click to remove</TooltipContent>
                         </Tooltip>
                     )}
-                    {showBadge ? (
+                    {(showBadge || isIntakeRow) ? (
                         <Tooltip>
                             <TooltipTrigger asChild>
-                                {isProjectLead && directShared ? (
-                                    <button
-                                        type="button"
-                                        onClick={(e) => { e.stopPropagation(); onUnshareConfirm(file) }}
-                                        className={`inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium border bg-primary/10 text-primary border-primary/30 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors`}
-                                    >
-                                        <Share2 className="h-3 w-3" />
-                                    </button>
-                                ) : (
-                                    <span className={`inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium border ${
-                                        isFolder && !directShared
+                                <span className={`inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium border ${
+                                    isIntakeRow
+                                        ? 'bg-primary/10 text-primary border-primary/30'
+                                        : isFolder && !directShared
                                             ? 'bg-primary/5 text-primary/50 border-primary/20'
                                             : 'bg-primary/10 text-primary border-primary/30'
-                                    }`}>
-                                        <Share2 className="h-3 w-3" />
-                                    </span>
-                                )}
+                                }`}>
+                                    <Share2 className="h-3 w-3" />
+                                </span>
                             </TooltipTrigger>
                             <TooltipContent side="top">
-                                {isProjectLead && directShared
-                                    ? 'Shared externally — click to revoke'
+                                {isIntakeRow
+                                    ? 'Pending Review'
                                     : isFolder && !directShared
                                         ? 'Contains shared items'
                                         : 'Shared externally'}
                             </TooltipContent>
                         </Tooltip>
-                    ) : null}
-                    {isIntakeRow ? (
-                        <span className="inline-flex items-center gap-1 shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <button
-                                        type="button"
-                                        onClick={(e) => { e.stopPropagation(); onSetExpandedIntakeBadgeId(expandedIntakeBadgeId === file.id ? null : file.id) }}
-                                        className="rounded p-0 leading-none text-amber-700 hover:text-amber-900"
-                                    >
-                                        <Inbox className="h-3 w-3" />
-                                    </button>
-                                </TooltipTrigger>
-                                <TooltipContent side="top" className="text-xs">Pending Review</TooltipContent>
-                            </Tooltip>
-                            {expandedIntakeBadgeId === file.id && (<>
-                                {isProjectLead && (<>
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <button
-                                                type="button"
-                                                disabled={intakeActionInProgress === file.id}
-                                                onClick={(e) => { e.stopPropagation(); isFolder ? onFolderIntakeAction(file, 'approve-folder') : onIntakeAction(file, 'approve') }}
-                                                className="rounded-full text-emerald-600 hover:text-emerald-700 hover:bg-emerald-100 disabled:opacity-40 p-0.5"
-                                            >
-                                                <CheckCircle2 className="h-3 w-3" />
-                                            </button>
-                                        </TooltipTrigger>
-                                        <TooltipContent side="top" className="text-xs">{isFolder ? 'Approve folder' : 'Approve'}</TooltipContent>
-                                    </Tooltip>
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <button
-                                                type="button"
-                                                disabled={intakeActionInProgress === file.id}
-                                                onClick={(e) => { e.stopPropagation(); isFolder ? onFolderIntakeAction(file, 'reject-folder') : onIntakeAction(file, 'reject') }}
-                                                className="rounded-full text-red-500 hover:text-red-600 hover:bg-red-100 disabled:opacity-40 p-0.5"
-                                            >
-                                                <Trash2 className="h-3 w-3" />
-                                            </button>
-                                        </TooltipTrigger>
-                                        <TooltipContent side="top" className="text-xs">{isFolder ? 'Reject folder' : 'Reject'}</TooltipContent>
-                                    </Tooltip>
-                                </>)}
-                                {(isEC || isGuest) && isOwnIntake && (
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <button
-                                                type="button"
-                                                disabled={intakeActionInProgress === file.id}
-                                                onClick={(e) => { e.stopPropagation(); isFolder ? onFolderIntakeAction(file, 'withdraw-folder') : onIntakeAction(file, 'withdraw') }}
-                                                className="rounded-full text-amber-500 hover:text-red-600 hover:bg-red-100 disabled:opacity-40 p-0.5"
-                                            >
-                                                <Trash2 className="h-3 w-3" />
-                                            </button>
-                                        </TooltipTrigger>
-                                        <TooltipContent side="top" className="text-xs">{isFolder ? 'Withdraw folder' : 'Withdraw upload'}</TooltipContent>
-                                    </Tooltip>
-                                )}
-                            </>)}
-                        </span>
                     ) : null}
                     {file.lock?.type === 'finalize' && !isFolder ? (
                         <Tooltip>
@@ -511,6 +423,7 @@ export function EngagementFileRow({
                                     )}
                                     aria-label="Open comments"
                                     aria-pressed={file.id === activeCommentDocId}
+                                    disabled={isIntakeRow}
                                     onClick={() => onOpenComments(file)}
                                 >
                                     <MessageCircle className="h-4 w-4" />
@@ -532,7 +445,7 @@ export function EngagementFileRow({
                                 )}
                                 aria-label="Copy link"
                                 aria-pressed={file.id === highlightedFileId}
-                                disabled={!file.projectDocumentId}
+                                disabled={isIntakeRow || !file.projectDocumentId}
                                 onClick={async () => {
                                     if (!file.projectDocumentId) return
                                     const base = typeof window !== 'undefined' ? window.location.href.replace(/#.*$/, '') : ''
@@ -563,6 +476,7 @@ export function EngagementFileRow({
                                     )}
                                     aria-label="Preview"
                                     aria-pressed={file.id === activePreviewDocId}
+                                    disabled={isIntakeRow}
                                     onClick={() => onOpenPreviewPane(file.id)}
                                 >
                                     <ScanEye className="h-4 w-4" />
@@ -585,6 +499,7 @@ export function EngagementFileRow({
 
                     <DocumentActionMenu
                         document={file}
+                        disabled={isIntakeRow}
                         triggerIcon={<MoreVertical className="h-4 w-4" />}
                         deeplinkBase={typeof window !== 'undefined' ? window.location.href.replace(/#.*$/, '') : ''}
                         showShareModal={isProjectLead && !isIntakeRow}
@@ -609,9 +524,6 @@ export function EngagementFileRow({
                         onMakePrivate={canOrganizeTree && !file.isPrivate ? () => onPrivacy(file, true) : undefined}
                         onMakePublic={canOrganizeTree && file.isPrivate ? () => onPrivacy(file, false) : undefined}
                         onOpenChange={(open) => onActionMenuOpenChange(open)}
-                        onApproveFolder={isProjectLead && isFolder && isIntakeRow ? () => onFolderIntakeAction(file, 'approve-folder') : undefined}
-                        onRejectFolder={isProjectLead && isFolder && isIntakeRow ? () => onFolderIntakeAction(file, 'reject-folder') : undefined}
-                        onWithdrawFolder={(isEC || isGuest) && isFolder && isOwnIntake ? () => onFolderIntakeAction(file, 'withdraw-folder') : undefined}
                         onOpenDocument={(doc) => {
                             const d = doc as DriveFile
                             onOpenDocument(d)

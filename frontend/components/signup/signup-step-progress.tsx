@@ -2,7 +2,7 @@
 
 import { cn } from '@/lib/utils'
 
-/** Four segments: email → names → auth method (email code / Google) → OTP. */
+/** Four segments: email → auth method → OTP → success. */
 export const SIGNUP_PROGRESS_STEPS = 4
 
 const STEPS = SIGNUP_PROGRESS_STEPS
@@ -17,18 +17,18 @@ export function signupStepIndex(step: SignupStepKey): number {
 
 /**
  * Maps UI state to 0–3 progress (four mini-bars).
- * - 0: email (`info`, not yet past name step)
- * - 1: first / last name (`info` + verified new user)
- * - 2: choose auth (`auth-method` — Continue with Email Code or Google)
- * - 3: enter OTP (`otp-verify`; Google OAuth skips this and redirects from step 2)
+ * - 0: email + name (`info`)
+ * - 1: choose auth (`auth-method` — Continue with Email Code or Google)
+ * - 2: enter OTP (`otp-verify`; Google OAuth skips this and redirects from step 1)
+ * - 3 (all filled): signup-success page
  */
 export function computeSignupProgressIndex(
   step: SignupStepKey,
   emailVerifiedNewUser: boolean,
 ): number {
   if (step === 'success') return STEPS  // sentinel: all bars filled
-  if (step === 'otp-verify') return 3
-  if (step === 'auth-method') return 2
+  if (step === 'otp-verify') return 2
+  if (step === 'auth-method') return 1
   if (step === 'info' && emailVerifiedNewUser) return 1
   return 0
 }
@@ -73,7 +73,7 @@ export function SignupStepProgress({
       className={cn('flex items-center gap-1.5 justify-center sm:gap-2', className)}
     >
       {Array.from({ length: STEPS }).map((_, i) => {
-        const on = isComplete || i === safe
+        const on = isComplete || i <= safe
         return (
           <span
             key={i}

@@ -16,7 +16,9 @@ export function registerEntityResolver(key: string, resolver: EntityResolver): v
 }
 
 export function resolveEntity(key: string, id: string): Promise<EntityContext> | null {
-    // Normalise: "platform.clients.someField" → "platform.clients"
+    // Try the full key first, then fall back to 2-segment normalisation
+    const exactResolver = registry.get(key)
+    if (exactResolver) return exactResolver(id)
     const tableKey = key.split('.').slice(0, 2).join('.')
     const resolver = registry.get(tableKey)
     return resolver ? resolver(id) : null
@@ -53,6 +55,21 @@ registerEntityResolver('platform.engagements', async (id) => {
         slug: e?.slug ?? null,
         firmSlug,
         ctaUrl: firmSlug && clientSlug && e?.slug ? `/d/f/${firmSlug}/c/${clientSlug}/e/${e.slug}` : null,
+    }
+})
+
+registerEntityResolver('platform.engagements.shares', async (id) => {
+    const e = await (prisma as any).engagement.findUnique({
+        where: { id },
+        select: { name: true, slug: true, client: { select: { slug: true, firm: { select: { slug: true } } } } },
+    })
+    const firmSlug = e?.client?.firm?.slug ?? null
+    const clientSlug = e?.client?.slug ?? null
+    return {
+        name: e?.name ?? '',
+        slug: e?.slug ?? null,
+        firmSlug,
+        ctaUrl: firmSlug && clientSlug && e?.slug ? `/d/f/${firmSlug}/c/${clientSlug}/e/${e.slug}/shares` : null,
     }
 })
 

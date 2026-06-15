@@ -138,23 +138,21 @@ export function SignupView() {
                 />
               </div>
 
-              {/* Middle: title + form vertically centered as one block */}
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col justify-center py-8">
-                <div className="max-h-full w-full min-h-0 overflow-y-auto overflow-x-hidden overscroll-y-contain text-left [scrollbar-gutter:stable]">
-                  <div className="w-full min-w-0">
-                    <h2 className={`mb-2 text-3xl font-bold tracking-tight text-[#1b1b1d] ${H}`}>Sign up</h2>
-                    <p className="text-[15px] leading-relaxed text-[#45474c]">
-                      Create your account and start setting up your firm workspace.
-                    </p>
-                    <div className="mt-8 min-w-0">
-                      <Suspense fallback={<div className="py-8 text-[#45474c]">Loading...</div>}>
-                        <SignupForm
-                          layout="split-light"
-                          onStepChange={setStep}
-                          onProgressIndexChange={setProgressIndex}
-                        />
-                      </Suspense>
-                    </div>
+              {/* Middle: title + form, scrollable */}
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden overscroll-y-contain py-8 text-left [scrollbar-gutter:stable]">
+                <div className="w-full min-w-0">
+                  <h2 className={`mb-2 text-3xl font-bold tracking-tight text-[#1b1b1d] ${H}`}>Sign up</h2>
+                  <p className="text-[15px] leading-relaxed text-[#45474c]">
+                    Create your account and start setting up your firm workspace.
+                  </p>
+                  <div className="mt-8 min-w-0">
+                    <Suspense fallback={<div className="py-8 text-[#45474c]">Loading...</div>}>
+                      <SignupForm
+                        layout="split-light"
+                        onStepChange={setStep}
+                        onProgressIndexChange={setProgressIndex}
+                      />
+                    </Suspense>
                   </div>
                 </div>
               </div>

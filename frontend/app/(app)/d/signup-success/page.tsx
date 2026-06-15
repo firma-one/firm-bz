@@ -10,6 +10,7 @@ import { KINETIC_LANDING_HERO_BADGE } from '@/lib/marketing/target-audience-nav'
 import { KINETIC_AUTH_HERO_IMAGE } from '@/lib/marketing/kinetic-auth-hero'
 import { Bolt, ShieldCheck } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { SignupStepProgress } from '@/components/signup/signup-step-progress'
 
 const H = '[font-family:var(--font-kinetic-headline),system-ui,sans-serif]'
 const B = '[font-family:var(--font-kinetic-body),system-ui,sans-serif]'
@@ -104,6 +105,12 @@ export default function SignupSuccessPage() {
                             <div className="shrink-0">
                                 <div className="flex justify-start"><Logo size="lg" /></div>
                                 <div className="mt-6 border-b border-black/[0.1]" aria-hidden />
+                                <SignupStepProgress
+                                    step="success"
+                                    variant="light"
+                                    className="mt-6"
+                                    aria-label="Sign up steps"
+                                />
                             </div>
                             <div className="flex min-h-0 min-w-0 flex-1 flex-col justify-center py-8">
                                 <div className="max-h-full w-full min-h-0 overflow-y-auto overflow-x-hidden overscroll-y-contain text-left [scrollbar-gutter:stable]">

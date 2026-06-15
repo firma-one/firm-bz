@@ -343,17 +343,20 @@ export async function POST(request: NextRequest) {
                             engagementId: engagementContext.projectId,
                             parentId: folderId,
                             ...(folderInShared || folderUnderShared ? {} : { externalId: { in: Array.from(allowSet) } }),
+                            // Exclude docs pending approval by someone else — only the uploader sees their own PENDING items (via intakeRows below)
+                            NOT: { sharingUsers: { some: { sharingPermissionStatus: 'PENDING' as any, userId: { not: user.id } } } },
                         },
                         select: { id: true, externalId: true, fileName: true, mimeType: true, fileSize: true, isFolder: true, metadata: true, settings: true, createdBy: true, status: true, dueDate: true },
                     }),
-                    // Also surface the EC/EV's own PENDING intake files/folders in this folder
-                    prisma.engagementDocument.findMany({
+                    // Also surface the EC/EV's own PENDING intake folders in this folder
+                    (prisma.engagementDocument as any).findMany({
                         where: {
                             engagementId: engagementContext.projectId,
                             parentId: folderId,
-                            settings: { path: ['lock', 'uploadedBy'], equals: user.id } as any,
+                            isFolder: true,
+                            sharingUsers: { some: { userId: user.id, sharingPermissionStatus: 'PENDING' } },
                         },
-                        select: { id: true, externalId: true, fileName: true, mimeType: true, fileSize: true, isFolder: true, metadata: true, settings: true, createdBy: true, status: true, dueDate: true },
+                        select: { id: true, externalId: true, fileName: true, mimeType: true, fileSize: true, isFolder: true, metadata: true, settings: true, createdBy: true, status: true, dueDate: true, sharingUsers: { where: { sharingPermissionStatus: 'PENDING' }, select: { userId: true } } },
                     }),
                 ])
 
@@ -409,6 +412,10 @@ export async function POST(request: NextRequest) {
                 }
 
                 const seenIds = new Set<string>()
+                const intakeExternalIds = new Set(intakeRows.map((r: any) => r.externalId))
+                const intakeUploaderByExternal = new Map<string, string>(
+                    intakeRows.map((r: any) => [r.externalId, r.sharingUsers?.[0]?.userId ?? null]).filter(([, v]: [string, string | null]) => v)
+                )
                 const mapRow = (row: any) => {
                     const fresh = freshMetaMap.get(row.externalId)
                     return ({
@@ -432,6 +439,8 @@ export async function POST(request: NextRequest) {
                     indexingStatus: row.status ?? undefined,
                     dueDate: row.dueDate ? (row.dueDate as Date).toISOString() : null,
                     lock: getLock(row.settings),
+                    isPendingApproval: intakeExternalIds.has(row.externalId),
+                    pendingUploaderId: intakeUploaderByExternal.get(row.externalId) ?? null,
                 })}
                 for (const row of allRows) {
                     if (!seenIds.has(row.externalId)) {
@@ -463,14 +472,15 @@ export async function POST(request: NextRequest) {
                                 select: { id: true, externalId: true, settings: true, status: true, dueDate: true },
                             })
                             : [],
-                        // All PENDING intake docs/folders in this folder (shadow rows for EL/internal)
-                        prisma.engagementDocument.findMany({
+                        // All PENDING intake folders in this folder (shadow rows for EL/internal)
+                        (prisma.engagementDocument as any).findMany({
                             where: {
                                 engagementId: bodyEngagementId,
                                 parentId: folderId,
-                                settings: { path: ['lock', 'type'], equals: 'intake' } as any,
+                                isFolder: true,
+                                sharingUsers: { some: { sharingPermissionStatus: 'PENDING' } },
                             },
-                            select: { id: true, externalId: true, fileName: true, mimeType: true, fileSize: true, isFolder: true, metadata: true, settings: true, status: true, dueDate: true },
+                            select: { id: true, externalId: true, fileName: true, mimeType: true, fileSize: true, isFolder: true, metadata: true, settings: true, status: true, dueDate: true, sharingUsers: { where: { sharingPermissionStatus: 'PENDING' }, select: { userId: true } } },
                         }),
                     ])
 
@@ -502,6 +512,12 @@ export async function POST(request: NextRequest) {
                         }))
                     }
 
+                    // Build set of PENDING externalIds so Drive-present pending folders get flagged too
+                    const pendingExternalIds = new Set(intakePendingRows.map((r: any) => r.externalId))
+                    const pendingUploaderByExternal = new Map<string, string>(
+                        intakePendingRows.map((r: any) => [r.externalId, r.sharingUsers?.[0]?.userId ?? null]).filter(([, v]: [string, string | null]) => v)
+                    )
+
                     files = files.map((f: any) => ({
                         ...f,
                         projectDocumentId: internalByExternal.get(f.id) ?? undefined,
@@ -510,13 +526,15 @@ export async function POST(request: NextRequest) {
                         lock: lockByExternal.get(f.id) ?? null,
                         isPrivate: lockByExternal.get(f.id)?.type === 'private',
                         isSharedWithExternal: sharedExternalByExternal.get(f.id) ?? false,
+                        isPendingApproval: pendingExternalIds.has(f.id),
+                        pendingUploaderId: pendingUploaderByExternal.get(f.id) ?? null,
                         ownerRole: (() => {
                             const ownerEmail = f.owners?.[0]?.emailAddress ?? f.actorEmail ?? null
                             return ownerEmail ? (elRoleByEmail.get(ownerEmail) ?? null) : null
                         })(),
                     }))
 
-                    // Merge PENDING intake rows that aren't already in Drive listing
+                    // Merge PENDING intake rows that aren't already in Drive listing (shadow rows)
                     const driveIdSet = new Set(files.map((f: any) => f.id))
                     for (const row of intakePendingRows) {
                         if (!driveIdSet.has(row.externalId)) {
@@ -533,6 +551,8 @@ export async function POST(request: NextRequest) {
                                 indexingStatus: row.status ?? undefined,
                                 dueDate: row.dueDate ? (row.dueDate as Date).toISOString() : null,
                                 lock: getLock(row.settings),
+                                isPendingApproval: true,
+                                pendingUploaderId: row.sharingUsers?.[0]?.userId ?? null,
                             })
                         }
                     }
@@ -621,8 +641,8 @@ export async function POST(request: NextRequest) {
                     fileName: name,
                 })
 
-                // If EC/EV user created this folder, immediately write DB record with intake lock
-                // so the folder is visible in their DB-driven file list
+                // If EC/EV user created this folder, immediately write DB record + PENDING sharing row
+                // so the folder is visible in their DB-driven file list and in the EL's intake queue
                 if (bodyEngagementId) {
                     const projectForRole = await prisma.engagement.findUnique({
                         where: { id: bodyEngagementId as string },
@@ -634,7 +654,15 @@ export async function POST(request: NextRequest) {
                         const folderOrgId = orgId
                         const folderClientId = engagement?.clientId
                         if (folderOrgId && folderClientId) {
-                            await prisma.engagementDocument.upsert({
+                            // Set the share flag immediately so getSharedAndAncestorIdsForPersona
+                            // includes this folder in allowSet — lets the uploader navigate into
+                            // nested subfolders via the DB-driven EC/EV listing path.
+                            // The PENDING sharing row is the gate that hides it from other EC/EV users.
+                            const shareSettings = userRole === 'eng_ext_collaborator'
+                                ? { share: { externalCollaborator: { enabled: true } } }
+                                : { share: { guest: { enabled: true } } }
+
+                            const folderDoc = await prisma.engagementDocument.upsert({
                                 where: {
                                     engagementId_firmId_externalId: {
                                         engagementId: bodyEngagementId as string,
@@ -642,9 +670,7 @@ export async function POST(request: NextRequest) {
                                         externalId: newFile.id as string,
                                     }
                                 },
-                                update: {
-                                    settings: { lock: { type: 'intake', uploadedBy: user.id, uploadedAt: now } } as object,
-                                },
+                                update: {},
                                 create: {
                                     engagementId: bodyEngagementId as string,
                                     firmId: folderOrgId,
@@ -655,51 +681,68 @@ export async function POST(request: NextRequest) {
                                     fileName: name,
                                     mimeType: 'application/vnd.google-apps.folder',
                                     isFolder: true,
-                                    settings: { lock: { type: 'intake', uploadedBy: user.id, uploadedAt: now } } as object,
+                                    createdBy: user.id,
+                                    settings: shareSettings as object,
                                     metadata: { modifiedTime: now } as object,
                                 }
                             })
-                            // Notify ELs about the pending folder upload (notification via Inngest)
-                            await safeInngestSend('file.index.requested', {
-                                organizationId: folderOrgId,
-                                clientId: folderClientId,
-                                projectId: bodyEngagementId as string,
-                                externalId: newFile.id as string,
-                                fileName: name,
-                                uploadedBy: user.id,
-                                isIntakeUpload: true,
-                                isFolder: true,
+
+                            // Only write PENDING row + EL reminders if this user has no existing
+                            // PENDING folder in this engagement — nested folders are covered by
+                            // their root ancestor's PENDING row and approved as a subtree.
+                            const alreadyHasPendingRoot = await (prisma.engagementDocumentSharingUser as any).findFirst({
+                                where: {
+                                    engagementId: bodyEngagementId as string,
+                                    userId: user.id,
+                                    sharingPermissionStatus: 'PENDING',
+                                },
+                                select: { id: true },
                             })
 
-                            // Create intake reminders synchronously for all ELs
-                            const reminderId = `intake-${bodyEngagementId as string}-${newFile.id as string}`
-                            const leads = await prisma.engagementMember.findMany({
-                                where: { engagementId: bodyEngagementId as string, role: { in: ['eng_admin', 'eng_member'] } },
-                                select: { userId: true },
-                            })
-                            const reminderItem = {
-                                id: reminderId,
-                                entityKey: 'platform.engagements',
-                                entityValue: bodyEngagementId as string,
-                                action: `Review folder: "${name}"`,
-                                dateKey: null,
-                                dateValue: null,
-                                hiddenAt: null,
-                                createdAt: new Date().toISOString(),
+                            if (!alreadyHasPendingRoot) {
+                                // Write PENDING sharing row — this is the intake queue entry for the root folder
+                                await (prisma.engagementDocumentSharingUser as any).upsert({
+                                    where: { projectDocumentId_userId: { projectDocumentId: folderDoc.id, userId: user.id } },
+                                    create: {
+                                        projectDocumentId: folderDoc.id,
+                                        engagementId: bodyEngagementId as string,
+                                        userId: user.id,
+                                        email: user.email ?? '',
+                                        sharingPermissionStatus: 'PENDING',
+                                    },
+                                    update: { sharingPermissionStatus: 'PENDING' },
+                                })
+
+                                // Create intake reminders synchronously for all ELs
+                                const reminderId = `intake-${bodyEngagementId as string}-${newFile.id as string}`
+                                const leads = await prisma.engagementMember.findMany({
+                                    where: { engagementId: bodyEngagementId as string, role: { in: ['eng_admin', 'eng_member'] } },
+                                    select: { userId: true },
+                                })
+                                const reminderItem = {
+                                    id: reminderId,
+                                    entityKey: 'platform.engagements.shares',
+                                    entityValue: bodyEngagementId as string,
+                                    action: `Review folder: "${name}"`,
+                                    dateKey: 'date',
+                                    dateValue: new Date().toISOString().slice(0, 10),
+                                    hiddenAt: null,
+                                    createdAt: new Date().toISOString(),
+                                }
+                                await Promise.all(leads.map(async (lead) => {
+                                    const p = await prisma.userPersonalization.findUnique({
+                                        where: { userId: lead.userId },
+                                        select: { reminders: true },
+                                    })
+                                    const existing: any[] = Array.isArray(p?.reminders) ? p!.reminders as any[] : []
+                                    if (existing.find((r: any) => r.id === reminderId)) return
+                                    await prisma.userPersonalization.upsert({
+                                        where: { userId: lead.userId },
+                                        create: { userId: lead.userId, reminders: [reminderItem] as any },
+                                        update: { reminders: [...existing, reminderItem] as any },
+                                    })
+                                }))
                             }
-                            await Promise.all(leads.map(async (lead) => {
-                                const p = await prisma.userPersonalization.findUnique({
-                                    where: { userId: lead.userId },
-                                    select: { reminders: true },
-                                })
-                                const existing: any[] = Array.isArray(p?.reminders) ? p!.reminders as any[] : []
-                                if (existing.find((r: any) => r.id === reminderId)) return
-                                await prisma.userPersonalization.upsert({
-                                    where: { userId: lead.userId },
-                                    create: { userId: lead.userId, reminders: [reminderItem] as any },
-                                    update: { reminders: [...existing, reminderItem] as any },
-                                })
-                            }))
                         }
                     }
                 }

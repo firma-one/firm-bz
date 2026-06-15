@@ -17,7 +17,7 @@ import { Button, buttonVariants } from '@/components/ui/button'
 
 import { persistCheckoutIntent, readCheckoutIntent, type CheckoutPlanName } from '@/lib/marketing/checkout-intent'
 import { cn } from '@/lib/utils'
-import { Building2, Check, ChevronDown, ChevronUp, CreditCard, ExternalLink, Loader2, Lock, Receipt, Rows3 } from 'lucide-react'
+import { Check, ChevronDown, ChevronUp, CreditCard, ExternalLink, Loader2, Rows3 } from 'lucide-react'
 import { EVENTS, Joyride, STATUS, type Controls, type EventData } from 'react-joyride'
 
 type CatalogJson = { items?: BillingCatalogPlan[]; error?: string }
@@ -70,9 +70,13 @@ interface PolarPlansPickerProps {
     /** Hide the catalog free (one-time) product row when current plan is shown elsewhere. */
     hideStandaloneFreePlan?: boolean
     /**
-     * Onboarding billing: run a react-joyride spotlight + tooltip on the plan card that matches
-     * `firma.checkoutIntent`. Dismissal applies until this component unmounts (full refresh clears it).
+     * Show a first-visit guided tour on the billing page. When a `firma.checkoutIntent` is present
+     * the tour spotlights that specific plan card; otherwise it spotlights the recommended plan.
+     * Seen-state is tracked in localStorage (`firma.billingTourSeen`) so the tour only runs once.
+     * Dismissal within the session also applies (ref-based, clears on unmount/refresh).
      */
+    enableBillingTour?: boolean
+    /** @deprecated Use enableBillingTour — kept for callers that still pass the old name. */
     enableCheckoutIntentJoyride?: boolean
     /**
      * Optional permissions precheck from `/api/permissions/firm`.
@@ -720,6 +724,26 @@ function BillingFaqInlineLink({
     )
 }
 
+const BILLING_TOUR_SEEN_KEY = 'firma.billingTourSeen'
+
+function readBillingTourSeen(): boolean {
+    if (typeof window === 'undefined') return true
+    try {
+        return window.localStorage.getItem(BILLING_TOUR_SEEN_KEY) === '1'
+    } catch {
+        return false
+    }
+}
+
+function markBillingTourSeen(): void {
+    if (typeof window === 'undefined') return
+    try {
+        window.localStorage.setItem(BILLING_TOUR_SEEN_KEY, '1')
+    } catch {
+        /* ignore quota */
+    }
+}
+
 export function PolarPlansPicker({
     firmId,
     returnPath,
@@ -729,9 +753,11 @@ export function PolarPlansPicker({
     className,
     blueAccentTrial,
     hideStandaloneFreePlan = false,
+    enableBillingTour = false,
     enableCheckoutIntentJoyride = false,
     fallbackCanManageBilling,
 }: PolarPlansPickerProps) {
+    const enableTour = enableBillingTour || enableCheckoutIntentJoyride
     const [plans, setPlans] = useState<BillingCatalogPlan[] | null>(null)
     const [error, setError] = useState<string | null>(null)
     const [loading, setLoading] = useState(true)
@@ -743,22 +769,25 @@ export function PolarPlansPicker({
     const [intentHighlightPlan, setIntentHighlightPlan] = useState<CheckoutPlanName | null>(null)
     const checkoutIntentAppliedRef = useRef(false)
     const [checkoutIntentJoyrideRun, setCheckoutIntentJoyrideRun] = useState(false)
+    /** True when neither a checkout intent nor a first-visit is detected — tour is generic mode. */
+    const [genericTourMode, setGenericTourMode] = useState(false)
     /** Avoid sessionStorage here — it survives refresh and made the tour impossible to re-test. */
     const checkoutIntentJoyrideDismissedRef = useRef(false)
 
     /** Legacy key no longer read — remove so DevTools / expectations match behavior after refresh. */
     useEffect(() => {
-        if (!enableCheckoutIntentJoyride || typeof window === 'undefined') return
+        if (!enableTour || typeof window === 'undefined') return
         try {
             sessionStorage.removeItem('firma.checkoutIntentJoyrideDismissed')
         } catch {
             /* ignore */
         }
-    }, [enableCheckoutIntentJoyride])
+    }, [enableTour])
 
     const checkoutJoyrideAutoAdvanceRef = useRef<number | null>(null)
     const joyrideTargetRetryRef = useRef<number | null>(null)
     const joyrideTargetNotFoundCountRef = useRef(0)
+    const joyrideStepCountRef = useRef(0)
 
     const clearCheckoutJoyrideAutoAdvance = useCallback(() => {
         if (checkoutJoyrideAutoAdvanceRef.current != null) {
@@ -775,12 +804,14 @@ export function PolarPlansPicker({
     }, [])
 
     /**
-     * Runs before step 2 tooltip: scroll plan card into view, then wait so Joyride measures after layout
+     * Runs before the plan card tooltip: scroll it into view, then wait so Joyride measures after layout
      * (calling go(1) immediately after scrollIntoView(smooth) left the spotlight at the pre-scroll position).
      */
     const waitForPlanCardScrollIntoView = useCallback((): Promise<void> => {
         return new Promise((resolve) => {
-            const el = document.querySelector('[data-checkout-intent-tour]')
+            const el =
+                document.querySelector('[data-checkout-intent-tour]') ??
+                document.querySelector('[data-billing-tour-recommended]')
             if (!el) {
                 resolve()
                 return
@@ -801,10 +832,10 @@ export function PolarPlansPicker({
                     joyrideTargetNotFoundCountRef.current += 1
                     joyrideTargetRetryRef.current = window.setTimeout(() => {
                         joyrideTargetRetryRef.current = null
-                        if (
-                            document.querySelector('[data-onboarding-billing-skip-tour]') &&
-                            document.querySelector('[data-checkout-intent-tour]')
-                        ) {
+                        const planTarget = intentHighlightPlan
+                            ? '[data-checkout-intent-tour]'
+                            : '[data-billing-tour-recommended]'
+                        if (document.querySelector(planTarget)) {
                             setCheckoutIntentJoyrideRun(true)
                         }
                     }, 450)
@@ -820,11 +851,12 @@ export function PolarPlansPicker({
                 clearJoyrideTargetRetry()
                 joyrideTargetNotFoundCountRef.current = 0
                 checkoutIntentJoyrideDismissedRef.current = true
+                markBillingTourSeen()
                 setCheckoutIntentJoyrideRun(false)
                 return
             }
-            /** After Skip step is shown, auto-advance to plan card — step 2 `before` scrolls then tooltip opens. */
-            if (type === EVENTS.STEP_BEFORE && index === 0) {
+            /** After Skip step is shown, auto-advance to plan card — only when tour has 2 steps. */
+            if (type === EVENTS.STEP_BEFORE && index === 0 && joyrideStepCountRef.current > 1) {
                 clearCheckoutJoyrideAutoAdvance()
                 checkoutJoyrideAutoAdvanceRef.current = window.setTimeout(() => {
                     checkoutJoyrideAutoAdvanceRef.current = null
@@ -835,7 +867,7 @@ export function PolarPlansPicker({
                 clearCheckoutJoyrideAutoAdvance()
             }
         },
-        [clearCheckoutJoyrideAutoAdvance, clearJoyrideTargetRetry]
+        [clearCheckoutJoyrideAutoAdvance, clearJoyrideTargetRetry, intentHighlightPlan]
     )
 
     useEffect(
@@ -847,37 +879,54 @@ export function PolarPlansPicker({
     )
 
     const checkoutIntentJoyrideSteps = useMemo(() => {
-        if (!enableCheckoutIntentJoyride || !intentHighlightPlan) return []
-        return [
-            {
-                target: '[data-onboarding-billing-skip-tour]',
-                title: upgradeCopy.checkoutIntentJoyrideSkipTitle,
-                content: (
-                    <p className="m-0 text-left text-sm leading-relaxed text-slate-700">
-                        {upgradeCopy.checkoutIntentJoyrideSkipBody}
-                    </p>
-                ),
-                placement: 'bottom' as const,
-            },
-            {
-                target: '[data-checkout-intent-tour]',
-                title: upgradeCopy.checkoutIntentJoyrideTitle,
-                content: (
-                    <p className="m-0 text-left text-sm leading-relaxed text-slate-700">
-                        {upgradeCopy.checkoutIntentJoyrideLead}
-                        <strong className="font-semibold text-slate-900">{intentHighlightPlan}</strong>
-                        {upgradeCopy.checkoutIntentJoyrideTrail}
-                    </p>
-                ),
-                placement: 'auto' as const,
-                /** Scroll + wait completes before Joyride measures the target (avoids stuck spotlight). */
-                before: waitForPlanCardScrollIntoView,
-                /** We handle scroll in `before`; skip Joyride’s own scroll to avoid double layout. */
-                skipScroll: true,
-                scrollOffset: 72,
-            },
-        ]
-    }, [enableCheckoutIntentJoyride, intentHighlightPlan, waitForPlanCardScrollIntoView])
+        if (!enableTour) return []
+        const hasSkipBtn = Boolean(
+            typeof document !== 'undefined' &&
+                document.querySelector('[data-onboarding-billing-skip-tour]')
+        )
+        const planTarget = intentHighlightPlan
+            ? '[data-checkout-intent-tour]'
+            : '[data-billing-tour-recommended]'
+        const planStepContent = intentHighlightPlan ? (
+            <p className="m-0 text-left text-sm leading-relaxed text-slate-700">
+                {upgradeCopy.checkoutIntentJoyrideLead}
+                <strong className="font-semibold text-slate-900">{intentHighlightPlan}</strong>
+                {upgradeCopy.checkoutIntentJoyrideTrail}
+            </p>
+        ) : (
+            <p className="m-0 text-left text-sm leading-relaxed text-slate-700">
+                {upgradeCopy.billingTourGenericBody}
+            </p>
+        )
+        const planStep = {
+            target: planTarget,
+            title: intentHighlightPlan
+                ? upgradeCopy.checkoutIntentJoyrideTitle
+                : upgradeCopy.billingTourGenericTitle,
+            content: planStepContent,
+            placement: 'auto' as const,
+            before: waitForPlanCardScrollIntoView,
+            skipScroll: true,
+            scrollOffset: 72,
+        }
+        if (hasSkipBtn) {
+            return [
+                {
+                    target: '[data-onboarding-billing-skip-tour]',
+                    title: upgradeCopy.checkoutIntentJoyrideSkipTitle,
+                    content: (
+                        <p className="m-0 text-left text-sm leading-relaxed text-slate-700">
+                            {upgradeCopy.checkoutIntentJoyrideSkipBody}
+                        </p>
+                    ),
+                    placement: 'bottom' as const,
+                },
+                planStep,
+            ]
+        }
+        return [planStep]
+    }, [enableTour, intentHighlightPlan, genericTourMode, waitForPlanCardScrollIntoView])
+    joyrideStepCountRef.current = checkoutIntentJoyrideSteps.length
 
     useEffect(() => {
         let cancelled = false
@@ -964,24 +1013,28 @@ export function PolarPlansPicker({
     /** Apply marketing checkout intent (plan + interval) before subscription-driven toggle sync overwrites it. */
     useEffect(() => {
         if (!planRows?.length || checkoutIntentAppliedRef.current) return
-        const intent = readCheckoutIntent()
-        if (!intent) return
         checkoutIntentAppliedRef.current = true
-        setIntentHighlightPlan(intent.plan)
-        const seg = intent.interval === 'monthly' ? 'monthly' : 'annual'
-        setGroupBilling((prev) => {
-            let changed = false
-            const next = { ...prev }
-            for (const row of planRows) {
-                if (row.kind !== 'group') continue
-                if (!checkoutIntentMatchesCatalogRow(intent.plan, row.name, false, true)) continue
-                if (next[row.groupKey] === seg) continue
-                next[row.groupKey] = seg
-                changed = true
-            }
-            return changed ? next : prev
-        })
-    }, [planRows])
+        const intent = readCheckoutIntent()
+        if (intent) {
+            setIntentHighlightPlan(intent.plan)
+            const seg = intent.interval === 'monthly' ? 'monthly' : 'annual'
+            setGroupBilling((prev) => {
+                let changed = false
+                const next = { ...prev }
+                for (const row of planRows) {
+                    if (row.kind !== 'group') continue
+                    if (!checkoutIntentMatchesCatalogRow(intent.plan, row.name, false, true)) continue
+                    if (next[row.groupKey] === seg) continue
+                    next[row.groupKey] = seg
+                    changed = true
+                }
+                return changed ? next : prev
+            })
+        } else if (enableTour) {
+            // No checkout intent — mark generic mode so tour targets the recommended plan card
+            setGenericTourMode(true)
+        }
+    }, [planRows, enableTour])
 
     /** Sync toggle when the active subscription matches one of the Polar products in a group. */
     useEffect(() => {
@@ -1001,14 +1054,22 @@ export function PolarPlansPicker({
         }
     }, [currentPlanId, planRows])
 
-    /** Start joyride once the intent-matched plan card is in the DOM (onboarding billing only). */
+    /** Start joyride once the target plan card is in the DOM (first visit only). */
     useEffect(() => {
-        if (!enableCheckoutIntentJoyride) {
+        if (!enableTour) {
             setCheckoutIntentJoyrideRun(false)
             return
         }
-        if (intentHighlightPlan == null || loading) return
+        // Wait until intent resolution is done (either intent found or generic mode set)
+        const intentResolved = intentHighlightPlan != null || genericTourMode
+        if (!intentResolved || loading) return
         if (checkoutIntentJoyrideDismissedRef.current) return
+        // Only show on first visit
+        if (readBillingTourSeen()) return
+
+        const planTarget = intentHighlightPlan
+            ? '[data-checkout-intent-tour]'
+            : '[data-billing-tour-recommended]'
 
         let cancelled = false
         let timeoutId: number | undefined
@@ -1017,10 +1078,8 @@ export function PolarPlansPicker({
 
         const tryStart = () => {
             if (cancelled) return false
-            if (
-                document.querySelector('[data-onboarding-billing-skip-tour]') &&
-                document.querySelector('[data-checkout-intent-tour]')
-            ) {
+            const planCard = document.querySelector(planTarget)
+            if (planCard) {
                 joyrideTargetNotFoundCountRef.current = 0
                 setCheckoutIntentJoyrideRun(true)
                 return true
@@ -1043,7 +1102,7 @@ export function PolarPlansPicker({
             cancelAnimationFrame(raf2)
             if (timeoutId != null) window.clearTimeout(timeoutId)
         }
-    }, [enableCheckoutIntentJoyride, intentHighlightPlan, loading, visiblePlanRows])
+    }, [enableTour, intentHighlightPlan, genericTourMode, loading, visiblePlanRows])
 
     if (!firmId) {
         return <p className="text-sm text-slate-600">{upgradeCopy.planPickerMissingFirm}</p>
@@ -1180,10 +1239,16 @@ export function PolarPlansPicker({
                                 intentHighlightPlan,
                                 row.name,
                                 false,
-                                enableCheckoutIntentJoyride
+                                enableTour
                             ) &&
                             (!isCurrentPlan ||
-                                (enableCheckoutIntentJoyride && !isPaidRecurringCurrent))
+                                (enableTour && !isPaidRecurringCurrent))
+                        // Generic tour target: recommended plan card (or first standard tier)
+                        const isGenericTourTarget =
+                            genericTourMode &&
+                            !isCurrentPlan &&
+                            (selectedPlan.isRecommended ||
+                                normalizePlanName(row.name).includes('standard'))
                         const isTrialingCurrentPlan =
                             isCurrentPlan &&
                             (currentPlanState?.subscriptionStatus ?? '').toLowerCase() === 'trialing' &&
@@ -1220,6 +1285,7 @@ export function PolarPlansPicker({
                                 ) : null}
                                 <article
                                     {...(isIntentHighlight ? { 'data-checkout-intent-tour': true } : {})}
+                                    {...(isGenericTourTarget ? { 'data-billing-tour-recommended': true } : {})}
                                     className={cn(
                                         planCardBase,
                                         'hover:shadow-[0_8px_24px_-8px_rgba(15,23,42,0.1),0_20px_48px_-16px_rgba(15,23,42,0.12)]',
@@ -1229,7 +1295,7 @@ export function PolarPlansPicker({
                                         isCurrentPlan && !blueAccentTrial && 'border-emerald-200 ring-1 ring-emerald-100',
                                         blueAccentTrial && isCurrentPlan && 'bg-[#ECC0AA]/10',
                                         isIntentHighlight &&
-                                            !enableCheckoutIntentJoyride &&
+                                            !enableTour &&
                                             (blueAccentTrial
                                                 ? 'border-2 border-[#b88972]/60'
                                                 : 'border-2 border-emerald-600/40')
@@ -1693,7 +1759,7 @@ export function PolarPlansPicker({
                     )
                 })}
             </ul>
-            {enableCheckoutIntentJoyride && checkoutIntentJoyrideSteps.length > 0 ? (
+            {enableTour && checkoutIntentJoyrideSteps.length > 0 ? (
                 <Joyride
                     run={checkoutIntentJoyrideRun}
                     steps={checkoutIntentJoyrideSteps}
@@ -1705,19 +1771,77 @@ export function PolarPlansPicker({
                         next: 'Next',
                     }}
                     options={{
-                        primaryColor: '#0f172a',
-                        textColor: '#0f172a',
+                        primaryColor: '#1b1b1d',
+                        textColor: '#1b1b1d',
                         backgroundColor: '#ffffff',
                         arrowColor: '#ffffff',
-                        overlayColor: 'rgba(15, 23, 42, 0.52)',
-                        spotlightPadding: 12,
-                        spotlightRadius: 16,
+                        overlayColor: 'rgba(15, 23, 42, 0.48)',
+                        spotlightPadding: 10,
+                        spotlightRadius: 4,
                         zIndex: 10050,
                         skipBeacon: true,
                         showProgress: false,
                         buttons: ['close', 'primary'],
                         scrollDuration: 400,
                         scrollOffset: 40,
+                    }}
+                    styles={{
+                        floater: {
+                            filter: 'drop-shadow(0 4px 16px rgba(15,23,42,0.13))',
+                        },
+                        tooltip: {
+                            borderRadius: 2,
+                            padding: '16px 16px 12px',
+                            fontSize: 12,
+                            maxWidth: 280,
+                            border: '1px solid #e5e7eb',
+                            boxShadow: '0 8px 32px -8px rgba(15,23,42,0.14), 0 2px 8px rgba(15,23,42,0.06)',
+                            fontFamily: 'inherit',
+                        },
+                        tooltipContainer: {
+                            textAlign: 'left',
+                            lineHeight: 1.5,
+                        },
+                        tooltipTitle: {
+                            fontSize: 12,
+                            fontWeight: 700,
+                            letterSpacing: '0.01em',
+                            color: '#1b1b1d',
+                            marginTop: 0,
+                            marginBottom: 0,
+                            marginLeft: 0,
+                            marginRight: 0,
+                        },
+                        tooltipContent: {
+                            padding: '6px 0 2px',
+                            fontSize: 12,
+                            color: '#45474c',
+                            lineHeight: 1.55,
+                        },
+                        tooltipFooter: {
+                            marginTop: 10,
+                            paddingTop: 8,
+                            borderTop: '1px solid #e5e7eb',
+                        },
+                        buttonPrimary: {
+                            borderRadius: 2,
+                            fontSize: 10,
+                            fontWeight: 700,
+                            letterSpacing: '0.12em',
+                            textTransform: 'uppercase',
+                            padding: '5px 12px',
+                            backgroundColor: '#1b1b1d',
+                            color: '#ffffff',
+                            fontFamily: 'inherit',
+                        },
+                        buttonClose: {
+                            color: '#9ca3af',
+                            width: 10,
+                            height: 10,
+                            padding: 8,
+                            top: 2,
+                            right: 2,
+                        },
                     }}
                 />
             ) : null}

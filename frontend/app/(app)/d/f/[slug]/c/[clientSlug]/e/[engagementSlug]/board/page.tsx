@@ -85,7 +85,7 @@ export default async function EngagementBoardPage({ params }: PageProps) {
     projectRole === 'eng_ext_collaborator' || projectRole === 'eng_viewer'
       ? getAccessibleFileCountForPersona(project.id, projectRole)
       : (basePrisma as any).engagementDocument.count({ where: { engagementId: project.id, isFolder: false } }),
-    (basePrisma as any).engagementDocument.count({ where: { engagementId: project.id, slug: { not: null } } }),
+    (basePrisma as any).engagementDocument.count({ where: { engagementId: project.id, OR: [{ slug: { not: null } }, { sharingUsers: { some: { sharingPermissionStatus: 'PENDING' } } }] } }),
     (basePrisma as any).docCommentMessage.count({ where: { engagementId: project.id } }),
     (basePrisma as any).engagementMember.count({ where: { engagementId: project.id } }),
     (basePrisma as any).engagementInvitation.count({ where: { engagementId: project.id, status: { not: 'JOINED' } } }),

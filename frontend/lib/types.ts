@@ -240,8 +240,12 @@ export interface DriveFile {
     summary?: string
     [key: string]: any
   }
-  /** Intake or finalize lock — present when file is pending intake or finalized. */
-  lock?: { type: 'intake' | 'finalize'; uploadedBy?: string; uploadedAt?: string; finalizedBy?: string; finalizedAt?: string } | null
+  /** Finalize lock — present when file is finalized. */
+  lock?: { type: 'finalize'; finalizedBy?: string; finalizedAt?: string } | null
+  /** True when this file/folder is pending EL approval (intake queue v2). Replaces lock.type==='intake'. */
+  isPendingApproval?: boolean
+  /** userId of the EC/EV who uploaded this item. Set when isPendingApproval=true. */
+  pendingUploaderId?: string | null
   /** True when the document has been marked private (hidden from EC/EV users). */
   isPrivate?: boolean
   /** True when the document is shared with EC or EV (disables "Make Private"). */

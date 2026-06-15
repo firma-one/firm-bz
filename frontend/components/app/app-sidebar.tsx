@@ -20,7 +20,6 @@ import {
   LifeBuoy,
   Bell,
   Clock,
-  CheckCircle2,
   History,
   CornerDownRight,
   Settings,
@@ -791,18 +790,6 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                                       </Tooltip>
                                       <span className="text-[0.8125rem] font-medium text-[#45474c] truncate">{r.entityName}</span>
                                     </a>
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <button
-                                          type="button"
-                                          onClick={() => handleReminderDone(r.id)}
-                                          className="shrink-0 h-5 w-5 flex items-center justify-center rounded border border-[#e5e7eb] bg-white text-[#45474c]/40 hover:text-emerald-600 hover:border-emerald-300 transition-colors"
-                                        >
-                                          <CheckCircle2 className="h-3 w-3" />
-                                        </button>
-                                      </TooltipTrigger>
-                                      <TooltipContent side="right" className="text-xs">Mark as done</TooltipContent>
-                                    </Tooltip>
                                   </div>
                                 ))}
                                 <Link

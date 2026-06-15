@@ -146,6 +146,7 @@ export function RemindersTable({ initialReminders }: Props) {
       await markReminderDone(id)
       const refreshed = await getUserReminders()
       setReminders(refreshed)
+      window.dispatchEvent(new Event('firma-reminders-updated'))
     } finally {
       setActingId(null)
     }

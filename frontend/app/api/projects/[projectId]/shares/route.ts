@@ -51,14 +51,31 @@ export async function GET(
       }
     } catch { /* non-critical */ }
 
-    const shares = await prisma.engagementDocument.findMany({
-      where: { engagementId: projectId, slug: { not: null } },
+    const shares = await (prisma.engagementDocument as any).findMany({
+      where: {
+        engagementId: projectId,
+        OR: [
+          { slug: { not: null } },
+          { isFolder: true, sharingUsers: { some: { sharingPermissionStatus: 'PENDING' } } },
+        ],
+      },
       orderBy: { createdAt: 'desc' },
+      include: {
+        sharingUsers: {
+          select: { sharingPermissionStatus: true, userId: true, email: true },
+        },
+      },
     })
 
-    const sharesWithDetails = shares.map((share) => {
+    const sharesWithDetails = shares.map((share: any) => {
       const parsed = parseSettingsFromDb(share.settings)
       const flat = flattenForLegacyUI(parsed)
+      const pendingApproval = share.sharingUsers?.some(
+        (u: any) => u.sharingPermissionStatus === 'PENDING'
+      ) ?? false
+      const pendingUploaderId = share.sharingUsers?.find(
+        (u: any) => u.sharingPermissionStatus === 'PENDING'
+      )?.userId ?? null
 
       const indexMetadata = (share.metadata as any) || {}
       const thumbnailLink = indexMetadata.thumbnailLink || indexMetadata.thumbnail_link || null
@@ -109,11 +126,13 @@ export async function GET(
         comments: flat.comments,
         finalizedAt: flat.finalizedAt,
         accessLog,
+        pendingApproval,
+        pendingUploaderId,
       }
     })
 
-    const uniqueCreatedBy = Array.from(new Set(sharesWithDetails.map((s) => s.createdBy).filter(Boolean))) as string[]
-    const uniqueUpdatedBy = Array.from(new Set(sharesWithDetails.map((s) => s.updatedBy).filter(Boolean))) as string[]
+    const uniqueCreatedBy = Array.from(new Set(sharesWithDetails.map((s: any) => s.createdBy).filter(Boolean))) as string[]
+    const uniqueUpdatedBy = Array.from(new Set(sharesWithDetails.map((s: any) => s.updatedBy).filter(Boolean))) as string[]
     const uniqueUserIds = Array.from(new Set([...uniqueCreatedBy, ...uniqueUpdatedBy]))
     const supabaseAdmin = createSupabaseAdmin(
       (process.env.NEXT_PUBLIC_SUPABASE_URL || "http://127.0.0.1:54321"),
@@ -137,7 +156,7 @@ export async function GET(
       })
     )
     // Resolve parent folder names from DB (same approach as search API)
-    const parentIds = Array.from(new Set(sharesWithDetails.map((s) => s.parentId).filter(Boolean))) as string[]
+    const parentIds = Array.from(new Set(sharesWithDetails.map((s: any) => s.parentId).filter(Boolean))) as string[]
     const parentNames: Record<string, string> = {}
     if (parentIds.length > 0) {
       try {
@@ -150,7 +169,7 @@ export async function GET(
       } catch { /* non-critical, skip */ }
     }
 
-    const enriched = sharesWithDetails.map((s) => ({
+    const enriched = sharesWithDetails.map((s: any) => ({
       ...s,
       parentName: (s.parentId && parentNames[s.parentId]) || null,
       createdByEmail: s.createdBy ? (userMap[s.createdBy]?.email ?? null) : null,
@@ -162,7 +181,7 @@ export async function GET(
     }))
 
     const statusOrder: Record<string, number> = { to_do: 0, in_progress: 1, in_review: 2, done: 3 }
-    enriched.sort((a, b) => {
+    enriched.sort((a: any, b: any) => {
       const sa = a.activity?.status ?? 'to_do'
       const sb = b.activity?.status ?? 'to_do'
       if (sa !== sb) return statusOrder[sa] - statusOrder[sb]

@@ -131,7 +131,7 @@ enum NotificationPriority {
 }
 
 enum DocumentSharingPermissionStatus {
-  PENDING_APPROVAL
+  PENDING
   GRANTED
   REVOKED
 

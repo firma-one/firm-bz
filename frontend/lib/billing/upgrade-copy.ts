@@ -68,6 +68,14 @@ export const upgradeCopy = {
     checkoutIntentJoyrideLead: 'You picked ',
     checkoutIntentJoyrideTrail:
         ' on our pricing page. Confirm the billing period above, then continue to checkout when you are ready.',
+    /** Step 2 — plan card spotlight (no checkout intent — generic first-visit). */
+    billingTourGenericTitle: 'Upgrade your limits',
+    billingTourGenericBody:
+        'Paid plans increase limits on firms, clients, engagements, and documents over the free plan. Pick a billing period above, then continue to checkout when you are ready.',
+    /** Step 1 — skip button spotlight when there is no Skip button (standalone billing page). */
+    billingTourSkipTitle: 'Come back any time',
+    billingTourSkipBody:
+        'Billing is always available from your firm settings. No rush—upgrade when you are ready.',
     checkoutIntentJoyridePrimaryCta: 'Got it',
     /** Non-blocking checkout hint strip — short headline (mirrors profile name line). */
     checkoutHintStripTitle: 'Finish Standard checkout',

@@ -427,7 +427,7 @@ export function BillingPageClient({
                             fallbackCanManageBilling={firmManageChecked && firmManageOk}
                             blueAccentTrial={false}
                             hideStandaloneFreePlan
-                            enableCheckoutIntentJoyride={isOnboardingSubscribe}
+                            enableBillingTour
                         />
                     ) : null}
                 </div>
