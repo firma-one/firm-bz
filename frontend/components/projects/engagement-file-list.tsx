@@ -2248,7 +2248,7 @@ const handleRefresh = async () => {
                                             </svg>
                                         )}
                                         {item.status === 'done' && <CheckCircle2 className="h-3.5 w-3.5 text-slate-900 flex-shrink-0" />}
-                                        {item.status === 'error' && <XCircle className="h-3.5 w-3.5 text-red-500 flex-shrink-0" title={item.error} />}
+                                        {item.status === 'error' && <span title={item.error}><XCircle className="h-3.5 w-3.5 text-red-500 flex-shrink-0" /></span>}
                                     </div>
                                 ))}
                             </div>
