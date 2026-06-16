@@ -6,7 +6,7 @@ export const upgradeCopy = {
     /** Centered upgrade modal title */
     upgradeDialogTitle: 'Add a custom firm',
     upgradeDialogBody: `Your free plan includes a Demo firm and 1 real firm. Pick a plan below to take off the training wheels—you will finish on a secure hosted checkout page, then return to your workspace.`,
-    planPickerCta: 'Continue to checkout',
+    planPickerCta: 'Checkout',
     /** Hosted checkout when changing paid plan without customer portal */
     planPickerSwitchPlanCta: 'Switch plan',
     /** Polar customer portal — shared CTA above plan grid for active subscribers */
