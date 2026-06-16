@@ -307,7 +307,7 @@ export async function GET(
     staleThreshold.setDate(today.getDate() - 180)
     const largeSizeThreshold = 50 * 1024 * 1024 // 50 MB
 
-    const [engagement, docs, comments, members, invitations, driveConnector, shares, sharedDocsCount, pendingApprovalSharesCount] = await Promise.all([
+    const [engagement, docs, comments, members, invitations, driveConnector, shares, pendingApprovalSharesCount] = await Promise.all([
       prisma.engagement.findUnique({
         where: { id: projectId },
         select: { dueDate: true, name: true, connectorRootFolderId: true, kickoffDate: true, createdAt: true },
@@ -351,19 +351,19 @@ export async function GET(
         where: { firmId: ctx.firmId, type: 'GOOGLE_DRIVE', status: 'ACTIVE' },
         select: { id: true },
       }),
-      // Shares progress (EngagementDocument where slug != null)
-      prisma.engagementDocument.findMany({
-        where: { engagementId: projectId, slug: { not: null } },
-        select: {
-          id: true,
-          settings: true,
-          slug: true,
-        },
-      }),
-      // Count of documents that have been published as shares (slug != null)
-      (prisma.engagementDocument as any).count({
-        where: { engagementId: projectId, slug: { not: null } },
-      }),
+      // Shares progress — documents explicitly shared via modal (createdAt set) or intake (sharing row)
+      (prisma as any).$queryRawUnsafe(
+        `SELECT DISTINCT ed.id, ed.settings
+         FROM platform.engagement_documents ed
+         LEFT JOIN platform.engagement_document_sharing_users su
+           ON su."projectDocumentId" = ed.id AND su."sharingPermissionStatus" IN ('GRANTED', 'PENDING')
+         WHERE ed."engagementId" = $1::uuid
+           AND (
+             (ed.settings->'share'->>'createdAt') IS NOT NULL
+             OR su.id IS NOT NULL
+           )`,
+        projectId
+      ) as Promise<{ id: string; settings: unknown }[]>,
       // Count of shares pending approval
       (prisma.engagementDocument as any).count({
         where: {
@@ -675,7 +675,7 @@ export async function GET(
       recentDocuments,
       sensitiveFiles,
       sharesProgress,
-      sharedDocsCount,
+      sharedDocsCount: shares.length,
       pendingApprovalSharesCount,
       healthScore,
     }

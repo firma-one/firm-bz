@@ -224,6 +224,18 @@ export async function removeMember(memberId: string) {
             }
         }
 
+        // Fire async revocation of document-level Drive permissions (folder-level already revoked above)
+        if (['eng_ext_collaborator', 'eng_viewer'].includes(member.role)) {
+            await safeInngestSend('project.member.removed', {
+                projectId: member.engagementId,
+                organizationId: member.engagement.client.firmId,
+                userId: member.userId,
+                personaSlug: member.role,
+                timestamp: new Date().toISOString(),
+                removedBy: user.id,
+            })
+        }
+
         audit(AUDIT_EVENT.ENGAGEMENT_MEMBER_REMOVED)
             .scope(AUDIT_SCOPE.ENGAGEMENT)
             .firm(member.engagement.client.firmId)

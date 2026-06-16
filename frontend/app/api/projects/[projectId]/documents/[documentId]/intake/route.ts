@@ -3,16 +3,16 @@ import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { requireEngagementMember, isExternalEngagementRole, isEngagementLeadRole } from '@/lib/engagement-access'
 import { getFileInfo } from '@/lib/file-utils'
-import { generateShareSlug } from '@/lib/slug-utils'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { safeInngestSend } from '@/lib/inngest/client'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
+import { buildSettingsForDb } from '@/lib/sharing-settings'
 
 /**
  * PATCH /api/projects/[projectId]/documents/[documentId]/intake
  * Body: { action: 'approve' | 'reject' | 'withdraw' | 'approve-folder' | 'reject-folder' | 'withdraw-folder' }
  *
- * approve        — EL only: flip sharing row PENDING→GRANTED, set share flag + slug, fire Inngest index
+ * approve        — EL only: flip sharing row PENDING→GRANTED, set share flag, fire Inngest index
  * reject         — EL only: delete EngagementDocument (cascades sharing row) + trash Drive file
  * withdraw       — EC/EV only (own uploads): same delete + trash flow
  * approve-folder — EL only: approve all children + the folder itself
@@ -92,10 +92,10 @@ export async function PATCH(
       const folderDoc = await (prisma.engagementDocument as any).findFirst({
         where: folderWhere,
         select: {
-          id: true, externalId: true, connectorId: true, firmId: true, clientId: true, fileName: true,
+          id: true, externalId: true, connectorId: true, firmId: true, clientId: true, fileName: true, settings: true,
           sharingUsers: { where: { sharingPermissionStatus: 'PENDING' }, select: { userId: true } },
         },
-      }) as { id: string; externalId: string; connectorId: string | null; firmId: string; clientId: string | null; fileName: string; sharingUsers: { userId: string }[] } | null
+      }) as { id: string; externalId: string; connectorId: string | null; firmId: string; clientId: string | null; fileName: string; settings: Record<string, unknown> | null; sharingUsers: { userId: string }[] } | null
       if (!folderDoc) return NextResponse.json({ error: 'Folder not found' }, { status: 404 })
 
       // For withdraw, verify this user owns the PENDING row
@@ -142,11 +142,14 @@ export async function PATCH(
           : uploaderRole === 'eng_viewer'
             ? 'guest'
             : null
-        const docSettings = shareKey ? { share: { [shareKey]: { enabled: true } } } : {}
+        const docSettings = shareKey
+          ? buildSettingsForDb(folderDoc.settings, {
+              share: { [shareKey]: { enabled: true } },
+              actorId: user.id,
+            })
+          : folderDoc.settings ?? {}
 
-        const folderSlug = generateShareSlug(folderDoc.fileName ?? folderDoc.externalId, folderDoc.id.slice(0, 8))
-
-        // Approve the root folder: flip PENDING→GRANTED, set share flag + slug
+        // Approve the root folder: flip PENDING→GRANTED, set share flag
         await Promise.all([
           (prisma.engagementDocumentSharingUser as any).updateMany({
             where: { projectDocumentId: folderDoc.id, sharingPermissionStatus: 'PENDING' },
@@ -154,22 +157,22 @@ export async function PATCH(
           }),
           prisma.engagementDocument.update({
             where: { id: folderDoc.id },
-            data: { settings: docSettings as object, slug: folderSlug, updatedAt: new Date() },
+            data: { settings: docSettings as object, updatedAt: new Date() },
           }),
         ])
         await safeInngestSend('file.index.requested', {
-          projectId, externalId: folderDoc.externalId, organizationId: folderDoc.firmId, fileName: folderDoc.fileName,
+          projectId, externalId: folderDoc.externalId, organizationId: folderDoc.firmId, fileName: folderDoc.fileName, actorId: user.id,
         })
         await (prisma as any).notification.deleteMany({ where: { dedupeKey: `intake-pending:${projectId}:${folderDoc.externalId}` } })
 
-        // Approve all descendants: update settings + Inngest (no slug — only root appears on Shares)
+        // Approve all descendants: trigger indexing only (no settings/slug — access is via ancestor lookup)
         await Promise.all(subtreeDocs.map(async (doc) => {
           await prisma.engagementDocument.update({
             where: { id: doc.id },
-            data: { settings: docSettings as object, updatedAt: new Date() },
+            data: { updatedAt: new Date() },
           })
           await safeInngestSend('file.index.requested', {
-            projectId, externalId: doc.externalId, organizationId: doc.firmId, fileName: doc.fileName,
+            projectId, externalId: doc.externalId, organizationId: doc.firmId, fileName: doc.fileName, actorId: user.id,
           })
           await (prisma as any).notification.deleteMany({ where: { dedupeKey: `intake-pending:${projectId}:${doc.externalId}` } })
         }))
@@ -206,10 +209,10 @@ export async function PATCH(
     const doc = await (prisma.engagementDocument as any).findFirst({
       where: { engagementId: projectId, externalId: fileInfo.externalId },
       select: {
-        id: true, fileName: true, firmId: true, connectorId: true, clientId: true,
+        id: true, fileName: true, firmId: true, connectorId: true, clientId: true, settings: true,
         sharingUsers: { where: { sharingPermissionStatus: 'PENDING' }, select: { id: true, userId: true } },
       },
-    }) as { id: string; fileName: string; firmId: string; connectorId: string | null; clientId: string | null; sharingUsers: { id: string; userId: string }[] } | null
+    }) as { id: string; fileName: string; firmId: string; connectorId: string | null; clientId: string | null; settings: Record<string, unknown> | null; sharingUsers: { id: string; userId: string }[] } | null
     if (!doc) return NextResponse.json({ error: 'Document record not found' }, { status: 404 })
 
     const pendingRow = doc.sharingUsers[0]
@@ -237,14 +240,15 @@ export async function PATCH(
           : null
 
       const updatedSettings = shareKey
-        ? { share: { [shareKey]: { enabled: true } } }
-        : {}
-      const newSlug = generateShareSlug(doc.fileName, doc.id.slice(0, 8))
-
+        ? buildSettingsForDb(doc.settings, {
+            share: { [shareKey]: { enabled: true } },
+            actorId: user.id,
+          })
+        : doc.settings ?? {}
       await Promise.all([
         prisma.engagementDocument.update({
           where: { id: doc.id },
-          data: { settings: updatedSettings as object, slug: newSlug, updatedAt: new Date() },
+          data: { settings: updatedSettings as object, updatedAt: new Date() },
         }),
         (prisma.engagementDocumentSharingUser as any).update({
           where: { id: pendingRow.id },
@@ -260,6 +264,7 @@ export async function PATCH(
         externalId: fileInfo.externalId,
         organizationId: doc.firmId,
         fileName: doc.fileName,
+        actorId: user.id,
       })
 
       audit(AUDIT_EVENT.DOCUMENT_CHANGED)

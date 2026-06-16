@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Users, UserCircle, FileDown, Droplets, Info } from 'lucide-react'
+import { DocumentIcon } from '@/components/ui/document-icon'
 import { useToast } from '@/components/ui/toast'
 import { SandboxInfoBanner } from '@/components/ui/sandbox-info-banner'
 import { useOrgSandbox } from '@/lib/use-org-sandbox'
@@ -186,7 +187,8 @@ export function DocumentShareModal({
       <DialogContent className="sm:max-w-[480px]">
         <DialogHeader>
           <DialogTitle>Share document</DialogTitle>
-          <DialogDescription className="truncate" title={doc.name}>
+          <DialogDescription className="flex items-center gap-1.5 truncate" title={doc.name}>
+            <DocumentIcon mimeType={doc.mimeType} size={14} className="shrink-0" />
             {doc.name}
           </DialogDescription>
         </DialogHeader>
@@ -354,6 +356,7 @@ export function DocumentShareModal({
           </Button>
           <Button
             variant="greenCta"
+            className="rounded-[2px] w-32 text-[10px] font-headline font-bold tracking-widest uppercase"
             onClick={handleSave}
             disabled={isSandboxFirm || saving || !initialLoadDone || !hasChanges}
           >

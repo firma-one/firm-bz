@@ -22,20 +22,25 @@ export async function GET(
 
     const [result, sharedByMeRows] = await Promise.all([
       getSharedAndAncestorIdsForAllPersonas(projectId),
-      prisma.engagementDocument.findMany({
-        where: {
-          engagementId: projectId,
-          slug: { not: null },
-          OR: [
-            { createdBy: user.id },
-            { settings: { path: ['share', 'createdBy'], equals: user.id } },
-          ],
-        },
-        select: { externalId: true },
-      }),
+      // Use sharing table as source of truth — slug: { not: null } was a fragile proxy
+      (prisma as any).$queryRawUnsafe(
+        `SELECT DISTINCT ed."externalId"
+         FROM platform.engagement_document_sharing_users su
+         JOIN platform.engagement_documents ed ON ed.id = su."projectDocumentId"
+         WHERE su."engagementId" = $1::uuid
+           AND su."createdBy" = $2::uuid
+           AND su."sharingPermissionStatus" IN ('GRANTED', 'PENDING')
+         UNION
+         SELECT ed."externalId"
+         FROM platform.engagement_documents ed
+         WHERE ed."engagementId" = $1::uuid
+           AND (ed.settings->'share'->>'createdBy') = $2`,
+        projectId,
+        user.id
+      ) as Promise<{ externalId: string }[]>,
     ])
 
-    const sharedByMeExternalIds = sharedByMeRows.filter(r => r.externalId).map(r => r.externalId!)
+    const sharedByMeExternalIds = (sharedByMeRows as { externalId: string }[]).filter(r => r.externalId).map(r => r.externalId)
 
     return NextResponse.json({
       sharedExternalIds: result.sharedIdsUnion,

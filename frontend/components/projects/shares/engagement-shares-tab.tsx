@@ -60,8 +60,7 @@ interface ShareRecord {
   documentMimeType: string | null
   thumbnailLink?: string | null
   webViewLink?: string | null
-  slug?: string | null
-  parentId?: string | null
+parentId?: string | null
   parentName?: string | null
   createdBy: string
   createdByEmail?: string | null

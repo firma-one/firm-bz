@@ -23,6 +23,7 @@ export class SearchService {
         externalId: string
         fileName: string
         parentId?: string
+        actorId?: string | null
     }) {
         const name = params.fileName.toLowerCase()
         const isJunk = [
@@ -98,7 +99,7 @@ export class SearchService {
                 return
             }
 
-            // Store in platform schema (do not overwrite settings/slug/createdBy/updatedBy on conflict)
+            // Store in platform schema (do not overwrite settings/slug on conflict; backfill createdBy/updatedBy if missing)
             await prisma.$executeRawUnsafe(`
     INSERT INTO platform.engagement_documents (
       "firmId",
@@ -114,6 +115,8 @@ export class SearchService {
       "content",
       "embedding",
       "metadata",
+      "createdBy",
+      "updatedBy",
       "updatedAt"
     )
     VALUES (
@@ -130,6 +133,8 @@ export class SearchService {
       $11,
       $12::vector,
       $13::jsonb,
+      $14::uuid,
+      $14::uuid,
       NOW()
     )
     ON CONFLICT ("engagementId", "firmId", "externalId")
@@ -144,6 +149,8 @@ export class SearchService {
       "connectorId" = COALESCE(EXCLUDED."connectorId", platform.engagement_documents."connectorId"),
       "parentId" = COALESCE(EXCLUDED."parentId", platform.engagement_documents."parentId"),
       "metadata" = EXCLUDED."metadata",
+      "createdBy" = COALESCE(platform.engagement_documents."createdBy", EXCLUDED."createdBy"),
+      "updatedBy" = COALESCE(EXCLUDED."updatedBy", platform.engagement_documents."updatedBy"),
       "updatedAt" = NOW()
   `,
                 params.organizationId,
@@ -158,7 +165,8 @@ export class SearchService {
                 meta?.size ? BigInt(meta.size) : null,
                 null,
                 embeddingSql,
-                JSON.stringify(driveMetadata)
+                JSON.stringify(driveMetadata),
+                params.actorId || null
             )
 
             // Sync to GDrive

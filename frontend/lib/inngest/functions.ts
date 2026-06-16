@@ -46,6 +46,7 @@ export const indexFileForSearch = inngest.createFunction(
                 externalId: event.data.externalId,
                 fileName: event.data.fileName,
                 parentId: event.data.parentId ?? undefined,
+                actorId: event.data.actorId ?? null,
             })
         })
 
@@ -184,6 +185,7 @@ export const indexBatchForSearch = inngest.createFunction(
                         externalId: file.externalId,
                         fileName: file.fileName,
                         parentId: file.parentId ?? undefined,
+                        actorId: event.data.actorId ?? null,
                     })
                 }
             })
@@ -699,6 +701,70 @@ export const revokeByDisabledPersona = inngest.createFunction(
         });
 
         return { message: "Revoked disabled personas", results: revokeResults };
+    }
+);
+
+/**
+ * Revoke document-level Drive permissions when an EC/EV member is removed from a project.
+ * Folder-level revocation is handled synchronously in removeMember(); this handles
+ * per-document connectorPermissionId entries written by the regrant flow.
+ */
+export const revokeByRemovedMember = inngest.createFunction(
+    { id: "revoke-by-removed-member", triggers: [{ event: "project.member.removed" }] },
+    async ({ event, step }) => {
+        const { projectId, organizationId, userId, personaSlug } = event.data;
+
+        const revokablePersonas = ['eng_viewer', 'eng_ext_collaborator'];
+        if (!revokablePersonas.includes(personaSlug)) return { message: "Non-external role — no revocation needed" };
+
+        const connectorId = await step.run("fetch-connector", async () => {
+            const firm = await prisma.firm.findUnique({
+                where: { id: organizationId },
+                select: { connectorId: true },
+            });
+            return firm?.connectorId;
+        });
+
+        const sharesToRevoke = await step.run("find-shares-to-revoke", async () => {
+            return prisma.engagementDocumentSharingUser.findMany({
+                where: {
+                    engagementId: projectId,
+                    userId,
+                    sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED,
+                },
+                include: { document: { select: { externalId: true } } },
+            });
+        });
+
+        if (sharesToRevoke.length === 0) return { message: "No shares to revoke" };
+
+        if (connectorId) {
+            await step.run("revoke-drive-permissions", async () => {
+                const adapter = await getPermissionAdapter(connectorId);
+                if (!adapter) return;
+                for (const share of sharesToRevoke) {
+                    if (share.connectorPermissionId && share.document?.externalId) {
+                        try {
+                            await adapter.revokePermission(connectorId, share.document.externalId, share.connectorPermissionId);
+                        } catch {
+                            // non-fatal — DB cleanup still runs
+                        }
+                    }
+                }
+            });
+        }
+
+        await step.run("cleanup-db", async () => {
+            await prisma.engagementDocumentSharingUser.updateMany({
+                where: { id: { in: sharesToRevoke.map((s: { id: string }) => s.id) } },
+                data: {
+                    sharingPermissionStatus: DocumentSharingPermissionStatus.REVOKED,
+                    connectorPermissionId: null,
+                },
+            });
+        });
+
+        return { message: "Revoked for removed member", revokedCount: sharesToRevoke.length };
     }
 );
 

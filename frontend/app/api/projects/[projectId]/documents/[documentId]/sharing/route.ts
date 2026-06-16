@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { buildSettingsForDb, parseSettingsFromDb, type ShareBlock } from '@/lib/sharing-settings'
-import { generateShareSlug } from '@/lib/slug-utils'
 import { syncDocumentSharingUsers } from '@/lib/sync-document-sharing'
 import { getFileInfo } from '@/lib/file-utils'
 import { safeInngestSend } from '@/lib/inngest/client'
@@ -81,6 +80,7 @@ async function ensureDocument(
       projectId,
       externalId,
       fileName: title || externalId,
+      actorId: actorId || null,
     }).catch((err) => console.error('Background indexFile error after share stub', err))
   )
 
@@ -247,27 +247,14 @@ export async function PUT(
     })
 
     if (existing) {
-      const updateData: { settings: typeof settings; updatedAt: Date; updatedBy: string; createdBy?: string; slug?: string; mimeType?: string } = { settings, updatedAt: new Date(), updatedBy: user.id }
+      const updateData: { settings: typeof settings; updatedAt: Date; updatedBy: string; createdBy?: string; mimeType?: string } = { settings, updatedAt: new Date(), updatedBy: user.id }
       if (!existing.createdBy) updateData.createdBy = user.id
       if (mimeType && !existing.mimeType) updateData.mimeType = mimeType
-      if (existing.slug == null) {
-        const docTitle = existing.fileName || title || documentIdParam
-        updateData.slug = generateShareSlug(docTitle, existing.id.slice(0, 8))
-      }
       await prisma.engagementDocument.update({
         where: { id: existing.id },
         data: updateData,
       })
     } else {
-      let slug = generateShareSlug(title || documentIdParam, Math.random().toString(36).slice(2, 10))
-      for (let attempts = 0; attempts < 5; attempts++) {
-        const taken = await prisma.engagementDocument.findFirst({
-          where: { engagementId: projectId, slug },
-          select: { id: true },
-        })
-        if (!taken) break
-        slug = generateShareSlug(title || documentIdParam, Math.random().toString(36).slice(2, 10))
-      }
       const proj = await prisma.engagement.findUnique({ where: { id: projectId }, select: { clientId: true } })
       await prisma.engagementDocument.create({
         data: {
@@ -278,7 +265,6 @@ export async function PUT(
           fileName: title || fileInfo.externalId,
           createdBy: user.id,
           settings,
-          slug,
           ...(mimeType ? { mimeType } : {}),
         },
       })
