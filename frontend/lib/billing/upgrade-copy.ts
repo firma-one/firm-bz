@@ -78,20 +78,13 @@ export const upgradeCopy = {
         'Billing is always available from your firm settings. No rush—upgrade when you are ready.',
     checkoutIntentJoyridePrimaryCta: 'Got it',
     /** Non-blocking checkout hint strip — short headline (mirrors profile name line). */
-    checkoutHintStripTitle: 'Finish Standard checkout',
+    checkoutHintStripTitle: 'Upgrade to Standard to increase your limits',
     /** Verbose subtitle under headline (mirrors profile plan / email line). */
     checkoutHintStripBodyIntent:
-        'Standard from pricing: use Profile (sidebar footer) → Billing, or Continue.',
-    /** Appended to `checkoutHintStripBodyIntent` only while the Show me control is visible. */
-    checkoutHintStripBodyIntentShowMeSuffix: 'Show me points at Profile.',
+        'Upgrade to a Standard plan to ease limits on clients, contacts, engagements, documents & audit history.',
     checkoutHintStripBodyUpgrade:
-        'Free plan: Profile (sidebar footer) → Billing to upgrade, or Continue.',
-    checkoutHintShowMe: 'Show me',
-    checkoutHintJoyrideTitle: 'Profile menu',
-    checkoutHintJoyrideBody:
-        'Click your avatar at the bottom of the sidebar, then choose Billing to compare plans and complete checkout.',
-    checkoutHintJoyrideDone: 'Got it',
-    freeSandboxFootnote: 'No checkout needed—keep exploring your Demo firm.',
+        'Upgrade to a Standard plan to ease limits on clients, contacts, engagements, documents & audit history.',
+freeSandboxFootnote: 'No checkout needed—keep exploring your Demo firm.',
     addFirmModalHint: `The free plan includes your Demo firm. Subscribe to add custom firms for your business.`,
     ctaContinueBilling: 'Continue to billing',
     ctaComparePlans: 'Compare plans',

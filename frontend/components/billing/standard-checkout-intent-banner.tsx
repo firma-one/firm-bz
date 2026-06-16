@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { CreditCard, X } from 'lucide-react'
-import { EVENTS, Joyride, STATUS, type EventData } from 'react-joyride'
 import { firmAdminMustCompleteOnboarding } from '@/lib/actions/firms'
 import { buildBillingPageHref } from '@/lib/billing/build-billing-page-href'
 import { buildPolarCheckoutHref } from '@/lib/billing/polar-checkout-href'
@@ -20,8 +19,6 @@ import {
 import {
     readCheckoutHintDismissedSession,
     setCheckoutHintDismissedSession,
-    readCheckoutProfileJoyrideDoneSession,
-    setCheckoutProfileJoyrideDoneSession,
 } from '@/lib/marketing/checkout-hint-session'
 import { useSidebarFirms } from '@/lib/sidebar-firms-context'
 import { AppShellHintStrip } from '@/components/layout/app-shell-hint-strip'
@@ -43,8 +40,6 @@ export function StandardCheckoutIntentBanner() {
     const [upgradeNudge, setUpgradeNudge] = useState(false)
     const [mounted, setMounted] = useState(false)
     const [hintSuppressed, setHintSuppressed] = useState(false)
-    const [profileJoyrideDone, setProfileJoyrideDone] = useState(false)
-    const [joyrideRun, setJoyrideRun] = useState(false)
 
     useEffect(() => {
         setMounted(true)
@@ -52,7 +47,6 @@ export function StandardCheckoutIntentBanner() {
 
     useEffect(() => {
         setHintSuppressed(readCheckoutHintDismissedSession())
-        setProfileJoyrideDone(readCheckoutProfileJoyrideDoneSession())
     }, [pathname])
 
     useEffect(() => {
@@ -131,40 +125,7 @@ export function StandardCheckoutIntentBanner() {
     const dismissHintForSession = useCallback(() => {
         setCheckoutHintDismissedSession()
         setHintSuppressed(true)
-        setJoyrideRun(false)
     }, [])
-
-    const onProfileJoyrideEvent = useCallback((data: EventData) => {
-        const { status, type } = data
-        if (type === EVENTS.TARGET_NOT_FOUND) {
-            setJoyrideRun(false)
-            return
-        }
-        if (
-            type === EVENTS.TOUR_END ||
-            status === STATUS.FINISHED ||
-            status === STATUS.SKIPPED
-        ) {
-            setCheckoutProfileJoyrideDoneSession()
-            setProfileJoyrideDone(true)
-            setJoyrideRun(false)
-        }
-    }, [])
-
-    const profileJoyrideSteps = useMemo(
-        () => [
-            {
-                target: '[data-checkout-hint-profile="trigger"]',
-                title: upgradeCopy.checkoutHintJoyrideTitle,
-                content: (
-                    <p className="text-sm leading-relaxed text-slate-600">{upgradeCopy.checkoutHintJoyrideBody}</p>
-                ),
-                disableBeacon: true,
-                placement: 'right' as const,
-            },
-        ],
-        []
-    )
 
     const showHintLogic =
         gate === 'show' &&
@@ -176,23 +137,12 @@ export function StandardCheckoutIntentBanner() {
         Boolean(showHintLogic && checkoutHref && defaultFirm && (intent != null || upgradeNudge)) &&
         !hintSuppressed
 
-    const startProfileJoyride = useCallback(() => {
-        if (profileJoyrideDone) return
-        const el = document.querySelector('[data-checkout-hint-profile="trigger"]')
-        if (!el) return
-        el.scrollIntoView({ block: 'nearest', inline: 'nearest' })
-        window.setTimeout(() => setJoyrideRun(true), 120)
-    }, [profileJoyrideDone])
-
     if (!mounted || !visible || !checkoutHref || !defaultFirm) return null
 
     const standardPaidIntent = isStandardPaidCheckoutIntent(intent)
-    const bodyCopy =
-        standardPaidIntent && !profileJoyrideDone
-            ? `${upgradeCopy.checkoutHintStripBodyIntent} ${upgradeCopy.checkoutHintStripBodyIntentShowMeSuffix}`
-            : standardPaidIntent
-              ? upgradeCopy.checkoutHintStripBodyIntent
-              : upgradeCopy.checkoutHintStripBodyUpgrade
+    const bodyCopy = standardPaidIntent
+        ? upgradeCopy.checkoutHintStripBodyIntent
+        : upgradeCopy.checkoutHintStripBodyUpgrade
 
     const nativeTitleFull = `${upgradeCopy.checkoutHintStripTitle} — ${bodyCopy}`
 
@@ -206,78 +156,38 @@ export function StandardCheckoutIntentBanner() {
     )
 
     return (
-        <>
-            <Joyride
-                run={joyrideRun}
-                steps={profileJoyrideSteps}
-                continuous={false}
-                scrollToFirstStep
-                onEvent={onProfileJoyrideEvent}
-                locale={{
-                    last: upgradeCopy.checkoutHintJoyrideDone,
-                    next: 'Next',
-                }}
-                options={{
-                    primaryColor: '#0f172a',
-                    textColor: '#0f172a',
-                    backgroundColor: '#ffffff',
-                    arrowColor: '#ffffff',
-                    overlayColor: 'rgba(15, 23, 42, 0.45)',
-                    spotlightPadding: 10,
-                    spotlightRadius: 12,
-                    zIndex: 10050,
-                    skipBeacon: true,
-                    showProgress: false,
-                    buttons: ['close', 'primary'],
-                    scrollDuration: 400,
-                    scrollOffset: 80,
-                }}
-            />
-            <AppShellHintStrip
-                density="profileRail"
-                accent="emerald"
-                aria-label="Checkout reminder"
-                nativeTitle={nativeTitleFull}
-                leading={billingIconTile}
-                innerClassName="px-7 sm:px-10 md:px-12"
-                title={upgradeCopy.checkoutHintStripTitle}
-                description={bodyCopy}
-                actions={
-                    <>
-                        {!profileJoyrideDone ? (
-                            <button
-                                type="button"
-                                onClick={startProfileJoyride}
-                                className={cn(
-                                    buttonVariants({ variant: 'outline', size: 'sm' }),
-                                    'h-9 shrink-0 border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 hover:bg-slate-50'
-                                )}
-                            >
-                                {upgradeCopy.checkoutHintShowMe}
-                            </button>
-                        ) : null}
-                        <Link
-                            href={checkoutHref}
-                            onClick={onContinueToBillingClick}
-                            className={cn(
-                                buttonVariants({ variant: 'blackCta', size: 'sm' }),
-                                'h-9 shrink-0 justify-center px-3 text-xs font-semibold'
-                            )}
-                        >
-                            {upgradeCopy.planPickerCta}
-                        </Link>
-                        <button
-                            type="button"
-                            onClick={dismissHintForSession}
-                            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-900"
-                            aria-label="Hide until you sign out"
-                            title="Hide until you sign out"
-                        >
-                            <X className="h-4 w-4" strokeWidth={2.25} />
-                        </button>
-                    </>
-                }
-            />
-        </>
+        <AppShellHintStrip
+            density="profileRail"
+            accent="emerald"
+            aria-label="Checkout reminder"
+            nativeTitle={nativeTitleFull}
+            leading={billingIconTile}
+            innerClassName="px-7 sm:px-10 md:px-12"
+            title={upgradeCopy.checkoutHintStripTitle}
+            description={bodyCopy}
+            actions={
+                <>
+                    <Link
+                        href={checkoutHref}
+                        onClick={onContinueToBillingClick}
+                        className={cn(
+                            buttonVariants({ variant: 'blackCta', size: 'sm' }),
+                            'h-9 shrink-0 justify-center px-3 text-xs font-semibold'
+                        )}
+                    >
+                        {upgradeCopy.planPickerCta}
+                    </Link>
+                    <button
+                        type="button"
+                        onClick={dismissHintForSession}
+                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-900"
+                        aria-label="Hide until you sign out"
+                        title="Hide until you sign out"
+                    >
+                        <X className="h-4 w-4" strokeWidth={2.25} />
+                    </button>
+                </>
+            }
+        />
     )
 }
