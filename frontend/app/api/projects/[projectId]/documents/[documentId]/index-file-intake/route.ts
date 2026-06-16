@@ -3,14 +3,14 @@ import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { requireEngagementMember, isExternalEngagementRole } from '@/lib/engagement-access'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
-import { safeInngestSend } from '@/lib/inngest/client'
 import { assertWithinDocumentCap } from '@/lib/billing/effective-billing-caps'
 import { resolveEngagementConnectorId } from '@/lib/connectors/resolve-client-connector'
 
 /**
  * POST /api/projects/[projectId]/documents/[documentId]/index-file-intake
- * Called after EC/EV completes an upload. Sets settings.lock = { type: 'intake', ... }
- * Creates the EngagementDocument record if Inngest hasn't indexed it yet (race condition).
+ * Called after EC/EV completes an upload. Creates an EngagementDocument record and writes a
+ * PENDING sharing row so the file appears in the EL's intake queue on the Shares tab.
+ * Does NOT fire Inngest — indexing happens only after EL approves.
  */
 export async function POST(
   _request: NextRequest,
@@ -42,30 +42,19 @@ export async function POST(
     const connector = await prisma.connector.findUnique({ where: { id: connectorId } })
     if (!connector) return NextResponse.json({ error: 'No active connector' }, { status: 500 })
 
-    const now = new Date().toISOString()
-    const intakeLock = { type: 'intake', uploadedBy: user.id, uploadedAt: now }
-
     // Gate before any DB writes — ensures cap is checked before record creation
     await assertWithinDocumentCap(project.client.firmId, 1)
 
     // Try to find an existing record first (happy path — Inngest already indexed it)
     const existing = await prisma.engagementDocument.findFirst({
       where: { engagementId: projectId, externalId },
-      select: { id: true, settings: true, fileName: true, firmId: true },
+      select: { id: true, fileName: true },
     })
 
     let docId: string
     let fileName: string
 
     if (existing) {
-      const prevSettings = (existing.settings as Record<string, unknown>) || {}
-      await prisma.engagementDocument.update({
-        where: { id: existing.id },
-        data: {
-          settings: { ...prevSettings, lock: intakeLock } as object,
-          updatedAt: new Date(),
-        },
-      })
       docId = existing.id
       fileName = existing.fileName
     } else {
@@ -93,7 +82,7 @@ export async function POST(
           mimeType: driveMeta.mimeType ?? null,
           fileSize: driveMeta.size ? BigInt(driveMeta.size) : null,
           isFolder: false,
-          settings: { lock: intakeLock } as object,
+          settings: {} as object,
           metadata: {
             modifiedTime: (driveMeta as any).modifiedTime ?? new Date().toISOString(),
             webViewLink: (driveMeta as any).webViewLink ?? null,
@@ -103,44 +92,61 @@ export async function POST(
       docId = created.id
     }
 
-    await safeInngestSend('file.index.requested', {
-      projectId,
-      externalId,
-      organizationId: project.client.firmId,
-      fileName,
-      uploadedBy: user.id,
-      isIntakeUpload: true,
+    // Only write a PENDING row + reminder if this user has no existing PENDING item in this
+    // engagement. Files uploaded inside a pending folder are covered by the folder's PENDING row.
+    const existingPendingRow = await (prisma.engagementDocumentSharingUser as any).findFirst({
+      where: {
+        engagementId: projectId,
+        userId: user.id,
+        sharingPermissionStatus: 'PENDING',
+      },
+      select: { id: true },
     })
 
-    // Create intake reminders synchronously for all ELs
-    const reminderId = `intake-${projectId}-${externalId}`
-    const leads = await prisma.engagementMember.findMany({
-      where: { engagementId: projectId, role: { in: ['eng_admin', 'eng_member'] } },
-      select: { userId: true },
-    })
-    const reminderItem = {
-      id: reminderId,
-      entityKey: 'platform.engagements',
-      entityValue: projectId,
-      action: `Review: "${fileName}"`,
-      dateKey: null,
-      dateValue: null,
-      hiddenAt: null,
-      createdAt: new Date().toISOString(),
+    if (!existingPendingRow) {
+      await (prisma.engagementDocumentSharingUser as any).upsert({
+        where: { projectDocumentId_userId: { projectDocumentId: docId, userId: user.id } },
+        create: {
+          projectDocumentId: docId,
+          engagementId: projectId,
+          userId: user.id,
+          email: user.email ?? '',
+          sharingPermissionStatus: 'PENDING',
+        },
+        update: { sharingPermissionStatus: 'PENDING' },
+      })
     }
-    await Promise.all(leads.map(async (lead) => {
-      const p = await prisma.userPersonalization.findUnique({
-        where: { userId: lead.userId },
-        select: { reminders: true },
+
+    if (!existingPendingRow) {
+      const reminderId = `intake-${projectId}-${externalId}`
+      const leads = await prisma.engagementMember.findMany({
+        where: { engagementId: projectId, role: { in: ['eng_admin', 'eng_member'] } },
+        select: { userId: true },
       })
-      const existing: any[] = Array.isArray(p?.reminders) ? p!.reminders as any[] : []
-      if (existing.find((r: any) => r.id === reminderId)) return
-      await prisma.userPersonalization.upsert({
-        where: { userId: lead.userId },
-        create: { userId: lead.userId, reminders: [reminderItem] as any },
-        update: { reminders: [...existing, reminderItem] as any },
-      })
-    }))
+      const reminderItem = {
+        id: reminderId,
+        entityKey: 'platform.engagements.shares',
+        entityValue: projectId,
+        action: `Review: "${fileName}"`,
+        dateKey: 'date',
+        dateValue: new Date().toISOString().slice(0, 10),
+        hiddenAt: null,
+        createdAt: new Date().toISOString(),
+      }
+      await Promise.all(leads.map(async (lead) => {
+        const p = await prisma.userPersonalization.findUnique({
+          where: { userId: lead.userId },
+          select: { reminders: true },
+        })
+        const existing: any[] = Array.isArray(p?.reminders) ? p!.reminders as any[] : []
+        if (existing.find((r: any) => r.id === reminderId)) return
+        await prisma.userPersonalization.upsert({
+          where: { userId: lead.userId },
+          create: { userId: lead.userId, reminders: [reminderItem] as any },
+          update: { reminders: [...existing, reminderItem] as any },
+        })
+      }))
+    }
 
     return NextResponse.json({ ok: true, documentId: docId })
   } catch (e) {

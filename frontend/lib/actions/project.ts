@@ -323,7 +323,8 @@ export async function getEngagementFolderIds(projectId: string) {
         projectName: project.name,
         clientSlug: project.client.slug,
         clientName: project.client.name,
-        projectFolderId: project.connectorRootFolderId
+        projectFolderId: project.connectorRootFolderId,
+        orgId: project.client.firm.id,
     })
 
     const projectMember = await prisma.engagementMember.findFirst({

@@ -1,33 +1,42 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { Building2, ArrowRight, Loader2, SquarePlus, Box, Home, ChevronRight, LayoutGrid } from 'lucide-react'
 import { getDomainOnboardingOptionsForCurrentUser, joinOrganizationByDomain, type DomainOnboardingOptions, type DomainOrgOption } from '@/lib/actions/domain-onboarding'
-import { getUserFirms, type FirmOption } from '@/lib/actions/firms'
+import { getUserFirms, getIsAdminOnAnyFirm, type FirmOption } from '@/lib/actions/firms'
 import { BRAND_NAME } from '@/config/brand'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AddFirmModal } from '@/components/projects/add-firm-modal'
+import { FirmSwitchDialog } from '@/components/projects/firm-switch-dialog'
 
 export default function WorkspacePickerPage() {
     const router = useRouter()
+    const pathname = usePathname()
     const [firms, setFirms] = useState<FirmOption[]>([])
     const [domainOptions, setDomainOptions] = useState<DomainOnboardingOptions | null>(null)
+    const [isAdminOnAnyFirm, setIsAdminOnAnyFirm] = useState(false)
     const [addFirmOpen, setAddFirmOpen] = useState(false)
     const [loading, setLoading] = useState(true)
     const [joiningId, setJoiningId] = useState<string | null>(null)
     const [joinError, setJoinError] = useState<string | null>(null)
+    const [switchDialogOpen, setSwitchDialogOpen] = useState(false)
+    const [targetOrg, setTargetOrg] = useState<{ slug: string; name: string } | null>(null)
+
+    const currentOrgSlug = pathname?.match(/^\/d\/f\/([^/]+)/)?.[1] ?? null
 
     useEffect(() => {
         async function load() {
-            const [userFirms, opts] = await Promise.all([
+            const [userFirms, opts, isAdmin] = await Promise.all([
                 getUserFirms(),
                 getDomainOnboardingOptionsForCurrentUser(),
+                getIsAdminOnAnyFirm(),
             ])
             setFirms(userFirms)
             setDomainOptions(opts)
+            setIsAdminOnAnyFirm(isAdmin)
             setLoading(false)
         }
         void load()
@@ -43,6 +52,15 @@ export default function WorkspacePickerPage() {
 
 
     const joinableFirms = domainOptions?.orgsToJoin ?? []
+
+    function handleFirmClick(firm: FirmOption) {
+        if (currentOrgSlug && currentOrgSlug !== firm.slug) {
+            setTargetOrg({ slug: firm.slug, name: firm.name })
+            setSwitchDialogOpen(true)
+        } else {
+            router.push(`/d/f/${firm.slug}`)
+        }
+    }
 
     async function handleJoin(org: DomainOrgOption) {
         setJoiningId(org.id)
@@ -97,14 +115,16 @@ export default function WorkspacePickerPage() {
                                 )}
                             </TabsTrigger>
                         </TabsList>
+                        {isAdminOnAnyFirm && (
                         <button
                             type="button"
-                            className="inline-flex items-center gap-2 px-4 py-2 rounded-[2px] bg-primary hover:brightness-110 text-primary-foreground font-medium text-[0.8125rem] transition-all shadow-[0_1px_2px_rgba(0,0,0,0.25)]"
+                            className="h-auto px-4 py-1.5 rounded-[2px] bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:brightness-105 shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all inline-flex items-center gap-1.5"
                             onClick={() => setAddFirmOpen(true)}
                         >
-                            <SquarePlus className="h-4 w-4" />
-                            Create new Firm
+                            <SquarePlus className="h-3.5 w-3.5" />
+                            Add Firm
                         </button>
+                        )}
                     </div>
                 </div>
 
@@ -119,7 +139,7 @@ export default function WorkspacePickerPage() {
                                 key={firm.id}
                                 type="button"
                                 className={`group relative flex flex-col gap-4 p-5 rounded-[2px] border bg-white shadow-md hover:shadow-lg text-left transition-all overflow-hidden h-48 ${firm.sandboxOnly ? 'border-dashed border-[#e5e7eb] hover:border-[#e5e7eb]' : 'border-[#e5e7eb] hover:border-primary/40'}`}
-                                onClick={() => router.push(`/d/f/${firm.slug}`)}
+                                onClick={() => handleFirmClick(firm)}
                             >
                                 {/* Brand corner decoration */}
                                 {firm.sandboxOnly ? (
@@ -227,6 +247,15 @@ export default function WorkspacePickerPage() {
                 </TabsContent>
             </Tabs>
             <AddFirmModal open={addFirmOpen} onOpenChange={setAddFirmOpen} />
+            {targetOrg && (
+                <FirmSwitchDialog
+                    open={switchDialogOpen}
+                    onOpenChange={setSwitchDialogOpen}
+                    targetFirmSlug={targetOrg.slug}
+                    targetFirmName={targetOrg.name}
+                    currentFirmName={firms.find(f => f.slug === currentOrgSlug)?.name}
+                />
+            )}
         </div>
         </TooltipProvider>
     )

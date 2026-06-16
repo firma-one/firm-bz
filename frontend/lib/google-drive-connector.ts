@@ -496,13 +496,15 @@ export class GoogleDriveConnector {
   async getEngagementFolderIds(
     connectionId: string,
     projectSlugOrName: string,
-    options?: { projectName?: string; clientSlug?: string; clientName?: string; projectFolderId?: string | null }
+    options?: { projectName?: string; clientSlug?: string; clientName?: string; projectFolderId?: string | null; orgId?: string }
   ): Promise<{ generalFolderId: string | null, confidentialFolderId: string | null, stagingFolderId: string | null }> {
     const connector = await (prisma as any).connector.findUnique({ where: { id: connectionId } })
     if (!connector) throw new Error('Connection not found')
 
     const settings = (connector.settings as any) || {}
-    const ps = settings.projectFolderSettings?.[projectSlugOrName] || {}
+    // Settings are stored under organizations.[orgId] when orgId is known; fall back to root for legacy connectors
+    const orgSettings = options?.orgId ? (settings.organizations?.[options.orgId] || {}) : settings
+    const ps = orgSettings.projectFolderSettings?.[projectSlugOrName] || {}
     let generalFolderId = ps.generalFolderId || null
     let confidentialFolderId = ps.confidentialFolderId || null
     let stagingFolderId = ps.stagingFolderId || null
@@ -522,15 +524,15 @@ export class GoogleDriveConnector {
       return fn === tn || fn.toLowerCase() === tn.toLowerCase()
     }
 
-    const hadProjectFolderIdInSettings = !!settings.projectFolderIds?.[projectSlugOrName]
-    let projectFolderId = options?.projectFolderId || settings.projectFolderIds?.[projectSlugOrName]
+    const hadProjectFolderIdInSettings = !!orgSettings.projectFolderIds?.[projectSlugOrName]
+    let projectFolderId = options?.projectFolderId || orgSettings.projectFolderIds?.[projectSlugOrName]
 
     // If we have none of the subfolders but we have a projectFolderId, we MUST list it to find them
     if ((!generalFolderId || !confidentialFolderId || !stagingFolderId) && !projectFolderId && options?.projectName) {
-      let clientFolderId = options?.clientSlug ? settings.clientFolderIds?.[options.clientSlug] : null
-      if (!clientFolderId && options?.clientName && settings.orgFolderId) {
+      let clientFolderId = options?.clientSlug ? orgSettings.clientFolderIds?.[options.clientSlug] : null
+      if (!clientFolderId && options?.clientName && orgSettings.orgFolderId) {
         try {
-          const orgChildren = await this.listFiles(connectionId, settings.orgFolderId, 100)
+          const orgChildren = await this.listFiles(connectionId, orgSettings.orgFolderId, 100)
           const orgFolders = orgChildren.filter((f: { mimeType?: string }) => f.mimeType === 'application/vnd.google-apps.folder')
           const clientMatch = orgFolders.find((f: { name?: string }) => nameMatches(f.name || '', options.clientName || ''))
           if (clientMatch) clientFolderId = (clientMatch as { id: string }).id
@@ -609,7 +611,7 @@ export class GoogleDriveConnector {
   async getProjectFolderIds(
     connectionId: string,
     projectSlugOrName: string,
-    options?: { projectName?: string; clientSlug?: string; clientName?: string; projectFolderId?: string | null }
+    options?: { projectName?: string; clientSlug?: string; clientName?: string; projectFolderId?: string | null; orgId?: string }
   ): Promise<{ generalFolderId: string | null, confidentialFolderId: string | null, stagingFolderId: string | null }> {
     return this.getEngagementFolderIds(connectionId, projectSlugOrName, options)
   }
@@ -2552,9 +2554,14 @@ export class GoogleDriveConnector {
         body: JSON.stringify({ trashed: true })
       })
 
-      return res.ok
+      if (!res.ok) {
+        const body = await res.text().catch(() => '')
+        logger.error(`Failed to trash file ${fileId} via connector ${connectorId}: HTTP ${res.status}: ${body}`, new Error(`HTTP ${res.status}`))
+        return false
+      }
+      return true
     } catch (error) {
-      logger.error('Failed to trash file', error as Error)
+      logger.error(`Failed to trash file ${fileId} via connector ${connectorId}`, error as Error)
       return false
     }
   }

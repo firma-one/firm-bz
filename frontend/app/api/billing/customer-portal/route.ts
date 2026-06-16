@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Polar } from '@polar-sh/sdk'
 import { prisma } from '@/lib/prisma'
 import { createClient } from '@/utils/supabase/server'
-import { getActiveSubscriptionForFirm } from '@/lib/billing/active-billing-subscription'
-import { resolveBillingAnchorFirmId } from '@/lib/billing/billing-group'
+import { getActiveSubscriptionForGroup } from '@/lib/billing/active-billing-subscription'
+import { resolveGroupId } from '@/lib/billing/billing-group'
 import { validateCheckoutReturnTo } from '@/lib/billing/checkout-return-path'
 
 function polarServer(): 'production' | 'sandbox' {
@@ -47,8 +47,8 @@ export async function POST(request: NextRequest) {
         )
     }
 
-    const anchorId = await resolveBillingAnchorFirmId(firmId)
-    const activeSub = await getActiveSubscriptionForFirm(anchorId)
+    const groupId = await resolveGroupId(firmId)
+    const activeSub = await getActiveSubscriptionForGroup(groupId)
 
     const returnToRaw = typeof body.returnTo === 'string' ? body.returnTo : undefined
     const validatedReturnPath = validateCheckoutReturnTo(returnToRaw ?? null)
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
     const polar = new Polar({ accessToken, server: polarServer() })
     const customerSession = await polar.customerSessions
         .create({
-            externalCustomerId: anchorId,
+            externalCustomerId: groupId,
             returnUrl,
         })
         .catch(() => null)

@@ -167,6 +167,7 @@ export function ClientContactsTab({
               disabled={!canManage && !isSandboxFirm}
               variant="ghost"
               size="sm"
+              data-demo-tour="client-add-contact-btn"
               className="h-auto px-4 py-1.5 rounded-[2px] bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-primary hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1.5"
               onClick={() => {
                 setNewContactDraft({ name: '', email: '', phone: '', title: '', notes: '', tags: '' })
@@ -174,7 +175,7 @@ export function ClientContactsTab({
               }}
             >
               <UserPlus className="h-4 w-4" />
-              New contact
+              Add Contact
             </Button>
           </div>
         </div>

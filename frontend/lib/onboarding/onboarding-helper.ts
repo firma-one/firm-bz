@@ -432,6 +432,12 @@ export async function runSandboxOnboarding(
   }
 
   // Greenfield: create firm, Drive firm folder, clients + engagements (DB projects), then sync connector + Drive.
+  const group = await (prisma as any).group.create({
+    data: { name, createdBy: userId },
+  })
+  await (prisma as any).groupMember.create({
+    data: { groupId: group.id, userId, role: 'GROUP_ADMIN' },
+  })
   const firm = await FirmService.createFirmWithMember({
     userId,
     email: input.userEmail,
@@ -441,6 +447,7 @@ export async function runSandboxOnboarding(
     connectorId: connectionId,
     allowDomainAccess: false,
     sandboxOnly: true,
+    groupId: group.id,
   })
   await normalizeSandboxFirmNameForAdmin(input, {
     id: firm.id,

@@ -132,6 +132,7 @@ export interface EngagementInsightsResponse {
   sensitiveFiles: SensitiveFileItem[]
   sharesProgress: SharesProgress
   sharedDocsCount: number
+  pendingApprovalSharesCount: number
   healthScore: EngagementHealthScore
 }
 
@@ -252,7 +253,7 @@ function buildDuplicateGroups(
   for (const f of files) {
     const ext = (f.fileName.match(/\.([^.]+)$/)?.[1] ?? '').toLowerCase()
     const base = normalizeBaseName(f.fileName)
-    if (!base || base.length < 3) continue
+    if (!base || base.length < 6) continue
     const key = `${ext}:${base}`
     const g = nameMap.get(key) ?? []
     g.push(f)
@@ -306,7 +307,7 @@ export async function GET(
     staleThreshold.setDate(today.getDate() - 180)
     const largeSizeThreshold = 50 * 1024 * 1024 // 50 MB
 
-    const [engagement, docs, comments, members, invitations, driveConnector, shares, sharedDocsCount] = await Promise.all([
+    const [engagement, docs, comments, members, invitations, driveConnector, shares, sharedDocsCount, pendingApprovalSharesCount] = await Promise.all([
       prisma.engagement.findUnique({
         where: { id: projectId },
         select: { dueDate: true, name: true, connectorRootFolderId: true, kickoffDate: true, createdAt: true },
@@ -359,11 +360,17 @@ export async function GET(
           slug: true,
         },
       }),
-      // Count of distinct documents that have been shared with at least one user
-      prisma.engagementDocumentSharingUser.groupBy({
-        by: ['projectDocumentId'],
-        where: { engagementId: projectId },
-      }).then(rows => rows.length),
+      // Count of documents that have been published as shares (slug != null)
+      (prisma.engagementDocument as any).count({
+        where: { engagementId: projectId, slug: { not: null } },
+      }),
+      // Count of shares pending approval
+      (prisma.engagementDocument as any).count({
+        where: {
+          engagementId: projectId,
+          sharingUsers: { some: { sharingPermissionStatus: 'PENDING' } },
+        },
+      }),
     ])
 
     // External user IDs set
@@ -642,10 +649,11 @@ export async function GET(
       else if (days === 1) penalties.push({ label: 'Engagement due tomorrow', points: 8 })
       else if (days === 2) penalties.push({ label: 'Engagement due in 2 days', points: 5 })
     }
-    if (sharesProgress.total > 0) {
-      const deliveryPct = Math.round((sharesProgress.done / sharesProgress.total) * 100)
-      if (deliveryPct < 50) penalties.push({ label: `${deliveryPct}% deliverables done`, points: Math.min(25, Math.round((50 - deliveryPct) / 2)) })
-    }
+    // TODO: re-enable when Shares board graduates from beta
+    // if (sharesProgress.total > 0) {
+    //   const deliveryPct = Math.round((sharesProgress.done / sharesProgress.total) * 100)
+    //   if (deliveryPct < 50) penalties.push({ label: `${deliveryPct}% deliverables done`, points: Math.min(25, Math.round((50 - deliveryPct) / 2)) })
+    // }
 
     const healthPenalty = penalties.reduce((sum, p) => sum + p.points, 0)
     const healthScoreValue = Math.max(0, 100 - healthPenalty)
@@ -668,6 +676,7 @@ export async function GET(
       sensitiveFiles,
       sharesProgress,
       sharedDocsCount,
+      pendingApprovalSharesCount,
       healthScore,
     }
 

@@ -684,3 +684,44 @@
     @apply bg-background text-foreground;
   }
 }
+
+@media print {
+  /* Hide shell chrome */
+  .d-app > header,
+  .d-app > div > div:first-child {
+    display: none !important;
+  }
+
+  /* Let the overview grid render full-width, stacked */
+  [data-print-overview] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Remove scroll containers and fixed heights inside the overview */
+  [data-print-overview] .overflow-y-auto,
+  [data-print-overview] .overflow-hidden {
+    overflow: visible !important;
+    max-height: none !important;
+    height: auto !important;
+  }
+
+  [data-print-overview] .h-full {
+    height: auto !important;
+  }
+
+  /* Clean up backgrounds */
+  body,
+  .d-app,
+  .d-app > div > main {
+    background: white !important;
+  }
+
+  /* Remove dot pattern */
+  .architectural-dot {
+    display: none !important;
+  }
+
+  .print\:hidden {
+    display: none !important;
+  }
+}

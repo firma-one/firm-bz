@@ -48,7 +48,7 @@ export default async function SupportPage({
       </nav>
 
       {/* Page Identity Header */}
-      <div className="flex items-start gap-6 mb-6">
+      <div className="flex items-start gap-6 mb-6" data-demo-tour="support-page-header">
         <div className="w-16 h-16 bg-white border border-[#e5e7eb] flex items-center justify-center rounded shadow-sm shrink-0">
           <LifeBuoy className="h-10 w-10 text-[#1b1b1d]" />
         </div>

@@ -271,3 +271,4 @@ scripts/create-google-form-simple.js
 
 # Playwright
 .playwright-mcp/**
+frontend/supabase/snippets/**

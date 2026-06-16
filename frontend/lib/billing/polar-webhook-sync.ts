@@ -1,9 +1,8 @@
 import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
-import { resolveBillingAnchorFirmId } from '@/lib/billing/billing-group'
 import {
-    findFirmIdByPolarCustomerId,
-    findFirmIdByPolarSubscriptionId,
+    findGroupIdByPolarCustomerId,
+    findGroupIdByPolarSubscriptionId,
 } from '@/lib/billing/active-billing-subscription'
 import { pricingModelFromRecurringFlag } from '@/lib/billing/pricing-model'
 import { refreshBillingPlanForFirmGroupUsers } from '@/lib/billing/billing-user-session-sync'
@@ -30,10 +29,10 @@ function asDate(value: unknown): Date | null {
     return Number.isNaN(date.getTime()) ? null : date
 }
 
-function metadataFirmId(payload: UnknownRecord): string | null {
+function metadataGroupId(payload: UnknownRecord): string | null {
     const metadata = asRecord(payload.metadata)
     if (!metadata) return null
-    return asString(metadata.firmId)
+    return asString(metadata.groupId) ?? asString(metadata.firmId)
 }
 
 function couponCodeFromDiscountRecord(discount: UnknownRecord | null): string | null {
@@ -122,7 +121,7 @@ function extractSubscriptionDetails(body: UnknownRecord) {
             asString(body.externalCustomerId) ??
             asString(customer?.externalId) ??
             asString(customer?.external_id) ??
-            metadataFirmId(body),
+            metadataGroupId(body),
         productId: asString(body.productId) ?? asString(product?.id),
         planName:
             asString(body.productName) ??
@@ -142,22 +141,24 @@ function isSubscriptionAccessActive(status: SubscriptionStatus): boolean {
     return status === 'active' || status === 'trialing' || status === 'past_due'
 }
 
-async function resolveFirmForPayload(details: ReturnType<typeof extractSubscriptionDetails>) {
+/** Returns the groupId from the webhook payload. customerExternalId is always groupId. */
+async function resolveGroupForPayload(details: ReturnType<typeof extractSubscriptionDetails>): Promise<string | null> {
     if (details.customerExternalId) {
-        const firm = await prisma.firm.findUnique({
+        // customerExternalId is group.id — verify it exists
+        const group = await prisma.group.findUnique({
             where: { id: details.customerExternalId },
             select: { id: true },
         })
-        if (firm) return firm.id
+        if (group) return group.id
     }
 
     if (details.customerId) {
-        const id = await findFirmIdByPolarCustomerId(details.customerId)
+        const id = await findGroupIdByPolarCustomerId(details.customerId)
         if (id) return id
     }
 
     if (details.subscriptionId) {
-        const id = await findFirmIdByPolarSubscriptionId(details.subscriptionId)
+        const id = await findGroupIdByPolarSubscriptionId(details.subscriptionId)
         if (id) return id
     }
 
@@ -165,7 +166,7 @@ async function resolveFirmForPayload(details: ReturnType<typeof extractSubscript
 }
 
 export type PolarSubscriptionSyncResult = {
-    anchorFirmId: string
+    groupId: string
     subscriptionId: string | null
     productId: string | null
     status: SubscriptionStatus
@@ -173,7 +174,7 @@ export type PolarSubscriptionSyncResult = {
 }
 
 /**
- * Maps Polar subscription webhooks → billing anchor firm row.
+ * Maps Polar subscription webhooks → group subscription row.
  * Returns context for post-sync hooks (revoke free tier, resync sandbox free, etc.).
  */
 export async function syncFirmSubscriptionFromPolarEvent(
@@ -187,9 +188,9 @@ export async function syncFirmSubscriptionFromPolarEvent(
     }
 
     const details = extractSubscriptionDetails(body)
-    const resolvedFirmId = await resolveFirmForPayload(details)
-    if (!resolvedFirmId) {
-        logger.warn('Polar webhook: no firm mapping found', {
+    const groupId = await resolveGroupForPayload(details)
+    if (!groupId) {
+        logger.warn('Polar webhook: no group mapping found', {
             customerExternalId: details.customerExternalId,
             customerId: details.customerId,
             subscriptionId: details.subscriptionId,
@@ -197,27 +198,20 @@ export async function syncFirmSubscriptionFromPolarEvent(
         return null
     }
 
-    const anchorFirmId = await resolveBillingAnchorFirmId(resolvedFirmId)
     const status = options?.statusOverride ?? mapPolarSubscriptionStatusToDb(body.status)
-    // `undefined` means the caller didn't supply this option — preserve the existing DB value.
-    // `null` means the caller explicitly wants to clear it (e.g. uncanceled, immediate cancel).
     const overrideScheduledCancelAt = options?.scheduledCancelAt
 
     const active = isSubscriptionAccessActive(status)
     const now = new Date()
     await prisma.$transaction(async (tx) => {
-        const auditUserId = await resolveSubscriptionAuditUserId(tx, anchorFirmId, null)
+        const auditUserId = await resolveSubscriptionAuditUserId(tx, groupId, null)
         if (!auditUserId) {
-            logger.warn('Polar webhook: could not resolve subscription audit user id', { anchorFirmId })
+            logger.warn('Polar webhook: could not resolve subscription audit user id', { groupId })
         }
-        // Must clear every active row for this firm first. Partial unique index
-        // `subscriptions_one_active_per_firm` allows only one active row per firmId.
-        // The previous NOT: polarSubscriptionId filter skipped rows with NULL polarSubscriptionId
-        // (sandbox free tier), so create() hit P2002 when adding a paid Polar subscription.
         if (active) {
             await tx.subscription.updateMany({
                 where: {
-                    firmId: anchorFirmId,
+                    groupId,
                     active: true,
                     deletedAt: null,
                 },
@@ -231,7 +225,7 @@ export async function syncFirmSubscriptionFromPolarEvent(
 
         const existing = details.subscriptionId
             ? await tx.subscription.findFirst({
-                  where: { firmId: anchorFirmId, polarSubscriptionId: details.subscriptionId, deletedAt: null },
+                  where: { groupId, polarSubscriptionId: details.subscriptionId, deletedAt: null },
                   select: { id: true },
               })
             : null
@@ -249,8 +243,6 @@ export async function syncFirmSubscriptionFromPolarEvent(
                     provider: 'polar',
                     pricingModel: recurringModel,
                     currentPeriodEnd: details.periodEnd ?? null,
-                    // Only overwrite scheduledCancelAt when the caller explicitly supplied a value
-                    // (including null to clear it). Omit the field when undefined to preserve the DB value.
                     ...(overrideScheduledCancelAt !== undefined ? { scheduledCancelAt: overrideScheduledCancelAt } : {}),
                     couponCode: details.couponCode ?? null,
                     polarCustomerId: details.customerId ?? null,
@@ -265,7 +257,7 @@ export async function syncFirmSubscriptionFromPolarEvent(
         } else {
             await tx.subscription.create({
                 data: {
-                    firmId: anchorFirmId,
+                    groupId,
                     plan: details.planName ?? null,
                     provider: 'polar',
                     pricingModel: recurringModel,
@@ -285,22 +277,21 @@ export async function syncFirmSubscriptionFromPolarEvent(
     })
 
     if (active) {
-        await advanceOnboardingPastSubscribeForBillingAnchor(anchorFirmId, details.productId ?? null)
+        await advanceOnboardingPastSubscribeForBillingAnchor(groupId, details.productId ?? null)
     }
 
-    logger.info('Polar webhook synced firm subscription', {
+    logger.info('Polar webhook synced group subscription', {
         status,
-        resolvedFirmId,
-        anchorFirmId,
+        groupId,
         subscriptionId: details.subscriptionId,
         customerId: details.customerId,
         productId: details.productId,
     })
 
-    await refreshBillingPlanForFirmGroupUsers(anchorFirmId)
+    await refreshBillingPlanForFirmGroupUsers(groupId)
 
     return {
-        anchorFirmId,
+        groupId,
         subscriptionId: details.subscriptionId,
         productId: details.productId,
         status,

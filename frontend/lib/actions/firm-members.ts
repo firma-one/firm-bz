@@ -9,7 +9,7 @@ import { sendEmail } from '@/lib/email'
 import { BRAND_NAME } from '@/config/brand'
 import { canManageOrganization } from '@/lib/permission-helpers'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
-import { upsertFollowUpReminder } from '@/lib/actions/user-reminders'
+import { upsertFollowUpReminder, removeRemindersByEntity } from '@/lib/actions/user-reminders'
 
 const supabaseAdmin = createSupabaseAdmin(
     process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321',
@@ -234,5 +234,6 @@ export async function revokeFirmInvitation(invitationId: string) {
     if (!canManage) throw new Error('Insufficient permissions')
 
     await prisma.firmInvitation.delete({ where: { id: invitationId } })
+    await removeRemindersByEntity(invite.createdBy ?? user.id, 'platform.firm_invitations', invitationId).catch(() => {})
     revalidatePath('/d/f/[slug]')
 }

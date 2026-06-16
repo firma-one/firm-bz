@@ -103,6 +103,7 @@ export function ProfileSection({
   // Close dropdowns when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
+      if (typeof window !== "undefined" && (window as any).__demoTourActive) return
       const target = event.target as Node
       const el = target as Element
       const insidePopup = el.closest?.('[data-profile-popup]')
@@ -177,7 +178,7 @@ export function ProfileSection({
         {isProfileOpen && popupPosition && typeof document !== 'undefined' && createPortal(
           <div
             data-profile-popup=""
-            className="d-app fixed bg-white rounded shadow-lg border border-[#e5e7eb] overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-200 z-[200]"
+            className={`d-app fixed bg-white rounded shadow-lg border border-[#e5e7eb] overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-200 ${typeof window !== 'undefined' && (window as any).__demoTourActive ? 'z-[10055]' : 'z-[200]'}`}
             style={{
               top: popupPosition.top,
               left: popupPosition.left,
@@ -212,6 +213,7 @@ export function ProfileSection({
                     <Link
                       href={billingHref}
                       onClick={() => setIsProfileOpen(false)}
+                      data-demo-tour="profile-billing"
                       className="d-sidebar-nav flex w-full items-center gap-2 rounded px-3 py-2.5 text-[#45474c] transition-colors hover:bg-[#f3f4f6] hover:text-[#1b1b1d]"
                     >
                       <CreditCard className="h-4 w-4 shrink-0" />
@@ -222,6 +224,7 @@ export function ProfileSection({
                     <Link
                       href={supportHref}
                       onClick={() => setIsProfileOpen(false)}
+                      data-demo-tour="profile-support"
                       className="d-sidebar-nav flex w-full items-center gap-2 rounded px-3 py-2.5 text-[#45474c] transition-colors hover:bg-[#f3f4f6] hover:text-[#1b1b1d]"
                     >
                       <LifeBuoy className="h-4 w-4 shrink-0" />
@@ -244,11 +247,12 @@ export function ProfileSection({
                     className="d-sidebar-nav flex w-full items-center gap-2 rounded px-3 py-2.5 text-[#45474c] transition-colors hover:bg-[#f3f4f6] hover:text-[#1b1b1d]"
                   >
                     <Building2 className="h-4 w-4 shrink-0" aria-hidden />
-                    Switch Workspace
+                    Switch Firm
                   </Link>
                   <button
                     type="button"
                     onClick={() => signOut()}
+                    data-demo-tour="profile-signout"
                     className="d-sidebar-nav flex w-full items-center gap-2 rounded px-3 py-2.5 text-left text-red-600 transition-colors hover:bg-[#f3f4f6] hover:text-red-700"
                   >
                     <LogOut className="h-4 w-4 shrink-0" />

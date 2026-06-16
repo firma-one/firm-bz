@@ -89,6 +89,8 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false }: Fir
   const [firmAdmins, setFirmAdmins] = useState<FirmAdmin[]>([])
   const [switchModalOpen, setSwitchModalOpen] = useState(false)
 
+  const [addNewOpen, setAddNewOpen] = useState(false)
+
   const [allClients, setAllClients] = useState<FirmClientRecord[]>([])
   const [attachingClientId, setAttachingClientId] = useState<string | null>(null)
   const [detachingClientId, setDetachingClientId] = useState<string | null>(null)
@@ -638,10 +640,22 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false }: Fir
 
         {/* Connect new account */}
         <div className="pt-2">
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#45474c] mb-2">
-            {connectors.length === 0 ? 'Connect storage account' : 'Add new connection'}
-          </p>
-          <div className="flex flex-col gap-0.5 border border-[#e5e7eb] rounded-[2px] p-1">
+          <button
+            type="button"
+            onClick={() => setAddNewOpen(o => !o)}
+            className="flex w-full items-center gap-2 mb-2 group"
+          >
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#45474c] flex-1 text-left">
+              {connectors.length === 0 ? 'Connect storage account' : 'Add new connection'}
+            </p>
+            <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-[2px] border border-[#e5e7eb] bg-white text-[#45474c] group-hover:border-[#1b1b1d] transition-colors">
+              {addNewOpen
+                ? <span className="text-[10px] font-bold leading-none">−</span>
+                : <span className="text-[10px] font-bold leading-none">+</span>
+              }
+            </span>
+          </button>
+          {addNewOpen && <div className="flex flex-col gap-0.5 border border-[#e5e7eb] rounded-[2px] p-1">
             <div className="flex items-start gap-2.5 px-2.5 py-2.5 rounded-[2px] hover:bg-slate-50 transition-colors">
               <div className="h-8 w-8 shrink-0 bg-white border border-[#e5e7eb] rounded-[2px] flex items-center justify-center p-1.5 mt-0.5">
                 {loading ? <RefreshCw className="w-3.5 h-3.5 text-[#45474c] animate-spin" /> : <GoogleDriveProductMark width={18} height={18} />}
@@ -690,7 +704,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false }: Fir
                 <span className="text-xs text-[#9a9ba0]">Connect your OneDrive or SharePoint</span>
               </div>
             </div>
-          </div>
+          </div>}
         </div>
 
         {/* Modals */}

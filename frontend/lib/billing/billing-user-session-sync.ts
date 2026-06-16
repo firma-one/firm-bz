@@ -10,9 +10,9 @@ import { userSettingsPlus } from '@/lib/user-settings-plus'
  * Billing details are **not** written into the JWT — `app_metadata` must stay tiny (see
  * `mergeLeanAppMetadata`); large blobs caused 431 Request Header Fields Too Large.
  */
-export async function refreshBillingPlanForFirmGroupUsers(anchorFirmId: string): Promise<void> {
+export async function refreshBillingPlanForFirmGroupUsers(groupId: string): Promise<void> {
     try {
-        const groupFirmIds = await listFirmIdsInBillingGroup(anchorFirmId)
+        const groupFirmIds = await listFirmIdsInBillingGroup(groupId)
         const members = await prisma.firmMember.findMany({
             where: { firmId: { in: groupFirmIds } },
             select: { userId: true },
@@ -23,7 +23,7 @@ export async function refreshBillingPlanForFirmGroupUsers(anchorFirmId: string):
         userSettingsPlus.invalidateUsers(userIds)
     } catch (error) {
         logger.warn('Failed to refresh billing plan for firm group users', {
-            anchorFirmId,
+            groupId,
             message: error instanceof Error ? error.message : String(error),
         })
     }

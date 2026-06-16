@@ -62,6 +62,8 @@ export async function inviteMember(projectId: string, email: string, personaId: 
             }
         })
 
+        await maybeProvisionInviteeAccount(email)
+
         const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invite/${token}`
         try {
             const { subject, html } = renderInviteEmail({
@@ -102,9 +104,12 @@ export async function inviteMember(projectId: string, email: string, personaId: 
             personaId,
             token,
             status: InvitationStatus.PENDING,
-            expireAt
+            expireAt,
+            createdBy: user.id,
         }
     })
+
+    await maybeProvisionInviteeAccount(email)
 
     const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invite/${token}`
     try {
@@ -392,7 +397,7 @@ export async function acceptInvitation(token: string): Promise<{ success: true; 
         }
         await invalidateUserSettingsPlus(user.id)
         if (invite.createdBy) {
-            await removeRemindersByEntity(invite.createdBy, 'platform.firm_invitations.id', invite.id).catch(() => {})
+            await removeRemindersByEntity(invite.createdBy, 'platform.firm_invitations', invite.id).catch(() => {})
         }
         if (!existing && !hadDefaultFirm) {
             try {
@@ -592,5 +597,27 @@ export async function acceptInvitation(token: string): Promise<{ success: true; 
     return {
         success: true,
         redirectUrl: `/d/f/${invite.engagement.client.firm.slug}/c/${invite.engagement.client.slug}/e/${invite.engagement.slug}/files`
+    }
+}
+
+/**
+ * Pre-provision an auth.user record for an invitee who doesn't have an account yet.
+ * This ensures the invitee is routed to sign-in (OTP) rather than sign-up when they
+ * click the invite link, so the `next=/invite/{token}` redirect is preserved end-to-end.
+ * Safe to call when the user already exists — it's a no-op in that case.
+ */
+async function maybeProvisionInviteeAccount(email: string): Promise<void> {
+    const existing = await prisma.$queryRaw<Array<{ id: string }>>`
+        SELECT id::text FROM auth.users WHERE lower(email) = ${email.toLowerCase()} LIMIT 1
+    `
+    if (existing.length > 0) return
+
+    const adminClient = createAdminClient()
+    const { error } = await adminClient.auth.admin.createUser({
+        email: email.toLowerCase(),
+        email_confirm: true,
+    })
+    if (error) {
+        logger.error('Failed to pre-provision invitee account', new Error(error.message), 'Invitations', { email })
     }
 }

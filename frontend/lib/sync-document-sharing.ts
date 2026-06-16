@@ -102,6 +102,8 @@ export async function syncDocumentSharingUsers(projectDocumentId: string, actorI
 
       const existingUserShare = doc.sharingUsers.find((u) => u.userId === member.userId)
       if (existingUserShare?.sharingPermissionStatus === DocumentSharingPermissionStatus.GRANTED) continue
+      // Never auto-grant a PENDING row — intake approval must happen explicitly
+      if ((existingUserShare?.sharingPermissionStatus as string) === 'PENDING') continue
 
       try {
         if (!externalId) continue

@@ -7,6 +7,7 @@ export type BreadcrumbItem = {
   id: string
   name: string
   clickable?: boolean
+  isPendingApproval?: boolean
 }
 
 const FILES_LAST_FOLDER_KEY = (projectId: string) => `fm_files_last_folder_${projectId}`

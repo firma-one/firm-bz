@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
             connectorId: connectionId,
             allowDomainAccess: sandboxOnly ? false : (allowDomainAccess ?? true),
             sandboxOnly: !!sandboxOnly,
-            anchorFirmId: billingAnchorId ?? undefined,
+            groupId: billingAnchorId ?? '',
         })
 
         // Persist onboarding progress on firm.settings (firm-first onboarding source of truth).

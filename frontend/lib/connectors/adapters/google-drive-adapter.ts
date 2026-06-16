@@ -191,7 +191,6 @@ export function createGoogleDriveAdapter(getAccessToken: GetAccessToken): IConne
           name,
           mimeType: DRIVE_FOLDER_MIME,
           parents: [parentFolderId],
-          appProperties: FIRMA_MANAGED_APP_PROPS,
         })
       })
       if (!res.ok) {
@@ -227,7 +226,6 @@ export function createGoogleDriveAdapter(getAccessToken: GetAccessToken): IConne
           name,
           mimeType: DRIVE_FOLDER_MIME,
           parents: [parentFolderId],
-          appProperties: FIRMA_MANAGED_APP_PROPS,
         })
       })
       if (!createRes.ok) {

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
-import { resolveBillingAnchorFirmId } from '@/lib/billing/billing-group'
+import { resolveGroupId } from '@/lib/billing/billing-group'
 
 export async function POST() {
     const supabase = await createClient()
@@ -17,19 +17,19 @@ export async function POST() {
     })
     if (!membership?.firmId) return NextResponse.json({ error: 'No default firm' }, { status: 400 })
 
-    const anchorFirmId = await resolveBillingAnchorFirmId(membership.firmId)
-    const anchor = await prisma.firm.findUnique({
-        where: { id: anchorFirmId },
-        select: { settings: true },
+    const groupId = await resolveGroupId(membership.firmId)
+    const sandboxFirm = await prisma.firm.findFirst({
+        where: { groupId, sandboxOnly: true, deletedAt: null },
+        select: { id: true, settings: true },
     })
-    if (!anchor) return NextResponse.json({ error: 'Firm not found' }, { status: 404 })
+    if (!sandboxFirm) return NextResponse.json({ error: 'Firm not found' }, { status: 404 })
 
-    const settings = (anchor.settings as Record<string, unknown> | null) ?? {}
+    const settings = (sandboxFirm.settings as Record<string, unknown> | null) ?? {}
     const onboarding = (settings.onboarding as Record<string, unknown> | undefined) ?? {}
     const subscription = (onboarding.subscription as Record<string, unknown> | undefined) ?? {}
 
     await prisma.firm.update({
-        where: { id: anchorFirmId },
+        where: { id: sandboxFirm.id },
         data: {
             settings: {
                 ...settings,

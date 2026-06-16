@@ -3,10 +3,10 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { createClient } from '@/utils/supabase/server'
 import {
-    getActiveSubscriptionForFirm,
+    getActiveSubscriptionForGroup,
     subscriptionAccessStatusLabel,
 } from '@/lib/billing/active-billing-subscription'
-import { resolveBillingAnchorFirmId, listBillableFirmIdsInBillingGroup } from '@/lib/billing/billing-group'
+import { resolveGroupId, listBillableFirmIdsInBillingGroup } from '@/lib/billing/billing-group'
 import { loadAnchorForCaps, anchorUsesSandboxCapDefaults } from '@/lib/billing/effective-billing-caps'
 
 function polarServer(): 'production' | 'sandbox' {
@@ -53,8 +53,8 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const anchorId = await resolveBillingAnchorFirmId(firmId)
-    const anchorSub = await getActiveSubscriptionForFirm(anchorId)
+    const groupId = await resolveGroupId(firmId)
+    const anchorSub = await getActiveSubscriptionForGroup(groupId)
 
     let periodEnd = anchorSub?.currentPeriodEnd ?? null
     let normalizedStatus = (subscriptionAccessStatusLabel(anchorSub) ?? '').toLowerCase()
@@ -114,7 +114,7 @@ export async function GET(request: Request) {
     if (stillMissingPaidContext) {
         try {
             const polar = new Polar({ accessToken: process.env.POLAR_ACCESS_TOKEN!.trim(), server: polarServer() })
-            const state = await polar.customers.getStateExternal({ externalId: anchorId })
+            const state = await polar.customers.getStateExternal({ externalId: groupId })
             const stateRecord = asRecord(state)
             const freeProductId = process.env.POLAR_FREE_PRODUCT_ID?.trim() || null
             const activeSubsRaw = asArray(stateRecord?.activeSubscriptions)
@@ -163,7 +163,7 @@ export async function GET(request: Request) {
     const isFirmBillingAdmin = membership.role === 'firm_admin'
 
     // Load entitlements for the summary strip — read raw metadata so manual SYS_ADMIN overrides are reflected
-    const anchor = await loadAnchorForCaps(anchorId)
+    const anchor = await loadAnchorForCaps(firmId)
     const entitlements = anchor ? {
         firms: anchor.entitledFirms,
         clients: anchor.entitledClients,
@@ -176,10 +176,10 @@ export async function GET(request: Request) {
     } : null
 
     // Usage counts — only query what has a cap (null cap = unlimited, no need to count)
-    const billableFirmIds = await listBillableFirmIdsInBillingGroup(anchorId)
+    const billableFirmIds = await listBillableFirmIdsInBillingGroup(groupId)
     const [usedFirms, usedClients, usedEngagements, usedDocuments, usedClientContacts] = await Promise.all([
         anchor?.entitledFirms != null
-            ? prisma.firm.count({ where: { OR: [{ id: anchorId }, { anchorFirmId: anchorId }], deletedAt: null, sandboxOnly: false } })
+            ? prisma.firm.count({ where: { groupId, deletedAt: null, sandboxOnly: false } })
             : Promise.resolve(null),
         anchor?.entitledClients != null
             ? prisma.client.count({ where: { firmId: { in: billableFirmIds }, deletedAt: null } })

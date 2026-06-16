@@ -227,7 +227,7 @@ export function EngagementWorkspace({
             </nav>
 
             {/* Project Identity Header — sits directly on pearl bg, no card wrapper */}
-            <div className="flex items-start justify-between gap-6 mb-6">
+            <div className="flex items-start justify-between gap-6 mb-6" data-demo-tour="engagement-header">
                 <div className="flex items-center gap-6">
                     <div className="w-16 h-16 bg-white border border-[#e5e7eb] flex items-center justify-center rounded shadow-sm shrink-0">
                         <Briefcase className="h-10 w-10 text-[#1b1b1d]" />
@@ -323,6 +323,7 @@ export function EngagementWorkspace({
                             )}
                             <TabsTrigger
                                 value="files"
+                                data-demo-tour="engagement-files-tab"
                                 className="h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                             >
                                 <Folder className="w-4 h-4 mr-2" />
@@ -335,6 +336,7 @@ export function EngagementWorkspace({
                             </TabsTrigger>
                             <TabsTrigger
                                 value="shares"
+                                data-demo-tour="engagement-shares-tab"
                                 className="h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                             >
                                 <Share2 className="w-4 h-4 mr-2" />
@@ -358,6 +360,7 @@ export function EngagementWorkspace({
                             )}
                             <TabsTrigger
                                 value="comments"
+                                data-demo-tour="engagement-comments-tab"
                                 className="h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                             >
                                 <MessageCircle className="w-4 h-4 mr-2" />
@@ -387,6 +390,7 @@ export function EngagementWorkspace({
                             {canManage && (
                                 <TabsTrigger
                                     value="audit"
+                                    data-demo-tour="engagement-audit-tab"
                                     className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                                 >
                                     <ClipboardList className="w-4 h-4 mr-2" />
@@ -402,6 +406,7 @@ export function EngagementWorkspace({
                             {canViewInternalTabs && (
                                 <TabsTrigger
                                     value="members"
+                                    data-demo-tour="engagement-members-tab"
                                     className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                                 >
                                     <Users className="w-4 h-4 mr-2" />
@@ -417,6 +422,7 @@ export function EngagementWorkspace({
                             {canViewSettings && (
                                 <TabsTrigger
                                     value="settings"
+                                    data-demo-tour="engagement-settings-tab"
                                     className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                                 >
                                     <Settings className="w-4 h-4 mr-2" />

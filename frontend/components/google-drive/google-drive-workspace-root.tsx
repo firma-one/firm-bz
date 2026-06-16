@@ -529,23 +529,25 @@ export function GoogleDriveWorkspaceRoot({
           </DialogHeader>
 
           {!previewDrive ? (
-            <div className="space-y-3 py-1">
-              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#45474c]">Step 1 · Location</p>
-              <p className="text-sm text-gray-600">
+            <div className="space-y-4 py-1">
+              <div className="flex items-center gap-2">
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#45474c]">Step 1 · Location</p>
+              </div>
+              <p className="text-xs text-[#45474c] leading-relaxed">
                 The next steps are the same for both: we suggest a unique folder name, you create it in Google Drive, then you select it here.
               </p>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <button
                   type="button"
                   onClick={startMyDriveFlow}
                   disabled={saving}
-                  className="group flex flex-col items-start gap-3 border border-[#e5e7eb] bg-white p-5 text-left transition-all hover:border-[#1b1b1d] hover:shadow-lg active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
+                  className="group flex flex-col items-start gap-3 rounded-[2px] border border-[#e5e7eb] bg-white p-4 text-left transition-all hover:border-[#1b1b1d] hover:bg-[#f9f9fb] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
                 >
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-sm bg-[#f9f9fb]">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[2px] border border-[#e5e7eb] bg-[#f9f9fb]">
                     {saving ? <RefreshCw className="h-6 w-6 text-[#45474c] animate-spin" /> : <GoogleDriveIcon size={28} />}
                   </div>
                   <div>
-                    <p className="font-bold text-[#1b1b1d]">{saving ? 'Creating folder…' : 'My Drive'}</p>
+                    <p className="text-[0.8125rem] font-semibold text-[#1b1b1d]">{saving ? 'Creating folder…' : 'My Drive'}</p>
                     <p className="text-xs text-[#45474c] leading-relaxed mt-0.5">Personal storage tied to your Google account.</p>
                   </div>
                 </button>
@@ -553,13 +555,13 @@ export function GoogleDriveWorkspaceRoot({
                   type="button"
                   onClick={startSharedDriveFlow}
                   disabled={saving}
-                  className="group flex flex-col items-start gap-3 border border-[#e5e7eb] bg-white p-5 text-left transition-all hover:border-[#1b1b1d] hover:shadow-lg active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
+                  className="group flex flex-col items-start gap-3 rounded-[2px] border border-[#e5e7eb] bg-white p-4 text-left transition-all hover:border-[#1b1b1d] hover:bg-[#f9f9fb] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
                 >
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-sm bg-[#f9f9fb]">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[2px] border border-[#e5e7eb] bg-[#f9f9fb]">
                     <GoogleSharedDriveIcon size={28} />
                   </div>
                   <div>
-                    <p className="font-bold text-[#1b1b1d]">Shared Drive</p>
+                    <p className="text-[0.8125rem] font-semibold text-[#1b1b1d]">Shared Drive</p>
                     <p className="text-xs text-[#45474c] leading-relaxed mt-0.5">Team storage not tied to any individual account.</p>
                   </div>
                 </button>

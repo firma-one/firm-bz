@@ -1,20 +1,20 @@
 'use client'
 
-import React, { useState, useEffect, useTransition } from 'react'
+import { useState, useEffect, useTransition } from 'react'
 import { ClientSummary, getFirmName } from '@/lib/actions/hierarchy'
-import { UserPlus, Building2, LayoutGrid, List, Home, ChevronRight, Settings, Users, ClipboardList, UserCog, LayoutDashboard, Lock } from 'lucide-react'
+import { UserPlus, Building2, LayoutGrid, List, Home, ChevronRight, Settings, Users, ClipboardList, UserCog, LayoutDashboard, Lock, Printer } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ClientList } from './client-list'
 import { AddClientModal } from './add-client-modal'
 import { FirmSettingsForm } from './firm-settings-form'
 import { FirmMembersTab } from './members/firm-members-tab'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import Link from 'next/link'
 import { useSearchParams, usePathname, useRouter } from 'next/navigation'
 import { EngagementAuditPane } from './engagement-audit-pane'
 import { ErrorBoundary } from '@/components/error-boundary'
 import { FirmBusinessInsights } from '@/components/dashboard/firm-business-insights'
 import { FirmActionCenter } from '@/components/dashboard/firm-action-center'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
 interface FirmClientsViewProps {
     clients: ClientSummary[]
@@ -126,7 +126,7 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
     return (
         <div className="flex flex-col h-full">
             {/* Breadcrumbs — monospace architectural style */}
-            <nav className="flex items-center gap-1.5 mb-4">
+            <nav className="flex items-center gap-1.5 mb-4 print:hidden">
                 <Home className="h-4 w-4 text-[#45474c] opacity-60" />
                 <ChevronRight className="h-3.5 w-3.5 text-[#d1d5db]" />
                 <Building2 className="h-4 w-4 text-primary" />
@@ -153,14 +153,15 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                 </div>
             </div>
 
-            <Tabs value={currentTab} onValueChange={handleTabChange} className="flex-1 flex flex-col min-h-0">
+            <Tabs value={currentTab} onValueChange={handleTabChange} className="flex-1 flex flex-col min-h-0 print:block print:flex-none">
                 {/* Tab navigation — full-width white strip with border-b, matching HTML sub-header */}
-                <div className="bg-white border border-[#e5e7eb] rounded mb-6 shrink-0">
+                <div className="bg-white border border-[#e5e7eb] rounded mb-6 shrink-0 print:hidden">
                     <div className="flex items-center justify-between h-14 pr-4">
                         <TabsList className="h-full p-0 bg-transparent rounded-none inline-flex justify-start gap-0 border-0">
                             {canViewOrgAudit && (
                                 <TabsTrigger
                                     value="analytics"
+                                    data-demo-tour="firm-overview-tab"
                                     className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                                 >
                                     <LayoutDashboard className="w-4 h-4 mr-2" />
@@ -183,6 +184,7 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                             {canViewOrgAudit && (
                                 <TabsTrigger
                                     value="members"
+                                    data-demo-tour="firm-members-tab"
                                     className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                                 >
                                     <UserCog className="w-4 h-4 mr-2" />
@@ -198,6 +200,7 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                             {canViewOrgAudit && (
                                 <TabsTrigger
                                     value="audit"
+                                    data-demo-tour="firm-audit-tab"
                                     className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                                 >
                                     <ClipboardList className="w-4 h-4 mr-2" />
@@ -213,6 +216,7 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                             {canViewOrgSettings && (
                                 <TabsTrigger
                                     value="settings"
+                                    data-demo-tour="firm-settings-tab"
                                     className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                                 >
                                     <Settings className="w-4 h-4 mr-2" />
@@ -222,6 +226,36 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                             )}
                         </TabsList>
                         <div className="flex items-center gap-3 ml-auto">
+                            {currentTab === 'analytics' && (
+                                <TooltipProvider delayDuration={300}>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <button
+                                                onClick={() => {
+                                                    const now = new Date()
+                                                    const pad = (n: number) => String(n).padStart(2, '0')
+                                                    const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}--${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`
+                                                    const prev = document.title
+                                                    document.title = `${orgName} - Overview - ${stamp}`
+                                                    const restore = () => {
+                                                        document.title = prev
+                                                        window.removeEventListener('afterprint', restore)
+                                                    }
+                                                    window.addEventListener('afterprint', restore)
+                                                    window.print()
+                                                }}
+                                                className="h-auto px-4 py-1.5 rounded-[2px] bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-primary hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1.5 print:hidden"
+                                            >
+                                                <Printer className="h-3.5 w-3.5" />
+                                                Print
+                                            </button>
+                                        </TooltipTrigger>
+                                        <TooltipContent variant="light" side="bottom" align="end">
+                                            Save a dated PDF snapshot for historical state comparison
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
+                            )}
                             {currentTab === 'clients' && (
                                 <div className="flex items-center bg-[#f3f4f6] p-0.5 rounded border border-[#e5e7eb]">
                                     <button
@@ -252,10 +286,11 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                                         variant="ghost"
                                         size="sm"
                                         type="button"
+                                        data-demo-tour="firm-add-client-btn"
                                         className="h-auto px-4 py-1.5 rounded-[2px] bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-primary hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1.5"
                                     >
                                         <UserPlus className="h-3.5 w-3.5" />
-                                        New Client
+                                        Add Client
                                     </Button>
                                 }
                             />
@@ -264,7 +299,7 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                 </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto custom-scrollbar">
+                <div className="flex-1 overflow-y-auto custom-scrollbar print:overflow-visible print:flex-none print:h-auto">
                     <TabsContent value="clients" className="m-0 h-full">
                         <div className="py-2">
                             <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -305,7 +340,7 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
 
                     {canViewOrgAudit && (orgId ?? (clients[0]?.firmId ?? clients[0]?.firmId)) && (
                         <TabsContent value="analytics" className="m-0">
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 22rem', gap: '1.5rem', paddingBottom: '1.5rem' }}>
+                            <div data-print-overview style={{ display: 'grid', gridTemplateColumns: '1fr 22rem', gap: '1.5rem', paddingBottom: '1.5rem' }}>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', minWidth: 0 }}>
                                     <ErrorBoundary context="FirmInsightsTab">
                                         <FirmBusinessInsights

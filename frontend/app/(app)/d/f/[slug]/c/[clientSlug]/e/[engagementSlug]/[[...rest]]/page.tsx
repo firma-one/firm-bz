@@ -128,10 +128,10 @@ export default async function EngagementPage({ params }: PageProps) {
     ecGuestPersona
       ? getAccessibleFileCountForPersona(project.id, ecGuestPersona)
       : (basePrisma as any).engagementDocument.count({ where: { engagementId: project.id, isFolder: false } }),
-    (basePrisma as any).engagementDocument.count({ where: { engagementId: project.id, slug: { not: null } } }),
+    (basePrisma as any).engagementDocument.count({ where: { engagementId: project.id, sharingUsers: { some: { sharingPermissionStatus: { in: ['GRANTED', 'PENDING'] } } } } }),
     (basePrisma as any).docCommentMessage.count({ where: { engagementId: project.id } }),
     (basePrisma as any).engagementMember.count({ where: { engagementId: project.id } }),
-    (basePrisma as any).engagementInvitation.count({ where: { engagementId: project.id, status: { not: 'JOINED' } } }),
+    (basePrisma as any).engagementInvitation.count({ where: { engagementId: project.id, status: { in: ['PENDING', 'ACCEPTED'] } } }),
     (basePrisma as any).platformAuditEvent.count({ where: { engagementId: project.id, scope: 'PROJECT' } }),
     (prisma as any).engagementWikiPage.count({ where: { engagementId: project.id } }),
   ])

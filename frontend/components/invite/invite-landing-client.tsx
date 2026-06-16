@@ -56,10 +56,9 @@ export function InviteLandingClient({ invitation, userEmail }: InviteLandingProp
 
             // Invitation is ACCEPTED (because server verifies PENDING -> ACCEPTED)
             if (!userEmail) {
-                // Not logged in -> Signup
                 setStatus('REDIRECTING')
                 const returnUrl = `/invite/${invitation.token}`
-                router.replace(`/signup?next=${encodeURIComponent(returnUrl)}&email=${encodeURIComponent(invitation.email)}`)
+                router.replace(`/signin?next=${encodeURIComponent(returnUrl)}&email=${encodeURIComponent(invitation.email)}`)
                 return
             }
 

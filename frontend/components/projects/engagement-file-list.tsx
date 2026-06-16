@@ -1378,7 +1378,8 @@ const handleRefresh = async () => {
     const handleFolderClick = (file: DriveFile) => {
         if (file.mimeType === 'application/vnd.google-apps.folder') {
             setHighlightedFileId(null)
-            setBreadcrumbs(prev => [...prev, { id: file.id, name: file.name, clickable: true }])
+            const isPending = !!file.isPendingApproval || breadcrumbs.some(c => c.isPendingApproval)
+            setBreadcrumbs(prev => [...prev, { id: file.id, name: file.name, clickable: true, isPendingApproval: isPending }])
             setCurrentFolderId(file.id)
         }
     }
@@ -1427,7 +1428,11 @@ const handleRefresh = async () => {
     // Filter Logic: search, type, owner, modified, sort. Shared-only filtering is done on the backend when View As EC/Guest.
     // Memoized so list re-renders stay fast. This component is only mounted when the Files tab is active (engagement-workspace conditional mount).
     const sortedFiles = useMemo(() => {
-        let result = [...files]
+        // If any ancestor breadcrumb is a pending intake folder, all children inherit the pending treatment
+        const insidePendingFolder = breadcrumbs.some(c => c.isPendingApproval)
+        let result = insidePendingFolder
+            ? files.map(f => f.isPendingApproval ? f : { ...f, isPendingApproval: true })
+            : [...files]
 
         if (filterTypes.size > 0) {
             result = result.filter(f => {
@@ -1507,7 +1512,7 @@ const handleRefresh = async () => {
                 }
                 if (filterShared === 'with_collaborator') return sharedExternalIdsForEC.has(f.id) || ancestorFolderIdsForEC.has(f.id)
                 if (filterShared === 'with_viewer') return sharedExternalIdsForGuest.has(f.id) || ancestorFolderIdsForGuest.has(f.id)
-                if (filterShared === 'pending_intake') return f.lock?.type === 'intake'
+                if (filterShared === 'pending_intake') return !!f.isPendingApproval
                 return true
             })
         }
@@ -1517,7 +1522,7 @@ const handleRefresh = async () => {
             return [...folders, ...rest]
         }
         return result.sort(cmp)
-    }, [files, sortConfig, filterTypes, filterOwner, filterModified, filterShared, sharedByMeExternalIds, sharedExternalIds, sharedExternalIdsForEC, sharedExternalIdsForGuest, ancestorFolderIds, ancestorFolderIdsForEC, ancestorFolderIdsForGuest, session?.user?.email])
+    }, [files, sortConfig, filterTypes, filterOwner, filterModified, filterShared, sharedByMeExternalIds, sharedExternalIds, sharedExternalIdsForEC, sharedExternalIdsForGuest, ancestorFolderIds, ancestorFolderIdsForEC, ancestorFolderIdsForGuest, session?.user?.email, breadcrumbs])
 
     const TableHeader = ({ label }: { label: string }) => (
         <div className="flex items-center gap-1 text-[0.8125rem] font-medium text-[#45474c] select-none">
@@ -1650,15 +1655,18 @@ const handleRefresh = async () => {
 
                 {/* New Document button portaled into the workspace nav bar slot */}
                 {navSlot && createPortal(
-                    !isAtProjectRoot && (canEdit || (restrictToSharedOnly && currentFolderType === 'general')) ? (
+                    (isSandboxFirm || (!isAtProjectRoot && (canEdit || (restrictToSharedOnly && currentFolderType === 'general')))) ? (
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button disabled={loading || isLoadingFolders} className="h-auto px-4 py-1.5 rounded-[2px] bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-primary hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1.5">
+                                <Button data-demo-tour="engagement-upload-btn" disabled={loading || isLoadingFolders || isUploading || isUploadInitiating} className="h-auto px-4 py-1.5 rounded-[2px] bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-primary hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1.5">
                                     <Upload className="h-3.5 w-3.5" />
                                     New File / Folder
                                 </Button>
                             </DropdownMenuTrigger>
                                 <DropdownMenuContent align="start" className="w-[280px] py-1 rounded-[2px]">
+                                {isSandboxFirm && (
+                                    <div className="absolute inset-0 z-10 rounded-[inherit] pointer-events-auto cursor-not-allowed bg-transparent" />
+                                )}
                                     <DropdownMenuItem onClick={() => openCreateDialog('folder')} className="text-xs py-1.5">
                                         <Folder className="mr-2 h-3.5 w-3.5 text-slate-500" />
                                         New folder
@@ -1795,6 +1803,11 @@ const handleRefresh = async () => {
                                         </>
                                     )}
 
+                                {isSandboxFirm && (
+                                    <div className="px-3 py-2 border-t border-[#e5e7eb] bg-[#f9f9fb]">
+                                        <p className="text-[10px] text-[#9a9ba0] leading-snug">Actions are unavailable in demo projects.</p>
+                                    </div>
+                                )}
                                 </DropdownMenuContent>
                             </DropdownMenu>
                     ) : null,
@@ -2282,9 +2295,9 @@ const handleRefresh = async () => {
                             <p className="text-xs text-[#45474c] max-w-[260px] mx-auto mb-4">
                                 Connect a Google Drive account to this client to start uploading and managing engagement files.
                             </p>
-                            {orgSlug && clientSlug && (
+                            {orgSlug && (
                                 <a
-                                    href={`/d/f/${orgSlug}/c/${clientSlug}?tab=settings`}
+                                    href={`/d/f/${orgSlug}?tab=settings&section=storage`}
                                     className="inline-flex items-center gap-1.5 h-8 px-4 rounded-[2px] bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:brightness-105 transition-all"
                                 >
                                     Go to Settings
@@ -2361,8 +2374,6 @@ const handleRefresh = async () => {
                                     generalFolderId={generalFolderId}
                                     projectId={projectId}
                                     orgSlug={orgSlug}
-                                    firmId={firmId}
-                                    sessionUserId={session?.user?.id}
                                     sessionUserEmail={session?.user?.email}
                                     sharedExternalIds={sharedExternalIds}
                                     ancestorFolderIds={ancestorFolderIds}
@@ -2374,9 +2385,6 @@ const handleRefresh = async () => {
                                     onActionMenuOpenChange={(open) => setActionMenuOpenFileId(open ? file.id : null)}
                                     processingFileIds={processingFileIds}
                                     isRegrantingId={isRegrantingId}
-                                    intakeActionInProgress={intakeActionInProgress}
-                                    expandedIntakeBadgeId={expandedIntakeBadgeId}
-                                    onSetExpandedIntakeBadgeId={setExpandedIntakeBadgeId}
                                     onOpenComments={openCommentsForFile}
                                     onOpenRename={openRenameModal}
                                     onDuplicate={handleDuplicate}
@@ -2385,10 +2393,7 @@ const handleRefresh = async () => {
                                     onTrash={handleTrash}
                                     onPrivacy={handlePrivacy}
                                     onShareSaved={refreshShareStateAndFiles}
-                                    onUnshareConfirm={setUnshareConfirmFile}
                                     onUnlockConfirm={setUnlockConfirmFile}
-                                    onIntakeAction={(file, action) => handleIntakeAction(file, action)}
-                                    onFolderIntakeAction={(file, action) => handleFolderIntakeAction(file, action)}
                                     onOpenDocument={(doc) => {
                                         const docId = doc.id ?? file.id
                                         handleSecureOpen(
@@ -2742,7 +2747,7 @@ const handleRefresh = async () => {
                         <div className="px-5 py-3 border-t border-[#e5e7eb] bg-white flex items-center justify-end gap-3">
                             <Button type="button" variant="outline" className="rounded-[2px] w-24 text-[10px] font-headline font-bold tracking-widest uppercase" onClick={() => setIsCreateItemOpen(false)} disabled={loading}>Cancel</Button>
                             <Button type="button" variant="greenCta" className="min-w-[7rem] text-[10px] font-headline font-bold tracking-widest uppercase" onClick={handleCreateItem} disabled={!newItemName.trim() || loading}>
-                                {loading ? <><LoadingSpinner className="h-3 w-3 mr-1.5" />Creating…</> : 'Create'}
+                                {loading ? <><LoadingSpinner size="sm" className="h-4 w-4 mr-1.5" />Creating…</> : 'Create'}
                             </Button>
                         </div>
                     </DialogContent>

@@ -411,11 +411,18 @@ export async function importStructureFromDrive(
       }
     } else {
       try {
+        const group = await (prisma as any).group.create({
+          data: { name: orgFolder.name, createdBy: userId },
+        })
+        await (prisma as any).groupMember.create({
+          data: { groupId: group.id, userId, role: 'GROUP_ADMIN' },
+        })
         org = await prisma.firm.create({
           data: {
             name: orgFolder.name,
             slug,
-            settings: {}
+            settings: {},
+            groupId: group.id,
           }
         })
       } catch (e: unknown) {
