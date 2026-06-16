@@ -1655,15 +1655,18 @@ const handleRefresh = async () => {
 
                 {/* New Document button portaled into the workspace nav bar slot */}
                 {navSlot && createPortal(
-                    !isAtProjectRoot && (canEdit || (restrictToSharedOnly && currentFolderType === 'general')) ? (
+                    (isSandboxFirm || (!isAtProjectRoot && (canEdit || (restrictToSharedOnly && currentFolderType === 'general')))) ? (
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button disabled={loading || isLoadingFolders || isUploading || isUploadInitiating} className="h-auto px-4 py-1.5 rounded-[2px] bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-primary hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1.5">
+                                <Button data-demo-tour="engagement-upload-btn" disabled={loading || isLoadingFolders || isUploading || isUploadInitiating} className="h-auto px-4 py-1.5 rounded-[2px] bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-primary hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1.5">
                                     <Upload className="h-3.5 w-3.5" />
                                     New File / Folder
                                 </Button>
                             </DropdownMenuTrigger>
                                 <DropdownMenuContent align="start" className="w-[280px] py-1 rounded-[2px]">
+                                {isSandboxFirm && (
+                                    <div className="absolute inset-0 z-10 rounded-[inherit] pointer-events-auto cursor-not-allowed bg-transparent" />
+                                )}
                                     <DropdownMenuItem onClick={() => openCreateDialog('folder')} className="text-xs py-1.5">
                                         <Folder className="mr-2 h-3.5 w-3.5 text-slate-500" />
                                         New folder
@@ -1800,6 +1803,11 @@ const handleRefresh = async () => {
                                         </>
                                     )}
 
+                                {isSandboxFirm && (
+                                    <div className="px-3 py-2 border-t border-[#e5e7eb] bg-[#f9f9fb]">
+                                        <p className="text-[10px] text-[#9a9ba0] leading-snug">Actions are unavailable in demo projects.</p>
+                                    </div>
+                                )}
                                 </DropdownMenuContent>
                             </DropdownMenu>
                     ) : null,

@@ -7,11 +7,13 @@ import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react
 import { usePathname } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { supabase } from "@/lib/supabase"
-import { Bell, Bookmark, ChevronDown, ChevronUp, Info, Megaphone, Search, Send, Trash2, X, ArrowUpRight } from "lucide-react"
+import { Bell, Bookmark, ChevronDown, ChevronUp, Info, Megaphone, MapPinned as MapIcon, Search, Send, Trash2, X, ArrowUpRight } from "lucide-react"
 import Link from "next/link"
 import { Tip } from "@/components/ui/tip"
 import { RemindersPanel } from "@/components/app/reminders-panel"
 import { CommandPalette } from "@/components/app/command-palette"
+import { useSidebarFirms } from "@/lib/sidebar-firms-context"
+import { useDemoTour } from "@/lib/demo-tour-context"
 
 // --- Typewriter trigger text ---
 const TYPEWRITER_PHRASES = [
@@ -193,9 +195,27 @@ function injectBrandCssVars(branding: OrganizationBranding | null): SessionBrand
   return payload
 }
 
+function DemoTourTopbarButton({ firmSlug }: { firmSlug: string }) {
+  const { run, restartTour } = useDemoTour()
+  return (
+    <Tip label={run ? "Tour in progress" : "Start guided tour"} position="bottom">
+      <button
+        type="button"
+        onClick={() => { if (!run) void restartTour(firmSlug) }}
+        disabled={run}
+        className="w-10 h-10 flex items-center justify-center rounded-xl text-primary hover:bg-primary/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        aria-label="Start guided tour"
+      >
+        <MapIcon className="h-5 w-5" />
+      </button>
+    </Tip>
+  )
+}
+
 export function AppTopbar() {
   const { user } = useAuth()
   const pathname = usePathname()
+  const firms = useSidebarFirms()
   const [, setFirmName] = useState<string>('')
   const [branding, setBranding] = useState<OrganizationBranding | null>(null)
   const [, setLoading] = useState(true)
@@ -245,6 +265,7 @@ export function AppTopbar() {
     return match ? match[1] : null
   }
   const slug = getSlug()
+  const isDemoFirm = slug ? (firms?.find((f) => f.slug === slug)?.sandboxOnly === true) : false
 
   // Restore branding from sessionStorage before paint to avoid flip on refresh/reload
   useLayoutEffect(() => {
@@ -577,6 +598,7 @@ export function AppTopbar() {
           return (
             <button
               type="button"
+              data-demo-tour="command-palette"
               onClick={() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true, bubbles: true }))}
               className="flex items-center gap-2.5 w-full max-w-sm bg-[#f9f9fb] border border-[#e5e7eb] rounded-sm px-3 py-2 text-sm text-[#45474c]/60 hover:border-primary/40 hover:bg-white transition-colors group"
               aria-label="Open command palette"
@@ -598,11 +620,15 @@ export function AppTopbar() {
 
       {/* Right: Utility actions — w-64, justify-end */}
       <div className="w-64 shrink-0 flex items-center justify-end gap-1 pr-4">
-        <RemindersPanel />
+        {isDemoFirm && slug && <DemoTourTopbarButton firmSlug={slug} />}
+        <div data-demo-tour="topbar-reminders">
+          <RemindersPanel />
+        </div>
         <div className="relative bookmarks-container">
           <Tip label="Bookmarks" position="bottom">
           <button
             type="button"
+            data-demo-tour="topbar-bookmarks"
             className="w-10 h-10 flex items-center justify-center rounded-xl text-[#5A78FF] hover:bg-[#5A78FF]/10 transition-colors relative"
             aria-label="Bookmarks"
             onClick={() => {

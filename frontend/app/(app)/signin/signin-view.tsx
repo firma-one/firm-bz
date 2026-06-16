@@ -299,17 +299,6 @@ export function SigninView() {
                       </Button>
                     )}
 
-                    {!noAccountMessage && (
-                      <p className="pt-1 text-center text-sm text-[#45474c]">
-                        Don&apos;t have an account?{' '}
-                        <Link
-                          href="/signup"
-                          className={`font-bold text-[#1b1b1d] underline-offset-4 transition-colors hover:text-[#006e16] hover:underline ${H}`}
-                        >
-                          Sign up
-                        </Link>
-                      </p>
-                    )}
                   </div>
                 )}
 
@@ -402,6 +391,19 @@ export function SigninView() {
                     </div>
                   </div>
                 )}
+              </div>
+
+              {/* Bottom: separator + account link */}
+              <div className="shrink-0 border-t border-black/[0.1] pt-6">
+                <p className="text-center text-sm text-[#45474c]">
+                  Don&apos;t have an account?{' '}
+                  <Link
+                    href="/signup"
+                    className={`font-bold text-[#1b1b1d] underline-offset-4 transition-colors hover:text-[#006e16] hover:underline ${H}`}
+                  >
+                    Sign up
+                  </Link>
+                </p>
               </div>
             </div>
 

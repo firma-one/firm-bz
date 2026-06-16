@@ -26,8 +26,40 @@ import { useFirmMaintenanceStatus } from '@/lib/hooks/use-firm-maintenance-statu
 import { usePlatformMaintenanceStatus } from '@/lib/hooks/use-platform-maintenance-status'
 import { useAuth } from '@/lib/auth-context'
 import { Megaphone } from 'lucide-react'
+import { DemoTourProvider, useDemoTour, readDemoTourSeen, loadTourProgress } from '@/lib/demo-tour-context'
+import { DemoTour } from '@/components/app/demo-tour'
+import { DemoTourIntroModal } from '@/components/app/demo-tour-intro-modal'
+import { DemoTourOutroModal } from '@/components/app/demo-tour-outro-modal'
+import { DemoTourButton } from '@/components/app/demo-tour-button'
 
 const TOP_BAR_HEIGHT = 64
+
+function DemoTourShell({ firmSlug }: { firmSlug: string }) {
+    const { openIntroModal } = useDemoTour()
+    const hasOpenedRef = useRef(false)
+
+    useEffect(() => {
+        if (hasOpenedRef.current) return
+        const tourSeen = readDemoTourSeen()
+        const savedProgress = loadTourProgress()
+        // If tour is marked seen but there's saved mid-tour progress (manual restart was in-flight),
+        // offer to resume. Otherwise don't auto-prompt.
+        if (tourSeen && !savedProgress) return
+        // Either: tour not yet seen (first time), OR seen + has in-progress step to resume
+        hasOpenedRef.current = true
+        const timer = setTimeout(() => { void openIntroModal(firmSlug) }, 800)
+        return () => clearTimeout(timer)
+    }, [firmSlug, openIntroModal])
+
+    return (
+        <>
+            <DemoTour />
+            <DemoTourIntroModal />
+            <DemoTourOutroModal />
+            <DemoTourButton firmSlug={firmSlug} />
+        </>
+    )
+}
 
 function AppLayoutContent({ children, isSystemAdmin }: { children: React.ReactNode; isSystemAdmin?: boolean }) {
     const pathname = usePathname()
@@ -46,9 +78,9 @@ function AppLayoutContent({ children, isSystemAdmin }: { children: React.ReactNo
 
     const slugMatch = pathname?.match(/^\/d\/f\/([^/]+)/)
     const currentSlug = slugMatch?.[1] ?? null
-    const currentFirmId = currentSlug
-        ? (firms?.find((f) => f.slug === currentSlug)?.id ?? null)
-        : null
+    const currentFirm = currentSlug ? (firms?.find((f) => f.slug === currentSlug) ?? null) : null
+    const currentFirmId = currentFirm?.id ?? null
+    const isDemoFirm = currentFirm?.sandboxOnly === true
 
     const { status: maintenanceStatus, refresh: refreshMaintenanceStatus } = useFirmMaintenanceStatus(currentFirmId, accessToken, 15_000)
     const prevActiveRef = useRef<boolean | null>(null)
@@ -128,7 +160,7 @@ function AppLayoutContent({ children, isSystemAdmin }: { children: React.ReactNo
               No floating cards on the chrome. Header: border-b. Sidebar: border-r.
               Main content: pearl bg-[#f9f9fb]. Right pane: m-4 rounded-xl shadow-xl.
             */}
-            <div className="d-app h-screen flex flex-col overflow-hidden bg-[#f9f9fb]">
+            <div className="d-app h-screen flex flex-col overflow-hidden bg-[#f9f9fb] print:h-auto print:overflow-visible print:block">
 
                 {/* ── Header: full-width, border-b only ── */}
                 <header
@@ -139,7 +171,7 @@ function AppLayoutContent({ children, isSystemAdmin }: { children: React.ReactNo
                 </header>
 
                 {/* ── Body row: sidebar | main | right pane ── */}
-                <div className="flex flex-1 overflow-hidden">
+                <div className="flex flex-1 overflow-hidden print:block print:overflow-visible">
 
                     {/* ── Left sidebar: border-r only, animates width ── */}
                     <div
@@ -150,10 +182,10 @@ function AppLayoutContent({ children, isSystemAdmin }: { children: React.ReactNo
                     </div>
 
                     {/* ── Main content: pearl bg, architectural dot pattern ── */}
-                    <main className="flex-1 min-w-0 flex flex-col overflow-hidden bg-[#f9f9fb] relative">
+                    <main className="flex-1 min-w-0 flex flex-col overflow-hidden bg-[#f9f9fb] relative print:overflow-visible print:block">
                         <div className="absolute inset-0 architectural-dot opacity-[0.15] pointer-events-none" />
-                        <div className="relative z-10 flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
-                            <div className="w-full px-6 pt-6 pb-6 min-h-full flex flex-col">{children}</div>
+                        <div className="relative z-10 flex-1 min-h-0 overflow-y-auto overflow-x-hidden print:overflow-visible print:flex-none print:h-auto">
+                            <div className="w-full px-6 pt-6 pb-6 min-h-full flex flex-col print:min-h-0">{children}</div>
                         </div>
                         <StandardCheckoutIntentBanner />
                         {platformStatus?.pendingGrace && graceCountdown !== null && (
@@ -200,6 +232,7 @@ function AppLayoutContent({ children, isSystemAdmin }: { children: React.ReactNo
 
                 <OnboardingExitGuardBanner />
                 <DebugFloatingTrigger />
+                {isDemoFirm && currentSlug && <DemoTourShell firmSlug={currentSlug} />}
                 <MigrationProgressPanel
                     status={maintenanceStatus}
                     migrationStartedAt={migrationStartedAt}
@@ -220,10 +253,11 @@ export function DLayoutClient({
     isSystemAdmin,
 }: {
     children: React.ReactNode
-    initialFirms: { id: string; name: string; slug: string; isDefault: boolean; createdAt: string }[]
+    initialFirms: { id: string; name: string; slug: string; isDefault: boolean; createdAt: string; sandboxOnly?: boolean }[]
     isSystemAdmin?: boolean
 }) {
     return (
+        <DemoTourProvider>
         <OnboardingProvider>
             <SidebarFirmsProvider firms={initialFirms}>
                 <SidebarProvider>
@@ -245,5 +279,6 @@ export function DLayoutClient({
                 </SidebarProvider>
             </SidebarFirmsProvider>
         </OnboardingProvider>
+        </DemoTourProvider>
     )
 }

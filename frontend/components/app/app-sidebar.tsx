@@ -519,6 +519,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                   {/* FIRM SWITCHER — compact when expanded, icon when collapsed */}
                   {!isCollapsed && (slug || firms.length > 0) && (
                     <>
+                      <div data-demo-tour="firm-switcher">
                       <FirmSelector
                         firms={firms}
                         selectedFirmSlug={selectedFirmSlug}
@@ -529,6 +530,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                         compact
                         isFirmAdmin={role === 'FIRM_ADMIN'}
                       />
+                      </div>
                       {/* Tree sub-items: Overview + Clients + Settings */}
                       <div className="ml-1 space-y-0.5">
                         {canManageOrg && (
@@ -610,7 +612,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                         <TooltipContent side="right">Support</TooltipContent>
                       </Tooltip>
                     ) : (
-                      <Link href={slug ? `/d/support?firmSlug=${slug}` : '/d/support'} className={`group/lock ${navLinkClass(isSupportActive)}`}>
+                      <Link href={slug ? `/d/support?firmSlug=${slug}` : '/d/support'} data-demo-tour="sidebar-support" className={`group/lock ${navLinkClass(isSupportActive)}`}>
                         <LifeBuoy className={navIconClass(isSupportActive)} />
                         <span className="flex-1">Support</span>
                         <span title="Internal only" className="flex items-center"><Lock className="w-2.5 h-2.5 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
@@ -622,7 +624,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
 
                   {/* RECENTS — expanded: collapsible inline list; collapsed: hover popover (only when items exist) */}
                   {!isCollapsed && (
-                    <div className="pt-1">
+                    <div className="pt-1" data-demo-tour="sidebar-recent">
                       <button
                         type="button"
                         onClick={() => setIsRecentsOpen((v) => !v)}
@@ -739,7 +741,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
 
                   {/* REMINDERS — expanded: inline accordion; collapsed: icon navigates to /d/u/reminders */}
                   {!isCollapsed ? (
-                    <div className="pt-1">
+                    <div className="pt-1" data-demo-tour="sidebar-reminders">
                       <button
                         type="button"
                         onClick={() => setIsRemindersOpen((v) => !v)}
@@ -835,7 +837,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
 
                   {/* BOOKMARKS — expanded: inline accordion; collapsed: icon navigates */}
                   {!isCollapsed ? (
-                    <div className="pt-1">
+                    <div className="pt-1" data-demo-tour="sidebar-bookmarks">
                       <button
                         type="button"
                         onClick={() => setIsBookmarksOpen((v) => !v)}
@@ -983,7 +985,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
 
                   {/* VIEW AS */}
                   {canShowViewAsDropdown && !isCollapsed && (
-                    <div className="pt-2 pb-2">
+                    <div className="pt-2 pb-2" data-demo-tour="view-as-selector">
                       <h3 className={`d-sidebar-section flex w-full items-center px-3 ${spaceTitle}`}>
                         <Eye className="h-3 w-3 shrink-0 mr-1.5 text-[#45474c]" />
                         <span className="flex-1">Viewing As</span>

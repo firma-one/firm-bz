@@ -159,7 +159,7 @@ export function SignupView() {
 
               {/* Bottom: separator + account link */}
               <div className="shrink-0 border-t border-black/[0.1] pt-6">
-                <p className="text-left text-sm text-[#45474c]">
+                <p className="text-center text-sm text-[#45474c]">
                   Already have an account?{' '}
                   <Link
                     href="/signin"

@@ -253,7 +253,7 @@ export function BillingPageClient({
     }
 
     return (
-        <div className="relative space-y-10 pb-10">
+        <div className="relative space-y-10 pb-10" data-demo-tour="billing-page">
             {!isOnboardingSubscribe && selectedFirm ? (
                 <PageBreadcrumb
                     items={[

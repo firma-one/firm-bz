@@ -388,7 +388,7 @@ export function FirmActionCenter({ firmId, firmSlug }: FirmActionCenterProps) {
 
     return (
         <div
-            className="flex flex-col gap-3 border border-[#e5e7eb] rounded p-4 h-full"
+            className="flex flex-col gap-3 border border-[#e5e7eb] rounded p-4 h-full print:h-auto"
             style={{
                 backgroundColor: '#ffffff',
                 background: [
@@ -434,7 +434,7 @@ export function FirmActionCenter({ firmId, firmSlug }: FirmActionCenterProps) {
             {/* Content */}
             <div
                 key={acView}
-                className="flex flex-col gap-4 flex-1 min-h-0 overflow-y-auto px-0.5 py-0.5 animate-in fade-in slide-in-from-bottom-2 duration-200 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]"
+                className="flex flex-col gap-4 flex-1 min-h-0 overflow-y-auto px-0.5 py-0.5 animate-in fade-in slide-in-from-bottom-2 duration-200 [&::-webkit-scrollbar]:hidden [scrollbar-width:none] print:overflow-visible print:h-auto print:flex-none"
             >
                 {loading ? (
                     [1, 2, 3].map((i) => <div key={i} className="h-14 rounded bg-gray-200 animate-pulse" />)
