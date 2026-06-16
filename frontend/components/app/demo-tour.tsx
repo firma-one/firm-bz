@@ -2,7 +2,7 @@
 
 import { useCallback, useRef } from "react"
 import { Joyride, EVENTS, STATUS, type EventData, type Controls } from "react-joyride"
-import { useRouter, usePathname } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { useDemoTour, saveTourProgress } from "@/lib/demo-tour-context"
 
 // ─── Step definitions ────────────────────────────────────────────────────────
@@ -122,7 +122,7 @@ function makeSteps(firmSlug: string, clientSlug: string | null, engSlug: string 
     ...(eng ? [{
       target: '[data-demo-tour="engagement-shares-tab"]',
       title: "Shares",
-      content: <p className="text-xs leading-relaxed text-[#45474c]">The Shares tab shows all documents shared with external parties. Switch between Grid, List, and Board views.</p>,
+      content: <p className="text-xs leading-relaxed text-[#45474c]">The Shares tab shows all documents shared with external parties. Switch between Grid, List and Board<sup>*</sup> views.</p>,
       placement: "bottom" as const,
       route: `${eng}/shares`,
     }] : []),
@@ -130,7 +130,7 @@ function makeSteps(firmSlug: string, clientSlug: string | null, engSlug: string 
     ...(eng ? [{
       target: '[data-demo-tour="engagement-comments-tab"]',
       title: "Comments",
-      content: <p className="text-xs leading-relaxed text-[#45474c]">See all comments across documents in this engagement in one place. Collaborate and resolve threads without switching files.</p>,
+      content: <p className="text-xs leading-relaxed text-[#45474c]">See all in-app comments across documents in this engagement in one place. Collaborate and resolve threads without switching files.</p>,
       placement: "bottom" as const,
       route: `${eng}/comments`,
     }] : []),
@@ -138,7 +138,7 @@ function makeSteps(firmSlug: string, clientSlug: string | null, engSlug: string 
     ...(eng ? [{
       target: '[data-demo-tour="engagement-audit-tab"]',
       title: "Engagement Audit",
-      content: <p className="text-xs leading-relaxed text-[#45474c]">A full activity log for this engagement — who uploaded, shared, commented, or changed settings, and when.</p>,
+      content: <p className="text-xs leading-relaxed text-[#45474c]">A full activity log for this engagement — who uploaded, shared, commented, or changed settings and when.</p>,
       placement: "bottom" as const,
       route: `${eng}/audit`,
     }] : []),
@@ -146,7 +146,7 @@ function makeSteps(firmSlug: string, clientSlug: string | null, engSlug: string 
     ...(eng ? [{
       target: '[data-demo-tour="engagement-members-tab"]',
       title: "Engagement Members",
-      content: <p className="text-xs leading-relaxed text-[#45474c]">Manage who has access to this engagement and their role — Lead, Collaborator, or Viewer.</p>,
+      content: <p className="text-xs leading-relaxed text-[#45474c]">Manage who has access to this engagement and their role — Lead, Collaborator or Viewer.</p>,
       placement: "bottom" as const,
       route: `${eng}/members`,
     }] : []),
@@ -154,7 +154,7 @@ function makeSteps(firmSlug: string, clientSlug: string | null, engSlug: string 
     ...(eng ? [{
       target: '[data-demo-tour="engagement-settings-tab"]',
       title: "Engagement Settings",
-      content: <p className="text-xs leading-relaxed text-[#45474c]">Configure the engagement — name, status, due dates, intake settings, and advanced options.</p>,
+      content: <p className="text-xs leading-relaxed text-[#45474c]">Configure the engagement — name, status, due dates, intake settings and advanced options.</p>,
       placement: "bottom" as const,
       route: `${eng}/settings`,
     }] : []),
@@ -162,7 +162,7 @@ function makeSteps(firmSlug: string, clientSlug: string | null, engSlug: string 
     {
       target: '[data-demo-tour="firm-switcher"]',
       title: "Firm Switcher",
-      content: <p className="text-xs leading-relaxed text-[#45474c]">Switch between firms or create a new one. Each firm is an independent workspace with its own clients, team, and billing.</p>,
+      content: <p className="text-xs leading-relaxed text-[#45474c]">Switch between firms or create a new one. Each firm is an independent workspace with its own clients, engagements and documents.</p>,
       placement: "right" as const,
       route: firm,
     },
@@ -186,7 +186,7 @@ function makeSteps(firmSlug: string, clientSlug: string | null, engSlug: string 
     {
       target: '[data-demo-tour="sidebar-reminders"]',
       title: "Reminders",
-      content: <p className="text-xs leading-relaxed text-[#45474c]">Set reminders on any document or engagement. They surface here so nothing slips through the cracks.</p>,
+      content: <p className="text-xs leading-relaxed text-[#45474c]">Auto reminders are set based on follow-up dates, due dates or assignments. They surface here so nothing slips through the cracks.</p>,
       placement: "right" as const,
       route: firm,
     },
@@ -210,7 +210,7 @@ function makeSteps(firmSlug: string, clientSlug: string | null, engSlug: string 
     {
       target: '[data-checkout-hint-profile="trigger"]',
       title: "Profile Menu",
-      content: <p className="text-xs leading-relaxed text-[#45474c]">Access billing, plan usage, and sign-out from here.</p>,
+      content: <p className="text-xs leading-relaxed text-[#45474c]">Access billing, plan usage, firm switcher and sign-out from here.</p>,
       placement: "right" as const,
       route: firm,
     },
@@ -224,7 +224,6 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 export function DemoTour() {
   const { run, stepIndex, slugs, setRun, setStepIndex, endTour } = useDemoTour()
   const router = useRouter()
-  const pathname = usePathname()
   const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const retryCountRef = useRef(0)
 
@@ -257,7 +256,7 @@ export function DemoTour() {
     }
   }, [slugs, steps, router])
 
-  const handleJoyrideEvent = useCallback(async (data: EventData, controls: Controls) => {
+  const handleJoyrideEvent = useCallback(async (data: EventData, _controls: Controls) => {
     const { status, type, index } = data
 
     if (type === EVENTS.TARGET_NOT_FOUND) {
@@ -295,13 +294,23 @@ export function DemoTour() {
     if (type === EVENTS.STEP_AFTER) {
       clearRetry()
       const { action } = data as any
+      // X / skip button mid-tour — save progress so user can resume, stop cleanly
+      if (action === "close" || action === "skip") {
+        if (slugs?.firmSlug) {
+          saveTourProgress(index, slugs.firmSlug)
+          setStepIndex(index) // keep context in sync
+        }
+        endTour(false)
+        return
+      }
       const nextIndex = action === "prev" ? Math.max(0, index - 1) : index + 1
       await navigateForStep(nextIndex)
       setStepIndex(nextIndex)
       if (slugs?.firmSlug) saveTourProgress(nextIndex, slugs.firmSlug)
+      return
     }
 
-    if (status === STATUS.FINISHED || status === STATUS.SKIPPED || type === EVENTS.TOUR_END) {
+    if (status === STATUS.FINISHED || type === EVENTS.TOUR_END) {
       clearRetry()
       endTour(status === STATUS.FINISHED)
     }

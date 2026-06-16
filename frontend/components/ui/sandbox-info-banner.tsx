@@ -3,7 +3,7 @@
 import { Info } from 'lucide-react'
 
 /** Same copy as {@link SandboxInfoBanner}; use for toast when no in-app surface exists (e.g. OS / Drive pickers). */
-export const SANDBOX_OPERATION_MESSAGE = 'This operation is not permitted in a Sandbox.'
+export const SANDBOX_OPERATION_MESSAGE = 'This operation is not permitted in the Demo firm.'
 
 /**
  * Reusable banner for Sandbox restrictions. Use in modals/panes where the user
