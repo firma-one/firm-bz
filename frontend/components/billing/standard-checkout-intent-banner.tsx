@@ -172,15 +172,15 @@ export function StandardCheckoutIntentBanner() {
                         onClick={onContinueToBillingClick}
                         className={cn(
                             buttonVariants({ variant: 'blackCta', size: 'sm' }),
-                            'h-9 shrink-0 justify-center px-3 text-xs font-semibold'
+                            'h-9 shrink-0 justify-center px-4 text-[10px] font-semibold uppercase tracking-widest'
                         )}
                     >
-                        {upgradeCopy.planPickerCta}
+                        Upgrade
                     </Link>
                     <button
                         type="button"
                         onClick={dismissHintForSession}
-                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-900"
+                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded border border-slate-200 bg-white text-slate-600 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-900"
                         aria-label="Hide until you sign out"
                         title="Hide until you sign out"
                     >
