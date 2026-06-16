@@ -498,16 +498,8 @@ function withBrandName(text: string | null | undefined): string {
     return text.replace(/\bfirma\b/gi, BRAND_NAME)
 }
 
-function formatTrialPeriodLabel(days: number): string {
-    return `${days}-Day`
-}
-
 function checkoutCtaLabel(plan: BillingCatalogPlan, isPaidRecurringCurrent: boolean): string {
     if (isPaidRecurringCurrent) return upgradeCopy.planPickerSwitchPlanCta
-    const trialDays = plan.trialDays
-    if (typeof trialDays === 'number' && trialDays > 0) {
-        return `Start ${formatTrialPeriodLabel(trialDays)} Trial`
-    }
     return upgradeCopy.planPickerCta
 }
 

@@ -1,7 +1,7 @@
 "use client"
 
 import { useDemoTour, markDemoTourSeen } from "@/lib/demo-tour-context"
-import { MapPinned, Play, Square } from "lucide-react"
+import { Clock3, FastForward, MapPinned, Play, Square } from "lucide-react"
 
 export function DemoTourIntroModal() {
   const { showIntroModal, closeIntroModal, startTour, resumeTour, resumableTourProgress } = useDemoTour()
@@ -32,8 +32,11 @@ export function DemoTourIntroModal() {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-[#1b1b1d] leading-tight">Welcome to the Demo Firm</p>
-            <p className="text-xs text-[#45474c] mt-0.5">This is a sandbox with sample data</p>
+            <p className="text-xs text-[#45474c] mt-0.5">This is a demo firm with sample data</p>
           </div>
+          <span className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 text-primary text-[10px] font-semibold">
+            <Clock3 className="h-3 w-3" /> ~3 min
+          </span>
         </div>
 
         {/* Body */}
@@ -66,7 +69,7 @@ export function DemoTourIntroModal() {
                 onClick={handleResume}
                 className="group flex-1 h-9 rounded-[2px] bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:brightness-105 transition-all flex items-center justify-center gap-1.5"
               >
-                Resume Tour <Play className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-0.5" />
+                Resume Tour <FastForward className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-0.5" />
               </button>
               <button
                 type="button"

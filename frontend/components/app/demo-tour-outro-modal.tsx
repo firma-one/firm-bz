@@ -1,7 +1,7 @@
 "use client"
 
 import { useDemoTour } from "@/lib/demo-tour-context"
-import { CheckCircle2, MapPinned, RefreshCw } from "lucide-react"
+import { CheckCircle2, MapPinned, Play } from "lucide-react"
 
 export function DemoTourOutroModal() {
   const { showOutroModal, closeOutroModal, slugs, restartTour } = useDemoTour()
@@ -61,7 +61,7 @@ export function DemoTourOutroModal() {
             }}
             className="flex-1 h-9 rounded-[2px] border border-[#e5e7eb] text-[10px] font-headline font-bold tracking-widest uppercase text-[#45474c] hover:bg-[#f3f4f6] transition-colors flex items-center justify-center gap-1.5"
           >
-            <RefreshCw className="h-3.5 w-3.5" /> Replay
+            <Play className="h-3.5 w-3.5" /> Replay
           </button>
         </div>
       </div>

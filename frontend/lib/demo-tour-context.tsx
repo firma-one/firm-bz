@@ -127,6 +127,8 @@ export function DemoTourProvider({ children }: { children: ReactNode }) {
     try {
       const { clientSlug, engagementSlug } = await resolveFirstClientAndEngagement(firmSlug)
       setSlugs({ firmSlug, clientSlug, engagementSlug })
+      // Refresh resume state from localStorage each time the modal opens
+      setResumableTourProgress(loadTourProgress())
       setShowIntroModal(true)
     } finally {
       resolvingRef.current = false
@@ -164,20 +166,20 @@ export function DemoTourProvider({ children }: { children: ReactNode }) {
 
   const restartTour = useCallback(async (firmSlug: string) => {
     setRun(false)
-    clearTourProgress()
-    setResumableTourProgress(null)
     await openIntroModal(firmSlug)
   }, [openIntroModal])
 
   const endTour = useCallback((completed = false) => {
     setRun(false)
     markDemoTourSeen()
-    clearTourProgress()
-    setResumableTourProgress(null)
     if (typeof window !== "undefined") {
       ;(window as any).__demoTourActive = false
     }
-    if (completed) setShowOutroModal(true)
+    if (completed) {
+      clearTourProgress()
+      setResumableTourProgress(null)
+      setShowOutroModal(true)
+    }
   }, [])
 
   return (
