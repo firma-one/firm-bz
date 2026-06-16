@@ -82,7 +82,7 @@ function makeSteps(firmSlug: string, clientSlug: string | null, engSlug: string 
     ...(client ? [{
       target: '[data-demo-tour="engagement-add-btn"]',
       title: "Add an Engagement",
-      content: <p className="text-xs leading-relaxed text-[#45474c]">Engagements are project workspaces — think client onboarding, strategy decks, SOPs, campaign reports, or quarterly reviews. Each has its own files, shares, and team.</p>,
+      content: <p className="text-xs leading-relaxed text-[#45474c]">Engagements are client-billable projects — e.g. SEO retainers, paid media campaigns, content sprints, brand audits, or social strategy. Run them as a <strong className="text-[#1b1b1d]">Retainer</strong>, <strong className="text-[#1b1b1d]">T&amp;M</strong>, or <strong className="text-[#1b1b1d]">Fixed Price</strong> engagement. Each has its own files, shares, and team.</p>,
       placement: "bottom" as const,
       route: `${client}?tab=projects`,
     }] : []),
@@ -106,7 +106,7 @@ function makeSteps(firmSlug: string, clientSlug: string | null, engSlug: string 
     ...(eng ? [{
       target: '[data-demo-tour="engagement-upload-btn"]',
       title: "Upload Files & Create Folders",
-      content: <p className="text-xs leading-relaxed text-[#45474c]">Upload files from your computer, create new folders, or import from Google Drive. You can also drag and drop directly.</p>,
+      content: <p className="text-xs leading-relaxed text-[#45474c]">Upload files from your computer, create new folders, or import from Google Drive — think strategy decks, SOPs, campaign reports, client onboarding docs, or quarterly reviews. You can also drag and drop directly.</p>,
       placement: "bottom" as const,
       route: `${eng}/files`,
     }] : []),
@@ -122,7 +122,14 @@ function makeSteps(firmSlug: string, clientSlug: string | null, engSlug: string 
     ...(eng ? [{
       target: '[data-demo-tour="engagement-shares-tab"]',
       title: "Shares",
-      content: <p className="text-xs leading-relaxed text-[#45474c]">The Shares tab shows all documents shared with external parties. Switch between Grid, List and Board<sup>*</sup> views.</p>,
+      content: <div className="text-xs leading-relaxed text-[#45474c] space-y-2">
+        <p>Share documents securely with two types of external parties:</p>
+        <ul className="space-y-1.5">
+          <li><strong className="text-[#1b1b1d]">Contributor</strong> — contractors, consultants, or agency partners who can create or edit content within the engagement.</li>
+          <li><strong className="text-[#1b1b1d]">Viewer</strong> — clients, sponsors, or stakeholders with read-only access to review materials.</li>
+        </ul>
+        <p>Switch between Grid, List, and Board<sup>*</sup> views.</p>
+      </div>,
       placement: "bottom" as const,
       route: `${eng}/shares`,
     }] : []),
@@ -170,7 +177,14 @@ function makeSteps(firmSlug: string, clientSlug: string | null, engSlug: string 
     {
       target: '[data-demo-tour="sidebar-support"]',
       title: "Support",
-      content: <p className="text-xs leading-relaxed text-[#45474c]">Submit and track support requests without leaving Firma. Always one click away in the sidebar.</p>,
+      content: <div className="text-xs leading-relaxed text-[#45474c] space-y-2">
+        <p>No more chasing support over email. Firma has a built-in support module — raise a request, track its status, and get responses, all without leaving the app.</p>
+        <ul className="space-y-1.5">
+          <li><strong className="text-[#1b1b1d]">Contextual</strong> — requests are tied to your firm, so our team has full context from the start.</li>
+          <li><strong className="text-[#1b1b1d]">Trackable</strong> — see open, in-progress, and resolved tickets in one place.</li>
+          <li><strong className="text-[#1b1b1d]">Always accessible</strong> — one click away in the sidebar, wherever you are in the app.</li>
+        </ul>
+      </div>,
       placement: "right" as const,
       route: firm,
     },
