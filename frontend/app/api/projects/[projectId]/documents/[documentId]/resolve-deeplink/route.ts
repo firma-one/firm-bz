@@ -104,6 +104,10 @@ export async function GET(
           : 'Staging'
         path = [{ id: parentId, name: rootName }, ...path]
       }
+    } else if (path.length === 0 && ps.generalFolderId) {
+      // No indexed ancestors — item is directly under General (the Drive root for this engagement).
+      projectRootFolderId = ps.generalFolderId
+      path = [{ id: ps.generalFolderId, name: 'General' }]
     }
 
     return NextResponse.json({

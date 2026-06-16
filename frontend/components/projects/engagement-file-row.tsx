@@ -639,8 +639,8 @@ export function EngagementFileRow({
 
             {(processingFileIds.has(file.id) || isRegrantingId === file.id) && (
                 <div className="absolute bottom-0 left-0 right-0 z-10 pointer-events-none">
-                    <div className="h-[2px] w-full bg-indigo-100 overflow-hidden">
-                        <div className="h-full bg-indigo-500 animate-indeterminate-progress" />
+                    <div className="h-[2px] w-full bg-primary/20 overflow-hidden">
+                        <div className="h-full bg-primary animate-indeterminate-progress" />
                     </div>
                 </div>
             )}

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { buildSettingsForDb, parseSettingsFromDb, type ShareBlock } from '@/lib/sharing-settings'
-import { generateShareSlug } from '@/lib/slug-utils'
 import { syncDocumentSharingUsers } from '@/lib/sync-document-sharing'
 import { getFileInfo } from '@/lib/file-utils'
 import { safeInngestSend } from '@/lib/inngest/client'
@@ -33,7 +32,8 @@ async function ensureDocument(
   projectId: string,
   externalId: string,
   title: string,
-  actorId?: string | null
+  actorId?: string | null,
+  mimeType?: string | null
 ): Promise<{ organizationId: string, externalId: string }> {
   const project = await prisma.engagement.findFirst({
     where: { id: projectId, isDeleted: false },
@@ -43,18 +43,34 @@ async function ensureDocument(
 
   const { firmId, clientId } = project
 
-  await (prisma as any).$executeRawUnsafe(
-    `INSERT INTO platform.engagement_documents
-       ("firmId", "clientId", "engagementId", "externalId", "fileName", "createdBy", "updatedAt")
-     VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6::uuid, NOW())
-     ON CONFLICT ("engagementId", "firmId", "externalId") DO NOTHING`,
-    firmId,
-    clientId || null,
-    projectId,
-    externalId,
-    title || externalId,
-    actorId || null
-  )
+  if (mimeType) {
+    await (prisma as any).$executeRawUnsafe(
+      `INSERT INTO platform.engagement_documents
+         ("firmId", "clientId", "engagementId", "externalId", "fileName", "mimeType", "createdBy", "updatedAt")
+       VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, $7::uuid, NOW())
+       ON CONFLICT ("engagementId", "firmId", "externalId") DO UPDATE SET "mimeType" = EXCLUDED."mimeType" WHERE platform.engagement_documents."mimeType" IS NULL`,
+      firmId,
+      clientId || null,
+      projectId,
+      externalId,
+      title || externalId,
+      mimeType,
+      actorId || null
+    )
+  } else {
+    await (prisma as any).$executeRawUnsafe(
+      `INSERT INTO platform.engagement_documents
+         ("firmId", "clientId", "engagementId", "externalId", "fileName", "createdBy", "updatedAt")
+       VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6::uuid, NOW())
+       ON CONFLICT ("engagementId", "firmId", "externalId") DO NOTHING`,
+      firmId,
+      clientId || null,
+      projectId,
+      externalId,
+      title || externalId,
+      actorId || null
+    )
+  }
 
   const { SearchService } = await import('@/lib/services/search-service')
   Promise.resolve().then(() =>
@@ -64,6 +80,7 @@ async function ensureDocument(
       projectId,
       externalId,
       fileName: title || externalId,
+      actorId: actorId || null,
     }).catch((err) => console.error('Background indexFile error after share stub', err))
   )
 
@@ -118,6 +135,7 @@ export async function PUT(
 
     const body = await request.json().catch(() => ({}))
     const title = typeof body.title === 'string' ? body.title : ''
+    const mimeType = typeof body.mimeType === 'string' ? body.mimeType : null
 
     let fileInfo: { organizationId: string; externalId: string } | null = null
 
@@ -128,7 +146,7 @@ export async function PUT(
     } else {
       // Drive file ID — ensure document row exists, then update its sharing fields.
       try {
-        fileInfo = await ensureDocument(projectId, documentIdParam, title, user.id)
+        fileInfo = await ensureDocument(projectId, documentIdParam, title, user.id, mimeType)
       } catch (err) {
         console.error('ensureDocument error', err)
         return NextResponse.json(
@@ -229,26 +247,14 @@ export async function PUT(
     })
 
     if (existing) {
-      const updateData: { settings: typeof settings; updatedAt: Date; updatedBy: string; createdBy?: string; slug?: string } = { settings, updatedAt: new Date(), updatedBy: user.id }
+      const updateData: { settings: typeof settings; updatedAt: Date; updatedBy: string; createdBy?: string; mimeType?: string } = { settings, updatedAt: new Date(), updatedBy: user.id }
       if (!existing.createdBy) updateData.createdBy = user.id
-      if (existing.slug == null) {
-        const docTitle = existing.fileName || title || documentIdParam
-        updateData.slug = generateShareSlug(docTitle, existing.id.slice(0, 8))
-      }
+      if (mimeType && !existing.mimeType) updateData.mimeType = mimeType
       await prisma.engagementDocument.update({
         where: { id: existing.id },
         data: updateData,
       })
     } else {
-      let slug = generateShareSlug(title || documentIdParam, Math.random().toString(36).slice(2, 10))
-      for (let attempts = 0; attempts < 5; attempts++) {
-        const taken = await prisma.engagementDocument.findFirst({
-          where: { engagementId: projectId, slug },
-          select: { id: true },
-        })
-        if (!taken) break
-        slug = generateShareSlug(title || documentIdParam, Math.random().toString(36).slice(2, 10))
-      }
       const proj = await prisma.engagement.findUnique({ where: { id: projectId }, select: { clientId: true } })
       await prisma.engagementDocument.create({
         data: {
@@ -259,7 +265,7 @@ export async function PUT(
           fileName: title || fileInfo.externalId,
           createdBy: user.id,
           settings,
-          slug,
+          ...(mimeType ? { mimeType } : {}),
         },
       })
     }

@@ -71,12 +71,29 @@ export interface ProjectMemberAddedEvent {
   }
 }
 
+/**
+ * Fired when an EC/EV member is removed from a project.
+ * Triggers revocation of their document-level Drive permissions.
+ */
+export interface ProjectMemberRemovedEvent {
+  type: 'project.member.removed'
+  data: {
+    projectId: string
+    organizationId: string
+    userId: string
+    personaSlug: string // role of the removed member e.g. 'eng_ext_collaborator', 'eng_viewer'
+    timestamp: string
+    removedBy: string // Supabase user ID of who made the change
+  }
+}
+
 // Union type for all permission-related events
 export type PermissionEvent =
   | SharingSettingsUpdatedEvent
   | ProjectMemberPersonaUpdatedEvent
   | ProjectArchivedEvent
   | ProjectMemberAddedEvent
+  | ProjectMemberRemovedEvent
 
 /**
  * Fired when a single file or folder should be indexed for search
@@ -90,6 +107,7 @@ export interface FileIndexRequestedEvent {
     externalId: string
     fileName: string
     parentId?: string | null
+    actorId?: string | null
   }
 }
 
@@ -103,6 +121,7 @@ export interface FileBatchIndexRequestedEvent {
     clientId?: string | null
     projectId?: string | null
     files: { externalId: string; fileName: string; parentId?: string | null }[]
+    actorId?: string | null
   }
 }
 

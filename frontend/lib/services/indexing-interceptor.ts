@@ -13,6 +13,7 @@ export class IndexingInterceptor {
         externalId: string
         fileName: string
         parentId?: string
+        actorId?: string | null
     }) {
         await assertWithinDocumentCap(params.organizationId, 1)
         await safeInngestSend('file.index.requested', params)
@@ -27,6 +28,7 @@ export class IndexingInterceptor {
         clientId?: string
         projectId?: string
         files: { externalId: string; fileName: string; parentId?: string }[]
+        actorId?: string | null
     }) {
         if (!params.files.length) return
 

@@ -1,155 +1,115 @@
 import { EngagementRole, DocumentSharingPermissionStatus, Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { getPermissionAdapter } from '@/lib/connectors/registry'
 import { logger } from '@/lib/logger'
 
 /**
- * Sync document sharing permissions for a specific project document (grant/revoke EC users).
+ * Sync engagement_document_sharing_users rows for a shared document.
+ *
+ * Manages DB rows only — Drive permission grants/revokes belong to the regrant
+ * flow triggered by ActionMenu > OPEN (sharing.settings.updated Inngest event).
+ *
+ * Rules:
+ * - Both disabled  → mark all GRANTED rows REVOKED
+ * - EC enabled     → upsert GRANTED rows for all eng_ext_collaborator members
+ * - Guest enabled  → upsert GRANTED rows for all eng_viewer members
+ * - Members no longer in project → mark their rows REVOKED
+ * - PENDING rows are never touched (intake approval handles those)
  */
 export async function syncDocumentSharingUsers(projectDocumentId: string, actorId?: string | null) {
   try {
     const doc = await prisma.engagementDocument.findUnique({
       where: { id: projectDocumentId },
-      include: {
-        sharingUsers: true,
-      },
+      include: { sharingUsers: true },
     })
 
     if (!doc) return
 
-    const isExternalCollaboratorEnabled = (doc.settings as any)?.share?.externalCollaborator?.enabled === true
+    const settings = (doc.settings as any)?.share ?? {}
+    const isEcEnabled = settings?.externalCollaborator?.enabled === true
+    const isGuestEnabled = settings?.guest?.enabled === true
     const projectId = doc.engagementId
-    const externalId = doc.externalId
 
-    let connectorId = doc.connectorId
-    if (!connectorId && doc.firmId) {
-      const org = await prisma.firm.findUnique({
-        where: { id: doc.firmId },
-        include: { connector: true, connectors: true },
-      })
-      const active = [...(org?.connectors ?? []), ...(org?.connector ? [org.connector] : [])]
-        .find(c => c.status === 'ACTIVE')
-      connectorId = active?.id ?? null
-    }
+    // Only touch GRANTED rows — leave PENDING (intake) rows alone
+    const grantedRows = doc.sharingUsers.filter(
+      (u) => (u.sharingPermissionStatus as string) === 'GRANTED'
+    )
 
-    if (!connectorId) {
-      logger.error('No active connector found for organization', undefined, undefined, {
-        organizationId: doc.firmId,
-      })
-      return
-    }
-
-    let adapter
-    try {
-      adapter = await getPermissionAdapter(connectorId)
-    } catch (adapterErr) {
-      logger.warn('syncDocumentSharingUsers: connector not found — skipping sync', {
-        connectorId,
-        organizationId: doc.firmId,
-        error: adapterErr instanceof Error ? adapterErr.message : String(adapterErr),
-      })
-      return
-    }
-    if (!adapter) {
-      logger.warn('syncDocumentSharingUsers: no permission adapter for connector type — skipping sync', {
-        connectorId,
-        organizationId: doc.firmId,
-      })
-      return
-    }
-
-    if (!isExternalCollaboratorEnabled) {
-      for (const user of doc.sharingUsers) {
-        if (user.connectorPermissionId && externalId) {
-          try {
-            await adapter.revokePermission(connectorId, externalId, user.connectorPermissionId)
-          } catch (e) {
-            logger.error('Failed to revoke connector permission on sync', e as Error)
-          }
-        }
+    if (!isEcEnabled && !isGuestEnabled) {
+      // Revoke all GRANTED rows
+      if (grantedRows.length > 0) {
+        await prisma.engagementDocumentSharingUser.updateMany({
+          where: {
+            projectDocumentId,
+            sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED,
+          },
+          data: {
+            sharingPermissionStatus: DocumentSharingPermissionStatus.REVOKED,
+            connectorPermissionId: null,
+            ...(actorId ? { updatedBy: actorId } : {}),
+          },
+        })
       }
-
-      await prisma.engagementDocumentSharingUser.updateMany({
-        where: { projectDocumentId },
-        data: {
-          sharingPermissionStatus: DocumentSharingPermissionStatus.REVOKED,
-          connectorPermissionId: null,
-          ...(actorId ? { updatedBy: actorId } : {}),
-        },
-      })
       return
     }
 
-    const externalCollaborators = await prisma.engagementMember.findMany({
-      where: {
-        engagementId: projectId,
-        role: EngagementRole.eng_ext_collaborator,
-      },
+    // Collect which roles are enabled
+    const enabledRoles: EngagementRole[] = []
+    if (isEcEnabled) enabledRoles.push(EngagementRole.eng_ext_collaborator)
+    if (isGuestEnabled) enabledRoles.push(EngagementRole.eng_viewer)
+
+    const members = await prisma.engagementMember.findMany({
+      where: { engagementId: projectId, role: { in: enabledRoles } },
     })
 
-    if (externalCollaborators.length === 0) return
-
-    const userIds = externalCollaborators.map((m) => m.userId)
+    const userIds = members.map((m) => m.userId)
     const authUsers = await prisma.$queryRaw<Array<{ id: string; email: string }>>(
       Prisma.sql`SELECT id::text, email FROM auth.users WHERE id = ANY(${userIds}::uuid[])`
     )
+    const userEmailMap = new Map(authUsers.map((u) => [u.id, u.email]))
 
-    const userEmailMap = new Map(authUsers.map(u => [u.id, u.email]))
-
-    for (const member of externalCollaborators) {
+    // Upsert GRANTED rows for each enabled member
+    for (const member of members) {
       const email = userEmailMap.get(member.userId)
       if (!email) continue
 
-      const existingUserShare = doc.sharingUsers.find((u) => u.userId === member.userId)
-      if (existingUserShare?.sharingPermissionStatus === DocumentSharingPermissionStatus.GRANTED) continue
-      // Never auto-grant a PENDING row — intake approval must happen explicitly
-      if ((existingUserShare?.sharingPermissionStatus as string) === 'PENDING') continue
+      const existing = doc.sharingUsers.find((u) => u.userId === member.userId)
 
-      try {
-        if (!externalId) continue
-        const permissionId = await adapter.grantFolderPermission(connectorId, externalId, email, 'writer')
+      // Already GRANTED — nothing to do
+      if ((existing?.sharingPermissionStatus as string) === 'GRANTED') continue
+      // Never touch PENDING rows
+      if ((existing?.sharingPermissionStatus as string) === 'PENDING') continue
 
-        if (existingUserShare) {
-          await prisma.engagementDocumentSharingUser.update({
-            where: { id: existingUserShare.id },
-            data: {
-              connectorPermissionId: permissionId,
-              sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED,
-              email,
-              ...(actorId ? { updatedBy: actorId } : {}),
-            },
-          })
-        } else {
-          await prisma.engagementDocumentSharingUser.create({
-            data: {
-              projectDocumentId,
-              engagementId: projectId,
-              userId: member.userId,
-              email,
-              connectorPermissionId: permissionId,
-              sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED,
-              ...(actorId ? { createdBy: actorId, updatedBy: actorId } : {}),
-            },
-          })
-        }
-      } catch (e) {
-        logger.error(`Failed to grant drive permission to ${email}`, e as Error)
+      if (existing) {
+        await prisma.engagementDocumentSharingUser.update({
+          where: { id: existing.id },
+          data: {
+            sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED,
+            email,
+            connectorPermissionId: null,
+            ...(actorId ? { updatedBy: actorId } : {}),
+          },
+        })
+      } else {
+        await prisma.engagementDocumentSharingUser.create({
+          data: {
+            projectDocumentId,
+            engagementId: projectId,
+            userId: member.userId,
+            email,
+            sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED,
+            ...(actorId ? { createdBy: actorId, updatedBy: actorId } : {}),
+          },
+        })
       }
     }
 
-    const validUserIds = new Set(externalCollaborators.map((m) => m.userId))
-    const usersToRemove = doc.sharingUsers.filter((u) => !validUserIds.has(u.userId))
+    // Revoke GRANTED rows for members no longer covered by any enabled role
+    const validUserIds = new Set(members.map((m) => m.userId))
+    const toRevoke = grantedRows.filter((u) => !validUserIds.has(u.userId))
 
-    for (const userToRemove of usersToRemove) {
-      if (userToRemove.connectorPermissionId && externalId) {
-        try {
-          await adapter.revokePermission(connectorId, externalId, userToRemove.connectorPermissionId)
-        } catch (e) {
-          logger.error('Failed to revoke connector permission for removed member', e as Error)
-        }
-      }
+    for (const row of toRevoke) {
       await prisma.engagementDocumentSharingUser.update({
-        where: { id: userToRemove.id },
+        where: { id: row.id },
         data: {
           sharingPermissionStatus: DocumentSharingPermissionStatus.REVOKED,
           connectorPermissionId: null,
@@ -158,6 +118,6 @@ export async function syncDocumentSharingUsers(projectDocumentId: string, actorI
       })
     }
   } catch (error) {
-    logger.error('Error in syncDocumentSharingUsers (V2)', error as Error)
+    logger.error('Error in syncDocumentSharingUsers', error as Error)
   }
 }

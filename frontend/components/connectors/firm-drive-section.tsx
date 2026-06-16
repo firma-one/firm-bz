@@ -51,9 +51,10 @@ type FirmDriveSectionProps = {
   firmId: string
   orgSlug: string
   isSandboxFirm?: boolean
+  onConnectorsLoaded?: (count: number) => void
 }
 
-export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false }: FirmDriveSectionProps) {
+export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onConnectorsLoaded }: FirmDriveSectionProps) {
   const router = useRouter()
   const { addToast } = useToast()
   const { user, session } = useAuth()
@@ -104,6 +105,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false }: Fir
       const [data, clients] = await Promise.all([getFirmConnectors(firmId), getFirmAllClients(firmId)])
       setConnectors(data)
       setAllClients(clients)
+      onConnectorsLoaded?.(data.length)
     } catch (e) {
       addToast({ type: 'error', title: 'Failed to load connectors', message: 'Could not fetch storage connectors.' })
     } finally {

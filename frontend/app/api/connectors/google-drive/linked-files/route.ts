@@ -10,7 +10,7 @@ import { GoogleDriveAuthError } from '@/lib/google-drive-connector'
 import { blockIfEngagementFileMutationForbidden } from '@/lib/engagement-access'
 import { resolveEngagementConnector } from '@/lib/connectors/resolve-client-connector'
 import { IndexingInterceptor } from '@/lib/services/indexing-interceptor'
-import { getLock, isDocumentPrivate } from '@/lib/sharing-settings'
+import { getLock, isDocumentPrivate, buildSettingsForDb } from '@/lib/sharing-settings'
 import { assertWithinDocumentCap } from '@/lib/billing/effective-billing-caps'
 // GET: List linked files for a connector
 export async function GET(request: NextRequest) {
@@ -639,6 +639,7 @@ export async function POST(request: NextRequest) {
                     projectId: engagement?.id ?? (bodyEngagementId as string) ?? null,
                     externalId: newFile.id as string,
                     fileName: name,
+                    actorId: user.id,
                 })
 
                 // If EC/EV user created this folder, immediately write DB record + PENDING sharing row
@@ -654,13 +655,25 @@ export async function POST(request: NextRequest) {
                         const folderOrgId = orgId
                         const folderClientId = engagement?.clientId
                         if (folderOrgId && folderClientId) {
-                            // Set the share flag immediately so getSharedAndAncestorIdsForPersona
-                            // includes this folder in allowSet — lets the uploader navigate into
-                            // nested subfolders via the DB-driven EC/EV listing path.
-                            // The PENDING sharing row is the gate that hides it from other EC/EV users.
-                            const shareSettings = userRole === 'eng_ext_collaborator'
-                                ? { share: { externalCollaborator: { enabled: true } } }
-                                : { share: { guest: { enabled: true } } }
+                            // Only write share settings on the root intake folder — nested subfolders
+                            // inherit access via getSharedAndAncestorIdsForPersona ancestor lookup.
+                            const alreadyHasPendingRoot = await (prisma.engagementDocumentSharingUser as any).findFirst({
+                                where: {
+                                    engagementId: bodyEngagementId as string,
+                                    userId: user.id,
+                                    sharingPermissionStatus: 'PENDING',
+                                },
+                                select: { id: true },
+                            })
+
+                            const isRootFolder = !alreadyHasPendingRoot
+                            const shareKey = userRole === 'eng_ext_collaborator' ? 'externalCollaborator' : 'guest'
+                            const shareSettings = isRootFolder
+                                ? buildSettingsForDb(null, {
+                                    share: { [shareKey]: { enabled: true } },
+                                    actorId: user.id,
+                                })
+                                : undefined
 
                             const folderDoc = await prisma.engagementDocument.upsert({
                                 where: {
@@ -682,21 +695,10 @@ export async function POST(request: NextRequest) {
                                     mimeType: 'application/vnd.google-apps.folder',
                                     isFolder: true,
                                     createdBy: user.id,
-                                    settings: shareSettings as object,
+                                    updatedBy: user.id,
+                                    ...(shareSettings ? { settings: shareSettings as object } : {}),
                                     metadata: { modifiedTime: now } as object,
                                 }
-                            })
-
-                            // Only write PENDING row + EL reminders if this user has no existing
-                            // PENDING folder in this engagement — nested folders are covered by
-                            // their root ancestor's PENDING row and approved as a subtree.
-                            const alreadyHasPendingRoot = await (prisma.engagementDocumentSharingUser as any).findFirst({
-                                where: {
-                                    engagementId: bodyEngagementId as string,
-                                    userId: user.id,
-                                    sharingPermissionStatus: 'PENDING',
-                                },
-                                select: { id: true },
                             })
 
                             if (!alreadyHasPendingRoot) {
@@ -709,8 +711,10 @@ export async function POST(request: NextRequest) {
                                         userId: user.id,
                                         email: user.email ?? '',
                                         sharingPermissionStatus: 'PENDING',
+                                        createdBy: user.id,
+                                        updatedBy: user.id,
                                     },
-                                    update: { sharingPermissionStatus: 'PENDING' },
+                                    update: { sharingPermissionStatus: 'PENDING', updatedBy: user.id },
                                 })
 
                                 // Create intake reminders synchronously for all ELs
@@ -788,6 +792,7 @@ export async function POST(request: NextRequest) {
                 projectId: engagement.id,
                 externalId: result.id,
                 fileName: newName,
+                actorId: user.id,
             })
 
             return NextResponse.json({ success: true, id: result.id, name: newName })
@@ -842,6 +847,7 @@ export async function POST(request: NextRequest) {
                     projectId: engagement.id,
                     externalId: result.id,
                     fileName: copyName || sourceName,
+                    actorId: user.id,
                 })
 
                 return NextResponse.json({ success: true, id: result.id })
@@ -859,6 +865,7 @@ export async function POST(request: NextRequest) {
                     externalId: fileId,
                     fileName: meta.name,
                     parentId: meta.parents?.[0] ?? null,
+                    actorId: user.id,
                 })
             }
 
@@ -942,6 +949,7 @@ export async function POST(request: NextRequest) {
                 externalId: fileId,
                 fileName: fileMeta?.name || 'Moved Folder',
                 parentId: destFolderId,
+                actorId: user.id,
             })
 
             return NextResponse.json({ success: true, id: result.id })
@@ -1009,6 +1017,7 @@ export async function POST(request: NextRequest) {
                         clientId: targetProject.clientId,
                         projectId: targetEngagementId,
                         files: copiedItems.map((item) => ({ externalId: item.id, fileName: item.name })),
+                        actorId: user.id,
                     })
                     return NextResponse.json({ success: true, count: copiedItems.length })
                 }
@@ -1024,6 +1033,7 @@ export async function POST(request: NextRequest) {
                     externalId: result.id,
                     fileName,
                     parentId: destFolderId,
+                    actorId: user.id,
                 })
                 return NextResponse.json({ success: true, id: result.id })
             }
@@ -1054,6 +1064,7 @@ export async function POST(request: NextRequest) {
                 externalId: fileId,
                 fileName,
                 parentId: destFolderId,
+                actorId: user.id,
             })
             return NextResponse.json({ success: true, id: result.id })
         }
@@ -1084,6 +1095,7 @@ export async function POST(request: NextRequest) {
                 projectId: engagement.id,
                 externalId: fileId,
                 fileName: result.name,
+                actorId: user.id,
             })
 
             return NextResponse.json({ success: true, id: result.id, name: result.name })

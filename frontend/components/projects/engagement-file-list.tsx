@@ -481,6 +481,15 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
     const [downloadQueue, setDownloadQueue] = useState<DownloadQueueItem[]>([])
     const [isDownloadPanelOpen, setIsDownloadPanelOpen] = useState(true)
 
+    // Bulk trash queue + confirmation
+    type TrashQueueItem = { id: string; name: string; connectorId: string; status: 'pending' | 'done' | 'error'; error?: string }
+    const [trashQueue, setTrashQueue] = useState<TrashQueueItem[]>([])
+    const [isTrashPanelOpen, setIsTrashPanelOpen] = useState(true)
+    const [bulkTrashConfirmOpen, setBulkTrashConfirmOpen] = useState(false)
+    const [pendingBulkTrashIds, setPendingBulkTrashIds] = useState<Set<string>>(new Set())
+
+
+
     // Row-level processing state
     const [processingFileIds, setProcessingFileIds] = useState<Set<string>>(new Set())
 
@@ -1028,6 +1037,52 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
         orgSandbox,
         refreshFileCount,
     })
+
+    const handleBulkTrashClick = useCallback(() => {
+        if (!selectedFileIds.size) return
+        setPendingBulkTrashIds(new Set(selectedFileIds))
+        setBulkTrashConfirmOpen(true)
+    }, [selectedFileIds])
+
+    const handleBulkTrashConfirmed = useCallback(async () => {
+        if (!pendingBulkTrashIds.size || !sessionRef.current?.access_token) return
+        if (orgSandbox?.sandboxOnly) {
+            addToast({ type: 'error', title: 'Sandbox', message: SANDBOX_OPERATION_MESSAGE, duration: 12000 } as any)
+            setBulkTrashConfirmOpen(false)
+            return
+        }
+        const ids = Array.from(pendingBulkTrashIds)
+        const filesToTrash = files.filter(f => ids.includes(f.id))
+        setBulkTrashConfirmOpen(false)
+        setSelectedFileIds(new Set())
+        setPendingBulkTrashIds(new Set())
+
+        const queueItems: TrashQueueItem[] = filesToTrash.map(f => ({ id: f.id, name: f.name, connectorId: f.connectorId ?? '', status: 'pending' }))
+        setTrashQueue(queueItems)
+        setIsTrashPanelOpen(true)
+
+        for (const item of queueItems) {
+            try {
+                const res = await fetch('/api/drive-action', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { Authorization: `Bearer ${sessionRef.current?.access_token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'trash', fileId: item.id, connectorId: item.connectorId, projectId, fileName: item.name }),
+                })
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}))
+                    throw new Error(err.error || 'Failed to move to bin')
+                }
+                setTrashQueue(prev => prev.map(i => i.id === item.id ? { ...i, status: 'done' } : i))
+            } catch (e: any) {
+                setTrashQueue(prev => prev.map(i => i.id === item.id ? { ...i, status: 'error', error: e?.message || 'Failed' } : i))
+            }
+        }
+
+        const currentFolderId = currentFolderIdRef.current
+        if (currentFolderId) fetchFiles(currentFolderId, true)
+        refreshFileCount?.()
+    }, [pendingBulkTrashIds, sessionRef, orgSandbox, files, projectId, currentFolderIdRef, fetchFiles, refreshFileCount, addToast])
 
     // Drag & drop hook
     const {
@@ -2014,6 +2069,7 @@ const handleRefresh = async () => {
                     {/* Right: Refresh & Search (search lives in right sidebar only) */}
                     <div className="flex items-center gap-2">
                         {!restrictToSharedOnly && (
+                        <>
                         <Tooltip>
                             <TooltipTrigger asChild>
                                 <Button
@@ -2036,6 +2092,29 @@ const handleRefresh = async () => {
                                 {selectedFileIds.size > 0 ? `Download ${selectedFileIds.size} item${selectedFileIds.size > 1 ? 's' : ''} as ZIP` : 'Select files to download'}
                             </TooltipContent>
                         </Tooltip>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={selectedFileIds.size === 0}
+                                    onClick={handleBulkTrashClick}
+                                    className={cn(
+                                        "h-9 w-9 p-0 rounded-full transition-colors",
+                                        selectedFileIds.size > 0
+                                            ? "bg-red-600 text-white border-red-600 hover:bg-red-700 hover:border-red-700"
+                                            : "border-slate-200 text-slate-400 bg-white disabled:opacity-40"
+                                    )}
+                                >
+                                    <Trash2 className="h-4 w-4" />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom" className="text-xs">
+                                {selectedFileIds.size > 0 ? `Move ${selectedFileIds.size} item${selectedFileIds.size > 1 ? 's' : ''} to Bin` : 'Select files to move to Bin'}
+                            </TooltipContent>
+                        </Tooltip>
+                        </>
                         )}
                         <Tooltip>
                             <TooltipTrigger asChild>
@@ -2047,7 +2126,7 @@ const handleRefresh = async () => {
                                     onClick={handleRefresh}
                                     className="h-9 w-9 p-0 rounded-full border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                                 >
-                                    <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
+                                    <RefreshCw className={cn("h-4 w-4", isRefreshing ? "animate-spin" : files.some(f => f.indexingStatus === 'PROCESSING') && "animate-pulse")} />
                                 </Button>
                             </TooltipTrigger>
                             <TooltipContent side="bottom" className="text-xs">
@@ -2081,10 +2160,9 @@ const handleRefresh = async () => {
                 {downloadQueue.length > 0 && typeof document !== 'undefined' && document.body && createPortal(
                     <div className={cn(
                         "fixed right-4 bg-white rounded-lg shadow-xl border border-slate-200 z-[101] flex flex-col transition-all duration-300 w-[360px]",
-                        uploadQueue.length > 0 ? "bottom-[calc(1rem+var(--upload-panel-h,160px))]" : "bottom-4",
                         isDownloadPanelOpen ? "h-auto max-h-[300px]" : "h-10"
                     )}
-                    style={uploadQueue.length > 0 ? { bottom: 'calc(1rem + 160px)' } : { bottom: '1rem' }}>
+                    style={{ bottom: uploadQueue.length > 0 ? 'calc(1rem + 160px)' : '1rem' }}>
                         <div
                             className="flex items-center justify-between px-3 py-2 bg-slate-100 border-b border-slate-200 text-slate-900 rounded-t-lg cursor-pointer"
                             onClick={() => setIsDownloadPanelOpen(!isDownloadPanelOpen)}
@@ -2119,6 +2197,58 @@ const handleRefresh = async () => {
                                         )}
                                         {item.status === 'done' && <CheckCircle2 className="h-3.5 w-3.5 text-slate-900 flex-shrink-0" />}
                                         {item.status === 'error' && <XCircle className="h-3.5 w-3.5 text-red-500 flex-shrink-0" />}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>,
+                    document.body
+                )}
+
+                {/* Bulk Trash Progress Panel — stacks above download panel if both visible */}
+                {trashQueue.length > 0 && typeof document !== 'undefined' && document.body && createPortal(
+                    <div className={cn(
+                        "fixed right-4 bg-white rounded-lg shadow-xl border border-slate-200 z-[102] flex flex-col transition-all duration-300 w-[360px]",
+                        isTrashPanelOpen ? "h-auto max-h-[300px]" : "h-10"
+                    )}
+                    style={{ bottom: downloadQueue.length > 0
+                        ? uploadQueue.length > 0 ? 'calc(2rem + 160px + 44px)' : 'calc(2rem + 44px)'
+                        : uploadQueue.length > 0 ? 'calc(1rem + 160px)' : '1rem'
+                    }}>
+                        <div
+                            className="flex items-center justify-between px-3 py-2 bg-red-50 border-b border-red-100 text-slate-900 rounded-t-lg cursor-pointer"
+                            onClick={() => setIsTrashPanelOpen(!isTrashPanelOpen)}
+                        >
+                            <span className="text-[11px] font-medium">
+                                {trashQueue.some(i => i.status === 'pending')
+                                    ? `Moving to Bin… ${trashQueue.filter(i => i.status === 'done').length}/${trashQueue.length}`
+                                    : `Moved to Bin ${trashQueue.filter(i => i.status === 'done').length}/${trashQueue.length}`
+                                }
+                            </span>
+                            <div className="flex items-center gap-2 text-slate-500">
+                                {isTrashPanelOpen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); setTrashQueue([]) }}
+                                    className="hover:bg-red-100 rounded p-0.5 transition-colors"
+                                >
+                                    <X className="h-3.5 w-3.5" />
+                                </button>
+                            </div>
+                        </div>
+                        {isTrashPanelOpen && (
+                            <div className="flex-1 overflow-y-auto p-0">
+                                {trashQueue.map((item) => (
+                                    <div key={item.id} className="flex items-center gap-2 px-3 py-2 border-b border-slate-100 last:border-0">
+                                        <Trash2 className="h-3.5 w-3.5 flex-shrink-0 text-slate-400" />
+                                        <p className="text-[11px] text-slate-700 truncate flex-1">{item.name}</p>
+                                        {item.status === 'pending' && (
+                                            <svg className="animate-spin h-3.5 w-3.5 text-slate-400 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                            </svg>
+                                        )}
+                                        {item.status === 'done' && <CheckCircle2 className="h-3.5 w-3.5 text-slate-900 flex-shrink-0" />}
+                                        {item.status === 'error' && <span title={item.error}><XCircle className="h-3.5 w-3.5 text-red-500 flex-shrink-0" /></span>}
                                     </div>
                                 ))}
                             </div>
@@ -2838,6 +2968,21 @@ const handleRefresh = async () => {
                     onCancel={() => setTrashConfirmTarget(null)}
                     onConfirm={handleTrashConfirmed}
                     loading={trashConfirming}
+                />
+
+                {/* Bulk Move to Bin confirmation dialog */}
+                <ConfirmDialog
+                    open={bulkTrashConfirmOpen}
+                    onOpenChange={(open) => { if (!open) { setBulkTrashConfirmOpen(false); setPendingBulkTrashIds(new Set()) } }}
+                    icon={<Trash2 className="h-3.5 w-3.5" />}
+                    iconVariant="red"
+                    title="Move to Bin"
+                    subtitle={`${pendingBulkTrashIds.size} item${pendingBulkTrashIds.size > 1 ? 's' : ''} will be moved to Google Drive Bin.`}
+                    description={<>{pendingBulkTrashIds.size} item{pendingBulkTrashIds.size > 1 ? 's' : ''} will be moved to your Google Drive Bin. Items in the Bin are permanently deleted after 30 days.</>}
+                    confirmLabel="Move to Bin"
+                    confirmVariant="red"
+                    onCancel={() => { setBulkTrashConfirmOpen(false); setPendingBulkTrashIds(new Set()) }}
+                    onConfirm={handleBulkTrashConfirmed}
                 />
 
                 {/* Return to Draft confirmation */}

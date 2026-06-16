@@ -35,7 +35,8 @@ export async function POST(
                 organizationId: orgId,
                 clientId: cliId,
                 projectId,
-                files
+                files,
+                actorId: authResult.user?.id ?? null,
             })
             // Audit: one event per file added (e.g. upload or import)
             const userId = authResult.user?.id
@@ -56,7 +57,8 @@ export async function POST(
                 clientId: cliId,
                 projectId,
                 externalId: externalId as string,
-                fileName: fileName as string
+                fileName: fileName as string,
+                actorId: authResult.user?.id ?? null,
             })
             // Audit: file added (upload or import)
             audit(AUDIT_EVENT.DOCUMENT_CREATED)

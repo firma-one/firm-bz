@@ -1102,7 +1102,12 @@ export function DocumentActionMenu({
                 </DropdownMenuSub>
                 <DropdownMenuSeparator />
 
+                <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className={!(document as any)?.projectDocumentId ? 'cursor-not-allowed' : undefined}>
                 <DropdownMenuItem
+                  disabled={!(document as any)?.projectDocumentId}
                   onClick={async () => {
                     if (onBookmarkDocument) {
                       onBookmarkDocument(document)
@@ -1159,11 +1164,18 @@ export function DocumentActionMenu({
                       addToast({ type: 'error', title: 'Failed', message: e instanceof Error ? e.message : 'Failed to update bookmark.' })
                     }
                   }}
-                  className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                  className="flex items-center space-x-3 px-3 py-2 text-xs data-[disabled]:opacity-50 data-[disabled]:pointer-events-none"
                 >
                   <Bookmark className={`h-4 w-4 ${existingBookmarkId ? 'fill-current text-primary' : 'text-gray-600'}`} />
                   <span>{existingBookmarkId ? 'Remove bookmark' : 'Bookmark'}</span>
                 </DropdownMenuItem>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="left" className="text-xs">
+                    {!(document as any)?.projectDocumentId ? 'Unavailable until indexed' : existingBookmarkId ? 'Remove bookmark' : 'Bookmark'}
+                  </TooltipContent>
+                </Tooltip>
+                </TooltipProvider>
                 <DropdownMenuItem
                   onClick={() => setShowDueDatePicker(true)}
                   className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"

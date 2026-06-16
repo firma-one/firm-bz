@@ -5,6 +5,7 @@ import { requireEngagementMember, isExternalEngagementRole } from '@/lib/engagem
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { assertWithinDocumentCap } from '@/lib/billing/effective-billing-caps'
 import { resolveEngagementConnectorId } from '@/lib/connectors/resolve-client-connector'
+import { buildSettingsForDb } from '@/lib/sharing-settings'
 
 /**
  * POST /api/projects/[projectId]/documents/[documentId]/index-file-intake
@@ -48,15 +49,25 @@ export async function POST(
     // Try to find an existing record first (happy path — Inngest already indexed it)
     const existing = await prisma.engagementDocument.findFirst({
       where: { engagementId: projectId, externalId },
-      select: { id: true, fileName: true },
+      select: { id: true, fileName: true, settings: true },
     })
 
     let docId: string
     let fileName: string
 
+    const shareKey = member.role === 'eng_ext_collaborator' ? 'externalCollaborator' : 'guest'
+    const pendingSettings = buildSettingsForDb(null, {
+      share: { [shareKey]: { enabled: true } },
+      actorId: user.id,
+    })
+
     if (existing) {
       docId = existing.id
       fileName = existing.fileName
+      await prisma.engagementDocument.update({
+        where: { id: existing.id },
+        data: { settings: pendingSettings as object },
+      })
     } else {
       // Record doesn't exist yet — fetch Drive metadata and create it now.
       const driveMeta = await googleDriveConnector.getFileMetadata(connector.id, externalId)
@@ -82,7 +93,7 @@ export async function POST(
           mimeType: driveMeta.mimeType ?? null,
           fileSize: driveMeta.size ? BigInt(driveMeta.size) : null,
           isFolder: false,
-          settings: {} as object,
+          settings: pendingSettings as object,
           metadata: {
             modifiedTime: (driveMeta as any).modifiedTime ?? new Date().toISOString(),
             webViewLink: (driveMeta as any).webViewLink ?? null,

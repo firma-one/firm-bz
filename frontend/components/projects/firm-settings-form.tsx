@@ -92,6 +92,7 @@ export function FirmSettingsForm({
     const [orgIdState, setOrgIdState] = useState<string | null>(null)
     const orgId = orgIdProp ?? orgIdState
     const [openSection, setOpenSection] = useState<Section>(initialSection ?? 'main')
+    const [storageConnectorCount, setStorageConnectorCount] = useState<number | null>(null)
     const [name, setName] = useState(initialName)
     const [internalMemo, setInternalMemo] = useState('')
     const [industry, setIndustry] = useState('')
@@ -144,6 +145,13 @@ export function FirmSettingsForm({
     const isRasterBrandLogo = brandLogoFile?.type === 'image/png' || brandLogoFile?.type === 'image/jpeg' || brandLogoFile?.type === 'image/jpg'
 
     useEffect(() => { setName(initialName) }, [initialName])
+
+    useEffect(() => {
+        if (storageConnectorCount === 0 && openSection !== 'storage') {
+            setOpenSection('storage')
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [storageConnectorCount])
 
     useEffect(() => {
         let cancelled = false
@@ -783,7 +791,7 @@ export function FirmSettingsForm({
                     <div className="overflow-hidden min-h-0">
                         <div className="p-5 border-t border-[#e5e7eb] bg-white">
                             {orgId
-                                ? <FirmDriveSection firmId={orgId} orgSlug={orgSlug} isSandboxFirm={isSandboxFirm} />
+                                ? <FirmDriveSection firmId={orgId} orgSlug={orgSlug} isSandboxFirm={isSandboxFirm} onConnectorsLoaded={setStorageConnectorCount} />
                                 : <div className="text-xs text-[#9a9ba0]">Loading…</div>
                             }
                         </div>

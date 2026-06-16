@@ -51,11 +51,24 @@ export async function GET(
       }
     } catch { /* non-critical */ }
 
+    // Return documents that were explicitly shared via:
+    // 1. The Share modal — settings.share.createdAt is always set by buildSettingsForDb (covers guest-only shares with no sharing row)
+    // 2. Intake upload — root folder has a PENDING or GRANTED sharing row (no createdAt since intake doesn't use buildSettingsForDb)
+    // Children of intake folders have settings.share.* but no createdAt and no sharing row — correctly excluded by both conditions.
+    const explicitShareIds = await (prisma as any).$queryRawUnsafe(
+      `SELECT DISTINCT ed.id FROM platform.engagement_documents ed
+       LEFT JOIN platform.engagement_document_sharing_users su
+         ON su."projectDocumentId" = ed.id AND su."sharingPermissionStatus" IN ('GRANTED', 'PENDING')
+       WHERE ed."engagementId" = $1::uuid
+         AND (
+           (ed.settings->'share'->>'createdAt') IS NOT NULL
+           OR su.id IS NOT NULL
+         )`,
+      projectId
+    ) as { id: string }[]
+
     const shares = await (prisma.engagementDocument as any).findMany({
-      where: {
-        engagementId: projectId,
-        sharingUsers: { some: { sharingPermissionStatus: { in: ['GRANTED', 'PENDING'] } } },
-      },
+      where: { id: { in: explicitShareIds.map((r) => r.id) } },
       orderBy: { createdAt: 'desc' },
       include: {
         sharingUsers: {
@@ -102,11 +115,10 @@ export async function GET(
         documentId: share.id,
         documentName: share.fileName || share.externalId || 'Unknown Document',
         documentExternalId: externalId || null,
-        documentMimeType: share.mimeType || null,
+        documentMimeType: share.mimeType || indexMetadata.mimeType || indexMetadata.mime_type || null,
         thumbnailLink,
         webViewLink,
-        slug: share.slug ?? null,
-        parentId: share.parentId ?? (indexMetadata.parents?.[0] ?? indexMetadata.parentId ?? null) as string | null,
+parentId: share.parentId ?? (indexMetadata.parents?.[0] ?? indexMetadata.parentId ?? null) as string | null,
         createdBy: share.createdBy ?? parsed.share?.createdBy ?? null,
         createdAt: share.createdAt.toISOString(),
         updatedAt: share.updatedAt.toISOString(),
