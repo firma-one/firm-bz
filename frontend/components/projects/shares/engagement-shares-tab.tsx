@@ -973,6 +973,22 @@ function SharesListView({
                     </Tooltip>
                   </TooltipProvider>
                 )}
+                {!isPending && !isFolder && onParentFolderClick && (share.parentId ?? generalFolderId) && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          className="h-7 w-7 rounded-md inline-flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                          onClick={(e) => { e.stopPropagation(); onParentFolderClick(share.parentId ?? generalFolderId!, share.parentName ?? 'General') }}
+                        >
+                          <FolderOpen className="h-4 w-4" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="text-xs">Go to folder</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
                 <DocumentActionMenu
                   document={getDocumentForMenu(share)}
                   showShareModal={canManage}
@@ -1292,6 +1308,22 @@ function ShareCard({
                 </Tooltip>
               </TooltipProvider>
             )}
+            {!isPending && !isFolder && onParentFolderClick && (share.parentId ?? generalFolderId) && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors"
+                      onClick={(e) => { e.stopPropagation(); onParentFolderClick(share.parentId ?? generalFolderId!, share.parentName ?? 'General') }}
+                    >
+                      <FolderOpen className="h-4 w-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-xs">Go to folder</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
             <DocumentActionMenu
               document={getDocumentForMenu(share)}
               showShareModal={canManage}
@@ -1556,6 +1588,7 @@ export function EngagementSharesTab({
 
   const getDocumentForMenu = (share: ShareRecord) => ({
     id: share.documentId,
+    projectDocumentId: share.documentId,
     name: share.documentName,
     mimeType: share.documentMimeType ?? undefined,
     externalId: share.documentExternalId,

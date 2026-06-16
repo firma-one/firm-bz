@@ -51,11 +51,17 @@ export async function GET(
       }
     } catch { /* non-critical */ }
 
+    // Only return documents explicitly shared via the Share modal.
+    // Intake stubs written by the Drive webhook omit share.createdAt; the modal always sets it.
+    const explicitShareIds = await (prisma as any).$queryRawUnsafe(
+      `SELECT id FROM platform.engagement_documents
+       WHERE "engagementId" = $1::uuid
+         AND (settings->'share'->>'createdAt') IS NOT NULL`,
+      projectId
+    ) as { id: string }[]
+
     const shares = await (prisma.engagementDocument as any).findMany({
-      where: {
-        engagementId: projectId,
-        sharingUsers: { some: { sharingPermissionStatus: { in: ['GRANTED', 'PENDING'] } } },
-      },
+      where: { id: { in: explicitShareIds.map((r) => r.id) } },
       orderBy: { createdAt: 'desc' },
       include: {
         sharingUsers: {
@@ -102,7 +108,7 @@ export async function GET(
         documentId: share.id,
         documentName: share.fileName || share.externalId || 'Unknown Document',
         documentExternalId: externalId || null,
-        documentMimeType: share.mimeType || null,
+        documentMimeType: share.mimeType || indexMetadata.mimeType || indexMetadata.mime_type || null,
         thumbnailLink,
         webViewLink,
         slug: share.slug ?? null,

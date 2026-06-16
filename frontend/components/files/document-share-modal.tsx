@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -12,7 +12,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import { Share2, Users, UserCircle, FileDown, Droplets, Info } from 'lucide-react'
+import { Users, UserCircle, FileDown, Droplets, Info } from 'lucide-react'
 import { useToast } from '@/components/ui/toast'
 import { SandboxInfoBanner } from '@/components/ui/sandbox-info-banner'
 import { useOrgSandbox } from '@/lib/use-org-sandbox'
@@ -183,13 +183,10 @@ export function DocumentShareModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md gap-4 border-slate-200 p-6">
-        <DialogHeader className="space-y-1">
-          <div className="flex items-center gap-2">
-            <Share2 className="h-5 w-5 text-purple-600" />
-            <DialogTitle className="text-slate-900">Share document</DialogTitle>
-          </div>
-          <DialogDescription className="text-sm text-slate-500 truncate" title={doc.name}>
+      <DialogContent className="sm:max-w-[480px]">
+        <DialogHeader>
+          <DialogTitle>Share document</DialogTitle>
+          <DialogDescription className="truncate" title={doc.name}>
             {doc.name}
           </DialogDescription>
         </DialogHeader>
@@ -346,14 +343,19 @@ export function DocumentShareModal({
           </div>
         )}
 
-        <DialogFooter className="gap-2 sm:gap-0">
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+        <DialogFooter>
+          <Button
+            variant="outline"
+            className="rounded-[2px] w-32 text-[10px] font-headline font-bold tracking-widest uppercase"
+            onClick={() => onOpenChange(false)}
+            disabled={saving}
+          >
             Cancel
           </Button>
           <Button
+            variant="greenCta"
             onClick={handleSave}
             disabled={isSandboxFirm || saving || !initialLoadDone || !hasChanges}
-            className="bg-slate-900 text-white hover:bg-black focus-visible:ring-slate-400"
           >
             {saving ? 'Saving...' : 'Save'}
           </Button>

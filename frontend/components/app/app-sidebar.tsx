@@ -18,7 +18,7 @@ import {
   ArrowUpRight,
   Info,
   LifeBuoy,
-  Bell,
+  CalendarClock,
   Clock,
   History,
   CornerDownRight,
@@ -275,6 +275,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
   }, [])
 
   useEffect(() => { loadReminders() }, [loadReminders])
+  useEffect(() => { if (isRemindersOpen) loadReminders() }, [isRemindersOpen]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const h = () => loadReminders()
     window.addEventListener('firma-reminders-updated', h)
@@ -747,7 +748,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                         onClick={() => setIsRemindersOpen((v) => !v)}
                         className={`d-sidebar-section w-full flex items-center px-3 ${spaceTitle} hover:opacity-80 transition-opacity`}
                       >
-                        <Bell
+                        <CalendarClock
                           className="h-3 w-3 mr-1.5 shrink-0"
                           style={{ color: remindersUrgentCount > 0 ? '#C4572B' : undefined }}
                         />
@@ -815,7 +816,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                           href="/d/u/reminders"
                           className="relative flex items-center d-sidebar-nav transition-colors px-0 justify-center py-2 text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d]"
                         >
-                          <Bell
+                          <CalendarClock
                             className="h-4 w-4 mx-auto"
                             style={{ color: remindersUrgentCount > 0 ? '#C4572B' : undefined }}
                           />

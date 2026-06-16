@@ -135,13 +135,13 @@ export class SearchService {
     ON CONFLICT ("engagementId", "firmId", "externalId")
     DO UPDATE SET
       "fileName" = EXCLUDED."fileName",
-      "isFolder" = EXCLUDED."isFolder",
-      "mimeType" = EXCLUDED."mimeType",
+      "isFolder" = CASE WHEN platform.engagement_documents."isFolder" = true THEN true ELSE EXCLUDED."isFolder" END,
+      "mimeType" = COALESCE(EXCLUDED."mimeType", platform.engagement_documents."mimeType"),
       "fileSize" = EXCLUDED."fileSize",
       "content" = EXCLUDED."content",
       "embedding" = EXCLUDED."embedding",
-      "clientId" = EXCLUDED."clientId",
-      "connectorId" = EXCLUDED."connectorId",
+      "clientId" = COALESCE(EXCLUDED."clientId", platform.engagement_documents."clientId"),
+      "connectorId" = COALESCE(EXCLUDED."connectorId", platform.engagement_documents."connectorId"),
       "parentId" = COALESCE(EXCLUDED."parentId", platform.engagement_documents."parentId"),
       "metadata" = EXCLUDED."metadata",
       "updatedAt" = NOW()

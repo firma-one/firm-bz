@@ -33,7 +33,8 @@ async function ensureDocument(
   projectId: string,
   externalId: string,
   title: string,
-  actorId?: string | null
+  actorId?: string | null,
+  mimeType?: string | null
 ): Promise<{ organizationId: string, externalId: string }> {
   const project = await prisma.engagement.findFirst({
     where: { id: projectId, isDeleted: false },
@@ -43,18 +44,34 @@ async function ensureDocument(
 
   const { firmId, clientId } = project
 
-  await (prisma as any).$executeRawUnsafe(
-    `INSERT INTO platform.engagement_documents
-       ("firmId", "clientId", "engagementId", "externalId", "fileName", "createdBy", "updatedAt")
-     VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6::uuid, NOW())
-     ON CONFLICT ("engagementId", "firmId", "externalId") DO NOTHING`,
-    firmId,
-    clientId || null,
-    projectId,
-    externalId,
-    title || externalId,
-    actorId || null
-  )
+  if (mimeType) {
+    await (prisma as any).$executeRawUnsafe(
+      `INSERT INTO platform.engagement_documents
+         ("firmId", "clientId", "engagementId", "externalId", "fileName", "mimeType", "createdBy", "updatedAt")
+       VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, $7::uuid, NOW())
+       ON CONFLICT ("engagementId", "firmId", "externalId") DO UPDATE SET "mimeType" = EXCLUDED."mimeType" WHERE platform.engagement_documents."mimeType" IS NULL`,
+      firmId,
+      clientId || null,
+      projectId,
+      externalId,
+      title || externalId,
+      mimeType,
+      actorId || null
+    )
+  } else {
+    await (prisma as any).$executeRawUnsafe(
+      `INSERT INTO platform.engagement_documents
+         ("firmId", "clientId", "engagementId", "externalId", "fileName", "createdBy", "updatedAt")
+       VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6::uuid, NOW())
+       ON CONFLICT ("engagementId", "firmId", "externalId") DO NOTHING`,
+      firmId,
+      clientId || null,
+      projectId,
+      externalId,
+      title || externalId,
+      actorId || null
+    )
+  }
 
   const { SearchService } = await import('@/lib/services/search-service')
   Promise.resolve().then(() =>
@@ -118,6 +135,7 @@ export async function PUT(
 
     const body = await request.json().catch(() => ({}))
     const title = typeof body.title === 'string' ? body.title : ''
+    const mimeType = typeof body.mimeType === 'string' ? body.mimeType : null
 
     let fileInfo: { organizationId: string; externalId: string } | null = null
 
@@ -128,7 +146,7 @@ export async function PUT(
     } else {
       // Drive file ID — ensure document row exists, then update its sharing fields.
       try {
-        fileInfo = await ensureDocument(projectId, documentIdParam, title, user.id)
+        fileInfo = await ensureDocument(projectId, documentIdParam, title, user.id, mimeType)
       } catch (err) {
         console.error('ensureDocument error', err)
         return NextResponse.json(
@@ -229,8 +247,9 @@ export async function PUT(
     })
 
     if (existing) {
-      const updateData: { settings: typeof settings; updatedAt: Date; updatedBy: string; createdBy?: string; slug?: string } = { settings, updatedAt: new Date(), updatedBy: user.id }
+      const updateData: { settings: typeof settings; updatedAt: Date; updatedBy: string; createdBy?: string; slug?: string; mimeType?: string } = { settings, updatedAt: new Date(), updatedBy: user.id }
       if (!existing.createdBy) updateData.createdBy = user.id
+      if (mimeType && !existing.mimeType) updateData.mimeType = mimeType
       if (existing.slug == null) {
         const docTitle = existing.fileName || title || documentIdParam
         updateData.slug = generateShareSlug(docTitle, existing.id.slice(0, 8))
@@ -260,6 +279,7 @@ export async function PUT(
           createdBy: user.id,
           settings,
           slug,
+          ...(mimeType ? { mimeType } : {}),
         },
       })
     }
