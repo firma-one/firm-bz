@@ -138,6 +138,18 @@ function ReminderRow({ r, isPending, acting, onDone, onUndoDone, onHide, onShow,
     )
 }
 
+const REMINDERS_SEEN_COUNT_KEY = 'fm_reminders_seen_count'
+
+function getSeenCount(): number {
+    try { return parseInt(localStorage.getItem(REMINDERS_SEEN_COUNT_KEY) ?? '0', 10) || 0 }
+    catch { return 0 }
+}
+
+function saveSeenCount(count: number) {
+    try { localStorage.setItem(REMINDERS_SEEN_COUNT_KEY, String(count)) }
+    catch { /* ignore */ }
+}
+
 type Props = { onCountChange?: (count: number) => void }
 
 export function RemindersPanel({ onCountChange }: Props) {
@@ -150,6 +162,8 @@ export function RemindersPanel({ onCountChange }: Props) {
     const [pendingDoneIds, setPendingDoneIds] = useState<Set<string>>(new Set())
     const pendingTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
     const mountedRef = useRef(false)
+    const seenCountRef = useRef<number>(getSeenCount())
+    const [hasNewReminders, setHasNewReminders] = useState(false)
 
     const isHidden = (r: ReminderWithContext) => r.hiddenAt !== null
     const sorted = [...reminders].sort((a, b) => {
@@ -167,7 +181,11 @@ export function RemindersPanel({ onCountChange }: Props) {
 
     const load = useCallback(async () => {
         setLoading(true)
-        try { setReminders(await getUserReminders()) }
+        try {
+            const data = await getUserReminders()
+            setReminders(data)
+            setHasNewReminders(data.length > seenCountRef.current)
+        }
         finally { setLoading(false) }
     }, [])
 
@@ -224,11 +242,20 @@ export function RemindersPanel({ onCountChange }: Props) {
             <button
                 type="button"
                 aria-label="Reminders"
-                onClick={() => setOpen((v) => !v)}
+                onClick={() => {
+                    setOpen((v) => {
+                        if (!v) {
+                            seenCountRef.current = reminders.length
+                            saveSeenCount(reminders.length)
+                            setHasNewReminders(false)
+                        }
+                        return !v
+                    })
+                }}
                 className="p-2 hover:bg-orange-50 rounded-xl transition-colors relative"
                 style={{ color: '#C4572B' }}
             >
-                <CalendarClock className="h-5 w-5" />
+                <CalendarClock className={`h-5 w-5${hasNewReminders ? ' animate-pulse' : ''}`} />
                 {reminders.length > 0 ? (
                     <span className="absolute top-0.5 right-0.5 min-w-[14px] h-3.5 px-1 text-white text-[9px] font-bold rounded-full border border-white flex items-center justify-center leading-none" style={{ background: '#C4572B' }}>
                         {reminders.length}
