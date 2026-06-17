@@ -323,6 +323,32 @@ export type SharedIdsForAllPersonas = {
   sharedIdsUnion: string[]
   ancestorIds: string[]
   descendantIds: string[]
+  descendantIdsForEC: string[]
+  descendantIdsForGuest: string[]
+}
+
+/**
+ * DB-only BFS: collect all descendant externalIds under the given shared folder externalIds.
+ * Uses the childrenMap built from engagement_documents rows — no Drive API calls.
+ */
+function buildDescendantIdsFromDB(
+  sharedFolderExternalIds: string[],
+  childrenMap: Map<string, { externalId: string; isFolder: boolean }[]>
+): string[] {
+  if (sharedFolderExternalIds.length === 0) return []
+  const result = new Set<string>()
+  const visited = new Set<string>()
+  const queue = [...sharedFolderExternalIds]
+  while (queue.length > 0) {
+    const folderId = queue.shift()!
+    if (visited.has(folderId)) continue
+    visited.add(folderId)
+    for (const child of childrenMap.get(folderId) ?? []) {
+      result.add(child.externalId)
+      if (child.isFolder) queue.push(child.externalId)
+    }
+  }
+  return Array.from(result)
 }
 
 /**
@@ -337,6 +363,7 @@ export async function getSharedAndAncestorIdsForAllPersonas(
     select: {
       externalId: true,
       parentId: true,
+      isFolder: true,
       settings: true,
     },
   })
@@ -344,6 +371,7 @@ export async function getSharedAndAncestorIdsForAllPersonas(
   const settingsRows = allRows.filter((r) => r.externalId) as {
     externalId: string
     parentId: string | null
+    isFolder: boolean
     settings: unknown
   }[]
 
@@ -354,7 +382,26 @@ export async function getSharedAndAncestorIdsForAllPersonas(
   const { ancestorIds } = sharedIdsUnion.length > 0
     ? await buildAncestorFoldersFromDB(sharedIdsUnion, settingsRows)
     : { ancestorIds: [] }
-  const descendantIds: string[] = []
 
-  return { sharedIdsForEC, sharedIdsForGuest, sharedIdsUnion, ancestorIds, descendantIds }
+  // Build children map once — used for all three descendant sets
+  const childrenMap = new Map<string, { externalId: string; isFolder: boolean }[]>()
+  for (const row of settingsRows) {
+    if (!row.parentId) continue
+    if (!childrenMap.has(row.parentId)) childrenMap.set(row.parentId, [])
+    childrenMap.get(row.parentId)!.push({ externalId: row.externalId, isFolder: row.isFolder })
+  }
+
+  const sharedSetEC = new Set(sharedIdsForEC)
+  const sharedSetGuest = new Set(sharedIdsForGuest)
+  const sharedSetUnion = new Set(sharedIdsUnion)
+
+  const sharedFolderIdsForEC = settingsRows.filter((r) => sharedSetEC.has(r.externalId) && r.isFolder).map((r) => r.externalId)
+  const sharedFolderIdsForGuest = settingsRows.filter((r) => sharedSetGuest.has(r.externalId) && r.isFolder).map((r) => r.externalId)
+  const sharedFolderIdsUnion = settingsRows.filter((r) => sharedSetUnion.has(r.externalId) && r.isFolder).map((r) => r.externalId)
+
+  const descendantIdsForEC = buildDescendantIdsFromDB(sharedFolderIdsForEC, childrenMap)
+  const descendantIdsForGuest = buildDescendantIdsFromDB(sharedFolderIdsForGuest, childrenMap)
+  const descendantIds = buildDescendantIdsFromDB(sharedFolderIdsUnion, childrenMap)
+
+  return { sharedIdsForEC, sharedIdsForGuest, sharedIdsUnion, ancestorIds, descendantIds, descendantIdsForEC, descendantIdsForGuest }
 }

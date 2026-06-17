@@ -144,6 +144,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
     const [activeActivityDocId, setActiveActivityDocId] = useState<string | null>(null)
     const [activeVersionDocId, setActiveVersionDocId] = useState<string | null>(null)
     const [activePreviewDocId, setActivePreviewDocId] = useState<string | null>(null)
+    const [previewKey, setPreviewKey] = useState(0)
     const lastHandledDeeplinkHashRef = useRef<string>('')
     // Cache resolve-deeplink/file-info results per hash to avoid re-fetching on every effect re-run.
     const deeplinkResolvedCacheRef = useRef<Record<string, {
@@ -180,6 +181,9 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
     const [ancestorFolderIdsForEC, setAncestorFolderIdsForEC] = useState<Set<string>>(new Set())
     const [sharedExternalIdsForGuest, setSharedExternalIdsForGuest] = useState<Set<string>>(new Set())
     const [ancestorFolderIdsForGuest, setAncestorFolderIdsForGuest] = useState<Set<string>>(new Set())
+    const [descendantIds, setDescendantIds] = useState<Set<string>>(new Set())
+    const [descendantIdsForEC, setDescendantIdsForEC] = useState<Set<string>>(new Set())
+    const [descendantIdsForGuest, setDescendantIdsForGuest] = useState<Set<string>>(new Set())
     const [sharedByMeExternalIds, setSharedByMeExternalIds] = useState<Set<string>>(new Set())
     const [filterShared, setFilterShared] = useState<'all' | 'by_me' | 'by_others' | 'with_collaborator' | 'with_viewer' | 'pending_intake'>('all')
     const [bookmarkIdByDocumentId, setBookmarkIdByDocumentId] = useState<Map<string, string>>(new Map())
@@ -257,12 +261,16 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
         (fileId: string, file: DriveFile) => {
             if (!rightPane.hasRightPane) return
             setActivePreviewDocId(fileId)
-            rightPane.setTitle(file.name || 'Preview')
-            rightPane.setHeaderActions(null)
-            rightPane.setHeaderIcon(null)
-            rightPane.setHeaderSubtitle('')
-            rightPane.setPaneSize('medium')
-            rightPane.setContent(<DocumentBlobPreviewPane document={file} projectId={projectId} />)
+            setPreviewKey(k => {
+                const nextKey = k + 1
+                rightPane.setTitle(file.name || 'Preview')
+                rightPane.setHeaderActions(null)
+                rightPane.setHeaderIcon(null)
+                rightPane.setHeaderSubtitle('')
+                rightPane.setPaneSize('medium')
+                rightPane.setContent(<DocumentBlobPreviewPane key={nextKey} document={file} projectId={projectId} />)
+                return nextKey
+            })
         },
         [rightPane, projectId]
     )
@@ -278,6 +286,9 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
                 const ancestorEC = Array.isArray(data?.ancestorFolderIdsForEC) ? data.ancestorFolderIdsForEC as string[] : []
                 const idsGuest = Array.isArray(data?.sharedExternalIdsForGuest) ? data.sharedExternalIdsForGuest as string[] : []
                 const ancestorGuest = Array.isArray(data?.ancestorFolderIdsForGuest) ? data.ancestorFolderIdsForGuest as string[] : []
+                const descIds = Array.isArray(data?.descendantIds) ? data.descendantIds as string[] : []
+                const descIdsEC = Array.isArray(data?.descendantIdsForEC) ? data.descendantIdsForEC as string[] : []
+                const descIdsGuest = Array.isArray(data?.descendantIdsForGuest) ? data.descendantIdsForGuest as string[] : []
                 const idsByMe = Array.isArray(data?.sharedByMeExternalIds) ? data.sharedByMeExternalIds as string[] : []
                 setSharedExternalIds(new Set(ids))
                 setAncestorFolderIds(new Set(ancestorIds))
@@ -285,6 +296,9 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
                 setAncestorFolderIdsForEC(new Set(ancestorEC))
                 setSharedExternalIdsForGuest(new Set(idsGuest))
                 setAncestorFolderIdsForGuest(new Set(ancestorGuest))
+                setDescendantIds(new Set(descIds))
+                setDescendantIdsForEC(new Set(descIdsEC))
+                setDescendantIdsForGuest(new Set(descIdsGuest))
                 setSharedByMeExternalIds(new Set(idsByMe))
             })
             .catch(() => {
@@ -294,6 +308,9 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
                 setAncestorFolderIdsForEC(new Set())
                 setSharedExternalIdsForGuest(new Set())
                 setAncestorFolderIdsForGuest(new Set())
+                setDescendantIds(new Set())
+                setDescendantIdsForEC(new Set())
+                setDescendantIdsForGuest(new Set())
                 setSharedByMeExternalIds(new Set())
             })
     }, [projectId])
@@ -309,6 +326,18 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
     // Core State
     const [currentFolderId, setCurrentFolderId] = useState<string | null>(null)
     const [breadcrumbs, setBreadcrumbs] = useState<BreadcrumbItem[]>([])
+
+    // Close preview when the user navigates to a different folder (up via breadcrumb or down into a subfolder).
+    // Skip on mount (isMountedRef is false until after first render).
+    const isMountedRef = useRef(false)
+    useEffect(() => {
+        if (!isMountedRef.current) { isMountedRef.current = true; return }
+        if (activePreviewDocId) {
+            setActivePreviewDocId(null)
+            rightPane.clearPane()
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentFolderId])
 
     // Load folder IDs and shared IDs in parallel on mount (both only need projectId)
     useEffect(() => {
@@ -1561,8 +1590,8 @@ const handleRefresh = async () => {
                     const isShared = sharedExternalIds.has(f.id) || ancestorFolderIds.has(f.id)
                     return isShared && !sharedByMeExternalIds.has(f.id)
                 }
-                if (filterShared === 'with_collaborator') return sharedExternalIdsForEC.has(f.id) || ancestorFolderIdsForEC.has(f.id)
-                if (filterShared === 'with_viewer') return sharedExternalIdsForGuest.has(f.id) || ancestorFolderIdsForGuest.has(f.id)
+                if (filterShared === 'with_collaborator') return sharedExternalIdsForEC.has(f.id) || ancestorFolderIdsForEC.has(f.id) || descendantIdsForEC.has(f.id)
+                if (filterShared === 'with_viewer') return sharedExternalIdsForGuest.has(f.id) || ancestorFolderIdsForGuest.has(f.id) || descendantIdsForGuest.has(f.id)
                 if (filterShared === 'pending_intake') return !!f.isPendingApproval
                 return true
             })
@@ -1573,7 +1602,7 @@ const handleRefresh = async () => {
             return [...folders, ...rest]
         }
         return result.sort(cmp)
-    }, [files, sortConfig, filterTypes, filterOwner, filterModified, filterShared, sharedByMeExternalIds, sharedExternalIds, sharedExternalIdsForEC, sharedExternalIdsForGuest, ancestorFolderIds, ancestorFolderIdsForEC, ancestorFolderIdsForGuest, session?.user?.email, breadcrumbs])
+    }, [files, sortConfig, filterTypes, filterOwner, filterModified, filterShared, sharedByMeExternalIds, sharedExternalIds, sharedExternalIdsForEC, sharedExternalIdsForGuest, ancestorFolderIds, ancestorFolderIdsForEC, ancestorFolderIdsForGuest, descendantIdsForEC, descendantIdsForGuest, session?.user?.email, breadcrumbs])
 
     const TableHeader = ({ label }: { label: string }) => (
         <div className="flex items-center gap-1 text-[0.8125rem] font-medium text-[#45474c] select-none">
@@ -2507,6 +2536,9 @@ const handleRefresh = async () => {
                                     ancestorFolderIdsForEC={ancestorFolderIdsForEC}
                                     sharedExternalIdsForGuest={sharedExternalIdsForGuest}
                                     ancestorFolderIdsForGuest={ancestorFolderIdsForGuest}
+                                    descendantIds={descendantIds}
+                                    descendantIdsForEC={descendantIdsForEC}
+                                    descendantIdsForGuest={descendantIdsForGuest}
                                     isActionMenuOpen={actionMenuOpenFileId === file.id}
                                     onActionMenuOpenChange={(open) => setActionMenuOpenFileId(open ? file.id : null)}
                                     processingFileIds={processingFileIds}
