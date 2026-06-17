@@ -144,6 +144,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
     const [activeActivityDocId, setActiveActivityDocId] = useState<string | null>(null)
     const [activeVersionDocId, setActiveVersionDocId] = useState<string | null>(null)
     const [activePreviewDocId, setActivePreviewDocId] = useState<string | null>(null)
+    const [previewKey, setPreviewKey] = useState(0)
     const lastHandledDeeplinkHashRef = useRef<string>('')
     // Cache resolve-deeplink/file-info results per hash to avoid re-fetching on every effect re-run.
     const deeplinkResolvedCacheRef = useRef<Record<string, {
@@ -257,12 +258,16 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
         (fileId: string, file: DriveFile) => {
             if (!rightPane.hasRightPane) return
             setActivePreviewDocId(fileId)
-            rightPane.setTitle(file.name || 'Preview')
-            rightPane.setHeaderActions(null)
-            rightPane.setHeaderIcon(null)
-            rightPane.setHeaderSubtitle('')
-            rightPane.setPaneSize('medium')
-            rightPane.setContent(<DocumentBlobPreviewPane document={file} projectId={projectId} />)
+            setPreviewKey(k => {
+                const nextKey = k + 1
+                rightPane.setTitle(file.name || 'Preview')
+                rightPane.setHeaderActions(null)
+                rightPane.setHeaderIcon(null)
+                rightPane.setHeaderSubtitle('')
+                rightPane.setPaneSize('medium')
+                rightPane.setContent(<DocumentBlobPreviewPane key={nextKey} document={file} projectId={projectId} />)
+                return nextKey
+            })
         },
         [rightPane, projectId]
     )
@@ -309,6 +314,18 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
     // Core State
     const [currentFolderId, setCurrentFolderId] = useState<string | null>(null)
     const [breadcrumbs, setBreadcrumbs] = useState<BreadcrumbItem[]>([])
+
+    // Close preview when the user navigates to a different folder (up via breadcrumb or down into a subfolder).
+    // Skip on mount (isMountedRef is false until after first render).
+    const isMountedRef = useRef(false)
+    useEffect(() => {
+        if (!isMountedRef.current) { isMountedRef.current = true; return }
+        if (activePreviewDocId) {
+            setActivePreviewDocId(null)
+            rightPane.clearPane()
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentFolderId])
 
     // Load folder IDs and shared IDs in parallel on mount (both only need projectId)
     useEffect(() => {
