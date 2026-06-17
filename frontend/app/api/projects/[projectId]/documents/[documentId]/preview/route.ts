@@ -208,7 +208,7 @@ export async function GET(
                 const exportHeaders = new Headers()
                 exportHeaders.set('Content-Type', 'application/pdf')
                 exportHeaders.set('Content-Disposition', 'inline')
-                exportHeaders.set('Cache-Control', 'private, max-age=3600')
+                exportHeaders.set('Cache-Control', 'no-store')
                 exportHeaders.set('Permissions-Policy', 'clipboard-write=(), downloads=()')
                 audit(AUDIT_EVENT.DOCUMENT_OPENED)
                     .scope(AUDIT_SCOPE.DOCUMENT)
@@ -249,7 +249,7 @@ export async function GET(
                     const exportHeaders = new Headers()
                     exportHeaders.set('Content-Type', 'application/pdf')
                     exportHeaders.set('Content-Disposition', 'inline')
-                    exportHeaders.set('Cache-Control', 'private, max-age=3600')
+                    exportHeaders.set('Cache-Control', 'no-store')
                     exportHeaders.set('Permissions-Policy', 'clipboard-write=(), downloads=()')
                     return new NextResponse(new Uint8Array(pdfBytes), { status: 200, headers: exportHeaders })
                 } catch (err) {
@@ -275,7 +275,7 @@ export async function GET(
         const headers = new Headers()
         headers.set('Content-Type', contentType)
         headers.set('Content-Disposition', 'inline')
-        headers.set('Cache-Control', 'private, max-age=3600')
+        headers.set('Cache-Control', 'no-store')
         // Discourage browser save/download/print via Permissions-Policy
         headers.set('Permissions-Policy', 'clipboard-write=(), downloads=()')
 

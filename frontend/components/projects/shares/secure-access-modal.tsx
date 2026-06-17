@@ -8,7 +8,7 @@ import {
     DialogDescription,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Mail, ArrowRight, ShieldCheck, AlertCircle } from 'lucide-react'
+import { Mail, ShieldCheck, AlertCircle } from 'lucide-react'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { SharedFolderIcon } from '@/components/ui/folder-shared-icon'
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
@@ -51,6 +51,7 @@ export function SecureAccessModal({
         >
             <DialogContent
                 className="sm:max-w-sm border-[#e5e7eb] p-0 gap-0 rounded-[2px] bg-[#f9f9fb]"
+                hideClose={isLoading}
                 onInteractOutside={(e) => { if (isLoading) e.preventDefault() }}
                 onEscapeKeyDown={(e) => { if (isLoading) e.preventDefault() }}
             >
@@ -132,7 +133,7 @@ export function SecureAccessModal({
                                 </div>
                             ) : (
                                 <p className="text-xs text-[#45474c] leading-relaxed">
-                                    Google Drive requires a one-time verification step. Please follow the link in the email to open the document directly.
+                                    Google Drive requires a one-time verification step. Please follow the link in the email to open the document securely.
                                 </p>
                             )}
                         </>
@@ -145,10 +146,9 @@ export function SecureAccessModal({
                         variant="blackCta"
                         onClick={onClose}
                         disabled={isLoading}
-                        className="rounded-[2px] text-[10px] font-headline font-bold tracking-widest uppercase group disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="rounded-[2px] text-[10px] font-headline font-bold tracking-widest uppercase disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {error ? 'Close' : isLoading ? 'Please wait…' : 'I understand. Close this message'}
-                        {!isLoading && <ArrowRight className="ml-2 h-3 w-3 transition-transform group-hover:translate-x-0.5" />}
                     </Button>
                 </div>
             </DialogContent>
