@@ -57,6 +57,8 @@ export function DocumentListCard({
         secureModalOpen,
         secureModalData,
         setSecureModalOpen,
+        isRegrantLoading,
+        regrantError,
     } = useSecureOpenDocument({ logContext: 'DocumentListCard' })
 
     // Initialize with All Selected once availableTypes are ready
@@ -428,6 +430,8 @@ export function DocumentListCard({
                 mimeType={secureModalData.mimeType}
                 externalId={secureModalData.externalId}
                 firmId={secureModalData.firmId}
+                isLoading={isRegrantLoading}
+                error={regrantError}
             />
         </div>
     )

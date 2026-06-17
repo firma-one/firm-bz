@@ -1475,13 +1475,11 @@ export function EngagementSharesTab({
     secureModalData,
     setSecureModalOpen,
     isRegrantingId,
+    isRegrantLoading,
+    regrantError,
   } = useSecureOpenDocument({
     projectId,
     logContext: 'ProjectShares',
-    onRegrantFailed: (doc) => {
-      const link = doc.webViewLink || (doc.externalId ? `https://drive.google.com/file/d/${doc.externalId}/view` : null)
-      if (link && typeof window !== 'undefined') window.open(link, '_blank')
-    },
   })
 
   const viewMode = (pathViewMode ?? 'grid') as SharesViewMode
@@ -2086,6 +2084,8 @@ export function EngagementSharesTab({
         mimeType={secureModalData.mimeType}
         externalId={secureModalData.externalId}
         firmId={secureModalData.firmId}
+        isLoading={isRegrantLoading}
+        error={regrantError}
       />
     </div>
   )

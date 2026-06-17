@@ -12,6 +12,7 @@ import {
 } from '@/lib/engagement-access'
 import { isDocumentFinalized, parseSettingsFromDb, buildSettingsForDb } from '@/lib/sharing-settings'
 import { applyDiagonalWatermark } from '@/lib/watermark-pdf'
+import { isDescendantOfGrantedFolder } from '@/lib/document-sharing-access'
 
 export async function POST(
     _request: NextRequest,
@@ -65,12 +66,18 @@ export async function POST(
 
         if (!sharingUser) {
             if (isExternalEngagementRole(projectMember.role)) {
-                const s = (document.settings as Record<string, unknown>) ?? {}
-                const isExtCollab = (s.share as any)?.externalCollaborator?.enabled === true
-                const isGuest = (s.share as any)?.guest?.enabled === true
+                const hasDirectShare = (() => {
+                    const s = (document.settings as Record<string, unknown>) ?? {}
+                    const isExtCollab = (s.share as any)?.externalCollaborator?.enabled === true
+                    const isGuest = (s.share as any)?.guest?.enabled === true
+                    return isExtCollab || isGuest
+                })()
 
-                if (!isExtCollab && !isGuest) {
-                    return NextResponse.json({ error: 'File is not shared with external users' }, { status: 403 })
+                if (!hasDirectShare) {
+                    const reachable = await isDescendantOfGrantedFolder(document.id, user.id, projectId)
+                    if (!reachable) {
+                        return NextResponse.json({ error: 'File is not accessible' }, { status: 403 })
+                    }
                 }
             }
 

@@ -32,21 +32,20 @@ export interface UseSecureOpenDocumentOptions {
   firmId?: string
   /** Optional log context for errors (e.g. 'ProjectShares', 'EngagementFileList'). */
   logContext?: string
-  /** When regrant fails (e.g. no sharing record), call with doc so caller can open link directly. */
-  onRegrantFailed?: (doc: SecureOpenDocumentInput) => void
 }
 
 export function useSecureOpenDocument({
   projectId,
   firmId: hookFirmId,
   logContext = 'SecureOpen',
-  onRegrantFailed,
 }: UseSecureOpenDocumentOptions) {
   const [secureModalOpen, setSecureModalOpen] = useState(false)
   const [secureModalData, setSecureModalData] = useState<SecureOpenModalData>({
     email: '',
     fileName: '',
   })
+  const [isRegrantLoading, setIsRegrantLoading] = useState(false)
+  const [regrantError, setRegrantError] = useState<string | null>(null)
   const [isRegrantingId, setIsRegrantingId] = useState<string | null>(null)
 
   const handleSecureOpen = useCallback(
@@ -54,29 +53,46 @@ export function useSecureOpenDocument({
       const effectiveProjectId = doc.projectId ?? projectId
       if (!effectiveProjectId) return
       const id = itemId ?? doc.documentId
+
+      // Open modal immediately with skeleton state
+      setIsRegrantLoading(true)
+      setRegrantError(null)
+      setSecureModalData({
+        email: '',
+        fileName: doc.fileName,
+        mimeType: doc.mimeType,
+        externalId: doc.externalId,
+        firmId: doc.firmId ?? hookFirmId,
+      })
+      setSecureModalOpen(true)
       setIsRegrantingId(id)
+
       try {
         const { data: { session } } = await supabase.auth.getSession()
-        if (!session?.access_token) return
+        if (!session?.access_token) {
+          setRegrantError('Session expired. Please refresh and try again.')
+          return
+        }
 
-        const res = await fetch(
-          `/api/projects/${effectiveProjectId}/documents/${encodeURIComponent(doc.documentId)}/sharing/regrant`,
-          { method: 'POST', headers: { Authorization: `Bearer ${session.access_token}` } }
+        const TIMEOUT_MS = 15_000
+        const timeout = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('timeout')), TIMEOUT_MS)
         )
+        const res = await Promise.race([
+          fetch(
+            `/api/projects/${effectiveProjectId}/documents/${encodeURIComponent(doc.documentId)}/sharing/regrant`,
+            { method: 'POST', headers: { Authorization: `Bearer ${session.access_token}` } }
+          ),
+          timeout,
+        ])
 
         if (!res.ok) {
-          if (onRegrantFailed && (doc.webViewLink || doc.externalId)) {
-            logger.debug(
-              'Regrant failed, using fallback open',
-              logContext,
-              { documentId: doc.documentId, status: res.status }
-            )
-            onRegrantFailed({
-              ...doc,
-              webViewLink: doc.webViewLink || (doc.externalId ? `https://drive.google.com/file/d/${doc.externalId}/view` : undefined),
-            })
+          const status = res.status
+          logger.debug('Regrant failed', logContext, { documentId: doc.documentId, status })
+          if (status === 403) {
+            setRegrantError('Your access to this document has been revoked. Please contact your engagement lead.')
           } else {
-            throw new Error('Failed to re-grant access')
+            setRegrantError('Unable to open this document. Please try again or contact support.')
           }
           return
         }
@@ -91,19 +107,25 @@ export function useSecureOpenDocument({
           externalId: doc.externalId,
           firmId: doc.firmId ?? hookFirmId,
         })
-        setSecureModalOpen(true)
       } catch (e) {
+        const isTimeout = e instanceof Error && e.message === 'timeout'
         logger.error(
-          'Failed to trigger secure access',
+          isTimeout ? 'Secure access timed out' : 'Failed to trigger secure access',
           e instanceof Error ? e : new Error(String(e)),
           logContext,
           { documentId: doc.documentId }
         )
+        setRegrantError(
+          isTimeout
+            ? 'The request timed out. Please check your connection and try again.'
+            : 'Unable to open this document. Please try again or contact support.'
+        )
       } finally {
+        setIsRegrantLoading(false)
         setIsRegrantingId(null)
       }
     },
-    [projectId, hookFirmId, logContext, onRegrantFailed]
+    [projectId, hookFirmId, logContext]
   )
 
   const canSecureOpen = (doc: SecureOpenDocumentInput) => Boolean(doc.projectId ?? projectId)
@@ -115,5 +137,7 @@ export function useSecureOpenDocument({
     secureModalData,
     setSecureModalOpen,
     isRegrantingId,
+    isRegrantLoading,
+    regrantError,
   }
 }
