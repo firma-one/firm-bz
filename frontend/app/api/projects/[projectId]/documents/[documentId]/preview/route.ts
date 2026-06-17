@@ -3,7 +3,7 @@ import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { googleDriveConnector } from "@/lib/google-drive-connector"
 import { getFileInfo } from '@/lib/file-utils'
-import { requireEngagementMember, isExternalEngagementRole } from '@/lib/engagement-access'
+import { requireEngagementMember } from '@/lib/engagement-access'
 import { resolveEngagementConnectorId } from '@/lib/connectors/resolve-client-connector'
 import { logger } from '@/lib/logger'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
@@ -59,28 +59,10 @@ export async function GET(
         }
         const engagementClientId = await prisma.engagement.findUnique({ where: { id: projectId }, select: { clientId: true } }).then((e) => e?.clientId ?? undefined)
 
-        // 2. Permission check — user must be a member of this engagement.
-        //    For EC/EV (external roles) the document must also be shared with them.
+        // 2. Permission check — engagement membership is the access gate for preview.
         const member = await requireEngagementMember(projectId, user.id)
         if (!member) {
             return NextResponse.json({ error: 'Access denied' }, { status: 403 })
-        }
-        if (isExternalEngagementRole(member.role)) {
-            // Verify this document has been explicitly shared with this user via the sharing flow.
-            // engagementDocumentSharingUser is the authoritative record — engagementDocument
-            // existence alone only confirms indexing, not intentional sharing.
-            const sharingGrant = await prisma.engagementDocumentSharingUser.findFirst({
-                where: {
-                    engagementId: projectId,
-                    userId: user.id,
-                    sharingPermissionStatus: 'GRANTED',
-                    document: { externalId: fileInfo.externalId },
-                },
-                select: { id: true },
-            })
-            if (!sharingGrant) {
-                return NextResponse.json({ error: 'Access denied' }, { status: 403 })
-            }
         }
 
         // resolvedExternalId starts as the indexed Drive file ID and may be updated

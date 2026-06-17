@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { AuthGuard } from '@/components/auth/auth-guard'
 import { AppSidebar } from '@/components/app/app-sidebar'
 import { AppTopbar } from '@/components/app/app-topbar'
+import { useViewAs, RBAC_PERSONAS } from '@/lib/view-as-context'
 import { LayoutRightPanel, RIGHT_PANEL_DOCKED_WIDTH_PX } from '@/components/app/layout-right-panel'
 import { SidebarProvider, useSidebar } from '@/lib/sidebar-context'
 import { ViewAsProvider } from '@/lib/view-as-context'
@@ -58,6 +59,25 @@ function DemoTourShell({ firmSlug }: { firmSlug: string }) {
             <DemoTourOutroModal />
             <DemoTourButton firmSlug={firmSlug} />
         </>
+    )
+}
+
+function ViewAsBanner() {
+    const { isViewAsActive, viewAsPersonaSlug, setViewAsPersonaSlug } = useViewAs()
+    if (!isViewAsActive || !viewAsPersonaSlug) return null
+    const persona = RBAC_PERSONAS.find((p) => p.slug === viewAsPersonaSlug)
+    return (
+        <div className="w-full shrink-0 flex items-center justify-center gap-3 px-4 py-1.5 text-[0.8125rem] font-medium z-50" style={{ background: '#9f1239', color: '#ffe4e6' }}>
+            <span>Viewing as: <strong>{persona?.displayName ?? viewAsPersonaSlug}</strong> — permissions are simulated</span>
+            <button
+                type="button"
+                onClick={() => { setViewAsPersonaSlug(null); window.location.reload() }}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[0.75rem] font-semibold transition-colors"
+                style={{ background: '#ffe4e6', color: '#9f1239' }}
+            >
+                Exit
+            </button>
+        </div>
     )
 }
 
@@ -169,6 +189,8 @@ function AppLayoutContent({ children, isSystemAdmin }: { children: React.ReactNo
                 >
                     <AppTopbar />
                 </header>
+
+                <ViewAsBanner />
 
                 {/* ── Body row: sidebar | main | right pane ── */}
                 <div className="flex flex-1 overflow-hidden print:block print:overflow-visible">

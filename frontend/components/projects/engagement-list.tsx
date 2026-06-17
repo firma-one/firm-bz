@@ -166,9 +166,9 @@ export function ProjectList({ projects, orgSlug, clientSlug, clientStatus, viewM
                 <div className="h-12 w-12 bg-[#f3f4f6] rounded flex items-center justify-center mb-4 text-[#45474c]">
                     <Briefcase className="h-6 w-6" />
                 </div>
-                <h3 className="text-sm font-semibold text-slate-900">No projects found</h3>
+                <h3 className="text-sm font-semibold text-slate-900">No engagements found</h3>
                 <p className="text-xs text-slate-500 mt-1 max-w-[200px]">
-                    This client workspace doesn't have any active projects yet.
+                    This client workspace doesn't have any active engagements yet.
                 </p>
                 {/* TODO: Add 'Create Engagement' button here if user has permission */}
             </div>
@@ -184,7 +184,7 @@ export function ProjectList({ projects, orgSlug, clientSlug, clientStatus, viewM
                     <table className="w-full text-left text-sm">
                         <thead>
                             <tr className="bg-white border-b border-[#e5e7eb]">
-                                <th className="px-4 py-3 font-medium text-slate-500">Project</th>
+                                <th className="px-4 py-3 font-medium text-slate-500">Engagement</th>
                                 <th className="px-4 py-3 font-medium text-slate-500">Status</th>
                                 <th className="px-4 py-3 font-medium text-slate-500">Description</th>
                                 <th className="px-4 py-3 font-medium text-slate-500">Collaborators</th>

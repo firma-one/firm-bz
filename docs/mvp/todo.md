@@ -104,6 +104,11 @@ AI layer using Gemma 4 (HuggingFace Transformers, same runtime as release notes 
 
 ## Infrastructure / Maintenance
 
+- [ ] **Bug: Signup OTP → redirects to `/signin` instead of `/d/signup-success`** — [plan](../../.claude/plans/signup-session-issue.md) — deferred past beta
+  - Race condition: middleware reads auth cookie before browser has committed it after `verifyOTP()`
+  - Fix: gate `window.location.href` on `onAuthStateChange SIGNED_IN` event instead of `getSession()`
+  - Also fix: skip button in `components/signup/signup-success.tsx` incorrectly calls `signOut()` before redirecting to `/signin`
+
 - [ ] **Refactor: Replace `sandboxOnly` with `isAnchorFirm()`** — [plan](../../.claude/plans/refactor-is-anchor-firm.md)
   - `Firm.sandboxOnly` maps to DB column `isAnchor`; the two names are used interchangeably across 165+ references
   - `isAnchorFirm()` utility added to `lib/billing/effective-billing-caps.ts`; all new code should use it

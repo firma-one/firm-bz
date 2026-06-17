@@ -216,7 +216,7 @@ function makeSteps(firmSlug: string, clientSlug: string | null, engSlug: string 
     {
       target: '[data-demo-tour="view-as-selector"]',
       title: "View As",
-      content: <p className="text-xs leading-relaxed text-[#45474c]">Preview the app as a different role — Firm Admin, Member, Client Collaborator, or External Viewer — to see exactly what each person has access to.</p>,
+      content: <p className="text-xs leading-relaxed text-[#45474c]">As a Firm Admin, you can switch into any role — <strong className="text-[#1b1b1d]">Member</strong>, <strong className="text-[#1b1b1d]">Client Collaborator</strong>, or <strong className="text-[#1b1b1d]">External Viewer</strong> — and see the app exactly as they would. No guesswork about what a client or contractor can see. Switch back to Firm Admin any time from the same selector to continue regular operations.</p>,
       placement: "right" as const,
       route: firm,
     },
