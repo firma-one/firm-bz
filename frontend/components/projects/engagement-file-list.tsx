@@ -169,14 +169,10 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
             setDeeplinkResolving(true)
         }
     }, [])
-    const { handleSecureOpen, secureModalOpen, secureModalData, setSecureModalOpen, isRegrantingId } = useSecureOpenDocument({
+    const { handleSecureOpen, secureModalOpen, secureModalData, setSecureModalOpen, isRegrantingId, isRegrantLoading, regrantError } = useSecureOpenDocument({
         projectId,
         firmId,
         logContext: 'EngagementFileList',
-        onRegrantFailed: (doc) => {
-            const link = doc.webViewLink || (doc.externalId ? `https://drive.google.com/file/d/${doc.externalId}/view` : null)
-            if (link && typeof window !== 'undefined') window.open(link, '_blank')
-        },
     })
     const [sharedExternalIds, setSharedExternalIds] = useState<Set<string>>(new Set())
     const [ancestorFolderIds, setAncestorFolderIds] = useState<Set<string>>(new Set())
@@ -3051,6 +3047,8 @@ const handleRefresh = async () => {
                     mimeType={secureModalData.mimeType}
                     externalId={secureModalData.externalId}
                     firmId={secureModalData.firmId}
+                    isLoading={isRegrantLoading}
+                    error={regrantError}
                 />
             </div>
 
