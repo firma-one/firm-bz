@@ -97,6 +97,8 @@ interface DocumentActionMenuProps {
   onDeleteDocument?: (doc: any) => void
   /** When set, Share opens the custom share modal instead of OS share. Only show Share item when true (Project Lead). */
   showShareModal?: boolean
+  /** When true, the Share item is shown but disabled — an ancestor folder is already shared. */
+  isAncestorShared?: boolean
   /** Required when showShareModal is true; project UUID for saving share settings. */
   projectId?: string
   orgSlug?: string
@@ -158,6 +160,7 @@ export function DocumentActionMenu({
   onVersionHistory,
   onDeleteDocument,
   showShareModal = false,
+  isAncestorShared = false,
   projectId,
   onShareSaved,
   canManage = false,
@@ -617,13 +620,31 @@ export function DocumentActionMenu({
                   </DropdownMenuSubTrigger>
                   <DropdownMenuSubContent className="w-56">
                     {showShareModal && projectId && (
-                      <DropdownMenuItem
-                        onClick={() => setShowShareModalOpen(true)}
-                        className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
-                      >
-                        <Share2 className="h-4 w-4 text-purple-600" />
-                        <span>Share</span>
-                      </DropdownMenuItem>
+                      isAncestorShared ? (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <DropdownMenuItem
+                                aria-disabled="true"
+                                onSelect={(e) => e.preventDefault()}
+                                className="flex items-center space-x-3 px-3 py-2 text-xs opacity-50 cursor-not-allowed"
+                              >
+                                <Share2 className="h-4 w-4 text-purple-600" />
+                                <span>Share</span>
+                              </DropdownMenuItem>
+                            </TooltipTrigger>
+                            <TooltipContent side="right" className="text-xs max-w-48">An ancestor folder is already shared</TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      ) : (
+                        <DropdownMenuItem
+                          onClick={() => setShowShareModalOpen(true)}
+                          className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                        >
+                          <Share2 className="h-4 w-4 text-purple-600" />
+                          <span>Share</span>
+                        </DropdownMenuItem>
+                      )
                     )}
                     <DropdownMenuItem
                       onClick={async () => {
@@ -788,13 +809,31 @@ export function DocumentActionMenu({
                   </DropdownMenuSubTrigger>
                   <DropdownMenuSubContent className="w-56">
                     {showShareModal && projectId && (
-                      <DropdownMenuItem
-                        onClick={() => setShowShareModalOpen(true)}
-                        className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
-                      >
-                        <Share2 className="h-4 w-4 text-purple-600" />
-                        <span>Share</span>
-                      </DropdownMenuItem>
+                      isAncestorShared ? (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <DropdownMenuItem
+                                aria-disabled="true"
+                                onSelect={(e) => e.preventDefault()}
+                                className="flex items-center space-x-3 px-3 py-2 text-xs opacity-50 cursor-not-allowed"
+                              >
+                                <Share2 className="h-4 w-4 text-purple-600" />
+                                <span>Share</span>
+                              </DropdownMenuItem>
+                            </TooltipTrigger>
+                            <TooltipContent side="right" className="text-xs max-w-48">An ancestor folder is already shared</TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      ) : (
+                        <DropdownMenuItem
+                          onClick={() => setShowShareModalOpen(true)}
+                          className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                        >
+                          <Share2 className="h-4 w-4 text-purple-600" />
+                          <span>Share</span>
+                        </DropdownMenuItem>
+                      )
                     )}
                     <DropdownMenuItem
                       onClick={async () => {

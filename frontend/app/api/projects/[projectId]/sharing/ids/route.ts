@@ -49,6 +49,9 @@ export async function GET(
       ancestorFolderIdsForEC: result.ancestorIds,
       sharedExternalIdsForGuest: result.sharedIdsForGuest,
       ancestorFolderIdsForGuest: result.ancestorIds,
+      descendantIds: result.descendantIds,
+      descendantIdsForEC: result.descendantIdsForEC,
+      descendantIdsForGuest: result.descendantIdsForGuest,
       sharedByMeExternalIds,
     })
   } catch (e) {

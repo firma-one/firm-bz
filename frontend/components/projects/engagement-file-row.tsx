@@ -65,6 +65,9 @@ export interface EngagementFileRowProps {
     ancestorFolderIdsForEC: Set<string>
     sharedExternalIdsForGuest: Set<string>
     ancestorFolderIdsForGuest: Set<string>
+    descendantIds: Set<string>
+    descendantIdsForEC: Set<string>
+    descendantIdsForGuest: Set<string>
     // Action menu state
     isActionMenuOpen: boolean
     onActionMenuOpenChange: (open: boolean) => void
@@ -133,6 +136,9 @@ export function EngagementFileRow({
     ancestorFolderIdsForEC,
     sharedExternalIdsForGuest,
     ancestorFolderIdsForGuest,
+    descendantIds,
+    descendantIdsForEC,
+    descendantIdsForGuest,
     isActionMenuOpen,
     onActionMenuOpenChange,
     processingFileIds,
@@ -164,11 +170,13 @@ export function EngagementFileRow({
     const isEC = restrictToSharedOnly ? canEdit : viewAsPersonaSlug === 'eng_ext_collaborator'
     const isGuest = restrictToSharedOnly ? !canEdit : viewAsPersonaSlug === 'eng_viewer'
     const showBadge = isGuest
-        ? (sharedExternalIdsForGuest.has(file.id) || ancestorFolderIdsForGuest.has(file.id))
+        ? (sharedExternalIdsForGuest.has(file.id) || ancestorFolderIdsForGuest.has(file.id) || descendantIdsForGuest.has(file.id))
         : isEC
-            ? (sharedExternalIdsForEC.has(file.id) || ancestorFolderIdsForEC.has(file.id))
-            : (sharedExternalIds.has(file.id) || ancestorFolderIds.has(file.id))
+            ? (sharedExternalIdsForEC.has(file.id) || ancestorFolderIdsForEC.has(file.id) || descendantIdsForEC.has(file.id))
+            : (sharedExternalIds.has(file.id) || ancestorFolderIds.has(file.id) || descendantIds.has(file.id))
     const directShared = isGuest ? sharedExternalIdsForGuest.has(file.id) : isEC ? sharedExternalIdsForEC.has(file.id) : sharedExternalIds.has(file.id)
+    // True when a file/folder is visible only because an ancestor folder is shared — not directly shared itself
+    const isAncestorShared = !directShared && (isGuest ? descendantIdsForGuest.has(file.id) : isEC ? descendantIdsForEC.has(file.id) : descendantIds.has(file.id))
 
     const locked = file.lock?.type === 'finalize'
     const canMutateFile = canEdit && !locked && !isIntakeRow
@@ -503,6 +511,7 @@ export function EngagementFileRow({
                         triggerIcon={<MoreVertical className="h-4 w-4" />}
                         deeplinkBase={typeof window !== 'undefined' ? window.location.href.replace(/#.*$/, '') : ''}
                         showShareModal={isProjectLead && !isIntakeRow}
+                        isAncestorShared={isAncestorShared}
                         isEngagementLead={isProjectLead}
                         isExternalUser={isEC || isGuest}
                         isExternalViewer={isGuest}
