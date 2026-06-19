@@ -18,6 +18,16 @@ After changes, offer to: 1) run build, 2) commit/push. **Never auto-execute**—
 - Never edit a migration file after it has been applied — add a new migration instead.
 - This keeps local and production migration history in sync and prevents drift.
 
+## GitHub PRs
+
+To create a PR via CLI (only when explicitly asked by the user):
+
+```bash
+unset GH_TOKEN && gh pr create --repo firma-one/firm-bz --title "..." --body "..." --base main --head dev
+```
+
+`GH_TOKEN` env var may be set but invalid — unsetting it falls back to the valid keyring token (`deepaksshettigar`). **Never create a PR without explicit user instruction.**
+
 ## Plans
 All plans must be created under `.claude/plans/` in the project root. Never save plans to `~/.claude/plans/` or any other location.
 
