@@ -1,14 +1,9 @@
 {
-  "rewrites": [
-    {
-      "source": "/",
-      "destination": "/d",
-      "has": [{ "type": "host", "value": "app.firma.bz" }]
-    },
-    {
-      "source": "/",
-      "destination": "/d",
-      "has": [{ "type": "host", "value": "datasentry.firma.bz" }]
+  "version": 2,
+  "framework": "nextjs",
+  "functions": {
+    "app/**/*.js": {
+      "runtime": "nodejs24.x"
     }
-  ]
+  }
 }
