@@ -1,9 +1,0 @@
-{
-  "version": 2,
-  "framework": "nextjs",
-  "functions": {
-    "app/**/*.js": {
-      "runtime": "nodejs24.x"
-    }
-  }
-}
