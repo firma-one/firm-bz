@@ -10,7 +10,12 @@
     {
       "source": "/",
       "destination": "/d",
-      "has": [{ "type": "host", "value": "(app|datasentry)\\.firma\\.bz" }]
+      "has": [{ "type": "host", "value": "app.firma.bz" }]
+    },
+    {
+      "source": "/",
+      "destination": "/d",
+      "has": [{ "type": "host", "value": "datasentry.firma.bz" }]
     }
   ]
 }
