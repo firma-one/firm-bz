@@ -54,6 +54,11 @@
   - Move "Choose Your Workspace" (onboarding step 0) from `/d/onboarding` to `/d/f/`
   - Returning users with multiple firms get AppSidebar chrome instead of OnboardingBar
 
+## Beta Features (hidden until `enableBetaFeatures` is on in Firm Settings)
+
+- [ ] **Notifications bell (TopBar)** — `components/app/app-topbar.tsx`: entire notifications container gated on `betaFeaturesEnabled` (reads `settings.enableBetaFeatures` from `/api/firm` response alongside branding)
+- [ ] **Notifications tab** (`/d/u/` personalization) — `app/(app)/d/u/layout.tsx`: Notifications tab filtered out unless `enableBetaFeatures`; Profile, Recent, Reminders, Bookmarks always visible. Same pattern as Engagement › Board tab in `engagement-workspace.tsx`.
+
 ## Client Management
 
 - [ ] **Contact Follow-Up Date** — [plan](../../.claude/plans/contact-follow-up-date.md) — Client Settings › Contacts: add a "Follow Up" date field per contact; auto-creates a reminder assigned to all Firm Admins on save

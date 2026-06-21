@@ -21,7 +21,7 @@ Source: @docs/mvp/todo-beta-feedback.md
 
 ## 3. Add Client Contact
 
-- [ ] **Multiple flickering on SAVE** — Investigate double-submit or optimistic UI race causing multiple re-renders on save.
+- [x] **Multiple flickering on SAVE** — Investigate double-submit or optimistic UI race causing multiple re-renders on save.
 
 ---
 
