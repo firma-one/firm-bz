@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client'
 import { z } from 'zod'
 
 import { sendEmail } from '@/lib/email'
+import { renderEmail, ctaButton, escHtml, TEXT_DARK, TEXT_MUTED } from '@/lib/email-templates/base'
 import { prisma } from '@/lib/prisma'
 import { serverActionWrapper, type ActionResponse } from '@/lib/server-action-wrapper'
 import { isSystemAdminEmail } from '@/lib/system/admin-check'
@@ -40,14 +41,6 @@ export interface SystemSignupInviteListItem {
   isConfirmed: boolean
 }
 
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-}
 
 function buildAdminSignupEmailHtml({
   fullName,
@@ -58,73 +51,32 @@ function buildAdminSignupEmailHtml({
   couponCode?: string
   actionLink: string
 }): string {
-  const greeting = `Hi ${escapeHtml(fullName)},`
-  const safeCouponCode = couponCode ? escapeHtml(couponCode) : ''
-  const safeActionLink = escapeHtml(actionLink)
   const couponSection = couponCode
-    ? `<div style="margin:0 0 18px 0;padding:18px 16px;text-align:center;border-radius:12px;border:1px solid #c6c6cc;background:linear-gradient(180deg,#f8f9fa 0%,#eceff1 100%);">
-          <p style="margin:0 0 6px 0;font-size:12px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#76777d;">
-            Discount Coupon
-          </p>
-          <span style="display:block;font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,Courier,monospace;font-size:26px;font-weight:800;letter-spacing:0.12em;color:#2d6d3a;">
-            ${safeCouponCode}
-          </span>
-        </div>`
+    ? `<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f9f9fb;border:1px solid #e5e7eb;border-radius:6px;margin:20px 0;">
+        <tr>
+          <td style="padding:16px 20px;text-align:center;">
+            <p style="margin:0 0 8px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:${TEXT_MUTED};">Discount Coupon</p>
+            <span style="font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,Courier,monospace;font-size:24px;font-weight:800;letter-spacing:0.12em;color:#1b1b1d;">${escHtml(couponCode)}</span>
+          </td>
+        </tr>
+      </table>`
     : ''
-  return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Complete your signup</title>
-</head>
-<body style="margin:0;padding:0;background-color:#f4f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1b1b1d;line-height:1.5;">
-  <div style="max-width:560px;margin:40px auto 0 auto;padding:0 16px;">
-    <div style="background-color:#ffffff;border:1px solid #d7d9df;border-radius:16px;overflow:hidden;box-shadow:0 14px 36px rgba(27,27,29,0.08);">
-      <div style="height:4px;background:linear-gradient(90deg,#4d4d4d 0%,#2d6d3a 55%,#4aba5e 100%);"></div>
-      <div style="padding:30px 32px 18px 32px;text-align:center;border-bottom:1px solid #eceff2;background:linear-gradient(180deg,#fbfcfd 0%,#f7f9fb 100%);">
-        <div style="display:inline-block;font-size:28px;font-weight:800;letter-spacing:-0.03em;line-height:1;color:#1b1b1d;background:linear-gradient(90deg,#4d4d4d 0%,#2d6d3a 55%,#4aba5e 100%);-webkit-background-clip:text;background-clip:text;">
-          firmä
-        </div>
-        <p style="margin:10px 0 0 0;font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#76777d;">
-          Organize • Protect • Deliver
-        </p>
-      </div>
-      <div style="padding:30px 32px 32px 32px;">
-        <h1 style="margin:0 0 10px 0;font-size:22px;font-weight:800;letter-spacing:-0.02em;color:#1b1b1d;text-align:center;">
-          Complete your signup
-        </h1>
-        <p style="margin:0 0 16px 0;font-size:15px;color:#45474c;">
-          ${greeting}
-        </p>
-        <p style="margin:0 0 20px 0;font-size:15px;color:#45474c;">
-          Your account setup is almost done. Confirm your email to activate access and continue to your workspace.
-        </p>
-        <div style="margin:0 0 22px 0;padding:16px;border:1px solid #c6c6cc;background:linear-gradient(180deg,#f8f9fa 0%,#eceff1 100%);border-radius:12px;text-align:center;">
-          <p style="margin:0 0 10px 0;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#76777d;">
-            Secure Confirmation
-          </p>
-          <a href="${safeActionLink}" style="display:inline-block;text-decoration:none;border-radius:10px;border:1px solid #2d6d3a;background:#4aba5e;color:#0d1f12;font-size:14px;font-weight:800;letter-spacing:0.02em;padding:12px 20px;">
-            Confirm and Complete Signup
-          </a>
-          <p style="margin:10px 0 0 0;font-size:12px;color:#76777d;">
-            This link is single-use and tied to your email address.
-          </p>
-        </div>
-        ${couponSection}
-        <p style="margin:0;font-size:13px;color:#76777d;text-align:center;">
-          If you did not expect this email, you can safely ignore it.
-        </p>
-      </div>
-      <div style="padding:18px 32px;text-align:center;border-top:1px solid #eceff2;background-color:#f7f9fb;">
-        <p style="margin:0;font-size:12px;color:#76777d;">
-          &copy; 2026 firmä. All rights reserved.
-        </p>
-      </div>
-    </div>
-  </div>
-</body>
-</html>`
+
+  const body = `
+    <h2 style="margin:0 0 8px;font-size:20px;font-weight:700;color:${TEXT_DARK};letter-spacing:-0.01em;">Complete your signup</h2>
+    <p style="margin:0 0 16px;font-size:15px;color:${TEXT_MUTED};line-height:1.6;">Hi ${escHtml(fullName)},</p>
+    <p style="margin:0 0 20px;font-size:15px;color:${TEXT_MUTED};line-height:1.6;">
+      Your account setup is almost done. Confirm your email to activate access and continue to your workspace.
+    </p>
+    ${ctaButton('Confirm and Complete Signup', actionLink)}
+    ${couponSection}
+    <p style="margin:24px 0 0;font-size:12px;color:${TEXT_MUTED};line-height:1.6;">
+      This link is single-use and tied to your email address. If you did not expect this email, you can safely ignore it.
+    </p>
+  `
+
+  const title = couponCode ? 'Complete your signup and claim your coupon' : 'Complete your signup'
+  return renderEmail({ title, preheader: `Hi ${fullName}, confirm your email to activate your account.`, body })
 }
 
 async function assertSystemAdmin(): Promise<{ userId: string }> {

@@ -18,7 +18,8 @@ export function renderInviteEmail(params: InviteEmailParams): { subject: string;
       ? `${escHtml(engagementName)} · ${escHtml(firmName)}`
       : escHtml(firmName)
 
-  const subject = `Action required: You've been invited to ${engagementName ?? firmName} on ${brandCap}`
+  const contextName = engagementName ?? clientName ?? firmName
+  const subject = `Action required: You've been invited to ${contextName} on ${brandCap}`
 
   const body = `
     <h2 style="margin:0 0 8px;font-size:20px;font-weight:700;color:${TEXT_DARK};letter-spacing:-0.01em;">You've been invited</h2>
@@ -42,5 +43,5 @@ export function renderInviteEmail(params: InviteEmailParams): { subject: string;
     </p>
   `
 
-  return { subject, html: renderEmail({ title: subject, preheader: `You've been invited to ${engagementName ?? firmName}`, body }) }
+  return { subject, html: renderEmail({ title: subject, preheader: `You've been invited to ${contextName}`, body }) }
 }

@@ -12,6 +12,7 @@ import { grantEngagementDriveFolderAccess } from '@/lib/grant-engagement-drive-f
 import { invalidateUserSettingsPlus } from '@/lib/actions/user-settings'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { mergeLeanAppMetadata } from '@/lib/auth/supabase-jwt-metadata'
+import { maybeProvisionInviteeAccount } from '@/lib/actions/account-provisioning'
 import { InvitationStatus } from '@prisma/client'
 
 /**
@@ -37,9 +38,11 @@ export async function inviteMember(projectId: string, email: string, personaId: 
             : null,
     }
 
+    const normalizedEmail = email.trim().toLowerCase()
+
     // 1. Check if invitation exists (V2)
     const existing = await prisma.engagementInvitation.findUnique({
-        where: { engagementId_email: { engagementId: projectId, email } },
+        where: { engagementId_email: { engagementId: projectId, email: normalizedEmail } },
     })
 
     const token = crypto.randomUUID()
@@ -49,6 +52,9 @@ export async function inviteMember(projectId: string, email: string, personaId: 
     if (existing) {
         if (existing.status === InvitationStatus.JOINED) {
             throw new Error("User has already joined the engagement")
+        }
+        if (existing.status === InvitationStatus.ACCEPTED) {
+            throw new Error("User is currently accepting this invitation — please wait")
         }
 
         await prisma.engagementInvitation.update({
@@ -62,7 +68,7 @@ export async function inviteMember(projectId: string, email: string, personaId: 
             }
         })
 
-        await maybeProvisionInviteeAccount(email)
+        await maybeProvisionInviteeAccount(normalizedEmail)
 
         const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invite/${token}`
         try {
@@ -72,9 +78,9 @@ export async function inviteMember(projectId: string, email: string, personaId: 
                 clientName: projectOrg?.client?.name,
                 inviteUrl,
             })
-            await sendEmail(email, subject, html)
+            await sendEmail(normalizedEmail, subject, html)
         } catch (err) {
-            logger.error('Invitation email failed', err instanceof Error ? err : new Error(String(err)), 'Email', { to: email })
+            logger.error('Invitation email failed', err instanceof Error ? err : new Error(String(err)), 'Email', { to: normalizedEmail })
             await prisma.engagementInvitation.update({
                 where: { id: existing.id },
                 data: { status: InvitationStatus.ERROR, updatedAt: new Date() }
@@ -88,7 +94,7 @@ export async function inviteMember(projectId: string, email: string, personaId: 
             action: 'Invitation expiring',
             dateKey: 'platform.engagement_invitations.expireAt',
             dateValue: expireAt.toISOString(),
-            entityName: email,
+            entityName: normalizedEmail,
             firmId: invReminderCtx.firmId,
             ctaUrl: invReminderCtx.ctaUrl,
         }).catch(() => {})
@@ -100,7 +106,7 @@ export async function inviteMember(projectId: string, email: string, personaId: 
     const invite = await prisma.engagementInvitation.create({
         data: {
             engagementId: projectId,
-            email,
+            email: normalizedEmail,
             personaId,
             token,
             status: InvitationStatus.PENDING,
@@ -109,7 +115,7 @@ export async function inviteMember(projectId: string, email: string, personaId: 
         }
     })
 
-    await maybeProvisionInviteeAccount(email)
+    await maybeProvisionInviteeAccount(normalizedEmail)
 
     const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invite/${token}`
     try {
@@ -119,9 +125,9 @@ export async function inviteMember(projectId: string, email: string, personaId: 
             clientName: projectOrg?.client?.name,
             inviteUrl,
         })
-        await sendEmail(email, subject, html)
+        await sendEmail(normalizedEmail, subject, html)
     } catch (err) {
-        logger.error('Invitation email failed', err instanceof Error ? err : new Error(String(err)), 'Email', { to: email })
+        logger.error('Invitation email failed', err instanceof Error ? err : new Error(String(err)), 'Email', { to: normalizedEmail })
         await prisma.engagementInvitation.update({
             where: { id: invite.id },
             data: { status: InvitationStatus.ERROR, updatedAt: new Date() }
@@ -135,7 +141,7 @@ export async function inviteMember(projectId: string, email: string, personaId: 
         action: 'Invitation expiring',
         dateKey: 'platform.engagement_invitations.expireAt',
         dateValue: expireAt.toISOString(),
-        entityName: email,
+        entityName: normalizedEmail,
         firmId: invReminderCtx.firmId,
         ctaUrl: invReminderCtx.ctaUrl,
     }).catch(() => {})
@@ -360,7 +366,8 @@ export async function acceptInvitation(token: string): Promise<{ success: true; 
             return { success: true, redirectUrl: `/d/f/${invite.firm.slug}` }
         }
         if (invite.expireAt && new Date() > invite.expireAt) throw new Error("Invitation expired")
-        if (user.email && invite.email.toLowerCase() !== user.email.toLowerCase()) {
+        if (!user.email) throw new Error("Cannot verify email: your account has no email address")
+        if (invite.email.toLowerCase() !== user.email.toLowerCase()) {
             throw new Error(`This invitation is for ${invite.email}`)
         }
         const existing = await prisma.firmMember.findFirst({
@@ -425,7 +432,8 @@ export async function acceptInvitation(token: string): Promise<{ success: true; 
             return { success: true, redirectUrl: `/d/f/${invite.client.firm.slug}/c/${invite.client.slug}` }
         }
         if (invite.expireAt && new Date() > invite.expireAt) throw new Error("Invitation expired")
-        if (user.email && invite.email.toLowerCase() !== user.email.toLowerCase()) {
+        if (!user.email) throw new Error("Cannot verify email: your account has no email address")
+        if (invite.email.toLowerCase() !== user.email.toLowerCase()) {
             throw new Error(`This invitation is for ${invite.email}`)
         }
         const existing = await prisma.clientMember.findFirst({
@@ -484,7 +492,8 @@ export async function acceptInvitation(token: string): Promise<{ success: true; 
 
     if (invite.expireAt && new Date() > invite.expireAt) throw new Error("Invitation expired")
 
-    if (user.email && invite.email.toLowerCase() !== user.email.toLowerCase()) {
+    if (!user.email) throw new Error("Cannot verify email: your account has no email address")
+    if (invite.email.toLowerCase() !== user.email.toLowerCase()) {
         throw new Error(`This invitation is for ${invite.email}`)
     }
 
@@ -492,18 +501,25 @@ export async function acceptInvitation(token: string): Promise<{ success: true; 
     const clientId = invite.engagement.clientId
     let newFirmMemberCreated = false
     let newFirmIsDefault = false
+    let newEngagementMemberCreated = false
 
     await prisma.$transaction(async (tx) => {
         const projectRole = invite.persona.slug as 'eng_admin' | 'eng_member' | 'eng_ext_collaborator' | 'eng_viewer'
-        await tx.engagementMember.create({
-            data: {
-                engagementId: invite.engagementId,
-                userId: user.id,
-                role: projectRole,
-                createdBy: user.id,
-                updatedBy: user.id,
-            }
+        const existingEngMember = await tx.engagementMember.findFirst({
+            where: { engagementId: invite.engagementId, userId: user.id }
         })
+        if (!existingEngMember) {
+            newEngagementMemberCreated = true
+            await tx.engagementMember.create({
+                data: {
+                    engagementId: invite.engagementId,
+                    userId: user.id,
+                    role: projectRole,
+                    createdBy: user.id,
+                    updatedBy: user.id,
+                }
+            })
+        }
 
         const existingClientMember = await tx.clientMember.findFirst({
             where: { clientId, userId: user.id }
@@ -584,15 +600,18 @@ export async function acceptInvitation(token: string): Promise<{ success: true; 
         }
     }
 
-    await safeInngestSend('project.member.added', {
-        projectId: invite.engagementId,
-        organizationId: firmId,
-        memberId: invite.id,
-        userId: user.id,
-        email: user.email || '',
-        personaSlug: invite.persona.slug,
-        timestamp: new Date().toISOString()
-    })
+    // Only fire if we actually created a new engagement membership (idempotent re-accepts skip this)
+    if (newEngagementMemberCreated) {
+        await safeInngestSend('project.member.added', {
+            projectId: invite.engagementId,
+            organizationId: firmId,
+            memberId: invite.id,
+            userId: user.id,
+            email: user.email || '',
+            personaSlug: invite.persona.slug,
+            timestamp: new Date().toISOString()
+        })
+    }
 
     return {
         success: true,
@@ -606,18 +625,3 @@ export async function acceptInvitation(token: string): Promise<{ success: true; 
  * click the invite link, so the `next=/invite/{token}` redirect is preserved end-to-end.
  * Safe to call when the user already exists — it's a no-op in that case.
  */
-async function maybeProvisionInviteeAccount(email: string): Promise<void> {
-    const existing = await prisma.$queryRaw<Array<{ id: string }>>`
-        SELECT id::text FROM auth.users WHERE lower(email) = ${email.toLowerCase()} LIMIT 1
-    `
-    if (existing.length > 0) return
-
-    const adminClient = createAdminClient()
-    const { error } = await adminClient.auth.admin.createUser({
-        email: email.toLowerCase(),
-        email_confirm: true,
-    })
-    if (error) {
-        logger.error('Failed to pre-provision invitee account', new Error(error.message), 'Invitations', { email })
-    }
-}

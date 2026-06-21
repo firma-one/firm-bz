@@ -15,14 +15,6 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { formatFullDate } from '@/lib/utils'
 import { useToast } from '@/components/ui/toast'
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from '@/components/ui/dialog'
 import { logger } from '@/lib/logger'
 
 interface ClientMembersTabProps {
@@ -150,11 +142,12 @@ export function ClientMembersTab({ firmId, clientId, orgSlug, clientSlug, canMan
                     </div>
                 ) : (
                     <div className="rounded border border-[#e5e7eb] bg-white overflow-hidden">
-                        <div className="px-3 py-2.5 border-b border-[#e5e7eb] bg-white">
-                            <h3 className="text-[13px] font-medium text-slate-700">Client Administrator</h3>
-                        </div>
                         <div className="divide-y divide-[#e5e7eb]">
-                            {members.map((member) => (
+                            {[...members].sort((a, b) => {
+                                const aIsPartner = a.persona?.slug === 'client_admin' ? -1 : 1
+                                const bIsPartner = b.persona?.slug === 'client_admin' ? -1 : 1
+                                return aIsPartner - bIsPartner
+                            }).map((member) => (
                                 <div key={member.id} className="flex items-center gap-3 px-3 py-2.5 hover:bg-[#f3f4f6] transition-colors">
                                     <Avatar className="h-8 w-8 shrink-0 border border-[#e5e7eb]">
                                         <AvatarImage src={member.user?.avatarUrl} />
@@ -166,7 +159,13 @@ export function ClientMembersTab({ firmId, clientId, orgSlug, clientSlug, canMan
                                         <p className="text-[13px] font-medium text-slate-900 truncate">{member.user?.name}</p>
                                         <p className="text-[11px] text-slate-500 truncate">{member.user?.email}</p>
                                     </div>
-                                    <span className="text-[11px] text-slate-400 shrink-0">{member.persona?.displayName ?? 'Member'}</span>
+                                    <span className={`inline-flex items-center rounded-sm px-2 py-0.5 text-[10px] font-medium shrink-0 ${
+                                        member.persona?.slug === 'client_admin'
+                                            ? 'bg-primary/10 text-primary ring-1 ring-inset ring-primary/25'
+                                            : 'bg-[#f3f4f6] text-[#45474c] ring-1 ring-inset ring-[#e5e7eb]'
+                                    }`}>
+                                        {member.persona?.slug === 'client_admin' ? 'Client Partner' : 'Firm Member'}
+                                    </span>
                                 </div>
                             ))}
                             {invitations.map((inv) => (
