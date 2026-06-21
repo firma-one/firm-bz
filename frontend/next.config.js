@@ -45,21 +45,6 @@ const nextConfig = {
     ]
   },
 
-  async rewrites() {
-    return [
-      {
-        source: '/',
-        destination: '/d',
-        has: [{ type: 'host', value: 'datasentry.firma.bz' }],
-      },
-      {
-        source: '/',
-        destination: '/d',
-        has: [{ type: 'host', value: 'app.firma.bz' }],
-      },
-    ]
-  },
-
   // Experimental features for faster compilation
   experimental: {
     // Optimize package imports - reduces compilation time
