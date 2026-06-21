@@ -116,3 +116,75 @@ Use a pre-seeded demo firm (sandbox environment). Navigate the real app — no s
 - **Engagement Board** (Kanban for tasks) — in Beta
 - **Wiki / Knowledge Base** per engagement — in Beta
 - **Full time-bombed link expiry** — planned
+
+---
+
+## Demo Coverage Slide — IA & Content
+
+For the research report PDF — insert before the Thank You slide.
+
+**Section label:** D E M O · W A L K T H R O U G H
+
+**Headline:** From your Drive to a client portal — in 15 minutes.
+
+### 5 Scene Cards (pastel, equal width, 3+2 grid or single row)
+
+#### Card 1 — Mint/sage green
+
+`01` **Your Firm & Clients**
+
+- Connect your storage — Google Drive, Dropbox, Notion, Confluence
+- Firm → Client → Engagement hierarchy
+- Every client has their own structured workspace
+- Firm Admins can raise a support ticket directly from the app
+
+#### Card 2 — Soft sky blue
+
+`02` **An Engagement, Live**
+
+- Documents pulled from Google Drive — nothing moved
+- Comment threads per document, aggregated in the Comments tab
+- Your team's async collaboration, in context
+- Semantic search — find any document by intent, not just exact filename
+
+#### Card 3 — Warm peach/coral
+
+`03` **Sharing & Control**
+
+- Shares tab — every external share in one view
+- Role-based access: Viewer, Contributor, no guesswork
+- Due dates with auto-reminders — clients get nudged automatically
+- Approve & Finalize — lock a deliverable, no email sign-offs
+- Audit log — every preview and download, append-only
+
+#### Card 4 — Soft lavender
+
+`04` **The Client's View**
+
+- Switch to "View As → Viewer (External)" in the sidebar
+- See exactly what your client sees — nothing more
+- Branded portal, not a raw Drive folder
+
+#### Card 5 — Light yellow/butter
+
+`05` **Action Centre**
+
+- Overdue & upcoming — reminders, engagement due dates, pending invites in one view
+- Unanswered threads — client comment threads waiting on your response, surfaced instantly
+- Document alerts — risky shares, sensitive file names, large files flagged automatically
+- Everything that needs attention across all engagements, without opening a single folder
+
+### Bottom Strip — dark background (roadmap)
+
+Label: `ON THE ROADMAP`
+
+| Engagement Templates                       | Campaign Close + IP Packaging         | Weekly Progress Digest                              |
+| ------------------------------------------ | ------------------------------------- | --------------------------------------------------- |
+| Reusable document sets per engagement type | Generate a closing pack when you wrap | AI summary from due dates, comments & audit signals |
+
+### Design Notes
+
+- Pastel palette: mint `#d4f0e0`, sky blue `#d0e8f5`, peach `#fde0d0`, lavender `#e8d8f5`, butter `#fdf5d0`
+- Cards: scene number bold top-left, title in dark green, bullets in dark grey, rounded corners
+- Bottom strip: dark background matching slides 10/12, roadmap items in white with thin vertical dividers
+- Footer: Firma logo mark · `CLIENT DELIVERY RESEARCH · 2026` · `www.firma.bz`

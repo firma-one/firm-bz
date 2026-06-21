@@ -7,9 +7,10 @@ import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react
 import { usePathname } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { supabase } from "@/lib/supabase"
-import { Bell, Bookmark, ChevronDown, ChevronUp, Info, Megaphone, MapPinned as MapIcon, Search, Send, Trash2, X, ArrowUpRight } from "lucide-react"
+import { Bell, Bookmark, Briefcase, ChevronDown, ChevronRight, ChevronUp, History, Info, Megaphone, MapPinned as MapIcon, Search, Send, SquareX, Trash2, Users, X, ArrowUpRight } from "lucide-react"
 import Link from "next/link"
 import { Tip } from "@/components/ui/tip"
+import { formatRelativeTime } from "@/lib/utils"
 import { RemindersPanel } from "@/components/app/reminders-panel"
 import { CommandPalette } from "@/components/app/command-palette"
 import { useSidebarFirms } from "@/lib/sidebar-firms-context"
@@ -227,6 +228,7 @@ export function AppTopbar() {
 
   const [betaFeaturesEnabled, setBetaFeaturesEnabled] = useState(false)
 
+  const [showRecentsDropdown, setShowRecentsDropdown] = useState(false)
   const [showBookmarksDropdown, setShowBookmarksDropdown] = useState(false)
   const [showNotificationsDropdown, setShowNotificationsDropdown] = useState(false)
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
@@ -268,6 +270,15 @@ export function AppTopbar() {
   }
   const slug = getSlug()
   const isDemoFirm = slug ? (firms?.find((f) => f.slug === slug)?.sandboxOnly === true) : false
+
+  const [recentItems, setRecentItems] = useState<{ type: string; name: string; href: string; visitedAt: number }[]>([])
+  useEffect(() => {
+    if (!slug) return
+    try {
+      const raw = localStorage.getItem(`fm_nav_recents_${slug}`)
+      if (raw) setRecentItems(JSON.parse(raw))
+    } catch { /* ignore */ }
+  }, [slug, pathname])
 
   // Restore branding from sessionStorage before paint to avoid flip on refresh/reload
   useLayoutEffect(() => {
@@ -566,12 +577,13 @@ export function AppTopbar() {
     if (!mounted) return
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Element
+      if (showRecentsDropdown && !target.closest('.recents-container')) setShowRecentsDropdown(false)
       if (showBookmarksDropdown && !target.closest('.bookmarks-container')) setShowBookmarksDropdown(false)
       if (showNotificationsDropdown && !target.closest('.notifications-container')) setShowNotificationsDropdown(false)
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [mounted, showBookmarksDropdown, showNotificationsDropdown])
+  }, [mounted, showRecentsDropdown, showBookmarksDropdown, showNotificationsDropdown])
 
   // Hide until mounted (Safari hydration) but always render the same subtree so child hooks run every render.
   return (
@@ -626,6 +638,97 @@ export function AppTopbar() {
         {isDemoFirm && slug && <DemoTourTopbarButton firmSlug={slug} />}
         <div data-demo-tour="topbar-reminders">
           <RemindersPanel />
+        </div>
+        <div className="relative recents-container">
+          <Tip label="Recents" position="bottom">
+          <button
+            type="button"
+            className="w-10 h-10 flex items-center justify-center rounded-xl text-firma hover:bg-firma/10 transition-colors relative"
+            aria-label="Recents"
+            onClick={() => setShowRecentsDropdown((v) => !v)}
+          >
+            <History className="h-5 w-5" />
+            {recentItems.length > 0 && (
+              <span className="absolute top-0.5 right-0.5 min-w-[14px] h-3.5 px-1 bg-firma text-white text-[9px] font-bold rounded-full border border-white flex items-center justify-center leading-none">
+                {recentItems.length}
+              </span>
+            )}
+          </button>
+          </Tip>
+          {showRecentsDropdown ? (
+            <div className="absolute right-0 top-full mt-2 w-[340px] border border-[#e5e7eb] rounded-[2px] shadow-lg z-50 overflow-hidden">
+              {/* Header */}
+              <div className="px-4 py-3 bg-[#f9f9fb] border-b border-[#e5e7eb] flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-[0.8125rem] font-bold text-[#1b1b1d] tracking-tight">Recents</span>
+                  {recentItems.length > 0 && (
+                    <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded-sm tabular-nums leading-none bg-firma text-white">
+                      {recentItems.length}
+                    </span>
+                  )}
+                </div>
+                <button type="button" onClick={() => setShowRecentsDropdown(false)} aria-label="Close"
+                  className="p-1 rounded-[2px] hover:bg-[#f3f4f6] text-[#45474c] hover:text-[#1b1b1d] transition-colors">
+                  <SquareX className="h-4 w-4" />
+                </button>
+              </div>
+              {/* Body */}
+              <div className="p-3 space-y-1.5 max-h-[400px] overflow-y-auto bg-white">
+                {recentItems.length === 0 ? (
+                  <div className="text-center py-8">
+                    <History className="h-7 w-7 mx-auto mb-2 text-[#e5e7eb]" />
+                    <p className="text-[0.8125rem] font-semibold text-[#1b1b1d]">No recent pages</p>
+                    <p className="text-xs text-[#45474c] mt-0.5">Pages you visit will appear here.</p>
+                  </div>
+                ) : (
+                  recentItems.slice(0, 8).map((item) => (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setShowRecentsDropdown(false)}
+                      className="grid px-3 py-2 rounded-[2px] border border-[#e5e7eb] bg-white hover:border-[#e5e7eb] hover:shadow-sm transition-all group"
+                      style={{ borderLeftWidth: '3px', borderLeftColor: item.type === 'client' ? '#5A78FF' : '#06966A' }}
+                    >
+                      {/* Line 1: icon + name + chevron */}
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        {item.type === 'client' ? (
+                          <Users className="h-3.5 w-3.5 shrink-0 text-[#45474c]" />
+                        ) : (
+                          <Briefcase className="h-3.5 w-3.5 shrink-0 text-[#45474c]" />
+                        )}
+                        <span className="text-[0.8125rem] font-semibold text-[#1b1b1d] truncate flex-1 group-hover:text-primary transition-colors">
+                          {item.name}
+                        </span>
+                        <ChevronRight className="h-3 w-3 shrink-0 text-[#45474c]/40 group-hover:text-primary/60 transition-colors" />
+                      </div>
+                      {/* Line 2: type label + relative time */}
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <History className="h-3 w-3 shrink-0 text-[#9ca3af]" />
+                        <span className="text-[11px] text-[#9ca3af]">
+                          {item.type === 'client' ? 'Client' : 'Engagement'} · {formatRelativeTime(new Date(item.visitedAt))}
+                        </span>
+                      </div>
+                    </Link>
+                  ))
+                )}
+              </div>
+              {/* Footer */}
+              {recentItems.length > 0 && (
+                <div className="sticky bottom-0 bg-white border-t border-[#e5e7eb] px-3 py-2 flex items-center justify-between">
+                  <span className="text-[11px] text-[#45474c]">
+                    {recentItems.length} {recentItems.length === 1 ? 'item' : 'items'}
+                  </span>
+                  <Link
+                    href="/d/u/recent"
+                    onClick={() => setShowRecentsDropdown(false)}
+                    className="flex items-center gap-0.5 text-[11px] font-semibold text-firma hover:text-firma/80"
+                  >
+                    View all <ArrowUpRight className="h-3 w-3" />
+                  </Link>
+                </div>
+              )}
+            </div>
+          ) : null}
         </div>
         <div className="relative bookmarks-container">
           <Tip label="Bookmarks" position="bottom">
