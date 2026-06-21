@@ -647,14 +647,12 @@ export function DocumentActionMenu({
                       )
                     )}
                     <DropdownMenuItem
-                      onClick={async () => {
-                        const docId = (document as any).projectDocumentId
-                        if (!deeplinkBase || !docId) {
-                          addToast({ type: 'error', title: 'Link unavailable', message: 'This item has not been indexed yet.' })
-                          return
-                        }
-                        await navigator.clipboard.writeText(`${deeplinkBase}#doc-file:${docId}`)
-                        addToast({ type: 'success', title: 'Link copied', message: 'Link copied to clipboard' })
+                      onClick={() => {
+                        const docId = (document as any).projectDocumentId || document.id
+                        if (!deeplinkBase) return
+                        navigator.clipboard.writeText(`${deeplinkBase}#doc-file:${docId}`)
+                          .then(() => addToast({ type: 'success', title: 'Link copied', message: 'Link copied to clipboard' }))
+                          .catch(() => addToast({ type: 'error', title: 'Copy failed', message: 'Could not copy link.' }))
                       }}
                       className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
                     >
@@ -836,14 +834,12 @@ export function DocumentActionMenu({
                       )
                     )}
                     <DropdownMenuItem
-                      onClick={async () => {
-                        const docId = (document as any).projectDocumentId
-                        if (!deeplinkBase || !docId) {
-                          addToast({ type: 'error', title: 'Link unavailable', message: 'This item has not been indexed yet.' })
-                          return
-                        }
-                        await navigator.clipboard.writeText(`${deeplinkBase}#doc-file:${docId}`)
-                        addToast({ type: 'success', title: 'Link copied', message: 'Link copied to clipboard' })
+                      onClick={() => {
+                        const docId = (document as any).projectDocumentId || document.id
+                        if (!deeplinkBase) return
+                        navigator.clipboard.writeText(`${deeplinkBase}#doc-file:${docId}`)
+                          .then(() => addToast({ type: 'success', title: 'Link copied', message: 'Link copied to clipboard' }))
+                          .catch(() => addToast({ type: 'error', title: 'Copy failed', message: 'Could not copy link.' }))
                       }}
                       className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
                     >
@@ -1144,24 +1140,23 @@ export function DocumentActionMenu({
                 <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span className={!(document as any)?.projectDocumentId ? 'cursor-not-allowed' : undefined}>
+                    <span>
                 <DropdownMenuItem
-                  disabled={!(document as any)?.projectDocumentId}
                   onClick={async () => {
                     if (onBookmarkDocument) {
                       onBookmarkDocument(document)
                       return
                     }
                     try {
-                      const projectDocumentId = (document as any)?.projectDocumentId as string | undefined
+                      const projectDocumentId = (document as any)?.projectDocumentId || document.id
                       const { getSession } = await import('@/lib/supabase')
                       const session = await getSession()
                       if (!session?.access_token) {
                         addToast({ type: 'error', title: 'Unauthorized', message: 'Please sign in again.' })
                         return
                       }
-                      if (!projectId || !projectDocumentId) {
-                        addToast({ type: 'error', title: 'Unavailable', message: 'This file cannot be bookmarked yet. Please try again shortly.' })
+                      if (!projectId) {
+                        addToast({ type: 'error', title: 'Unavailable', message: 'No project context for this bookmark.' })
                         return
                       }
                       if (existingBookmarkId) {
@@ -1211,7 +1206,7 @@ export function DocumentActionMenu({
                     </span>
                   </TooltipTrigger>
                   <TooltipContent side="left" className="text-xs">
-                    {!(document as any)?.projectDocumentId ? 'Unavailable until indexed' : existingBookmarkId ? 'Remove bookmark' : 'Bookmark'}
+                    {existingBookmarkId ? 'Remove bookmark' : 'Bookmark'}
                   </TooltipContent>
                 </Tooltip>
                 </TooltipProvider>
