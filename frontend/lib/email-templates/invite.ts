@@ -1,5 +1,5 @@
 import { BRAND_NAME } from '@/config/brand'
-import { renderEmail, ctaButton, escHtml, TEXT_DARK, TEXT_MUTED, PRIMARY } from './base'
+import { renderEmail, ctaButton, escHtml, TEXT_DARK, TEXT_MUTED } from './base'
 
 interface InviteEmailParams {
   firmName: string

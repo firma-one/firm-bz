@@ -236,7 +236,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
     /** Same behavior as DocumentActionMenu → Comment (direct right pane; no URL hash). */
     const openCommentsForFile = useCallback(
         (file: DriveFile) => {
-            if (!rightPane.hasRightPane || !file.projectDocumentId) return
+            if (!rightPane.hasRightPane) return
             setActiveCommentDocId(file.id)
             const docIdForComments = file.projectDocumentId || file.id
             rightPane.setTitle('Comments')

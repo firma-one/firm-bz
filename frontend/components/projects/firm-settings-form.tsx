@@ -26,6 +26,14 @@ import { SelectWithCustomEntry } from '@/components/ui/select-with-custom-entry'
 import { SandboxInfoBanner } from '@/components/ui/sandbox-info-banner'
 import { useOrgSandbox } from '@/lib/use-org-sandbox'
 import { FirmDriveSection } from '@/components/connectors/firm-drive-section'
+
+function normaliseUrl(raw: string): string {
+    const v = raw.trim()
+    if (!v) return ''
+    if (/^https?:\/\//i.test(v)) return v
+    return `https://${v}`
+}
+
 const WORLD_CURRENCIES: { code: string; symbol: string; label: string }[] = [
     { code: 'USD', symbol: '$',    label: 'USD ($)' },
     { code: 'EUR', symbol: '€',    label: 'EUR (€)' },
@@ -340,7 +348,7 @@ export function FirmSettingsForm({
                 internalMemo: internalMemo.trim() || null,
                 industry: industry.trim() || null,
                 companySizeBracket: companySizeBracket || null,
-                companyWebsite: companyWebsite.trim() || null,
+                companyWebsite: normaliseUrl(companyWebsite) || null,
                 linkedInUrl: linkedInUrl.trim() || null,
                 billingAddress: billingAddress.trim() || null,
                 notes: notes.trim() || null,
@@ -470,7 +478,7 @@ export function FirmSettingsForm({
                                     <p className={`${fieldLabel} shrink-0`}>Company</p>
                                     <div className="shrink-0">
                                         <label htmlFor="firm-company-website" className={fieldLabel}><span className="inline-flex items-center gap-1"><Globe className="h-3 w-3" /> Website</span></label>
-                                        <Input id="firm-company-website" type="url" value={companyWebsite} onChange={(e) => { setCompanyWebsite(e.target.value); setMainDirty(true) }} placeholder="https://…" disabled={isSandboxFirm} className={inputCls} />
+                                        <Input id="firm-company-website" type="text" value={companyWebsite} onChange={(e) => { setCompanyWebsite(e.target.value); setMainDirty(true) }} placeholder="https://example.com or www.example.com" disabled={isSandboxFirm} className={inputCls} />
                                     </div>
                                     <div className="shrink-0">
                                         <label htmlFor="firm-linkedin" className={fieldLabel}><span className="inline-flex items-center gap-1"><Linkedin className="h-3 w-3" /> LinkedIn</span></label>

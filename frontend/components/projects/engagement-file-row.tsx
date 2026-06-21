@@ -453,22 +453,29 @@ export function EngagementFileRow({
                                 )}
                                 aria-label="Copy link"
                                 aria-pressed={file.id === highlightedFileId}
-                                disabled={isIntakeRow || !file.projectDocumentId}
-                                onClick={async () => {
-                                    if (!file.projectDocumentId) return
+                                disabled={isIntakeRow}
+                                onClick={() => {
+                                    const docId = file.projectDocumentId || file.id
                                     const base = typeof window !== 'undefined' ? window.location.href.replace(/#.*$/, '') : ''
-                                    const url = base ? `${base}#doc-file:${file.projectDocumentId}` : ''
+                                    const url = base ? `${base}#doc-file:${docId}` : ''
                                     if (!url) return
-                                    await navigator.clipboard.writeText(url)
-                                    onAddToast({ type: 'success', title: 'Link copied', message: 'Document link copied to clipboard.' })
+                                    navigator.clipboard.writeText(url).then(() => {
+                                        onAddToast({ type: 'success', title: 'Link copied', message: 'Document link copied to clipboard.' })
+                                    }).catch(() => {
+                                        const ta = document.createElement('textarea')
+                                        ta.value = url
+                                        document.body.appendChild(ta)
+                                        ta.select()
+                                        document.execCommand('copy')
+                                        document.body.removeChild(ta)
+                                        onAddToast({ type: 'success', title: 'Link copied', message: 'Document link copied to clipboard.' })
+                                    })
                                 }}
                             >
                                 <Link2 className="h-4 w-4" />
                             </button>
                         </TooltipTrigger>
-                        <TooltipContent side="top" className="text-xs">
-                            {file.projectDocumentId ? 'Copy link' : 'Unavailable until indexed'}
-                        </TooltipContent>
+                        <TooltipContent side="top" className="text-xs">Copy link</TooltipContent>
                     </Tooltip>
 
                     {!isFolder && (

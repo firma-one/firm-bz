@@ -7,7 +7,7 @@ Source: @docs/mvp/todo-beta-feedback.md
 ## 1. Add Firm
 
 - [ ] **Simplify Add Firm form** — TMI at creation time. Move non-essential fields (e.g. tax number, extended address) to Firm Settings. Keep creation minimal.
-- [ ] **Website URL validation** — `www.datasentry.in` was rejected. Relax validation to accept `www.` prefixed URLs without protocol, and show a clear format hint in the error message (e.g. "e.g. https://example.com or www.example.com").
+- [x] **Website URL validation** — `www.datasentry.in` was rejected. Relax validation to accept `www.` prefixed URLs without protocol, and show a clear format hint in the error message (e.g. "e.g. https://example.com or www.example.com").
 - [ ] **Rename "Billing address" → "Registered address"** across the Add Firm form and settings.
 
 ---
@@ -35,8 +35,8 @@ Source: @docs/mvp/todo-beta-feedback.md
 
 ## 5. Invitation Emails
 
-- [ ] **Client Partner invite email is not HTML formatted** — Apply `renderInviteEmail` (same as firm/engagement invite). Covered in recent session but verify end-to-end for client_admin persona specifically.
-- [ ] **Add "About Firma" section to invite emails** — Brief product blurb for first-time recipients who don't know what Firma is.
+- [x] **Client Partner invite email is not HTML formatted** — Apply `renderInviteEmail` (same as firm/engagement invite). Covered in recent session but verify end-to-end for client_admin persona specifically.
+- [x] **Add "About Firma" section to invite emails** — Brief product blurb for first-time recipients who don't know what Firma is.
 
 ---
 

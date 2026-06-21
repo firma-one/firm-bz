@@ -62,9 +62,13 @@ export function renderEmail({
           <!-- Footer -->
           <tr>
             <td style="background:${BG_SURFACE};border-top:1px solid ${BORDER};padding:20px 32px;">
-              <p style="margin:0;font-size:12px;color:${TEXT_MUTED};line-height:1.5;">
+              <p style="margin:0 0 8px;font-size:12px;color:${TEXT_MUTED};line-height:1.5;">
                 You're receiving this email because you're a member of a ${escHtml(brandCap)} workspace.
-                <br/>
+              </p>
+              <p style="margin:0 0 8px;font-size:12px;color:${TEXT_MUTED};line-height:1.5;">
+                <a href="https://www.firma.bz" style="color:${PRIMARY};text-decoration:none;font-weight:600;">Firma</a> helps firms and their clients work together more clearly — shared workspaces, secure document exchange, and real-time visibility into every engagement.
+              </p>
+              <p style="margin:0;font-size:12px;color:${TEXT_MUTED};line-height:1.5;">
                 &copy; ${new Date().getFullYear()} ${escHtml(brandCap)}. All rights reserved.
               </p>
             </td>
