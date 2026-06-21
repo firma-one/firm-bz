@@ -204,6 +204,21 @@ export async function proxy(request: NextRequest) {
         return NextResponse.redirect(new URL('/d', request.url))
     }
 
+    // Rewrite client subdomains (e.g. datasentry.firma.bz) to /d, preserving the URL.
+    // Auth is checked first above — unauthenticated users get redirected to /signin.
+    const host = request.headers.get('host') ?? ''
+    const CLIENT_SUBDOMAINS = ['datasentry.firma.bz', 'app.firma.bz']
+    if (CLIENT_SUBDOMAINS.includes(host) && pathname === '/') {
+        if (!user) {
+            const loginUrl = new URL('/signin', request.url)
+            loginUrl.searchParams.set('redirect', '/d')
+            return NextResponse.redirect(loginUrl)
+        }
+        const url = request.nextUrl.clone()
+        url.pathname = '/d'
+        return NextResponse.rewrite(url)
+    }
+
     // Protect all /d routes
     const isDRoute = pathname === '/d' || pathname.startsWith('/d/')
     if (isDRoute && !user) {
