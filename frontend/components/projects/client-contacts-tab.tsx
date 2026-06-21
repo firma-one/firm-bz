@@ -281,7 +281,7 @@ export function ClientContactsTab({
                     <TooltipTrigger asChild>
                       <button
                         type="button"
-                        className="h-7 w-7 rounded-md inline-flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+                        className="h-7 w-7 rounded-md inline-flex items-center justify-center text-rose-500 hover:text-rose-700 hover:bg-rose-50 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
                         disabled={!canManage || isPending}
                         onClick={() => setContactToDelete(c)}
                       >
