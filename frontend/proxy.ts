@@ -207,7 +207,7 @@ export async function proxy(request: NextRequest) {
     // Rewrite client subdomains (e.g. datasentry.firma.bz) to /d, preserving the URL.
     // Auth is checked first above — unauthenticated users get redirected to /signin.
     const host = request.headers.get('host') ?? ''
-    const CLIENT_SUBDOMAINS = ['datasentry.firma.bz', 'app.firma.bz']
+    const CLIENT_SUBDOMAINS = ['app.firma.bz', 'datasentry.firma.bz', 'keithmeyer.firma.bz']
     if (CLIENT_SUBDOMAINS.includes(host) && pathname === '/') {
         if (!user) {
             const loginUrl = new URL('/signin', request.url)
