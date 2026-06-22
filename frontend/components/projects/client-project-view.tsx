@@ -39,6 +39,7 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
     const [canManageClient, setCanManageClient] = useState(false)
     const [isFirmOwner, setIsFirmOwner] = useState(false)
     const [isPendingRefresh, startRefresh] = useTransition()
+    const [pendingTab, setPendingTab] = useState<string | null>(null)
 
     // Load view mode preference from localStorage on mount
     useEffect(() => {
@@ -64,7 +65,13 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                     ? 'members'
                     : 'projects'
 
+    // Clear pending state once searchParams catches up
+    useEffect(() => {
+        setPendingTab(null)
+    }, [searchParams])
+
     const handleTabChange = (value: string) => {
+        setPendingTab(value)
         const params = new URLSearchParams(searchParams.toString())
         params.set('tab', value)
         router.push(`${pathname}?${params.toString()}`, { scroll: false })
@@ -199,7 +206,7 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                                     <TabsList className="h-full p-0 bg-transparent rounded-none inline-flex justify-start gap-0 border-0">
                                         <TabsTrigger
                                             value="projects"
-                                            className="h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                            className="relative h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                                         >
                                             <Briefcase className="w-4 h-4 mr-2" />
                                             Engagements
@@ -208,11 +215,12 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                                                     {selectedClient.engagements.length}
                                                 </span>
                                             )}
+                                            {pendingTab === 'projects' && <span className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden"><span className="absolute inset-y-0 w-1/2 bg-brand-accent animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full" /></span>}
                                         </TabsTrigger>
                                         {isFirmOwner && (
                                         <TabsTrigger
                                             value="contacts"
-                                            className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                            className="relative group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                                         >
                                             <Users className="w-4 h-4 mr-2" />
                                             Contacts
@@ -222,12 +230,13 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                                                     {contactCount}
                                                 </span>
                                             )}
+                                            {pendingTab === 'contacts' && <span className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden"><span className="absolute inset-y-0 w-1/2 bg-brand-accent animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full" /></span>}
                                         </TabsTrigger>
                                         )}
                                         {false && canManageClient && (
                                             <TabsTrigger
                                                 value="members"
-                                                className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                                className="relative group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                                             >
                                                 <UserCog className="w-4 h-4 mr-2" />
                                                 Members
@@ -237,17 +246,19 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                                                         {memberCount}
                                                     </span>
                                                 )}
+                                                {pendingTab === 'members' && <span className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden"><span className="absolute inset-y-0 w-1/2 bg-brand-accent animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full" /></span>}
                                             </TabsTrigger>
                                         )}
                                         {canManageClient && (
                                             <TabsTrigger
                                                 value="settings"
                                                 data-demo-tour="client-settings-form"
-                                                className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                                className="relative group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                                             >
                                                 <Settings className="w-4 h-4 mr-2" />
                                                 Settings
                                                 <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
+                                                {pendingTab === 'settings' && <span className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden"><span className="absolute inset-y-0 w-1/2 bg-brand-accent animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full" /></span>}
                                             </TabsTrigger>
                                         )}
                                     </TabsList>
