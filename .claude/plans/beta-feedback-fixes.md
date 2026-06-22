@@ -47,7 +47,15 @@ Source: @docs/mvp/todo-beta-feedback.md
 
 ---
 
-## 7. Google Drive / Sharing
+## 7. AppBar — Bookmarks & Quick Links
+
+- [ ] **Document bookmark deeplinks are incorrect** — Bookmark URLs stored/displayed in the AppBar are not full deeplink URLs. Audit how bookmark URLs are constructed and ensure they resolve to the correct absolute path (including firm/client/engagement slug segments).
+- [ ] **Bookmark count badge color** — The count badge on the AppBar bookmarks icon is green; it should be blue (match the app's primary color).
+- [ ] **GDrive Recycle Bin quick link (Firm Admin only)** — Add a quick link icon in the Topbar (visible to Firm Admins only) that opens the Google Drive Recycle Bin (`https://drive.google.com/drive/trash`) in a new tab.
+
+---
+
+## 8. Google Drive / Sharing
 
 - [ ] **EV (Eng Viewer) sees native Google Docs SHARE button** — Sharing via native UI is blocked by Google and triggers an approval email, but it's an open loop. Options:
   - Add a caveat banner inside the engagement file view for EV/EC users warning that native sharing is controlled by Firma.
@@ -56,13 +64,13 @@ Source: @docs/mvp/todo-beta-feedback.md
 
 ---
 
-## 8. Watermark
+## 9. Watermark
 
 - [ ] **Add "[FirmName] Confidential" watermark** to viewed/downloaded documents. Scope TBD (PDF export only? Google Docs viewer overlay?).
 
 ---
 
-## 9. Account / Data
+## 10. Account / Data
 
 - [ ] **Close Account — Download my data / Information export** — Users want a data export before closing account. Design and implement a data export flow (engagement files list, client list, etc.) gated behind account deletion.
 

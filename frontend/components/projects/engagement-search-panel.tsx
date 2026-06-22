@@ -290,8 +290,8 @@ export function EngagementSearchPanel({
                   <HighlightText text={file.name} highlight={searchQuery} />
                 </span>
               </div>
-              <div className="flex items-center justify-between gap-2 mt-0.5 min-w-0">
-                <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden">
+              <div className="mt-0.5 min-w-0">
+                <div className="flex items-center min-w-0 overflow-hidden">
                   {file.parents?.[0] ? (
                     <button
                       type="button"
@@ -330,6 +330,8 @@ export function EngagementSearchPanel({
                   ) : (
                     <span className="text-[10px] text-slate-400 flex-shrink-0">—</span>
                   )}
+                </div>
+                <div className="flex items-center justify-between gap-2 mt-0.5">
                   <Tooltip open={openTooltipId === `badge-${file.id}`}>
                     <TooltipTrigger asChild>
                       <span
@@ -350,17 +352,17 @@ export function EngagementSearchPanel({
                       {MATCH_TYPE_TOOLTIP[matchType]}
                     </TooltipContent>
                   </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="text-[10px] text-slate-400 shrink-0 cursor-default">
+                        {formatRelativeTime(file.modifiedTime)}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className={LIGHT_TOOLTIP_CLASS}>
+                      {formatDateTimeWithTZ(file.modifiedTime)}
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="text-[10px] text-slate-400 shrink-0 ml-auto cursor-default">
-                      {formatRelativeTime(file.modifiedTime)}
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className={LIGHT_TOOLTIP_CLASS}>
-                    {formatDateTimeWithTZ(file.modifiedTime)}
-                  </TooltipContent>
-                </Tooltip>
               </div>
             </div>
           </div>
