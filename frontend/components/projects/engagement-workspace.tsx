@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { EngagementInsightsDashboard } from './engagement-insights-dashboard'
 import { EngagementFileList } from './engagement-file-list'
-import { setSavedFolderState, type BreadcrumbItem } from '@/lib/files-folder-session'
+import { type BreadcrumbItem } from '@/lib/files-folder-session'
 import { EngagementSettingsForm } from './engagement-settings-form'
 import { Folder, BarChart3, Building2, PenTool, ChevronRight, ChevronLeft, Users, Briefcase, Share2, Settings, Home, ClipboardList, MessageCircle, Lock, LayoutGrid, List } from 'lucide-react'
 import Link from 'next/link'
@@ -186,9 +186,8 @@ export function EngagementWorkspace({
     }, [base, router])
 
     const handleOpenInFiles = useCallback((folderId: string, breadcrumbs: BreadcrumbItem[], hash?: string) => {
-        setSavedFolderState(projectId, folderId, breadcrumbs)
         router.push(`${base}/files${hash ? '#' + hash : ''}`)
-    }, [projectId, base, router])
+    }, [base, router])
 
     return (
         <div className="flex flex-col flex-1 min-h-0">

@@ -60,7 +60,7 @@ import { useViewAs } from '@/lib/view-as-context'
 import { useRightPane } from '@/lib/right-pane-context'
 import { useEngagementSearch, EngagementSearchProvider } from '@/components/projects/engagement-search-context'
 import { EngagementSearchPanel, type EngagementSearchPanelActionMenuProps } from '@/components/projects/engagement-search-panel'
-import { getSavedFolderState, setSavedFolderState, consumeDeeplinkHighlight, type BreadcrumbItem } from '@/lib/files-folder-session'
+import { consumeDeeplinkHighlight, type BreadcrumbItem } from '@/lib/files-folder-session'
 import { useSecureOpenDocument } from '@/lib/use-secure-open-document'
 import { SecureAccessModal } from '@/components/projects/shares/secure-access-modal'
 import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
@@ -393,21 +393,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
                     && (window.location.hash.startsWith('#doc-file:') || window.location.hash.startsWith('#doc-comment:'))
 
                 if (!hasDeeplinkHash) {
-                    const saved = getSavedFolderState(projectId)
-                    if (!restrictToSharedOnly && saved.folderId && saved.breadcrumbs.length >= 4) {
-                        setCurrentFolderId(saved.folderId)
-                        setBreadcrumbs(saved.breadcrumbs)
-                        // Sync folder type based on ID
-                        if (saved.folderId === generalId) setCurrentFolderType('general')
-                        else if (saved.folderId === confidentialId) setCurrentFolderType('confidential')
-                        else if (saved.folderId === stagingId) setCurrentFolderType('staging')
-                        else {
-                            const rootName = saved.breadcrumbs[3]?.name
-                            if (rootName === 'confidential') setCurrentFolderType('confidential')
-                            else if (rootName === 'staging') setCurrentFolderType('staging')
-                            else setCurrentFolderType('general')
-                        }
-                    } else if (defaultFolderId) {
+                    if (defaultFolderId) {
                         setCurrentFolderId(defaultFolderId)
                         setBreadcrumbs(defaultBreadcrumbs)
                         setCurrentFolderType(defaultFolderType)
@@ -422,12 +408,6 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
         }
         loadFolderIds()
     }, [projectId, connectorRootFolderId, orgName, clientName, projectName, rootFolderName, fetchSharedIds])
-
-    // Persist current folder and breadcrumbs to session (memory for reload / navigate back to Files)
-    useEffect(() => {
-        if (!projectId || !currentFolderId) return
-        setSavedFolderState(projectId, currentFolderId, breadcrumbs)
-    }, [projectId, currentFolderId, breadcrumbs])
 
     // Data State
     const [files, setFiles] = useState<DriveFile[]>([])
