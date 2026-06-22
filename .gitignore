@@ -272,3 +272,6 @@ scripts/create-google-form-simple.js
 # Playwright
 .playwright-mcp/**
 frontend/supabase/snippets/**
+
+# Next.js dev-generated (rewritten by `next dev`, not needed in git)
+frontend/next-env.d.ts
