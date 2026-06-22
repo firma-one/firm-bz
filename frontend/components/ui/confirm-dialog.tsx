@@ -21,12 +21,14 @@ export interface ConfirmDialogProps {
   /** Optional extra content rendered below the description (e.g. a warning banner) */
   extra?: React.ReactNode
   cancelLabel?: string
-  confirmLabel: string
+  confirmLabel?: string
   /** Confirm button colour variant */
   confirmVariant?: 'red' | 'primary' | 'amber'
   onCancel: () => void
   onConfirm: () => void
   loading?: boolean
+  /** When true, only the cancel button is shown (use for warning-only dialogs) */
+  hideConfirm?: boolean
 }
 
 const ICON_PILL: Record<string, string> = {
@@ -57,11 +59,12 @@ export function ConfirmDialog({
   description,
   extra,
   cancelLabel = 'Cancel',
-  confirmLabel,
+  confirmLabel = 'Confirm',
   confirmVariant = 'red',
   onCancel,
   onConfirm,
   loading = false,
+  hideConfirm = false,
 }: ConfirmDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -99,13 +102,15 @@ export function ConfirmDialog({
           >
             {cancelLabel}
           </Button>
-          <Button
-            onClick={onConfirm}
-            disabled={loading}
-            className={`rounded-[2px] text-[10px] font-headline font-bold tracking-widest uppercase ${CONFIRM_BTN[confirmVariant]}`}
-          >
-            {loading ? <svg className="h-3 w-3 animate-spin text-white/80" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" /></svg> : confirmLabel}
-          </Button>
+          {!hideConfirm && confirmLabel && (
+            <Button
+              onClick={onConfirm}
+              disabled={loading}
+              className={`rounded-[2px] text-[10px] font-headline font-bold tracking-widest uppercase ${CONFIRM_BTN[confirmVariant]}`}
+            >
+              {loading ? <svg className="h-3 w-3 animate-spin text-white/80" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" /></svg> : confirmLabel}
+            </Button>
+          )}
         </div>
       </DialogContent>
     </Dialog>

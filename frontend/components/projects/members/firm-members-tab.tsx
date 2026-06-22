@@ -1,19 +1,19 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { getFirmMembers, resendFirmInvitation, revokeFirmInvitation } from '@/lib/actions/firm-members'
+import { getFirmMembers, resendFirmInvitation, revokeFirmInvitation, removeFirmMember } from '@/lib/actions/firm-members'
 import { FirmInviteModal } from './firm-invite-modal'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Mail, Clock, MoreHorizontal, SquarePlus, Trash2, RefreshCw } from 'lucide-react'
+import { Mail, Clock, MoreHorizontal, SquarePlus, Trash2, RefreshCw, UserMinus, AlertTriangle } from 'lucide-react'
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { formatFullDate } from '@/lib/utils'
+import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import { useToast } from '@/components/ui/toast'
 import {
     Dialog,
@@ -35,14 +35,6 @@ function getInitials(name: string) {
     return name ? name.substring(0, 2).toUpperCase() : '??'
 }
 
-function formatDate(date: string | Date | null | undefined) {
-    if (!date) return '-'
-    try {
-        return formatFullDate(date) || '-'
-    } catch {
-        return '-'
-    }
-}
 
 export function FirmMembersTab({ firmId, orgSlug, canManage = false }: FirmMembersTabProps) {
     const [members, setMembers] = useState<any[]>([])
@@ -51,6 +43,7 @@ export function FirmMembersTab({ firmId, orgSlug, canManage = false }: FirmMembe
     const [isInviteModalOpen, setIsInviteModalOpen] = useState(false)
     const [actionLoading, setActionLoading] = useState<string | null>(null)
     const [inviteToRevokeId, setInviteToRevokeId] = useState<string | null>(null)
+    const [memberToRemove, setMemberToRemove] = useState<{ id: string; name: string; email: string; ownsConnector: boolean } | null>(null)
     const { addToast } = useToast()
 
     const refreshData = async () => {
@@ -102,6 +95,24 @@ export function FirmMembersTab({ firmId, orgSlug, canManage = false }: FirmMembe
         }
     }
 
+    const executeRemoveMember = async () => {
+        if (!memberToRemove) return
+        const { id } = memberToRemove
+        setMemberToRemove(null)
+        setActionLoading(id)
+        try {
+            await removeFirmMember(firmId, id)
+            addToast({ type: 'success', title: 'Member Removed', message: 'The firm member has been removed.' })
+            refreshData()
+        } catch (e) {
+            addToast({ type: 'error', title: 'Error', message: 'Failed to remove member.' })
+        } finally {
+            setActionLoading(null)
+        }
+    }
+
+    const adminCount = members.filter(m => m.role === 'firm_admin').length
+
     return (
         <div className="flex flex-col h-full bg-white rounded border border-[#e5e7eb] overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-[#e5e7eb] bg-white">
@@ -123,17 +134,29 @@ export function FirmMembersTab({ firmId, orgSlug, canManage = false }: FirmMembe
                         <p className="mt-0.5 text-sm text-slate-500">Firm administrators can manage settings and members.</p>
                     </div>
                 </div>
-                {canManage && (
+                <div className="flex items-center gap-2">
                     <Button
                         variant="ghost"
-                        size="sm"
-                        onClick={() => setIsInviteModalOpen(true)}
-                        className="h-auto px-4 py-1.5 rounded-[2px] bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-primary hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1.5"
+                        size="icon"
+                        onClick={refreshData}
+                        disabled={isLoading}
+                        className="h-7 w-7 text-slate-400 hover:text-slate-600"
+                        title="Refresh"
                     >
-                        <SquarePlus className="h-4 w-4" />
-                        Invite
+                        <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
                     </Button>
-                )}
+                    {canManage && (
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setIsInviteModalOpen(true)}
+                            className="h-auto px-4 py-1.5 rounded-[2px] bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-primary hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1.5"
+                        >
+                            <SquarePlus className="h-4 w-4" />
+                            Invite
+                        </Button>
+                    )}
+                </div>
             </div>
 
             <div className="flex-1 overflow-auto p-4">
@@ -169,10 +192,28 @@ export function FirmMembersTab({ firmId, orgSlug, canManage = false }: FirmMembe
                                             <p className="text-[13px] font-medium text-slate-900 truncate">{member.user?.name}</p>
                                             <p className="text-[11px] text-slate-500 truncate">{member.user?.email}</p>
                                         </div>
-                                        <span className={`inline-flex items-center rounded-sm px-2 py-0.5 text-[10px] font-medium shrink-0 ${roleBadgeClass}`}>
-                                            {roleLabel}
-                                        </span>
-                                        <span className="text-[11px] text-slate-400 tabular-nums shrink-0">{formatDate(member.createdAt)}</span>
+                                        <div className="w-36 flex justify-end shrink-0">
+                                            <span className={`inline-flex items-center rounded-sm px-2 py-0.5 text-[10px] font-medium ${roleBadgeClass}`}>
+                                                {roleLabel}
+                                            </span>
+                                        </div>
+                                        <div className="w-24 flex justify-end shrink-0">
+                                            {member.createdAt && <RelativeDateTime date={member.createdAt} textClassName="text-[11px] text-slate-400" iconClassName="h-3 w-3 text-slate-400" tooltipSide="left" />}
+                                        </div>
+                                        {canManage && member.role === 'firm_admin' && adminCount > 1 && (
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-7 w-7 text-rose-400 hover:text-red-600 hover:bg-red-50 shrink-0 transition-colors"
+                                                disabled={actionLoading === member.id}
+                                                onClick={() => setMemberToRemove({ id: member.id, name: member.user?.name ?? member.user?.email ?? 'this member', email: member.user?.email ?? '', ownsConnector: !!member.ownsConnector })}
+                                            >
+                                                <UserMinus className="h-3.5 w-3.5" />
+                                            </Button>
+                                        )}
+                                        {canManage && (member.role !== 'firm_admin' || adminCount <= 1) && (
+                                            <div className="w-7 shrink-0" />
+                                        )}
                                     </div>
                                 )
                             })}
@@ -188,35 +229,42 @@ export function FirmMembersTab({ firmId, orgSlug, canManage = false }: FirmMembe
                                             Pending
                                         </p>
                                     </div>
-                                    <span className="inline-flex items-center rounded-sm px-2 py-0.5 text-[10px] font-medium shrink-0 bg-primary/10 text-primary ring-1 ring-inset ring-primary/25">
-                                        Firm Administrator
-                                    </span>
-                                    {canManage && (
-                                        <DropdownMenu>
-                                            <DropdownMenuTrigger asChild>
-                                                <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-slate-600 shrink-0">
-                                                    <MoreHorizontal className="h-3.5 w-3.5" />
-                                                </Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuContent align="end" className="min-w-[140px]">
-                                                <DropdownMenuItem
-                                                    onClick={() => handleResendInvite(inv.id)}
-                                                    disabled={actionLoading === inv.id}
-                                                >
-                                                    <RefreshCw className="h-4 w-4 mr-2" />
-                                                    Resend
-                                                </DropdownMenuItem>
-                                                <DropdownMenuItem
-                                                    className="text-red-600 focus:text-red-600"
-                                                    onClick={() => setInviteToRevokeId(inv.id)}
-                                                    disabled={actionLoading === inv.id}
-                                                >
-                                                    <Trash2 className="h-4 w-4 mr-2" />
-                                                    Cancel invite
-                                                </DropdownMenuItem>
-                                            </DropdownMenuContent>
-                                        </DropdownMenu>
-                                    )}
+                                    <div className="w-36 flex justify-end shrink-0">
+                                        <span className="inline-flex items-center rounded-sm px-2 py-0.5 text-[10px] font-medium bg-primary/10 text-primary ring-1 ring-inset ring-primary/25">
+                                            Firm Administrator
+                                        </span>
+                                    </div>
+                                    <div className="w-24 flex justify-end shrink-0">
+                                        {inv.createdAt && <RelativeDateTime date={inv.createdAt} textClassName="text-[11px] text-slate-400" iconClassName="h-3 w-3 text-slate-400" tooltipSide="left" />}
+                                    </div>
+                                    <div className="w-7 flex justify-end shrink-0">
+                                        {canManage && (
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-slate-600 shrink-0">
+                                                        <MoreHorizontal className="h-3.5 w-3.5" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end" className="min-w-[140px]">
+                                                    <DropdownMenuItem
+                                                        onClick={() => handleResendInvite(inv.id)}
+                                                        disabled={actionLoading === inv.id}
+                                                    >
+                                                        <RefreshCw className="h-4 w-4 mr-2" />
+                                                        Resend
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem
+                                                        className="text-red-600 focus:text-red-600"
+                                                        onClick={() => setInviteToRevokeId(inv.id)}
+                                                        disabled={actionLoading === inv.id}
+                                                    >
+                                                        <Trash2 className="h-4 w-4 mr-2" />
+                                                        Cancel invite
+                                                    </DropdownMenuItem>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
+                                        )}
+                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -249,6 +297,53 @@ export function FirmMembersTab({ firmId, orgSlug, canManage = false }: FirmMembe
                 confirmVariant="red"
                 onCancel={() => setInviteToRevokeId(null)}
                 onConfirm={() => void executeRevokeInvite()}
+            />
+
+            {/* Connector-owner warning — removal blocked */}
+            <ConfirmDialog
+                open={memberToRemove !== null && memberToRemove.ownsConnector}
+                onOpenChange={(open) => !open && setMemberToRemove(null)}
+                icon={<AlertTriangle className="h-3.5 w-3.5" />}
+                iconVariant="amber"
+                title="Cannot remove this member"
+                subtitle="This administrator owns the Drive Connector."
+                description={
+                    <span>
+                        <strong>{memberToRemove?.name}</strong>{memberToRemove?.email ? ` (${memberToRemove.email})` : ''} is the owner of this firm's Storage Drive Connector. Removing them would disconnect document storage for all clients and engagements.
+                        <br /><br />
+                        To remove this member, first transfer the Storage Connector to another Firm Administrator in <a href={`/d/f/${orgSlug}?tab=settings&section=storage`} className="text-primary underline underline-offset-2">Firm Settings → Data Storage</a> — then come back and remove them.
+                    </span>
+                }
+                extra={
+                    <p className="text-[12px] text-slate-500 mt-1">
+                        Not sure how? <a href="/support" className="text-primary underline underline-offset-2">Contact Support</a> and we'll help you through it.
+                    </p>
+                }
+                cancelLabel="Got it"
+                hideConfirm
+                onCancel={() => setMemberToRemove(null)}
+                onConfirm={() => setMemberToRemove(null)}
+            />
+
+            {/* Normal removal confirmation */}
+            <ConfirmDialog
+                open={memberToRemove !== null && !memberToRemove?.ownsConnector}
+                onOpenChange={(open) => !open && setMemberToRemove(null)}
+                icon={<UserMinus className="h-3.5 w-3.5" />}
+                iconVariant="red"
+                title="Revoke Firm Administrator"
+                subtitle={`${memberToRemove?.name}'s admin role will be revoked.`}
+                description={
+                    <span>
+                        <strong>{memberToRemove?.name}</strong>{memberToRemove?.email ? ` (${memberToRemove.email})` : ''} will lose their Firm Administrator role and can no longer manage this firm, its clients, or engagements. Any existing engagement-level access remains unchanged.
+                    </span>
+                }
+                cancelLabel="Cancel"
+                confirmLabel="Confirm"
+                confirmVariant="red"
+                onCancel={() => setMemberToRemove(null)}
+                onConfirm={() => void executeRemoveMember()}
+                loading={actionLoading !== null}
             />
         </div>
     )

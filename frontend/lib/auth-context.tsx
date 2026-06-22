@@ -75,6 +75,9 @@ export function AuthProvider({ children, initialSession }: { children: ReactNode
 
         if (event === 'SIGNED_OUT') {
           clearCheckoutHintSessionKeys()
+          if (typeof window !== 'undefined' && window.location.pathname.startsWith('/d/')) {
+            window.location.href = '/signin'
+          }
         }
 
         setLoading(false)

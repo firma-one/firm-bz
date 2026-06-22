@@ -3,26 +3,44 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Home, User, ChevronRight, Clock, Bell, Bookmark, BellRing } from "lucide-react"
-import { useState, useCallback, type ReactNode } from "react"
+import { useState, useCallback, useEffect, type ReactNode } from "react"
 import { LayoutContext } from "./layout-context"
+import { supabase } from "@/lib/supabase"
 
 const TABS = [
-  { label: 'Profile',       href: '/d/u/profile',       icon: User     },
-  { label: 'Recent',        href: '/d/u/recent',        icon: Clock    },
-  { label: 'Reminders',     href: '/d/u/reminders',     icon: Bell     },
-  { label: 'Bookmarks',     href: '/d/u/bookmarks',     icon: Bookmark },
-  { label: 'Notifications', href: '/d/u/notifications', icon: BellRing },
+  { label: 'Profile',       href: '/d/u/profile',       icon: User,    beta: false },
+  { label: 'Recent',        href: '/d/u/recent',        icon: Clock,   beta: false },
+  { label: 'Reminders',     href: '/d/u/reminders',     icon: Bell,    beta: false },
+  { label: 'Bookmarks',     href: '/d/u/bookmarks',     icon: Bookmark,beta: false },
+  { label: 'Notifications', href: '/d/u/notifications', icon: BellRing,beta: true  },
 ]
 
 export default function UserLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const [slot, setSlotState] = useState<ReactNode>(null)
   const [tabCounts, setTabCountsState] = useState<Record<string, number | null>>({})
+  const [betaFeaturesEnabled, setBetaFeaturesEnabled] = useState(false)
 
   const setSlot = useCallback((node: ReactNode) => setSlotState(node), [])
   const setTabCount = useCallback((href: string, count: number | null) => {
     setTabCountsState((prev) => (prev[href] === count ? prev : { ...prev, [href]: count }))
   }, [])
+
+  useEffect(() => {
+    async function loadBetaFlag() {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) return
+      const res = await fetch('/api/firm', { headers: { Authorization: `Bearer ${session.access_token}` } })
+      if (!res.ok) return
+      const data = await res.json()
+      const org = data.organization || data.firm || data
+      const settings = (org?.settings as Record<string, unknown>) || {}
+      setBetaFeaturesEnabled(settings.enableBetaFeatures === true)
+    }
+    void loadBetaFlag()
+  }, [])
+
+  const visibleTabs = TABS.filter((t) => !t.beta || betaFeaturesEnabled)
 
   return (
     <LayoutContext.Provider value={{ slot, setSlot, setTabCount }}>
@@ -57,7 +75,7 @@ export default function UserLayout({ children }: { children: ReactNode }) {
         {/* Tab strip */}
         <div className="bg-white border border-[#e5e7eb] rounded mb-3 shrink-0 flex items-center justify-between h-14 pr-3">
           <div className="flex items-center h-full">
-            {TABS.map((tab) => {
+            {visibleTabs.map((tab) => {
               const isActive = pathname?.startsWith(tab.href)
               const Icon = tab.icon
               const count = tabCounts[tab.href]

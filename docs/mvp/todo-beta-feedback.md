@@ -1,22 +1,18 @@
 Add Firm 
-TMI required .. simplify on ADD & keep the additional details on settings 
-website url validation is too strict ..
-www.datasentry.in was rejected .. saying valid url required, but error message did not show format
-
+-TMI required .. simplify on ADD & keep the additional details on settings 
+- website url validation is too strict .. www.datasentry.in was rejected .. saying valid url required, but error message did not show format
+- Billing address - rename to registered address
 ---
 
 Add Client
-Follow Up date & Internal memo or not connected
-No indicator to say that the Follow Up date & Internal memo will be used to create a reminder 
+- Follow Up date & Internal memo or not connected; No indicator to say that the Follow Up date & Internal memo will be used to create a reminder
 
-Billing address
-Tax Account number 
-
+Billing address + Tax Account number
 Add a note that Critical client information is all encrypted. 
 
 
 ---
-Add Contact
+Add Client Contact
 multiple time flickering on SAVE 
 
 -----
@@ -51,7 +47,7 @@ Engagement files
 Copy link was also blocked for a while until 
 ---
 
-Google Sharing > EV is allowed to see SHARE button but the actual sharing did not work.
+Google native GDocs page - Sharing > EV is allowed to see SHARE button but the actual sharing did not work.
 
 ---
 

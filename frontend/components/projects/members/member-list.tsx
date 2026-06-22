@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { MoreHorizontal, Mail, Clock, Trash2, SquarePlus, UserCog, User, UserCircle, Info, UserMinus } from 'lucide-react'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -417,7 +418,19 @@ export function MemberList({ members, invitations, personas, onRefresh, canManag
                                     <div key={persona.id} className="flex items-center space-x-2 border border-[#e5e7eb] p-3 rounded hover:bg-[#f3f4f6] cursor-pointer" onClick={() => setSelectedPersonaId(persona.id)}>
                                         <RadioGroupItem value={persona.id} id={persona.id} />
                                         <div className="flex-1 cursor-pointer">
-                                            <Label htmlFor={persona.id} className="font-medium cursor-pointer">{persona.displayName}</Label>
+                                            <div className="flex items-center gap-1.5">
+                                                <Label htmlFor={persona.id} className="font-medium cursor-pointer">{persona.displayName}</Label>
+                                                <TooltipProvider>
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild onClick={(e) => e.stopPropagation()}>
+                                                            <Info className="h-3.5 w-3.5 text-slate-400 cursor-help shrink-0" />
+                                                        </TooltipTrigger>
+                                                        <TooltipContent side="top" className="max-w-[260px]">
+                                                            {persona.description || 'No description'}
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                </TooltipProvider>
+                                            </div>
                                             <p className="text-sm text-slate-500">{persona.description || 'No description'}</p>
                                         </div>
                                     </div>

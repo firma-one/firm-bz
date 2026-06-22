@@ -6,23 +6,17 @@ import { revalidatePath } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { InvitationStatus } from '@prisma/client'
 import { sendEmail } from '@/lib/email'
-import { BRAND_NAME } from '@/config/brand'
+import { logger } from '@/lib/logger'
+import { renderInviteEmail } from '@/lib/email-templates/invite'
+import { maybeProvisionInviteeAccount } from '@/lib/actions/account-provisioning'
 import { canManageClient } from '@/lib/permission-helpers'
+import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
+import { getAvatarUrlFromSupabaseUser } from '@/lib/supabase-user-helpers'
 
 const supabaseAdmin = createSupabaseAdmin(
     process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321',
     process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
-
-function getAvatarUrlFromSupabaseUser(dbUser: any): string | null {
-    if (!dbUser) return null
-    const meta = dbUser.user_metadata
-    const fromMeta = (meta?.avatar_url ?? meta?.picture) as string | undefined
-    if (fromMeta) return fromMeta
-    const firstIdentity = dbUser.identities?.[0]?.identity_data
-    const fromIdentity = (firstIdentity?.avatar_url ?? firstIdentity?.picture) as string | undefined
-    return fromIdentity ?? null
-}
 
 export async function getClientMembers(clientId: string) {
     const supabase = await createClient()
@@ -38,7 +32,7 @@ export async function getClientMembers(clientId: string) {
     const invitations = await prisma.clientInvitation.findMany({
         where: {
             clientId,
-            status: { not: InvitationStatus.JOINED }
+            status: { in: [InvitationStatus.PENDING, InvitationStatus.ACCEPTED, InvitationStatus.ERROR] }
         },
         include: { persona: true },
         orderBy: { createdAt: 'desc' }
@@ -78,7 +72,7 @@ export async function inviteClientMember(firmId: string, clientId: string, email
 
     const client = await prisma.client.findUnique({
         where: { id: clientId },
-        include: { firm: { select: { sandboxOnly: true } } }
+        include: { firm: { select: { sandboxOnly: true, name: true } } }
     })
     if (!client) throw new Error('Client not found')
     if (client.firm?.sandboxOnly) {
@@ -93,20 +87,17 @@ export async function inviteClientMember(firmId: string, clientId: string, email
     const normalizedEmail = email.trim().toLowerCase()
 
     const allMembers = await prisma.clientMember.findMany({ where: { clientId }, select: { userId: true } })
-    let existingUserWithEmail: string | null = null
-    for (const m of allMembers) {
-        const uid = m.userId
-        try {
-            const { data: { user: u } } = await supabaseAdmin.auth.admin.getUserById(uid)
-            if (u?.email?.toLowerCase() === normalizedEmail) {
-                existingUserWithEmail = uid
-                break
+    const memberEmails = await Promise.all(
+        allMembers.map(async (m) => {
+            try {
+                const { data: { user: u } } = await supabaseAdmin.auth.admin.getUserById(m.userId)
+                return u?.email?.toLowerCase() ?? null
+            } catch {
+                return null
             }
-        } catch {
-            // skip
-        }
-    }
-    if (existingUserWithEmail) {
+        })
+    )
+    if (memberEmails.includes(normalizedEmail)) {
         throw new Error('A member with this email is already in the client')
     }
 
@@ -141,13 +132,23 @@ export async function inviteClientMember(firmId: string, clientId: string, email
         })
     }
 
+    await maybeProvisionInviteeAccount(normalizedEmail)
+
     const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invite/${token}`
-    await sendEmail(
-        normalizedEmail,
-        `You've been invited to join a client on ${BRAND_NAME}`,
-        `<p>You have been invited to join a client on ${BRAND_NAME} as a Client Administrator.</p>
-         <p>Click here to accept: <a href="${inviteUrl}">${inviteUrl}</a></p>`
-    )
+    const { subject, html } = renderInviteEmail({
+        firmName: client.firm?.name ?? '',
+        clientName: client.name,
+        inviteUrl,
+    })
+    await sendEmail(normalizedEmail, subject, html)
+
+    audit(AUDIT_EVENT.CLIENT_MEMBER_INVITED)
+        .scope(AUDIT_SCOPE.CLIENT)
+        .firm(firmId)
+        .actor(user.id)
+        .meta({ invitedEmail: normalizedEmail, clientId })
+        .fireAndForget()
+
     revalidatePath(`/d/f/[slug]/c/[clientSlug]`)
 }
 
@@ -158,10 +159,11 @@ export async function resendClientInvitation(invitationId: string) {
 
     const invite = await prisma.clientInvitation.findUnique({
         where: { id: invitationId },
-        include: { client: { select: { firmId: true } } }
+        include: { client: { select: { firmId: true, name: true, firm: { select: { name: true } } } } }
     })
     if (!invite) throw new Error('Invitation not found')
     if (invite.status === InvitationStatus.JOINED) throw new Error('User has already joined')
+    if (invite.status === InvitationStatus.ACCEPTED) throw new Error('User is currently accepting this invitation — please wait')
 
     const canManage = await canManageClient(invite.client.firmId, invite.clientId)
     if (!canManage) throw new Error('Insufficient permissions')
@@ -175,13 +177,23 @@ export async function resendClientInvitation(invitationId: string) {
         data: { token, status: 'PENDING', expireAt, updatedAt: new Date() }
     })
 
+    await maybeProvisionInviteeAccount(invite.email)
+
     const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invite/${token}`
-    await sendEmail(
-        invite.email,
-        `You've been invited to join a client on ${BRAND_NAME}`,
-        `<p>You have been invited to join a client on ${BRAND_NAME}.</p>
-         <p>Click here to accept: <a href="${inviteUrl}">${inviteUrl}</a></p>`
-    )
+    try {
+        const { subject, html } = renderInviteEmail({
+            firmName: invite.client.firm?.name ?? '',
+            clientName: invite.client.name,
+            inviteUrl,
+        })
+        await sendEmail(invite.email, subject, html)
+    } catch (err) {
+        logger.error('Resend client invitation email failed', err instanceof Error ? err : new Error(String(err)), 'Email', { to: invite.email })
+        await prisma.clientInvitation.update({
+            where: { id: invitationId },
+            data: { status: InvitationStatus.ERROR, updatedAt: new Date() }
+        })
+    }
     revalidatePath(`/d/f/[slug]/c/[clientSlug]`)
 }
 

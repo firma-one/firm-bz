@@ -10,6 +10,7 @@ import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { safeInngestSend } from '@/lib/inngest/client'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { removeRemindersByEntity } from '@/lib/actions/user-reminders'
+import { getAvatarUrlFromSupabaseUser } from '@/lib/supabase-user-helpers'
 
 // Admin Client for fetching user details
 const supabaseAdmin = createSupabaseAdmin(
@@ -17,22 +18,10 @@ const supabaseAdmin = createSupabaseAdmin(
     process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-/** Resolve avatar URL from Supabase user */
-function getAvatarUrlFromSupabaseUser(dbUser: any): string | null {
-    if (!dbUser) return null
-    const meta = dbUser.user_metadata
-    const fromMeta = (meta?.avatar_url ?? meta?.picture) as string | undefined
-    if (fromMeta) return fromMeta
-    const firstIdentity = dbUser.identities?.[0]?.identity_data
-    const fromIdentity = (firstIdentity?.avatar_url ?? firstIdentity?.picture) as string | undefined
-    return fromIdentity ?? null
-}
-
 export async function getProjectMembers(projectId: string) {
     const supabase = await createClient()
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session?.user) throw new Error("Unauthorized")
-    const user = session.user
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error("Unauthorized")
 
     // 1. Fetch Members (engagement = project in UI)
     const members = await prisma.engagementMember.findMany({
@@ -44,7 +33,7 @@ export async function getProjectMembers(projectId: string) {
     const invitations = await prisma.engagementInvitation.findMany({
         where: {
             engagementId: projectId,
-            status: { notIn: [InvitationStatus.JOINED, InvitationStatus.SUPERSEDED] }
+            status: { in: [InvitationStatus.PENDING, InvitationStatus.ACCEPTED, InvitationStatus.ERROR] }
         },
         include: { persona: true },
         orderBy: { createdAt: 'desc' }
@@ -86,8 +75,8 @@ export type ProjectMemberSummary = {
 /** Lightweight member summaries per project */
 export async function getProjectMemberSummaries(projectIds: string[]): Promise<Record<string, ProjectMemberSummary>> {
     const supabase = await createClient()
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session?.user) return {}
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return {}
 
     if (projectIds.length === 0) return {}
 
@@ -143,9 +132,8 @@ export async function getProjectMemberSummaries(projectIds: string[]): Promise<R
 export async function removeMember(memberId: string) {
     try {
         const supabase = await createClient()
-        const { data: { session } } = await supabase.auth.getSession()
-        if (!session?.user) throw new Error("Unauthorized")
-        const user = session.user
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) throw new Error("Unauthorized")
 
         const member = await prisma.engagementMember.findUnique({
             where: { id: memberId },
@@ -169,56 +157,68 @@ export async function removeMember(memberId: string) {
 
         if (!member) throw new Error("Member not found")
 
+        // Fetch member email once — reused for Drive revocation and invitation supersede
+        let memberEmail: string | undefined
+        try {
+            const { data: { user: memberUser } } = await supabaseAdmin.auth.admin.getUserById(member.userId)
+            memberEmail = memberUser?.email
+        } catch (error) {
+            logger.error('Error fetching member user for removal', error as Error)
+        }
+
         // Revoke Google Drive folder access
-        if (member.engagement.connectorRootFolderId) {
+        if (member.engagement.connectorRootFolderId && memberEmail) {
             try {
-                const { data: { user: memberUser } } = await supabaseAdmin.auth.admin.getUserById(member.userId)
-                const memberEmail = memberUser?.email
-
-                if (memberEmail) {
-                    const connectorId = member.engagement.client.firm.connectorId
-
-                    if (connectorId) {
-                        await googleDriveConnector.revokeFolderPermissionByEmail(
-                            connectorId,
-                            member.engagement.connectorRootFolderId,
-                            memberEmail
-                        )
-                    }
+                const connectorId = member.engagement.client.firm.connectorId
+                if (connectorId) {
+                    await googleDriveConnector.revokeFolderPermissionByEmail(
+                        connectorId,
+                        member.engagement.connectorRootFolderId,
+                        memberEmail
+                    )
                 }
             } catch (error) {
                 logger.error('Error revoking Drive folder access', error as Error)
             }
         }
 
-        await prisma.engagementMember.delete({ where: { id: memberId } })
-
-        // If the user has no remaining engagement memberships in this firm, remove their firm_members row.
-        // EC/EV users get a firm_members row on invite acceptance but are not true firm members.
+        // Atomic: delete engagement member + conditionally cascade to firmMember
+        // EC/EV guests get a firmMember row on accept but are not true firm members —
+        // remove it if they have no other engagements. firm_admins are never cascaded.
         const firmId = member.engagement.client.firmId
-        const remainingEngagements = await prisma.engagementMember.count({
-            where: {
-                userId: member.userId,
-                engagement: { client: { firmId } },
-            },
-        })
-        if (remainingEngagements === 0) {
-            await prisma.firmMember.deleteMany({
-                where: { userId: member.userId, firmId },
-            })
-        }
+        await prisma.$transaction(async (tx) => {
+            await tx.engagementMember.delete({ where: { id: memberId } })
 
-        // Mark invitation as SUPERSEDED so the member can be re-invited
-        if (member.userId) {
-            try {
-                const { data: { user: memberUser } } = await supabaseAdmin.auth.admin.getUserById(member.userId)
-                const memberEmail = memberUser?.email
-                if (memberEmail) {
-                    await prisma.engagementInvitation.updateMany({
-                        where: { engagementId: member.engagementId, email: memberEmail, status: InvitationStatus.JOINED },
-                        data: { status: InvitationStatus.SUPERSEDED },
+            const firmMembership = await tx.firmMember.findFirst({
+                where: { userId: member.userId, firmId },
+                select: { role: true },
+            })
+            const isActualFirmAdmin = firmMembership?.role === 'firm_admin'
+            if (!isActualFirmAdmin) {
+                const remainingEngagements = await tx.engagementMember.count({
+                    where: {
+                        userId: member.userId,
+                        engagement: { client: { firmId } },
+                    },
+                })
+                if (remainingEngagements === 0) {
+                    await tx.firmMember.deleteMany({
+                        where: { userId: member.userId, firmId },
                     })
                 }
+            }
+        })
+
+        // Kick the removed user's active sessions — fire-and-forget
+        supabaseAdmin.auth.admin.signOut(member.userId).catch(() => {})
+
+        // Mark invitation as SUPERSEDED so the member can be re-invited
+        if (memberEmail) {
+            try {
+                await prisma.engagementInvitation.updateMany({
+                    where: { engagementId: member.engagementId, email: memberEmail, status: InvitationStatus.JOINED },
+                    data: { status: InvitationStatus.SUPERSEDED },
+                })
             } catch (error) {
                 logger.error('Error superseding invitation on member removal', error as Error)
             }
@@ -256,10 +256,27 @@ export async function removeMember(memberId: string) {
 
 export async function revokeInvitation(invitationId: string) {
     try {
+        const supabase = await createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) throw new Error("Unauthorized")
+
         const invite = await prisma.engagementInvitation.findUnique({
             where: { id: invitationId },
-            select: { createdBy: true },
+            select: { createdBy: true, engagementId: true },
         })
+        if (!invite) throw new Error("Invitation not found")
+
+        // Verify caller has management rights over this engagement's firm
+        const engagement = await prisma.engagement.findUnique({
+            where: { id: invite.engagementId },
+            select: { client: { select: { firmId: true } } },
+        })
+        if (engagement) {
+            const { canManageOrganization } = await import('@/lib/permission-helpers')
+            const canManage = await canManageOrganization(engagement.client.firmId)
+            if (!canManage) throw new Error("Insufficient permissions")
+        }
+
         await prisma.engagementInvitation.delete({ where: { id: invitationId } })
         if (invite?.createdBy) {
             await removeRemindersByEntity(invite.createdBy, 'platform.engagement_invitations.id', invitationId).catch(() => {})
@@ -274,9 +291,8 @@ export async function revokeInvitation(invitationId: string) {
 export async function updateMemberPersona(memberId: string, personaId: string) {
     try {
         const supabase = await createClient()
-        const { data: { session } } = await supabase.auth.getSession()
-        if (!session?.user) throw new Error("Unauthorized")
-        const user = session.user
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) throw new Error("Unauthorized")
 
         const member = await prisma.engagementMember.findUnique({
             where: { id: memberId },
@@ -296,6 +312,9 @@ export async function updateMemberPersona(memberId: string, personaId: string) {
             where: { id: memberId },
             data: { role: newPersonaSlug }
         })
+
+        // Role change alters permissions — kick session, fire-and-forget
+        supabaseAdmin.auth.admin.signOut(member.userId).catch(() => {})
 
         const timestamp = new Date().toISOString()
 

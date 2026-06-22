@@ -303,7 +303,23 @@ export function RemindersPanel({ onCountChange }: Props) {
                     <style>{`@keyframes reminder-undo-shrink { from { width: 100% } to { width: 0% } }`}</style>
                     <div className="p-3 space-y-1.5 max-h-[400px] overflow-y-auto bg-white">
                         {loading ? (
-                            <div className="text-center py-8 text-[0.8125rem] text-[#45474c]">Loading…</div>
+                            <div className="space-y-1.5">
+                                {[1, 2, 3].map((i) => (
+                                    <div key={i} className="px-3 py-2 rounded-[2px] border border-[#e5e7eb] bg-white animate-pulse" style={{ borderLeftWidth: '3px', borderLeftColor: '#E8B99F' }}>
+                                        <div className="flex items-start gap-1.5">
+                                            <div className="h-3.5 w-3.5 rounded bg-[#f3f4f6] shrink-0 mt-0.5" />
+                                            <div className="flex-1 space-y-1.5">
+                                                <div className="h-3 rounded bg-[#f3f4f6] w-3/4" />
+                                                <div className="h-2.5 rounded bg-[#f3f4f6] w-1/2" />
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-1.5 mt-2">
+                                            <div className="h-2.5 w-2.5 rounded bg-[#f3f4f6]" />
+                                            <div className="h-2.5 rounded bg-[#f3f4f6] w-24" />
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
                         ) : displayed.length === 0 ? (
                             <div className="text-center py-8">
                                 <BellOff className="h-7 w-7 mx-auto mb-2 text-[#e5e7eb]" />

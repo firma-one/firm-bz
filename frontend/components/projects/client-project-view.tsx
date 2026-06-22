@@ -224,7 +224,7 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                                             )}
                                         </TabsTrigger>
                                         )}
-                                        {canManageClient && (
+                                        {false && canManageClient && (
                                             <TabsTrigger
                                                 value="members"
                                                 className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
@@ -232,7 +232,7 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                                                 <UserCog className="w-4 h-4 mr-2" />
                                                 Members
                                                 <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
-                                                {memberCount !== undefined && memberCount > 0 && (
+                                                {(memberCount ?? 0) > 0 && (
                                                     <span className="ml-2 font-mono text-[10px] font-bold bg-primary text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
                                                         {memberCount}
                                                     </span>
@@ -325,14 +325,14 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                                 </TabsContent>
                                 )}
 
-                                {canManageClient && (
+                                {false && canManageClient && (
                                     <TabsContent value="members" className="m-0 h-full">
                                         <div className="w-full py-2">
                                             <ClientMembersTab
                                                 firmId={firmId ?? selectedClient?.firmId ?? ''}
-                                                clientId={selectedClient.id}
+                                                clientId={selectedClient?.id ?? ''}
                                                 orgSlug={firmSlug}
-                                                clientSlug={selectedClient.slug}
+                                                clientSlug={selectedClient?.slug ?? ''}
                                                 canManage={canManageClient}
                                             />
                                         </div>

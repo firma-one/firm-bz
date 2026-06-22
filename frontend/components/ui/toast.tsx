@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, createContext, useContext, ReactNode } from 'react'
+import { useState, useCallback, useMemo, createContext, useContext, ReactNode } from 'react'
 import { AlertCircle, Info, X } from 'lucide-react'
 
 export type ToastType = 'success' | 'error' | 'info'
@@ -24,12 +24,12 @@ const ToastContext = createContext<ToastContextType | undefined>(undefined)
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([])
 
-  const removeToast = (id: string) => {
+  const removeToast = useCallback((id: string) => {
     setToasts(prev => prev.filter(t => t.id !== id))
-  }
+  }, [])
 
-  const addToast = (toast: Omit<Toast, 'id'>) => {
-    const id = Math.random().toString(36).substr(2, 9)
+  const addToast = useCallback((toast: Omit<Toast, 'id'>) => {
+    const id = crypto.randomUUID()
     const newToast = { ...toast, id }
     setToasts(prev => {
       if (prev.find(t => t.title === newToast.title)) return prev
@@ -39,10 +39,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id))
     }, duration)
-  }
+  }, [])
+
+  const ctx = useMemo(() => ({ toasts, addToast, removeToast }), [toasts, addToast, removeToast])
 
   return (
-    <ToastContext.Provider value={{ toasts, addToast, removeToast }}>
+    <ToastContext.Provider value={ctx}>
       {children}
       <ToastContainer toasts={toasts} removeToast={removeToast} />
     </ToastContext.Provider>

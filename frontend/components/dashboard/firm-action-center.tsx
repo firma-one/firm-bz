@@ -374,9 +374,9 @@ export function FirmActionCenter({ firmId, firmSlug }: FirmActionCenterProps) {
         }
     }
 
-    const sharingFileCount = driveAlerts?.sharing.reduce((s, e) => s + e.count, 0) ?? 0
-    const sensitiveFileCount = driveAlerts?.sensitive.reduce((s, e) => s + e.count, 0) ?? 0
-    const storageFileCount = driveAlerts?.storage.reduce((s, e) => s + e.count, 0) ?? 0
+    const sharingFileCount = driveAlerts?.sharing?.reduce((s, e) => s + e.count, 0) ?? 0
+    const sensitiveFileCount = driveAlerts?.sensitive?.reduce((s, e) => s + e.count, 0) ?? 0
+    const storageFileCount = driveAlerts?.storage?.reduce((s, e) => s + e.count, 0) ?? 0
 
     const driveViewLabel: Record<string, string> = { sharing: 'Sharing Alerts', sensitive: 'Sensitive Alerts', storage: 'Storage Alerts' }
     const driveViewCount: Record<string, number> = { sharing: sharingFileCount, sensitive: sensitiveFileCount, storage: storageFileCount }
@@ -544,9 +544,9 @@ export function FirmActionCenter({ firmId, firmSlug }: FirmActionCenterProps) {
                                 </div>
                                 <div className="flex flex-col gap-2">
                                     {([
-                                        { key: 'sharing' as const, icon: Share2, label: 'Sharing', count: sharingFileCount, engCount: driveAlerts?.sharing.length ?? 0, active: { border: 'border-[#d1d5db]', hover: 'hover:bg-blue-50', text: 'text-blue-700', iconBg: 'bg-blue-50', iconText: 'text-blue-600', chevron: 'text-blue-400', num: 'text-blue-600' } },
-                                        { key: 'sensitive' as const, icon: FileWarning, label: 'Sensitive', count: sensitiveFileCount, engCount: driveAlerts?.sensitive.length ?? 0, active: { border: 'border-[#d1d5db]', hover: 'hover:bg-orange-50', text: 'text-orange-700', iconBg: 'bg-orange-50', iconText: 'text-orange-600', chevron: 'text-orange-400', num: 'text-orange-600' } },
-                                        { key: 'storage' as const, icon: HardDrive, label: 'Storage', count: storageFileCount, engCount: driveAlerts?.storage.length ?? 0, active: { border: 'border-[#d1d5db]', hover: 'hover:bg-purple-50', text: 'text-purple-700', iconBg: 'bg-purple-50', iconText: 'text-purple-600', chevron: 'text-purple-400', num: 'text-purple-600' } },
+                                        { key: 'sharing' as const, icon: Share2, label: 'Sharing', count: sharingFileCount, engCount: driveAlerts?.sharing?.length ?? 0, active: { border: 'border-[#d1d5db]', hover: 'hover:bg-blue-50', text: 'text-blue-700', iconBg: 'bg-blue-50', iconText: 'text-blue-600', chevron: 'text-blue-400', num: 'text-blue-600' } },
+                                        { key: 'sensitive' as const, icon: FileWarning, label: 'Sensitive', count: sensitiveFileCount, engCount: driveAlerts?.sensitive?.length ?? 0, active: { border: 'border-[#d1d5db]', hover: 'hover:bg-orange-50', text: 'text-orange-700', iconBg: 'bg-orange-50', iconText: 'text-orange-600', chevron: 'text-orange-400', num: 'text-orange-600' } },
+                                        { key: 'storage' as const, icon: HardDrive, label: 'Storage', count: storageFileCount, engCount: driveAlerts?.storage?.length ?? 0, active: { border: 'border-[#d1d5db]', hover: 'hover:bg-purple-50', text: 'text-purple-700', iconBg: 'bg-purple-50', iconText: 'text-purple-600', chevron: 'text-purple-400', num: 'text-purple-600' } },
                                     ]).map(({ key, icon: Icon, label, count, engCount, active }) => {
                                         const isAlert = count > 0
                                         const border = isAlert ? active.border : 'border-[#d1d5db]'
