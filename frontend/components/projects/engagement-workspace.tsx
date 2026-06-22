@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { EngagementInsightsDashboard } from './engagement-insights-dashboard'
 import { EngagementFileList } from './engagement-file-list'
-import { setSavedFolderState, type BreadcrumbItem } from '@/lib/files-folder-session'
+import { type BreadcrumbItem } from '@/lib/files-folder-session'
 import { EngagementSettingsForm } from './engagement-settings-form'
 import { Folder, BarChart3, Building2, PenTool, ChevronRight, ChevronLeft, Users, Briefcase, Share2, Settings, Home, ClipboardList, MessageCircle, Lock, LayoutGrid, List } from 'lucide-react'
 import Link from 'next/link'
@@ -132,6 +132,7 @@ export function EngagementWorkspace({
     const tabsScrollRef = useRef<HTMLDivElement>(null)
     const [canScrollLeft, setCanScrollLeft] = useState(false)
     const [canScrollRight, setCanScrollRight] = useState(false)
+    const [pendingTab, setPendingTab] = useState<string | null>(null)
 
     const updateScrollState = useCallback(() => {
         const el = tabsScrollRef.current
@@ -179,16 +180,21 @@ export function EngagementWorkspace({
         return () => window.removeEventListener('hashchange', ensureFilesTabForDeeplink)
     }, [base, currentTab, router])
 
+    // Clear pending state once pathname catches up (engagement tabs navigate by path, not query param)
+    useEffect(() => {
+        setPendingTab(null)
+    }, [pathname])
+
     const handleTabChange = useCallback((value: string) => {
+        setPendingTab(value)
         if (value === 'board') { router.push(`${base}/board`); return }
         const suffix = value === 'shares' ? '/grid' : ''
         router.push(`${base}/${value}${suffix}`)
     }, [base, router])
 
     const handleOpenInFiles = useCallback((folderId: string, breadcrumbs: BreadcrumbItem[], hash?: string) => {
-        setSavedFolderState(projectId, folderId, breadcrumbs)
         router.push(`${base}/files${hash ? '#' + hash : ''}`)
-    }, [projectId, base, router])
+    }, [base, router])
 
     return (
         <div className="flex flex-col flex-1 min-h-0">
@@ -314,17 +320,18 @@ export function EngagementWorkspace({
                             {canViewInternalTabs && (
                                 <TabsTrigger
                                     value="analytics"
-                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                    className="relative group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                                 >
                                     <BarChart3 className="w-4 h-4 mr-2" />
                                     Overview
                                     <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
+                                    {pendingTab === 'analytics' && <span className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden"><span className="absolute inset-y-0 w-1/2 bg-brand-accent animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full" /></span>}
                                 </TabsTrigger>
                             )}
                             <TabsTrigger
                                 value="files"
                                 data-demo-tour="engagement-files-tab"
-                                className="h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                className="relative h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                             >
                                 <Folder className="w-4 h-4 mr-2" />
                                 Files
@@ -333,11 +340,12 @@ export function EngagementWorkspace({
                                         {liveFileCount}
                                     </span>
                                 )}
+                                {pendingTab === 'files' && <span className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden"><span className="absolute inset-y-0 w-1/2 bg-brand-accent animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full" /></span>}
                             </TabsTrigger>
                             <TabsTrigger
                                 value="shares"
                                 data-demo-tour="engagement-shares-tab"
-                                className="h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                className="relative h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                             >
                                 <Share2 className="w-4 h-4 mr-2" />
                                 Shares
@@ -346,22 +354,24 @@ export function EngagementWorkspace({
                                         {sharesCount}
                                     </span>
                                 )}
+                                {pendingTab === 'shares' && <span className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden"><span className="absolute inset-y-0 w-1/2 bg-brand-accent animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full" /></span>}
                             </TabsTrigger>
                             {enableBetaFeatures && canViewInternalTabs && (
                                 <TabsTrigger
                                     value="board"
-                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                    className="relative group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                                 >
                                     <LayoutGrid className="w-4 h-4 mr-2" />
                                     Board
                                     <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
                                     <span className="ml-2 rounded px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 leading-none">Beta</span>
+                                    {pendingTab === 'board' && <span className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden"><span className="absolute inset-y-0 w-1/2 bg-brand-accent animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full" /></span>}
                                 </TabsTrigger>
                             )}
                             <TabsTrigger
                                 value="comments"
                                 data-demo-tour="engagement-comments-tab"
-                                className="h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                className="relative h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                             >
                                 <MessageCircle className="w-4 h-4 mr-2" />
                                 Comments
@@ -370,11 +380,12 @@ export function EngagementWorkspace({
                                         {commentsCount}
                                     </span>
                                 )}
+                                {pendingTab === 'comments' && <span className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden"><span className="absolute inset-y-0 w-1/2 bg-brand-accent animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full" /></span>}
                             </TabsTrigger>
                             {enableBetaFeatures && canViewInternalTabs && (
                                 <TabsTrigger
                                     value="wiki"
-                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                    className="relative group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                                 >
                                     <PenTool className="w-4 h-4 mr-2" />
                                     Dossier
@@ -385,13 +396,14 @@ export function EngagementWorkspace({
                                             {wikiPageCount}
                                         </span>
                                     )}
+                                    {pendingTab === 'wiki' && <span className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden"><span className="absolute inset-y-0 w-1/2 bg-brand-accent animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full" /></span>}
                                 </TabsTrigger>
                             )}
                             {canManage && (
                                 <TabsTrigger
                                     value="audit"
                                     data-demo-tour="engagement-audit-tab"
-                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                    className="relative group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                                 >
                                     <ClipboardList className="w-4 h-4 mr-2" />
                                     Audit
@@ -401,13 +413,14 @@ export function EngagementWorkspace({
                                             {auditCount}
                                         </span>
                                     )}
+                                    {pendingTab === 'audit' && <span className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden"><span className="absolute inset-y-0 w-1/2 bg-brand-accent animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full" /></span>}
                                 </TabsTrigger>
                             )}
                             {canViewInternalTabs && (
                                 <TabsTrigger
                                     value="members"
                                     data-demo-tour="engagement-members-tab"
-                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                    className="relative group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                                 >
                                     <Users className="w-4 h-4 mr-2" />
                                     Members
@@ -417,17 +430,19 @@ export function EngagementWorkspace({
                                             {memberCount}
                                         </span>
                                     )}
+                                    {pendingTab === 'members' && <span className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden"><span className="absolute inset-y-0 w-1/2 bg-brand-accent animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full" /></span>}
                                 </TabsTrigger>
                             )}
                             {canViewSettings && (
                                 <TabsTrigger
                                     value="settings"
                                     data-demo-tour="engagement-settings-tab"
-                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                    className="relative group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                                 >
                                     <Settings className="w-4 h-4 mr-2" />
                                     Settings
                                     <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
+                                    {pendingTab === 'settings' && <span className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden"><span className="absolute inset-y-0 w-1/2 bg-brand-accent animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full" /></span>}
                                 </TabsTrigger>
                             )}
                         </TabsList>

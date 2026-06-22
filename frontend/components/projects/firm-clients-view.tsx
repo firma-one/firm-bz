@@ -37,6 +37,7 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
     const [canCreateClient, setCanCreateClient] = useState(false)
     const [canViewOrgSettings, setCanViewOrgSettings] = useState(false)
     const [canViewOrgAudit, setCanViewOrgAudit] = useState(false)
+    const [pendingTab, setPendingTab] = useState<string | null>(null)
 
     const tabParam = searchParams.get('tab') || 'analytics'
     const currentTab =
@@ -50,7 +51,13 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                         ? 'analytics'
                         : 'clients'
 
+    // Clear pending state once searchParams catches up
+    useEffect(() => {
+        setPendingTab(null)
+    }, [searchParams])
+
     const handleTabChange = (value: string) => {
+        setPendingTab(value)
         const params = new URLSearchParams(searchParams.toString())
         params.set('tab', value)
         router.push(`${pathname}?${params.toString()}`, { scroll: false })
@@ -162,16 +169,17 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                                 <TabsTrigger
                                     value="analytics"
                                     data-demo-tour="firm-overview-tab"
-                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                    className="relative group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                                 >
                                     <LayoutDashboard className="w-4 h-4 mr-2" />
                                     Overview
                                     <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
+                                    {pendingTab === 'analytics' && <span className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden"><span className="absolute inset-y-0 w-1/2 bg-brand-accent animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full" /></span>}
                                 </TabsTrigger>
                             )}
                             <TabsTrigger
                                 value="clients"
-                                className="h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                className="relative h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                             >
                                 <Users className="w-4 h-4 mr-2" />
                                 Clients
@@ -180,12 +188,13 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                                         {clients.length}
                                     </span>
                                 )}
+                                {pendingTab === 'clients' && <span className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden"><span className="absolute inset-y-0 w-1/2 bg-brand-accent animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full" /></span>}
                             </TabsTrigger>
                             {canViewOrgAudit && (
                                 <TabsTrigger
                                     value="members"
                                     data-demo-tour="firm-members-tab"
-                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                    className="relative group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                                 >
                                     <UserCog className="w-4 h-4 mr-2" />
                                     Members
@@ -195,13 +204,14 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                                             {memberCount}
                                         </span>
                                     )}
+                                    {pendingTab === 'members' && <span className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden"><span className="absolute inset-y-0 w-1/2 bg-brand-accent animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full" /></span>}
                                 </TabsTrigger>
                             )}
                             {canViewOrgAudit && (
                                 <TabsTrigger
                                     value="audit"
                                     data-demo-tour="firm-audit-tab"
-                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                    className="relative group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                                 >
                                     <ClipboardList className="w-4 h-4 mr-2" />
                                     Audit
@@ -211,17 +221,19 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                                             {auditCount}
                                         </span>
                                     )}
+                                    {pendingTab === 'audit' && <span className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden"><span className="absolute inset-y-0 w-1/2 bg-brand-accent animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full" /></span>}
                                 </TabsTrigger>
                             )}
                             {canViewOrgSettings && (
                                 <TabsTrigger
                                     value="settings"
                                     data-demo-tour="firm-settings-tab"
-                                    className="group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                                    className="relative group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                                 >
                                     <Settings className="w-4 h-4 mr-2" />
                                     Settings
                                     <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
+                                    {pendingTab === 'settings' && <span className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden"><span className="absolute inset-y-0 w-1/2 bg-brand-accent animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full" /></span>}
                                 </TabsTrigger>
                             )}
                         </TabsList>
