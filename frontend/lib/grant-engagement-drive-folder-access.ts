@@ -14,12 +14,22 @@ type GrantParams = {
 }
 
 /**
- * Grants connector folder access for an engagement member (General for all; Confidential + Staging for leads).
+ * Grants connector folder access for internal engagement members only.
+ * - eng_admin:  General (writer) + Confidential (writer) + Staging (writer)
+ * - eng_member: General (writer)
+ *
+ * EV (eng_viewer) and EC (eng_ext_collaborator) are intentionally excluded —
+ * they receive Drive access only through per-file/per-folder sharing (regrant flow),
+ * never through folder-level inheritance.
+ *
  * Idempotent: ignores failures when permission already exists.
  */
 export async function grantEngagementDriveFolderAccess(params: GrantParams): Promise<void> {
   const { connectorId, engagementSlug, email, role, projectName, clientSlug, clientName, projectFolderId } = params
   if (!email?.trim()) return
+
+  // EV/EC get per-file permissions only — never folder-level
+  if (role === 'eng_viewer' || role === 'eng_ext_collaborator') return
 
   const adapter = await getPermissionAdapter(connectorId)
   if (!adapter) return
@@ -30,8 +40,6 @@ export async function grantEngagementDriveFolderAccess(params: GrantParams): Pro
     clientName,
     projectFolderId: projectFolderId ?? undefined,
   })
-
-  const generalRole: 'writer' | 'reader' = role === 'eng_viewer' ? 'reader' : 'writer'
 
   const grant = async (folderId: string | null | undefined, r: 'writer' | 'reader' | 'commenter') => {
     if (!folderId) return
@@ -45,7 +53,7 @@ export async function grantEngagementDriveFolderAccess(params: GrantParams): Pro
     }
   }
 
-  await grant(folderIds.generalFolderId, generalRole)
+  await grant(folderIds.generalFolderId, 'writer')
 
   if (role === 'eng_admin') {
     await grant(folderIds.confidentialFolderId, 'writer')

@@ -17,6 +17,10 @@ import {
     checkClientFollowUpReminders,
     sendReminderEmail,
     sendRecurringReminderEmails,
+    cleanupEngagementReminders,
+    cleanupMemberReminders,
+    cleanupDocumentReminders,
+    purgeDeletedEngagements,
 } from "@/lib/inngest/functions";
 
 export const { GET, POST, PUT } = serve({
@@ -38,5 +42,9 @@ export const { GET, POST, PUT } = serve({
         checkClientFollowUpReminders,
         sendReminderEmail,
         sendRecurringReminderEmails,
+        cleanupEngagementReminders,
+        cleanupMemberReminders,
+        cleanupDocumentReminders,
+        purgeDeletedEngagements,
     ],
 });

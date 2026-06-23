@@ -4,7 +4,7 @@ import { createClient } from "@/utils/supabase/server"
 import { prisma } from "@/lib/prisma"
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { revalidatePath } from "next/cache"
-import { InvitationStatus } from '@prisma/client'
+import { InvitationStatus, DocumentSharingPermissionStatus } from '@prisma/client'
 import { logger } from '@/lib/logger'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { safeInngestSend } from '@/lib/inngest/client'
@@ -166,10 +166,39 @@ export async function removeMember(memberId: string) {
             logger.error('Error fetching member user for removal', error as Error)
         }
 
-        // Revoke Google Drive folder access
+        const connectorId = member.engagement.client.firm.connectorId
+
+        // Revoke document-level connector permissions BEFORE deleting the member row.
+        // The FK cascade will drop sharing rows (and their connectorPermissionId) when
+        // the member is deleted — so we must read and revoke them first.
+        if (connectorId) {
+            try {
+                const { getPermissionAdapter } = await import('@/lib/connectors/registry')
+                const adapter = await getPermissionAdapter(connectorId)
+                if (adapter) {
+                    const sharingRows = await prisma.engagementDocumentSharingUser.findMany({
+                        where: {
+                            engagementId: member.engagementId,
+                            userId: member.userId,
+                            sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED,
+                            connectorPermissionId: { not: null },
+                        },
+                        select: { connectorPermissionId: true, document: { select: { externalId: true } } },
+                    })
+                    await Promise.allSettled(
+                        sharingRows
+                            .filter((s) => s.connectorPermissionId && s.document?.externalId)
+                            .map((s) => adapter.revokePermission(connectorId, s.document!.externalId, s.connectorPermissionId!))
+                    )
+                }
+            } catch (error) {
+                logger.error('Error revoking document-level connector permissions on member removal', error as Error)
+            }
+        }
+
+        // Revoke folder-level connector access
         if (member.engagement.connectorRootFolderId && memberEmail) {
             try {
-                const connectorId = member.engagement.client.firm.connectorId
                 if (connectorId) {
                     await googleDriveConnector.revokeFolderPermissionByEmail(
                         connectorId,
@@ -182,9 +211,10 @@ export async function removeMember(memberId: string) {
             }
         }
 
-        // Atomic: delete engagement member + conditionally cascade to firmMember
+        // Atomic: delete engagement member + conditionally cascade to firmMember.
         // EC/EV guests get a firmMember row on accept but are not true firm members —
         // remove it if they have no other engagements. firm_admins are never cascaded.
+        // The FK cascade on engagement_document_sharing_users drops their sharing rows here.
         const firmId = member.engagement.client.firmId
         await prisma.$transaction(async (tx) => {
             await tx.engagementMember.delete({ where: { id: memberId } })
@@ -209,9 +239,6 @@ export async function removeMember(memberId: string) {
             }
         })
 
-        // Kick the removed user's active sessions — fire-and-forget
-        supabaseAdmin.auth.admin.signOut(member.userId).catch(() => {})
-
         // Mark invitation as SUPERSEDED so the member can be re-invited
         if (memberEmail) {
             try {
@@ -224,18 +251,6 @@ export async function removeMember(memberId: string) {
             }
         }
 
-        // Fire async revocation of document-level Drive permissions (folder-level already revoked above)
-        if (['eng_ext_collaborator', 'eng_viewer'].includes(member.role)) {
-            await safeInngestSend('project.member.removed', {
-                projectId: member.engagementId,
-                organizationId: member.engagement.client.firmId,
-                userId: member.userId,
-                personaSlug: member.role,
-                timestamp: new Date().toISOString(),
-                removedBy: user.id,
-            })
-        }
-
         audit(AUDIT_EVENT.ENGAGEMENT_MEMBER_REMOVED)
             .scope(AUDIT_SCOPE.ENGAGEMENT)
             .firm(member.engagement.client.firmId)
@@ -246,6 +261,13 @@ export async function removeMember(memberId: string) {
 
         const { invalidateUserSettingsPlus } = await import('@/lib/actions/user-settings')
         await invalidateUserSettingsPlus(member.userId)
+
+        // Async: reminder cleanup + session sign-out via Inngest (retried on failure)
+        await safeInngestSend('engagement.member.removed', {
+            engagementId: member.engagementId,
+            userId: member.userId,
+            timestamp: new Date().toISOString(),
+        })
 
         revalidatePath('/d/f/[slug]/c/[clientSlug]/e/[engagementSlug]')
     } catch (error) {

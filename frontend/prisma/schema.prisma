@@ -530,7 +530,8 @@ model EngagementMember {
   createdBy    String?         @db.Uuid
   updatedBy    String?         @db.Uuid
 
-  engagement Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  engagement    Engagement                      @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  sharingUsers  EngagementDocumentSharingUser[]
 
   @@unique([userId, engagementId])
   @@map("engagement_members")
@@ -753,8 +754,9 @@ model EngagementDocumentSharingUser {
   connectorPermissionId     String?
   sharingPermissionStatus   DocumentSharingPermissionStatus  @default(GRANTED)
 
-  document           EngagementDocument @relation(fields: [projectDocumentId], references: [id], onDelete: Cascade)
-  engagement         Engagement         @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  document           EngagementDocument  @relation(fields: [projectDocumentId], references: [id], onDelete: Cascade)
+  engagement         Engagement          @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  member             EngagementMember    @relation(fields: [engagementId, userId], references: [engagementId, userId], onDelete: Cascade)
 
   @@unique([projectDocumentId, userId])
   @@map("engagement_document_sharing_users")

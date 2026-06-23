@@ -1,16 +1,19 @@
 import { useState } from 'react'
 import { DriveFile } from '@/lib/types'
+import { type ToastType } from '@/components/ui/toast'
 
 interface UseEngagementDragDropOptions {
     canEdit: boolean
     processUploads: (fileList: FileList) => Promise<void>
     handleCopyMoveToFolder: (destinationFolderId: string, sourceFile?: DriveFile, action?: 'copy' | 'move') => Promise<void>
+    addToast: (toast: { type: ToastType; title: string; message: string }) => void
 }
 
 export function useEngagementDragDrop({
     canEdit,
     processUploads,
     handleCopyMoveToFolder,
+    addToast,
 }: UseEngagementDragDropOptions) {
     const [draggedItem, setDraggedItem] = useState<DriveFile | null>(null)
     const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null)
@@ -34,6 +37,22 @@ export function useEngagementDragDrop({
     const handleDrop = async (e: React.DragEvent) => {
         e.preventDefault()
         setIsDragging(false)
+
+        // Detect if any dropped item is a folder via the FileSystemEntry API
+        const items = Array.from(e.dataTransfer.items)
+        const hasFolder = items.some(item => {
+            const entry = item.webkitGetAsEntry?.()
+            return entry?.isDirectory
+        })
+        if (hasFolder) {
+            addToast({
+                type: 'info',
+                title: 'Folder drag-drop not supported',
+                message: 'Use the "Upload folder" button instead.',
+            })
+            return
+        }
+
         const fileList = e.dataTransfer.files
         if (!fileList || fileList.length === 0) return
         await processUploads(fileList)
