@@ -360,7 +360,7 @@ export const reconcileFileDeletion = inngest.createFunction(
         await step.run("cleanup-sharing-records", async () => {
             const docs = await prisma.engagementDocument.findMany({
                 where: { firmId: organizationId, externalId },
-                select: { id: true, settings: true, connectorId: true, firmId: true },
+                select: { id: true, settings: true, connectorId: true, firmId: true, engagementId: true },
             })
             if (docs.length === 0) return
 
@@ -403,6 +403,17 @@ export const reconcileFileDeletion = inngest.createFunction(
                 where: { projectDocumentId: { in: docIds } },
             })
 
+            // Fire document.deleted before deleting — cleanupDocumentReminders fetches
+            // comment IDs from DB, so it must run before the FK cascade drops them.
+            await Promise.allSettled(
+                docs.map((d) =>
+                    safeInngestSend('document.deleted', {
+                        documentId: d.id,
+                        engagementId: d.engagementId,
+                    })
+                )
+            )
+
             // Delete the engagement document records — file is gone from Drive
             await prisma.engagementDocument.deleteMany({
                 where: { id: { in: docIds } },
@@ -429,7 +440,7 @@ export const reconcileFolderDeletion = inngest.createFunction(
         await step.run("cleanup-folder-sharing-records", async () => {
             const doc = await prisma.engagementDocument.findFirst({
                 where: { firmId: organizationId, externalId },
-                select: { id: true, settings: true, connectorId: true },
+                select: { id: true, settings: true, connectorId: true, engagementId: true },
             })
             if (!doc) return
 
@@ -460,6 +471,13 @@ export const reconcileFolderDeletion = inngest.createFunction(
             // Delete sharing user records (must happen before document delete to avoid FK violation)
             await prisma.engagementDocumentSharingUser.deleteMany({
                 where: { projectDocumentId: doc.id },
+            })
+
+            // Fire document.deleted before deleting — cleanupDocumentReminders fetches
+            // comment IDs from DB, so it must run before the FK cascade drops them.
+            await safeInngestSend('document.deleted', {
+                documentId: doc.id,
+                engagementId: doc.engagementId,
             })
 
             // Delete the engagement document record — folder is gone from Drive
@@ -1230,6 +1248,208 @@ export const sendReminderEmail = inngest.createFunction(
         })
 
         return { reminderId: event.data.reminderId }
+    }
+)
+
+// ---------------------------------------------------------------------------
+// Engagement Reminder Cleanup
+// ---------------------------------------------------------------------------
+
+/**
+ * Clean up all reminders referencing a deleted/closed engagement for every member.
+ * Covers: engagement-level reminders (dueDate, kickoffDate, followUpDate, shares)
+ * and all document-level + comment-level reminders within the engagement.
+ *
+ * Triggered by: engagement.deleted, engagement.closed
+ */
+export const cleanupEngagementReminders = inngest.createFunction(
+    { id: "cleanup-engagement-reminders", triggers: [{ event: "engagement.deleted" }, { event: "engagement.closed" }] },
+    async ({ event, step }) => {
+        const { engagementId, memberUserIds } = event.data
+
+        const { docIds, commentIds } = await step.run("fetch-child-entity-ids", async () => {
+            const docs = await prisma.engagementDocument.findMany({
+                where: { engagementId },
+                select: { id: true },
+            })
+            const comments = await prisma.docCommentMessage.findMany({
+                where: { engagementId },
+                select: { id: true },
+            })
+            return {
+                docIds: docs.map((d: { id: string }) => d.id),
+                commentIds: comments.map((c: { id: string }) => c.id),
+            }
+        })
+
+        await step.run("remove-engagement-reminders", async () => {
+            const { removeRemindersByEntityForUsers } = await import('@/lib/actions/user-reminders')
+            const ENGAGEMENT_KEYS = [
+                'platform.engagements',
+                'platform.engagements.dueDate',
+                'platform.engagements.kickoffDate',
+                'platform.engagements.followUpDate',
+                'platform.engagement_invitations.shares',
+            ]
+            await Promise.allSettled(
+                ENGAGEMENT_KEYS.map((key) => removeRemindersByEntityForUsers(memberUserIds, key, engagementId))
+            )
+        })
+
+        await step.run("remove-document-reminders", async () => {
+            if (docIds.length === 0) return
+            const { removeRemindersByEntityForUsers } = await import('@/lib/actions/user-reminders')
+            await Promise.allSettled(
+                docIds.map((docId: string) => removeRemindersByEntityForUsers(memberUserIds, 'platform.documents', docId))
+            )
+        })
+
+        await step.run("remove-comment-reminders", async () => {
+            if (commentIds.length === 0) return
+            const { removeRemindersByEntityForUsers } = await import('@/lib/actions/user-reminders')
+            await Promise.allSettled(
+                commentIds.map((commentId: string) => removeRemindersByEntityForUsers(memberUserIds, 'platform.doc_comments', commentId))
+            )
+        })
+
+        return { engagementId, memberCount: memberUserIds.length, docCount: docIds.length, commentCount: commentIds.length }
+    }
+)
+
+// ---------------------------------------------------------------------------
+// Member Removal Reminder + Sign-out Cleanup
+// ---------------------------------------------------------------------------
+
+/**
+ * Clean up reminders for a single removed member and sign them out of active sessions.
+ * Covers: engagement-level + document-level + comment-level reminders for that user.
+ *
+ * Triggered by: engagement.member.removed
+ */
+export const cleanupMemberReminders = inngest.createFunction(
+    { id: "cleanup-member-reminders", triggers: [{ event: "engagement.member.removed" }] },
+    async ({ event, step }) => {
+        const { engagementId, userId } = event.data
+
+        const { docIds, commentIds } = await step.run("fetch-child-entity-ids", async () => {
+            const docs = await prisma.engagementDocument.findMany({
+                where: { engagementId },
+                select: { id: true },
+            })
+            const comments = await prisma.docCommentMessage.findMany({
+                where: { engagementId },
+                select: { id: true },
+            })
+            return {
+                docIds: docs.map((d: { id: string }) => d.id),
+                commentIds: comments.map((c: { id: string }) => c.id),
+            }
+        })
+
+        await step.run("remove-reminders", async () => {
+            const { removeRemindersByEntity } = await import('@/lib/actions/user-reminders')
+            const ENGAGEMENT_KEYS = [
+                'platform.engagements',
+                'platform.engagements.dueDate',
+                'platform.engagements.kickoffDate',
+                'platform.engagements.followUpDate',
+                'platform.engagement_invitations.shares',
+            ]
+            await Promise.allSettled([
+                ...ENGAGEMENT_KEYS.map((key) => removeRemindersByEntity(userId, key, engagementId)),
+                ...docIds.map((docId: string) => removeRemindersByEntity(userId, 'platform.documents', docId)),
+                ...commentIds.map((commentId: string) => removeRemindersByEntity(userId, 'platform.doc_comments', commentId)),
+            ])
+        })
+
+        await step.run("sign-out-member", async () => {
+            const { createAdminClient } = await import('@/utils/supabase/admin')
+            const admin = createAdminClient()
+            await admin.auth.admin.signOut(userId)
+        })
+
+        return { engagementId, userId }
+    }
+)
+
+// ---------------------------------------------------------------------------
+// Document Deletion Reminder Cleanup
+// ---------------------------------------------------------------------------
+
+/**
+ * Clean up all reminders referencing a deleted document and its comments,
+ * across all engagement members.
+ *
+ * Triggered by: document.deleted
+ */
+export const cleanupDocumentReminders = inngest.createFunction(
+    { id: "cleanup-document-reminders", triggers: [{ event: "document.deleted" }] },
+    async ({ event, step }) => {
+        const { documentId, engagementId } = event.data
+
+        const { memberUserIds, commentIds } = await step.run("fetch-members-and-comments", async () => {
+            const [members, comments] = await Promise.all([
+                prisma.engagementMember.findMany({
+                    where: { engagementId },
+                    select: { userId: true },
+                }),
+                prisma.docCommentMessage.findMany({
+                    where: { projectDocumentId: documentId },
+                    select: { id: true },
+                }),
+            ])
+            return {
+                memberUserIds: members.map((m: { userId: string }) => m.userId),
+                commentIds: comments.map((c: { id: string }) => c.id),
+            }
+        })
+
+        await step.run("remove-document-reminders", async () => {
+            const { removeRemindersByEntityForUsers } = await import('@/lib/actions/user-reminders')
+            await removeRemindersByEntityForUsers(memberUserIds, 'platform.documents', documentId)
+        })
+
+        await step.run("remove-comment-reminders", async () => {
+            if (commentIds.length === 0) return
+            const { removeRemindersByEntityForUsers } = await import('@/lib/actions/user-reminders')
+            await Promise.allSettled(
+                commentIds.map((commentId: string) => removeRemindersByEntityForUsers(memberUserIds, 'platform.doc_comments', commentId))
+            )
+        })
+
+        return { documentId, memberCount: memberUserIds.length, commentCount: commentIds.length }
+    }
+)
+
+// ---------------------------------------------------------------------------
+// 30-day Engagement Purge (Daily Cron)
+// ---------------------------------------------------------------------------
+
+/**
+ * Hard-purges engagements soft-deleted more than 30 days ago.
+ * A single DELETE; FK cascades clean all child rows (documents, wiki, comments, notifications).
+ */
+export const purgeDeletedEngagements = inngest.createFunction(
+    { id: "purge-deleted-engagements", triggers: [{ cron: "0 2 * * *" }] },
+    async ({ step }) => {
+        return step.run("purge", async () => {
+            const cutoff = new Date()
+            cutoff.setDate(cutoff.getDate() - 30)
+
+            const toDelete = await prisma.engagement.findMany({
+                where: { isDeleted: true, deletedAt: { lt: cutoff } },
+                select: { id: true },
+            })
+
+            if (toDelete.length === 0) return { purged: 0 }
+
+            await prisma.engagement.deleteMany({
+                where: { id: { in: toDelete.map((e: { id: string }) => e.id) } },
+            })
+
+            logger.info(`Purged ${toDelete.length} deleted engagements`, 'purge-deleted-engagements')
+            return { purged: toDelete.length }
+        })
     }
 )
 

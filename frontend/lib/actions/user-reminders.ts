@@ -409,6 +409,21 @@ export async function removeRemindersByEntity(userId: string, entityKey: string,
     await saveItems(userId, items.filter((r) => r.entityKey !== entityKey || r.entityValue !== entityValue))
 }
 
+/**
+ * Remove all reminders matching entityKey+entityValue across a set of users.
+ * Used when an entity is deleted (engagement, document) to clean up all members' reminders.
+ * Cancels any scheduled Inngest email/recurring jobs for each removed reminder.
+ */
+export async function removeRemindersByEntityForUsers(
+    userIds: string[],
+    entityKey: string,
+    entityValue: string,
+): Promise<void> {
+    await Promise.allSettled(
+        userIds.map((uid) => removeRemindersByEntity(uid, entityKey, entityValue))
+    )
+}
+
 /** Mark multiple reminders done at once. */
 export async function markAllRemindersDone(reminderIds: string[]): Promise<void> {
     for (const id of reminderIds) {

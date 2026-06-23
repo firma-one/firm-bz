@@ -1107,6 +1107,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
         canEdit,
         processUploads,
         handleCopyMoveToFolder,
+        addToast,
     })
 
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => handleFileUploadFromHook(e, fileInputRef)

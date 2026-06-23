@@ -1,7 +1,7 @@
 'use server'
 
 import { prisma } from '@/lib/prisma'
-import { type EngagementStatus } from '@prisma/client'
+import { type EngagementStatus, DocumentSharingPermissionStatus } from '@prisma/client'
 import { createClient as createSupabaseClient } from '@/utils/supabase/server'
 import { upsertFollowUpReminder } from '@/lib/actions/user-reminders'
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
@@ -581,6 +581,36 @@ export async function closeEngagement(projectId: string, firmSlug: string, clien
         select: { userId: true },
     })
 
+    // Revoke document-level connector permissions BEFORE deleting member rows.
+    // The FK cascade drops sharing rows (and connectorPermissionId) on member delete —
+    // so permissions must be revoked first while the data is still readable.
+    const { connectorId: clientConnectorId } = await resolveClientConnector(project.clientId)
+    if (clientConnectorId) {
+        try {
+            const { getPermissionAdapter } = await import('@/lib/connectors/registry')
+            const adapter = await getPermissionAdapter(clientConnectorId)
+            if (adapter) {
+                const externalUserIds = externalMembers.map((m) => m.userId)
+                const sharingRows = await prisma.engagementDocumentSharingUser.findMany({
+                    where: {
+                        engagementId: projectId,
+                        userId: { in: externalUserIds },
+                        sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED,
+                        connectorPermissionId: { not: null },
+                    },
+                    select: { connectorPermissionId: true, document: { select: { externalId: true } } },
+                })
+                await Promise.allSettled(
+                    sharingRows
+                        .filter((s) => s.connectorPermissionId && s.document?.externalId)
+                        .map((s) => adapter.revokePermission(clientConnectorId, s.document!.externalId, s.connectorPermissionId!))
+                )
+            }
+        } catch (error) {
+            logger.error('Error revoking document-level connector permissions on engagement close', error as Error)
+        }
+    }
+
     await prisma.$transaction(async (tx) => {
         await tx.engagement.update({
             where: { id: projectId },
@@ -624,7 +654,14 @@ export async function closeEngagement(projectId: string, firmSlug: string, clien
         projectId: project.id,
         organizationId: project.firmId,
         reason: 'closed',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+    })
+
+    // Async: reminder cleanup for all members (engagement + doc + comment level)
+    await safeInngestSend('engagement.closed', {
+        engagementId: projectId,
+        memberUserIds: Array.from(toInvalidate),
+        timestamp: new Date().toISOString(),
     })
 
     revalidatePath(`/d/f/${firmSlug}/c/${clientSlug}`)
@@ -662,6 +699,16 @@ export async function reopenEngagement(projectId: string, firmSlug: string, clie
 
 /**
  * Delete project (Soft delete) (V2)
+ *
+ * Sequence:
+ *   1. Revoke all doc-level connector permissions (sync — must read connectorPermissionId
+ *      before FK cascade drops sharing rows on member delete)
+ *   2. Restrict Drive root folder to owner-only (sync — immediate safety net)
+ *   3. Transaction: hard-delete members (FK cascades sharing rows), invitations,
+ *      file persona grants; soft-delete engagement with deletedAt timestamp
+ *   4. Invalidate member caches (sync — must take effect on next request)
+ *   5. Fire engagement.deleted (async Inngest) — reminder cleanup + member sign-outs
+ *   6. Fire project/archived (async Inngest) — share config clear + internal folder downgrade
  */
 export async function deleteEngagement(projectId: string, firmSlug: string, clientSlug: string) {
     await assertCanManageProject(projectId)
@@ -674,6 +721,65 @@ export async function deleteEngagement(projectId: string, firmSlug: string, clie
 
     const supabase = await createSupabaseClient()
     const { data: { user } } = await supabase.auth.getUser()
+
+    const projectMembers = await prisma.engagementMember.findMany({
+        where: { engagementId: projectId },
+        select: { userId: true },
+    })
+    const memberUserIds = projectMembers.map((m: { userId: string }) => m.userId)
+
+    const { connectorId: clientConnectorId } = await resolveClientConnector(project.clientId)
+
+    // 1. Revoke doc-level connector permissions before deleting members.
+    //    FK cascade drops sharing rows (and connectorPermissionId) on member delete.
+    if (clientConnectorId) {
+        try {
+            const { getPermissionAdapter } = await import('@/lib/connectors/registry')
+            const adapter = await getPermissionAdapter(clientConnectorId)
+            if (adapter) {
+                const sharingRows = await prisma.engagementDocumentSharingUser.findMany({
+                    where: {
+                        engagementId: projectId,
+                        sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED,
+                        connectorPermissionId: { not: null },
+                    },
+                    select: { connectorPermissionId: true, document: { select: { externalId: true } } },
+                })
+                await Promise.allSettled(
+                    sharingRows
+                        .filter((s) => s.connectorPermissionId && s.document?.externalId)
+                        .map((s) => adapter.revokePermission(clientConnectorId, s.document!.externalId, s.connectorPermissionId!))
+                )
+            }
+        } catch (e) {
+            logger.error('Error revoking document-level connector permissions on project delete', e as Error)
+        }
+    }
+
+    // 2. Restrict Drive root folder to owner-only (immediate safety net)
+    if (project.connectorRootFolderId && clientConnectorId) {
+        try {
+            await googleDriveConnector.restrictFolderToOwnerOnly(clientConnectorId, project.connectorRootFolderId)
+        } catch (e) {
+            logger.error('Error restricting Drive folders on project delete', e as Error)
+        }
+    }
+
+    // 3. Hard-delete live access objects; soft-delete the engagement anchor
+    await prisma.$transaction(async (tx) => {
+        // Members — FK cascade drops their engagement_document_sharing_users rows
+        await tx.engagementMember.deleteMany({ where: { engagementId: projectId } })
+        // Pending invitations — meaningless on a deleted engagement
+        await tx.engagementInvitation.deleteMany({ where: { engagementId: projectId } })
+        // File persona grants — live access objects, must not dangle
+        await tx.filePersonaGrant.deleteMany({ where: { engagementId: projectId } })
+        // Soft-delete with timestamp for 30-day purge cron
+        await tx.engagement.update({
+            where: { id: projectId },
+            data: { isDeleted: true, deletedAt: new Date(), deletedBy: user?.id ?? null },
+        })
+    })
+
     audit(AUDIT_EVENT.ENGAGEMENT_DELETED)
         .scope(AUDIT_SCOPE.ENGAGEMENT)
         .firm(project.firmId)
@@ -682,37 +788,26 @@ export async function deleteEngagement(projectId: string, firmSlug: string, clie
         .actor(user?.id)
         .fireAndForget()
 
-    // 1. Fetch all members before deletion for cache invalidation
-    const projectMembers = await prisma.engagementMember.findMany({
-        where: { engagementId: projectId },
-        select: { userId: true }
-    })
-
-    // 2. Revoke Drive access
-    if (project.connectorRootFolderId) {
-        const { connectorId: clientConnectorId } = await resolveClientConnector(project.clientId)
-
-        if (clientConnectorId) {
-            try {
-                await googleDriveConnector.restrictFolderToOwnerOnly(clientConnectorId, project.connectorRootFolderId)
-            } catch (e) {
-                logger.error('Error restricting Drive folders on project delete', e as Error)
-            }
-        }
-    }
-
-    // 3. Delete members and project
-    await prisma.engagementMember.deleteMany({ where: { engagementId: projectId } })
-    await prisma.engagement.update({
-        where: { id: projectId },
-        data: { isDeleted: true }
-    })
-
-    // 4. Invalidate caches
-    if (projectMembers.length > 0) {
+    // 4. Invalidate caches — must take effect on next request
+    if (memberUserIds.length > 0) {
         const { invalidateUsersSettingsPlus } = await import('@/lib/actions/user-settings')
-        await invalidateUsersSettingsPlus(projectMembers.map((m: any) => m.userId))
+        await invalidateUsersSettingsPlus(memberUserIds)
     }
+
+    // 5. Async: reminder cleanup + member sign-outs
+    await safeInngestSend('engagement.deleted', {
+        engagementId: projectId,
+        memberUserIds,
+        timestamp: new Date().toISOString(),
+    })
+
+    // 6. Async: share config clear + internal folder access downgrade
+    await safeInngestSend('project/archived', {
+        projectId,
+        organizationId: project.firmId,
+        reason: 'deleted',
+        timestamp: new Date().toISOString(),
+    })
 
     revalidatePath(`/d/f/${firmSlug}/c/${clientSlug}`)
 }
