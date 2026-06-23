@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { DriveFile } from '@/lib/types'
+import { type ToastType } from '@/components/ui/toast'
 
 interface UseEngagementDragDropOptions {
     canEdit: boolean
     processUploads: (fileList: FileList) => Promise<void>
     handleCopyMoveToFolder: (destinationFolderId: string, sourceFile?: DriveFile, action?: 'copy' | 'move') => Promise<void>
-    addToast: (toast: { type: string; title: string; message: string }) => void
+    addToast: (toast: { type: ToastType; title: string; message: string }) => void
 }
 
 export function useEngagementDragDrop({

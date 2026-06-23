@@ -1,5 +1,11 @@
 # MVP Todo List
 
+## Beta Feedback Fixes
+
+See [`.claude/plans/beta-feedback-fixes.md`](../../.claude/plans/beta-feedback-fixes.md) for the full tracked list of beta feedback items and their completion status.
+
+---
+
 ## HIGH Priority
 
 - [x] **Insights**
@@ -100,12 +106,14 @@ AI layer using Gemma 4 (HuggingFace Transformers, same runtime as release notes 
 
 - [ ] **Browser Preview** — reuse the DOWNLOAD mechanism (bypasses Google secure link flow) to render a quick in-browser preview; intended for read-only viewing without Comments or Collaboration overhead
 
-## Bookmarks
+## Bookmarks & Topbar Quick Links
 
 - [ ] **Bookmark Pages & Documents** — users can bookmark any app page (e.g. a specific engagement, client, or section) or document for quick access
   - Bookmark button in the topbar or page header; bookmarks stored per-user in DB
   - Dedicated "Bookmarks" section in the sidebar or command palette for quick navigation
   - Bookmarks persist across sessions and are scoped to the firm the user is currently in
+
+- [ ] **GDrive Recycle Bin quick link (Firm Admin only)** — quick link icon in the Topbar that opens the Google Drive Recycle Bin in a new tab; visible to Firm Admins only. See [beta-feedback-fixes.md §7](../../.claude/plans/beta-feedback-fixes.md)
 
 ## Infrastructure / Maintenance
 

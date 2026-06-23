@@ -7,7 +7,7 @@ Source: @docs/mvp/todo-beta-feedback.md
 ## 1. Add Firm
 
 - [ ] **Simplify Add Firm form** — TMI at creation time. Move non-essential fields (e.g. tax number, extended address) to Firm Settings. Keep creation minimal.
-- [x] **Website URL validation** — `www.datasentry.in` was rejected. Relax validation to accept `www.` prefixed URLs without protocol, and show a clear format hint in the error message (e.g. "e.g. https://example.com or www.example.com").
+- [x] **Website URL validation** — `www.datasentry.in` was rejected. Relax validation to accept `www.` prefixed URLs without protocol, and show a clear format hint in the error message (e.g. `https://example.com` or `www.example.com`).
 - [ ] **Rename "Billing address" → "Registered address"** across the Add Firm form and settings.
 
 ---
@@ -55,7 +55,18 @@ Source: @docs/mvp/todo-beta-feedback.md
 
 ---
 
-## 8. Google Drive / Sharing
+## 8. Calendar — Right Panel (Dockable)
+
+- [ ] **Lean calendar view in right panel** — Add a dockable calendar panel on the right side of the workspace that surfaces all time-sensitive items in one place:
+  - Reminders (all assignees visible to the current user)
+  - Document due dates
+  - Client follow-up dates
+  - Should be collapsible/dockable so it doesn't crowd the main content area
+  - Lean/compact design — not a full calendar app; a scrollable date-grouped list with a mini month picker is sufficient
+
+---
+
+## 9. Google Drive / Sharing
 
 - [ ] **EV (Eng Viewer) sees native Google Docs SHARE button** — Sharing via native UI is blocked by Google and triggers an approval email, but it's an open loop. Options:
   - Add a caveat banner inside the engagement file view for EV/EC users warning that native sharing is controlled by Firma.
