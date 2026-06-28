@@ -65,6 +65,19 @@ See [`.claude/plans/beta-feedback-fixes.md`](../../.claude/plans/beta-feedback-f
 - [ ] **Notifications bell (TopBar)** — `components/app/app-topbar.tsx`: entire notifications container gated on `betaFeaturesEnabled` (reads `settings.enableBetaFeatures` from `/api/firm` response alongside branding)
 - [ ] **Notifications tab** (`/d/u/` personalization) — `app/(app)/d/u/layout.tsx`: Notifications tab filtered out unless `enableBetaFeatures`; Profile, Recent, Reminders, Bookmarks always visible. Same pattern as Engagement › Board tab in `engagement-workspace.tsx`.
 
+## Client Pull Features — [plan](../../.claude/plans/client-pull-features.md)
+
+> Add-ons to give fCMO end-clients a reason to return proactively, without touching core fCMO workflows.
+
+- [ ] **Shared Action Items Tracker** — per-engagement checklist; fCMO creates items with optional assignee + due date; external users check off their items; in-app notification on assignment
+  - New `EngagementActionItem` model; new `action-items` tab in engagement workspace (visible to all personas, write-gated to internal roles)
+
+- [ ] **Deliverables Timeline** — read-only timeline view grouping shared documents by month + activity status; reuses existing `dueDate` + `ActivityStatus` fields; no schema changes
+  - New `timeline` tab in engagement workspace; new `/api/projects/[projectId]/timeline` route
+
+- [ ] **Weekly Client Email Digest** — Monday morning email to external engagement members (EC + EV) summarising last week's completed docs, pending reviews, and open action items; toggled per engagement by Engagement Lead
+  - Activate `email` channel on existing notification infrastructure; new Inngest cron function; new email template; `digestEnabled` flag on `Engagement.settings`
+
 ## Client Management
 
 - [ ] **Contact Follow-Up Date** — [plan](../../.claude/plans/contact-follow-up-date.md) — Client Settings › Contacts: add a "Follow Up" date field per contact; auto-creates a reminder assigned to all Firm Admins on save

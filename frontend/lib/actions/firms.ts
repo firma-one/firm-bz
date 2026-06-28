@@ -382,6 +382,7 @@ export type FirmReminderEmailConfig = {
         frequencyDays: number
         startDaysBeforeDue: number
     }
+    mentionEmailOnCreate?: boolean
 }
 
 export async function getFirmReminderConfig(firmId: string): Promise<FirmReminderEmailConfig> {

@@ -1,7 +1,8 @@
 'use client'
 
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react'
-import { CalendarClock, Eye, MessageCircle, Send, Loader2, Check, ChevronDown, Link2, SlidersHorizontal, Smile } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { AtSign, CalendarClock, Eye, MessageCircle, Send, Loader2, Check, ChevronDown, Link2, SlidersHorizontal, Smile, Trash2, UserCheck, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useRightPane } from '@/lib/right-pane-context'
@@ -76,6 +77,27 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
   const [existingReminders, setExistingReminders] = useState<Map<string, { reminderId: string; dateValue: string | null }>>(new Map())
   // Set of messageIds that have at least one active reminder (for dot indicator)
   const [messagesWithReminders, setMessagesWithReminders] = useState<Set<string>>(new Set())
+
+  // @mention state
+  type MentionedUser = { userId: string; name: string; avatarUrl?: string | null }
+  const [mentionedUsers, setMentionedUsers] = useState<MentionedUser[]>([])
+  const [mentionPickerOpen, setMentionPickerOpen] = useState(false)
+  const [mentionSearch, setMentionSearch] = useState('')
+  const [mentionDateValue, setMentionDateValue] = useState('')
+  const [editingMentionId, setEditingMentionId] = useState<string | null>(null)
+  const [mentionFocusedIndex, setMentionFocusedIndex] = useState(0)
+  const mentionPickerRef = useRef<HTMLDivElement>(null)
+  const composerRef = useRef<HTMLDivElement>(null)
+
+  // Mentions filter: show only comments where current user is mentioned
+  const [mentionsFilterActive, setMentionsFilterActive] = useState(false)
+  // messageIds where current user has an active reminder/mention (for filter)
+  const [myMentionedMessageIds, setMyMentionedMessageIds] = useState<Set<string>>(new Set())
+  // messageIds that have ANY active reminder/mention (blocks delete)
+  const [messagesWithAnyMention, setMessagesWithAnyMention] = useState<Set<string>>(new Set())
+  // delete confirmation
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const topSentinelRef = useRef<HTMLDivElement>(null)
@@ -101,6 +123,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
     setCommentorEmailsFilter([])
     setFromDate('')
     setToDate('')
+    setMentionsFilterActive(false)
   }, [])
 
   const [filtersOpen, setFiltersOpen] = useState<boolean>(isExpanded)
@@ -183,10 +206,50 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
     }
   }, [engagementId, documentId])
 
+  // Fetch which comments the current user is mentioned in (for Mentions filter)
+  const fetchMyMentions = useCallback(async () => {
+    if (!user?.id) return
+    try {
+      const res = await fetch(`/api/projects/${engagementId}/doc-comments?filter=mentions`)
+      if (!res.ok) return
+      const data = await res.json()
+      const ids = new Set<string>((data.mentions ?? []).map((m: any) => m.messageId as string))
+      setMyMentionedMessageIds(ids)
+    } catch {
+      // non-blocking
+    }
+  }, [engagementId, user?.id])
+
+  // Build set of messages that have ANY active reminder (blocks delete) + populates reminder icon set
+  const refreshMessagesWithAnyMention = useCallback(async (msgs: typeof messages) => {
+    if (msgs.length === 0) { setMessagesWithAnyMention(new Set()); setMessagesWithReminders(new Set()); return }
+    const results = await Promise.allSettled(
+      msgs.map((m) =>
+        fetch(`/api/projects/${engagementId}/documents/${documentId}/doc-comments/reminders?messageId=${encodeURIComponent(m.id)}`)
+          .then((r) => r.ok ? r.json() : null)
+          .then((d) => ({ id: m.id, hasReminder: (d?.reminders?.length ?? 0) > 0 }))
+      )
+    )
+    const withReminder = new Set<string>()
+    for (const r of results) {
+      if (r.status === 'fulfilled' && r.value?.hasReminder) withReminder.add(r.value.id)
+    }
+    setMessagesWithAnyMention(withReminder)
+    setMessagesWithReminders(withReminder)
+  }, [engagementId, documentId])
+
   useEffect(() => {
     fetchMessages()
   }, [fetchMessages])
 
+  useEffect(() => {
+    fetchMyMentions()
+  }, [fetchMyMentions])
+
+  useEffect(() => {
+    if (!loading) refreshMessagesWithAnyMention(messages)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, messages.length])
 
   useEffect(() => {
     // Keyboard friendly: focus composer on open
@@ -206,26 +269,71 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (isSandboxFirm) return
-    const content = newContent.trim()
-    if (!content || submitting) return
+    // Strip any trailing '@' that opened the picker but wasn't completed
+    const content = newContent.replace(/@\s*$/, '').trim()
+    if ((!content && mentionedUsers.length === 0) || submitting) return
     setSubmitting(true)
     try {
+      // Prepend @mentions to the message text so they're visible in the thread
+      const mentionPrefix = mentionedUsers.map((u) => `@${u.name}`).join(' ')
+      const fullContent = mentionPrefix ? `${mentionPrefix} ${content}`.trim() : content
       const res = await fetch(`/api/projects/${engagementId}/documents/${documentId}/doc-comments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content }),
+        body: JSON.stringify({ content: fullContent }),
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
         throw new Error(data.error ?? 'Failed to add comment')
       }
       const data = await res.json()
-      setMessages((prev) => [...prev, data.message])
+      const newMsg = data.message
+      setMessages((prev) => [...prev, newMsg])
       setNewContent('')
+      setMentionPickerOpen(false)
+
+      // Create reminders for @mentioned users
+      if (mentionedUsers.length > 0) {
+        const toMention = [...mentionedUsers]
+        const dateVal = mentionDateValue || null
+        setMentionedUsers([])
+        setMentionDateValue('')
+        for (const { userId } of toMention) {
+          fetch(`/api/projects/${engagementId}/documents/${documentId}/doc-comments`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ messageId: newMsg.id, recipientId: userId, dateValue: dateVal }),
+          }).catch(() => {})
+        }
+        // Refresh mention state
+        setTimeout(() => { void fetchMyMentions(); void refreshMessagesWithAnyMention([...messages, newMsg]) }, 500)
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to add comment')
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  const handleDeleteComment = async (messageId: string) => {
+    if (deleting) return
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/projects/${engagementId}/documents/${documentId}/doc-comments`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete-comment', messageId }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error ?? 'Failed to delete comment')
+      }
+      setMessages((prev) => prev.filter((m) => m.id !== messageId))
+      setDeleteConfirmId(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to delete comment')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -263,6 +371,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
 
   const filteredMessages = useMemo(() => {
     return messages.filter((m) => {
+      if (mentionsFilterActive && !myMentionedMessageIds.has(m.id)) return false
       if (commentorEmailsFilter.length > 0 && (!m.authorEmail || !commentorEmailsFilter.includes(m.authorEmail))) return false
       if (statusKeysFilter.length > 0) {
         const anyMatch = statusKeysFilter.some((k) => (m.reactions?.[k]?.count ?? 0) > 0)
@@ -282,7 +391,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
       }
       return true
     })
-  }, [messages, commentorEmailsFilter, statusKeysFilter, fromDate, toDate])
+  }, [messages, mentionsFilterActive, myMentionedMessageIds, commentorEmailsFilter, statusKeysFilter, fromDate, toDate])
 
   const displayMessages = useMemo(() => {
     if (sortOrder === 'latestFirst') return [...filteredMessages].reverse()
@@ -364,33 +473,336 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
     }
   }, [loading, sortOrder, visibleMessages.length])
 
+  // Format a raw auth name (may be username-style like "deepaksshettigar") into a readable display name.
+  // If it contains no spaces/separators, fall back to the email local part split by domain.
+  const formatDisplayName = (name: string, email: string): string => {
+    if (!name || name === email.split('@')[0]) {
+      // Try to derive a nice name from the email local part
+      const local = email.split('@')[0]
+      return local.replace(/[._\-+]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()).trim()
+    }
+    if (name.includes(' ') || name.includes('.') || name.includes('_')) {
+      return name.split(/[\s._-]+/).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ').trim()
+    }
+    return name
+  }
+
+  // Render message content with @Name tokens highlighted as pills
+  const renderContentWithMentions = (content: string) => {
+    // Names are prepended as "@Name1 @Name2 message…" — extract leading @tokens, rest is plain text
+    const tokens: { type: 'mention' | 'text'; value: string }[] = []
+    let remaining = content
+    while (remaining.startsWith('@')) {
+      // Greedily consume one @token: stop at the next @ or when we hit lowercase-start words
+      const match = remaining.match(/^(@[A-Za-z][^\s]*(?:\s+[A-Z][^\s]*)?)(\s+|$)/)
+      if (!match) break
+      tokens.push({ type: 'mention', value: match[1] })
+      remaining = remaining.slice(match[0].length)
+    }
+    if (remaining) tokens.push({ type: 'text', value: remaining })
+    return tokens.map((t, i) =>
+      t.type === 'mention'
+        ? <span key={i} className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-primary/10 text-primary leading-none mr-1">{t.value}</span>
+        : <span key={i}>{t.value}</span>
+    )
+  }
+
+  // State for editing reminder on an already-posted message (read-only mentions, editable date)
+  const [reminderEditPicker, setReminderEditPicker] = useState<{
+    messageId: string
+    anchorEl: HTMLElement
+    existingDate: string
+    mentionedNames: string[] // @Name tokens parsed from message content
+  } | null>(null)
+  const reminderEditPickerRef = useRef<HTMLDivElement>(null)
+
+  // Close reminder edit picker on outside click
+  useEffect(() => {
+    if (!reminderEditPicker) return
+    const handler = (e: MouseEvent) => {
+      const target = e.target as Node
+      if ((target as Element)?.closest?.('[data-radix-popper-content-wrapper]')) return
+      if (reminderEditPickerRef.current && !reminderEditPickerRef.current.contains(target)) {
+        setReminderEditPicker(null)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [reminderEditPicker])
+
+  // Filtered member list for mention picker
+  const mentionCandidates = useMemo(() => {
+    const q = mentionSearch.trim().toLowerCase()
+    const others = firmMembers.filter((m) => m.userId !== user?.id)
+    if (!q) return others
+    return others.filter((m) => m.name.toLowerCase().includes(q) || m.email.toLowerCase().includes(q))
+  }, [firmMembers, mentionSearch, user?.id])
+
+  const openMentionPicker = (editUserId?: string) => {
+    setMentionSearch('')
+    setEditingMentionId(editUserId ?? null)
+    setMentionPickerOpen(true)
+  }
+
+  const closeMentionPicker = () => {
+    setMentionPickerOpen(false)
+    setMentionSearch('')
+    setMentionDateValue('')
+    setEditingMentionId(null)
+    textareaRef.current?.focus()
+  }
+
+  const toggleMentionUser = (member: { userId: string; name: string; email: string; avatarUrl?: string | null }) => {
+    setMentionedUsers((prev) => {
+      const already = prev.find((m) => m.userId === member.userId)
+      if (already) return prev.filter((m) => m.userId !== member.userId)
+      const displayName = formatDisplayName(member.name, member.email)
+      return [...prev, { userId: member.userId, name: displayName, avatarUrl: member.avatarUrl }]
+    })
+  }
+
+  // Close picker on outside click — but not when clicking inside a Radix Popover portal (e.g. DateTimePicker calendar)
+  useEffect(() => {
+    if (!mentionPickerOpen) return
+    const handler = (e: MouseEvent) => {
+      const target = e.target as Node
+      const insidePortal = (target as Element)?.closest?.('[data-radix-popper-content-wrapper]')
+      if (insidePortal) return
+      if (
+        mentionPickerRef.current && !mentionPickerRef.current.contains(target) &&
+        composerRef.current && !composerRef.current.contains(target)
+      ) {
+        closeMentionPicker()
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [mentionPickerOpen])
+
+  // MentionPill: shows avatar + name, hover tooltip with avatar, click to edit
+  const MentionPill = ({ u }: { u: { userId: string; name: string; avatarUrl?: string | null } }) => {
+    const initials = u.name.replace('@', '').split(/[\s._-]/).filter(Boolean).map((p: string) => p[0]).join('').slice(0, 2).toUpperCase() || '?'
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            onClick={() => openMentionPicker(u.userId)}
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-semibold bg-primary/10 text-primary hover:bg-primary/20 transition-colors cursor-pointer leading-none"
+            aria-label={`Edit mention of ${u.name}`}
+          >
+            <span className="inline-flex h-4 w-4 rounded-full overflow-hidden shrink-0 items-center justify-center text-[9px] font-bold bg-primary/20 text-primary">
+              {u.avatarUrl
+                ? <img src={u.avatarUrl} alt="" className="h-full w-full object-cover" />
+                : initials}
+            </span>
+            @{u.name}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="z-[9999] p-2 bg-white border border-slate-200 shadow-lg text-xs text-slate-800">
+          <div className="flex items-center gap-2">
+            <div className="h-7 w-7 rounded-full overflow-hidden shrink-0 flex items-center justify-center text-[11px] font-bold bg-primary/20 text-primary">
+              {u.avatarUrl
+                ? <img src={u.avatarUrl} alt="" className="h-full w-full object-cover" />
+                : initials}
+            </div>
+            <div>
+              <div className="font-semibold">{u.name}</div>
+              <div className="text-slate-400 text-[10px]">Click to edit mention</div>
+            </div>
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    )
+  }
+
   const Composer = (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-2 shrink-0">
-      <div className="flex gap-2">
-        <textarea
-          ref={textareaRef}
-          value={newContent}
-          onChange={(e) => setNewContent(e.target.value)}
-          placeholder="Add a comment…"
-          rows={2}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault()
-              void handleSubmit(e as any)
-            }
-          }}
-          className="flex-1 min-w-0 rounded-sm border border-slate-200 bg-white px-3 py-2 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-300 focus:border-slate-300 resize-none disabled:cursor-not-allowed disabled:opacity-60"
-          disabled={isSandboxFirm || submitting}
-        />
+    <form onSubmit={handleSubmit} className="flex flex-col gap-1 shrink-0">
+      {/* Usage hint above the composer */}
+      <div className="flex items-center gap-1.5 px-0.5 pb-0.5">
+        <AtSign className="h-3 w-3 text-primary shrink-0" />
+        <span className="text-[10px] text-[#45474c]">Type <span className="font-semibold text-primary">@</span> in the box below to mention a team member and optionally set a reminder.</span>
+      </div>
+      {/* Inline composer: pills + textarea in one visual box */}
+      <div ref={composerRef} className="relative">
+        <div
+          className={cn(
+            'flex flex-wrap items-center gap-1 min-h-[64px] rounded-sm border border-slate-200 bg-white px-3 py-2 text-sm focus-within:ring-2 focus-within:ring-slate-300 focus-within:border-slate-300',
+            (isSandboxFirm || submitting) && 'opacity-60 cursor-not-allowed'
+          )}
+          onClick={() => textareaRef.current?.focus()}
+        >
+          {/* Inline mention pills */}
+          {mentionedUsers.map((u) => (
+            <MentionPill key={u.userId} u={u} />
+          ))}
+
+          {/* Actual textarea — grows to fill remaining space */}
+          <textarea
+            ref={textareaRef}
+            value={newContent}
+            onChange={(e) => setNewContent(e.target.value)}
+            placeholder={mentionedUsers.length === 0 ? 'Add a comment… (type @ to mention)' : ''}
+            rows={1}
+            onKeyDown={(e) => {
+              if (e.key === '@' && !isSandboxFirm && firmMembers.length > 0) {
+                // Let '@' type into textarea, then open picker and strip it
+                setTimeout(() => {
+                  setNewContent((prev) => prev.replace(/@$/, ''))
+                  openMentionPicker()
+                }, 0)
+                return
+              }
+              if (e.key === 'Backspace' && newContent === '' && mentionedUsers.length > 0) {
+                // Remove last mention when backspacing on empty text
+                setMentionedUsers((prev) => prev.slice(0, -1))
+                e.preventDefault()
+                return
+              }
+              if (e.key === 'Escape' && mentionPickerOpen) {
+                closeMentionPicker()
+                e.stopPropagation()
+                return
+              }
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                if (mentionPickerOpen) { closeMentionPicker(); return }
+                void handleSubmit(e as any)
+              }
+            }}
+            className="flex-1 min-w-[80px] bg-transparent outline-none resize-none overflow-hidden placeholder:text-slate-400 disabled:cursor-not-allowed"
+            style={{ minHeight: '1.5rem' }}
+            disabled={isSandboxFirm || submitting}
+          />
+        </div>
+
+        {/* Anchored mention picker dropdown */}
+        {mentionPickerOpen && mentionCandidates.length > 0 && (
+          <div
+            ref={mentionPickerRef}
+            className="absolute bottom-full left-0 mb-1 w-full max-w-xs bg-white border border-[#e5e7eb] rounded-sm shadow-2xl z-[200] flex flex-col overflow-hidden"
+          >
+            {/* Header */}
+            <div className="flex items-center gap-2 px-3 py-2.5 bg-primary/5 border-b border-primary/10">
+              <AtSign className="h-3.5 w-3.5 text-primary shrink-0" />
+              <span className="text-xs font-semibold text-[#1b1b1d]">Mention a team member</span>
+            </div>
+            {/* Search */}
+            <div className="px-3 pt-2.5 pb-2">
+              <input
+                autoFocus
+                value={mentionSearch}
+                onChange={(e) => { setMentionSearch(e.target.value); setMentionFocusedIndex(0) }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') { closeMentionPicker(); e.stopPropagation(); return }
+                  if (e.key === 'ArrowDown') {
+                    e.preventDefault()
+                    setMentionFocusedIndex((i) => Math.min(i + 1, mentionCandidates.length - 1))
+                    return
+                  }
+                  if (e.key === 'ArrowUp') {
+                    e.preventDefault()
+                    setMentionFocusedIndex((i) => Math.max(i - 1, 0))
+                    return
+                  }
+                  if (e.key === ' ' || e.key === 'Enter') {
+                    const m = mentionCandidates[mentionFocusedIndex]
+                    if (m) { e.preventDefault(); toggleMentionUser(m) }
+                  }
+                }}
+                placeholder="Search members…"
+                className="w-full text-xs rounded-sm border border-[#e5e7eb] bg-[#f9f9fb] px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40 focus:bg-white transition-colors"
+              />
+            </div>
+            {/* Member list */}
+            <div className="overflow-y-auto border-t border-[#f0f0f2]" style={{ maxHeight: '180px' }}>
+              {mentionCandidates.map((m, idx) => {
+                const selected = mentionedUsers.some((u) => u.userId === m.userId)
+                const focused = idx === mentionFocusedIndex
+                const displayName = formatDisplayName(m.name, m.email)
+                const initials = displayName.split(/\s+/).filter(Boolean).map((p: string) => p[0]).join('').slice(0, 2).toUpperCase() || '?'
+                return (
+                  <button
+                    key={m.userId}
+                    type="button"
+                    ref={(el) => { if (el && focused) el.scrollIntoView({ block: 'nearest' }) }}
+                    onClick={() => toggleMentionUser(m)}
+                    onMouseEnter={() => setMentionFocusedIndex(idx)}
+                    className={cn(
+                      'w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors',
+                      selected ? 'bg-primary/5 hover:bg-primary/10' : focused ? 'bg-[#f4f4f5]' : 'hover:bg-[#f4f4f5]'
+                    )}
+                  >
+                    <span className={cn(
+                      'h-4 w-4 rounded border flex items-center justify-center shrink-0 transition-colors',
+                      selected ? 'border-primary bg-primary' : 'border-[#c5c7cc] bg-white'
+                    )}>
+                      {selected && <Check className="h-3 w-3 text-white" strokeWidth={2.5} />}
+                    </span>
+                    <div className={cn(
+                      'h-7 w-7 rounded-full overflow-hidden shrink-0 flex items-center justify-center text-[11px] font-bold border',
+                      selected ? 'border-primary/30' : 'border-[#e5e7eb]'
+                    )}>
+                      {m.avatarUrl
+                        ? <img src={m.avatarUrl} alt="" className="h-full w-full object-cover" />
+                        : <div className={cn('h-full w-full flex items-center justify-center font-bold', selected ? 'bg-primary/10 text-primary' : 'bg-primary/5 text-primary/60')}>{initials}</div>
+                      }
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className={cn('text-xs font-semibold truncate', selected ? 'text-primary' : 'text-[#1b1b1d]')}>{displayName}</div>
+                      <div className="text-[10px] truncate text-[#9a9ba0]">{m.email}</div>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+            {/* Reminder footer */}
+            <div className="px-3 pt-2.5 pb-3 border-t border-[#e5e7eb] bg-[#f9f9fb] flex flex-col gap-2">
+              <div className="flex items-center gap-1.5">
+                <CalendarClock className={cn('h-3.5 w-3.5 shrink-0', mentionedUsers.length > 0 ? 'text-primary' : 'text-[#c5c7cc]')} />
+                <span className={cn('text-[10px] font-semibold uppercase tracking-wide', mentionedUsers.length > 0 ? 'text-[#45474c]' : 'text-[#c5c7cc]')}>
+                  Remind on <span className="font-normal normal-case tracking-normal">(optional)</span>
+                </span>
+              </div>
+              <div className={cn(mentionedUsers.length === 0 && 'opacity-40 pointer-events-none select-none')}>
+                <DateTimePicker
+                  value={mentionDateValue}
+                  onChange={setMentionDateValue}
+                  placeholder="No date — notify now"
+                  defaultTime="09:00"
+                  allowFutureDateTimes={true}
+                  disabled={mentionedUsers.length === 0}
+                />
+              </div>
+              {mentionedUsers.length === 0 && (
+                <p className="text-[10px] text-[#9a9ba0]">Select a member above to enable reminders.</p>
+              )}
+              <div className="flex justify-end pt-0.5">
+                <button
+                  type="button"
+                  onClick={closeMentionPicker}
+                  className="text-xs font-semibold text-white bg-primary hover:bg-primary/90 px-4 py-1.5 rounded-sm transition-colors"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Send row */}
+      <div className="flex items-center justify-end gap-2">
         <Button
           variant="blackCta"
           type="submit"
-          size="icon"
-          className="shrink-0 h-10 w-10 rounded-xl"
-          disabled={isSandboxFirm || submitting || !newContent.trim()}
+          size="sm"
+          className="h-8 px-4 rounded-xl"
+          disabled={isSandboxFirm || submitting || (!newContent.trim() && mentionedUsers.length === 0)}
           aria-label="Send comment"
         >
-          {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+          {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Send className="h-3.5 w-3.5 mr-1" />}
+          Send
         </Button>
       </div>
     </form>
@@ -476,13 +888,6 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
     <div className="flex flex-col h-full min-h-0 p-4 min-w-0">
       <TooltipProvider>
       <div className="space-y-3 min-w-0">
-        {documentName ? (
-          <div className="inline-flex max-w-full items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-            <span className="truncate text-xs font-medium text-slate-700" title={documentName}>
-              {documentName}
-            </span>
-          </div>
-        ) : null}
 
         {error && (
           <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
@@ -675,6 +1080,26 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                 </div>
               </div>
 
+              {myMentionedMessageIds.size > 0 && (
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-medium text-slate-600">Mentions</label>
+                  <button
+                    type="button"
+                    onClick={() => setMentionsFilterActive((v) => !v)}
+                    className={cn(
+                      'h-9 px-3 rounded-xl border text-xs font-medium inline-flex items-center gap-1.5 transition-colors',
+                      mentionsFilterActive
+                        ? 'bg-blue-50 border-blue-300 text-blue-700'
+                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                    )}
+                  >
+                    <UserCheck className="h-3.5 w-3.5" />
+                    Mentions me
+                    {mentionsFilterActive && <X className="h-3 w-3 ml-0.5" />}
+                  </button>
+                </div>
+              )}
+
               <div className="flex gap-2 items-center">
                 <Button
                   variant="outline"
@@ -851,6 +1276,25 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                   className="min-w-[140px]"
                 />
               </div>
+              {myMentionedMessageIds.size > 0 && (
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-medium text-slate-600">Mentions</label>
+                  <button
+                    type="button"
+                    onClick={() => setMentionsFilterActive((v) => !v)}
+                    className={cn(
+                      'h-9 px-3 rounded-xl border text-xs font-medium inline-flex items-center gap-1.5 transition-colors',
+                      mentionsFilterActive
+                        ? 'bg-blue-50 border-blue-300 text-blue-700'
+                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                    )}
+                  >
+                    <UserCheck className="h-3.5 w-3.5" />
+                    Mentions me
+                    {mentionsFilterActive && <X className="h-3 w-3 ml-0.5" />}
+                  </button>
+                </div>
+              )}
               <Button
                 variant="outline"
                 size="sm"
@@ -1018,11 +1462,22 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
           <div className="space-y-3">
             {visibleMessages.map((msg) => {
               const isLatest = latestCommentId === msg.id
+              const isMine = msg.authorUserId === user?.id
+              const isLastMsg = messages[messages.length - 1]?.id === msg.id
+              const hasMention = messagesWithAnyMention.has(msg.id)
+              const mentionedMe = myMentionedMessageIds.has(msg.id)
+              // Trash visible only if: my message, last in thread, no active reminders/mentions
+              const canDelete = isMine && isLastMsg && !hasMention && !isSandboxFirm
+              const isConfirmingDelete = deleteConfirmId === msg.id
               return (
                 <div
                   key={msg.id}
                   id={`comment-${msg.id}`}
-                  className={`group rounded-sm border border-slate-200 bg-white px-4 py-3 text-sm shadow-[0_1px_2px_rgba(0,0,0,0.04)] hover:bg-slate-50/80 transition-colors ${focusedCommentId === msg.id ? 'ring-2 ring-slate-300' : ''}`}
+                  className={cn(
+                    'group rounded-sm border bg-white px-4 py-3 text-sm shadow-[0_1px_2px_rgba(0,0,0,0.04)] hover:bg-slate-50/80 transition-colors',
+                    focusedCommentId === msg.id ? 'ring-2 ring-slate-300' : '',
+                    mentionedMe ? 'border-l-2 border-l-blue-400 border-slate-200 bg-blue-50/20' : 'border-slate-200'
+                  )}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
@@ -1042,7 +1497,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                       </div>
 
                       <p className="text-slate-900 whitespace-pre-wrap break-words leading-[1.6] max-w-[700px] mb-3">
-                        {msg.content}
+                        {renderContentWithMentions(msg.content)}
                       </p>
                     </div>
 
@@ -1140,39 +1595,39 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                     </div>
 
                     <div className="flex items-center gap-1">
-                      {firmMembers.length > 0 && (
+                      {messagesWithReminders.has(msg.id) && (
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <button
                               type="button"
                               className="relative shrink-0 h-7 w-7 rounded-md hover:bg-orange-50 transition-colors inline-flex items-center justify-center"
                               style={{ color: '#C4572B' }}
-                              aria-label="Assign reminder"
-                              onClick={() => {
-                                // Fetch existing reminders first, then open modal so pre-population is correct
+                              aria-label="Edit reminder"
+                              onClick={(e) => {
+                                const btn = e.currentTarget as HTMLElement
+                                const names: string[] = []
+                                let rem = msg.content
+                                while (rem.startsWith('@')) {
+                                  const m = rem.match(/^(@[A-Za-z][^\s]*(?:\s+[A-Z][^\s]*)?)(\s+|$)/)
+                                  if (!m) break
+                                  names.push(m[1])
+                                  rem = rem.slice(m[0].length)
+                                }
                                 fetch(`/api/projects/${engagementId}/documents/${documentId}/doc-comments/reminders?messageId=${encodeURIComponent(msg.id)}`)
                                   .then((r) => r.ok ? r.json() : null)
                                   .then((data) => {
-                                    const map = new Map<string, { reminderId: string; dateValue: string | null }>()
-                                    ;(data?.reminders ?? []).forEach((r: any) => map.set(r.userId, { reminderId: r.reminderId, dateValue: r.dateValue }))
-                                    setExistingReminders(map)
-                                    if (map.size > 0) setMessagesWithReminders((prev) => new Set([...Array.from(prev), msg.id]))
-                                    setReminderModal({ messageId: msg.id, content: msg.content })
+                                    const firstReminder = (data?.reminders ?? [])[0]
+                                    setReminderEditPicker({ messageId: msg.id, anchorEl: btn, existingDate: firstReminder?.dateValue ?? '', mentionedNames: names })
                                   })
-                                  .catch(() => {
-                                    setExistingReminders(new Map())
-                                    setReminderModal({ messageId: msg.id, content: msg.content })
-                                  })
+                                  .catch(() => setReminderEditPicker({ messageId: msg.id, anchorEl: btn, existingDate: '', mentionedNames: names }))
                               }}
                             >
                               <CalendarClock className="h-4 w-4" />
-                              {messagesWithReminders.has(msg.id) && (
-                                <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full border border-white" style={{ backgroundColor: '#C4572B' }} />
-                              )}
+                              <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full border border-white" style={{ backgroundColor: '#C4572B' }} />
                             </button>
                           </TooltipTrigger>
                           <TooltipContent side="top" className={LIGHT_TOOLTIP_CLASS}>
-                            Setup Reminder
+                            Edit reminder
                           </TooltipContent>
                         </Tooltip>
                       )}
@@ -1195,6 +1650,45 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                           Copy link
                         </TooltipContent>
                       </Tooltip>
+
+                      {canDelete && !isConfirmingDelete && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              className="shrink-0 h-7 w-7 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors inline-flex items-center justify-center opacity-0 group-hover:opacity-100"
+                              aria-label="Delete comment"
+                              onClick={() => setDeleteConfirmId(msg.id)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className={LIGHT_TOOLTIP_CLASS}>
+                            Delete comment
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                      {isConfirmingDelete && (
+                        <div className="inline-flex items-center gap-1.5 text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-md px-2 py-1">
+                          <span>Delete?</span>
+                          <button
+                            type="button"
+                            className="font-semibold hover:underline"
+                            disabled={deleting}
+                            onClick={() => void handleDeleteComment(msg.id)}
+                          >
+                            {deleting ? 'Deleting…' : 'Yes'}
+                          </button>
+                          <span className="text-rose-300">·</span>
+                          <button
+                            type="button"
+                            className="hover:underline"
+                            onClick={() => setDeleteConfirmId(null)}
+                          >
+                            No
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1223,7 +1717,93 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
         hint="A reminder with a link to this comment will appear in the assignee's reminders on the selected date."
         onSubmit={handleReminderSubmit}
       />
+
     </TooltipProvider>
+
+    {/* Reminder-edit picker — portalled to body, identical layout to mention picker */}
+    {reminderEditPicker && typeof document !== 'undefined' && createPortal(
+      <div
+        ref={reminderEditPickerRef}
+        className="fixed bg-white border border-[#e5e7eb] rounded-sm shadow-2xl flex flex-col overflow-hidden"
+        style={{
+          zIndex: 999999,
+          width: 320,
+          ...(() => {
+            const rect = reminderEditPicker.anchorEl.getBoundingClientRect()
+            return rect.top > window.innerHeight / 2
+              ? { bottom: window.innerHeight - rect.top + 8, right: window.innerWidth - rect.right }
+              : { top: rect.bottom + 8, right: window.innerWidth - rect.right }
+          })()
+        }}
+      >
+        {/* Header — matches mention picker exactly */}
+        <div className="flex items-center gap-2 px-3 py-2.5 bg-primary/5 border-b border-primary/10">
+          <AtSign className="h-3.5 w-3.5 text-primary shrink-0" />
+          <span className="text-xs font-semibold text-[#1b1b1d]">Edit reminder</span>
+        </div>
+        {/* Disabled search box */}
+        <div className="px-3 pt-2.5 pb-2">
+          <input
+            disabled
+            placeholder="Search members…"
+            className="w-full text-xs rounded-sm border border-[#e5e7eb] bg-[#f3f4f6] px-2.5 py-1.5 outline-none opacity-50 cursor-not-allowed"
+          />
+        </div>
+        {/* Member list — checked, non-interactive */}
+        <div className="overflow-y-auto border-t border-[#f0f0f2]" style={{ maxHeight: 180 }}>
+          {reminderEditPicker.mentionedNames.map((name, ni) => {
+            const initials = name.replace('@', '').split(/\s+/).map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
+            return (
+              <div key={ni} className="flex items-center gap-2.5 px-3 py-2.5 bg-primary/5 select-none">
+                <span className="h-4 w-4 rounded border border-primary bg-primary flex items-center justify-center shrink-0">
+                  <Check className="h-3 w-3 text-white" strokeWidth={2.5} />
+                </span>
+                <div className="h-7 w-7 rounded-full overflow-hidden shrink-0 flex items-center justify-center text-[11px] font-bold border border-primary/30">
+                  <div className="h-full w-full flex items-center justify-center bg-primary/10 text-primary">{initials}</div>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-semibold truncate text-primary">{name.replace('@', '')}</div>
+                  <div className="text-[10px] text-[#9a9ba0]">Mentioned</div>
+                </div>
+                <span className="text-[9px] font-semibold text-[#9a9ba0] uppercase tracking-wide shrink-0">Locked</span>
+              </div>
+            )
+          })}
+        </div>
+        {/* Reminder footer — identical to mention picker footer */}
+        <div className="px-3 pt-2.5 pb-3 border-t border-[#e5e7eb] bg-[#f9f9fb] flex flex-col gap-2">
+          <div className="flex items-center gap-1.5">
+            <CalendarClock className="h-3.5 w-3.5 text-primary shrink-0" />
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-[#45474c]">
+              Remind on <span className="font-normal normal-case tracking-normal">(optional)</span>
+            </span>
+          </div>
+          <DateTimePicker
+            value={reminderEditPicker.existingDate}
+            onChange={(val) => setReminderEditPicker((prev) => prev ? { ...prev, existingDate: val } : prev)}
+            placeholder="No date — notify now"
+            defaultTime="09:00"
+            allowFutureDateTimes={true}
+          />
+          <div className="flex justify-end pt-0.5">
+            <button type="button"
+              onClick={() => {
+                const dateVal = reminderEditPicker.existingDate || null
+                fetch(`/api/projects/${engagementId}/documents/${documentId}/doc-comments`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ messageId: reminderEditPicker.messageId, dateValue: dateVal }),
+                }).catch(() => {})
+                setReminderEditPicker(null)
+              }}
+              className="text-xs font-semibold text-white bg-primary hover:bg-primary/90 px-4 py-1.5 rounded-sm transition-colors">
+              Done
+            </button>
+          </div>
+        </div>
+      </div>,
+      document.body
+    )}
     </div>
   )
 }

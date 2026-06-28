@@ -134,6 +134,7 @@ enum DocumentSharingPermissionStatus {
   PENDING
   GRANTED
   REVOKED
+  INHERITED
 
   @@schema("platform")
 }

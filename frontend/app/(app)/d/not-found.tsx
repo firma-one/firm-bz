@@ -28,17 +28,9 @@ export default function NotFound() {
                 This page doesn&apos;t exist or you no longer have access. If you followed a link from a client or engagement, check that your access hasn&apos;t changed.
             </p>
 
-            <div className="flex flex-col sm:flex-row gap-3">
-                <Button asChild variant="blackCta" className="w-full sm:w-auto">
-                    <Link href={dashboardHref}>
-                        <Home className="mr-2 h-4 w-4" />
-                        Go to Dashboard
-                    </Link>
-                </Button>
-
+            <div className="flex flex-row gap-3 justify-center">
                 <Button
                     variant="outline"
-                    className="w-full sm:w-auto"
                     onClick={() => {
                         if (typeof window !== 'undefined') {
                             window.history.back()
@@ -47,6 +39,13 @@ export default function NotFound() {
                 >
                     <ArrowLeft className="mr-2 h-4 w-4" />
                     Go Back
+                </Button>
+
+                <Button asChild variant="blackCta">
+                    <Link href={dashboardHref} className="flex items-center">
+                        <Home className="mr-2 h-4 w-4" />
+                        Go to Dashboard
+                    </Link>
                 </Button>
             </div>
         </div>
