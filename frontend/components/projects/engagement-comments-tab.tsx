@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
-import { AtSign, MessageCircle, Search, ChevronRight } from 'lucide-react'
+import { AtSign, MessageCircle, Search, ExternalLink, MessagesSquare } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { useRightPane } from '@/lib/right-pane-context'
@@ -184,34 +184,40 @@ export function EngagementCommentsTab({
             ) : (
               <div className="divide-y divide-[#e5e7eb]">
                 {rows.map((r) => (
-                  <button
-                    key={r.projectDocumentId}
-                    type="button"
-                    className={cn('w-full text-left px-4 py-3 hover:bg-[#f9f9fb] transition-colors flex items-start gap-3')}
-                    onClick={() => openDocComments(r.projectDocumentId, r.documentName)}
-                  >
+                  <div key={r.projectDocumentId} className="flex items-center gap-2 px-4 py-3 hover:bg-[#f9f9fb] transition-colors group">
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="text-sm font-semibold text-[#1b1b1d] truncate">{r.documentName}</div>
-                          {r.latest ? (
-                            <div className="mt-0.5 text-xs text-[#45474c] line-clamp-2">{r.latest.preview}</div>
-                          ) : null}
-                        </div>
-                        <div className="shrink-0 flex items-center gap-2">
-                          <span className="inline-flex items-center rounded border border-[#e5e7eb] bg-[#f3f4f6] px-1.5 py-0.5 text-[10px] font-semibold text-[#45474c]">
-                            {r.count}
-                          </span>
-                          <ChevronRight className="h-3.5 w-3.5 text-[#c5c7cc]" />
-                        </div>
-                      </div>
+                      <div className="text-sm font-semibold text-[#1b1b1d] truncate">{r.documentName}</div>
                       {r.latest ? (
-                        <div className="mt-1.5 text-[10px] text-[#9a9ba0]">
+                        <div className="mt-0.5 text-xs text-[#45474c] line-clamp-2">{r.latest.preview}</div>
+                      ) : null}
+                      {r.latest ? (
+                        <div className="mt-1 text-[10px] text-[#9a9ba0]">
                           <RelativeDateTime date={r.latest.createdAt} />
                         </div>
                       ) : null}
                     </div>
-                  </button>
+                    <div className="shrink-0 flex items-center gap-1.5">
+                      <span className="inline-flex items-center rounded border border-[#e5e7eb] bg-[#f3f4f6] px-1.5 py-0.5 text-[10px] font-semibold text-[#45474c]">
+                        {r.count}
+                      </span>
+                      <button
+                        type="button"
+                        title="Open comment thread"
+                        onClick={() => openDocComments(r.projectDocumentId, r.documentName)}
+                        className="h-7 w-7 rounded flex items-center justify-center text-[#45474c] hover:text-primary hover:bg-primary/10 transition-colors"
+                      >
+                        <MessagesSquare className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        title="Go to document"
+                        onClick={() => { window.location.hash = `doc-file:${r.projectDocumentId}` }}
+                        className="h-7 w-7 rounded flex items-center justify-center text-[#45474c] hover:text-primary hover:bg-primary/10 transition-colors"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
                 ))}
               </div>
             )}
@@ -234,28 +240,36 @@ export function EngagementCommentsTab({
           ) : (
             <div className="divide-y divide-[#e5e7eb]">
               {mentionRows.map((r) => (
-                <button
-                  key={r.messageId}
-                  type="button"
-                  className="w-full text-left px-4 py-3 hover:bg-[#f9f9fb] transition-colors flex items-start gap-3"
-                  onClick={() => openDocComments(r.projectDocumentId, r.documentName, r.messageId)}
-                >
+                <div key={r.messageId} className="flex items-center gap-2 px-4 py-3 hover:bg-[#f9f9fb] transition-colors">
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="text-xs font-semibold text-blue-600 truncate flex items-center gap-1">
-                          <AtSign className="h-3 w-3 shrink-0" />
-                          {r.documentName}
-                        </div>
-                        <div className="mt-0.5 text-xs text-[#45474c] line-clamp-2">{r.preview}</div>
-                      </div>
-                      <ChevronRight className="h-3.5 w-3.5 text-[#c5c7cc] shrink-0 mt-0.5" />
+                    <div className="text-xs font-semibold text-primary truncate flex items-center gap-1">
+                      <AtSign className="h-3 w-3 shrink-0" />
+                      {r.documentName}
                     </div>
-                    <div className="mt-1.5 text-[10px] text-[#9a9ba0]">
+                    <div className="mt-0.5 text-xs text-[#45474c] line-clamp-2">{r.preview}</div>
+                    <div className="mt-1 text-[10px] text-[#9a9ba0]">
                       <RelativeDateTime date={r.createdAt} />
                     </div>
                   </div>
-                </button>
+                  <div className="shrink-0 flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      title="Open comment thread"
+                      onClick={() => openDocComments(r.projectDocumentId, r.documentName, r.messageId)}
+                      className="h-7 w-7 rounded flex items-center justify-center text-[#45474c] hover:text-primary hover:bg-primary/10 transition-colors"
+                    >
+                      <MessagesSquare className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      title="Go to document"
+                      onClick={() => { window.location.hash = `doc-file:${r.projectDocumentId}` }}
+                      className="h-7 w-7 rounded flex items-center justify-center text-[#45474c] hover:text-primary hover:bg-primary/10 transition-colors"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
               ))}
             </div>
           )}
