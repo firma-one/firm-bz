@@ -319,8 +319,18 @@ export async function PATCH(
 
 /**
  * DELETE /api/projects/[projectId]/documents/[documentId]/doc-comments
- * Remove a reminder for a specific recipient on a comment.
- * Body: { messageId: string; reminderId: string; recipientId: string }
+ *
+ * Two actions (discriminated by body.action):
+ *
+ * action = 'delete-comment' (default when messageId present without reminderId)
+ *   Hard-delete a comment authored by the current user, provided no subsequent
+ *   message exists on the same document (race-condition safety net only — the
+ *   UI already prevents reaching this in normal flow).
+ *   Body: { messageId: string }
+ *
+ * action = 'remove-reminder' (legacy, used by handleReminderSubmit in the UI)
+ *   Remove a reminder for a specific recipient on a comment.
+ *   Body: { reminderId: string; recipientId: string }
  */
 export async function DELETE(
   request: NextRequest,
@@ -338,6 +348,70 @@ export async function DELETE(
     if (!canView) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     const body = await request.json().catch(() => ({}))
+
+    // ── Hard-delete a comment ──────────────────────────────────────────────
+    if (body.action === 'delete-comment' || (body.messageId && !body.reminderId)) {
+      const messageId = typeof body.messageId === 'string' ? body.messageId : null
+      if (!messageId) return NextResponse.json({ error: 'messageId is required' }, { status: 400 })
+
+      const docCtx = await getProjectDocumentContext(projectId, documentIdParam)
+      if (!docCtx) return NextResponse.json({ error: 'Document not found in this project' }, { status: 404 })
+
+      const message = await prisma.docCommentMessage.findFirst({
+        where: { id: messageId, projectDocumentId: docCtx.id, engagementId: projectId },
+        select: { id: true, authorUserId: true, createdAt: true },
+      })
+      if (!message) return NextResponse.json({ error: 'Comment not found' }, { status: 404 })
+      if (message.authorUserId !== user.id) return NextResponse.json({ error: 'You can only delete your own comments' }, { status: 403 })
+
+      // Server-side race condition guard: reject if any newer message exists on this document
+      const hasFollowUp = await prisma.docCommentMessage.findFirst({
+        where: {
+          projectDocumentId: docCtx.id,
+          engagementId: projectId,
+          createdAt: { gt: message.createdAt },
+        },
+        select: { id: true },
+      })
+      if (hasFollowUp) return NextResponse.json({ error: 'Cannot delete a comment that has follow-up replies' }, { status: 409 })
+
+      // Block deletion if any user has an active reminder/mention on this comment
+      const anyMention = await prisma.userPersonalization.findFirst({
+        where: { reminders: { array_contains: [{ entityKey: 'platform.doc_comments', entityValue: messageId }] } as any },
+        select: { userId: true },
+      })
+      if (anyMention) return NextResponse.json({ error: 'Cannot delete a comment that has active mentions or reminders' }, { status: 409 })
+
+      // Cancel any reminders associated with this comment
+      try {
+        const personalization = await prisma.userPersonalization.findMany({
+          where: { reminders: { path: ['$[*].entityValue'], string_contains: messageId } as any },
+          select: { userId: true, reminders: true },
+        })
+        const { safeInngestSend } = await import('@/lib/inngest/client')
+        for (const p of personalization) {
+          const items = Array.isArray(p.reminders) ? (p.reminders as any[]) : []
+          const matching = items.filter((r) => r.entityValue === messageId)
+          for (const r of matching) {
+            await safeInngestSend('reminder.email.cancelled', { reminderId: r.id }).catch(() => {})
+            await safeInngestSend('reminder.recurring.cancelled', { reminderId: r.id }).catch(() => {})
+          }
+          if (matching.length > 0) {
+            await prisma.userPersonalization.update({
+              where: { userId: p.userId },
+              data: { reminders: items.filter((r) => r.entityValue !== messageId) as any },
+            }).catch(() => {})
+          }
+        }
+      } catch {
+        // Never block deletion if reminder cleanup fails
+      }
+
+      await prisma.docCommentMessage.delete({ where: { id: messageId } })
+      return NextResponse.json({ success: true })
+    }
+
+    // ── Remove a reminder from a comment ──────────────────────────────────
     const reminderId = typeof body.reminderId === 'string' ? body.reminderId : null
     const recipientId = typeof body.recipientId === 'string' ? body.recipientId : null
     if (!reminderId || !recipientId) return NextResponse.json({ error: 'reminderId and recipientId are required' }, { status: 400 })
@@ -367,7 +441,7 @@ export async function DELETE(
 
     return NextResponse.json({ success: true })
   } catch (e) {
-    console.error('DELETE doc-comments reminder error', e)
-    return NextResponse.json({ error: 'Failed to remove reminder' }, { status: 500 })
+    console.error('DELETE doc-comments error', e)
+    return NextResponse.json({ error: 'Failed to process request' }, { status: 500 })
   }
 }

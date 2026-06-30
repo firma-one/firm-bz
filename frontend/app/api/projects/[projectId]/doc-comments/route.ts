@@ -7,6 +7,10 @@ import { canViewProject } from '@/lib/permission-helpers'
 /**
  * GET /api/projects/[projectId]/doc-comments
  * Project-level rollup of doc comments: list documents with counts + latest message preview.
+ *
+ * ?filter=mentions  — returns only comments where the current user is an @mentioned recipient
+ *                    (i.e. has a reminder with entityKey='platform.doc_comments' for that message).
+ *                    Response shape: { mentions: MentionRow[] }
  */
 export async function GET(
   request: NextRequest,
@@ -22,6 +26,45 @@ export async function GET(
   const canView = await canViewProject(ctx.orgId, ctx.clientId, ctx.projectId)
   if (!canView) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
+  // ── Mentions filter ───────────────────────────────────────────────────────
+  if (request.nextUrl.searchParams.get('filter') === 'mentions') {
+    const personalization = await prisma.userPersonalization.findUnique({
+      where: { userId: user.id },
+      select: { reminders: true },
+    })
+    const reminders = Array.isArray(personalization?.reminders) ? (personalization!.reminders as any[]) : []
+    const mentionedMessageIds = reminders
+      .filter((r) => r.entityKey === 'platform.doc_comments')
+      .map((r) => r.entityValue as string)
+
+    if (mentionedMessageIds.length === 0) return NextResponse.json({ mentions: [] })
+
+    const messages = await prisma.docCommentMessage.findMany({
+      where: { id: { in: mentionedMessageIds }, engagementId: projectId },
+      select: { id: true, createdAt: true, content: true, authorUserId: true, projectDocumentId: true },
+      orderBy: { createdAt: 'desc' },
+    })
+
+    const docIds = Array.from(new Set(messages.map((m) => m.projectDocumentId)))
+    const docs = await prisma.engagementDocument.findMany({
+      where: { id: { in: docIds } },
+      select: { id: true, fileName: true },
+    })
+    const docNameById = Object.fromEntries(docs.map((d) => [d.id, d.fileName]))
+
+    const mentions = messages.map((m) => ({
+      messageId: m.id,
+      createdAt: m.createdAt.toISOString(),
+      preview: m.content.slice(0, 220),
+      authorUserId: m.authorUserId ?? null,
+      projectDocumentId: m.projectDocumentId,
+      documentName: docNameById[m.projectDocumentId] ?? '',
+    }))
+
+    return NextResponse.json({ mentions })
+  }
+
+  // ── Default: document rollup ──────────────────────────────────────────────
   const q = request.nextUrl.searchParams.get('q')?.trim().toLowerCase() || ''
 
   const docs = await prisma.engagementDocument.findMany({

@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
-import { X, Expand, Minimize2, PanelRight, PanelRightOpen } from 'lucide-react'
+import { XSquare, Expand, Minimize2, PanelRight, PanelRightOpen, File } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Logo from '@/components/Logo'
 import { cn } from '@/lib/utils'
@@ -151,8 +151,9 @@ export function LayoutRightPanel({
                   {title}
                 </h2>
                 {subtitle ? (
-                  <p className="font-mono text-[10px] text-[#45474c] uppercase tracking-wider truncate" title={subtitle}>
-                    {subtitle}
+                  <p className="flex items-center gap-1 text-[10px] text-[#45474c] min-w-0 overflow-hidden">
+                    <File className="h-3 w-3 shrink-0" />
+                    <span className="truncate" title={subtitle}>{subtitle}</span>
                   </p>
                 ) : null}
               </div>
@@ -163,7 +164,7 @@ export function LayoutRightPanel({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 rounded-sm text-[#45474c] hover:text-[#1b1b1d] hover:!bg-[#f4f4f5]"
+                className="h-8 w-8 rounded-sm text-[#45474c] hover:text-[#1b1b1d] bg-[#f4f4f5] hover:bg-[#e9e9eb]"
                 onClick={() => setPaneSize(cycleMeta.next)}
                 title={cycleMeta.title}
               >
@@ -172,11 +173,11 @@ export function LayoutRightPanel({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 rounded-sm text-[#45474c] hover:text-[#1b1b1d] hover:!bg-[#f4f4f5]"
+                className="h-8 w-8 rounded-sm text-[#45474c] hover:text-[#1b1b1d] bg-[#f4f4f5] hover:bg-[#e9e9eb]"
                 onClick={handleClose}
                 title="Close"
               >
-                <X className="h-4 w-4" />
+                <XSquare className="h-4 w-4" />
               </Button>
             </div>
           </header>
@@ -211,23 +212,22 @@ export function LayoutRightPanel({
           <div className="flex items-center gap-2 shrink-0">
             {/* Cycle from large → small */}
             <Button
-              variant="outline"
-              size="sm"
-              className="rounded border-[#e5e7eb] text-[#45474c] hover:bg-[#f0edee] h-9"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 rounded text-[#45474c] hover:text-[#1b1b1d] bg-[#f4f4f5] hover:bg-[#e9e9eb]"
               onClick={() => setPaneSize(CYCLE_META.large.next)}
               title={CYCLE_META.large.title}
             >
-              <Minimize2 className="h-4 w-4 mr-1.5" />
-              <span className="text-xs font-medium">Collapse</span>
+              <Minimize2 className="h-4 w-4" />
             </Button>
             <Button
               variant="ghost"
               size="icon"
-              className="h-9 w-9 rounded text-[#45474c] hover:text-[#1b1b1d] hover:bg-[#f0edee]"
+              className="h-8 w-8 rounded text-[#45474c] hover:text-[#1b1b1d] bg-[#f4f4f5] hover:bg-[#e9e9eb]"
               onClick={handleClose}
               title="Close"
             >
-              <X className="h-5 w-5" />
+              <XSquare className="h-4 w-4" />
             </Button>
           </div>
         </header>

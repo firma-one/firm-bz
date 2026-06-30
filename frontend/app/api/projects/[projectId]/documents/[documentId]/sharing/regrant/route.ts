@@ -65,6 +65,8 @@ export async function POST(
         }
 
         if (!sharingUser) {
+            let inheritedAccess = false
+
             if (isExternalEngagementRole(projectMember.role)) {
                 const hasDirectShare = (() => {
                     const s = (document.settings as Record<string, unknown>) ?? {}
@@ -78,6 +80,7 @@ export async function POST(
                     if (!reachable) {
                         return NextResponse.json({ error: 'File is not accessible' }, { status: 403 })
                     }
+                    inheritedAccess = true
                 }
             }
 
@@ -87,7 +90,9 @@ export async function POST(
                     engagementId: projectId,
                     userId: user.id,
                     email,
-                    sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED,
+                    sharingPermissionStatus: inheritedAccess
+                        ? DocumentSharingPermissionStatus.INHERITED
+                        : DocumentSharingPermissionStatus.GRANTED,
                     createdBy: user.id,
                     updatedBy: user.id,
                 },
