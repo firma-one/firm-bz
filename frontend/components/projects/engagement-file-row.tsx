@@ -364,7 +364,7 @@ export function EngagementFileRow({
                                     isIntakeRow
                                         ? 'bg-primary/10 text-primary border-primary/30'
                                         : (isFolderApproved || isInsideApprovedDeliverable)
-                                            ? 'bg-green-600 text-white border-green-700'
+                                            ? 'bg-primary text-white/70 border-primary'
                                             : isAncestorShared
                                                 ? 'bg-primary/5 text-primary/50 border-primary/20'
                                                 : 'bg-primary/10 text-primary border-primary/30'
