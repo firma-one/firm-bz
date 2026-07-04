@@ -939,7 +939,6 @@ export const grantPermissionsForNewMember = inngest.createFunction(
                                 engagementId: projectId,
                                 projectDocumentId: doc.id,
                                 userId,
-                                email,
                                 connectorPermissionId: permissionId,
                                 sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED,
                             },

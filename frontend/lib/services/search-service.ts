@@ -2,6 +2,7 @@ import { prisma } from '../prisma'
 import { generateEmbedding, prepareTextForEmbedding } from '../embeddings'
 import { generateSummary } from '../summarization'
 import { logger } from '../logger'
+import { assignDocId } from '../doc-id'
 
 export interface VectorSearchResult {
     externalId: string
@@ -168,6 +169,23 @@ export class SearchService {
                 JSON.stringify(driveMetadata),
                 params.actorId || null
             )
+
+            // Assign docId to new rows
+            if (params.projectId) {
+                const doc = await prisma.engagementDocument.findUnique({
+                    where: {
+                        engagementId_firmId_externalId: {
+                            engagementId: params.projectId,
+                            firmId: params.organizationId,
+                            externalId: params.externalId,
+                        },
+                    },
+                    select: { id: true, docId: true, engagement: { select: { name: true } } },
+                })
+                if (doc && !doc.docId && doc.engagement?.name) {
+                    await assignDocId(doc.id, params.projectId, doc.engagement.name)
+                }
+            }
 
             // Sync to GDrive
             if (connectorId) {

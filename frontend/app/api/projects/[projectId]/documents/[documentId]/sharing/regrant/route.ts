@@ -89,7 +89,6 @@ export async function POST(
                     projectDocumentId: document.id,
                     engagementId: projectId,
                     userId: user.id,
-                    email,
                     sharingPermissionStatus: inheritedAccess
                         ? DocumentSharingPermissionStatus.INHERITED
                         : DocumentSharingPermissionStatus.GRANTED,

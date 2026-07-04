@@ -64,10 +64,6 @@ export default async function EngagementBoardPage({ params }: PageProps) {
   const canEdit = capabilities['project:can_edit'] ?? false
   const canManage = canViewSettings
 
-  if (!enableBetaFeatures || !canViewInternalTabs) {
-    redirect(`/d/f/${slug}/c/${clientSlug}/e/${engagementSlug}/files`)
-  }
-
   const projectRole = applyViewAs ? viewAsSlug : await getProjectPersona(org.id, client.id, project.id)
   const restrictToSharedOnly = projectRole ? !['eng_admin', 'eng_member'].includes(projectRole) : false
 

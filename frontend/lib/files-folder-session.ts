@@ -1,8 +1,10 @@
 export type BreadcrumbItem = {
   id: string
   name: string
+  projectDocumentId?: string
   clickable?: boolean
   isPendingApproval?: boolean
+  isEngagementRoot?: boolean
 }
 
 const FILES_DEEPLINK_HIGHLIGHT_KEY = (projectId: string) => `fm_files_deeplink_highlight_${projectId}`

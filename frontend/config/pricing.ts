@@ -88,7 +88,7 @@ export const ENGAGEMENT_PERSONA_TOOLTIP_ROWS = [
         body: 'External collaborator invited to contribute to an engagement. Can create or edit content within the engagement but has limited access outside the engagement scope. Typically contractors, consultants, vendors, or agency partners.',
     },
     {
-        role: 'Viewer (External)',
+        role: 'Reviewer',
         body: 'External stakeholder with read-only access to engagement content. Cannot modify content but can review materials and stay informed. Typically clients, sponsors, or external stakeholders.',
     },
 ] as const
@@ -234,7 +234,7 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
             },
             {
                 feature: "External users",
-                tooltip: "No per-seat fee for Contributor (External) or Viewer (External).",
+                tooltip: "No per-seat fee for Contributor (External) or Reviewer.",
                 values: { Sandbox: "2", Standard: "Unlimited", Pro: "Unlimited", Business: "Unlimited", Enterprise: "Unlimited" },
             },
         ],

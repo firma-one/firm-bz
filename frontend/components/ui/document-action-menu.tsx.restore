@@ -109,8 +109,6 @@ interface DocumentActionMenuProps {
   onUntagAsDeliverable?: (doc: any) => void
   /** True when this folder is already a Deliverable (shows Untag instead of Tag). */
   isDeliverable?: boolean
-  /** True when this folder is an Approved deliverable — hides Untag, disables Tag with lock tooltip. */
-  isApprovedDeliverable?: boolean
   /** Project Lead / Client Partner / Org Owner: show persona move-tree options and allow Organize. */
   canManage?: boolean
   /** Current root folder type for persona options (Restrict / Restore / Promote). */
@@ -173,7 +171,6 @@ export function DocumentActionMenu({
   onMarkAsDeliverable,
   onUntagAsDeliverable,
   isDeliverable = false,
-  isApprovedDeliverable = false,
   canManage = false,
   currentFolderType,
   onMakePrivate,
@@ -503,7 +500,7 @@ export function DocumentActionMenu({
           avoidCollisions
           collisionPadding={8}
           sideOffset={0}
-          className="w-80 p-0 flex flex-col overflow-hidden"
+          className="w-80 p-0 flex flex-col"
           style={{ maxHeight: 'var(--radix-dropdown-menu-content-available-height)' }}
           onClick={(e) => e.stopPropagation()}
           onCloseAutoFocus={(e) => e.preventDefault()} // Prevent focus jump causing scroll
@@ -553,7 +550,7 @@ export function DocumentActionMenu({
             </div>
           </div>
 
-          <div className="p-2 overflow-y-auto min-h-0">
+          <div className="p-2">
             {/* Intake pending actions — shown at the top when applicable */}
             {(onApproveIntake || onRejectIntake || onWithdrawIntake) && (
               <>
@@ -628,23 +625,7 @@ export function DocumentActionMenu({
                   </DropdownMenuSubTrigger>
                   <DropdownMenuSubContent className="w-56">
                     {showShareModal && projectId && (
-                      isApprovedDeliverable ? (
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <DropdownMenuItem
-                                aria-disabled="true"
-                                onSelect={(e) => e.preventDefault()}
-                                className="flex items-center space-x-3 px-3 py-2 text-xs opacity-50 cursor-not-allowed"
-                              >
-                                <XCircle className="h-4 w-4" />
-                                <span>Untag as Deliverable</span>
-                              </DropdownMenuItem>
-                            </TooltipTrigger>
-                            <TooltipContent side="right" className="text-xs max-w-48">Approved deliverables cannot be untagged</TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      ) : isDeliverable ? (
+                      isDeliverable ? (
                         <DropdownMenuItem
                           onClick={() => setShowUntagConfirm(true)}
                           className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs text-destructive focus:text-destructive"
@@ -693,50 +674,24 @@ export function DocumentActionMenu({
                     </DropdownMenuItem>
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
-                {isApprovedDeliverable && !onCopyDocument ? (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground opacity-50 cursor-not-allowed select-none">
-                          <FolderOpen className="h-4 w-4" />
-                          <span>Organize</span>
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent side="right" className="text-xs max-w-48">
-                        Approved deliverables cannot be reorganized
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                ) : (onCopyDocument || onMoveDocument || onRenameDocument || onDuplicateDocument || canManage) && (
+                {(onCopyDocument || onMoveDocument || onRenameDocument || onDuplicateDocument || canManage) && (
                   <DropdownMenuSub>
                     <DropdownMenuSubTrigger className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
                       <FolderOpen className="h-4 w-4 text-gray-600" />
-                      <span>Organize</span>
+                      <span>Organise</span>
                     </DropdownMenuSubTrigger>
                     <DropdownMenuSubContent className="w-56">
                       {onRenameDocument && (
-                        isApprovedDeliverable ? (
-                          <div className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground opacity-40 cursor-not-allowed select-none">
-                            <Edit3 className="h-4 w-4" /><span>Rename</span>
-                          </div>
-                        ) : (
-                          <DropdownMenuItem onSelect={() => onRenameDocument(document)} className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
-                            <Edit3 className="h-4 w-4 text-gray-600" />
-                            <span>Rename</span>
-                          </DropdownMenuItem>
-                        )
+                        <DropdownMenuItem onSelect={() => onRenameDocument(document)} className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
+                          <Edit3 className="h-4 w-4 text-gray-600" />
+                          <span>Rename</span>
+                        </DropdownMenuItem>
                       )}
                       {onDuplicateDocument && (
-                        isApprovedDeliverable ? (
-                          <div className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground opacity-40 cursor-not-allowed select-none">
-                            <Copy className="h-4 w-4" /><span>Duplicate</span>
-                          </div>
-                        ) : (
-                          <DropdownMenuItem onSelect={() => onDuplicateDocument(document)} className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
-                            <Copy className="h-4 w-4 text-gray-600" />
-                            <span>Duplicate</span>
-                          </DropdownMenuItem>
-                        )
+                        <DropdownMenuItem onSelect={() => onDuplicateDocument(document)} className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
+                          <Copy className="h-4 w-4 text-gray-600" />
+                          <span>Duplicate</span>
+                        </DropdownMenuItem>
                       )}
                       {onCopyDocument && (
                         <DropdownMenuItem onSelect={() => onCopyDocument(document)} className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
@@ -745,24 +700,14 @@ export function DocumentActionMenu({
                         </DropdownMenuItem>
                       )}
                       {onMoveDocument && (
-                        isApprovedDeliverable ? (
-                          <div className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground opacity-40 cursor-not-allowed select-none">
-                            <Move className="h-4 w-4" /><span>Move</span>
-                          </div>
-                        ) : (
-                          <DropdownMenuItem onSelect={() => onMoveDocument(document)} className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
-                            <Move className="h-4 w-4 text-gray-600" />
-                            <span>Move</span>
-                          </DropdownMenuItem>
-                        )
+                        <DropdownMenuItem onSelect={() => onMoveDocument(document)} className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
+                          <Move className="h-4 w-4 text-gray-600" />
+                          <span>Move</span>
+                        </DropdownMenuItem>
                       )}
                       {(canManage && (onMakePrivate || onMakePublic)) && <DropdownMenuSeparator />}
                       {canManage && !document.isPrivate && onMakePrivate && (
-                        isApprovedDeliverable ? (
-                          <div className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground opacity-40 cursor-not-allowed select-none">
-                            <FolderLock className="h-4 w-4" /><span>Make Private</span>
-                          </div>
-                        ) : document.isSharedWithExternal ? (
+                        document.isSharedWithExternal ? (
                           <TooltipProvider>
                             <Tooltip open={privateInfoOpen} onOpenChange={setPrivateInfoOpen}>
                               <TooltipTrigger asChild>
@@ -788,50 +733,32 @@ export function DocumentActionMenu({
                         )
                       )}
                       {canManage && document.isPrivate && onMakePublic && (
-                        isApprovedDeliverable ? (
-                          <div className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground opacity-40 cursor-not-allowed select-none">
-                            <FolderUp className="h-4 w-4" /><span>Make Public</span>
-                          </div>
-                        ) : (
-                          <DropdownMenuItem onClick={() => onMakePublic(document)} className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
-                            <FolderUp className="h-4 w-4 text-slate-500" />
-                            <span>Make Public</span>
-                          </DropdownMenuItem>
-                        )
+                        <DropdownMenuItem onClick={() => onMakePublic(document)} className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
+                          <FolderUp className="h-4 w-4 text-slate-500" />
+                          <span>Make Public</span>
+                        </DropdownMenuItem>
                       )}
                     </DropdownMenuSubContent>
                   </DropdownMenuSub>
                 )}
-                {(onDeleteDocument || isApprovedDeliverable) && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          {isApprovedDeliverable ? (
-                            <div className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground opacity-50 cursor-not-allowed select-none">
-                              <Trash2 className="h-4 w-4" />
-                              <span>Move to Bin</span>
-                            </div>
-                          ) : (
-                            <DropdownMenuItem
-                              onSelect={(e) => { e.preventDefault(); onDeleteDocument!(document); }}
-                              className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                              <span>Move to Bin</span>
-                            </DropdownMenuItem>
-                          )}
-                        </TooltipTrigger>
-                        <TooltipContent side="left" className="max-w-[200px]">
-                          {isApprovedDeliverable
-                            ? <p>Approved deliverables cannot be deleted</p>
-                            : <p>Items in Bin are permanently deleted after 30 days (Google Drive).</p>
-                          }
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </>
+                {(!isExternalUser || onDeleteDocument) && <DropdownMenuSeparator />}
+                {onDeleteDocument && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <DropdownMenuItem
+                          onSelect={(e) => { e.preventDefault(); onDeleteDocument(document); }}
+                          className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          <span>Move to Bin</span>
+                        </DropdownMenuItem>
+                      </TooltipTrigger>
+                      <TooltipContent side="left" className="max-w-[200px]">
+                        <p>Items in Bin are permanently deleted after 30 days (Google Drive).</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 )}
                 {!isExternalUser && (
                 <>
@@ -859,6 +786,225 @@ export function DocumentActionMenu({
               </>
             ) : (
               <>
+                <DropdownMenuItem
+                  onClick={() => {
+                    if (onOpenDocument) {
+                      onOpenDocument(document)
+                    } else if (rightPane.hasRightPane) {
+                      rightPane.setTitle(document.name || 'Preview')
+                      rightPane.setContent(<DocumentPreviewPanelContent document={document} />)
+                    }
+                  }}
+                  className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                >
+                  <Eye className="h-4 w-4 text-gray-600" />
+                  <span>Open</span>
+                </DropdownMenuItem>
+
+                {!(document.isGuest && !document.allowDownload) &&
+                 !(document.isExternalCollaborator && !document.ecAllowDownload) && (
+                  <DropdownMenuItem
+                    onClick={() => { handleDownload(document); onDownloadDocument?.(document) }}
+                    className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                  >
+                    <Download className="h-4 w-4 text-blue-600" />
+                    <span>Download</span>
+                  </DropdownMenuItem>
+                )}
+
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
+                    <Share2 className="h-4 w-4 text-purple-600" />
+                    <span>Share</span>
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="w-56">
+                    <DropdownMenuItem
+                      onClick={() => {
+                        const docId = (document as any).projectDocumentId || document.id
+                        if (!deeplinkBase) return
+                        navigator.clipboard.writeText(`${deeplinkBase}#doc-file:${docId}`)
+                          .then(() => addToast({ type: 'success', title: 'Link copied', message: 'Link copied to clipboard' }))
+                          .catch(() => addToast({ type: 'error', title: 'Copy failed', message: 'Could not copy link.' }))
+                      }}
+                      className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                    >
+                      <Link2 className="h-4 w-4 text-gray-600" />
+                      <span>Copy link</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+
+                {/* Comments (doc only, project context) */}
+                {projectId && (
+                  <DropdownMenuItem
+                    onClick={() => {
+                      if (rightPane.hasRightPane) {
+                        onOpenCommentPane?.(document.id)
+                        const docIdForComments = (document as any)?.projectDocumentId || document.id
+                        rightPane.setTitle('Comments')
+                        rightPane.setHeaderActions(null)
+                        rightPane.setHeaderIcon(<DocumentIcon mimeType={document.mimeType} className="h-4 w-4" />)
+                        rightPane.setHeaderSubtitle('Append-only. Visible to all project members.')
+                        rightPane.setContent(
+                          <DocumentDocCommentsPane
+                            engagementId={projectId}
+                            documentId={docIdForComments}
+                            documentName={document.name}
+                            documentMimeType={document.mimeType}
+                            orgSlug={orgSlug}
+                          />
+                        )
+                        rightPane.setExpanded?.(false)
+                      }
+                    }}
+                    className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                  >
+                    <MessageCircle className="h-4 w-4 text-gray-600" />
+                    <span>Comment</span>
+                  </DropdownMenuItem>
+                )}
+
+                {/* Setup Reminder */}
+                {projectId && (
+                  <DropdownMenuItem
+                    onClick={async () => {
+                      if (!projectId) return
+                      const docId = (document as any).projectDocumentId || document.id
+                      // Fetch members and existing reminders in parallel
+                      try {
+                        const { getSession } = await import('@/lib/supabase')
+                        const membersSession = await getSession()
+                        const authHeaders: HeadersInit = membersSession?.access_token ? { Authorization: `Bearer ${membersSession.access_token}` } : {}
+                        const [membersRes, remindersRes] = await Promise.all([
+                          fetch(`/api/projects/${projectId}/members`, { headers: authHeaders }),
+                          fetch(`/api/projects/${projectId}/documents/${encodeURIComponent(docId)}/reminder`, { headers: authHeaders }),
+                        ])
+                        if (membersRes.ok) {
+                          const data = await membersRes.json()
+                          const selfEntry = (data.members ?? []).find((m: any) => m.userId === user?.id)
+                          if (selfEntry) setCurrentUserRole(selfEntry.role ?? null)
+                          setReminderMembers(
+                            (data.members ?? [])
+                              .filter((m: any) => m.userId && m.email && m.userId !== user?.id)
+                              .map((m: any) => ({ userId: m.userId, email: m.email, name: m.name ?? m.email.split('@')[0], role: m.role ?? '', avatarUrl: m.avatarUrl ?? null }))
+                          )
+                        }
+                        if (remindersRes.ok) {
+                          const data = await remindersRes.json()
+                          const map = new Map<string, { reminderId: string; dateValue: string | null }>()
+                          ;(data.reminders ?? []).forEach((r: any) => map.set(r.userId, { reminderId: r.reminderId, dateValue: r.dateValue }))
+                          setExistingDocReminders(map)
+                        }
+                      } catch {
+                        setExistingDocReminders(new Map())
+                      }
+                      setShowReminderModal(true)
+                    }}
+                    className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                  >
+                    <CalendarClock className="h-4 w-4 text-gray-600" />
+                    <span>Setup Reminder</span>
+                  </DropdownMenuItem>
+                )}
+
+                {/* Organize (Copy + Move + persona options) */}
+                {(onCopyDocument || onMoveDocument || onRenameDocument || onDuplicateDocument || canManage) && (
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
+                      <FolderOpen className="h-4 w-4 text-gray-600" />
+                      <span>Organise</span>
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent className="w-56">
+                      {onRenameDocument && (
+                        <DropdownMenuItem
+                          onSelect={() => onRenameDocument(document)}
+                          className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                        >
+                          <Edit3 className="h-4 w-4 text-gray-600" />
+                          <span>Rename</span>
+                        </DropdownMenuItem>
+                      )}
+                      {onDuplicateDocument && (
+                        <DropdownMenuItem
+                          onSelect={() => onDuplicateDocument(document)}
+                          className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                        >
+                          <Copy className="h-4 w-4 text-gray-600" />
+                          <span>Duplicate</span>
+                        </DropdownMenuItem>
+                      )}
+                      {onCopyDocument && (
+                        <DropdownMenuItem
+                          onSelect={() => onCopyDocument(document)}
+                          className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                        >
+                          <Copy className="h-4 w-4 text-gray-600" />
+                          <span>Copy</span>
+                        </DropdownMenuItem>
+                      )}
+                      {onMoveDocument && (
+                        <DropdownMenuItem
+                          onSelect={() => onMoveDocument(document)}
+                          className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                        >
+                          <Move className="h-4 w-4 text-gray-600" />
+                          <span>Move</span>
+                        </DropdownMenuItem>
+                      )}
+                      {onCrossEngagementCopy && <DropdownMenuSeparator />}
+                      {onCrossEngagementCopy && (
+                        <DropdownMenuItem
+                          onSelect={() => onCrossEngagementCopy(document)}
+                          className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                        >
+                          <Building2 className="h-4 w-4 flex-shrink-0 text-blue-600" />
+                          <span className="whitespace-nowrap">Copy to another engagement…</span>
+                        </DropdownMenuItem>
+                      )}
+                      {(canManage && (onMakePrivate || onMakePublic)) && <DropdownMenuSeparator />}
+                      {canManage && !document.isPrivate && onMakePrivate && (
+                        document.isSharedWithExternal ? (
+                          <TooltipProvider>
+                            <Tooltip open={privateInfoOpen} onOpenChange={setPrivateInfoOpen}>
+                              <TooltipTrigger asChild>
+                                <div
+                                  onClick={(e) => { e.stopPropagation(); setPrivateInfoOpen((v) => !v) }}
+                                  className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground cursor-pointer opacity-50 hover:bg-accent rounded-sm"
+                                >
+                                  <FolderLock className="h-4 w-4 text-orange-500" />
+                                  <span>Make Private</span>
+                                  <Info className="h-3.5 w-3.5 ml-auto text-slate-400" />
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent side="left" className="text-xs max-w-[220px]">
+                                A shared document cannot be made Private. Turn off sharing first.
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        ) : (
+                          <DropdownMenuItem
+                            onClick={() => onMakePrivate(document)}
+                            className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                          >
+                            <FolderLock className="h-4 w-4 text-orange-500" />
+                            <span>Make Private</span>
+                          </DropdownMenuItem>
+                        )
+                      )}
+                      {canManage && document.isPrivate && onMakePublic && (
+                        <DropdownMenuItem
+                          onClick={() => onMakePublic(document)}
+                          className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                        >
+                          <FolderUp className="h-4 w-4 text-slate-500" />
+                          <span>Make Public</span>
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+                )}
+
+                <DropdownMenuSeparator />
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
                     <Info className="h-4 w-4 text-gray-600" />
@@ -974,242 +1120,6 @@ export function DocumentActionMenu({
                     </DropdownMenuItem>
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
-
-                <DropdownMenuSeparator />
-
-                {isApprovedDeliverable ? (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground opacity-50 cursor-not-allowed select-none">
-                          <Eye className="h-4 w-4" />
-                          <span>Open</span>
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent side="right" className="text-xs max-w-48">
-                        Use the preview panel to view this document
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                ) : (
-                  <DropdownMenuItem
-                    onClick={() => {
-                      if (onOpenDocument) {
-                        onOpenDocument(document)
-                      } else if (rightPane.hasRightPane) {
-                        rightPane.setTitle(document.name || 'Preview')
-                        rightPane.setContent(<DocumentPreviewPanelContent document={document} />)
-                      }
-                    }}
-                    className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
-                  >
-                    <Eye className="h-4 w-4 text-gray-600" />
-                    <span>Open</span>
-                  </DropdownMenuItem>
-                )}
-
-                {!(document.isGuest && !document.allowDownload) &&
-                 !(document.isExternalCollaborator && !document.ecAllowDownload) && (
-                  <DropdownMenuItem
-                    onClick={() => { handleDownload(document); onDownloadDocument?.(document) }}
-                    className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
-                  >
-                    <Download className="h-4 w-4 text-blue-600" />
-                    <span>Download</span>
-                  </DropdownMenuItem>
-                )}
-
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
-                    <Share2 className="h-4 w-4 text-purple-600" />
-                    <span>Share</span>
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="w-56">
-                    <DropdownMenuItem
-                      onClick={() => {
-                        const docId = (document as any).projectDocumentId || document.id
-                        if (!deeplinkBase) return
-                        navigator.clipboard.writeText(`${deeplinkBase}#doc-file:${docId}`)
-                          .then(() => addToast({ type: 'success', title: 'Link copied', message: 'Link copied to clipboard' }))
-                          .catch(() => addToast({ type: 'error', title: 'Copy failed', message: 'Could not copy link.' }))
-                      }}
-                      className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
-                    >
-                      <Link2 className="h-4 w-4 text-gray-600" />
-                      <span>Copy link</span>
-                    </DropdownMenuItem>
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
-
-                {/* Comments (folders only — files have Comments inside the deliverable detail pane) */}
-                {projectId && document.mimeType?.includes('folder') && (
-                  <DropdownMenuItem
-                    onClick={() => {
-                      if (rightPane.hasRightPane) {
-                        onOpenCommentPane?.(document.id)
-                        const docIdForComments = (document as any)?.projectDocumentId || document.id
-                        rightPane.setTitle('Comments')
-                        rightPane.setHeaderActions(null)
-                        rightPane.setHeaderIcon(<DocumentIcon mimeType={document.mimeType} className="h-4 w-4" />)
-                        rightPane.setHeaderSubtitle('Append-only. Visible to all project members.')
-                        rightPane.setContent(
-                          <DocumentDocCommentsPane
-                            engagementId={projectId}
-                            documentId={docIdForComments}
-                            documentName={document.name}
-                            documentMimeType={document.mimeType}
-                            orgSlug={orgSlug}
-                          />
-                        )
-                        rightPane.setExpanded?.(false)
-                      }
-                    }}
-                    className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
-                  >
-                    <MessageCircle className="h-4 w-4 text-gray-600" />
-                    <span>Comment</span>
-                  </DropdownMenuItem>
-                )}
-
-                {/* Organize (Copy + Move + persona options) */}
-                {isApprovedDeliverable && !onCopyDocument ? (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground opacity-50 cursor-not-allowed select-none">
-                          <FolderOpen className="h-4 w-4" />
-                          <span>Organize</span>
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent side="right" className="text-xs max-w-48">
-                        Approved deliverables cannot be reorganized
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                ) : (onCopyDocument || onMoveDocument || onRenameDocument || onDuplicateDocument || canManage) && (
-                  <DropdownMenuSub>
-                    <DropdownMenuSubTrigger className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
-                      <FolderOpen className="h-4 w-4 text-gray-600" />
-                      <span>Organize</span>
-                    </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent className="w-56">
-                      {onRenameDocument && (
-                        isApprovedDeliverable ? (
-                          <div className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground opacity-40 cursor-not-allowed select-none">
-                            <Edit3 className="h-4 w-4" /><span>Rename</span>
-                          </div>
-                        ) : (
-                          <DropdownMenuItem
-                            onSelect={() => onRenameDocument(document)}
-                            className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
-                          >
-                            <Edit3 className="h-4 w-4 text-gray-600" />
-                            <span>Rename</span>
-                          </DropdownMenuItem>
-                        )
-                      )}
-                      {onDuplicateDocument && (
-                        isApprovedDeliverable ? (
-                          <div className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground opacity-40 cursor-not-allowed select-none">
-                            <Copy className="h-4 w-4" /><span>Duplicate</span>
-                          </div>
-                        ) : (
-                          <DropdownMenuItem
-                            onSelect={() => onDuplicateDocument(document)}
-                            className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
-                          >
-                            <Copy className="h-4 w-4 text-gray-600" />
-                            <span>Duplicate</span>
-                          </DropdownMenuItem>
-                        )
-                      )}
-                      {onCopyDocument && (
-                        <DropdownMenuItem
-                          onSelect={() => onCopyDocument(document)}
-                          className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
-                        >
-                          <Copy className="h-4 w-4 text-gray-600" />
-                          <span>Copy</span>
-                        </DropdownMenuItem>
-                      )}
-                      {onMoveDocument && (
-                        isApprovedDeliverable ? (
-                          <div className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground opacity-40 cursor-not-allowed select-none">
-                            <Move className="h-4 w-4" /><span>Move</span>
-                          </div>
-                        ) : (
-                          <DropdownMenuItem
-                            onSelect={() => onMoveDocument(document)}
-                            className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
-                          >
-                            <Move className="h-4 w-4 text-gray-600" />
-                            <span>Move</span>
-                          </DropdownMenuItem>
-                        )
-                      )}
-                      {onCrossEngagementCopy && <DropdownMenuSeparator />}
-                      {onCrossEngagementCopy && (
-                        <DropdownMenuItem
-                          onSelect={() => onCrossEngagementCopy(document)}
-                          className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
-                        >
-                          <Building2 className="h-4 w-4 flex-shrink-0 text-blue-600" />
-                          <span className="whitespace-nowrap">Copy to another engagement…</span>
-                        </DropdownMenuItem>
-                      )}
-                      {(canManage && (onMakePrivate || onMakePublic)) && <DropdownMenuSeparator />}
-                      {canManage && !document.isPrivate && onMakePrivate && (
-                        isApprovedDeliverable ? (
-                          <div className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground opacity-40 cursor-not-allowed select-none">
-                            <FolderLock className="h-4 w-4" /><span>Make Private</span>
-                          </div>
-                        ) : document.isSharedWithExternal ? (
-                          <TooltipProvider>
-                            <Tooltip open={privateInfoOpen} onOpenChange={setPrivateInfoOpen}>
-                              <TooltipTrigger asChild>
-                                <div
-                                  onClick={(e) => { e.stopPropagation(); setPrivateInfoOpen((v) => !v) }}
-                                  className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground cursor-pointer opacity-50 hover:bg-accent rounded-sm"
-                                >
-                                  <FolderLock className="h-4 w-4 text-orange-500" />
-                                  <span>Make Private</span>
-                                  <Info className="h-3.5 w-3.5 ml-auto text-slate-400" />
-                                </div>
-                              </TooltipTrigger>
-                              <TooltipContent side="left" className="text-xs max-w-[220px]">
-                                A shared document cannot be made Private. Turn off sharing first.
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        ) : (
-                          <DropdownMenuItem
-                            onClick={() => onMakePrivate(document)}
-                            className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
-                          >
-                            <FolderLock className="h-4 w-4 text-orange-500" />
-                            <span>Make Private</span>
-                          </DropdownMenuItem>
-                        )
-                      )}
-                      {canManage && document.isPrivate && onMakePublic && (
-                        isApprovedDeliverable ? (
-                          <div className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground opacity-40 cursor-not-allowed select-none">
-                            <FolderUp className="h-4 w-4" /><span>Make Public</span>
-                          </div>
-                        ) : (
-                          <DropdownMenuItem
-                            onClick={() => onMakePublic(document)}
-                            className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
-                          >
-                            <FolderUp className="h-4 w-4 text-slate-500" />
-                            <span>Make Public</span>
-                          </DropdownMenuItem>
-                        )
-                      )}
-                    </DropdownMenuSubContent>
-                  </DropdownMenuSub>
-                )}
-
                 <DropdownMenuSeparator />
 
                 <TooltipProvider>
@@ -1285,28 +1195,59 @@ export function DocumentActionMenu({
                   </TooltipContent>
                 </Tooltip>
                 </TooltipProvider>
-                {isApprovedDeliverable ? (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground opacity-50 cursor-not-allowed select-none">
-                          <Calendar className="h-4 w-4 text-orange-600" />
-                          <span>Set Due Date</span>
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent side="right" className="text-xs max-w-48">
-                        Cannot set due date on an approved deliverable
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                ) : (
-                  <DropdownMenuItem
-                    onClick={() => setShowDueDatePicker(true)}
-                    className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
-                  >
-                    <Calendar className="h-4 w-4 text-orange-600" />
-                    <span>Set Due Date</span>
-                  </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setShowDueDatePicker(true)}
+                  className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                >
+                  <Calendar className="h-4 w-4 text-orange-600" />
+                  <span>Set Due Date</span>
+                </DropdownMenuItem>
+                {!mime.includes('folder') && leadForVersionLock && projectId && (
+                  <>
+                    {(document as { lock?: { type?: string } | null }).lock?.type === 'finalize' ? (
+                      <DropdownMenuItem
+                        disabled={finalizeLockDisabled}
+                        onClick={() => void handleUnlockVersion()}
+                        className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                      >
+                        <Unlock className="h-4 w-4 text-emerald-700 shrink-0" />
+                        <span>Return to Draft</span>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild onClick={(ev) => ev.stopPropagation()}>
+                              <span className="inline-flex text-gray-400 hover:text-gray-600 shrink-0">
+                                <Info className="h-3.5 w-3.5" />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="left" className="bg-slate-50 text-slate-800 border-slate-200 max-w-[260px]">
+                              {VERSION_LOCK_TOOLTIP}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </DropdownMenuItem>
+                    ) : (
+                      <DropdownMenuItem
+                        disabled={finalizeLockDisabled}
+                        onClick={() => void handleFinalizeAndLock()}
+                        className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs text-amber-800 focus:bg-amber-50 focus:text-amber-900 data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                      >
+                        <Lock className="h-4 w-4 text-amber-700 shrink-0" />
+                        <span className="whitespace-nowrap">Finalize</span>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild onClick={(ev) => ev.stopPropagation()}>
+                              <span className="inline-flex text-gray-400 hover:text-gray-600 shrink-0">
+                                <Info className="h-3.5 w-3.5" />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="left" className="bg-slate-50 text-slate-800 border-slate-200 max-w-[260px]">
+                              {VERSION_LOCK_TOOLTIP}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </DropdownMenuItem>
+                    )}
+                  </>
                 )}
                 {!mime.includes('folder') && isExternalViewer && projectId && (() => {
                   const doc = document as { lock?: { type?: string } | null }
@@ -1329,36 +1270,26 @@ export function DocumentActionMenu({
                   )
                 })()}
 
-                {(onDeleteDocument || isApprovedDeliverable) && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          {isApprovedDeliverable ? (
-                            <div className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground opacity-50 cursor-not-allowed select-none">
-                              <Trash2 className="h-4 w-4" />
-                              <span>Move to Bin</span>
-                            </div>
-                          ) : (
-                            <DropdownMenuItem
-                              onSelect={(e) => { e.preventDefault(); onDeleteDocument!(document); }}
-                              className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                              <span>Move to Bin</span>
-                            </DropdownMenuItem>
-                          )}
-                        </TooltipTrigger>
-                        <TooltipContent side="left" className="max-w-[200px]">
-                          {isApprovedDeliverable
-                            ? <p>Approved deliverables cannot be deleted</p>
-                            : <p>Items in Bin are permanently deleted after 30 days (Google Drive).</p>
-                          }
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </>
+                {(!isExternalUser || onDeleteDocument) && <DropdownMenuSeparator />}
+
+                {onDeleteDocument && (
+
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <DropdownMenuItem
+                          onSelect={(e) => { e.preventDefault(); onDeleteDocument(document); }}
+                          className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          <span>Move to Bin</span>
+                        </DropdownMenuItem>
+                      </TooltipTrigger>
+                      <TooltipContent side="left" className="max-w-[200px]">
+                        <p>Items in Bin are permanently deleted after 30 days (Google Drive).</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 )}
                 {!isExternalUser && (
                 <>

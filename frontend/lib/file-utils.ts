@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /** `projectId` here is the engagement id (same as API route param). */
-export async function getFileInfo(projectId: string, documentIdParam: string): Promise<{ organizationId: string, externalId: string, connectorId: string | null, fileName?: string } | null> {
+export async function getFileInfo(projectId: string, documentIdParam: string): Promise<{ organizationId: string, externalId: string, connectorId: string | null, fileName?: string, isFolder?: boolean } | null> {
   const doc = await prisma.engagementDocument.findFirst({
     where: {
       engagementId: projectId,
@@ -12,7 +12,7 @@ export async function getFileInfo(projectId: string, documentIdParam: string): P
         ...(UUID_REGEX.test(documentIdParam) ? [{ id: documentIdParam }] : []),
       ],
     },
-    select: { firmId: true, externalId: true, connectorId: true, fileName: true },
+    select: { firmId: true, externalId: true, connectorId: true, fileName: true, isFolder: true },
   })
 
   if (doc) {
@@ -21,6 +21,7 @@ export async function getFileInfo(projectId: string, documentIdParam: string): P
       externalId: doc.externalId,
       connectorId: doc.connectorId,
       fileName: doc.fileName,
+      isFolder: doc.isFolder ?? false,
     }
   }
 

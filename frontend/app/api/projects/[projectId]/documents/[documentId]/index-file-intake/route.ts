@@ -3,6 +3,7 @@ import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { requireEngagementMember, isExternalEngagementRole } from '@/lib/engagement-access'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
+import { assignDocId } from '@/lib/doc-id'
 import { assertWithinDocumentCap } from '@/lib/billing/effective-billing-caps'
 import { resolveEngagementConnectorId } from '@/lib/connectors/resolve-client-connector'
 import { buildSettingsForDb } from '@/lib/sharing-settings'
@@ -100,6 +101,7 @@ export async function POST(
           } as object,
         },
       })
+      Promise.resolve().then(() => assignDocId(created.id, projectId, project.name).catch(() => {}))
       docId = created.id
     }
 
@@ -121,7 +123,6 @@ export async function POST(
           projectDocumentId: docId,
           engagementId: projectId,
           userId: user.id,
-          email: user.email ?? '',
           sharingPermissionStatus: 'PENDING',
         },
         update: { sharingPermissionStatus: 'PENDING' },

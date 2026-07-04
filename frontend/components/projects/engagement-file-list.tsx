@@ -125,16 +125,11 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
     const onFileCountChangeRef = useRef(onFileCountChange)
     useEffect(() => { onFileCountChangeRef.current = onFileCountChange }, [onFileCountChange])
 
-    const refreshFileCount = useCallback(async () => {
+    const refreshFileCount = useCallback((fileList: any[]) => {
         if (!onFileCountChangeRef.current) return
-        try {
-            const res = await fetch(`/api/projects/${projectId}/documents/count`)
-            if (res.ok) {
-                const { count } = await res.json()
-                onFileCountChangeRef.current(count)
-            }
-        } catch { /* best-effort */ }
-    }, [projectId])
+        const count = fileList.filter((f: any) => !f.mimeType?.includes('folder')).length
+        onFileCountChangeRef.current(count)
+    }, [])
     const orgSandbox = useOrgSandbox()
     const isSandboxFirm = Boolean(firmSandboxOnly || orgSandbox?.sandboxOnly)
     const { viewAsPersonaSlug } = useViewAs()
@@ -150,6 +145,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
     const deeplinkResolvedCacheRef = useRef<Record<string, {
         externalId: string | null
         fileName: string | null
+        isFolder?: boolean
         status?: number
         path?: { id: string; name: string }[]
         projectRootFolderId?: string | null
@@ -322,6 +318,8 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
     const [isProjectLead, setIsProjectLead] = useState(false)
     const [isLoadingFolders, setIsLoadingFolders] = useState(true)
     const [currentFolderType, setCurrentFolderType] = useState<'general' | 'confidential' | 'staging'>('general')
+    // Tracks whether the current folder is an approved deliverable (locks write ops)
+    const [currentFolderIsApprovedDeliverable, setCurrentFolderIsApprovedDeliverable] = useState(false)
 
     // Core State
     const [currentFolderId, setCurrentFolderId] = useState<string | null>(null)
@@ -380,10 +378,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
 
                 const defaultBreadcrumbs: BreadcrumbItem[] = defaultFolderId
                     ? [
-                        { id: 'org', name: orgName || 'Organization', clickable: false },
-                        { id: 'client', name: clientName || 'Client', clickable: false },
-                        { id: connectorRootFolderId || 'project', name: projectName || rootFolderName, clickable: false },
-                        { id: defaultFolderId, name: defaultFolderName, clickable: true }
+                        { id: defaultFolderId, name: defaultFolderName, clickable: true, isEngagementRoot: true }
                     ]
                     : []
 
@@ -590,8 +585,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
                 const breadcrumbStartIndex = rootIndex >= 0 ? rootIndex : 0
                 const breadcrumbPath = rootIndex >= 0 ? path.slice(rootIndex) : (rootId ? [rootItem, ...path] : path)
                 setBreadcrumbs([
-                    ...baseBreadcrumbPrefix,
-                    ...breadcrumbPath.map((p: { id: string; name: string }) => ({ id: p.id, name: p.name, clickable: true })),
+                    ...breadcrumbPath.map((p: { id: string; name: string }, i: number) => ({ id: p.id, name: p.name, clickable: true, isEngagementRoot: i === 0 && rootIds.includes(p.id) })),
                 ])
 
                 // Open the direct parent folder so the clicked item is in the list and can be highlighted
@@ -612,7 +606,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
 
                     if (type) {
                         setCurrentFolderType(type as any)
-                        setBreadcrumbs([...baseBreadcrumbPrefix, { id: parentId, name: type, clickable: true }])
+                        setBreadcrumbs([{ id: parentId, name: type, clickable: true, isEngagementRoot: true }])
                         setCurrentFolderId(parentId)
                     }
                 }
@@ -653,6 +647,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
             const cached = deeplinkResolvedCacheRef.current[hash]
             let externalId: string | null = cached?.externalId ?? null
             let fileName: string | null = cached?.fileName ?? null
+            let isFolder: boolean = cached?.isFolder ?? false
             let resolveStatus: number | undefined = cached?.status
             let resolvedPath: { id: string; name: string }[] | undefined = cached?.path
             let projectRootFolderId: string | null | undefined = cached?.projectRootFolderId
@@ -671,11 +666,12 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
                     resolveStatus = res.status
                     if (res.ok) {
                         const json = await res.json() as {
-                            externalId?: string; fileName?: string | null
+                            externalId?: string; fileName?: string | null; isFolder?: boolean
                             path?: { id: string; name: string }[]; projectRootFolderId?: string | null
                         }
                         externalId = typeof json.externalId === 'string' ? json.externalId : null
                         fileName = typeof json.fileName === 'string' ? json.fileName : null
+                        isFolder = json.isFolder ?? false
                         resolvedPath = Array.isArray(json.path) ? json.path : undefined
                         projectRootFolderId = json.projectRootFolderId ?? null
                     }
@@ -688,10 +684,10 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
                 // Fallback: match already-loaded file list (covers older hash formats)
                 if (!externalId) {
                     const maybe = files.find((f) => f.projectDocumentId === documentIdParam || f.id === documentIdParam)
-                    if (maybe) { externalId = maybe.id; fileName = maybe.name ?? null }
+                    if (maybe) { externalId = maybe.id; fileName = maybe.name ?? null; isFolder = maybe.mimeType === 'application/vnd.google-apps.folder' }
                 }
 
-                deeplinkResolvedCacheRef.current[hash] = { externalId, fileName, status: resolveStatus, path: resolvedPath, projectRootFolderId }
+                deeplinkResolvedCacheRef.current[hash] = { externalId, fileName, isFolder, status: resolveStatus, path: resolvedPath, projectRootFolderId }
             }
 
             if (!externalId) {
@@ -725,22 +721,24 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
                                 : rootItem.id === stagingFolderId ? 'staging'
                                     : 'general'
                     const breadcrumbPath = rootIndex >= 0 ? resolvedPath.slice(rootIndex) : (rootId ? [rootItem, ...resolvedPath] : resolvedPath)
-                    const prefixCrumbs: BreadcrumbItem[] = [
-                        { id: 'org', name: orgName || 'Organization', clickable: false },
-                        { id: 'client', name: clientName || 'Client', clickable: false },
-                        { id: connectorRootFolderId || 'project', name: projectName || rootFolderName, clickable: false },
-                    ]
                     setCurrentFolderType(type)
-                    setBreadcrumbs([
-                        ...prefixCrumbs,
-                        ...breadcrumbPath.map((p) => ({ id: p.id, name: p.name, clickable: true })),
-                    ])
+
+                    if (isFolder) {
+                        // Folder deeplink: path includes the folder itself — navigate into it.
+                        setBreadcrumbs(breadcrumbPath.map((p, i) => ({ id: p.id, name: p.name, clickable: true, isEngagementRoot: i === 0 && rootIds.includes(p.id) })))
+                        setCurrentFolderId(resolvedPath[resolvedPath.length - 1].id)
+                        setDeeplinkResolving(false)
+                        lastHandledDeeplinkHashRef.current = hash
+                        return
+                    }
+
+                    setBreadcrumbs(breadcrumbPath.map((p, i) => ({ id: p.id, name: p.name, clickable: true, isEngagementRoot: i === 0 && rootIds.includes(p.id) })))
                     setCurrentFolderId(resolvedPath[resolvedPath.length - 1].id)
                 } else {
                     // Path unavailable — fall back to navigateToItem which will try resolve-path separately
                     await navigateToItem({
                         id: externalId, name: fileName ?? 'Document',
-                        mimeType: 'application/octet-stream', webViewLink: '', iconLink: '',
+                        mimeType: isFolder ? 'application/vnd.google-apps.folder' : 'application/octet-stream', webViewLink: '', iconLink: '',
                         modifiedTime: new Date().toISOString(),
                     } as DriveFile)
                 }
@@ -930,14 +928,16 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
                 throw new Error(data.error || 'Failed to fetch files')
             }
             const data = await res.json()
-            setFiles(data.files || [])
+            const loadedFiles = data.files || []
+            setFiles(loadedFiles)
+            refreshFileCount(loadedFiles)
         } catch (err: any) {
             logger.error(err)
             setError(err.message)
         } finally {
             if (!silent) setLoading(false)
         }
-    }, [projectId, viewAsPersonaSlug])
+    }, [projectId, viewAsPersonaSlug, refreshFileCount])
 
     // Stable ref to currentFolderId — used by hooks to avoid stale closures
     const currentFolderIdRef = useRef<string | null>(null)
@@ -975,7 +975,6 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
         restrictToSharedOnly,
         isSandboxFirm,
         fetchFiles,
-        refreshFileCount,
     })
 
     // File operations hook
@@ -1040,14 +1039,71 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
         stopProcessing,
         setFiles,
         orgSandbox,
-        refreshFileCount,
     })
+
+    const handleMarkAsDeliverable = useCallback(async (doc: any) => {
+        const token = sessionRef.current?.access_token
+        if (!token || !projectId) return
+        const documentId = doc.projectDocumentId || doc.id
+        try {
+            const res = await fetch(`/api/projects/${projectId}/documents/${encodeURIComponent(documentId)}/sharing`, {
+                method: 'PUT',
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ markAsDeliverable: true }),
+            })
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}))
+                addToast({ type: 'error', title: 'Failed', message: err.error ?? 'Could not mark as Deliverable.' })
+                return
+            }
+            addToast({ type: 'success', title: 'Marked as Deliverable', message: `"${doc.name}" added to the Board.` })
+            await refreshShareStateAndFiles()
+        } catch {
+            addToast({ type: 'error', title: 'Error', message: 'Could not mark as Deliverable.' })
+        }
+    }, [sessionRef, projectId, refreshShareStateAndFiles, addToast])
+
+    const handleUntagAsDeliverable = useCallback(async (doc: any) => {
+        const token = sessionRef.current?.access_token
+        if (!token || !projectId) return
+        const documentId = doc.projectDocumentId || doc.id
+        try {
+            const res = await fetch(`/api/projects/${projectId}/documents/${encodeURIComponent(documentId)}/sharing`, {
+                method: 'PUT',
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ untagAsDeliverable: true }),
+            })
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}))
+                addToast({ type: 'error', title: 'Failed', message: err.error ?? 'Could not untag Deliverable.' })
+                return
+            }
+            addToast({ type: 'success', title: 'Untagged', message: `"${doc.name}" removed from the Board.` })
+            await refreshShareStateAndFiles()
+        } catch {
+            addToast({ type: 'error', title: 'Error', message: 'Could not untag Deliverable.' })
+        }
+    }, [sessionRef, projectId, refreshShareStateAndFiles, addToast])
 
     const handleBulkTrashClick = useCallback(() => {
         if (!selectedFileIds.size) return
+        const ids = Array.from(selectedFileIds)
+        const selected = files.filter(f => ids.includes(f.id))
+        // Block if any selected item is an approved deliverable or inside one
+        const hasApproved = currentFolderIsApprovedDeliverable
+            || selected.some(f => f.isDeliverable && (f as any).deliverableStatus === 'approved')
+        if (hasApproved) {
+            addToast({
+                type: 'error',
+                title: 'Cannot delete',
+                message: 'One or more selected items are Approved Deliverables and cannot be moved to Bin.',
+                duration: 6000,
+            } as any)
+            return
+        }
         setPendingBulkTrashIds(new Set(selectedFileIds))
         setBulkTrashConfirmOpen(true)
-    }, [selectedFileIds])
+    }, [selectedFileIds, files, currentFolderIsApprovedDeliverable, addToast])
 
     const handleBulkTrashConfirmed = useCallback(async () => {
         if (!pendingBulkTrashIds.size || !sessionRef.current?.access_token) return
@@ -1086,8 +1142,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
 
         const currentFolderId = currentFolderIdRef.current
         if (currentFolderId) fetchFiles(currentFolderId, true)
-        refreshFileCount?.()
-    }, [pendingBulkTrashIds, sessionRef, orgSandbox, files, projectId, currentFolderIdRef, fetchFiles, refreshFileCount, addToast])
+    }, [pendingBulkTrashIds, sessionRef, orgSandbox, files, projectId, currentFolderIdRef, fetchFiles, addToast])
 
     // Drag & drop hook
     const {
@@ -1280,7 +1335,6 @@ const handleRefresh = async () => {
             setNewItemName('')
             isCreatingRef.current = false
             if (currentFolderId) fetchFiles(currentFolderId)
-            refreshFileCount()
         } catch (err: any) {
             logger.error(err)
             isCreatingRef.current = false
@@ -1422,8 +1476,6 @@ const handleRefresh = async () => {
             // Success
             setIsImportDialogOpen(false)
             if (currentFolderId) fetchFiles(currentFolderId, true)
-            refreshFileCount()
-
         } catch (err: any) {
             logger.error(err)
             setError(err.message)
@@ -1440,8 +1492,14 @@ const handleRefresh = async () => {
         if (file.mimeType === 'application/vnd.google-apps.folder') {
             setHighlightedFileId(null)
             const isPending = !!file.isPendingApproval || breadcrumbs.some(c => c.isPendingApproval)
-            setBreadcrumbs(prev => [...prev, { id: file.id, name: file.name, clickable: true, isPendingApproval: isPending }])
+            setBreadcrumbs(prev => [...prev, { id: file.id, name: file.name, projectDocumentId: file.projectDocumentId, clickable: true, isPendingApproval: isPending }])
             setCurrentFolderId(file.id)
+            // Entering an approved deliverable folder OR navigating deeper inside one
+            setCurrentFolderIsApprovedDeliverable(
+                !!(file.isDeliverable && (file as any).deliverableStatus === 'approved')
+                || currentFolderIsApprovedDeliverable
+            )
+            window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#doc-file:${file.projectDocumentId ?? file.id}`)
         }
     }
 
@@ -1454,13 +1512,20 @@ const handleRefresh = async () => {
         setHighlightedFileId(null)
         setBreadcrumbs(prev => prev.slice(0, index + 1))
         setCurrentFolderId(id)
+        // When navigating up via breadcrumb, check if target folder is an approved deliverable
+        const folderInList = files.find(f => f.id === id)
+        setCurrentFolderIsApprovedDeliverable(
+            !!(folderInList?.isDeliverable && (folderInList as any).deliverableStatus === 'approved')
+        )
+        const rootIds = [generalFolderId, confidentialFolderId, stagingFolderId].filter(Boolean)
+        if (rootIds.includes(id)) {
+            // Root folders are restored by default on load — no hash needed
+            window.history.replaceState(null, '', window.location.pathname + window.location.search)
+        } else {
+            const docId = item?.projectDocumentId ?? id
+            window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#doc-file:${docId}`)
+        }
     }
-
-    const baseBreadcrumbPrefix: BreadcrumbItem[] = [
-        { id: 'org', name: orgName || 'Organization', clickable: false },
-        { id: 'client', name: clientName || 'Client', clickable: false },
-        { id: connectorRootFolderId || 'project', name: projectName || rootFolderName, clickable: false }
-    ]
 
     const handleSwitchToRoot = (type: 'general' | 'confidential' | 'staging') => {
         const folderId = type === 'general' ? generalFolderId : type === 'confidential' ? confidentialFolderId : stagingFolderId
@@ -1468,7 +1533,10 @@ const handleRefresh = async () => {
         setHighlightedFileId(null)
         setCurrentFolderId(folderId)
         setCurrentFolderType(type)
-        setBreadcrumbs([...baseBreadcrumbPrefix, { id: folderId, name: type, clickable: true }])
+        setCurrentFolderIsApprovedDeliverable(false)
+        setBreadcrumbs([{ id: folderId, name: type, clickable: true, isEngagementRoot: true }])
+        // Root folders are restored by default on load — clear the hash
+        window.history.replaceState(null, '', window.location.pathname + window.location.search)
     }
 
     // Check if we're at project root level (not in general or confidential)
@@ -1603,7 +1671,7 @@ const handleRefresh = async () => {
                 <div className="flex items-center text-xs font-medium text-slate-700 min-w-0">
                     <div className="flex items-center min-w-0 overflow-x-auto whitespace-nowrap custom-scrollbar">
                         {(() => {
-                            const ROOT_INDEX = 3
+                            const ROOT_INDEX = 0
                             const showAll = breadcrumbs.length <= 4
                             const displayItems: { item: BreadcrumbItem; index: number; isEllipsis: boolean; isRoot: boolean }[] = showAll
                                 ? breadcrumbs.map((item, index) => ({ item, index, isEllipsis: false, isRoot: index === ROOT_INDEX }))
@@ -1667,13 +1735,12 @@ const handleRefresh = async () => {
                                                     type="button"
                                                     onClick={() => handleBreadcrumbClick(index, item.id)}
                                                     className={cn(
-                                                        "flex items-center hover:bg-slate-100 px-2 py-1 rounded transition-colors max-w-[180px]",
+                                                        "flex items-center hover:bg-slate-100 px-1.5 py-1 rounded transition-colors",
                                                         index === breadcrumbs.length - 1 ? "text-slate-900 bg-slate-50" : "hover:text-slate-900"
                                                     )}
-                                                    title={item.name}
+                                                    title="Files root"
                                                 >
-                                                    <Folder className="h-3.5 w-3.5 mr-1.5 text-primary flex-shrink-0" />
-                                                    <span className="truncate capitalize">{item.name}</span>
+                                                    <Briefcase className="h-3.5 w-3.5 text-primary flex-shrink-0" />
                                                 </button>
                                             ) : isEllipsis ? (
                                                 <button
@@ -1692,6 +1759,18 @@ const handleRefresh = async () => {
                                                     {index > 2 && <Folder className="h-3.5 w-3.5 mr-1.5 text-slate-400 flex-shrink-0" />}
                                                     <span className="truncate max-w-[140px]" title={item.name}>{item.name}</span>
                                                 </div>
+                                            ) : item.isEngagementRoot ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleBreadcrumbClick(index, item.id)}
+                                                    className={cn(
+                                                        "flex items-center hover:bg-slate-100 px-1.5 py-1 rounded transition-colors",
+                                                        index === breadcrumbs.length - 1 ? "text-slate-900 bg-slate-50" : "hover:text-slate-900"
+                                                    )}
+                                                    title="Files root"
+                                                >
+                                                    <Briefcase className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+                                                </button>
                                             ) : (
                                                 <button
                                                     type="button"
@@ -1716,7 +1795,7 @@ const handleRefresh = async () => {
 
                 {/* New Document button portaled into the workspace nav bar slot */}
                 {navSlot && createPortal(
-                    (isSandboxFirm || (!isAtProjectRoot && (canEdit || (restrictToSharedOnly && currentFolderType === 'general')))) ? (
+                    (isSandboxFirm || (!isAtProjectRoot && !currentFolderIsApprovedDeliverable && (canEdit || (restrictToSharedOnly && currentFolderType === 'general')))) ? (
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button data-demo-tour="engagement-upload-btn" disabled={loading || isLoadingFolders || isUploading || isUploadInitiating} className="h-auto px-4 py-1.5 rounded-[2px] bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-primary hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1.5">
@@ -1971,7 +2050,7 @@ const handleRefresh = async () => {
                                     Shared with Collaborator (External)
                                 </DropdownMenuCheckboxItem>
                                 <DropdownMenuCheckboxItem checked={filterShared === 'with_viewer'} onCheckedChange={() => setFilterShared(filterShared === 'with_viewer' ? 'all' : 'with_viewer')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
-                                    Shared with Viewer (External)
+                                    Shared with Reviewer
                                 </DropdownMenuCheckboxItem>
                                 <DropdownMenuSeparator />
                                 <div className="px-2 pt-1.5 pb-0.5">
@@ -2310,6 +2389,15 @@ const handleRefresh = async () => {
                     )
                 }
 
+                {/* Item count */}
+                {files.length > 0 && (
+                    <div className="px-4 py-1.5 border-b border-[#f0f0f2] bg-[#fafafa]">
+                        <span className="text-[10px] font-medium text-[#9a9ba0]">
+                            Showing {files.length} {files.length === 1 ? 'item' : 'items'}
+                        </span>
+                    </div>
+                )}
+
                 {/* Fixed Table Header (Compact) */}
                 <div className="sticky top-0 bg-white border-b border-[#e5e7eb] pl-3 pr-2 py-2.5 shrink-0 z-10 group">
                     <div className="grid gap-4 items-center" style={{ gridTemplateColumns: 'minmax(0, 1fr) minmax(124px, 10%) 10% 14% 12% 10% 8%' }}>
@@ -2505,7 +2593,8 @@ const handleRefresh = async () => {
                                     isProjectLead={isProjectLead}
                                     restrictToSharedOnly={restrictToSharedOnly}
                                     viewAsPersonaSlug={viewAsPersonaSlug}
-                                    canManage={canManage}
+                                    canManage={canManage && !currentFolderIsApprovedDeliverable}
+                                    isInsideApprovedDeliverable={currentFolderIsApprovedDeliverable}
                                     currentFolderType={currentFolderType}
                                     generalFolderId={generalFolderId}
                                     projectId={projectId}
@@ -2532,6 +2621,8 @@ const handleRefresh = async () => {
                                     onTrash={handleTrash}
                                     onPrivacy={handlePrivacy}
                                     onShareSaved={refreshShareStateAndFiles}
+                                    onMarkAsDeliverable={handleMarkAsDeliverable}
+                                    onUntagAsDeliverable={handleUntagAsDeliverable}
                                     onUnlockConfirm={setUnlockConfirmFile}
                                     onOpenDocument={(doc) => {
                                         const docId = doc.id ?? file.id

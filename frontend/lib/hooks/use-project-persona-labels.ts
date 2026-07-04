@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { getProjectPersonas } from '@/lib/actions/personas'
 
 const FALLBACK_EXT_COLLABORATOR = 'External Collaborator'
-const FALLBACK_VIEWER = 'Guest'
+const FALLBACK_VIEWER = 'Reviewer'
 
 export interface ProjectPersonaLabels {
   /** displayName for platform.personas.eng_ext_collaborator */

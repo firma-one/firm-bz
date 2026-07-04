@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
+import { assignDocId } from '@/lib/doc-id'
 import { getViewAsPersonaFromCookie } from '@/lib/view-as-server'
 import { canAccessRbacAdmin } from '@/lib/permission-helpers'
 import { getSharedAndAncestorIdsForPersona, isFolderUnderSharedFolderDB } from '@/lib/engagement-sharing-ids'
@@ -495,6 +496,14 @@ export async function POST(request: NextRequest) {
                         const guestEnabled = share?.guest?.enabled === true || s.guest === true
                         return [r.externalId, ecEnabled || guestEnabled]
                     }))
+                    const isDeliverableByExternal = new Map<string, boolean>(enrichRows.map((r: any) => {
+                        const s = (r.settings as Record<string, any>) || {}
+                        return [r.externalId, !!(s.share?.createdAt)]
+                    }))
+                    const deliverableStatusByExternal = new Map<string, string | null>(enrichRows.map((r: any) => {
+                        const s = (r.settings as Record<string, any>) || {}
+                        return [r.externalId, s.share?.createdAt ? (s.activity?.status ?? null) : null]
+                    }))
 
                     // Build email → engagement role map for owner role display
                     const elMembers = await prisma.engagementMember.findMany({
@@ -526,6 +535,8 @@ export async function POST(request: NextRequest) {
                         lock: lockByExternal.get(f.id) ?? null,
                         isPrivate: lockByExternal.get(f.id)?.type === 'private',
                         isSharedWithExternal: sharedExternalByExternal.get(f.id) ?? false,
+                        isDeliverable: isDeliverableByExternal.get(f.id) ?? false,
+                        deliverableStatus: deliverableStatusByExternal.get(f.id) ?? null,
                         isPendingApproval: pendingExternalIds.has(f.id),
                         pendingUploaderId: pendingUploaderByExternal.get(f.id) ?? null,
                         ownerRole: (() => {
@@ -607,12 +618,12 @@ export async function POST(request: NextRequest) {
             // never leaves an orphaned file in Drive.
             let engagement = await prisma.engagement.findFirst({
                 where: { connectorRootFolderId: folderId },
-                select: { id: true, clientId: true, client: { select: { firmId: true } } }
+                select: { id: true, name: true, clientId: true, client: { select: { firmId: true } } }
             })
             if (!engagement && bodyEngagementId) {
                 engagement = await prisma.engagement.findUnique({
                     where: { id: bodyEngagementId as string },
-                    select: { id: true, clientId: true, client: { select: { firmId: true } } }
+                    select: { id: true, name: true, clientId: true, client: { select: { firmId: true } } }
                 })
             }
             const orgId = engagement?.client?.firmId
@@ -700,6 +711,9 @@ export async function POST(request: NextRequest) {
                                     metadata: { modifiedTime: now } as object,
                                 }
                             })
+                            if (!folderDoc.docId) {
+                                Promise.resolve().then(() => assignDocId(folderDoc.id, bodyEngagementId as string, engagement!.name).catch(() => {}))
+                            }
 
                             if (!alreadyHasPendingRoot) {
                                 // Write PENDING sharing row — this is the intake queue entry for the root folder
@@ -709,7 +723,6 @@ export async function POST(request: NextRequest) {
                                         projectDocumentId: folderDoc.id,
                                         engagementId: bodyEngagementId as string,
                                         userId: user.id,
-                                        email: user.email ?? '',
                                         sharingPermissionStatus: 'PENDING',
                                         createdBy: user.id,
                                         updatedBy: user.id,

@@ -210,9 +210,9 @@ function SharesProgressCard({ data }: { data: EngagementInsightsResponse }) {
                 <h3 className="text-sm font-semibold text-gray-700">Shares Board</h3>
                 <span className="text-xs text-gray-400">{sp.total} share{sp.total !== 1 ? 's' : ''}</span>
             </div>
-            {/* Progress bar: Done | In Progress | To Do */}
+            {/* Progress bar: Approved | In Progress | To Do */}
             <div className="h-2 w-full rounded-full overflow-hidden flex mb-3 bg-gray-100">
-                {sp.done > 0 && <div className="bg-sky-400 h-full transition-all" style={{ width: `${(sp.done / sp.total) * 100}%` }} />}
+                {sp.approved > 0 && <div className="bg-sky-400 h-full transition-all" style={{ width: `${(sp.approved / sp.total) * 100}%` }} />}
                 {sp.inProgress > 0 && <div className="bg-teal-400 h-full transition-all" style={{ width: `${(sp.inProgress / sp.total) * 100}%` }} />}
                 {sp.toDo > 0 && <div className="bg-violet-200 h-full transition-all" style={{ width: `${(sp.toDo / sp.total) * 100}%` }} />}
             </div>
@@ -226,8 +226,8 @@ function SharesProgressCard({ data }: { data: EngagementInsightsResponse }) {
                     <p className="text-[10px] text-gray-400">In Progress</p>
                 </div>
                 <div className="text-center">
-                    <p className="text-lg font-bold text-sky-600">{sp.done}</p>
-                    <p className="text-[10px] text-gray-400">Done</p>
+                    <p className="text-lg font-bold text-sky-600">{sp.approved}</p>
+                    <p className="text-[10px] text-gray-400">Approved</p>
                 </div>
             </div>
             {(sp.finalized > 0 || sp.externalCollaborators > 0 || sp.externalViewers > 0) && (
@@ -1113,7 +1113,7 @@ export function EngagementInsightsDashboard({
                             const deductClass = (pts: number) => pts >= 15 ? 'text-red-600 font-bold' : pts >= 8 ? 'text-amber-600 font-semibold' : 'text-slate-400 font-medium'
                             // TODO: re-enable when Shares board graduates from beta
                             // const deliveryItem = data.sharesProgress?.total > 0
-                            //     ? { pct: Math.round((data.sharesProgress.done / data.sharesProgress.total) * 100), total: data.sharesProgress.total, done: data.sharesProgress.done }
+                            //     ? { pct: Math.round((data.sharesProgress.approved / data.sharesProgress.total) * 100), total: data.sharesProgress.total, approved: data.sharesProgress.approved }
                             //     : null
                             const deliveryItem = null as { pct: number; total: number; done: number } | null
                             const totalDeducted = penalties.reduce((s, p) => s + p.points, 0)

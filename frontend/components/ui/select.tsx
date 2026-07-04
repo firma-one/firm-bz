@@ -138,7 +138,7 @@ const SelectItem = React.forwardRef<
       </SelectPrimitive.ItemIndicator>
     </span>
     {endAdornment && (
-      <span className="absolute right-2 flex h-3.5 w-3.5 items-center justify-center">
+      <span className="absolute right-2 flex items-center justify-center">
         {endAdornment}
       </span>
     )}

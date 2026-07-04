@@ -71,7 +71,7 @@ export interface SharesProgress {
   total: number
   toDo: number
   inProgress: number
-  done: number
+  approved: number
   finalized: number
   externalCollaborators: number
   externalViewers: number
@@ -451,17 +451,19 @@ export async function GET(
       total: shares.length,
       toDo: 0,
       inProgress: 0,
-      done: 0,
+      approved: 0,
       finalized: 0,
       externalCollaborators: 0,
       externalViewers: 0,
     }
     for (const share of shares) {
       const settings = share.settings as any
-      const status = settings?.activity?.status ?? 'to_do'
+      // Normalize legacy 'done' to 'approved' on read
+      const rawStatus = settings?.activity?.status ?? 'to_do'
+      const status = rawStatus === 'done' ? 'approved' : rawStatus
       if (status === 'to_do') sharesProgress.toDo++
       else if (status === 'in_progress') sharesProgress.inProgress++
-      else if (status === 'done') sharesProgress.done++
+      else if (status === 'approved') sharesProgress.approved++
       if (settings?.share?.finalizedAt) sharesProgress.finalized++
       if (settings?.externalCollaborator) sharesProgress.externalCollaborators++
       if (settings?.guest) sharesProgress.externalViewers++
@@ -649,10 +651,9 @@ export async function GET(
       else if (days === 1) penalties.push({ label: 'Engagement due tomorrow', points: 8 })
       else if (days === 2) penalties.push({ label: 'Engagement due in 2 days', points: 5 })
     }
-    // TODO: re-enable when Shares board graduates from beta
     // if (sharesProgress.total > 0) {
-    //   const deliveryPct = Math.round((sharesProgress.done / sharesProgress.total) * 100)
-    //   if (deliveryPct < 50) penalties.push({ label: `${deliveryPct}% deliverables done`, points: Math.min(25, Math.round((50 - deliveryPct) / 2)) })
+    //   const deliveryPct = Math.round((sharesProgress.approved / sharesProgress.total) * 100)
+    //   if (deliveryPct < 50) penalties.push({ label: `${deliveryPct}% deliverables approved`, points: Math.min(25, Math.round((50 - deliveryPct) / 2)) })
     // }
 
     const healthPenalty = penalties.reduce((sum, p) => sum + p.points, 0)

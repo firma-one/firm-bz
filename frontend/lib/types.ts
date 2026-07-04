@@ -250,6 +250,10 @@ export interface DriveFile {
   isPrivate?: boolean
   /** True when the document is shared with EC or EV (disables "Make Private"). */
   isSharedWithExternal?: boolean
+  /** True when the folder is tagged as a Deliverable (settings.share.createdAt is set). */
+  isDeliverable?: boolean
+  /** Activity status of this deliverable folder (only set when isDeliverable=true). */
+  deliverableStatus?: 'to_do' | 'in_progress' | 'in_review' | 'approved' | null
 }
 
 export interface DriveRevision {

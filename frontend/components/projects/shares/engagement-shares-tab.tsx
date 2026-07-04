@@ -16,7 +16,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core'
-import { Share2, User, Lock, ListTodo, Loader2, CheckCircle, Eye, GripVertical, FolderOpen, Clock, Copy, Check, Search, MessageCircle, Link2, ScanEye, X, RefreshCw, ChevronDown, Filter, CheckCircle2, Trash2 } from 'lucide-react'
+import { Share2, User, Lock, ListTodo, CheckCircle, Eye, GripVertical, FolderOpen, Clock, Copy, Check, Search, MessageCircle, Link2, ScanEye, X, RefreshCw, ChevronDown, Filter, CheckCircle2, Trash2, BookOpenText, PenLine, LayoutGrid } from 'lucide-react'
 import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
 import { DocumentBreadcrumb } from '@/components/ui/document-breadcrumb'
 import { DocumentIcon } from '@/components/ui/document-icon'
@@ -35,6 +35,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { ShareDetailPanel } from './share-detail-panel'
+import { DeliverableDetailPanel } from './deliverable-detail-panel'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { SecureAccessModal } from './secure-access-modal'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
@@ -48,8 +49,9 @@ import { formatDistanceToNow } from 'date-fns'
 import { cn } from '@/lib/utils'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useProjectPersonaLabels } from '@/lib/hooks/use-project-persona-labels'
+import { useToast } from '@/components/ui/toast'
 
-type ActivityStatus = 'to_do' | 'in_progress' | 'in_review' | 'done'
+type ActivityStatus = 'to_do' | 'in_progress' | 'in_review' | 'approved'
 
 interface ShareRecord {
   id: string
@@ -92,6 +94,7 @@ parentId?: string | null
   }>
   pendingApproval?: boolean
   pendingUploaderId?: string | null
+  docId?: string | null
   /** Used internally when grouping into lanes for stable sort order. */
   _orderIndex?: number
 }
@@ -133,7 +136,7 @@ const LANES: {
     {
       status: 'in_progress',
       label: 'In Progress',
-      icon: <Loader2 className="h-3.5 w-3.5 text-[#5A78FF]" />,
+      icon: <PenLine className="h-3.5 w-3.5 text-[#5A78FF]" />,
       iconBg: 'bg-[#eff2ff]',
     },
     {
@@ -143,8 +146,8 @@ const LANES: {
       iconBg: 'bg-[#fff7ed]',
     },
     {
-      status: 'done',
-      label: 'Done',
+      status: 'approved',
+      label: 'Approved',
       icon: <CheckCircle className="h-3.5 w-3.5 text-primary" />,
       iconBg: 'bg-primary/10',
     },
@@ -185,7 +188,7 @@ const CARD_ACCENT: Record<ActivityStatus, { iconPillBg: string }> = {
   to_do: { iconPillBg: 'bg-[#f3f4f6]' },
   in_progress: { iconPillBg: 'bg-[#eff2ff]' },
   in_review: { iconPillBg: 'bg-[#fff7ed]' },
-  done: { iconPillBg: 'bg-primary/10' },
+  approved: { iconPillBg: 'bg-primary/10' },
 }
 
 function DraggableCard({
@@ -195,10 +198,8 @@ function DraggableCard({
   formatDate,
   getDocumentForMenu,
   showActions,
-  onFinalize,
-  finalizingId,
   canManage,
-  isDoneLane,
+  isApprovedLane,
   onShareSaved,
   handleSecureOpen,
   isRegrantingId,
@@ -207,6 +208,10 @@ function DraggableCard({
   extCollaboratorLabel,
   viewerLabel,
   onParentFolderClick,
+  onOpenInFilesForFolder,
+  onOpenDetail,
+  isDetailOpen,
+  isPaneOpen,
   isExternalPersona,
   isExternalViewer,
   deeplinkBase,
@@ -221,10 +226,8 @@ function DraggableCard({
   formatDate: (s: string) => string
   getDocumentForMenu: (s: ShareRecord) => { id: string; name: string; mimeType?: string; externalId: string }
   showActions: boolean
-  onFinalize?: () => void
-  finalizingId: string | null
   canManage: boolean
-  isDoneLane: boolean
+  isApprovedLane: boolean
   onShareSaved?: () => void
   handleSecureOpen: (share: ShareRecord) => void
   isRegrantingId: string | null
@@ -233,6 +236,12 @@ function DraggableCard({
   extCollaboratorLabel: string
   viewerLabel: string
   onParentFolderClick?: (parentId: string, parentName: string) => void
+  onOpenInFilesForFolder?: (share: ShareRecord) => void
+  onOpenDetail?: (share: ShareRecord) => void
+  /** True when this card's detail panel is open in the right pane */
+  isDetailOpen?: boolean
+  /** True when any deliverable's detail pane is open */
+  isPaneOpen?: boolean
   isExternalPersona?: boolean
   isExternalViewer?: boolean
   deeplinkBase?: string
@@ -256,6 +265,9 @@ function DraggableCard({
     isGuest: share.settings?.guest ?? false,
   }
 
+  // When any pane is open, only the open card stays interactive; others are muted
+  const isBlocked = isPaneOpen && !isDetailOpen
+
   return (
     <motion.div
       ref={(node) => { setNodeRef(node); setDropRef(node) }}
@@ -264,15 +276,22 @@ function DraggableCard({
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.98 }}
       transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-      whileHover={!isDragging ? { y: -2, boxShadow: '0 4px 12px -2px rgba(0,0,0,0.08)' } : undefined}
+      whileHover={!isDragging && !isBlocked ? { y: -2, boxShadow: '0 4px 12px -2px rgba(0,0,0,0.08)' } : undefined}
       className={cn(
-        'rounded overflow-hidden select-none border border-[#e5e7eb] transition-shadow duration-200',
-        'bg-white shadow-sm',
+        'rounded overflow-hidden select-none border transition-all duration-200',
+        isApprovedLane ? 'bg-primary/5 shadow-sm' : 'bg-white shadow-sm',
+        isDetailOpen && 'ring-2 ring-primary border-primary/40 shadow-md',
+        !isDetailOpen && !isBlocked && (isApprovedLane ? 'border-primary/10' : 'border-[#e5e7eb]'),
+        isBlocked && 'opacity-40 pointer-events-none',
         isDragging && 'opacity-60 shadow-md z-10 scale-[1.02]',
         isOver && !isDragging && 'ring-1 ring-primary/30 ring-inset'
       )}
     >
-      <div className="flex items-center gap-1 px-2.5 py-1 bg-[#f9f9fb] border-b border-[#e5e7eb]" {...listeners} {...attributes}>
+      <div
+        className={cn('flex items-center gap-1 px-2.5 py-1 border-b', isApprovedLane ? 'bg-primary/[0.06] border-primary/10' : 'bg-[#f9f9fb] border-[#e5e7eb]')}
+        {...(!isBlocked ? listeners : {})}
+        {...(!isBlocked ? attributes : {})}
+      >
         <GripVertical className="h-4 w-4 text-slate-400 cursor-grab active:cursor-grabbing" />
       </div>
       <ShareCardContent
@@ -281,10 +300,8 @@ function DraggableCard({
         formatDate={formatDate}
         getDocumentForMenu={getDocumentForMenu}
         showActions={showActions}
-        onFinalize={onFinalize}
-        finalizingId={finalizingId}
         canManage={canManage}
-        isDoneLane={isDoneLane}
+        isApprovedLane={isApprovedLane}
         onShareSaved={onShareSaved}
         handleSecureOpen={handleSecureOpen}
         isRegrantingId={isRegrantingId}
@@ -294,6 +311,8 @@ function DraggableCard({
         extCollaboratorLabel={extCollaboratorLabel}
         viewerLabel={viewerLabel}
         onParentFolderClick={onParentFolderClick}
+        onOpenInFilesForFolder={onOpenInFilesForFolder}
+        onOpenDetail={onOpenDetail}
         isExternalPersona={isExternalPersona}
         isExternalViewer={isExternalViewer}
         deeplinkBase={deeplinkBase}
@@ -313,10 +332,8 @@ function ShareCardContent({
   formatDate,
   getDocumentForMenu,
   showActions,
-  onFinalize,
-  finalizingId,
   canManage,
-  isDoneLane,
+  isApprovedLane,
   onShareSaved,
   onClickTitle,
   handleSecureOpen,
@@ -326,6 +343,8 @@ function ShareCardContent({
   extCollaboratorLabel,
   viewerLabel,
   onParentFolderClick,
+  onOpenInFilesForFolder,
+  onOpenDetail,
   isExternalPersona,
   isExternalViewer,
   deeplinkBase,
@@ -339,10 +358,8 @@ function ShareCardContent({
   formatDate: (s: string) => string
   getDocumentForMenu: (s: ShareRecord) => { id: string; name: string; mimeType?: string; externalId: string }
   showActions: boolean
-  onFinalize?: () => void
-  finalizingId: string | null
   canManage: boolean
-  isDoneLane: boolean
+  isApprovedLane: boolean
   onShareSaved?: () => void
   onClickTitle?: () => void
   handleSecureOpen: (share: ShareRecord) => void
@@ -352,6 +369,8 @@ function ShareCardContent({
   extCollaboratorLabel: string
   viewerLabel: string
   onParentFolderClick?: (parentId: string, parentName: string) => void
+  onOpenInFilesForFolder?: (share: ShareRecord) => void
+  onOpenDetail?: (share: ShareRecord) => void
   isExternalPersona?: boolean
   isExternalViewer?: boolean
   deeplinkBase?: string
@@ -372,7 +391,7 @@ function ShareCardContent({
 
   return (
     <>
-      <div className={cn('bg-[#f9f9fb] border-b border-[#e5e7eb]', isPending && 'opacity-80')}>
+      <div className={cn('border-b', isApprovedLane ? 'bg-primary/[0.06] border-primary/10' : 'bg-[#f9f9fb] border-[#e5e7eb]', isPending && 'opacity-80')}>
         <div className="flex items-center gap-2.5 px-3 pt-2.5 pb-2">
           <div className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded', iconPillBg)}>
             {share.documentMimeType?.includes('folder') ? (
@@ -383,11 +402,19 @@ function ShareCardContent({
           </div>
           <div className="min-w-0 flex-1">
             <div
-              className="text-[13px] font-semibold text-[#1b1b1d] truncate cursor-pointer hover:text-primary transition-colors"
+              className="text-[13px] font-semibold text-[#1b1b1d] truncate cursor-pointer hover:text-primary transition-colors flex items-center gap-1.5"
               title={share.documentName}
               onClick={onClickTitle}
             >
-              {share.documentName}
+              <span className="truncate">{share.documentName}</span>
+              {isFinalized && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Lock className="h-3 w-3 shrink-0 text-[#9a9ba0]" />
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-xs">Finalized</TooltipContent>
+                </Tooltip>
+              )}
             </div>
             {isPending ? (
               <Tooltip>
@@ -406,6 +433,22 @@ function ShareCardContent({
               />
             )}
           </div>
+          {onOpenDetail && !isPending && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className="p-1 rounded hover:bg-[#e5e7eb] text-[#9a9ba0] hover:text-[#45474c] transition-colors shrink-0"
+                    onClick={(e) => { e.stopPropagation(); onOpenDetail(share) }}
+                  >
+                    <BookOpenText className="h-3.5 w-3.5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">View details</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
         </div>
       </div>
       {/* Intake actions — shown instead of normal content when pending */}
@@ -476,20 +519,22 @@ function ShareCardContent({
             </TooltipProvider>
             {!isPending && (
               <>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        className="p-1 rounded hover:bg-[#f3f4f6] text-[#9a9ba0] hover:text-[#45474c] transition-colors"
-                        onClick={(e) => { e.stopPropagation(); onOpenComments?.(share) }}
-                      >
-                        <MessageCircle className="h-3.5 w-3.5" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="text-xs">Comments</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                {isFolder && onOpenInFilesForFolder && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          className="p-1 rounded hover:bg-[#f3f4f6] text-[#9a9ba0] hover:text-[#45474c] transition-colors"
+                          onClick={(e) => { e.stopPropagation(); onOpenInFilesForFolder(share) }}
+                        >
+                          <FolderOpen className="h-3.5 w-3.5" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="text-xs">Open in Files</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
                 {!share.documentMimeType?.includes('folder') && (
                   <TooltipProvider>
                     <Tooltip>
@@ -517,6 +562,7 @@ function ShareCardContent({
               isExternalUser={isExternalPersona}
               isExternalViewer={isExternalViewer}
               disabled={isPending}
+              isDeliverable={true}
             />
             {isRegrantingId === share.id && <LoadingSpinner size="sm" className="min-h-0 ml-0.5" />}
           </div>
@@ -563,27 +609,21 @@ function ShareCardContent({
             </div>
           </div>
         )}
+        {(() => {
+          const total = (share as any).subtaskCount ?? 0
+          const approved = (share as any).approvedSubtaskCount ?? 0
+          if (total === 0) return null
+          const pct = Math.round((approved / total) * 100)
+          return (
+            <div className="flex items-center gap-2 pt-0.5">
+              <div className="flex-1 h-1 rounded-full bg-[#e5e7eb] overflow-hidden">
+                <div className="h-full rounded-full bg-green-500 transition-all duration-300" style={{ width: `${pct}%` }} />
+              </div>
+              <span className="text-[9px] font-semibold text-[#9a9ba0] tabular-nums shrink-0">{approved}/{total}</span>
+            </div>
+          )
+        })()}
       </div>
-      {!isPending && showActions && (canManage && isDoneLane && !isFinalized || isFinalized) && (
-        <div className="px-3 pb-2.5 pt-1.5 flex items-center gap-2 border-t border-[#e5e7eb] bg-white" onClick={(e) => e.stopPropagation()}>
-          {canManage && isDoneLane && !isFinalized && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="text-xs h-7 rounded-[2px] text-amber-700 border-amber-200 hover:bg-amber-50"
-              disabled={!!finalizingId}
-              onClick={(e) => { e.stopPropagation(); onFinalize?.() }}
-            >
-              {finalizingId ? '…' : <><Lock className="h-3 w-3 mr-1" /> Finalize</>}
-            </Button>
-          )}
-          {isFinalized && (
-            <span className="text-[11px] text-[#45474c] flex items-center gap-1">
-              <Lock className="h-3 w-3" /> Finalized
-            </span>
-          )}
-        </div>
-      )}
     </>
   )
 }
@@ -592,14 +632,14 @@ const STATUS_LABELS: Record<ActivityStatus, string> = {
   to_do: 'To Do',
   in_progress: 'In Progress',
   in_review: 'In Review',
-  done: 'Done',
+  approved: 'Approved',
 }
 
 const STATUS_PILL_CLASS: Record<ActivityStatus, string> = {
   to_do: 'bg-[#ede9fe]/90 text-[#5b21b6]',
   in_progress: 'bg-[#eff2ff]/90 text-[#5A78FF]',
   in_review: 'bg-[#fff7ed]/90 text-[#c2410c]',
-  done: 'bg-primary/10/90 text-primary',
+  approved: 'bg-primary/10/90 text-primary',
 }
 
 
@@ -998,6 +1038,7 @@ function SharesListView({
                   isExternalUser={isExternalPersona}
                   isExternalViewer={isExternalViewer}
                   disabled={isPending}
+                  isDeliverable={true}
                 />
                 {isRegrantingId === share.id && <LoadingSpinner size="sm" className="min-h-0 ml-0.5" />}
               </div>
@@ -1332,6 +1373,7 @@ function ShareCard({
               isExternalUser={isExternalPersona}
               isExternalViewer={isExternalViewer}
               disabled={isPending}
+              isDeliverable={true}
             />
             {isRegrantingId === share.id && (
               <LoadingSpinner size="sm" className="min-h-0 ml-1" />
@@ -1468,6 +1510,14 @@ export function EngagementSharesTab({
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [intakeActionInProgress, setIntakeActionInProgress] = useState<string | null>(null)
+  const [openDeliverableId, setOpenDeliverableId] = useState<string | null>(null)
+
+  // Clear highlight when the right pane is closed externally (e.g. user opens Comments instead)
+  useEffect(() => {
+    if (!rightPane.content) setOpenDeliverableId(null)
+  }, [rightPane.content])
+
+  const { addToast } = useToast()
 
   const {
     handleSecureOpen,
@@ -1515,14 +1565,14 @@ export function EngagementSharesTab({
     })
   }, [refreshData])
 
-  const saveOrder = useCallback(async (toDo: string[], inProgress: string[], inReview: string[], done: string[]) => {
+  const saveOrder = useCallback(async (toDo: string[], inProgress: string[], inReview: string[], approved: string[]) => {
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session?.access_token) return
       await fetch(`/api/projects/${projectId}/shares/order`, {
         method: 'PUT',
         headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to_do: toDo, in_progress: inProgress, in_review: inReview, done }),
+        body: JSON.stringify({ to_do: toDo, in_progress: inProgress, in_review: inReview, approved }),
       })
       await refreshData()
     } catch (e) {
@@ -1599,6 +1649,9 @@ export function EngagementSharesTab({
     allowDownload: share.settings?.guestOptions?.allowDownload ?? false,
     isExternalCollaborator: share.settings?.externalCollaborator ?? false,
     ecAllowDownload: share.settings?.ecOptions?.allowDownload ?? false,
+    lastModifyingUser: (share.updatedByName || share.updatedByEmail || share.createdByName || share.createdByEmail)
+      ? { displayName: share.updatedByName || share.updatedByEmail || share.createdByName || share.createdByEmail }
+      : undefined,
   })
 
   const handleOpenInFilesForFolder = useCallback(
@@ -1633,9 +1686,47 @@ export function EngagementSharesTab({
     [onOpenInFiles, orgName, clientName, projectName, connectorRootFolderId]
   )
 
+  const handleOpenDeliverableDetail = useCallback(
+    (share: ShareRecord) => {
+      setOpenDeliverableId(share.id)
+      rightPane.setTitle(share.documentName)
+      rightPane.setHeaderSubtitle(share.docId ?? 'Deliverable')
+      rightPane.setHeaderIcon(<LayoutGrid className="h-4 w-4" />)
+      rightPane.setPaneSize('medium')
+      rightPane.setContent(
+        <DeliverableDetailPanel
+          documentId={share.documentId}
+          projectId={projectId}
+          docId={share.docId ?? null}
+          fileName={share.documentName}
+          activityStatus={share.activity?.status ?? 'to_do'}
+          canManage={canManage ?? false}
+          isExternalViewer={isExternalViewer}
+          orgSlug={orgSlug}
+          deeplinkBase={deeplinkBase}
+          onStatusChange={(newStatus) => {
+            setShares((prev) =>
+              prev.map((s) =>
+                s.id === share.id
+                  ? { ...s, activity: { ...(s.activity ?? { updatedAt: new Date().toISOString() }), status: newStatus } }
+                  : s
+              )
+            )
+          }}
+          onClose={() => { setOpenDeliverableId(null); rightPane.clearPane() }}
+        />
+      )
+    },
+    [rightPane, projectId, canManage, isExternalViewer, orgSlug]
+  )
+
   const handleSecureOpenShare = useCallback(
     (share: ShareRecord) => {
       if (share.documentMimeType?.includes('folder')) {
+        if (share.activity) {
+          handleOpenDeliverableDetail(share)
+          return
+        }
         handleOpenInFilesForFolder(share)
         return
       }
@@ -1650,7 +1741,7 @@ export function EngagementSharesTab({
         share.id
       )
     },
-    [handleSecureOpen, handleOpenInFilesForFolder]
+    [handleSecureOpen, handleOpenInFilesForFolder, handleOpenDeliverableDetail]
   )
 
   const byLane = React.useMemo(() => {
@@ -1659,26 +1750,29 @@ export function EngagementSharesTab({
     const inReview: ShareRecord[] = []
     const done: ShareRecord[] = []
     shares.forEach((s) => {
+      // EC/EV only see cards where their access flag has been set (i.e. reached In Progress+).
+      // A backward lane move keeps the flag true, so they continue seeing it.
+      if (restrictToSharedOnly && !s.settings?.externalCollaborator) return
       const status = s.activity?.status ?? 'to_do'
       const orderIndex = s.activity?.orderIndex ?? 0
       const rec = { ...s, _orderIndex: orderIndex }
       if (status === 'in_progress') inProgress.push(rec)
       else if (status === 'in_review') inReview.push(rec)
-      else if (status === 'done') done.push(rec)
+      else if (status === 'approved' || (status as string) === 'done') done.push(rec)
       else toDo.push(rec)
     })
     toDo.sort((a, b) => (a._orderIndex ?? 0) - (b._orderIndex ?? 0))
     inProgress.sort((a, b) => (a._orderIndex ?? 0) - (b._orderIndex ?? 0))
     inReview.sort((a, b) => (a._orderIndex ?? 0) - (b._orderIndex ?? 0))
     done.sort((a, b) => (a._orderIndex ?? 0) - (b._orderIndex ?? 0))
-    return { to_do: toDo, in_progress: inProgress, in_review: inReview, done }
+    return { to_do: toDo, in_progress: inProgress, in_review: inReview, approved: done }
   }, [shares])
 
   const laneOrder = React.useMemo(() => ({
     to_do: byLane.to_do.map((s) => s.id),
     in_progress: byLane.in_progress.map((s) => s.id),
     in_review: byLane.in_review.map((s) => s.id),
-    done: byLane.done.map((s) => s.id),
+    approved: byLane.approved.map((s) => s.id),
   }), [byLane])
 
   const sensors = useSensors(
@@ -1698,7 +1792,7 @@ export function EngagementSharesTab({
     const overId = String(over.id)
     let targetLane: ActivityStatus
     let insertIndex: number
-    if (['to_do', 'in_progress', 'in_review', 'done'].includes(overId)) {
+    if (['to_do', 'in_progress', 'in_review', 'approved'].includes(overId)) {
       targetLane = overId as ActivityStatus
       insertIndex = laneOrder[targetLane].length
     } else {
@@ -1708,10 +1802,36 @@ export function EngagementSharesTab({
       insertIndex = laneOrder[targetLane].indexOf(overId)
       if (insertIndex < 0) insertIndex = laneOrder[targetLane].length
     }
+
+    // Only allow ±1 stage moves; no going back from Approved
+    const STAGE_ORDER: Record<ActivityStatus, number> = { to_do: 0, in_progress: 1, in_review: 2, approved: 3 }
+    const share = shares.find((s) => s.id === shareId)
+    const currentLane = (share?.activity?.status ?? 'to_do') as ActivityStatus
+    if (currentLane === 'approved') {
+      addToast({ type: 'error', title: 'Cannot move back', message: 'Approved deliverables cannot be moved.' })
+      return
+    }
+    if (Math.abs(STAGE_ORDER[targetLane] - STAGE_ORDER[currentLane]) > 1) {
+      addToast({ type: 'error', title: 'Invalid move', message: 'You can only move one stage at a time.' })
+      return
+    }
+    if (targetLane === 'approved') {
+      const total = (share as any)?.subtaskCount ?? 0
+      const approved = (share as any)?.approvedSubtaskCount ?? 0
+      if (total > 0 && approved < total) {
+        const unapproved = total - approved
+        addToast({
+          type: 'error',
+          title: 'Cannot approve yet',
+          message: `${unapproved} document${unapproved > 1 ? 's' : ''} still need to be approved before this deliverable can be approved.`,
+        })
+        return
+      }
+    }
     const newToDo = laneOrder.to_do.filter((id) => id !== shareId)
     const newInProgress = laneOrder.in_progress.filter((id) => id !== shareId)
     const newInReview = laneOrder.in_review.filter((id) => id !== shareId)
-    const newDone = laneOrder.done.filter((id) => id !== shareId)
+    const newDone = laneOrder.approved.filter((id) => id !== shareId)
     const insertAt = (arr: string[], id: string, idx: number) => {
       const out = arr.slice()
       out.splice(idx, 0, id)
@@ -1850,7 +1970,7 @@ export function EngagementSharesTab({
               <DropdownMenuCheckboxItem checked={filterShared === 'by_me'} onCheckedChange={() => setFilterShared(filterShared === 'by_me' ? 'all' : 'by_me')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Shared by me</DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem checked={filterShared === 'by_others'} onCheckedChange={() => setFilterShared(filterShared === 'by_others' ? 'all' : 'by_others')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Shared by others</DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem checked={filterShared === 'with_collaborator'} onCheckedChange={() => setFilterShared(filterShared === 'with_collaborator' ? 'all' : 'with_collaborator')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Shared with Collaborator (External)</DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem checked={filterShared === 'with_viewer'} onCheckedChange={() => setFilterShared(filterShared === 'with_viewer' ? 'all' : 'with_viewer')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Shared with Viewer (External)</DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem checked={filterShared === 'with_viewer'} onCheckedChange={() => setFilterShared(filterShared === 'with_viewer' ? 'all' : 'with_viewer')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Shared with Reviewer</DropdownMenuCheckboxItem>
               <DropdownMenuSeparator />
               <DropdownMenuCheckboxItem checked={filterShared === 'pending_approval'} onCheckedChange={() => setFilterShared(filterShared === 'pending_approval' ? 'all' : 'pending_approval')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Pending Approval</DropdownMenuCheckboxItem>
             </DropdownMenuContent>
@@ -2008,10 +2128,8 @@ export function EngagementSharesTab({
                               formatDate={formatDate}
                               getDocumentForMenu={getDocumentForMenu}
                               showActions
-                              onFinalize={() => handleFinalize(share.id, share.documentId)}
-                              finalizingId={finalizingId}
                               canManage={canManage}
-                              isDoneLane={lane.status === 'done'}
+                              isApprovedLane={lane.status === 'approved'}
                               onShareSaved={refreshData}
                               handleSecureOpen={handleSecureOpenShare}
                               isRegrantingId={isRegrantingId}
@@ -2020,6 +2138,10 @@ export function EngagementSharesTab({
                               extCollaboratorLabel={projExtCollaborator}
                               viewerLabel={projViewer}
                               onParentFolderClick={onOpenInFiles ? handleOpenParentFolder : undefined}
+                              onOpenInFilesForFolder={onOpenInFiles ? handleOpenInFilesForFolder : undefined}
+                              onOpenDetail={handleOpenDeliverableDetail}
+                              isDetailOpen={share.id === openDeliverableId}
+                              isPaneOpen={!!openDeliverableId}
                               isExternalPersona={restrictToSharedOnly}
                               isExternalViewer={isExternalViewer}
                               deeplinkBase={deeplinkBase}
@@ -2054,9 +2176,8 @@ export function EngagementSharesTab({
                           formatDate={formatDate}
                           getDocumentForMenu={getDocumentForMenu}
                           showActions={false}
-                          finalizingId={null}
                           canManage={false}
-                          isDoneLane={false}
+                          isApprovedLane={false}
                           handleSecureOpen={handleSecureOpenShare}
                           isRegrantingId={isRegrantingId}
                           onOpenComments={handleOpenComments}
@@ -2087,6 +2208,7 @@ export function EngagementSharesTab({
         isLoading={isRegrantLoading}
         error={regrantError}
       />
+
     </div>
   )
 }
