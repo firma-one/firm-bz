@@ -15,7 +15,9 @@ import {
   useDroppable,
   type DragEndEvent,
   type DragStartEvent,
+  type DraggableAttributes,
 } from '@dnd-kit/core'
+import type { SyntheticListenerMap } from '@dnd-kit/core/dist/hooks/utilities'
 import { Share2, User, Lock, ListTodo, CheckCircle, Eye, GripVertical, FolderOpen, Clock, Copy, Check, Search, MessageCircle, Link2, ScanEye, X, RefreshCw, ChevronDown, Filter, CheckCircle2, Trash2, BookOpenText, PenLine, LayoutGrid } from 'lucide-react'
 import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
 import { DocumentBreadcrumb } from '@/components/ui/document-breadcrumb'
@@ -287,13 +289,6 @@ function DraggableCard({
         isOver && !isDragging && 'ring-1 ring-primary/30 ring-inset'
       )}
     >
-      <div
-        className={cn('flex items-center gap-1 px-2.5 py-1 border-b', isApprovedLane ? 'bg-primary/[0.06] border-primary/10' : 'bg-[#f9f9fb] border-[#e5e7eb]')}
-        {...(!isBlocked ? listeners : {})}
-        {...(!isBlocked ? attributes : {})}
-      >
-        <GripVertical className="h-4 w-4 text-slate-400 cursor-grab active:cursor-grabbing" />
-      </div>
       <ShareCardContent
         share={share}
         iconPillBg={iconPillBg}
@@ -320,6 +315,8 @@ function DraggableCard({
         currentUserId={currentUserId}
         onIntakeAction={onIntakeAction}
         intakeActionInProgress={intakeActionInProgress}
+        dragListeners={!isBlocked ? listeners : undefined}
+        dragAttributes={!isBlocked ? attributes : undefined}
       />
     </motion.div>
   )
@@ -352,6 +349,8 @@ function ShareCardContent({
   currentUserId,
   onIntakeAction,
   intakeActionInProgress,
+  dragListeners,
+  dragAttributes,
 }: {
   share: ShareRecord
   iconPillBg: string
@@ -378,9 +377,10 @@ function ShareCardContent({
   currentUserId?: string | null
   onIntakeAction?: (documentId: string, action: string) => void
   intakeActionInProgress?: string | null
+  dragListeners?: SyntheticListenerMap
+  dragAttributes?: DraggableAttributes
 }) {
-  const latestComment = share.comments?.[0]
-  const isFinalized = !!share.finalizedAt
+  const isFinalized = share.activity?.status === 'approved'
   const [linkCopied, setLinkCopied] = useState(false)
   const isPending = !!share.pendingApproval
   const isOwnPending = isPending && !!currentUserId && share.pendingUploaderId === currentUserId
@@ -392,7 +392,14 @@ function ShareCardContent({
   return (
     <>
       <div className={cn('border-b', isApprovedLane ? 'bg-primary/[0.06] border-primary/10' : 'bg-[#f9f9fb] border-[#e5e7eb]', isPending && 'opacity-80')}>
-        <div className="flex items-center gap-2.5 px-3 pt-2.5 pb-2">
+        <div
+          className="flex items-center gap-2.5 px-3 pt-2.5 pb-2 group/drag"
+          {...(dragListeners ?? {})}
+          {...(dragAttributes ?? {})}
+        >
+          {dragListeners && (
+            <GripVertical className="h-4 w-4 shrink-0 text-slate-300 group-hover/drag:text-slate-400 cursor-grab active:cursor-grabbing transition-colors" />
+          )}
           <div className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded', iconPillBg)}>
             {share.documentMimeType?.includes('folder') ? (
               <SharedFolderIcon fillLevel={1} tooltip="shared" />
@@ -403,16 +410,20 @@ function ShareCardContent({
           <div className="min-w-0 flex-1">
             <div
               className="text-[13px] font-semibold text-[#1b1b1d] truncate cursor-pointer hover:text-primary transition-colors flex items-center gap-1.5"
-              title={share.documentName}
               onClick={onClickTitle}
             >
-              <span className="truncate">{share.documentName}</span>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="truncate">{share.documentName}</span>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs max-w-64 break-words">{share.documentName}</TooltipContent>
+              </Tooltip>
               {isFinalized && (
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Lock className="h-3 w-3 shrink-0 text-[#9a9ba0]" />
                   </TooltipTrigger>
-                  <TooltipContent side="top" className="text-xs">Finalized</TooltipContent>
+                  <TooltipContent side="top" className="text-xs">Approved & Locked</TooltipContent>
                 </Tooltip>
               )}
             </div>
