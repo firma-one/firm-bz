@@ -628,7 +628,7 @@ function ShareCardContent({
           return (
             <div className="flex items-center gap-2 pt-0.5">
               <div className="flex-1 h-1 rounded-full bg-[#e5e7eb] overflow-hidden">
-                <div className="h-full rounded-full bg-green-500 transition-all duration-300" style={{ width: `${pct}%` }} />
+                <div className="h-full rounded-full bg-primary transition-all duration-300" style={{ width: `${pct}%` }} />
               </div>
               <span className="text-[9px] font-semibold text-[#9a9ba0] tabular-nums shrink-0">{approved}/{total}</span>
             </div>

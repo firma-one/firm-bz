@@ -559,7 +559,7 @@ export function DeliverableDetailPanel({
                       <>
                         <div className="flex-1 h-1.5 rounded-full bg-[#e5e7eb] overflow-hidden">
                           <div
-                            className="h-full rounded-full bg-green-500 transition-all duration-300"
+                            className="h-full rounded-full bg-primary transition-all duration-300"
                             style={{ width: `${pct}%` }}
                           />
                         </div>
