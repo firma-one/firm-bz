@@ -118,9 +118,16 @@ export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className,
                 {compact ? (
                     <SelectTrigger className="flex h-8 w-full items-center gap-2 rounded border-none bg-transparent px-3 py-1 text-[#1b1b1d] shadow-none transition-colors hover:bg-[#f3f4f6] focus:ring-0 [&>svg]:hidden">
                         <span className="shrink-0 flex items-center"><Building2 className="h-4 w-4 text-[#45474c]" /></span>
-                        <span className="d-sidebar-section truncate flex-1 text-left">
-                            {selectedOrg?.name || 'Select Workspace...'}
-                        </span>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <span className="d-sidebar-section truncate flex-1 text-left">
+                                    {selectedOrg?.name || 'Select Workspace...'}
+                                </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom" className="text-xs">
+                                {selectedOrg?.name || 'Select Workspace...'}
+                            </TooltipContent>
+                        </Tooltip>
                         {selectedOrg?.sandboxOnly && (
                             <Tooltip>
                                 <TooltipTrigger asChild>
@@ -145,9 +152,16 @@ export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className,
                         <div className="flex flex-1 flex-col min-w-0 text-left leading-tight">
                             <div className="flex items-center gap-2 min-w-0">
                                 <Building2 className="h-4 w-4 shrink-0 text-[#45474c]" />
-                                <span className="text-sm font-semibold truncate text-[#1b1b1d]">
-                                    {selectedOrg?.name || 'Select Workspace...'}
-                                </span>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[#1b1b1d]">
+                                            {selectedOrg?.name || 'Select Workspace...'}
+                                        </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="bottom" className="text-xs">
+                                        {selectedOrg?.name || 'Select Workspace...'}
+                                    </TooltipContent>
+                                </Tooltip>
                             </div>
                             <div className="mt-0.5 flex items-center gap-2 min-w-0">
                                 <span className="truncate text-[10px] leading-snug text-[#45474c] font-mono">
@@ -222,9 +236,16 @@ export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className,
                         >
                             <div className="flex w-full min-w-0 items-center gap-2 text-left">
                                 <Building2 className="h-4 w-4 shrink-0 text-[#45474c]" aria-hidden />
-                                <span className="line-clamp-1 min-w-0 font-medium text-[#1b1b1d]" title={org.name}>
-                                    {org.name}
-                                </span>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <span className="min-w-0 flex-1 truncate font-medium text-[#1b1b1d]">
+                                            {org.name}
+                                        </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="text-xs">
+                                        {org.name}
+                                    </TooltipContent>
+                                </Tooltip>
                                 {org.sandboxOnly && (
                                     <Tooltip>
                                         <TooltipTrigger asChild>

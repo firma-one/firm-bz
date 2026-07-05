@@ -100,6 +100,8 @@ parentId?: string | null
   pendingUploaderId?: string | null
   docId?: string | null
   dueDate?: string | null
+  subtaskCount?: number
+  approvedSubtaskCount?: number
   /** Used internally when grouping into lanes for stable sort order. */
   _orderIndex?: number
 }
@@ -323,7 +325,7 @@ function DraggableCard({
         viewerLabel={viewerLabel}
         onParentFolderClick={onParentFolderClick}
         onOpenInFilesForFolder={onOpenInFilesForFolder}
-        onOpenDetail={onOpenDetail}
+        onOpenDetail={isDetailOpen ? undefined : onOpenDetail}
         isExternalPersona={isExternalPersona}
         isExternalViewer={isExternalViewer}
         deeplinkBase={deeplinkBase}
@@ -645,8 +647,8 @@ function ShareCardContent({
           </div>
         )}
         {(() => {
-          const total = (share as any).subtaskCount ?? 0
-          const approved = (share as any).approvedSubtaskCount ?? 0
+          const total = share.subtaskCount ?? 0
+          const approved = share.approvedSubtaskCount ?? 0
           if (total === 0) return null
           const pct = Math.round((approved / total) * 100)
           return (
@@ -1559,6 +1561,8 @@ export function EngagementSharesTab({
   const [intakeActionInProgress, setIntakeActionInProgress] = useState<string | null>(null)
   const [openDeliverableId, setOpenDeliverableId] = useState<string | null>(null)
   const [savingId, setSavingId] = useState<string | null>(null)
+  // Stable ref — panel registers its setStatus here so drag-drop can update it without remounting
+  const panelStatusSetterRef = React.useRef<((s: ActivityStatus) => void) | null>(null)
 
   // Clear highlight when the right pane is closed externally (e.g. user opens Comments instead)
   useEffect(() => {
@@ -1772,7 +1776,6 @@ export function EngagementSharesTab({
 
   const handleOpenDeliverableDetail = useCallback(
     (share: ShareRecord) => {
-      if (share.id === openDeliverableId) return
       setOpenDeliverableId(share.id)
       rightPane.setTitle(share.docId ?? share.documentName)
       rightPane.setHeaderSubtitle(share.documentName)
@@ -1802,11 +1805,21 @@ export function EngagementSharesTab({
               )
             )
           }}
+          onSubtaskStatusChange={(total, approved) => {
+            setShares((prev) =>
+              prev.map((s) =>
+                s.id === share.id
+                  ? { ...s, subtaskCount: total, approvedSubtaskCount: approved }
+                  : s
+              )
+            )
+          }}
+          externalStatusRef={panelStatusSetterRef}
           onClose={() => { setOpenDeliverableId(null); rightPane.clearPane() }}
         />
       )
     },
-    [rightPane, projectId, canManage, isExternalViewer, orgSlug, openDeliverableId, roleSlug, restrictToSharedOnly]
+    [rightPane, projectId, canManage, isExternalViewer, orgSlug, roleSlug, restrictToSharedOnly]
   )
 
   // Capture the hash at mount so re-renders don't lose it before shares load
@@ -1971,8 +1984,8 @@ export function EngagementSharesTab({
     }
 
     if (targetLane === 'approved') {
-      const total = (share as any)?.subtaskCount ?? 0
-      const approved = (share as any)?.approvedSubtaskCount ?? 0
+      const total = share?.subtaskCount ?? 0
+      const approved = share?.approvedSubtaskCount ?? 0
       if (total > 0 && approved < total) {
         const unapproved = total - approved
         addToast({
@@ -2002,6 +2015,7 @@ export function EngagementSharesTab({
 
     // Optimistic update — reorder and update status immediately
     const allFinal = [...finalToDo, ...finalInProgress, ...finalInReview, ...finalDone]
+    let updatedShare: ShareRecord | null = null
     setShares((prev) =>
       allFinal.map((id, idx) => {
         const s = prev.find((x) => x.id === id)!
@@ -2009,13 +2023,20 @@ export function EngagementSharesTab({
           finalToDo.includes(id) ? 'to_do' :
           finalInProgress.includes(id) ? 'in_progress' :
           finalInReview.includes(id) ? 'in_review' : 'approved'
-        return {
+        const updated = {
           ...s,
           activity: { ...(s.activity ?? { updatedAt: new Date().toISOString() }), status: lane as ActivityStatus, orderIndex: idx },
           _orderIndex: idx,
         }
+        if (id === shareId) updatedShare = updated
+        return updated
       })
     )
+
+    // If the dragged card is currently open in the detail panel, push the new status directly
+    if (shareId === openDeliverableId && targetLane !== currentLane) {
+      panelStatusSetterRef.current?.(targetLane)
+    }
 
     setSavingId(shareId)
     const rollback = () => setShares(previousShares)

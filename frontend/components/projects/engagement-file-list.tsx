@@ -2908,28 +2908,48 @@ const handleRefresh = async () => {
 
                 {/* Folder upload confirmation modal (in-app, avoids browser "trust this site" wording) */}
                 <Dialog open={isFolderUploadModalOpen} onOpenChange={setIsFolderUploadModalOpen}>
-                    <DialogContent className="max-w-lg gap-4 p-5 border-slate-200">
-                        <DialogHeader className="space-y-3">
-                            <DialogTitle className="text-slate-900">Upload a folder</DialogTitle>
-                            <div className="text-xs text-slate-600 leading-relaxed">
-                                <p className="mb-2">Choose a folder from your computer. All files inside will be:</p>
-                                <ul className="list-disc list-inside space-y-1.5 pl-1">
-                                    <li>Uploaded to this engagement folder in your Google Drive</li>
-                                    <li>Folder structure preserved</li>
-                                    <li>Sent directly to your Google Drive and never pass through our servers</li>
-                                </ul>
+                    <DialogContent className="sm:max-w-[440px] border-[#e5e7eb] p-0 gap-0 rounded-[2px]">
+                        <VisuallyHidden><DialogTitle>Upload a folder</DialogTitle></VisuallyHidden>
+
+                        {/* Header */}
+                        <div className="px-5 py-4 border-b border-[#e5e7eb] bg-[#f9f9fb] flex items-start gap-3">
+                            <div className="mt-0.5 h-7 w-7 rounded bg-primary/10 flex items-center justify-center shrink-0">
+                                <FolderUp className="h-3.5 w-3.5 text-primary" />
                             </div>
-                        </DialogHeader>
-                        <div className="mt-3 flex items-start gap-2 rounded-md border border-slate-200 bg-slate-100 px-3 py-2.5">
-                            <Info className="h-4 w-4 shrink-0 text-slate-600 mt-0.5" />
-                            <p className="text-xs text-slate-700 font-medium leading-relaxed">
-                                Your browser may prompt you to confirm the folder selection.
-                            </p>
+                            <div>
+                                <p className="text-sm font-semibold text-[#1b1b1d] leading-tight">Upload a folder</p>
+                                <p className="text-xs text-[#45474c] mt-0.5">Choose a folder from your computer. All files inside will be:</p>
+                            </div>
                         </div>
-                        <div className="flex justify-end gap-3 mt-3">
-                            <Button variant="outline" className="border-slate-200 text-slate-700 hover:bg-slate-50" onClick={() => setIsFolderUploadModalOpen(false)}>Cancel</Button>
+
+                        {/* Body */}
+                        <div className="p-5 space-y-4">
+                            <ul className="list-disc list-inside space-y-1.5 pl-1 text-xs text-[#45474c] leading-relaxed">
+                                <li>Uploaded to this engagement folder in your Google Drive</li>
+                                <li>Folder structure preserved</li>
+                                <li>Sent directly to your Google Drive and never pass through our servers</li>
+                            </ul>
+                            <div className="flex items-start gap-2 rounded-[2px] border border-[#e5e7eb] bg-[#f9f9fb] px-3 py-2.5">
+                                <Info className="h-4 w-4 shrink-0 text-[#45474c] mt-0.5" />
+                                <p className="text-xs text-[#1b1b1d] font-medium leading-relaxed">
+                                    Your browser may prompt you to confirm the folder selection.
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="px-5 py-3 border-t border-[#e5e7eb] flex items-center justify-end gap-3">
                             <Button
-                                className="bg-slate-900 text-white hover:bg-slate-800"
+                                type="button"
+                                variant="outline"
+                                className="!rounded-[2px] text-[10px] font-headline font-bold tracking-widest uppercase border-gray-300"
+                                onClick={() => setIsFolderUploadModalOpen(false)}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                variant="greenCta"
+                                className="min-w-[8rem] text-[10px] font-headline font-bold tracking-widest uppercase"
                                 onClick={() => {
                                     setIsFolderUploadModalOpen(false)
                                     setTimeout(() => folderInputRef.current?.click(), 0)
