@@ -347,7 +347,7 @@ export async function POST(request: NextRequest) {
                             // Exclude docs pending approval by someone else — only the uploader sees their own PENDING items (via intakeRows below)
                             NOT: { sharingUsers: { some: { sharingPermissionStatus: 'PENDING' as any, userId: { not: user.id } } } },
                         },
-                        select: { id: true, externalId: true, fileName: true, mimeType: true, fileSize: true, isFolder: true, metadata: true, settings: true, createdBy: true, status: true, dueDate: true },
+                        select: { id: true, externalId: true, fileName: true, mimeType: true, fileSize: true, isFolder: true, metadata: true, settings: true, createdBy: true, status: true, dueDate: true, docId: true },
                     }),
                     // Also surface the EC/EV's own PENDING intake folders in this folder
                     (prisma.engagementDocument as any).findMany({
@@ -439,6 +439,7 @@ export async function POST(request: NextRequest) {
                     projectDocumentId: row.id,
                     indexingStatus: row.status ?? undefined,
                     dueDate: row.dueDate ? (row.dueDate as Date).toISOString() : null,
+                    docId: (row as any).docId ?? null,
                     lock: getLock(row.settings),
                     isPendingApproval: intakeExternalIds.has(row.externalId),
                     pendingUploaderId: intakeUploaderByExternal.get(row.externalId) ?? null,
@@ -470,7 +471,7 @@ export async function POST(request: NextRequest) {
                         driveIds.length > 0
                             ? prisma.engagementDocument.findMany({
                                 where: { engagementId: bodyEngagementId, externalId: { in: driveIds } },
-                                select: { id: true, externalId: true, settings: true, status: true, dueDate: true },
+                                select: { id: true, externalId: true, settings: true, status: true, dueDate: true, docId: true },
                             })
                             : [],
                         // All PENDING intake folders in this folder (shadow rows for EL/internal)
@@ -488,6 +489,7 @@ export async function POST(request: NextRequest) {
                     const internalByExternal = new Map<string, string>(enrichRows.map((r: any) => [r.externalId, r.id]))
                     const statusByExternal = new Map<string, string>(enrichRows.map((r: any) => [r.externalId, r.status]))
                     const dueDateByExternal = new Map<string, string | null>(enrichRows.map((r: any) => [r.externalId, r.dueDate ? (r.dueDate as Date).toISOString() : null]))
+                    const docIdByExternal = new Map<string, string | null>(enrichRows.map((r: any) => [r.externalId, r.docId ?? null]))
                     const lockByExternal = new Map<string, any>(enrichRows.map((r: any) => [r.externalId, getLock(r.settings)]))
                     const sharedExternalByExternal = new Map<string, boolean>(enrichRows.map((r: any) => {
                         const s = (r.settings as Record<string, any>) || {}
@@ -532,6 +534,7 @@ export async function POST(request: NextRequest) {
                         projectDocumentId: internalByExternal.get(f.id) ?? undefined,
                         indexingStatus: statusByExternal.get(f.id) ?? undefined,
                         dueDate: dueDateByExternal.get(f.id) ?? null,
+                        docId: docIdByExternal.get(f.id) ?? null,
                         lock: lockByExternal.get(f.id) ?? null,
                         isPrivate: lockByExternal.get(f.id)?.type === 'private',
                         isSharedWithExternal: sharedExternalByExternal.get(f.id) ?? false,

@@ -217,7 +217,7 @@ export function EngagementFileRow({
             onDragOver={(e) => onDragOver(e, file)}
             onDragLeave={onDragLeave}
             onDrop={(e) => onDrop(e, file)}
-            style={{ gridTemplateColumns: 'minmax(0, 1fr) minmax(124px, 10%) 10% 14% 12% 10% 8%' }}
+            style={{ gridTemplateColumns: '24px 72px minmax(0, 1fr) minmax(124px, 10%) 10% 14% 12% 10% 8%' }}
             className={cn(
                 "group grid gap-4 h-10 pl-3 pr-2 transition-all items-center cursor-default relative text-[0.8125rem]",
                 isFolder && selectedFileIdsSize === 0 && "cursor-pointer",
@@ -242,42 +242,44 @@ export function EngagementFileRow({
                 }
             }}
         >
+            {/* Checkbox Column */}
+            <div
+                className="flex-shrink-0 w-4 h-4 flex items-center justify-center"
+                onClick={(e) => {
+                    e.stopPropagation()
+                    onToggleSelect(file.id)
+                }}
+            >
+                <Checkbox
+                    checked={isSelected}
+                    className="h-4 w-4 pointer-events-none"
+                />
+            </div>
+
+            {/* ID Column */}
+            <div className="flex items-center min-w-0">
+                {file.docId ? (
+                    <span className="text-[11px] font-bold font-mono text-primary tracking-wide truncate">
+                        {file.docId}
+                    </span>
+                ) : (
+                    <span className="text-[11px] text-[#c0c1c6]">—</span>
+                )}
+            </div>
+
             {/* Name Column: icon and name (deeplink = skewed pastel marker on file name only) */}
             <div className="flex items-center gap-3 min-w-0">
-                {/* OneDrive-style: checkbox on hover or in selection mode; icon otherwise */}
-                <div
-                    className="flex-shrink-0 w-4 h-4 flex items-center justify-center relative"
-                    onClick={(e) => {
-                        e.stopPropagation()
-                        onToggleSelect(file.id)
-                    }}
-                >
-                    {/* Checkbox: show when row hovered (group-hover) or selection active */}
-                    <div className={cn(
-                        "absolute inset-0 flex items-center justify-center",
-                        selectedFileIdsSize > 0 ? "flex" : "hidden group-hover:flex"
-                    )}>
-                        <Checkbox
-                            checked={isSelected}
-                            className="h-4 w-4 pointer-events-none"
+                <div className="flex-shrink-0 w-4 h-4 flex items-center justify-center">
+                    {isFolder && showBadge ? (
+                        <SharedFolderIcon
+                            fillLevel={isAncestorShared ? 0.5 : 1}
+                            tooltip={isAncestorShared ? 'contains-shared' : 'shared'}
                         />
-                    </div>
-                    {/* Icon: hidden when hovered/selected */}
-                    <div className={cn(
-                        "absolute inset-0 flex items-center justify-center",
-                        selectedFileIdsSize > 0 ? "hidden" : "flex group-hover:hidden"
-                    )}>
-                        {isFolder && showBadge ? (
-                            <SharedFolderIcon
-                                fillLevel={isAncestorShared ? 0.5 : 1}
-                                tooltip={isAncestorShared ? 'contains-shared' : 'shared'}
-                            />
-                        ) : isFolder ? (
-                            <Folder className="h-4 w-4 fill-primary/20 text-primary flex-shrink-0" />
-                        ) : (
-                            <DocumentIcon mimeType={file.mimeType} className="h-4 w-4" />
-                        )}
-                    </div>
+                    ) : isFolder ? (
+                        <Folder className="h-4 w-4 fill-primary/20 text-primary flex-shrink-0" />
+                    ) : (
+                        <DocumentIcon mimeType={file.mimeType} className="h-4 w-4" />
+                    )}
                 </div>
                 <div className="flex-1 min-w-0 flex items-center gap-2">
                     <Tooltip>

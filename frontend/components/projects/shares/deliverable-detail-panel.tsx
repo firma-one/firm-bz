@@ -81,6 +81,10 @@ export interface DeliverableDetailPanelProps {
   orgSlug?: string
   deeplinkBase?: string
   onStatusChange?: (newStatus: ActivityStatus) => void
+  /** Called when a subtask's status changes — lets the board card keep its x/y progress counter in sync. */
+  onSubtaskStatusChange?: (totalCount: number, approvedCount: number) => void
+  /** Ref the parent can call to push a new status into the panel without remounting it (e.g. after board drag). */
+  externalStatusRef?: React.MutableRefObject<((s: ActivityStatus) => void) | null>
   onClose?: () => void
   className?: string
 }
@@ -505,6 +509,8 @@ export function DeliverableDetailPanel({
   orgSlug,
   deeplinkBase,
   onStatusChange,
+  onSubtaskStatusChange,
+  externalStatusRef,
   className,
 }: DeliverableDetailPanelProps) {
   const { addToast } = useToast()
@@ -525,7 +531,22 @@ export function DeliverableDetailPanel({
     evPdfOnly: true,
     evAddWatermark: false,
   })
+  // Register setter so the parent can push status updates (e.g. board drag) without remounting
+  useEffect(() => {
+    if (externalStatusRef) externalStatusRef.current = setStatus
+    return () => { if (externalStatusRef) externalStatusRef.current = null }
+  }, [externalStatusRef])
+
   const [subtasks, setSubtasks] = useState<SubtaskRecord[]>([])
+  const subtasksLoadedRef = useRef(false)
+
+  // Notify parent of progress changes after subtasks state settles — must be outside render.
+  useEffect(() => {
+    if (!subtasksLoadedRef.current) return
+    onSubtaskStatusChange?.(subtasks.length, subtasks.filter((t) => t.status === 'approved').length)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subtasks])
+
   const [expandedSubtaskId, setExpandedSubtaskId] = useState<string | null>(null)
   const [loadingSubtasks, setLoadingSubtasks] = useState(false)
   const [savingOptions, setSavingOptions] = useState(false)
@@ -571,6 +592,7 @@ export function DeliverableDetailPanel({
       if (subRes.ok) {
         const subData = await subRes.json()
         const loaded: SubtaskRecord[] = subData.subtasks ?? []
+        subtasksLoadedRef.current = true
         setSubtasks(loaded)
         // Auto-expand first item in large pane
         if (paneSize === 'large' && loaded.length > 0) {
