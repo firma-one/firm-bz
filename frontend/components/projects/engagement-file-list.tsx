@@ -2400,25 +2400,25 @@ const handleRefresh = async () => {
 
                 {/* Fixed Table Header (Compact) */}
                 <div className="sticky top-0 bg-white border-b border-[#e5e7eb] pl-3 pr-2 py-2.5 shrink-0 z-10 group">
-                    <div className="grid gap-4 items-center" style={{ gridTemplateColumns: 'minmax(0, 1fr) minmax(124px, 10%) 10% 14% 12% 10% 8%' }}>
-                        <div className="flex items-center gap-3">
-                            {/* Select-all checkbox — visible on hover of header or when in selection mode */}
-                            <div
-                                className={cn(
-                                    "flex-shrink-0 w-4 h-4 flex items-center justify-center cursor-pointer",
-                                    selectedFileIds.size > 0 ? "flex" : "hidden group-hover:flex"
-                                )}
-                                onClick={() => {
-                                    const allIds = files.filter(f => f.id).map(f => f.id)
-                                    const allSelected = allIds.every(id => selectedFileIds.has(id))
-                                    setSelectedFileIds(allSelected ? new Set() : new Set(allIds))
-                                }}
-                            >
-                                <Checkbox
-                                    checked={files.length > 0 && files.every(f => selectedFileIds.has(f.id))}
-                                    className="h-4 w-4 pointer-events-none"
-                                />
-                            </div>
+                    <div className="grid gap-4 items-center" style={{ gridTemplateColumns: '24px 72px minmax(0, 1fr) minmax(124px, 10%) 10% 14% 12% 10% 8%' }}>
+                        {/* Select-all checkbox column */}
+                        <div
+                            className="flex-shrink-0 w-4 h-4 flex items-center justify-center cursor-pointer"
+                            onClick={() => {
+                                const allIds = files.filter(f => f.id).map(f => f.id)
+                                const allSelected = allIds.every(id => selectedFileIds.has(id))
+                                setSelectedFileIds(allSelected ? new Set() : new Set(allIds))
+                            }}
+                        >
+                            <Checkbox
+                                checked={files.length > 0 && files.every(f => selectedFileIds.has(f.id))}
+                                className="h-4 w-4 pointer-events-none"
+                            />
+                        </div>
+                        <div className="flex items-center">
+                            <TableHeader label="ID" />
+                        </div>
+                        <div className="flex items-center">
                             <TableHeader label="Name" />
                         </div>
                         <div className="col-span-2 flex items-center justify-center"><TableHeader label="Quick" /></div>

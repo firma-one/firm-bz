@@ -430,10 +430,29 @@ function ShareCardContent({
               <DocumentIcon mimeType={share.documentMimeType ?? undefined} className="h-4 w-4" />
             )}
           </div>
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1" onClick={onClickTitle}>
+            {/* Row 1: DOC ID (primary) */}
+            {share.docId && (
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <span className="text-[11px] font-bold font-mono text-primary tracking-wide">{share.docId}</span>
+                {isFinalized && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Lock className="h-3 w-3 shrink-0 text-[#9a9ba0]" />
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="text-xs">Approved & Locked</TooltipContent>
+                  </Tooltip>
+                )}
+              </div>
+            )}
+            {/* Row 2: filename */}
             <div
-              className="text-[13px] font-semibold text-[#1b1b1d] truncate cursor-pointer hover:text-primary transition-colors flex items-center gap-1.5"
-              onClick={onClickTitle}
+              className={cn(
+                'truncate cursor-pointer transition-colors flex items-center gap-1.5',
+                share.docId
+                  ? 'text-[11px] font-normal text-[#9a9ba0] hover:text-[#45474c]'
+                  : 'text-[13px] font-semibold text-[#1b1b1d] hover:text-primary'
+              )}
             >
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -441,7 +460,7 @@ function ShareCardContent({
                 </TooltipTrigger>
                 <TooltipContent side="top" className="text-xs max-w-64 break-words">{share.documentName}</TooltipContent>
               </Tooltip>
-              {isFinalized && (
+              {!share.docId && isFinalized && (
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Lock className="h-3 w-3 shrink-0 text-[#9a9ba0]" />

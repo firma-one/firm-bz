@@ -254,6 +254,8 @@ export interface DriveFile {
   isDeliverable?: boolean
   /** Activity status of this deliverable folder (only set when isDeliverable=true). */
   deliverableStatus?: 'to_do' | 'in_progress' | 'in_review' | 'approved' | null
+  /** Jira-style short ID (e.g. "VDK-43") assigned to this document. */
+  docId?: string | null
 }
 
 export interface DriveRevision {
