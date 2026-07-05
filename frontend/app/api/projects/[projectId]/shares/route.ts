@@ -60,6 +60,7 @@ export async function GET(
        LEFT JOIN platform.engagement_document_sharing_users su
          ON su."projectDocumentId" = ed.id AND su."sharingPermissionStatus" IN ('GRANTED', 'PENDING')
        WHERE ed."engagementId" = $1::uuid
+         AND ed."isFolder" = true
          AND (
            (ed.settings->'share'->>'createdAt') IS NOT NULL
            OR su.id IS NOT NULL
@@ -72,7 +73,7 @@ export async function GET(
       orderBy: { createdAt: 'desc' },
       include: {
         sharingUsers: {
-          select: { sharingPermissionStatus: true, userId: true, email: true },
+          select: { sharingPermissionStatus: true, userId: true },
         },
       },
     })
@@ -137,6 +138,8 @@ parentId: share.parentId ?? (indexMetadata.parents?.[0] ?? indexMetadata.parentI
         accessLog,
         pendingApproval,
         pendingUploaderId,
+        docId: (share as any).docId ?? null,
+        dueDate: (share as any).dueDate ? (share as any).dueDate.toISOString() : null,
       }
     })
 
@@ -178,9 +181,44 @@ parentId: share.parentId ?? (indexMetadata.parents?.[0] ?? indexMetadata.parentI
       } catch { /* non-critical, skip */ }
     }
 
+    // Subtask counts per deliverable — one recursive CTE per folder (mirrors subtasks route logic)
+    const deliverableFolders = sharesWithDetails
+      .map((s: any) => ({ shareId: s.id, externalId: s.documentExternalId }))
+      .filter((f: any) => !!f.externalId)
+    const subtaskCounts: Record<string, { total: number; approved: number }> = {}
+    await Promise.all(deliverableFolders.map(async ({ shareId, externalId }: { shareId: string; externalId: string }) => {
+      try {
+        const rows = await (prisma as any).$queryRawUnsafe(
+          `WITH RECURSIVE descendants AS (
+             SELECT id, "externalId", "isFolder",
+                    settings->'activity'->>'status' AS "activityStatus"
+             FROM platform.engagement_documents
+             WHERE "parentId" = $1 AND "engagementId" = $2::uuid
+             UNION ALL
+             SELECT ed.id, ed."externalId", ed."isFolder",
+                    ed.settings->'activity'->>'status'
+             FROM platform.engagement_documents ed
+             INNER JOIN descendants d ON ed."parentId" = d."externalId"
+             WHERE ed."engagementId" = $2::uuid
+           )
+           SELECT
+             COUNT(*) FILTER (WHERE "isFolder" = false) AS total,
+             COUNT(*) FILTER (WHERE "isFolder" = false AND "activityStatus" = 'approved') AS approved
+           FROM descendants`,
+          externalId,
+          projectId
+        ) as { total: bigint; approved: bigint }[]
+        if (rows.length > 0) {
+          subtaskCounts[shareId] = { total: Number(rows[0].total), approved: Number(rows[0].approved) }
+        }
+      } catch { /* non-critical */ }
+    }))
+
     const enriched = sharesWithDetails.map((s: any) => ({
       ...s,
       parentName: (s.parentId && parentNames[s.parentId]) || null,
+      subtaskCount: subtaskCounts[s.id]?.total ?? 0,
+      approvedSubtaskCount: subtaskCounts[s.id]?.approved ?? 0,
       createdByEmail: s.createdBy ? (userMap[s.createdBy]?.email ?? null) : null,
       createdByName: s.createdBy ? (userMap[s.createdBy]?.name ?? null) : null,
       createdByAvatarUrl: s.createdBy ? (userMap[s.createdBy]?.avatarUrl ?? null) : null,
@@ -189,7 +227,7 @@ parentId: share.parentId ?? (indexMetadata.parents?.[0] ?? indexMetadata.parentI
       updatedByAvatarUrl: s.updatedBy ? (userMap[s.updatedBy]?.avatarUrl ?? null) : null,
     }))
 
-    const statusOrder: Record<string, number> = { to_do: 0, in_progress: 1, in_review: 2, done: 3 }
+    const statusOrder: Record<string, number> = { to_do: 0, in_progress: 1, in_review: 2, approved: 3 }
     enriched.sort((a: any, b: any) => {
       const sa = a.activity?.status ?? 'to_do'
       const sb = b.activity?.status ?? 'to_do'

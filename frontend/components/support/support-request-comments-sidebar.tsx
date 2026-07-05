@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react'
-import { X, MessageCircle, Send } from 'lucide-react'
+import { X, MessagesSquare, Send } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { formatDistanceToNow } from 'date-fns'
 import { cn } from '@/lib/utils'
@@ -156,7 +156,7 @@ export function SupportRequestCommentsSidebar({
         <header className="flex items-center justify-between gap-2 px-4 border-b border-slate-200/60 bg-white shrink-0 rounded-t-2xl" style={{ height: 52 }}>
           <div className="flex items-center gap-2 min-w-0 flex-1">
             <div className="h-7 w-7 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500 shrink-0">
-              <MessageCircle className="h-3.5 w-3.5" />
+              <MessagesSquare className="h-3.5 w-3.5" />
             </div>
             <h2 className="text-sm font-semibold text-slate-900 truncate">Comments</h2>
             {comments.length > 0 && (
@@ -178,7 +178,7 @@ export function SupportRequestCommentsSidebar({
           {comments.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full py-12 text-center">
               <div className="h-10 w-10 rounded-xl bg-slate-100 flex items-center justify-center mb-3">
-                <MessageCircle className="h-5 w-5 text-slate-400" />
+                <MessagesSquare className="h-5 w-5 text-slate-400" />
               </div>
               <p className="text-sm font-medium text-slate-600">No comments yet</p>
               <p className="text-xs text-slate-400 mt-1">Be the first to add a note</p>

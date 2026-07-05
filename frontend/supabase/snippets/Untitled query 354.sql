@@ -14,3 +14,9 @@ FROM platform."engagement_documents" as ed
 WHERE ed."fileName" = 'pockettcalculator.com-Coverage-Valid-2025-11-23';
 
 -- 
+
+
+select em.* from platform.engagement_members em
+join platform.engagements e on e.id = em."engagementId"
+where e.slug = 'q2-go-t-s5vq'
+limit 100

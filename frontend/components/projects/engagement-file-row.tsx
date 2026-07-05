@@ -3,7 +3,8 @@
 import React from 'react'
 import {
     Folder, Share2, Lock, FolderLock, FolderUp,
-    MessageCircle, Link2, ScanEye, MoreVertical, CircleChevronLeft, Loader2, Bookmark
+    Link2, ScanEye, MoreVertical, CircleChevronLeft, Loader2, Bookmark,
+    PackagePlus, PackageCheck
 } from 'lucide-react'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { SharedFolderIcon } from '@/components/ui/folder-shared-icon'
@@ -83,6 +84,8 @@ export interface EngagementFileRowProps {
     onTrash: (doc: DriveFile) => void
     onPrivacy: (file: DriveFile, makePrivate: boolean) => void
     onShareSaved: () => void
+    onMarkAsDeliverable?: (doc: any) => void
+    onUntagAsDeliverable?: (doc: any) => void
     onUnlockConfirm: (file: DriveFile) => void
     onOpenDocument: (doc: DriveFile) => void
     onOpenCommentPane: (docId: string) => void
@@ -97,6 +100,8 @@ export interface EngagementFileRowProps {
     bookmarkId?: string
     /** When true, hides the dynamic badges column (shared/bookmark/intake/lock) to save horizontal space. */
     hideBadges?: boolean
+    /** When true, the current folder is an approved deliverable — disable all write operations. */
+    isInsideApprovedDeliverable?: boolean
 }
 
 export function EngagementFileRow({
@@ -151,6 +156,8 @@ export function EngagementFileRow({
     onTrash,
     onPrivacy,
     onShareSaved,
+    onMarkAsDeliverable,
+    onUntagAsDeliverable,
     onUnlockConfirm,
     onOpenDocument,
     onOpenCommentPane,
@@ -162,6 +169,7 @@ export function EngagementFileRow({
     connectorAccountEmail,
     bookmarkId,
     hideBadges = false,
+    isInsideApprovedDeliverable = false,
 }: EngagementFileRowProps) {
     const isDeeplinkHighlight = file.id === highlightedFileId
     const isFolder = (file.mimeType ?? (file as { type?: string }).type) === 'application/vnd.google-apps.folder'
@@ -179,8 +187,9 @@ export function EngagementFileRow({
     const isAncestorShared = !directShared && (isGuest ? descendantIdsForGuest.has(file.id) : isEC ? descendantIdsForEC.has(file.id) : descendantIds.has(file.id))
 
     const locked = file.lock?.type === 'finalize'
-    const canMutateFile = canEdit && !locked && !isIntakeRow
-    const canOrganizeTree = canManage && !locked && !isIntakeRow
+    const isFolderApproved = isFolder && file.isDeliverable && (file as any).deliverableStatus === 'approved'
+    const canMutateFile = canEdit && !locked && !isIntakeRow && !isInsideApprovedDeliverable && !isFolderApproved
+    const canOrganizeTree = canManage && !locked && !isIntakeRow && !isFolderApproved && !isInsideApprovedDeliverable
     const isIndexing = !isFolder && !!file.projectDocumentId && file.indexingStatus === 'PROCESSING'
 
     async function handleRemoveBookmark(e: React.MouseEvent) {
@@ -212,7 +221,8 @@ export function EngagementFileRow({
             className={cn(
                 "group grid gap-4 h-10 pl-3 pr-2 transition-all items-center cursor-default relative text-[0.8125rem]",
                 isFolder && selectedFileIdsSize === 0 && "cursor-pointer",
-                (isIntakeRow || file.lock?.type === 'finalize' || (file.isPrivate && !isFolder)) ? "hover:bg-[#f9f9fb] opacity-60" : "hover:bg-[#f9f9fb]",
+                (isFolderApproved || isInsideApprovedDeliverable) && "bg-primary/5 hover:bg-primary/10",
+                (isIntakeRow || file.lock?.type === 'finalize' || (file.isPrivate && !isFolder)) ? "hover:bg-[#f9f9fb] opacity-60" : !(isFolderApproved || isInsideApprovedDeliverable) && "hover:bg-[#f9f9fb]",
                 !isIntakeRow && isSelected && "bg-blue-50 hover:bg-blue-50",
                 !isIntakeRow && isActionMenuOpen && "bg-[#f3f4f6]",
                 !isIntakeRow && (file.id === activeCommentDocId || file.id === activeInfoDocId || file.id === activeActivityDocId || file.id === activeVersionDocId || file.id === activePreviewDocId) && "bg-[#f3f4f6]",
@@ -259,8 +269,8 @@ export function EngagementFileRow({
                     )}>
                         {isFolder && showBadge ? (
                             <SharedFolderIcon
-                                fillLevel={directShared ? 1 : 0.5}
-                                tooltip={directShared ? 'shared' : 'contains-shared'}
+                                fillLevel={isAncestorShared ? 0.5 : 1}
+                                tooltip={isAncestorShared ? 'contains-shared' : 'shared'}
                             />
                         ) : isFolder ? (
                             <Folder className="h-4 w-4 fill-primary/20 text-primary flex-shrink-0" />
@@ -353,19 +363,28 @@ export function EngagementFileRow({
                                 <span className={`inline-flex items-center shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium border ${
                                     isIntakeRow
                                         ? 'bg-primary/10 text-primary border-primary/30'
-                                        : isFolder && !directShared
-                                            ? 'bg-primary/5 text-primary/50 border-primary/20'
-                                            : 'bg-primary/10 text-primary border-primary/30'
+                                        : (isFolderApproved || isInsideApprovedDeliverable)
+                                            ? 'bg-primary text-white/70 border-primary'
+                                            : isAncestorShared
+                                                ? 'bg-primary/5 text-primary/50 border-primary/20'
+                                                : 'bg-primary/10 text-primary border-primary/30'
                                 }`}>
-                                    <Share2 className="h-3 w-3" />
+                                    {isIntakeRow
+                                        ? <Share2 className="h-3 w-3" />
+                                        : (isFolderApproved || isInsideApprovedDeliverable)
+                                            ? <PackageCheck className="h-3.5 w-3.5" />
+                                            : <PackagePlus className="h-3.5 w-3.5" />
+                                    }
                                 </span>
                             </TooltipTrigger>
                             <TooltipContent side="top">
                                 {isIntakeRow
                                     ? 'Pending Review'
-                                    : isFolder && !directShared
-                                        ? 'Contains shared items'
-                                        : 'Shared externally'}
+                                    : (isFolderApproved || isInsideApprovedDeliverable)
+                                        ? 'Deliverable — Approved'
+                                        : isAncestorShared
+                                            ? 'Inside a Deliverable folder'
+                                            : 'Tagged as Deliverable'}
                             </TooltipContent>
                         </Tooltip>
                     ) : null}
@@ -418,28 +437,6 @@ export function EngagementFileRow({
             {/* Quick icons */}
             <div className="flex items-center justify-end">
                 <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                    {!isFolder && (
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <button
-                                    type="button"
-                                    className={cn(
-                                        'h-7 w-7 rounded-md inline-flex items-center justify-center disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-500',
-                                        file.id === activeCommentDocId
-                                            ? 'text-slate-700 bg-slate-100'
-                                            : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
-                                    )}
-                                    aria-label="Open comments"
-                                    aria-pressed={file.id === activeCommentDocId}
-                                    disabled={isIntakeRow}
-                                    onClick={() => onOpenComments(file)}
-                                >
-                                    <MessageCircle className="h-4 w-4" />
-                                </button>
-                            </TooltipTrigger>
-                            <TooltipContent side="top" className="text-xs">Comments</TooltipContent>
-                        </Tooltip>
-                    )}
 
                     <Tooltip>
                         <TooltipTrigger asChild>
@@ -519,26 +516,31 @@ export function EngagementFileRow({
                         deeplinkBase={typeof window !== 'undefined' ? window.location.href.replace(/#.*$/, '') : ''}
                         showShareModal={isProjectLead && !isIntakeRow}
                         isAncestorShared={isAncestorShared}
+                        isDeliverable={isFolder && !!file.isDeliverable}
+                        isApprovedDeliverable={isFolderApproved || isInsideApprovedDeliverable}
+                        deliverableStatus={(file as any).deliverableStatus ?? undefined}
                         isEngagementLead={isProjectLead}
                         isExternalUser={isEC || isGuest}
                         isExternalViewer={isGuest}
                         projectId={projectId}
                         orgSlug={orgSlug}
                         onShareSaved={onShareSaved}
+                        onMarkAsDeliverable={onMarkAsDeliverable}
+                        onUntagAsDeliverable={(isInsideApprovedDeliverable || isFolderApproved) ? undefined : onUntagAsDeliverable}
                         canManage={canOrganizeTree}
                         currentFolderType={currentFolderType}
                         onOpenCommentPane={(docId) => onOpenCommentPane(docId)}
                         onOpenInfoPane={(docId) => onOpenInfoPane(docId)}
                         onOpenActivityPane={(docId) => onOpenActivityPane(docId)}
                         onOpenVersionPane={(docId) => onOpenVersionPane(docId)}
-                        onRenameDocument={canMutateFile ? (doc) => onOpenRename(doc as DriveFile) : undefined}
-                        onDuplicateDocument={canMutateFile ? (doc) => onDuplicate(doc as DriveFile) : undefined}
-                        onCopyDocument={generalFolderId && canMutateFile ? (doc) => onOpenCopyMove(doc as DriveFile, 'copy') : undefined}
-                        onMoveDocument={generalFolderId && canMutateFile ? (doc) => onOpenCopyMove(doc as DriveFile, 'move') : undefined}
+                        onRenameDocument={canEdit && !locked && !isIntakeRow ? (doc) => onOpenRename(doc as DriveFile) : undefined}
+                        onDuplicateDocument={canEdit && !locked && !isIntakeRow ? (doc) => onDuplicate(doc as DriveFile) : undefined}
+                        onCopyDocument={generalFolderId && canEdit && !locked && !isIntakeRow ? (doc) => onOpenCopyMove(doc as DriveFile, 'copy') : undefined}
+                        onMoveDocument={generalFolderId && canEdit && !locked && !isIntakeRow ? (doc) => onOpenCopyMove(doc as DriveFile, 'move') : undefined}
                         onCrossEngagementCopy={isProjectLead && canMutateFile ? (doc) => onOpenCrossEngagement(doc as DriveFile) : undefined}
                         onDeleteDocument={canMutateFile ? (doc) => onTrash(doc as DriveFile) : undefined}
-                        onMakePrivate={canOrganizeTree && !file.isPrivate ? () => onPrivacy(file, true) : undefined}
-                        onMakePublic={canOrganizeTree && file.isPrivate ? () => onPrivacy(file, false) : undefined}
+                        onMakePrivate={canManage && !locked && !isIntakeRow && !file.isPrivate ? () => onPrivacy(file, true) : undefined}
+                        onMakePublic={canManage && !locked && !isIntakeRow && file.isPrivate ? () => onPrivacy(file, false) : undefined}
                         onOpenChange={(open) => onActionMenuOpenChange(open)}
                         onOpenDocument={(doc) => {
                             const d = doc as DriveFile
@@ -566,7 +568,7 @@ export function EngagementFileRow({
                         eng_admin: 'Engagement Lead',
                         eng_member: 'Team Member',
                         eng_ext_collaborator: 'External Collaborator',
-                        eng_viewer: 'Viewer (External)',
+                        eng_viewer: 'Reviewer',
                     }
                     const personaName = file.ownerRole ? (ROLE_LABELS[file.ownerRole] ?? file.ownerRole) : undefined
                     if (!ownerName) return (

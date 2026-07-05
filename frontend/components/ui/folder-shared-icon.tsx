@@ -27,9 +27,9 @@ export function SharedFolderIcon({
   const fillOpacity = fillLevel === 1 ? 1 : fillLevel === 0.5 ? 0.5 : 0.2
   const tooltipText =
     tooltip === 'shared'
-      ? 'Shared folder'
+      ? 'Tagged as Deliverable'
       : tooltip === 'contains-shared'
-        ? 'Contains shared items'
+        ? 'Inside a Deliverable folder'
         : tooltip
 
   const icon = (

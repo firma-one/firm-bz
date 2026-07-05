@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Info, Folder, Link2, MessageCircle, MoreVertical } from 'lucide-react'
+import { Info, Folder, Link2, MessagesSquare, MoreVertical } from 'lucide-react'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
 import { DocumentActionMenu } from '@/components/ui/document-action-menu'
@@ -157,7 +157,7 @@ function SandboxPreviewFileRow({ file, activeCommentDocId, onOpenCommentPane, on
                                     aria-label="Open comments"
                                     onClick={() => onOpenCommentPane(file.id)}
                                 >
-                                    <MessageCircle className="h-4 w-4" />
+                                    <MessagesSquare className="h-4 w-4" />
                                 </button>
                             </TooltipTrigger>
                             <TooltipContent side="top" className="text-xs">Comments (preview)</TooltipContent>

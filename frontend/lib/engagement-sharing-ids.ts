@@ -167,6 +167,13 @@ function isGuestEnabled(settings: unknown): boolean {
   return (share?.guest as { enabled?: boolean } | undefined)?.enabled === true
 }
 
+/** True as soon as a folder is tagged as a Deliverable (settings.share.createdAt is set). */
+function isDeliverable(settings: unknown): boolean {
+  if (!settings || typeof settings !== 'object') return false
+  const share = (settings as Record<string, unknown>).share as Record<string, unknown> | undefined
+  return !!share?.createdAt
+}
+
 export type GetSharedAndAncestorOptions = {
   /** When true, skip buildDescendantIds (lazy descendant loading). Use for list-files API. */
   skipDescendants?: boolean
@@ -377,7 +384,9 @@ export async function getSharedAndAncestorIdsForAllPersonas(
 
   const sharedIdsForEC = settingsRows.filter((r) => isECEnabled(r.settings)).map((r) => r.externalId)
   const sharedIdsForGuest = settingsRows.filter((r) => isGuestEnabled(r.settings)).map((r) => r.externalId)
-  const sharedIdsUnion = Array.from(new Set([...sharedIdsForEC, ...sharedIdsForGuest]))
+  // Union uses isDeliverable (share.createdAt) so the icon appears as soon as a folder is tagged,
+  // regardless of which stage (EC/Guest) is currently enabled.
+  const sharedIdsUnion = settingsRows.filter((r) => isDeliverable(r.settings)).map((r) => r.externalId)
 
   const { ancestorIds } = sharedIdsUnion.length > 0
     ? await buildAncestorFoldersFromDB(sharedIdsUnion, settingsRows)

@@ -110,9 +110,17 @@ export async function GET(
       path = [{ id: ps.generalFolderId, name: 'General' }]
     }
 
+    // For folders, resolvePathToProjectRoot only returns ancestors — append the folder itself
+    // so the client can set it as currentFolderId and include it in breadcrumbs.
+    const isFolder = fileInfo.isFolder ?? false
+    if (isFolder) {
+      path = [...path, { id: fileInfo.externalId, name: fileInfo.fileName ?? documentIdParam }]
+    }
+
     return NextResponse.json({
       externalId: fileInfo.externalId,
       fileName: fileInfo.fileName ?? null,
+      isFolder,
       path,
       projectRootFolderId,
     })

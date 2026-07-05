@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { useRouter } from 'next/navigation'
 import {
     Dialog,
     DialogContent,
@@ -30,7 +29,6 @@ export function FirmSwitchDialog({
 }: FirmSwitchDialogProps) {
     const [isLoading, setIsLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
-    const router = useRouter()
     const switchInProgressRef = useRef(false)
 
     const handleSwitch = async () => {
@@ -47,17 +45,15 @@ export function FirmSwitchDialog({
             const { supabase } = await import('@/lib/supabase')
             await supabase.auth.refreshSession()
 
-            // Brief delay so client state (and any RLS) sees the new session before we navigate
-            await new Promise(resolve => setTimeout(resolve, 100))
-
             // Rebuild permission cache for consistency with onboarding
             const { buildUserSettingsPlus } = await import('@/lib/actions/user-settings')
             await buildUserSettingsPlus()
 
-            // Navigate first, then close dialog after a tick so navigation isn't dropped when we unmount
-            router.push(`/d/f/${targetFirmSlug}`)
-            router.refresh()
-            setTimeout(() => onOpenChange(false), 0)
+            // Hard navigation: the firm links in FirmList are prefetched by Next.js before the
+            // switch happens, so router.push()/router.refresh() can serve that stale pre-switch
+            // RSC payload for the target slug. A full page load guarantees a fresh request with
+            // the refreshed session cookie and bypasses the router's prefetch cache entirely.
+            window.location.href = `/d/f/${targetFirmSlug}`
         } catch (err: any) {
             setError(err.message || 'Failed to switch firm')
             setIsLoading(false)

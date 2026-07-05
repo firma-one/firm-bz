@@ -15,8 +15,10 @@ import {
   useDroppable,
   type DragEndEvent,
   type DragStartEvent,
+  type DraggableAttributes,
 } from '@dnd-kit/core'
-import { Share2, User, Lock, ListTodo, Loader2, CheckCircle, Eye, GripVertical, FolderOpen, Clock, Copy, Check, Search, MessageCircle, Link2, ScanEye, X, RefreshCw, ChevronDown, Filter, CheckCircle2, Trash2 } from 'lucide-react'
+import type { SyntheticListenerMap } from '@dnd-kit/core/dist/hooks/utilities'
+import { Share2, User, Lock, ListTodo, CheckCircle, Eye, GripVertical, FolderOpen, Clock, Copy, Check, Search, MessagesSquare, Link2, ScanEye, X, RefreshCw, ChevronDown, Filter, CheckCircle2, Trash2, BookOpenText, PenLine, PackagePlus, PackageCheck } from 'lucide-react'
 import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
 import { DocumentBreadcrumb } from '@/components/ui/document-breadcrumb'
 import { DocumentIcon } from '@/components/ui/document-icon'
@@ -35,6 +37,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { ShareDetailPanel } from './share-detail-panel'
+import { DeliverableDetailPanel } from './deliverable-detail-panel'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { SecureAccessModal } from './secure-access-modal'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
@@ -48,8 +51,11 @@ import { formatDistanceToNow } from 'date-fns'
 import { cn } from '@/lib/utils'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useProjectPersonaLabels } from '@/lib/hooks/use-project-persona-labels'
+import { useToast } from '@/components/ui/toast'
+import { SandboxBoardPreview } from '@/components/projects/sandbox-board-comments-preview'
+import { getAllowedTransitions, type EngagementRoleSlug } from '@/lib/deliverable-stage-roles'
 
-type ActivityStatus = 'to_do' | 'in_progress' | 'in_review' | 'done'
+type ActivityStatus = 'to_do' | 'in_progress' | 'in_review' | 'approved'
 
 interface ShareRecord {
   id: string
@@ -92,6 +98,8 @@ parentId?: string | null
   }>
   pendingApproval?: boolean
   pendingUploaderId?: string | null
+  docId?: string | null
+  dueDate?: string | null
   /** Used internally when grouping into lanes for stable sort order. */
   _orderIndex?: number
 }
@@ -105,6 +113,8 @@ interface EngagementSharesTabProps {
   restrictToSharedOnly?: boolean
   /** True only for External Viewer (eng_viewer) — shows Accept Document option. */
   isExternalViewer?: boolean
+  /** The user's engagement role slug — used to derive allowed lane transitions. */
+  roleSlug?: EngagementRoleSlug
   connectorRootFolderId?: string
   orgName?: string
   clientName?: string
@@ -133,7 +143,7 @@ const LANES: {
     {
       status: 'in_progress',
       label: 'In Progress',
-      icon: <Loader2 className="h-3.5 w-3.5 text-[#5A78FF]" />,
+      icon: <PenLine className="h-3.5 w-3.5 text-[#5A78FF]" />,
       iconBg: 'bg-[#eff2ff]',
     },
     {
@@ -143,8 +153,8 @@ const LANES: {
       iconBg: 'bg-[#fff7ed]',
     },
     {
-      status: 'done',
-      label: 'Done',
+      status: 'approved',
+      label: 'Approved',
       icon: <CheckCircle className="h-3.5 w-3.5 text-primary" />,
       iconBg: 'bg-primary/10',
     },
@@ -185,7 +195,7 @@ const CARD_ACCENT: Record<ActivityStatus, { iconPillBg: string }> = {
   to_do: { iconPillBg: 'bg-[#f3f4f6]' },
   in_progress: { iconPillBg: 'bg-[#eff2ff]' },
   in_review: { iconPillBg: 'bg-[#fff7ed]' },
-  done: { iconPillBg: 'bg-primary/10' },
+  approved: { iconPillBg: 'bg-primary/10' },
 }
 
 function DraggableCard({
@@ -195,10 +205,8 @@ function DraggableCard({
   formatDate,
   getDocumentForMenu,
   showActions,
-  onFinalize,
-  finalizingId,
   canManage,
-  isDoneLane,
+  isApprovedLane,
   onShareSaved,
   handleSecureOpen,
   isRegrantingId,
@@ -207,6 +215,10 @@ function DraggableCard({
   extCollaboratorLabel,
   viewerLabel,
   onParentFolderClick,
+  onOpenInFilesForFolder,
+  onOpenDetail,
+  isDetailOpen,
+  isPaneOpen,
   isExternalPersona,
   isExternalViewer,
   deeplinkBase,
@@ -214,6 +226,8 @@ function DraggableCard({
   currentUserId,
   onIntakeAction,
   intakeActionInProgress,
+  isSaving,
+  onUntagAsDeliverable,
 }: {
   id: string
   share: ShareRecord
@@ -221,10 +235,8 @@ function DraggableCard({
   formatDate: (s: string) => string
   getDocumentForMenu: (s: ShareRecord) => { id: string; name: string; mimeType?: string; externalId: string }
   showActions: boolean
-  onFinalize?: () => void
-  finalizingId: string | null
   canManage: boolean
-  isDoneLane: boolean
+  isApprovedLane: boolean
   onShareSaved?: () => void
   handleSecureOpen: (share: ShareRecord) => void
   isRegrantingId: string | null
@@ -233,6 +245,12 @@ function DraggableCard({
   extCollaboratorLabel: string
   viewerLabel: string
   onParentFolderClick?: (parentId: string, parentName: string) => void
+  onOpenInFilesForFolder?: (share: ShareRecord) => void
+  onOpenDetail?: (share: ShareRecord) => void
+  /** True when this card's detail panel is open in the right pane */
+  isDetailOpen?: boolean
+  /** True when any deliverable's detail pane is open */
+  isPaneOpen?: boolean
   isExternalPersona?: boolean
   isExternalViewer?: boolean
   deeplinkBase?: string
@@ -240,6 +258,9 @@ function DraggableCard({
   currentUserId?: string | null
   onIntakeAction?: (documentId: string, action: string) => void
   intakeActionInProgress?: string | null
+  /** True when this specific card's order save is in-flight */
+  isSaving?: boolean
+  onUntagAsDeliverable?: (doc: { id: string }) => void
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id })
   const { setNodeRef: setDropRef, isOver } = useDroppable({ id })
@@ -256,6 +277,9 @@ function DraggableCard({
     isGuest: share.settings?.guest ?? false,
   }
 
+  // When any pane is open, only the open card stays interactive; others are muted
+  const isBlocked = isPaneOpen && !isDetailOpen
+
   return (
     <motion.div
       ref={(node) => { setNodeRef(node); setDropRef(node) }}
@@ -264,27 +288,31 @@ function DraggableCard({
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.98 }}
       transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-      whileHover={!isDragging ? { y: -2, boxShadow: '0 4px 12px -2px rgba(0,0,0,0.08)' } : undefined}
+      whileHover={!isDragging && !isSaving ? { y: -2, boxShadow: '0 4px 12px -2px rgba(0,0,0,0.08)' } : undefined}
       className={cn(
-        'rounded overflow-hidden select-none border border-[#e5e7eb] transition-shadow duration-200',
-        'bg-white shadow-sm',
+        'relative rounded overflow-hidden select-none border transition-all duration-200',
+        isApprovedLane ? 'bg-primary/5 shadow-sm' : 'bg-white shadow-sm',
+        isDetailOpen && 'ring-2 ring-primary border-primary/40 shadow-md',
+        !isDetailOpen && (isApprovedLane ? 'border-primary/10' : 'border-[#e5e7eb]'),
+        isBlocked && 'opacity-40',
         isDragging && 'opacity-60 shadow-md z-10 scale-[1.02]',
-        isOver && !isDragging && 'ring-1 ring-primary/30 ring-inset'
+        isOver && !isDragging && 'ring-1 ring-primary/30 ring-inset',
+        isSaving && 'pointer-events-none'
       )}
     >
-      <div className="flex items-center gap-1 px-2.5 py-1 bg-[#f9f9fb] border-b border-[#e5e7eb]" {...listeners} {...attributes}>
-        <GripVertical className="h-4 w-4 text-slate-400 cursor-grab active:cursor-grabbing" />
-      </div>
+      {isSaving && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/60 backdrop-blur-[1px] rounded">
+          <LoadingSpinner className="h-4 w-4 text-primary" />
+        </div>
+      )}
       <ShareCardContent
         share={share}
         iconPillBg={iconPillBg}
         formatDate={formatDate}
         getDocumentForMenu={getDocumentForMenu}
         showActions={showActions}
-        onFinalize={onFinalize}
-        finalizingId={finalizingId}
         canManage={canManage}
-        isDoneLane={isDoneLane}
+        isApprovedLane={isApprovedLane}
         onShareSaved={onShareSaved}
         handleSecureOpen={handleSecureOpen}
         isRegrantingId={isRegrantingId}
@@ -294,6 +322,8 @@ function DraggableCard({
         extCollaboratorLabel={extCollaboratorLabel}
         viewerLabel={viewerLabel}
         onParentFolderClick={onParentFolderClick}
+        onOpenInFilesForFolder={onOpenInFilesForFolder}
+        onOpenDetail={onOpenDetail}
         isExternalPersona={isExternalPersona}
         isExternalViewer={isExternalViewer}
         deeplinkBase={deeplinkBase}
@@ -301,6 +331,9 @@ function DraggableCard({
         currentUserId={currentUserId}
         onIntakeAction={onIntakeAction}
         intakeActionInProgress={intakeActionInProgress}
+        dragListeners={!isBlocked ? listeners : undefined}
+        dragAttributes={!isBlocked ? attributes : undefined}
+        onUntagAsDeliverable={onUntagAsDeliverable}
       />
     </motion.div>
   )
@@ -313,10 +346,8 @@ function ShareCardContent({
   formatDate,
   getDocumentForMenu,
   showActions,
-  onFinalize,
-  finalizingId,
   canManage,
-  isDoneLane,
+  isApprovedLane,
   onShareSaved,
   onClickTitle,
   handleSecureOpen,
@@ -326,6 +357,8 @@ function ShareCardContent({
   extCollaboratorLabel,
   viewerLabel,
   onParentFolderClick,
+  onOpenInFilesForFolder,
+  onOpenDetail,
   isExternalPersona,
   isExternalViewer,
   deeplinkBase,
@@ -333,16 +366,17 @@ function ShareCardContent({
   currentUserId,
   onIntakeAction,
   intakeActionInProgress,
+  dragListeners,
+  dragAttributes,
+  onUntagAsDeliverable,
 }: {
   share: ShareRecord
   iconPillBg: string
   formatDate: (s: string) => string
   getDocumentForMenu: (s: ShareRecord) => { id: string; name: string; mimeType?: string; externalId: string }
   showActions: boolean
-  onFinalize?: () => void
-  finalizingId: string | null
   canManage: boolean
-  isDoneLane: boolean
+  isApprovedLane: boolean
   onShareSaved?: () => void
   onClickTitle?: () => void
   handleSecureOpen: (share: ShareRecord) => void
@@ -352,6 +386,8 @@ function ShareCardContent({
   extCollaboratorLabel: string
   viewerLabel: string
   onParentFolderClick?: (parentId: string, parentName: string) => void
+  onOpenInFilesForFolder?: (share: ShareRecord) => void
+  onOpenDetail?: (share: ShareRecord) => void
   isExternalPersona?: boolean
   isExternalViewer?: boolean
   deeplinkBase?: string
@@ -359,9 +395,11 @@ function ShareCardContent({
   currentUserId?: string | null
   onIntakeAction?: (documentId: string, action: string) => void
   intakeActionInProgress?: string | null
+  dragListeners?: SyntheticListenerMap
+  dragAttributes?: DraggableAttributes
+  onUntagAsDeliverable?: (doc: { id: string }) => void
 }) {
-  const latestComment = share.comments?.[0]
-  const isFinalized = !!share.finalizedAt
+  const isFinalized = share.activity?.status === 'approved'
   const [linkCopied, setLinkCopied] = useState(false)
   const isPending = !!share.pendingApproval
   const isOwnPending = isPending && !!currentUserId && share.pendingUploaderId === currentUserId
@@ -372,22 +410,43 @@ function ShareCardContent({
 
   return (
     <>
-      <div className={cn('bg-[#f9f9fb] border-b border-[#e5e7eb]', isPending && 'opacity-80')}>
-        <div className="flex items-center gap-2.5 px-3 pt-2.5 pb-2">
+      <div className={cn('border-b', isApprovedLane ? 'bg-primary/[0.06] border-primary/10' : 'bg-[#f9f9fb] border-[#e5e7eb]', isPending && 'opacity-80')}>
+        <div
+          className="flex items-center gap-2.5 px-3 pt-2.5 pb-2 group/drag"
+          {...(dragListeners ?? {})}
+          {...(dragAttributes ?? {})}
+        >
+          {dragListeners && (
+            <GripVertical className="h-4 w-4 shrink-0 text-slate-300 group-hover/drag:text-slate-400 cursor-grab active:cursor-grabbing transition-colors" />
+          )}
           <div className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded', iconPillBg)}>
             {share.documentMimeType?.includes('folder') ? (
-              <SharedFolderIcon fillLevel={1} tooltip="shared" />
+              isFinalized
+                ? <PackageCheck className="h-4 w-4 text-primary" />
+                : <PackagePlus className="h-4 w-4 text-primary" />
             ) : (
               <DocumentIcon mimeType={share.documentMimeType ?? undefined} className="h-4 w-4" />
             )}
           </div>
           <div className="min-w-0 flex-1">
             <div
-              className="text-[13px] font-semibold text-[#1b1b1d] truncate cursor-pointer hover:text-primary transition-colors"
-              title={share.documentName}
+              className="text-[13px] font-semibold text-[#1b1b1d] truncate cursor-pointer hover:text-primary transition-colors flex items-center gap-1.5"
               onClick={onClickTitle}
             >
-              {share.documentName}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="truncate">{share.documentName}</span>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs max-w-64 break-words">{share.documentName}</TooltipContent>
+              </Tooltip>
+              {isFinalized && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Lock className="h-3 w-3 shrink-0 text-[#9a9ba0]" />
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-xs">Approved & Locked</TooltipContent>
+                </Tooltip>
+              )}
             </div>
             {isPending ? (
               <Tooltip>
@@ -406,6 +465,22 @@ function ShareCardContent({
               />
             )}
           </div>
+          {onOpenDetail && !isPending && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className="p-1 rounded hover:bg-[#e5e7eb] text-[#9a9ba0] hover:text-[#45474c] transition-colors shrink-0"
+                    onClick={(e) => { e.stopPropagation(); onOpenDetail(share) }}
+                  >
+                    <BookOpenText className="h-3.5 w-3.5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">View details</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
         </div>
       </div>
       {/* Intake actions — shown instead of normal content when pending */}
@@ -476,20 +551,22 @@ function ShareCardContent({
             </TooltipProvider>
             {!isPending && (
               <>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        className="p-1 rounded hover:bg-[#f3f4f6] text-[#9a9ba0] hover:text-[#45474c] transition-colors"
-                        onClick={(e) => { e.stopPropagation(); onOpenComments?.(share) }}
-                      >
-                        <MessageCircle className="h-3.5 w-3.5" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="text-xs">Comments</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                {isFolder && onOpenInFilesForFolder && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          className="p-1 rounded hover:bg-[#f3f4f6] text-[#9a9ba0] hover:text-[#45474c] transition-colors"
+                          onClick={(e) => { e.stopPropagation(); onOpenInFilesForFolder(share) }}
+                        >
+                          <FolderOpen className="h-3.5 w-3.5" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="text-xs">Open in Files</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
                 {!share.documentMimeType?.includes('folder') && (
                   <TooltipProvider>
                     <Tooltip>
@@ -517,6 +594,10 @@ function ShareCardContent({
               isExternalUser={isExternalPersona}
               isExternalViewer={isExternalViewer}
               disabled={isPending}
+              isDeliverable={true}
+              isApprovedDeliverable={isFinalized}
+              deliverableStatus={share.activity?.status ?? 'to_do'}
+              onUntagAsDeliverable={onUntagAsDeliverable}
             />
             {isRegrantingId === share.id && <LoadingSpinner size="sm" className="min-h-0 ml-0.5" />}
           </div>
@@ -563,27 +644,21 @@ function ShareCardContent({
             </div>
           </div>
         )}
+        {(() => {
+          const total = (share as any).subtaskCount ?? 0
+          const approved = (share as any).approvedSubtaskCount ?? 0
+          if (total === 0) return null
+          const pct = Math.round((approved / total) * 100)
+          return (
+            <div className="flex items-center gap-2 pt-0.5">
+              <div className="flex-1 h-1 rounded-full bg-[#e5e7eb] overflow-hidden">
+                <div className="h-full rounded-full bg-primary transition-all duration-300" style={{ width: `${pct}%` }} />
+              </div>
+              <span className="text-[9px] font-semibold text-[#9a9ba0] tabular-nums shrink-0">{approved}/{total}</span>
+            </div>
+          )
+        })()}
       </div>
-      {!isPending && showActions && (canManage && isDoneLane && !isFinalized || isFinalized) && (
-        <div className="px-3 pb-2.5 pt-1.5 flex items-center gap-2 border-t border-[#e5e7eb] bg-white" onClick={(e) => e.stopPropagation()}>
-          {canManage && isDoneLane && !isFinalized && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="text-xs h-7 rounded-[2px] text-amber-700 border-amber-200 hover:bg-amber-50"
-              disabled={!!finalizingId}
-              onClick={(e) => { e.stopPropagation(); onFinalize?.() }}
-            >
-              {finalizingId ? '…' : <><Lock className="h-3 w-3 mr-1" /> Finalize</>}
-            </Button>
-          )}
-          {isFinalized && (
-            <span className="text-[11px] text-[#45474c] flex items-center gap-1">
-              <Lock className="h-3 w-3" /> Finalized
-            </span>
-          )}
-        </div>
-      )}
     </>
   )
 }
@@ -592,14 +667,14 @@ const STATUS_LABELS: Record<ActivityStatus, string> = {
   to_do: 'To Do',
   in_progress: 'In Progress',
   in_review: 'In Review',
-  done: 'Done',
+  approved: 'Approved',
 }
 
 const STATUS_PILL_CLASS: Record<ActivityStatus, string> = {
   to_do: 'bg-[#ede9fe]/90 text-[#5b21b6]',
   in_progress: 'bg-[#eff2ff]/90 text-[#5A78FF]',
   in_review: 'bg-[#fff7ed]/90 text-[#c2410c]',
-  done: 'bg-primary/10/90 text-primary',
+  approved: 'bg-primary/10/90 text-primary',
 }
 
 
@@ -704,6 +779,7 @@ function SharesListView({
   currentUserId,
   onIntakeAction,
   intakeActionInProgress,
+  onUntagAsDeliverable,
 }: {
   shares: ShareRecord[]
   formatDate: (s: string) => string
@@ -725,6 +801,7 @@ function SharesListView({
   currentUserId?: string | null
   onIntakeAction?: (documentId: string, action: string) => void
   intakeActionInProgress?: string | null
+  onUntagAsDeliverable?: (doc: { id: string }) => void
 }) {
   const [actionMenuOpenShareId, setActionMenuOpenShareId] = useState<string | null>(null)
   const [linkCopiedId, setLinkCopiedId] = useState<string | null>(null)
@@ -933,7 +1010,7 @@ function SharesListView({
                           className="h-7 w-7 rounded-md inline-flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
                           onClick={(e) => { e.stopPropagation(); onOpenComments?.(share) }}
                         >
-                          <MessageCircle className="h-4 w-4" />
+                          <MessagesSquare className="h-4 w-4" />
                         </button>
                       </TooltipTrigger>
                       <TooltipContent side="top" className="text-xs">Comments</TooltipContent>
@@ -998,6 +1075,9 @@ function SharesListView({
                   isExternalUser={isExternalPersona}
                   isExternalViewer={isExternalViewer}
                   disabled={isPending}
+                  isDeliverable={true}
+                  deliverableStatus={share.activity?.status ?? 'to_do'}
+                  onUntagAsDeliverable={onUntagAsDeliverable}
                 />
                 {isRegrantingId === share.id && <LoadingSpinner size="sm" className="min-h-0 ml-0.5" />}
               </div>
@@ -1030,6 +1110,7 @@ function SharesGridView({
   currentUserId,
   onIntakeAction,
   intakeActionInProgress,
+  onUntagAsDeliverable,
 }: {
   shares: ShareRecord[]
   formatDate: (s: string) => string
@@ -1051,6 +1132,7 @@ function SharesGridView({
   currentUserId?: string | null
   onIntakeAction?: (documentId: string, action: string) => void
   intakeActionInProgress?: string | null
+  onUntagAsDeliverable?: (doc: { id: string }) => void
 }) {
   return (
     <div className="flex flex-wrap gap-4 py-2">
@@ -1077,6 +1159,7 @@ function SharesGridView({
           currentUserId={currentUserId}
           onIntakeAction={onIntakeAction}
           intakeActionInProgress={intakeActionInProgress}
+          onUntagAsDeliverable={onUntagAsDeliverable}
         />
       ))}
     </div>
@@ -1104,6 +1187,7 @@ function ShareCard({
   currentUserId,
   onIntakeAction,
   intakeActionInProgress,
+  onUntagAsDeliverable,
 }: {
   share: ShareRecord
   formatDate: (s: string) => string
@@ -1125,6 +1209,7 @@ function ShareCard({
   currentUserId?: string | null
   onIntakeAction?: (documentId: string, action: string) => void
   intakeActionInProgress?: string | null
+  onUntagAsDeliverable?: (doc: { id: string }) => void
 }) {
   const isFolder = share.documentMimeType?.includes('folder')
   const [linkCopied, setLinkCopied] = useState(false)
@@ -1268,7 +1353,7 @@ function ShareCard({
                       className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-colors"
                       onClick={(e) => { e.stopPropagation(); onOpenComments?.(share) }}
                     >
-                      <MessageCircle className="h-4 w-4" />
+                      <MessagesSquare className="h-4 w-4" />
                     </button>
                   </TooltipTrigger>
                   <TooltipContent side="top" className="text-xs">Comments</TooltipContent>
@@ -1332,6 +1417,9 @@ function ShareCard({
               isExternalUser={isExternalPersona}
               isExternalViewer={isExternalViewer}
               disabled={isPending}
+              isDeliverable={true}
+              deliverableStatus={share.activity?.status ?? 'to_do'}
+              onUntagAsDeliverable={onUntagAsDeliverable}
             />
             {isRegrantingId === share.id && (
               <LoadingSpinner size="sm" className="min-h-0 ml-1" />
@@ -1442,6 +1530,7 @@ export function EngagementSharesTab({
   canManage = false,
   restrictToSharedOnly = false,
   isExternalViewer = false,
+  roleSlug,
   connectorRootFolderId,
   orgName,
   clientName,
@@ -1468,6 +1557,15 @@ export function EngagementSharesTab({
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [intakeActionInProgress, setIntakeActionInProgress] = useState<string | null>(null)
+  const [openDeliverableId, setOpenDeliverableId] = useState<string | null>(null)
+  const [savingId, setSavingId] = useState<string | null>(null)
+
+  // Clear highlight when the right pane is closed externally (e.g. user opens Comments instead)
+  useEffect(() => {
+    if (!rightPane.content) setOpenDeliverableId(null)
+  }, [rightPane.content])
+
+  const { addToast } = useToast()
 
   const {
     handleSecureOpen,
@@ -1515,20 +1613,28 @@ export function EngagementSharesTab({
     })
   }, [refreshData])
 
-  const saveOrder = useCallback(async (toDo: string[], inProgress: string[], inReview: string[], done: string[]) => {
+  const saveOrder = useCallback(async (
+    toDo: string[], inProgress: string[], inReview: string[], approved: string[],
+    rollback: () => void,
+    onComplete: () => void,
+  ) => {
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session?.access_token) return
-      await fetch(`/api/projects/${projectId}/shares/order`, {
+      const res = await fetch(`/api/projects/${projectId}/shares/order`, {
         method: 'PUT',
         headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to_do: toDo, in_progress: inProgress, in_review: inReview, done }),
+        body: JSON.stringify({ to_do: toDo, in_progress: inProgress, in_review: inReview, approved }),
       })
-      await refreshData()
+      if (!res.ok) throw new Error(`Order save failed: ${res.status}`)
     } catch (e) {
       logger.error('Failed to save order', e instanceof Error ? e : new Error(String(e)), 'ProjectShares', {})
+      rollback()
+      addToast({ type: 'error', title: 'Move failed', message: 'Could not save the new position. The board has been restored.' })
+    } finally {
+      onComplete()
     }
-  }, [projectId, refreshData])
+  }, [projectId, addToast])
 
   const handleFinalize = async (shareId: string, documentId: string) => {
     setFinalizingId(shareId)
@@ -1549,6 +1655,32 @@ export function EngagementSharesTab({
     }
   }
 
+  const handleUntagAsDeliverable = useCallback(async (doc: { id: string }) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) return
+      const res = await fetch(
+        `/api/projects/${projectId}/documents/${encodeURIComponent(doc.id)}/sharing`,
+        {
+          method: 'PUT',
+          headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ untagAsDeliverable: true }),
+        }
+      )
+      if (!res.ok) {
+        logger.error('Untag as deliverable failed', new Error(`${res.status}`), 'ProjectShares', { documentId: doc.id })
+        addToast({ type: 'error', title: 'Untag failed', message: 'Could not remove the deliverable tag. Please try again.' })
+        return
+      }
+      setShares((prev) => prev.filter((s) => s.documentId !== doc.id))
+      if (openDeliverableId === doc.id) setOpenDeliverableId(null)
+      addToast({ type: 'success', title: 'Deliverable removed', message: 'The document has been untagged as a deliverable.' })
+    } catch (e) {
+      logger.error('Untag as deliverable error', e instanceof Error ? e : new Error(String(e)), 'ProjectShares', { documentId: doc.id })
+      addToast({ type: 'error', title: 'Untag failed', message: 'Could not remove the deliverable tag. Please try again.' })
+    }
+  }, [projectId, addToast, openDeliverableId])
+
   const handleIntakeAction = useCallback(async (documentId: string, action: string) => {
     if (intakeActionInProgress) return
     setIntakeActionInProgress(documentId)
@@ -1560,7 +1692,9 @@ export function EngagementSharesTab({
         body: JSON.stringify({ action }),
       })
       if (!res.ok) {
-        logger.error('Intake action failed', new Error(await res.text()), 'SharesTab', { documentId, action })
+        const errText = await res.text()
+        logger.error('Intake action failed', new Error(errText), 'SharesTab', { documentId, action })
+        addToast({ type: 'error', title: 'Action failed', message: 'Could not complete the intake action. Please try again.' })
         return
       }
       await refreshData()
@@ -1599,6 +1733,9 @@ export function EngagementSharesTab({
     allowDownload: share.settings?.guestOptions?.allowDownload ?? false,
     isExternalCollaborator: share.settings?.externalCollaborator ?? false,
     ecAllowDownload: share.settings?.ecOptions?.allowDownload ?? false,
+    lastModifyingUser: (share.updatedByName || share.updatedByEmail || share.createdByName || share.createdByEmail)
+      ? { displayName: share.updatedByName || share.updatedByEmail || share.createdByName || share.createdByEmail }
+      : undefined,
   })
 
   const handleOpenInFilesForFolder = useCallback(
@@ -1633,9 +1770,70 @@ export function EngagementSharesTab({
     [onOpenInFiles, orgName, clientName, projectName, connectorRootFolderId]
   )
 
+  const handleOpenDeliverableDetail = useCallback(
+    (share: ShareRecord) => {
+      if (share.id === openDeliverableId) return
+      setOpenDeliverableId(share.id)
+      rightPane.setTitle(share.docId ?? share.documentName)
+      rightPane.setHeaderSubtitle(share.documentName)
+      rightPane.setHeaderIcon(<PackagePlus className="h-4 w-4" />)
+      rightPane.setIconTooltip('Deliverable')
+      rightPane.setPaneSize('medium')
+      rightPane.setContent(
+        <DeliverableDetailPanel
+          documentId={share.documentId}
+          projectId={projectId}
+          docId={share.docId ?? null}
+          fileName={share.documentName}
+          activityStatus={share.activity?.status ?? 'to_do'}
+          dueDate={share.dueDate ?? null}
+          canManage={canManage ?? false}
+          isExternalViewer={isExternalViewer}
+          isExternalCollaborator={restrictToSharedOnly && !isExternalViewer}
+          roleSlug={roleSlug}
+          orgSlug={orgSlug}
+          deeplinkBase={deeplinkBase}
+          onStatusChange={(newStatus) => {
+            setShares((prev) =>
+              prev.map((s) =>
+                s.id === share.id
+                  ? { ...s, activity: { ...(s.activity ?? { updatedAt: new Date().toISOString() }), status: newStatus } }
+                  : s
+              )
+            )
+          }}
+          onClose={() => { setOpenDeliverableId(null); rightPane.clearPane() }}
+        />
+      )
+    },
+    [rightPane, projectId, canManage, isExternalViewer, orgSlug, openDeliverableId, roleSlug, restrictToSharedOnly]
+  )
+
+  // Capture the hash at mount so re-renders don't lose it before shares load
+  const initialHashRef = React.useRef(typeof window !== 'undefined' ? window.location.hash : '')
+  const deeplinkHandledRef = React.useRef(false)
+
+  // Deeplink: #doc-file:<projectDocumentId> → open that deliverable's detail panel
+  useEffect(() => {
+    if (isLoading || shares.length === 0 || deeplinkHandledRef.current) return
+    const match = initialHashRef.current.match(/^#doc-file:([^:]+)$/)
+    if (!match) return
+    const docId = match[1]
+    const share = shares.find((s) => s.documentId === docId)
+    if (share) {
+      deeplinkHandledRef.current = true
+      handleOpenDeliverableDetail(share)
+      window.history.replaceState(null, '', window.location.pathname + window.location.search)
+    }
+  }, [isLoading, shares, handleOpenDeliverableDetail])
+
   const handleSecureOpenShare = useCallback(
     (share: ShareRecord) => {
       if (share.documentMimeType?.includes('folder')) {
+        if (share.activity) {
+          handleOpenDeliverableDetail(share)
+          return
+        }
         handleOpenInFilesForFolder(share)
         return
       }
@@ -1650,40 +1848,87 @@ export function EngagementSharesTab({
         share.id
       )
     },
-    [handleSecureOpen, handleOpenInFilesForFolder]
+    [handleSecureOpen, handleOpenInFilesForFolder, handleOpenDeliverableDetail]
   )
+
+  // Computed early so byLane (board) and list/grid views share the same filtered result
+  const filteredShares = React.useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    return shares.filter((s) => {
+      if (q.length > 0) {
+        const hay = [s.documentName, s.createdByEmail, s.updatedByEmail, s.createdBy, s.updatedBy]
+          .filter(Boolean).join(' ').toLowerCase()
+        if (!hay.includes(q)) return false
+      }
+      if (filterTypes.size > 0) {
+        const m = (s.documentMimeType ?? '').toLowerCase()
+        const isFolder = m.includes('folder')
+        const matched =
+          (filterTypes.has('folder') && isFolder) ||
+          (filterTypes.has('document') && !isFolder && (m.includes('document') || m.includes('wordprocessingml'))) ||
+          (filterTypes.has('spreadsheet') && !isFolder && (m.includes('spreadsheet') || m.includes('spreadsheetml'))) ||
+          (filterTypes.has('presentation') && !isFolder && (m.includes('presentation') || m.includes('presentationml'))) ||
+          (filterTypes.has('image') && !isFolder && m.includes('image')) ||
+          (filterTypes.has('other') && !isFolder &&
+            !m.includes('folder') && !m.includes('document') && !m.includes('wordprocessingml') &&
+            !m.includes('spreadsheet') && !m.includes('spreadsheetml') &&
+            !m.includes('presentation') && !m.includes('presentationml') &&
+            !m.includes('image'))
+        if (!matched) return false
+      }
+      if (filterModified !== 'any') {
+        const t = new Date(s.updatedAt).getTime()
+        const now = Date.now()
+        const day = 86400000
+        if (filterModified === '7d' && now - t > 7 * day) return false
+        if (filterModified === '30d' && now - t > 30 * day) return false
+        if (filterModified === 'year' && new Date(s.updatedAt).getFullYear() !== new Date().getFullYear()) return false
+      }
+      if (filterShared === 'by_me') return !!currentUserEmail && s.createdByEmail === currentUserEmail
+      if (filterShared === 'by_others') return !currentUserEmail || s.createdByEmail !== currentUserEmail
+      if (filterShared === 'with_collaborator') return !!s.settings.externalCollaborator
+      if (filterShared === 'with_viewer') return !!s.settings.guest
+      if (filterShared === 'pending_approval') return !!s.pendingApproval
+      return true
+    })
+  }, [shares, searchQuery, filterTypes, filterModified, filterShared, currentUserEmail])
 
   const byLane = React.useMemo(() => {
     const toDo: ShareRecord[] = []
     const inProgress: ShareRecord[] = []
     const inReview: ShareRecord[] = []
     const done: ShareRecord[] = []
-    shares.forEach((s) => {
+    // Use filteredShares so search/type/date filters apply on board view too
+    filteredShares.forEach((s) => {
+      // Board visibility for EC/EV: any deliverable that has been given an activity status
+      // (i.e. has entered the board workflow) is visible, regardless of current lane.
+      // canViewDeliverable controls which lanes sharing rows are written to, not board visibility.
+      if (restrictToSharedOnly && !s.activity?.status) return
       const status = s.activity?.status ?? 'to_do'
       const orderIndex = s.activity?.orderIndex ?? 0
       const rec = { ...s, _orderIndex: orderIndex }
       if (status === 'in_progress') inProgress.push(rec)
       else if (status === 'in_review') inReview.push(rec)
-      else if (status === 'done') done.push(rec)
+      else if (status === 'approved' || (status as string) === 'done') done.push(rec)
       else toDo.push(rec)
     })
     toDo.sort((a, b) => (a._orderIndex ?? 0) - (b._orderIndex ?? 0))
     inProgress.sort((a, b) => (a._orderIndex ?? 0) - (b._orderIndex ?? 0))
     inReview.sort((a, b) => (a._orderIndex ?? 0) - (b._orderIndex ?? 0))
     done.sort((a, b) => (a._orderIndex ?? 0) - (b._orderIndex ?? 0))
-    return { to_do: toDo, in_progress: inProgress, in_review: inReview, done }
-  }, [shares])
+    return { to_do: toDo, in_progress: inProgress, in_review: inReview, approved: done }
+  }, [filteredShares, restrictToSharedOnly])
 
   const laneOrder = React.useMemo(() => ({
     to_do: byLane.to_do.map((s) => s.id),
     in_progress: byLane.in_progress.map((s) => s.id),
     in_review: byLane.in_review.map((s) => s.id),
-    done: byLane.done.map((s) => s.id),
+    approved: byLane.approved.map((s) => s.id),
   }), [byLane])
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 8 } })
+    useSensor(PointerSensor, { activationConstraint: savingId ? { distance: Infinity } : { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: savingId ? { delay: 9999999, tolerance: 0 } : { delay: 150, tolerance: 8 } })
   )
 
   const handleDragStart = (event: DragStartEvent) => {
@@ -1698,7 +1943,7 @@ export function EngagementSharesTab({
     const overId = String(over.id)
     let targetLane: ActivityStatus
     let insertIndex: number
-    if (['to_do', 'in_progress', 'in_review', 'done'].includes(overId)) {
+    if (['to_do', 'in_progress', 'in_review', 'approved'].includes(overId)) {
       targetLane = overId as ActivityStatus
       insertIndex = laneOrder[targetLane].length
     } else {
@@ -1708,68 +1953,113 @@ export function EngagementSharesTab({
       insertIndex = laneOrder[targetLane].indexOf(overId)
       if (insertIndex < 0) insertIndex = laneOrder[targetLane].length
     }
+
+    const share = shares.find((s) => s.id === shareId)
+    const currentLane = (share?.activity?.status ?? 'to_do') as ActivityStatus
+
+    // Check allowed transitions — single source of truth from deliverable-stage-roles.ts
+    const allowed = roleSlug ? getAllowedTransitions(roleSlug, currentLane) : []
+    if (targetLane === currentLane) {
+      // Same-lane reorder is always allowed if the user can see the lane
+    } else if (!allowed.includes(targetLane)) {
+      if (currentLane === 'approved') {
+        addToast({ type: 'error', title: 'Cannot move back', message: 'Approved deliverables cannot be moved.' })
+      } else {
+        addToast({ type: 'error', title: 'Move not allowed', message: 'You cannot move this deliverable to that stage.' })
+      }
+      return
+    }
+
+    if (targetLane === 'approved') {
+      const total = (share as any)?.subtaskCount ?? 0
+      const approved = (share as any)?.approvedSubtaskCount ?? 0
+      if (total > 0 && approved < total) {
+        const unapproved = total - approved
+        addToast({
+          type: 'error',
+          title: 'Cannot approve yet',
+          message: `${unapproved} document${unapproved > 1 ? 's' : ''} still need to be approved before this deliverable can be approved.`,
+        })
+        return
+      }
+    }
     const newToDo = laneOrder.to_do.filter((id) => id !== shareId)
     const newInProgress = laneOrder.in_progress.filter((id) => id !== shareId)
     const newInReview = laneOrder.in_review.filter((id) => id !== shareId)
-    const newDone = laneOrder.done.filter((id) => id !== shareId)
+    const newDone = laneOrder.approved.filter((id) => id !== shareId)
     const insertAt = (arr: string[], id: string, idx: number) => {
       const out = arr.slice()
       out.splice(idx, 0, id)
       return out
     }
-    if (targetLane === 'to_do') saveOrder(insertAt(newToDo, shareId, insertIndex), newInProgress, newInReview, newDone)
-    else if (targetLane === 'in_progress') saveOrder(newToDo, insertAt(newInProgress, shareId, insertIndex), newInReview, newDone)
-    else if (targetLane === 'in_review') saveOrder(newToDo, newInProgress, insertAt(newInReview, shareId, insertIndex), newDone)
-    else saveOrder(newToDo, newInProgress, newInReview, insertAt(newDone, shareId, insertIndex))
+    const finalToDo = targetLane === 'to_do' ? insertAt(newToDo, shareId, insertIndex) : newToDo
+    const finalInProgress = targetLane === 'in_progress' ? insertAt(newInProgress, shareId, insertIndex) : newInProgress
+    const finalInReview = targetLane === 'in_review' ? insertAt(newInReview, shareId, insertIndex) : newInReview
+    const finalDone = targetLane === 'approved' ? insertAt(newDone, shareId, insertIndex) : newDone
+
+    // Snapshot for rollback
+    const previousShares = shares
+
+    // Optimistic update — reorder and update status immediately
+    const allFinal = [...finalToDo, ...finalInProgress, ...finalInReview, ...finalDone]
+    setShares((prev) =>
+      allFinal.map((id, idx) => {
+        const s = prev.find((x) => x.id === id)!
+        const lane =
+          finalToDo.includes(id) ? 'to_do' :
+          finalInProgress.includes(id) ? 'in_progress' :
+          finalInReview.includes(id) ? 'in_review' : 'approved'
+        return {
+          ...s,
+          activity: { ...(s.activity ?? { updatedAt: new Date().toISOString() }), status: lane as ActivityStatus, orderIndex: idx },
+          _orderIndex: idx,
+        }
+      })
+    )
+
+    setSavingId(shareId)
+    const rollback = () => setShares(previousShares)
+    const onComplete = () => setSavingId(null)
+
+    if (canManage) {
+      // EL: full reorder via shares/order (handles orderIndex + EC/EV flag updates)
+      saveOrder(finalToDo, finalInProgress, finalInReview, finalDone, rollback, onComplete)
+    } else {
+      // EM / EC / EV: single-deliverable status change via sharing/activity
+      const documentId = share?.documentId
+      if (!documentId) { rollback(); onComplete(); return }
+      ;(async () => {
+        try {
+          const { data: { session } } = await supabase.auth.getSession()
+          if (!session?.access_token) throw new Error('No session')
+          const res = await fetch(`/api/projects/${projectId}/documents/${encodeURIComponent(documentId)}/sharing/activity`, {
+            method: 'PATCH',
+            headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: targetLane }),
+          })
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}))
+            throw new Error(err.error ?? `Status ${res.status}`)
+          }
+          addToast({ type: 'success', title: 'Stage updated', message: `Moved to ${STATUS_LABELS[targetLane]}.` })
+        } catch (e) {
+          logger.error('Failed to update deliverable status', e instanceof Error ? e : new Error(String(e)), 'ProjectShares', {})
+          rollback()
+          addToast({ type: 'error', title: 'Move failed', message: 'Could not update status. The board has been restored.' })
+        } finally {
+          onComplete()
+        }
+      })()
+    }
   }
 
   const detailShare = detailShareId ? shares.find((s) => s.id === detailShareId) : null
-  const normalizedQuery = searchQuery.trim().toLowerCase()
-  const filteredShares = shares.filter((s) => {
-    if (normalizedQuery.length > 0) {
-      const hay = [s.documentName, s.createdByEmail, s.updatedByEmail, s.createdBy, s.updatedBy]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
-      if (!hay.includes(normalizedQuery)) return false
-    }
-    if (filterTypes.size > 0) {
-      const m = (s.documentMimeType ?? '').toLowerCase()
-      const isFolder = m.includes('folder')
-      const matched =
-        (filterTypes.has('folder') && isFolder) ||
-        (filterTypes.has('document') && !isFolder && (m.includes('document') || m.includes('wordprocessingml'))) ||
-        (filterTypes.has('spreadsheet') && !isFolder && (m.includes('spreadsheet') || m.includes('spreadsheetml'))) ||
-        (filterTypes.has('presentation') && !isFolder && (m.includes('presentation') || m.includes('presentationml'))) ||
-        (filterTypes.has('image') && !isFolder && m.includes('image')) ||
-        (filterTypes.has('other') && !isFolder &&
-          !m.includes('folder') && !m.includes('document') && !m.includes('wordprocessingml') &&
-          !m.includes('spreadsheet') && !m.includes('spreadsheetml') &&
-          !m.includes('presentation') && !m.includes('presentationml') &&
-          !m.includes('image'))
-      if (!matched) return false
-    }
-    if (filterModified !== 'any') {
-      const t = new Date(s.updatedAt).getTime()
-      const now = Date.now()
-      const day = 86400000
-      if (filterModified === '7d' && now - t > 7 * day) return false
-      if (filterModified === '30d' && now - t > 30 * day) return false
-      if (filterModified === 'year' && new Date(s.updatedAt).getFullYear() !== new Date().getFullYear()) return false
-    }
-    if (filterShared === 'by_me') return !!currentUserEmail && s.createdByEmail === currentUserEmail
-    if (filterShared === 'by_others') return !currentUserEmail || s.createdByEmail !== currentUserEmail
-    if (filterShared === 'with_collaborator') return !!s.settings.externalCollaborator
-    if (filterShared === 'with_viewer') return !!s.settings.guest
-    if (filterShared === 'pending_approval') return !!s.pendingApproval
-    return true
-  })
 
   const handleOpenComments = useCallback(
     (share: ShareRecord) => {
       rightPane.setTitle('Comments')
       rightPane.setHeaderSubtitle(share.documentName)
-      rightPane.setHeaderIcon(<MessageCircle className="h-4 w-4" />)
+      rightPane.setHeaderIcon(<MessagesSquare className="h-4 w-4" />)
       rightPane.setContent(
         <DocumentDocCommentsPane
           engagementId={share.projectId}
@@ -1850,7 +2140,7 @@ export function EngagementSharesTab({
               <DropdownMenuCheckboxItem checked={filterShared === 'by_me'} onCheckedChange={() => setFilterShared(filterShared === 'by_me' ? 'all' : 'by_me')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Shared by me</DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem checked={filterShared === 'by_others'} onCheckedChange={() => setFilterShared(filterShared === 'by_others' ? 'all' : 'by_others')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Shared by others</DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem checked={filterShared === 'with_collaborator'} onCheckedChange={() => setFilterShared(filterShared === 'with_collaborator' ? 'all' : 'with_collaborator')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Shared with Collaborator (External)</DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem checked={filterShared === 'with_viewer'} onCheckedChange={() => setFilterShared(filterShared === 'with_viewer' ? 'all' : 'with_viewer')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Shared with Viewer (External)</DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem checked={filterShared === 'with_viewer'} onCheckedChange={() => setFilterShared(filterShared === 'with_viewer' ? 'all' : 'with_viewer')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Shared with Reviewer</DropdownMenuCheckboxItem>
               <DropdownMenuSeparator />
               <DropdownMenuCheckboxItem checked={filterShared === 'pending_approval'} onCheckedChange={() => setFilterShared(filterShared === 'pending_approval' ? 'all' : 'pending_approval')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Pending Approval</DropdownMenuCheckboxItem>
             </DropdownMenuContent>
@@ -1917,6 +2207,8 @@ export function EngagementSharesTab({
             <div className="flex items-center justify-center min-h-[200px]">
               <LoadingSpinner size="md" className="min-h-0" />
             </div>
+          ) : filteredShares.length === 0 && viewMode === 'board' && !connectorRootFolderId ? (
+            <SandboxBoardPreview projectName={projectName} />
           ) : filteredShares.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-slate-500 bg-white/60 rounded-2xl border border-slate-200/60 mx-2">
               <Share2 className="h-11 w-11 mb-3 text-slate-300" />
@@ -1951,6 +2243,7 @@ export function EngagementSharesTab({
               currentUserId={currentUserId}
               onIntakeAction={handleIntakeAction}
               intakeActionInProgress={intakeActionInProgress}
+              onUntagAsDeliverable={handleUntagAsDeliverable}
             />
           ) : viewMode === 'list' ? (
             <SharesListView
@@ -1974,6 +2267,7 @@ export function EngagementSharesTab({
               currentUserId={currentUserId}
               onIntakeAction={handleIntakeAction}
               intakeActionInProgress={intakeActionInProgress}
+              onUntagAsDeliverable={handleUntagAsDeliverable}
             />
           ) : (
             <>
@@ -2008,10 +2302,8 @@ export function EngagementSharesTab({
                               formatDate={formatDate}
                               getDocumentForMenu={getDocumentForMenu}
                               showActions
-                              onFinalize={() => handleFinalize(share.id, share.documentId)}
-                              finalizingId={finalizingId}
                               canManage={canManage}
-                              isDoneLane={lane.status === 'done'}
+                              isApprovedLane={lane.status === 'approved'}
                               onShareSaved={refreshData}
                               handleSecureOpen={handleSecureOpenShare}
                               isRegrantingId={isRegrantingId}
@@ -2020,6 +2312,10 @@ export function EngagementSharesTab({
                               extCollaboratorLabel={projExtCollaborator}
                               viewerLabel={projViewer}
                               onParentFolderClick={onOpenInFiles ? handleOpenParentFolder : undefined}
+                              onOpenInFilesForFolder={onOpenInFiles ? handleOpenInFilesForFolder : undefined}
+                              onOpenDetail={handleOpenDeliverableDetail}
+                              isDetailOpen={share.id === openDeliverableId}
+                              isPaneOpen={!!openDeliverableId}
                               isExternalPersona={restrictToSharedOnly}
                               isExternalViewer={isExternalViewer}
                               deeplinkBase={deeplinkBase}
@@ -2027,6 +2323,8 @@ export function EngagementSharesTab({
                               currentUserId={currentUserId}
                               onIntakeAction={handleIntakeAction}
                               intakeActionInProgress={intakeActionInProgress}
+                              isSaving={savingId === share.id}
+                              onUntagAsDeliverable={handleUntagAsDeliverable}
                             />
                           ))}
                         </AnimatePresence>
@@ -2054,9 +2352,8 @@ export function EngagementSharesTab({
                           formatDate={formatDate}
                           getDocumentForMenu={getDocumentForMenu}
                           showActions={false}
-                          finalizingId={null}
                           canManage={false}
-                          isDoneLane={false}
+                          isApprovedLane={false}
                           handleSecureOpen={handleSecureOpenShare}
                           isRegrantingId={isRegrantingId}
                           onOpenComments={handleOpenComments}
@@ -2087,6 +2384,7 @@ export function EngagementSharesTab({
         isLoading={isRegrantLoading}
         error={regrantError}
       />
+
     </div>
   )
 }

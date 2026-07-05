@@ -19,7 +19,11 @@ export async function syncDocumentSharingUsers(projectDocumentId: string, actorI
   try {
     const doc = await prisma.engagementDocument.findUnique({
       where: { id: projectDocumentId },
-      include: { sharingUsers: true },
+      include: {
+        sharingUsers: {
+          include: { member: { select: { role: true } } },
+        },
+      },
     })
 
     if (!doc) return
@@ -29,18 +33,24 @@ export async function syncDocumentSharingUsers(projectDocumentId: string, actorI
     const isGuestEnabled = settings?.guest?.enabled === true
     const projectId = doc.engagementId
 
-    // Only touch GRANTED rows — leave PENDING (intake) rows alone
+    const EXTERNAL_ROLES: EngagementRole[] = [EngagementRole.eng_ext_collaborator, EngagementRole.eng_viewer]
+
+    // Only touch GRANTED rows — leave PENDING/INHERITED rows alone
     const grantedRows = doc.sharingUsers.filter(
       (u) => (u.sharingPermissionStatus as string) === 'GRANTED'
     )
 
     if (!isEcEnabled && !isGuestEnabled) {
-      // Revoke all GRANTED rows
-      if (grantedRows.length > 0) {
+      // Revoke GRANTED rows for external personas only — never touch EL/EM rows
+      const hasExternalGranted = grantedRows.some(
+        (u) => u.member && EXTERNAL_ROLES.includes(u.member.role as EngagementRole)
+      )
+      if (hasExternalGranted) {
         await prisma.engagementDocumentSharingUser.updateMany({
           where: {
             projectDocumentId,
             sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED,
+            member: { role: { in: EXTERNAL_ROLES } },
           },
           data: {
             sharingPermissionStatus: DocumentSharingPermissionStatus.REVOKED,
@@ -76,15 +86,16 @@ export async function syncDocumentSharingUsers(projectDocumentId: string, actorI
 
       // Already GRANTED — nothing to do
       if ((existing?.sharingPermissionStatus as string) === 'GRANTED') continue
-      // Never touch PENDING rows
+      // Never touch PENDING rows (intake approval handles those)
       if ((existing?.sharingPermissionStatus as string) === 'PENDING') continue
+      // Never overwrite INHERITED rows — Drive access managed at folder level
+      if ((existing?.sharingPermissionStatus as string) === 'INHERITED') continue
 
       if (existing) {
         await prisma.engagementDocumentSharingUser.update({
           where: { id: existing.id },
           data: {
             sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED,
-            email,
             connectorPermissionId: null,
             ...(actorId ? { updatedBy: actorId } : {}),
           },
@@ -95,7 +106,6 @@ export async function syncDocumentSharingUsers(projectDocumentId: string, actorI
             projectDocumentId,
             engagementId: projectId,
             userId: member.userId,
-            email,
             sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED,
             ...(actorId ? { createdBy: actorId, updatedBy: actorId } : {}),
           },
@@ -103,9 +113,15 @@ export async function syncDocumentSharingUsers(projectDocumentId: string, actorI
       }
     }
 
-    // Revoke GRANTED rows for members no longer covered by any enabled role
+    // Revoke GRANTED rows for external members no longer covered by any enabled role
+    // Never touch EL/EM rows — they always retain access
     const validUserIds = new Set(members.map((m) => m.userId))
-    const toRevoke = grantedRows.filter((u) => !validUserIds.has(u.userId))
+    const toRevoke = grantedRows.filter(
+      (u) =>
+        !validUserIds.has(u.userId) &&
+        u.member &&
+        EXTERNAL_ROLES.includes(u.member.role as EngagementRole)
+    )
 
     for (const row of toRevoke) {
       await prisma.engagementDocumentSharingUser.update({

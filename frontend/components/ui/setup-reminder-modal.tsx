@@ -14,7 +14,7 @@ const ROLE_DISPLAY: Record<string, string> = {
   eng_admin: 'Engagement Lead',
   eng_member: 'Contributor (Internal)',
   eng_ext_collaborator: 'Contributor (External)',
-  eng_viewer: 'Viewer (External)',
+  eng_viewer: 'Reviewer',
   firm_admin: 'Firm Administrator',
   firm_member: 'Firm Member',
 }

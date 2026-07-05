@@ -29,7 +29,7 @@ export const RBAC_PERSONAS = [
   { slug: "eng_admin", displayName: "Engagement Lead", description: "Responsible for managing a specific engagement. Can manage engagement members, documents, and settings." },
   { slug: "eng_member", displayName: "Contributor (Internal)", description: "Internal team member contributing to engagement work. Can create and edit documents within assigned engagements." },
   { slug: "eng_ext_collaborator", displayName: "Contributor (External)", description: "External collaborator invited to contribute to an engagement. Can create and edit documents they have been granted access to." },
-  { slug: "eng_viewer", displayName: "Viewer (External)", description: "External stakeholder with read-only access to engagement content. Cannot create or edit documents." },
+  { slug: "eng_viewer", displayName: "Reviewer", description: "External stakeholder with read-only access to engagement content. Cannot create or edit documents." },
 ] as const
 
 type ViewAsContextValue = {

@@ -64,10 +64,6 @@ export default async function EngagementBoardPage({ params }: PageProps) {
   const canEdit = capabilities['project:can_edit'] ?? false
   const canManage = canViewSettings
 
-  if (!enableBetaFeatures || !canViewInternalTabs) {
-    redirect(`/d/f/${slug}/c/${clientSlug}/e/${engagementSlug}/files`)
-  }
-
   const projectRole = applyViewAs ? viewAsSlug : await getProjectPersona(org.id, client.id, project.id)
   const restrictToSharedOnly = projectRole ? !['eng_admin', 'eng_member'].includes(projectRole) : false
 
@@ -86,7 +82,7 @@ export default async function EngagementBoardPage({ params }: PageProps) {
       ? getAccessibleFileCountForPersona(project.id, projectRole)
       : (basePrisma as any).engagementDocument.count({ where: { engagementId: project.id, isFolder: false } }),
     (basePrisma as any).engagementDocument.count({ where: { engagementId: project.id, sharingUsers: { some: { sharingPermissionStatus: { in: ['GRANTED', 'PENDING'] } } } } }),
-    (basePrisma as any).docCommentMessage.count({ where: { engagementId: project.id } }),
+    (basePrisma as any).docCommentMessage.groupBy({ by: ['projectDocumentId'], where: { engagementId: project.id } }).then((r: any[]) => r.length),
     (basePrisma as any).engagementMember.count({ where: { engagementId: project.id } }),
     (basePrisma as any).engagementInvitation.count({ where: { engagementId: project.id, status: { not: 'JOINED' } } }),
     (basePrisma as any).platformAuditEvent.count({ where: { engagementId: project.id, scope: 'PROJECT' } }),
@@ -113,6 +109,7 @@ export default async function EngagementBoardPage({ params }: PageProps) {
           canManage={canManage}
           restrictToSharedOnly={restrictToSharedOnly}
           isExternalViewer={projectRole === 'eng_viewer'}
+          roleSlug={projectRole ?? undefined}
           projectDescription={project.description ?? undefined}
           engagementKickoffDate={project.kickoffDate}
           engagementDueDate={project.dueDate}

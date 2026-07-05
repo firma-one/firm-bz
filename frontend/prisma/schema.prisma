@@ -446,6 +446,8 @@ model Engagement {
   settings              Json     @default("{}")
   isDeleted             Boolean  @default(false)
   sandboxOnly           Boolean  @default(false)
+  docIdPrefix           String?
+  docIdSeq              Int      @default(0)
 
   firm                  Firm                         @relation(fields: [firmId], references: [id], onDelete: Cascade)
   client                Client                       @relation(fields: [clientId], references: [id], onDelete: Cascade)
@@ -646,6 +648,7 @@ model EngagementDocument {
   slug           String?                     @unique
   createdBy      String?                     @db.Uuid
   updatedBy      String?                     @db.Uuid
+  docId          String?
 
   sharingUsers   EngagementDocumentSharingUser[]
   firm           Firm                         @relation(fields: [firmId], references: [id], onDelete: Cascade)
@@ -751,7 +754,6 @@ model EngagementDocumentSharingUser {
   projectDocumentId         String                           @db.Uuid
   engagementId              String                           @db.Uuid
   userId                    String                           @db.Uuid
-  email                     String
   connectorPermissionId     String?
   sharingPermissionStatus   DocumentSharingPermissionStatus  @default(GRANTED)
 

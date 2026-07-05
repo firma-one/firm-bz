@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { AtSign, CalendarClock, Eye, MessageCircle, Send, Loader2, Check, ChevronDown, Link2, SlidersHorizontal, Smile, Trash2, UserCheck, X } from 'lucide-react'
+import { AtSign, CalendarClock, Eye, MessagesSquare, Send, Loader2, Check, ChevronDown, Link2, SlidersHorizontal, Smile, Trash2, UserCheck, X, XSquare } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useRightPane } from '@/lib/right-pane-context'
@@ -500,11 +500,36 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
       remaining = remaining.slice(match[0].length)
     }
     if (remaining) tokens.push({ type: 'text', value: remaining })
-    return tokens.map((t, i) =>
-      t.type === 'mention'
-        ? <span key={i} className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-primary/10 text-primary leading-none mr-1">{t.value}</span>
-        : <span key={i}>{t.value}</span>
-    )
+    return tokens.map((t, i) => {
+      if (t.type !== 'mention') return <span key={i}>{t.value}</span>
+      const nameWithoutAt = t.value.replace(/^@/, '')
+      const member = firmMembers.find((m) => m.name === nameWithoutAt || m.name === t.value)
+      const initials = nameWithoutAt.split(/[\s._-]/).filter(Boolean).map((p: string) => p[0]).join('').slice(0, 2).toUpperCase() || '?'
+      const pill = (
+        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-primary/10 text-primary leading-none mr-1 cursor-pointer">
+          {t.value}
+        </span>
+      )
+      if (!member) return <span key={i}>{pill}</span>
+      return (
+        <Tooltip key={i}>
+          <TooltipTrigger asChild>{pill}</TooltipTrigger>
+          <TooltipContent side="top" className="z-[9999] p-2 bg-white border border-slate-200 shadow-lg text-xs text-slate-800">
+            <div className="flex items-center gap-2">
+              <div className="h-7 w-7 rounded-full overflow-hidden shrink-0 flex items-center justify-center text-[11px] font-bold bg-primary/20 text-primary">
+                {member.avatarUrl
+                  ? <img src={member.avatarUrl} alt="" className="h-full w-full object-cover" />
+                  : initials}
+              </div>
+              <div>
+                <div className="font-semibold">{member.name}</div>
+                <div className="text-slate-400 text-[10px]">{member.email}</div>
+              </div>
+            </div>
+          </TooltipContent>
+        </Tooltip>
+      )
+    })
   }
 
   // State for editing reminder on an already-posted message (read-only mentions, editable date)
@@ -646,7 +671,6 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
             rows={1}
             onKeyDown={(e) => {
               if (e.key === '@' && !isSandboxFirm && firmMembers.length > 0) {
-                // Let '@' type into textarea, then open picker and strip it
                 setTimeout(() => {
                   setNewContent((prev) => prev.replace(/@$/, ''))
                   openMentionPicker()
@@ -670,10 +694,19 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                 void handleSubmit(e as any)
               }
             }}
-            className="flex-1 min-w-[80px] bg-transparent outline-none resize-none overflow-hidden placeholder:text-slate-400 disabled:cursor-not-allowed"
+            className="flex-1 min-w-[80px] bg-transparent outline-none resize-none overflow-hidden placeholder:text-slate-400 disabled:cursor-not-allowed pr-10"
             style={{ minHeight: '1.5rem' }}
             disabled={isSandboxFirm || submitting}
           />
+          {/* Send button — inline bottom-right */}
+          <button
+            type="submit"
+            disabled={isSandboxFirm || submitting || (!newContent.trim() && mentionedUsers.length === 0)}
+            aria-label="Send comment"
+            className="absolute bottom-2 right-2 h-7 w-7 flex items-center justify-center rounded-md bg-primary text-white hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
+          >
+            {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+          </button>
         </div>
 
         {/* Anchored mention picker dropdown */}
@@ -685,7 +718,10 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
             {/* Header */}
             <div className="flex items-center gap-2 px-3 py-2.5 bg-primary/5 border-b border-primary/10">
               <AtSign className="h-3.5 w-3.5 text-primary shrink-0" />
-              <span className="text-xs font-semibold text-[#1b1b1d]">Mention a team member</span>
+              <span className="text-xs font-semibold text-[#1b1b1d] flex-1">Mention a team member</span>
+              <button type="button" onClick={closeMentionPicker} className="text-[#9a9ba0] hover:text-[#45474c] transition-colors">
+                <XSquare className="h-4 w-4" />
+              </button>
             </div>
             {/* Search */}
             <div className="px-3 pt-2.5 pb-2">
@@ -781,7 +817,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                 <button
                   type="button"
                   onClick={closeMentionPicker}
-                  className="text-xs font-semibold text-white bg-primary hover:bg-primary/90 px-4 py-1.5 rounded-sm transition-colors"
+                  className="font-mono text-[10px] font-bold uppercase tracking-widest text-white bg-primary hover:bg-primary/90 px-4 py-1.5 rounded-[2px] transition-colors"
                 >
                   Done
                 </button>
@@ -791,20 +827,6 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
         )}
       </div>
 
-      {/* Send row */}
-      <div className="flex items-center justify-end gap-2">
-        <Button
-          variant="blackCta"
-          type="submit"
-          size="sm"
-          className="h-8 px-4 rounded-xl"
-          disabled={isSandboxFirm || submitting || (!newContent.trim() && mentionedUsers.length === 0)}
-          aria-label="Send comment"
-        >
-          {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Send className="h-3.5 w-3.5 mr-1" />}
-          Send
-        </Button>
-      </div>
     </form>
   )
 
@@ -1455,7 +1477,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
           </div>
         ) : visibleMessages.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 text-gray-500">
-            <MessageCircle className="h-10 w-10 text-gray-300 mb-2" />
+            <MessagesSquare className="h-10 w-10 text-gray-300 mb-2" />
             <p className="text-sm">No comments match the current filters.</p>
           </div>
         ) : (

@@ -4,6 +4,9 @@ import { useUploadProgress, type UploadQueueItem } from '@/lib/upload-progress-c
 import { useToast } from '@/components/ui/toast'
 import { DriveFile } from '@/lib/types'
 
+const JUNK_FILE_NAMES = new Set(['.ds_store', 'desktop.ini', 'thumbs.db', '.trash', '.spotlight-v100', '.fseventsd'])
+const isJunkFile = (name: string) => JUNK_FILE_NAMES.has(name.toLowerCase())
+
 type Session = {
     access_token?: string
     user?: { id?: string; email?: string }
@@ -23,7 +26,6 @@ interface UseEngagementUploadOptions {
     restrictToSharedOnly: boolean
     isSandboxFirm: boolean
     fetchFiles: (folderId: string, silent?: boolean) => Promise<void>
-    refreshFileCount?: () => void
 }
 
 export function useEngagementUpload({
@@ -35,7 +37,6 @@ export function useEngagementUpload({
     restrictToSharedOnly,
     isSandboxFirm,
     fetchFiles,
-    refreshFileCount,
 }: UseEngagementUploadOptions) {
     const {
         uploadQueue,
@@ -304,8 +305,6 @@ export function useEngagementUpload({
         // Refresh
         const currentFolderId = currentFolderIdRef.current
         if (currentFolderId) fetchFiles(currentFolderId, true)
-        refreshFileCount?.()
-
         setIsUploading(false)
         if (uploadOverlayDismissedRef.current && (completedCount > 0 || errorCount > 0)) {
             const total = completedCount + errorCount
@@ -334,7 +333,7 @@ export function useEngagementUpload({
         setIsUploadModalOpen(true)
 
         try {
-            const uploads = Array.from(fileList)
+            const uploads = Array.from(fileList).filter(f => !isJunkFile(f.name))
             const conflicts: ConflictItem[] = []
             const safeUploads: File[] = []
 
@@ -407,7 +406,6 @@ export function useEngagementUpload({
 
                 const currentFolderId = currentFolderIdRef.current
                 if (currentFolderId) fetchFiles(currentFolderId, true)
-                refreshFileCount?.()
             }
             setIsUploading(false)
             if (uploadOverlayDismissedRef.current && (completedCount > 0 || errorCount > 0)) {
@@ -498,7 +496,8 @@ export function useEngagementUpload({
         const fileItems = Array.from(fileList).filter(f => {
             const rel = (f as File & { webkitRelativePath?: string }).webkitRelativePath || ''
             const parts = rel.split('/')
-            return parts.length >= 1 && parts[parts.length - 1] !== '' // has a file name (not directory-only)
+            const fileName = parts[parts.length - 1]
+            return parts.length >= 1 && fileName !== '' && !isJunkFile(fileName)
         })
         const fileEntries = fileItems.map(f => {
             const rel = (f as File & { webkitRelativePath?: string }).webkitRelativePath || f.name
@@ -559,7 +558,6 @@ export function useEngagementUpload({
         }
         const latestFolderId = currentFolderIdRef.current
         if (latestFolderId) fetchFiles(latestFolderId, true)
-        refreshFileCount?.()
         setIsUploading(false)
         if (uploadOverlayDismissedRef.current) {
             const total = fileEntries.length

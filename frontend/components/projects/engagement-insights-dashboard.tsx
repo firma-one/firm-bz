@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth-context'
 import {
-    MessageCircle,
+    MessagesSquare,
     CalendarClock,
     FolderOpen,
     HardDrive,
@@ -210,9 +210,9 @@ function SharesProgressCard({ data }: { data: EngagementInsightsResponse }) {
                 <h3 className="text-sm font-semibold text-gray-700">Shares Board</h3>
                 <span className="text-xs text-gray-400">{sp.total} share{sp.total !== 1 ? 's' : ''}</span>
             </div>
-            {/* Progress bar: Done | In Progress | To Do */}
+            {/* Progress bar: Approved | In Progress | To Do */}
             <div className="h-2 w-full rounded-full overflow-hidden flex mb-3 bg-gray-100">
-                {sp.done > 0 && <div className="bg-sky-400 h-full transition-all" style={{ width: `${(sp.done / sp.total) * 100}%` }} />}
+                {sp.approved > 0 && <div className="bg-sky-400 h-full transition-all" style={{ width: `${(sp.approved / sp.total) * 100}%` }} />}
                 {sp.inProgress > 0 && <div className="bg-teal-400 h-full transition-all" style={{ width: `${(sp.inProgress / sp.total) * 100}%` }} />}
                 {sp.toDo > 0 && <div className="bg-violet-200 h-full transition-all" style={{ width: `${(sp.toDo / sp.total) * 100}%` }} />}
             </div>
@@ -226,8 +226,8 @@ function SharesProgressCard({ data }: { data: EngagementInsightsResponse }) {
                     <p className="text-[10px] text-gray-400">In Progress</p>
                 </div>
                 <div className="text-center">
-                    <p className="text-lg font-bold text-sky-600">{sp.done}</p>
-                    <p className="text-[10px] text-gray-400">Done</p>
+                    <p className="text-lg font-bold text-sky-600">{sp.approved}</p>
+                    <p className="text-[10px] text-gray-400">Approved</p>
                 </div>
             </div>
             {(sp.finalized > 0 || sp.externalCollaborators > 0 || sp.externalViewers > 0) && (
@@ -553,7 +553,7 @@ function EngagementActionCenter({ data, loading, engagementBase, projectId, setR
                             </div>
                             <div className="flex flex-col gap-2">
                                 {([
-                                    { key: 'threads' as const, icon: MessageCircle, label: 'Threads', count: threadCount, sub: threadCount > 0 ? `${threadCount} unanswered thread${threadCount > 1 ? 's' : ''}` : 'No unanswered threads', active: { border: 'border-[#d1d5db]', hover: 'hover:bg-blue-50', text: 'text-blue-700', iconBg: 'bg-blue-50', iconText: 'text-blue-600', chevron: 'text-blue-400', num: 'text-blue-600' } },
+                                    { key: 'threads' as const, icon: MessagesSquare, label: 'Threads', count: threadCount, sub: threadCount > 0 ? `${threadCount} unanswered thread${threadCount > 1 ? 's' : ''}` : 'No unanswered threads', active: { border: 'border-[#d1d5db]', hover: 'hover:bg-blue-50', text: 'text-blue-700', iconBg: 'bg-blue-50', iconText: 'text-blue-600', chevron: 'text-blue-400', num: 'text-blue-600' } },
                                     { key: 'sharing' as const, icon: Share2, label: 'Invitations', count: sharingCount, sub: sharingCount > 0 ? `${sharingCount} invitation${sharingCount > 1 ? 's' : ''} pending` : 'No pending invites', active: { border: 'border-[#d1d5db]', hover: 'hover:bg-indigo-50', text: 'text-indigo-700', iconBg: 'bg-indigo-50', iconText: 'text-indigo-600', chevron: 'text-indigo-400', num: 'text-indigo-600' } },
                                     { key: 'sensitive' as const, icon: FileWarning, label: 'Sensitive', count: sensitiveCount, sub: sensitiveCount > 0 ? `${sensitiveCount} file${sensitiveCount > 1 ? 's' : ''} flagged` : 'No sensitive files', active: { border: 'border-[#d1d5db]', hover: 'hover:bg-orange-50', text: 'text-orange-700', iconBg: 'bg-orange-50', iconText: 'text-orange-600', chevron: 'text-orange-400', num: 'text-orange-600' } },
                                     { key: 'storage' as const, icon: HardDrive, label: 'Storage', count: storageCount, sub: storageCount > 0 ? [data?.storageHealth.staleCount ? `${data.storageHealth.staleCount} stale` : '', data?.storageHealth.largeCount ? `${data.storageHealth.largeCount} large` : '', duplicateCount ? `${duplicateCount} duplicate${duplicateCount > 1 ? 's' : ''}` : ''].filter(Boolean).join(' · ') : 'Storage looks healthy', active: { border: 'border-[#d1d5db]', hover: 'hover:bg-blue-50', text: 'text-[#5A78FF]', iconBg: 'bg-blue-50', iconText: 'text-[#5A78FF]', chevron: 'text-[#5A78FF]/50', num: 'text-[#5A78FF]' } },
@@ -671,7 +671,7 @@ function EngagementActionCenter({ data, loading, engagementBase, projectId, setR
                     <div className="flex flex-col gap-4">
                         {acView === 'threads' && (
                             threadItems.length > 0 ? (
-                                <SectionBlock title="Unanswered Client Threads" icon={MessageCircle}>
+                                <SectionBlock title="Unanswered Client Threads" icon={MessagesSquare}>
                                     <div className="space-y-2">
                                         {threadItems.map(t => <ACThreadRow key={t.documentId} item={t} engagementBase={engagementBase} />)}
                                     </div>
@@ -1113,7 +1113,7 @@ export function EngagementInsightsDashboard({
                             const deductClass = (pts: number) => pts >= 15 ? 'text-red-600 font-bold' : pts >= 8 ? 'text-amber-600 font-semibold' : 'text-slate-400 font-medium'
                             // TODO: re-enable when Shares board graduates from beta
                             // const deliveryItem = data.sharesProgress?.total > 0
-                            //     ? { pct: Math.round((data.sharesProgress.done / data.sharesProgress.total) * 100), total: data.sharesProgress.total, done: data.sharesProgress.done }
+                            //     ? { pct: Math.round((data.sharesProgress.approved / data.sharesProgress.total) * 100), total: data.sharesProgress.total, approved: data.sharesProgress.approved }
                             //     : null
                             const deliveryItem = null as { pct: number; total: number; done: number } | null
                             const totalDeducted = penalties.reduce((s, p) => s + p.points, 0)
@@ -1216,7 +1216,7 @@ export function EngagementInsightsDashboard({
                     </div>
                     <div>
                         <StatTile
-                            icon={MessageCircle}
+                            icon={MessagesSquare}
                             label="Unanswered Comment(s)"
                             count={loading ? '—' : (data?.unansweredThreads.length ?? 0)}
                             colorClass={(data?.unansweredThreads.length ?? 0) > 0 ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}

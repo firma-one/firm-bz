@@ -118,20 +118,20 @@ function makeSteps(firmSlug: string, clientSlug: string | null, engSlug: string 
       placement: "left" as const,
       route: `${eng}/files`,
     }] : []),
-    // 14 – Shares tab
+    // 14 – Board view (Deliverables)
     ...(eng ? [{
-      target: '[data-demo-tour="engagement-shares-tab"]',
-      title: "Shares",
+      target: '[data-demo-tour="engagement-board-tab"]',
+      title: "Deliverables Board",
       content: <div className="text-xs leading-relaxed text-[#45474c] space-y-2">
-        <p>Share documents securely with two types of external parties:</p>
+        <p>The Board tracks shared documents as deliverables through a Kanban-style workflow.</p>
         <ul className="space-y-1.5">
-          <li><strong className="text-[#1b1b1d]">Contributor</strong> — contractors, consultants, or agency partners who can create or edit content within the engagement.</li>
-          <li><strong className="text-[#1b1b1d]">Viewer</strong> — clients, sponsors, or stakeholders with read-only access to review materials.</li>
+          <li><strong className="text-[#1b1b1d]">Four stages</strong> — To Do, In Progress, In Review, and Approved.</li>
+          <li><strong className="text-[#1b1b1d]">Drag to advance</strong> — move cards one stage at a time; approved deliverables are locked.</li>
+          <li><strong className="text-[#1b1b1d]">Subtask detail</strong> — click any card to see assigned documents, due dates, and assignees.</li>
         </ul>
-        <p>Switch between Grid, List, and Board<sup>*</sup> views.</p>
       </div>,
       placement: "bottom" as const,
-      route: `${eng}/shares`,
+      route: `${eng}/board`,
     }] : []),
     // 15 – Comments tab
     ...(eng ? [{

@@ -41,6 +41,28 @@
               ]
             }
           }
+        },
+        {
+          "name": "Brand Refresh & Visual Identity",
+          "contractType": "Fixed Price",
+          "dueDate": "today+60",
+          "rateOrValue": "22000",
+          "structure": {
+            "Staging": { "name": "Staging", "files": [{ "name": "Creative Brief Draft.md", "type": "md" }] },
+            "Confidential": { "name": "Confidential", "files": [{ "name": "Brand Budget & Approval.xlsx", "type": "xlsx" }] },
+            "General": {
+              "name": "General",
+              "subfolders": [
+                { "name": "01_Brand_Audit", "files": [{ "name": "Current Brand Audit.pdf", "type": "pdf" }] },
+                { "name": "02_Moodboard", "files": [{ "name": "Visual Direction Deck.pptx", "type": "pptx" }] },
+                { "name": "03_Deliverables", "files": [
+                  { "name": "Logo Suite.pdf", "type": "pdf" },
+                  { "name": "Brand Guidelines.pdf", "type": "pdf" },
+                  { "name": "Color & Typography System.docx", "type": "docx" }
+                ]}
+              ]
+            }
+          }
         }
       ]
     },
@@ -62,6 +84,164 @@
               "name": "General",
               "subfolders": [
                 { "name": "01_Discovery", "files": [{ "name": "Initial Requirements.pdf", "type": "pdf" }] }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Investor Relations Program",
+          "contractType": "Retainer",
+          "dueDate": "today+30",
+          "rateOrValue": "14000",
+          "structure": {
+            "Staging": { "name": "Staging", "files": [{ "name": "IR Program Notes.md", "type": "md" }] },
+            "Confidential": { "name": "Confidential", "files": [{ "name": "Investor Targeting List.xlsx", "type": "xlsx" }] },
+            "General": {
+              "name": "General",
+              "subfolders": [
+                { "name": "01_IR_Strategy", "files": [{ "name": "IR Strategy Overview.pdf", "type": "pdf" }] },
+                { "name": "02_Pitch_Materials", "files": [
+                  { "name": "Investor Presentation Q1.pptx", "type": "pptx" },
+                  { "name": "One-Pager.pdf", "type": "pdf" }
+                ]}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "clientName": "Horizon FinTech",
+      "status": "ACTIVE",
+      "clientSinceDate": "2024-06-01",
+      "followUpDate": "today+7",
+      "industry": "Financial Technology",
+      "engagements": [
+        {
+          "name": "Growth Marketing Retainer",
+          "contractType": "Retainer",
+          "dueDate": "today+21",
+          "rateOrValue": "16500",
+          "structure": {
+            "Staging": { "name": "Staging", "files": [{ "name": "Weekly Growth Notes.md", "type": "md" }] },
+            "Confidential": { "name": "Confidential", "files": [{ "name": "Channel ROI Model.xlsx", "type": "xlsx" }] },
+            "General": {
+              "name": "General",
+              "subfolders": [
+                { "name": "01_Onboarding", "files": [{ "name": "Kickoff Deck.pptx", "type": "pptx" }] },
+                { "name": "02_Paid_Media", "files": [
+                  { "name": "Paid Media Strategy.pdf", "type": "pdf" },
+                  { "name": "Campaign Performance Report.xlsx", "type": "xlsx" }
+                ]},
+                { "name": "03_Lifecycle", "files": [
+                  { "name": "Email Lifecycle Flows.pdf", "type": "pdf" },
+                  { "name": "Segmentation Plan.docx", "type": "docx" }
+                ]}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Product Launch Campaign",
+          "contractType": "Fixed Price",
+          "dueDate": "today+14",
+          "rateOrValue": "28000",
+          "structure": {
+            "Staging": { "name": "Staging", "files": [{ "name": "Launch Checklist Draft.md", "type": "md" }] },
+            "Confidential": { "name": "Confidential", "files": [{ "name": "Launch Budget Approval.xlsx", "type": "xlsx" }] },
+            "General": {
+              "name": "General",
+              "subfolders": [
+                { "name": "01_GTM_Plan", "files": [{ "name": "GTM Plan.pdf", "type": "pdf" }] },
+                { "name": "02_Creative_Assets", "files": [
+                  { "name": "Social Ad Creatives.pdf", "type": "pdf" },
+                  { "name": "Landing Page Copy.docx", "type": "docx" }
+                ]},
+                { "name": "03_PR_Outreach", "files": [
+                  { "name": "Press Release Draft.docx", "type": "docx" },
+                  { "name": "Media List.xlsx", "type": "xlsx" }
+                ]},
+                { "name": "04_Post_Launch", "files": [
+                  { "name": "Launch Retrospective.pdf", "type": "pdf" }
+                ]}
+              ]
+            }
+          }
+        },
+        {
+          "name": "SEO & Content Authority",
+          "contractType": "Retainer",
+          "dueDate": "today+90",
+          "rateOrValue": "8500",
+          "structure": {
+            "Staging": { "name": "Staging", "files": [{ "name": "Content Calendar Draft.md", "type": "md" }] },
+            "Confidential": { "name": "Confidential", "files": [{ "name": "Keyword Research Master.xlsx", "type": "xlsx" }] },
+            "General": {
+              "name": "General",
+              "subfolders": [
+                { "name": "01_SEO_Audit", "files": [{ "name": "Technical SEO Audit.pdf", "type": "pdf" }] },
+                { "name": "02_Content", "files": [
+                  { "name": "Pillar Page Draft.docx", "type": "docx" },
+                  { "name": "Blog Post Series.docx", "type": "docx" }
+                ]}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "clientName": "Nova Health Systems",
+      "status": "ACTIVE",
+      "clientSinceDate": "2024-09-10",
+      "followUpDate": "today+10",
+      "industry": "Healthcare",
+      "engagements": [
+        {
+          "name": "Patient Communications Redesign",
+          "contractType": "Fixed Price",
+          "dueDate": "today+35",
+          "rateOrValue": "19500",
+          "structure": {
+            "Staging": { "name": "Staging", "files": [{ "name": "Stakeholder Interview Notes.md", "type": "md" }] },
+            "Confidential": { "name": "Confidential", "files": [{ "name": "Patient Journey Map.xlsx", "type": "xlsx" }] },
+            "General": {
+              "name": "General",
+              "subfolders": [
+                { "name": "01_Discovery", "files": [
+                  { "name": "Current State Assessment.pdf", "type": "pdf" },
+                  { "name": "Patient Survey Results.xlsx", "type": "xlsx" }
+                ]},
+                { "name": "02_Strategy", "files": [{ "name": "Communications Strategy.pdf", "type": "pdf" }] },
+                { "name": "03_Deliverables", "files": [
+                  { "name": "Message Framework.docx", "type": "docx" },
+                  { "name": "Template Library.docx", "type": "docx" },
+                  { "name": "Implementation Guide.pdf", "type": "pdf" }
+                ]}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Digital Health PR & Media",
+          "contractType": "Retainer",
+          "dueDate": "today+50",
+          "rateOrValue": "11000",
+          "structure": {
+            "Staging": { "name": "Staging", "files": [{ "name": "Media Tracker.md", "type": "md" }] },
+            "Confidential": { "name": "Confidential", "files": [{ "name": "PR Budget & Approvals.xlsx", "type": "xlsx" }] },
+            "General": {
+              "name": "General",
+              "subfolders": [
+                { "name": "01_PR_Strategy", "files": [{ "name": "PR Strategy Plan.pdf", "type": "pdf" }] },
+                { "name": "02_Press_Materials", "files": [
+                  { "name": "Press Release — Q1 Initiative.docx", "type": "docx" },
+                  { "name": "Executive Bio Pack.pdf", "type": "pdf" }
+                ]},
+                { "name": "03_Thought_Leadership", "files": [
+                  { "name": "LinkedIn Article Draft.docx", "type": "docx" },
+                  { "name": "Conference Speaker Brief.pdf", "type": "pdf" }
+                ]}
               ]
             }
           }

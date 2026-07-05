@@ -13,6 +13,8 @@ import { getPermissionAdapter } from '@/lib/connectors/registry'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { assertFirmSubscriptionAccess } from '@/lib/billing/subscription-gate'
 import { SubscriptionRevokedError } from '@/lib/errors/api-error'
+import { assignDocId } from '@/lib/doc-id'
+import { DocumentSharingPermissionStatus, EngagementRole } from '@prisma/client'
 
 /** ProjectDocument can contain BigInt (fileSize); JSON.stringify cannot serialize it. */
 function toJsonSafeSharing(doc: Record<string, unknown> | null): Record<string, unknown> | null {
@@ -134,6 +136,186 @@ export async function PUT(
     await assertFirmSubscriptionAccess(ctx.firmId)
 
     const body = await request.json().catch(() => ({}))
+
+    // --- Description update path ---
+    if (typeof body.description === 'string') {
+      const doc = await prisma.engagementDocument.findFirst({
+        where: { id: documentIdParam, engagementId: projectId },
+      })
+      if (!doc) return NextResponse.json({ error: 'Document not found' }, { status: 404 })
+      const existingSettings = (doc.settings as Record<string, unknown>) || {}
+      const updated = await prisma.engagementDocument.update({
+        where: { id: doc.id },
+        data: {
+          settings: { ...existingSettings, description: body.description },
+          updatedAt: new Date(),
+          updatedBy: user.id,
+        },
+      })
+      return NextResponse.json({ sharing: toJsonSafeSharing(updated as Record<string, unknown>) })
+    }
+
+    // --- Mark as Deliverable path ---
+    if (body.markAsDeliverable === true) {
+      const doc = await prisma.engagementDocument.findFirst({
+        where: { id: documentIdParam, engagementId: projectId },
+      })
+      if (!doc) return NextResponse.json({ error: 'Document not found' }, { status: 404 })
+      if (!doc.isFolder) return NextResponse.json({ error: 'Cannot mark a file as a Deliverable' }, { status: 400 })
+
+      const engagement = await prisma.engagement.findUnique({
+        where: { id: projectId },
+        select: { name: true, firmId: true },
+      })
+      if (!engagement) return NextResponse.json({ error: 'Engagement not found' }, { status: 404 })
+
+      const now = new Date().toISOString()
+
+      // Mark folder as Deliverable in settings
+      const settings = buildSettingsForDb((doc.settings as Record<string, unknown>) || null, {
+        share: {
+          externalCollaborator: { enabled: false },
+          guest: { enabled: false, options: {} },
+        },
+        activity: { status: 'to_do', updatedAt: now },
+        actorId: user.id,
+      })
+      await prisma.engagementDocument.update({
+        where: { id: doc.id },
+        data: { settings, updatedAt: new Date(), updatedBy: user.id },
+      })
+
+      // Insert GRANTED rows for EL (eng_admin) and EM (eng_member) on the folder
+      const internalMembers = await prisma.engagementMember.findMany({
+        where: {
+          engagementId: projectId,
+          role: { in: [EngagementRole.eng_admin, EngagementRole.eng_member] },
+        },
+      })
+      const internalUserIds = internalMembers.map((m) => m.userId)
+      for (const member of internalMembers) {
+        await prisma.engagementDocumentSharingUser.upsert({
+          where: { projectDocumentId_userId: { projectDocumentId: doc.id, userId: member.userId } },
+          update: { sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED, updatedBy: user.id },
+          create: {
+            projectDocumentId: doc.id,
+            engagementId: projectId,
+            userId: member.userId,
+            sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED,
+            createdBy: user.id,
+            updatedBy: user.id,
+          },
+        })
+      }
+
+      // Insert INHERITED rows for EL/EM on all descendants (files and sub-folders) via recursive CTE
+      const allDescendants = (await (prisma as any).$queryRawUnsafe(
+        `WITH RECURSIVE descendants AS (
+           SELECT id, "externalId" FROM platform.engagement_documents
+           WHERE "parentId" = $1 AND "engagementId" = $2::uuid
+           UNION ALL
+           SELECT ed.id, ed."externalId" FROM platform.engagement_documents ed
+           INNER JOIN descendants d ON ed."parentId" = d."externalId"
+           WHERE ed."engagementId" = $2::uuid
+         )
+         SELECT id FROM descendants`,
+        doc.externalId,
+        projectId
+      )) as Array<{ id: string }>
+      for (const child of allDescendants) {
+        for (const member of internalMembers) {
+          await prisma.engagementDocumentSharingUser.upsert({
+            where: { projectDocumentId_userId: { projectDocumentId: child.id, userId: member.userId } },
+            update: { sharingPermissionStatus: DocumentSharingPermissionStatus.INHERITED, updatedBy: user.id },
+            create: {
+              projectDocumentId: child.id,
+              engagementId: projectId,
+              userId: member.userId,
+              sharingPermissionStatus: DocumentSharingPermissionStatus.INHERITED,
+              createdBy: user.id,
+              updatedBy: user.id,
+            },
+          })
+        }
+      }
+
+      audit(AUDIT_EVENT.DOCUMENT_SHARE_CREATED)
+        .scope(AUDIT_SCOPE.DOCUMENT)
+        .firm(engagement.firmId)
+        .client(ctx.clientId)
+        .engagement(projectId)
+        .document(doc.id)
+        .actor(user.id)
+        .meta({ fileName: doc.fileName, action: 'markAsDeliverable' })
+        .fireAndForget()
+
+      const updated = await prisma.engagementDocument.findUnique({ where: { id: doc.id } })
+      return NextResponse.json({ sharing: toJsonSafeSharing(updated as Record<string, unknown> | null) })
+    }
+    // --- End Mark as Deliverable ---
+
+    // --- Untag as Deliverable path ---
+    if (body.untagAsDeliverable === true) {
+      const doc = await prisma.engagementDocument.findFirst({
+        where: { id: documentIdParam, engagementId: projectId },
+      })
+      if (!doc) return NextResponse.json({ error: 'Document not found' }, { status: 404 })
+      if (!doc.isFolder) return NextResponse.json({ error: 'Cannot untag a file' }, { status: 400 })
+
+      // Clear settings (removes share.createdAt, activity, etc.)
+      await prisma.engagementDocument.update({
+        where: { id: doc.id },
+        data: { settings: {}, updatedAt: new Date(), updatedBy: user.id },
+      })
+
+      // Revoke all GRANTED and INHERITED sharing rows for this folder
+      await prisma.engagementDocumentSharingUser.deleteMany({
+        where: { projectDocumentId: doc.id },
+      })
+
+      // Revoke INHERITED rows for all descendants via recursive CTE
+      const allDescendants = (await (prisma as any).$queryRawUnsafe(
+        `WITH RECURSIVE descendants AS (
+           SELECT id, "externalId" FROM platform.engagement_documents
+           WHERE "parentId" = $1 AND "engagementId" = $2::uuid
+           UNION ALL
+           SELECT ed.id, ed."externalId" FROM platform.engagement_documents ed
+           INNER JOIN descendants d ON ed."parentId" = d."externalId"
+           WHERE ed."engagementId" = $2::uuid
+         )
+         SELECT id FROM descendants`,
+        doc.externalId,
+        projectId
+      )) as Array<{ id: string }>
+      if (allDescendants.length > 0) {
+        await prisma.engagementDocumentSharingUser.deleteMany({
+          where: {
+            projectDocumentId: { in: allDescendants.map((c: { id: string }) => c.id) },
+            sharingPermissionStatus: DocumentSharingPermissionStatus.INHERITED,
+          },
+        })
+      }
+
+      const engagement = await prisma.engagement.findUnique({
+        where: { id: projectId },
+        select: { firmId: true },
+      })
+
+      audit(AUDIT_EVENT.DOCUMENT_SHARE_DELETED)
+        .scope(AUDIT_SCOPE.DOCUMENT)
+        .firm(engagement?.firmId ?? ctx.firmId)
+        .client(ctx.clientId)
+        .engagement(projectId)
+        .document(doc.id)
+        .actor(user.id)
+        .meta({ fileName: doc.fileName, action: 'untagAsDeliverable' })
+        .fireAndForget()
+
+      const updated = await prisma.engagementDocument.findUnique({ where: { id: doc.id } })
+      return NextResponse.json({ sharing: toJsonSafeSharing(updated as Record<string, unknown> | null) })
+    }
+    // --- End Untag as Deliverable ---
+
     const title = typeof body.title === 'string' ? body.title : ''
     const mimeType = typeof body.mimeType === 'string' ? body.mimeType : null
 
@@ -255,8 +437,8 @@ export async function PUT(
         data: updateData,
       })
     } else {
-      const proj = await prisma.engagement.findUnique({ where: { id: projectId }, select: { clientId: true } })
-      await prisma.engagementDocument.create({
+      const proj = await prisma.engagement.findUnique({ where: { id: projectId }, select: { clientId: true, name: true } })
+      const created = await prisma.engagementDocument.create({
         data: {
           engagementId: projectId,
           firmId: fileInfo.organizationId,
@@ -268,6 +450,9 @@ export async function PUT(
           ...(mimeType ? { mimeType } : {}),
         },
       })
+      if (proj?.name) {
+        Promise.resolve().then(() => assignDocId(created.id, projectId, proj.name).catch(() => {}))
+      }
     }
 
     const updated = await prisma.engagementDocument.findUnique({

@@ -10,6 +10,7 @@ import {
     indexBatchForSearch,
     scanAndIndexProject,
     populateSandboxSampleFiles,
+    seedSandboxDeliverables,
     reconcileFileDeletion,
     reconcileFolderDeletion,
     migrateWorkspaceRoot,
@@ -21,6 +22,7 @@ import {
     cleanupMemberReminders,
     cleanupDocumentReminders,
     purgeDeletedEngagements,
+    sendDeliverableDueReminder,
 } from "@/lib/inngest/functions";
 
 export const { GET, POST, PUT } = serve({
@@ -35,6 +37,7 @@ export const { GET, POST, PUT } = serve({
         indexBatchForSearch,
         scanAndIndexProject,
         populateSandboxSampleFiles,
+        seedSandboxDeliverables,
         reconcileFileDeletion,
         reconcileFolderDeletion,
         migrateWorkspaceRoot,
@@ -46,5 +49,6 @@ export const { GET, POST, PUT } = serve({
         cleanupMemberReminders,
         cleanupDocumentReminders,
         purgeDeletedEngagements,
+        sendDeliverableDueReminder,
     ],
 });

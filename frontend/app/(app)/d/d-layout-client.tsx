@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { usePathname } from 'next/navigation'
 import { AuthGuard } from '@/components/auth/auth-guard'
 import { AppSidebar } from '@/components/app/app-sidebar'
@@ -84,7 +85,7 @@ function ViewAsBanner() {
 function AppLayoutContent({ children, isSystemAdmin }: { children: React.ReactNode; isSystemAdmin?: boolean }) {
     const pathname = usePathname()
     const { isCollapsed } = useSidebar()
-    const { content: rightPaneContent, title: rightPaneTitle, clearPane, headerActions: rightPaneHeaderActions, headerIcon, headerSubtitle, paneSize } = useRightPane()
+    const { content: rightPaneContent, contentKey: rightPaneContentKey, title: rightPaneTitle, clearPane, headerActions: rightPaneHeaderActions, headerIcon, iconTooltip, headerSubtitle, paneSize } = useRightPane()
     const { session } = useAuth()
     const accessToken = session?.access_token ?? null
     const firms = useSidebarFirms()
@@ -240,12 +241,24 @@ function AppLayoutContent({ children, isSystemAdmin }: { children: React.ReactNo
                             <LayoutRightPanel
                                 title={rightPaneTitle || 'Document'}
                                 icon={headerIcon}
+                                iconTooltip={iconTooltip || undefined}
                                 subtitle={headerSubtitle || undefined}
                                 onClose={clearPane}
                                 headerActions={rightPaneHeaderActions}
                                 embedContent={true}
                             >
-                                {rightPaneContent}
+                                <AnimatePresence mode="wait" initial={false}>
+                                    <motion.div
+                                        key={rightPaneContentKey}
+                                        initial={{ opacity: 0, y: 6 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        exit={{ opacity: 0, y: -6 }}
+                                        transition={{ duration: 0.15, ease: 'easeInOut' }}
+                                        className="h-full"
+                                    >
+                                        {rightPaneContent}
+                                    </motion.div>
+                                </AnimatePresence>
                             </LayoutRightPanel>
                         </div>
                     ) : null}
