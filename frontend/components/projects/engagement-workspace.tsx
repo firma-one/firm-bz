@@ -7,7 +7,7 @@ import { EngagementInsightsDashboard } from './engagement-insights-dashboard'
 import { EngagementFileList } from './engagement-file-list'
 import { type BreadcrumbItem } from '@/lib/files-folder-session'
 import { EngagementSettingsForm } from './engagement-settings-form'
-import { Folder, BarChart3, Building2, PenTool, ChevronRight, ChevronLeft, Users, Briefcase, Share2, Settings, Home, ClipboardList, MessageCircle, Lock, LayoutGrid, List } from 'lucide-react'
+import { Folder, BarChart3, Building2, PenTool, ChevronRight, ChevronLeft, Users, Briefcase, Share2, Settings, Home, ClipboardList, MessagesSquare, Lock, LayoutGrid, List } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { EngagementMembersTab } from './members/engagement-members-tab'
@@ -47,6 +47,8 @@ interface EngagementWorkspaceProps {
     restrictToSharedOnly?: boolean
     /** When true (eng_viewer only), shows Accept Document option in document action menu */
     isExternalViewer?: boolean
+    /** The user's engagement role slug — used to derive allowed lane transitions */
+    roleSlug?: string
     projectDescription?: string
     engagementKickoffDate?: string | null
     engagementDueDate?: string | null
@@ -98,6 +100,7 @@ export function EngagementWorkspace({
     isFirmAdmin = false,
     restrictToSharedOnly = false,
     isExternalViewer = false,
+    roleSlug,
     projectDescription,
     engagementKickoffDate = null,
     engagementDueDate = null,
@@ -339,6 +342,7 @@ export function EngagementWorkspace({
                             </TabsTrigger>
                             <TabsTrigger
                                 value="board"
+                                data-demo-tour="engagement-board-tab"
                                 className="relative h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                             >
                                 <LayoutGrid className="w-4 h-4 mr-2" />
@@ -355,7 +359,7 @@ export function EngagementWorkspace({
                                 data-demo-tour="engagement-comments-tab"
                                 className="relative h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                             >
-                                <MessageCircle className="w-4 h-4 mr-2" />
+                                <MessagesSquare className="w-4 h-4 mr-2" />
                                 Comments
                                 {commentsCount !== undefined && commentsCount > 0 && (
                                     <span className="ml-2 font-mono text-[10px] font-bold bg-primary text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
@@ -503,6 +507,7 @@ export function EngagementWorkspace({
                                     canManage={canManage}
                                     restrictToSharedOnly={restrictToSharedOnly}
                                     isExternalViewer={isExternalViewer}
+                                    roleSlug={roleSlug as any}
                                     connectorRootFolderId={connectorRootFolderId ?? undefined}
                                     orgName={orgName}
                                     clientName={clientName}
@@ -522,6 +527,7 @@ export function EngagementWorkspace({
                                     canManage={canManage}
                                     restrictToSharedOnly={restrictToSharedOnly}
                                     isExternalViewer={isExternalViewer}
+                                    roleSlug={roleSlug as any}
                                     connectorRootFolderId={connectorRootFolderId ?? undefined}
                                     orgName={orgName}
                                     clientName={clientName}
@@ -577,7 +583,13 @@ export function EngagementWorkspace({
                     {currentTab === 'comments' && (
                         <div className="py-1 h-full">
                             <ErrorBoundary context="ProjectComments">
-                                <EngagementCommentsTab projectId={projectId} orgSlug={orgSlug} />
+                                <EngagementCommentsTab
+                                    projectId={projectId}
+                                    orgSlug={orgSlug}
+                                    boardUrl={`${projectBase(orgSlug, clientSlug, projectSlug, useEngagement)}/board`}
+                                    isSandboxFirm={firmSandboxOnly}
+                                    projectName={projectName}
+                                />
                             </ErrorBoundary>
                         </div>
                     )}
@@ -591,7 +603,7 @@ export function EngagementWorkspace({
                     {canManage && currentTab === 'audit' && (
                         <div className="p-4 h-full">
                             <ErrorBoundary context="ProjectAudit">
-                                <EngagementAuditPane projectId={projectId} projectName={projectName} />
+                                <EngagementAuditPane projectId={projectId} projectName={projectName} isSandboxFirm={firmSandboxOnly} />
                             </ErrorBoundary>
                         </div>
                     )}

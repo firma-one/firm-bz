@@ -38,5 +38,42 @@ export function canViewDeliverable(role: EngagementRoleSlug, status: ActivitySta
 }
 
 export function canApproveDeliverable(role: EngagementRoleSlug): boolean {
-  return role === 'eng_admin' || role === 'eng_viewer'
+  return role === 'eng_admin'
+}
+
+const STAGE_ORDER: Record<ActivityStatus, number> = { to_do: 0, in_progress: 1, in_review: 2, approved: 3 }
+
+/**
+ * Returns the set of target statuses a role may move a deliverable to from `currentStatus`.
+ * This is the single source of truth used by both the board drag-and-drop and the detail panel.
+ */
+export function getAllowedTransitions(role: EngagementRoleSlug, currentStatus: ActivityStatus): ActivityStatus[] {
+  if (currentStatus === 'approved') return [] // nothing can move back from approved
+
+  const currentIdx = STAGE_ORDER[currentStatus]
+  const allStatuses: ActivityStatus[] = ['to_do', 'in_progress', 'in_review', 'approved']
+
+  return allStatuses.filter((target) => {
+    if (target === currentStatus) return false
+    const targetIdx = STAGE_ORDER[target]
+    if (Math.abs(targetIdx - currentIdx) > 1) return false // only ±1 step
+
+    switch (role) {
+      case 'eng_admin':
+        // EL can move anywhere (±1), including approve
+        return true
+      case 'eng_member':
+        // EM can move forward to in_review only (in_progress → in_review)
+        // and back (in_review → in_progress). Cannot approve.
+        return target !== 'approved'
+      case 'eng_ext_collaborator':
+        // EC can only submit for review: in_progress → in_review
+        return currentStatus === 'in_progress' && target === 'in_review'
+      case 'eng_viewer':
+        // EV can only push back: in_review → in_progress
+        return currentStatus === 'in_review' && target === 'in_progress'
+      default:
+        return false
+    }
+  })
 }

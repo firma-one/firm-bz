@@ -1,0 +1,120 @@
+{
+  "Marketing": {
+    "Market Research": {
+      "Customer Research": {},
+      "Competitor Analysis": {},
+      "Audience Insights": {},
+      "Surveys": {},
+      "Trend Analysis": {}
+    },
+    "Branding": {
+      "Positioning": {},
+      "Messaging": {},
+      "Storytelling": {},
+      "Visual Identity": {},
+      "Brand Awareness": {}
+    },
+    "Content Marketing": {
+      "Blog Content": {},
+      "Newsletters": {},
+      "Case Studies": {},
+      "Lead Magnets": {},
+      "Content Distribution": {}
+    },
+    "SEO": {
+      "Keyword Research": {},
+      "On-page SEO": {},
+      "Technical SEO": {},
+      "Link Building": {},
+      "Content Optimization": {},
+      "SEO Wins": {}
+    },
+    "Social Media Marketing": {
+      "X (Twitter)": {},
+      "LinkedIn": {},
+      "FB": {},
+      "Insta": {},
+      "TikTok": {},
+      "Reddit": {}
+    },
+    "Email Marketing": {
+      "List Building": {},
+      "Newsletters": {},
+      "Automation": {},
+      "Segmentation": {},
+      "Deliverability": {},
+      "Monetization": {}
+    },
+    "Video Marketing": {
+      "YouTube": {},
+      "Shorts": {},
+      "Reels": {},
+      "Podcasts": {},
+      "Live Streams": {}
+    },
+    "Paid Marketing": {
+      "Google Ads": {},
+      "Meta Ads": {},
+      "LinkedIn Ads": {},
+      "TikTok Ads": {},
+      "YouTube Ads": {},
+      "Retargeting": {}
+    },
+    "Influencer Marketing": {
+      "Creator Outreach": {},
+      "Sponsorships": {},
+      "UGC": {},
+      "Partnerships": {},
+      "Brand Ambassadors": {}
+    },
+    "Community Marketing": {
+      "Reddit": {},
+      "Discord": {},
+      "Slack": {},
+      "FB Groups": {},
+      "Forums": {}
+    },
+    "Product Marketing": {
+      "Product Positioning": {},
+      "Feature Launches": {},
+      "GTM Strategy": {},
+      "Customer Education": {},
+      "Competitive Messaging": {}
+    },
+    "Growth Marketing": {
+      "Growth Hacking": {},
+      "Referral Programs": {},
+      "Viral Loops": {},
+      "Product Led Growth": {},
+      "Experimentation": {}
+    },
+    "Public Relations": {
+      "Press Releases": {},
+      "Media Outreach": {},
+      "Podcast Guests": {},
+      "Thought Leadership": {},
+      "Reputation Management": {}
+    },
+    "Affiliate Marketing": {
+      "Affiliate Programs": {},
+      "Partner Recruitment": {},
+      "Commission Structures": {},
+      "Tracking": {},
+      "Payouts": {}
+    },
+    "Analytics": {
+      "Attribution": {},
+      "Funnel Analysis": {},
+      "Cohort Analysis": {},
+      "KPI Tracking": {},
+      "Reporting": {}
+    },
+    "Revenue Optimization": {
+      "Upsells": {},
+      "Cross Sells": {},
+      "Pricing Strategy": {},
+      "Subscription Growth": {},
+      "LTV Maximization": {}
+    }
+  }
+}

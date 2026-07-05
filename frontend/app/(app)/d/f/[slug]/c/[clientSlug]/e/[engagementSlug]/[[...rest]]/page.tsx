@@ -129,7 +129,7 @@ export default async function EngagementPage({ params }: PageProps) {
       ? getAccessibleFileCountForPersona(project.id, ecGuestPersona)
       : (basePrisma as any).engagementDocument.count({ where: { engagementId: project.id, isFolder: false } }),
     (basePrisma as any).engagementDocument.count({ where: { engagementId: project.id, sharingUsers: { some: { sharingPermissionStatus: { in: ['GRANTED', 'PENDING'] } } } } }),
-    (basePrisma as any).docCommentMessage.count({ where: { engagementId: project.id } }),
+    (basePrisma as any).docCommentMessage.groupBy({ by: ['projectDocumentId'], where: { engagementId: project.id } }).then((r: any[]) => r.length),
     (basePrisma as any).engagementMember.count({ where: { engagementId: project.id } }),
     (basePrisma as any).engagementInvitation.count({ where: { engagementId: project.id, status: { in: ['PENDING', 'ACCEPTED'] } } }),
     (basePrisma as any).platformAuditEvent.count({ where: { engagementId: project.id, scope: 'PROJECT' } }),
@@ -159,6 +159,7 @@ export default async function EngagementPage({ params }: PageProps) {
           isFirmAdmin={isFirmAdmin}
           restrictToSharedOnly={restrictToSharedOnly}
           isExternalViewer={projectRole === 'eng_viewer'}
+          roleSlug={projectRole ?? undefined}
           projectDescription={project.description ?? undefined}
           engagementKickoffDate={project.kickoffDate}
           engagementDueDate={project.dueDate}

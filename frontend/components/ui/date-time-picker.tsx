@@ -40,7 +40,7 @@ interface DateTimePickerProps {
 export function DateTimePicker({
   value,
   onChange,
-  placeholder = "Select date and time",
+  placeholder = "SELECT DATE & TIME",
   className = "",
   disabled = false,
   defaultTime,
@@ -202,7 +202,7 @@ export function DateTimePicker({
           type="button"
           variant="outline"
           disabled={disabled}
-          className={`w-full justify-start text-left font-normal !text-xs h-9 !py-0 !px-2 disabled:opacity-100 ${disabled ? '!bg-[#f9f9fb] cursor-not-allowed' : ''} ${disabled && !selectedDate ? 'opacity-50' : ''} ${className}`}
+          className={`w-full justify-start text-left !font-bold !font-mono !uppercase !tracking-widest !text-[10px] h-9 !py-0 !px-2 disabled:opacity-100 ${disabled ? '!bg-[#f9f9fb] cursor-not-allowed' : ''} ${disabled && !selectedDate ? 'opacity-50' : ''} ${className}`}
         >
           <Calendar className="mr-1.5 h-3 w-3 shrink-0" />
           <span className="flex-1 whitespace-nowrap overflow-hidden text-ellipsis">{formatDisplayValue()}</span>

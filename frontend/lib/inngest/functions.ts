@@ -336,10 +336,122 @@ export const populateSandboxSampleFiles = inngest.createFunction(
                     connectorId: connectionId,
                     rootFolderIds: [proj.rootFolderId],
                 })
+                if (proj.generalFolderId) {
+                    safeInngestSend("sandbox.seed.board-data.requested", {
+                        organizationId,
+                        projectId: proj.projectId,
+                        generalFolderId: proj.generalFolderId,
+                    })
+                }
             })
         }
 
         return { populated: projects.length, organizationId }
+    }
+)
+
+
+// ---------------------------------------------------------------------------
+// Sandbox board data seeding: tag General subfolders as deliverables with varied statuses
+// ---------------------------------------------------------------------------
+
+/**
+ * Statuses cycle in this order so demo boards always look live and varied.
+ * Index 0 = approved (first subfolder looks done), then in_review, in_progress, to_do repeating.
+ */
+const BOARD_SEED_STATUS_CYCLE = ['approved', 'in_review', 'in_progress', 'to_do'] as const
+type BoardSeedStatus = typeof BOARD_SEED_STATUS_CYCLE[number]
+
+/**
+ * After the Drive scan indexes engagement documents, tag General subfolders as deliverables
+ * with varied board statuses so the sandbox Board view has meaningful demo data out of the box.
+ * Sleeps 2 minutes to let the scan complete before querying indexed documents.
+ */
+export const seedSandboxDeliverables = inngest.createFunction(
+    { id: "seed-sandbox-deliverables", triggers: [{ event: "sandbox.seed.board-data.requested" }] },
+    async ({ event, step }) => {
+        const { organizationId, projectId, generalFolderId } = event.data as {
+            organizationId: string
+            projectId: string
+            generalFolderId: string
+        }
+
+        // Wait for the scan to index documents into the DB
+        await step.sleep('wait-for-scan', '2m')
+
+        await step.run('tag-deliverables', async () => {
+            // Find direct children of the General folder that are themselves folders (the subfolders like 01_Discovery etc.)
+            // These become the deliverable items on the board.
+            const generalSubfolders = await prisma.engagementDocument.findMany({
+                where: {
+                    engagementId: projectId,
+                    firmId: organizationId,
+                    parentId: generalFolderId,
+                    isFolder: true,
+                },
+                select: { id: true, fileName: true, settings: true },
+                orderBy: { fileName: 'asc' },
+            })
+
+            // If no subfolders (flat file engagement), fall back to direct non-folder children of General
+            const candidates = generalSubfolders.length > 0
+                ? generalSubfolders
+                : await prisma.engagementDocument.findMany({
+                    where: {
+                        engagementId: projectId,
+                        firmId: organizationId,
+                        parentId: generalFolderId,
+                        isFolder: false,
+                    },
+                    select: { id: true, fileName: true, settings: true },
+                    orderBy: { fileName: 'asc' },
+                })
+
+            if (candidates.length === 0) {
+                logger.info('seedSandboxDeliverables: no candidates found, skipping', 'Inngest', { projectId, generalFolderId })
+                return
+            }
+
+            const now = new Date().toISOString()
+
+            for (let i = 0; i < candidates.length; i++) {
+                const doc = candidates[i]
+                const existing = parseSettingsFromDb(doc.settings)
+                // Don't overwrite if already tagged as a deliverable
+                if (existing.share?.createdAt) continue
+
+                const status: BoardSeedStatus = BOARD_SEED_STATUS_CYCLE[i % BOARD_SEED_STATUS_CYCLE.length]
+
+                const newSettings = {
+                    ...(doc.settings as object || {}),
+                    share: {
+                        guest: { enabled: false, options: { publish: false, addWatermark: false, sharePdfOnly: false, allowDownload: false, sharedPdfDriveId: null } },
+                        externalCollaborator: { enabled: false, options: { allowDownload: false } },
+                        createdAt: now,
+                        createdBy: null,
+                        updatedAt: now,
+                        updatedBy: null,
+                        publishedVersionId: null,
+                        publishedAt: null,
+                        finalizedAt: status === 'approved' ? now : null,
+                    },
+                    activity: {
+                        status,
+                        updatedAt: now,
+                        orderIndex: i,
+                    },
+                }
+
+                await prisma.engagementDocument.update({
+                    where: { id: doc.id },
+                    data: { settings: newSettings },
+                })
+            }
+
+            logger.info(`seedSandboxDeliverables: tagged ${candidates.length} deliverables`, 'Inngest', { projectId })
+        })
+
+        return { projectId, organizationId, generalFolderId }
     }
 )
 
@@ -1531,3 +1643,80 @@ export const sendRecurringReminderEmails = inngest.createFunction(
     }
 )
 
+
+// ---------------------------------------------------------------------------
+// Deliverable Due Date Reminders
+// ---------------------------------------------------------------------------
+
+/**
+ * Sends reminder emails to all engagement members when a Deliverable due date
+ * is approaching. Fires at 24h and 1h before the due date.
+ * Cancelled when the due date is cleared or changed (same documentId).
+ */
+export const sendDeliverableDueReminder = inngest.createFunction(
+    {
+        id: "send-deliverable-due-reminder",
+        triggers: [{ event: "deliverable.due_date.set" }],
+        cancelOn: [{
+            event: "deliverable.due_date.cancelled",
+            if: "event.data.documentId == async.data.documentId",
+        }],
+    },
+    async ({ event, step }: any) => {
+        const { documentId, documentName, dueDate, memberUserIds, boardUrl } = event.data
+        const due = new Date(dueDate)
+
+        const sendToMembers = async (subject: string, body: string) => {
+            const { createAdminClient } = await import("@/utils/supabase/admin")
+            const { sendEmail } = await import("@/lib/email")
+            const admin = createAdminClient()
+            const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
+            const cta = boardUrl ? `${appUrl}${boardUrl}` : null
+            const ctaLink = cta ? `<p><a href="${cta}" style="color:#5A78FF">View Deliverable &rarr;</a></p>` : ''
+            await Promise.allSettled((memberUserIds as string[]).map(async (userId: string) => {
+                const { data } = await admin.auth.admin.getUserById(userId)
+                const email = data?.user?.email
+                if (!email) return
+                await sendEmail(email, subject, `${body}${ctaLink}`)
+            }))
+        }
+
+        const isDateStillSet = async () => {
+            const doc = await prisma.engagementDocument.findUnique({
+                where: { id: documentId },
+                select: { dueDate: true },
+            })
+            return doc?.dueDate?.toISOString() === dueDate
+        }
+
+        // 24h reminder
+        const at24h = new Date(due.getTime() - 24 * 60 * 60 * 1000)
+        if (at24h > new Date()) {
+            await step.sleepUntil("wait-24h", at24h.toISOString())
+            await step.run("send-24h", async () => {
+                if (!(await isDateStillSet())) return { skipped: 'date-changed' }
+                await sendToMembers(
+                    `Due tomorrow: ${documentName}`,
+                    `<p><strong>${documentName}</strong> is due tomorrow (<strong>${due.toISOString().slice(0, 10)}</strong>).</p>`
+                )
+                return { sent: true }
+            })
+        }
+
+        // 1h reminder
+        const at1h = new Date(due.getTime() - 60 * 60 * 1000)
+        if (at1h > new Date()) {
+            await step.sleepUntil("wait-1h", at1h.toISOString())
+            await step.run("send-1h", async () => {
+                if (!(await isDateStillSet())) return { skipped: 'date-changed' }
+                await sendToMembers(
+                    `Due in 1 hour: ${documentName}`,
+                    `<p><strong>${documentName}</strong> is due in 1 hour (<strong>${due.toISOString().slice(0, 10)}</strong>).</p>`
+                )
+                return { sent: true }
+            })
+        }
+
+        return { documentId, dueDate }
+    }
+)

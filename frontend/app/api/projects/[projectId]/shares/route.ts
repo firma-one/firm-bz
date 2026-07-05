@@ -139,6 +139,7 @@ parentId: share.parentId ?? (indexMetadata.parents?.[0] ?? indexMetadata.parentI
         pendingApproval,
         pendingUploaderId,
         docId: (share as any).docId ?? null,
+        dueDate: (share as any).dueDate ? (share as any).dueDate.toISOString() : null,
       }
     })
 

@@ -1,7 +1,8 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
-import { XSquare, Expand, Minimize2, PanelRight, PanelRightOpen, File } from 'lucide-react'
+import { XSquare, Expand, Minimize2, PanelRight, PanelRightOpen } from 'lucide-react'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Button } from '@/components/ui/button'
 import Logo from '@/components/Logo'
 import { cn } from '@/lib/utils'
@@ -27,6 +28,7 @@ interface LayoutRightPanelProps {
   title: string
   subtitle?: string
   icon?: React.ReactNode
+  iconTooltip?: string
   children: React.ReactNode
   onClose: () => void
   headerActions?: React.ReactNode
@@ -45,6 +47,7 @@ export function LayoutRightPanel({
   title,
   subtitle,
   icon,
+  iconTooltip,
   children,
   onClose,
   headerActions,
@@ -142,19 +145,29 @@ export function LayoutRightPanel({
           >
             <div className="flex items-center gap-2.5 min-w-0 flex-1">
               {icon ? (
-                <div className="h-8 w-8 rounded-sm bg-primary/10 flex items-center justify-center text-primary shrink-0">
-                  {icon}
-                </div>
+                iconTooltip ? (
+                  <TooltipProvider delayDuration={300}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="h-8 w-8 rounded-sm bg-primary/10 flex items-center justify-center text-primary shrink-0 cursor-default">
+                          {icon}
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="text-xs">{iconTooltip}</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                ) : (
+                  <div className="h-8 w-8 rounded-sm bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                    {icon}
+                  </div>
+                )
               ) : null}
               <div className="min-w-0 flex-1">
                 <h2 className="font-headline text-sm font-bold text-[#1b1b1d] truncate" title={title}>
                   {title}
                 </h2>
                 {subtitle ? (
-                  <p className="flex items-center gap-1 text-[10px] text-[#45474c] min-w-0 overflow-hidden">
-                    <File className="h-3 w-3 shrink-0" />
-                    <span className="truncate" title={subtitle}>{subtitle}</span>
-                  </p>
+                  <p className="text-[10px] text-[#45474c] truncate min-w-0" title={subtitle}>{subtitle}</p>
                 ) : null}
               </div>
             </div>
@@ -208,7 +221,35 @@ export function LayoutRightPanel({
           <div className="flex items-center gap-3 min-w-0">
             <Logo size="xl" branding={branding ?? undefined} />
           </div>
-          <div className="flex-1 min-w-0" />
+          <div className="w-px h-6 bg-[#e5e7eb] mx-2 shrink-0" />
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+            {icon && (
+              iconTooltip ? (
+                <TooltipProvider delayDuration={300}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="h-8 w-8 rounded-sm bg-primary/10 flex items-center justify-center text-primary shrink-0 cursor-default">
+                        {icon}
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="text-xs">{iconTooltip}</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              ) : (
+                <div className="h-8 w-8 rounded-sm bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                  {icon}
+                </div>
+              )
+            )}
+            <div className="min-w-0">
+              <h2 className="font-headline text-sm font-bold text-[#1b1b1d] truncate" title={title}>
+                {title}
+              </h2>
+              {subtitle && (
+                <p className="text-[10px] text-[#45474c] truncate min-w-0" title={subtitle}>{subtitle}</p>
+              )}
+            </div>
+          </div>
           <div className="flex items-center gap-2 shrink-0">
             {/* Cycle from large → small */}
             <Button

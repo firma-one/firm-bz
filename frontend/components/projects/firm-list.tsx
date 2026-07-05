@@ -96,6 +96,7 @@ export function FirmList({ firms, viewMode = 'grid', activeOrgIdFromJWT }: FirmL
                                     <td className="px-4 py-3">
                                         <Link
                                             href={`/d/f/${org.slug}`}
+                                            prefetch={false}
                                             onClick={(e) => handleOrgClick(e, org)}
                                             className="flex items-center gap-3"
                                         >
@@ -153,6 +154,7 @@ export function FirmList({ firms, viewMode = 'grid', activeOrgIdFromJWT }: FirmL
                     <Link
                         key={org.id}
                         href={`/d/f/${org.slug}`}
+                        prefetch={false}
                         onClick={(e) => handleOrgClick(e, org)}
                         className="group relative bg-white border border-slate-200 rounded-xl p-5 hover:shadow-lg hover:border-slate-300 hover:-translate-y-0.5 transition-all duration-200 flex flex-col h-48"
                     >

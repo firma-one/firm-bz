@@ -15,7 +15,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog'
-import { AlertTriangle, Bell, Building2, ChevronDown, Check, DollarSign, FileText, FlaskConical, Globe, HardDrive, ImageIcon, ImagePlus, Info, Linkedin, Lock, MapPin, MessageCircle, Palette, RefreshCw, RotateCcw, Shield, Trash2, Type, User, Users2, X } from 'lucide-react'
+import { AlertTriangle, Bell, Building2, ChevronDown, Check, DollarSign, FileText, FlaskConical, Globe, HardDrive, ImageIcon, ImagePlus, Info, Linkedin, Lock, MapPin, MessagesSquare, Palette, RefreshCw, RotateCcw, Shield, Trash2, Type, User, Users2, X } from 'lucide-react'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip'
@@ -764,7 +764,7 @@ export function FirmSettingsForm({
                                 )}
                                 <div className="flex items-center justify-between gap-4 pt-1 border-t border-[#f0f0f2]">
                                     <div className="flex items-start gap-2.5">
-                                        <MessageCircle className="h-4 w-4 text-[#45474c] mt-0.5 shrink-0" />
+                                        <MessagesSquare className="h-4 w-4 text-[#45474c] mt-0.5 shrink-0" />
                                         <div>
                                             <div className="text-sm font-semibold text-[#1b1b1d]">Email on @mention</div>
                                             <p className="text-xs text-[#45474c] mt-0.5">Send an email when a user is @mentioned in a comment.</p>

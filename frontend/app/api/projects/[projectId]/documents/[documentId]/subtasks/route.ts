@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
+import { createAdminClient } from '@/utils/supabase/admin'
 import { prisma } from '@/lib/prisma'
 import { getFileInfo } from '@/lib/file-utils'
 import { resolveProjectContext } from '@/lib/resolve-project-context'
@@ -10,9 +11,14 @@ import { parseSettingsFromDb } from '@/lib/sharing-settings'
  * GET /api/projects/[projectId]/documents/[documentId]/subtasks
  * Returns all descendant files of a Deliverable folder that have INHERITED sharing rows.
  * Uses recursive CTE to walk the full folder tree (not just direct children).
+ *
+ * Query params:
+ *   persona=ec  — only return files that have an INHERITED sharing row for an EC member (eng_ext_collaborator)
+ *   persona=ev  — only return files that have an INHERITED sharing row for an EV member (eng_viewer)
+ *   persona=all (default) — return all descendant files regardless of sharing rows
  */
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ projectId: string; documentId: string }> }
 ) {
   try {
@@ -21,6 +27,8 @@ export async function GET(
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const { projectId, documentId: documentIdParam } = await params
+    const persona = request.nextUrl.searchParams.get('persona') ?? 'all'
+
     const ctx = await resolveProjectContext(projectId)
     if (!ctx) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
 
@@ -42,23 +50,51 @@ export async function GET(
     })
     if (!folder || !folder.isFolder) return NextResponse.json({ subtasks: [] })
 
-    // Walk the full descendant tree (any depth) and collect all non-folder file IDs.
-    // We don't filter by INHERITED status — new files added to the deliverable folder
-    // after it was marked won't have sharing rows yet, but they still belong to the deliverable.
-    const descendantIds = (await (prisma as any).$queryRawUnsafe(
-      `WITH RECURSIVE descendants AS (
-         SELECT id, "externalId", "isFolder" FROM platform.engagement_documents
-         WHERE "parentId" = $1 AND "engagementId" = $2::uuid
-         UNION ALL
-         SELECT ed.id, ed."externalId", ed."isFolder" FROM platform.engagement_documents ed
-         INNER JOIN descendants d ON ed."parentId" = d."externalId"
-         WHERE ed."engagementId" = $2::uuid
-       )
-       SELECT id FROM descendants
-       WHERE "isFolder" = false`,
-      folder.externalId,
-      projectId
-    )) as Array<{ id: string }>
+    // Walk the full descendant tree and collect non-folder file IDs.
+    // When persona=ec or persona=ev, additionally filter to files that have an INHERITED
+    // sharing row for a member with the corresponding engagement role.
+    const roleFilter =
+      persona === 'ec' ? 'eng_ext_collaborator' :
+      persona === 'ev' ? 'eng_viewer' :
+      null
+
+    let descendantIds: Array<{ id: string }>
+    if (roleFilter) {
+      descendantIds = (await (prisma as any).$queryRawUnsafe(
+        `WITH RECURSIVE descendants AS (
+           SELECT id, "externalId", "isFolder" FROM platform.engagement_documents
+           WHERE "parentId" = $1 AND "engagementId" = $2::uuid
+           UNION ALL
+           SELECT ed.id, ed."externalId", ed."isFolder" FROM platform.engagement_documents ed
+           INNER JOIN descendants d ON ed."parentId" = d."externalId"
+           WHERE ed."engagementId" = $2::uuid
+         )
+         SELECT DISTINCT d.id FROM descendants d
+         INNER JOIN platform.engagement_document_sharing_users su ON su."projectDocumentId" = d.id
+         INNER JOIN platform.engagement_members em ON em."userId" = su."userId" AND em."engagementId" = su."engagementId"
+         WHERE d."isFolder" = false
+           AND su."sharingPermissionStatus" = 'INHERITED'
+           AND em.role = $3::platform."EngagementRole"`,
+        folder.externalId,
+        projectId,
+        roleFilter
+      )) as Array<{ id: string }>
+    } else {
+      descendantIds = (await (prisma as any).$queryRawUnsafe(
+        `WITH RECURSIVE descendants AS (
+           SELECT id, "externalId", "isFolder" FROM platform.engagement_documents
+           WHERE "parentId" = $1 AND "engagementId" = $2::uuid
+           UNION ALL
+           SELECT ed.id, ed."externalId", ed."isFolder" FROM platform.engagement_documents ed
+           INNER JOIN descendants d ON ed."parentId" = d."externalId"
+           WHERE ed."engagementId" = $2::uuid
+         )
+         SELECT id FROM descendants
+         WHERE "isFolder" = false`,
+        folder.externalId,
+        projectId
+      )) as Array<{ id: string }>
+    }
 
     if (descendantIds.length === 0) return NextResponse.json({ subtasks: [] })
 
@@ -97,7 +133,7 @@ export async function GET(
       return crumbs
     }
 
-    const subtasks = children.map((c) => {
+    const subtasksRaw = children.map((c) => {
       const parsed = parseSettingsFromDb(c.settings)
       const assigneeUserId = (parsed as any).assigneeUserId ?? null
       const breadcrumb = buildBreadcrumb(c.parentId ?? null)
@@ -109,12 +145,37 @@ export async function GET(
         docId: c.docId ?? null,
         dueDate: c.dueDate?.toISOString() ?? null,
         assigneeUserId,
-        assigneeName: null,
-        assigneeEmail: null,
         status: parsed.activity?.status ?? null,
         breadcrumb,
       }
     })
+
+    // Resolve assignee display names for all unique assigneeUserIds
+    const uniqueAssigneeIds = Array.from(new Set(subtasksRaw.map((s) => s.assigneeUserId).filter(Boolean) as string[]))
+    const assigneeMap: Record<string, { name: string | null; email: string | null; avatarUrl: string | null }> = {}
+    if (uniqueAssigneeIds.length > 0) {
+      const admin = createAdminClient()
+      await Promise.allSettled(uniqueAssigneeIds.map(async (userId) => {
+        try {
+          const { data } = await admin.auth.admin.getUserById(userId)
+          const meta = data?.user?.user_metadata ?? {}
+          assigneeMap[userId] = {
+            name: (meta.full_name ?? meta.name ?? data?.user?.email?.split('@')[0] ?? null) as string | null,
+            email: data?.user?.email ?? null,
+            avatarUrl: (meta.avatar_url ?? meta.picture ?? null) as string | null,
+          }
+        } catch {
+          assigneeMap[userId] = { name: null, email: null, avatarUrl: null }
+        }
+      }))
+    }
+
+    const subtasks = subtasksRaw.map((s) => ({
+      ...s,
+      assigneeName: s.assigneeUserId ? (assigneeMap[s.assigneeUserId]?.name ?? null) : null,
+      assigneeEmail: s.assigneeUserId ? (assigneeMap[s.assigneeUserId]?.email ?? null) : null,
+      assigneeAvatarUrl: s.assigneeUserId ? (assigneeMap[s.assigneeUserId]?.avatarUrl ?? null) : null,
+    }))
 
     return NextResponse.json({ subtasks })
   } catch (e) {

@@ -36,8 +36,7 @@ import {
   XSquare,
   FolderLock,
   FolderUp,
-  MessageSquare,
-  MessageCircle,
+  MessagesSquare,
   Link2,
   Lock,
   Unlock,
@@ -47,6 +46,7 @@ import {
   XCircle,
   Building2,
   Loader2,
+  PackageMinus,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -61,6 +61,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useToast } from "@/components/ui/toast"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { useDownloadProgress } from "@/lib/download-progress-context"
 import { SetupReminderModal } from "@/components/ui/setup-reminder-modal"
 import { useAuth } from "@/lib/auth-context"
@@ -111,6 +112,8 @@ interface DocumentActionMenuProps {
   isDeliverable?: boolean
   /** True when this folder is an Approved deliverable — hides Untag, disables Tag with lock tooltip. */
   isApprovedDeliverable?: boolean
+  /** Current activity status of the deliverable — untag is only allowed when 'to_do'. */
+  deliverableStatus?: string
   /** Project Lead / Client Partner / Org Owner: show persona move-tree options and allow Organize. */
   canManage?: boolean
   /** Current root folder type for persona options (Restrict / Restore / Promote). */
@@ -174,6 +177,7 @@ export function DocumentActionMenu({
   onUntagAsDeliverable,
   isDeliverable = false,
   isApprovedDeliverable = false,
+  deliverableStatus,
   canManage = false,
   currentFolderType,
   onMakePrivate,
@@ -646,7 +650,13 @@ export function DocumentActionMenu({
                         </TooltipProvider>
                       ) : isDeliverable ? (
                         <DropdownMenuItem
-                          onClick={() => setShowUntagConfirm(true)}
+                          onClick={() => {
+                            if (deliverableStatus && deliverableStatus !== 'to_do') {
+                              addToast({ type: 'error', title: 'Cannot untag', message: 'Only deliverables with a To Do status can be untagged.' })
+                              return
+                            }
+                            setShowUntagConfirm(true)
+                          }}
                           className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs text-destructive focus:text-destructive"
                         >
                           <XCircle className="h-4 w-4" />
@@ -1066,7 +1076,7 @@ export function DocumentActionMenu({
                     }}
                     className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
                   >
-                    <MessageCircle className="h-4 w-4 text-gray-600" />
+                    <MessagesSquare className="h-4 w-4 text-gray-600" />
                     <span>Comment</span>
                   </DropdownMenuItem>
                 )}
@@ -1401,32 +1411,22 @@ export function DocumentActionMenu({
 
 
       {/* Untag as Deliverable confirmation */}
-      <Dialog open={showUntagConfirm} onOpenChange={setShowUntagConfirm}>
-        <DialogContent className="max-w-sm" onClick={(e) => e.stopPropagation()}>
-          <DialogHeader>
-            <DialogTitle className="text-sm font-semibold">Untag as Deliverable?</DialogTitle>
-          </DialogHeader>
-          <p className="text-xs text-muted-foreground mt-1">
-            This will remove the deliverable tag from <span className="font-medium text-foreground">{document.name}</span> and revoke all sharing access for external collaborators and viewers.
-          </p>
-          <div className="flex justify-end gap-2 mt-4">
-            <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => setShowUntagConfirm(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              size="sm"
-              className="text-xs h-8"
-              onClick={() => {
-                setShowUntagConfirm(false)
-                onUntagAsDeliverable?.(document)
-              }}
-            >
-              Untag
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDialog
+        open={showUntagConfirm}
+        onOpenChange={setShowUntagConfirm}
+        icon={<PackageMinus className="h-3.5 w-3.5" />}
+        iconVariant="red"
+        title="Untag as Deliverable"
+        subtitle="This action will revoke all external access."
+        description={<>This will remove the deliverable tag from <span className="font-semibold text-[#1b1b1d]">{document.name}</span> and revoke all sharing access for external collaborators and viewers.</>}
+        confirmLabel="Untag"
+        confirmVariant="red"
+        onCancel={() => setShowUntagConfirm(false)}
+        onConfirm={() => {
+          setShowUntagConfirm(false)
+          onUntagAsDeliverable?.(document)
+        }}
+      />
 
       {/* Setup Reminder modal */}
       <SetupReminderModal

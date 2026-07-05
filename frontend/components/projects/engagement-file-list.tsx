@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom'
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { CoffeeIcon, type CoffeeIconHandle } from "@/components/ui/coffee-icon"
-import { SquarePlus, Upload, FolderUp, X, Folder, File as FileIcon, ArrowUp, ArrowDown, ChevronRight, Search, List as ListIcon, LayoutGrid, Filter, ChevronDown, User, FileText, FileSpreadsheet, Presentation, ListChecks, PenTool, Map as MapIcon, LayoutTemplate, FileCode, AlertCircle, ShieldCheck, Maximize2, Minimize2, CheckCircle2, XCircle, Trash2, Layout, Code, Laptop, RefreshCw, Info, Share2, Layers, Building2, Users, Briefcase, Lock, FolderLock, Inbox, Sparkles, Link2, MessageCircle, CircleChevronLeft, Download, MoreVertical, Clock } from 'lucide-react'
+import { SquarePlus, Upload, FolderUp, X, Folder, File as FileIcon, ArrowUp, ArrowDown, ChevronRight, Search, List as ListIcon, LayoutGrid, Filter, ChevronDown, User, FileText, FileSpreadsheet, Presentation, ListChecks, PenTool, Map as MapIcon, LayoutTemplate, FileCode, AlertCircle, ShieldCheck, Maximize2, Minimize2, CheckCircle2, XCircle, Trash2, Layout, Code, Laptop, RefreshCw, Info, Share2, Layers, Building2, Users, Briefcase, Lock, FolderLock, Inbox, Sparkles, Link2, MessagesSquare, CircleChevronLeft, Download, MoreVertical, Clock } from 'lucide-react'
 import Fuse from 'fuse.js'
 import { config } from "@/lib/config"
 import { DocumentIcon } from '@/components/ui/document-icon'
@@ -237,7 +237,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
             const docIdForComments = file.projectDocumentId || file.id
             rightPane.setTitle('Comments')
             rightPane.setHeaderActions(null)
-            rightPane.setHeaderIcon(<MessageCircle className="h-4 w-4" />)
+            rightPane.setHeaderIcon(<MessagesSquare className="h-4 w-4" />)
             rightPane.setHeaderSubtitle('Append-only. Visible to all project members.')
             rightPane.setContent(
                 <DocumentDocCommentsPane
@@ -765,7 +765,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
             setActiveCommentDocId(externalId)
             rightPane.setTitle('Comments')
             rightPane.setHeaderActions(null)
-            rightPane.setHeaderIcon(<MessageCircle className="h-4 w-4" />)
+            rightPane.setHeaderIcon(<MessagesSquare className="h-4 w-4" />)
             rightPane.setHeaderSubtitle('Append-only. Visible to all engagement members.')
             rightPane.setContent(
                 <DocumentDocCommentsPane
@@ -2463,7 +2463,7 @@ const handleRefresh = async () => {
                                 projectName={projectName}
                                 onOpenCommentPane={(docId) => {
                                     rightPane.setTitle('Comments')
-                                    rightPane.setHeaderIcon(<MessageCircle className="h-4 w-4" />)
+                                    rightPane.setHeaderIcon(<MessagesSquare className="h-4 w-4" />)
                                     rightPane.setHeaderActions(null)
                                     rightPane.setHeaderSubtitle('Sandbox preview')
                                     rightPane.setContent(

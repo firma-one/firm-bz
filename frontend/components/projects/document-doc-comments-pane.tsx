@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { AtSign, CalendarClock, Eye, MessageCircle, Send, Loader2, Check, ChevronDown, Link2, SlidersHorizontal, Smile, Trash2, UserCheck, X, XSquare } from 'lucide-react'
+import { AtSign, CalendarClock, Eye, MessagesSquare, Send, Loader2, Check, ChevronDown, Link2, SlidersHorizontal, Smile, Trash2, UserCheck, X, XSquare } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useRightPane } from '@/lib/right-pane-context'
@@ -500,11 +500,36 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
       remaining = remaining.slice(match[0].length)
     }
     if (remaining) tokens.push({ type: 'text', value: remaining })
-    return tokens.map((t, i) =>
-      t.type === 'mention'
-        ? <span key={i} className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-primary/10 text-primary leading-none mr-1">{t.value}</span>
-        : <span key={i}>{t.value}</span>
-    )
+    return tokens.map((t, i) => {
+      if (t.type !== 'mention') return <span key={i}>{t.value}</span>
+      const nameWithoutAt = t.value.replace(/^@/, '')
+      const member = firmMembers.find((m) => m.name === nameWithoutAt || m.name === t.value)
+      const initials = nameWithoutAt.split(/[\s._-]/).filter(Boolean).map((p: string) => p[0]).join('').slice(0, 2).toUpperCase() || '?'
+      const pill = (
+        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-primary/10 text-primary leading-none mr-1 cursor-pointer">
+          {t.value}
+        </span>
+      )
+      if (!member) return <span key={i}>{pill}</span>
+      return (
+        <Tooltip key={i}>
+          <TooltipTrigger asChild>{pill}</TooltipTrigger>
+          <TooltipContent side="top" className="z-[9999] p-2 bg-white border border-slate-200 shadow-lg text-xs text-slate-800">
+            <div className="flex items-center gap-2">
+              <div className="h-7 w-7 rounded-full overflow-hidden shrink-0 flex items-center justify-center text-[11px] font-bold bg-primary/20 text-primary">
+                {member.avatarUrl
+                  ? <img src={member.avatarUrl} alt="" className="h-full w-full object-cover" />
+                  : initials}
+              </div>
+              <div>
+                <div className="font-semibold">{member.name}</div>
+                <div className="text-slate-400 text-[10px]">{member.email}</div>
+              </div>
+            </div>
+          </TooltipContent>
+        </Tooltip>
+      )
+    })
   }
 
   // State for editing reminder on an already-posted message (read-only mentions, editable date)
@@ -1452,7 +1477,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
           </div>
         ) : visibleMessages.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 text-gray-500">
-            <MessageCircle className="h-10 w-10 text-gray-300 mb-2" />
+            <MessagesSquare className="h-10 w-10 text-gray-300 mb-2" />
             <p className="text-sm">No comments match the current filters.</p>
           </div>
         ) : (

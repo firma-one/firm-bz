@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { TicketType } from '@prisma/client'
-import { AlertCircle, Lightbulb, HelpCircle, MessageCircle, Copy, Check, Eye, Clock, ChevronDown, RefreshCw, Search, X, CircleChevronLeft } from "lucide-react"
+import { AlertCircle, Lightbulb, HelpCircle, MessagesSquare, Copy, Check, Eye, Clock, ChevronDown, RefreshCw, Search, X, CircleChevronLeft } from "lucide-react"
 import { formatDistanceToNow } from 'date-fns'
 import { cn } from '@/lib/utils'
 import {
@@ -118,7 +118,7 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
     setActiveCommentTicketId(request.ticketNumber)
     setActiveDetailsTicketId(null)
     rightPane.setTitle('Comments')
-    rightPane.setHeaderIcon(<MessageCircle className="h-4 w-4" />)
+    rightPane.setHeaderIcon(<MessagesSquare className="h-4 w-4" />)
     rightPane.setHeaderSubtitle('Append-only. Visible to Firm Administrators.')
     rightPane.setContent(
       <SupportTicketCommentsPane
@@ -516,7 +516,7 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
                               )}
                               aria-pressed={isCommentActive}
                             >
-                              <MessageCircle className="h-4 w-4" />
+                              <MessagesSquare className="h-4 w-4" />
                             </button>
                           </TooltipTrigger>
                           <TooltipContent side="bottom" className="text-xs">Comments ({commentCount})</TooltipContent>

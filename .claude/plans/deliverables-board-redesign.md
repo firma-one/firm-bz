@@ -74,10 +74,33 @@ No backfill needed — the Board has never been in production use (beta flag onl
 
 **New behaviour:** When a folder is marked as a Deliverable (action menu → "Mark as Deliverable"):
 1. Upsert the folder's `settings.share.createdAt` (marks it SHARED / a Deliverable). Status = `to_do`. Assign `docId = NVQ-D-{deliverableSeq}`.
-2. Insert `EngagementDocumentSharingUser` rows for **EL (`eng_admin`) and EM (`eng_member`) only**, with `sharingPermissionStatus = 'GRANTED'`, for the folder itself.
-3. For every non-folder file currently inside the folder, insert GRANTED rows for EL/EM with `sharingPermissionStatus = 'INHERITED'`.
-4. EC and EV rows are **not inserted yet** — they are inserted at lane transitions (In Progress → EC; In Review → EV).
-5. New files added inside this folder via intake → EL/EM INHERITED rows inserted immediately; EC/EV INHERITED rows inserted at the same time as the parent folder's lane transition (bulk fan-out).
+2. Insert `EngagementDocumentSharingUser` rows for **ALL engagement members** (EL, EM, EC, EV), with `sharingPermissionStatus = 'GRANTED'`, for the **folder itself only**.
+3. For every non-folder file currently inside the folder, insert GRANTED rows for **EL/EM only** with `sharingPermissionStatus = 'INHERITED'`. EC/EV child rows come later via lane transitions.
+4. New files added inside this folder via intake → EL/EM INHERITED rows inserted immediately; EC/EV INHERITED rows inserted at the same time as the parent folder's lane transition (bulk fan-out).
+
+**Visibility model — Deliverable folder vs child artefacts:**
+
+| Who | Deliverable folder | Child artefacts |
+|-----|-------------------|-----------------|
+| EL / EM | Visible immediately on tagging | Visible immediately |
+| EC | Visible immediately on tagging | Visible when deliverable moves to `in_progress`+ |
+| EV | Visible immediately on tagging | Visible when deliverable moves to `in_review`+ |
+
+The Deliverable is a project milestone — everyone sees it exists from day 1. Only the *contents* are gated by workflow stage.
+
+**Access is additive — no revocation on backward moves:**
+- When a deliverable moves back (e.g. `in_review → in_progress`), EV retains their child artefact rows.
+- Backward moves affect workflow state only, not access.
+
+**Child artefact visibility in Deliverable detail pane (EC/EV):**
+EC and EV see a child document in the detail pane only when **both** conditions are met:
+1. A sharing row exists for that child (`INHERITED` or `GRANTED`)
+2. The deliverable's current status meets their threshold (`in_progress`+ for EC, `in_review`+ for EV)
+
+Individual document status is **not** used as a visibility gate (removed to avoid confusion when a doc is moved backward).
+
+**Backfill for newly added children:**
+When a file is added to a Deliverable folder that is already `in_progress`+, insert EC rows immediately (and EV rows if `in_review`+) — don't wait for the next status transition.
 
 **Why not insert EC/EV rows upfront with REVOKED status:** Option kept simple — EC/EV rows only exist when access is active. The assignee picker queries `sharingPermissionStatus = 'GRANTED'` so it naturally shows only the members with current access for the active stage. In To Do, that's EL/EM; after In Progress transition it includes EC; after In Review it includes EV. No special picker logic needed.
 
@@ -165,6 +188,74 @@ grep -rn "Viewer (External)\|Guest\b\|eng_viewer.*display\|displayName.*viewer" 
 ---
 
 ## Phase 3B — Approved Deliverable: Lock / Unlock Rules ✅ IMPLEMENTED
+
+---
+
+## Phase 4C/4D — Deliverable Detail Panel ✅ SUBSTANTIALLY IMPLEMENTED
+
+**Status:** Core panel is live. Remaining gaps noted below.
+
+### What's implemented
+
+- `deliverable-detail-panel.tsx` — Jira-style right-pane panel with Details / Comments / Settings tabs
+- **Stage badge row:** EL gets full Select dropdown (all ±1 moves); EM/EC/EV get a single action button ("Submit for Review" or "Request Changes") based on `getAllowedTransitions`; static badge for roles with no allowed move
+- **Description field:** Editable textarea for EL; read-only `<p>` for EC/EV when a description exists; hidden when empty for non-EL
+- **Subtasks list:** INHERITED children fetched via `/api/projects/[projectId]/documents/[documentId]/subtasks?persona=ec|ev|all`; EC sees files from `in_progress`+, EV sees files from `in_review`+
+- **Documents progress bar:** Thin progress bar showing approvedCount/total above subtask list
+- **Assignee picker:** Per-subtask avatar chip + dropdown for all engagement members (Phase 4F partially completed)
+- **Comments tab:** `DocumentDocCommentsPane` scoped to deliverable folder's `projectDocumentId`
+- **Settings (delivery) tab:** EC/EV sharing toggles (download, PDF-only, watermark) — EL-only
+- **Success toasts:** Both panel button moves and board drag moves emit `type: 'success'` toast on success
+- **Cross-fade animation:** Framer Motion `AnimatePresence mode="wait"` on right pane, keyed by `contentKey` (increments on every `setContent`)
+- **Pane switching:** Clicking a different board card reloads the panel; same-card click is a no-op
+
+### What's NOT yet implemented (gaps)
+
+- `#DOC_ID` tag autocomplete in comments → Phase 6A (depends on Phase 1A DOC_ID population)
+- History tab → Phase 10 (ON HOLD)
+- `deeplinkBase` not passed into `DocumentDocCommentsPane` (component doesn't accept the prop yet)
+
+---
+
+## Phase 4E — Board Interaction Rules ✅ IMPLEMENTED
+
+**Single source of truth:** `getAllowedTransitions(role, currentStatus)` in `lib/deliverable-stage-roles.ts` — consumed by the API route, the detail panel button, and the board drag handler.
+
+### Transition rules (as implemented)
+
+| Role | Allowed moves |
+|------|--------------|
+| EL (`eng_admin`) | Any ±1 move, including approve |
+| EM (`eng_member`) | Any ±1 move except approve (`to_do↔in_progress`, `in_progress↔in_review`) |
+| EC (`eng_ext_collaborator`) | `in_progress → in_review` only (submit for review) |
+| EV (`eng_viewer`) | `in_review → in_progress` only (push back / request changes) |
+
+### Board drag behaviour
+
+- **EL drags** → routed through `shares/order` PUT (bulk reorder with full orderIndex update + EC/EV flag sync)
+- **EM/EC/EV drags** → routed through `sharing/activity` PATCH (single-deliverable status change)
+- **Same-lane reorder** → always allowed for any role that can see the lane (no status change, just orderIndex update for EL; no-op for others if same lane)
+- **Illegal move** → error toast; board state rolled back
+- **Approved lane → any move** → blocked for all roles (approved is final)
+
+### Board visibility for EC/EV
+
+- Any deliverable with `activity.status` set is visible on the board (regardless of current lane)
+- Board visibility ≠ file access: a deliverable pushed back to `in_progress` from `in_review` stays visible to EV on the board; only the *files inside* are gated by the sharing rows written at lane-transition time
+
+---
+
+## Phase 4F — Board Audit Fixes ✅ IMPLEMENTED
+
+Fixes applied after audit of the board feature:
+
+1. **Board search/filters** — `byLane` (board view) now uses `filteredShares` (a `useMemo` computed before `byLane`) instead of raw `shares`. Search query, type filter, date filter, and shared-by filter all apply to the board.
+2. **Description for EC/EV** — Description field shows for all roles when a value exists: editable for EL, read-only `<p>` for others. Hidden for non-EL only when empty.
+3. **Success toast on status move** — Panel button (`handleMoveToNext`) and board drag (non-EL PATCH path) both emit success toast after successful status change.
+4. **`canApproveDeliverable` corrected** — Fixed bug: only `eng_admin` (EL) can approve; EV was incorrectly listed. `getAllowedTransitions` already enforced this correctly; the standalone function now matches.
+5. **Same-lane reorder for EM/EC** — Removed `&& canManage` guard; same-lane drag is always allowed for any role that can see the lane.
+6. **Intake failure toast** — `handleIntakeAction` now shows error toast on failure (was silently failing before).
+7. **`canViewDeliverable` not used for board visibility** — Board uses `activity.status` presence check (correct); `canViewDeliverable` is the right gate for API/sharing layer, not board card visibility. The function has been corrected to be accurate but is not wired into board visibility.
 
 ### What is locked when status = `approved`
 
@@ -342,9 +433,10 @@ Reviewer [EV]
 
 Each INHERITED file can have one designated assignee — a single member from the existing `EngagementDocumentSharingUser` rows for that file. Store in `EngagementDocument.settings.assigneeUserId` (existing `settings` JSONB — no new column needed).
 
-- **Picker:** In the subtask row, clicking the assignee avatar opens a dropdown listing only users with `sharingPermissionStatus = 'GRANTED'` for that file. This naturally scopes to EL/EM in To Do, adds EC in In Progress, adds EV in In Review — no special logic needed.
-- **API:** `PATCH /api/projects/[projectId]/documents/[documentId]` with `{ assigneeUserId: string | null }` — writes to `settings.assigneeUserId`. Validate that the userId has a GRANTED row for this document.
-- **Display:** Avatar + name chip in the subtask row; empty state shows a "Assign" placeholder.
+- **Picker:** In the subtask row, clicking the assignee avatar opens a dropdown listing **all engagement members** (same list regardless of role). Membership is queried from `EngagementMember` for the engagement, resolved to display names via Supabase admin user lookup. No GRANTED-row filter — assignee can be anyone on the engagement.
+- **API:** `PATCH /api/projects/[projectId]/documents/[documentId]/assignee` with `{ assigneeUserId: string | null }` — writes to `settings.assigneeUserId`. Validate that the userId is a member of the engagement.
+- **Save mechanism:** Same pattern as status PATCH — optimistic UI update, fire-and-forget PATCH, revert on error.
+- **Display:** Avatar chip + name in the subtask row; empty state shows an "Assign" placeholder button. Shown in both the detail pane subtask list and the Board card subtask view.
 - **Notification:** On assignee change, create an in-app notification for the newly assigned user (type: `SUBTASK_ASSIGNED`, CTA deeplinks to the Deliverable board card).
 
 > **Note on DOC_ID:** All records — files and folders — share the same `docId` format (e.g. `NVQ-7`) from a single sequence on `Engagement.docIdSeq`. No prefix distinction between files and folders; `isFolder` already identifies the record type.
@@ -353,6 +445,81 @@ Each INHERITED file can have one designated assignee — a single member from th
 - When user types `#` in the comment box, show a dropdown of files with `sharingPermissionStatus = 'INHERITED'` under this Deliverable folder.
 - Format: `#NAV-7 Budget Sheet Q1`
 - Stored as `#NAV-7` in comment content (parse on render for linkification).
+
+---
+
+## Phase 4E — Due Date Reminders ⏸ ON HOLD
+
+> Implement after Phase 4D (Deliverable detail panel) is stable.
+
+**Goal:** When a due date is set on a Deliverable or a child document, create reminders for all engagement members.
+
+**Scope:** Deliverable-level due date only. Child document due dates do not trigger reminders (MVP).
+
+**Who gets notified:**
+
+Since the Deliverable folder is visible to everyone from tagging time, all engagement members are notified — no status filter needed.
+
+| Reminder target | Recipients |
+|---|---|
+| Deliverable due date | All engagement members (EL, EM, EC, EV) |
+| ~~Child document due date~~ | ~~Not in scope for now~~ |
+
+**Trigger:** When `PATCH /api/projects/[projectId]/documents/[documentId]/due-date` is called on a **Deliverable folder** (`isFolder = true` and `settings.share.createdAt` set) with a non-null date, schedule a reminder job via Inngest (`scheduleDeliverableReminder`) for `dueDate - 24h` and `dueDate - 1h`.
+
+**Notification content:**
+- Type: `DELIVERABLE_DUE_REMINDER`
+- Title: `"{deliverableName} is due {tomorrow / in 1 hour}"`
+- CTA: deeplink to Board card `#doc-file:{documentId}`
+
+**Edge cases:**
+- If due date is cleared, cancel any pending reminder jobs for that document.
+- If due date is updated, cancel previous jobs and reschedule.
+- Reminder jobs check current deliverable status at fire time — if already `approved`, skip silently.
+
+**Schema:** No new columns — `dueDate` already exists on `EngagementDocument`. Reminder job IDs stored transiently in Inngest (no DB tracking needed for MVP).
+
+---
+
+## Phase 4F — Assignee Dropdown (Document level) ⏸ ON HOLD
+
+> Can be implemented alongside or after Phase 4D.
+
+**Goal:** Each child document (subtask) inside a Deliverable can have one assignee — any engagement member. Surfaced as an avatar chip + dropdown in the subtask row of the Deliverable detail pane.
+
+**Schema:** No new DB column — stored in `EngagementDocument.settings.assigneeUserId` (existing `settings` JSONB).
+
+**New API endpoint:**
+
+`PATCH /api/projects/[projectId]/documents/[documentId]/assignee`
+```typescript
+// Body
+{ assigneeUserId: string | null }
+// Validates: userId is an EngagementMember of this engagement
+// Writes: settings.assigneeUserId
+// On change: fires SUBTASK_ASSIGNED notification to new assignee
+```
+
+**Member list API:** Reuse existing `GET /api/projects/[projectId]/members` — returns all engagement members with display name + avatar. Fetched once per panel open, shared across all subtask rows.
+
+**UI — subtask row:**
+
+```
+[doc icon] [VFH-68] [filename truncated]       [Assign ▾]  [Status ▾]  [Due date]  [...]
+```
+
+- Empty state: ghost "Assign" button with `UserPlus` icon
+- Filled state: avatar chip with initials + name truncated
+- Dropdown: searchable list of all engagement members, grouped by role (EL/EM / EC / EV)
+- Clear option: "Unassign" at bottom of dropdown
+
+**Files to create/modify:**
+
+| File | Change |
+|---|---|
+| `app/api/projects/[projectId]/documents/[documentId]/assignee/route.ts` (new) | PATCH endpoint — validate member, write `settings.assigneeUserId`, fire notification |
+| `components/projects/shares/deliverable-detail-panel.tsx` | Add assignee state + dropdown to `SubtaskRow`; fetch member list on panel open |
+| `components/ui/assignee-picker.tsx` (new) | Reusable avatar chip + searchable dropdown for member selection |
 
 ---
 

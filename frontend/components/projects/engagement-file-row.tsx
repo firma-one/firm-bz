@@ -518,6 +518,7 @@ export function EngagementFileRow({
                         isAncestorShared={isAncestorShared}
                         isDeliverable={isFolder && !!file.isDeliverable}
                         isApprovedDeliverable={isFolderApproved || isInsideApprovedDeliverable}
+                        deliverableStatus={(file as any).deliverableStatus ?? undefined}
                         isEngagementLead={isProjectLead}
                         isExternalUser={isEC || isGuest}
                         isExternalViewer={isGuest}

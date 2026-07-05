@@ -6,7 +6,7 @@ import { syncDocumentSharingUsers } from '@/lib/sync-document-sharing'
 import { EngagementRole, DocumentSharingPermissionStatus } from '@prisma/client'
 import { getFileInfo } from '@/lib/file-utils'
 import { getProjectPersona } from '@/lib/permission-helpers'
-import { STAGE_ROLE_MAP } from '@/lib/deliverable-stage-roles'
+import { STAGE_ROLE_MAP, getAllowedTransitions, type EngagementRoleSlug } from '@/lib/deliverable-stage-roles'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 
 const VALID_STATUSES: ActivityStatus[] = ['to_do', 'in_progress', 'in_review', 'approved']
@@ -28,11 +28,8 @@ export async function PATCH(
 
     const { projectId, documentId: documentIdParam } = await params
     const { resolveProjectContext } = await import('@/lib/resolve-project-context')
-    const { canViewProjectInternalTabs } = await import('@/lib/permission-helpers')
     const ctx = await resolveProjectContext(projectId)
     if (!ctx) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
-    const canView = await canViewProjectInternalTabs(ctx.orgId, ctx.clientId, ctx.projectId)
-    if (!canView) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     const fileInfo = await getFileInfo(projectId, documentIdParam)
     if (!fileInfo)
@@ -43,14 +40,6 @@ export async function PATCH(
     if (!status)
       return NextResponse.json({ error: 'Invalid or missing status' }, { status: 400 })
     const orderIndex = typeof body.orderIndex === 'number' && body.orderIndex >= 0 ? body.orderIndex : undefined
-
-    // Role gate: only EL (eng_admin) or Reviewer (eng_viewer) can move to 'approved'
-    if (status === 'approved') {
-      const role = await getProjectPersona(ctx.firmId, ctx.clientId, ctx.projectId)
-      if (role !== 'eng_admin' && role !== 'eng_viewer') {
-        return NextResponse.json({ error: 'Only Engagement Leads or Reviewers can approve deliverables.' }, { status: 403 })
-      }
-    }
 
     const existing = await prisma.engagementDocument.findUnique({
       where: {
@@ -67,6 +56,19 @@ export async function PATCH(
     const parsed = parseSettingsFromDb(existing.settings)
     if (parsed.share?.finalizedAt)
       return NextResponse.json({ error: 'Share is finalized and cannot be updated' }, { status: 403 })
+
+    const role = await getProjectPersona(ctx.firmId, ctx.clientId, ctx.projectId)
+    const currentStatus = (parsed.activity?.status ?? 'to_do') as ActivityStatus
+
+    // Gate on allowed transitions — single source of truth from deliverable-stage-roles.ts:
+    //   EL  (eng_admin):            any ±1 move, including approve
+    //   EM  (eng_member):           any ±1 move except approve
+    //   EC  (eng_ext_collaborator): in_progress → in_review only (submit for review)
+    //   EV  (eng_viewer):           in_review → in_progress only (request changes / push back)
+    const allowed = getAllowedTransitions(role as EngagementRoleSlug, currentStatus)
+    if (!allowed.includes(status)) {
+      return NextResponse.json({ error: 'This move is not permitted for your role.' }, { status: 403 })
+    }
 
     const oldStatus = parsed.activity?.status
     const stageConfig = STAGE_ROLE_MAP[status]

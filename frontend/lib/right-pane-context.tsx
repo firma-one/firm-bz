@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
+import { createContext, useContext, useState, useCallback, useRef, type ReactNode } from 'react'
 
 /** Current search root (scope) when Search pane is open; updated by file list when breadcrumb root changes. */
 export type SearchRootValue = {
@@ -18,12 +18,17 @@ export type PaneSize = 'small' | 'medium' | 'large'
  */
 type RightPaneContextValue = {
   content: ReactNode
+  /** Increments each time setContent is called — use as animation key. */
+  contentKey: number
   title: string
   setContent: (node: ReactNode) => void
   setTitle: (t: string) => void
   /** Optional icon to show next to the title in the right panel header. */
   headerIcon: ReactNode
   setHeaderIcon: (node: ReactNode) => void
+  /** Optional tooltip text for the header icon. */
+  iconTooltip: string
+  setIconTooltip: (t: string) => void
   /** Optional subtitle to show under the title in the right panel header. */
   headerSubtitle: string
   setHeaderSubtitle: (t: string) => void
@@ -49,16 +54,24 @@ const RightPaneContext = createContext<RightPaneContextValue | null>(null)
 
 export function RightPaneProvider({ children }: { children: ReactNode }) {
   const [content, setContentState] = useState<ReactNode>(null)
+  const contentKeyRef = useRef(0)
+  const [contentKey, setContentKey] = useState(0)
   const [title, setTitleState] = useState<string>('')
   const [headerIcon, setHeaderIconState] = useState<ReactNode>(null)
+  const [iconTooltip, setIconTooltipState] = useState<string>('')
   const [headerSubtitle, setHeaderSubtitleState] = useState<string>('')
   const [headerActions, setHeaderActionsState] = useState<ReactNode>(null)
   const [searchRoot, setSearchRootState] = useState<SearchRootValue>(null)
   const [paneSize, setPaneSizeState] = useState<PaneSize>('small')
 
-  const setContent = useCallback((node: ReactNode) => setContentState(node), [])
+  const setContent = useCallback((node: ReactNode) => {
+    contentKeyRef.current += 1
+    setContentKey(contentKeyRef.current)
+    setContentState(node)
+  }, [])
   const setTitle = useCallback((t: string) => setTitleState(t), [])
   const setHeaderIcon = useCallback((node: ReactNode) => setHeaderIconState(node), [])
+  const setIconTooltip = useCallback((t: string) => setIconTooltipState(t), [])
   const setHeaderSubtitle = useCallback((t: string) => setHeaderSubtitleState(t), [])
   const setHeaderActions = useCallback((node: ReactNode) => setHeaderActionsState(node), [])
   const setSearchRoot = useCallback((v: SearchRootValue) => setSearchRootState(v), [])
@@ -68,6 +81,7 @@ export function RightPaneProvider({ children }: { children: ReactNode }) {
     setContentState(null)
     setTitleState('')
     setHeaderIconState(null)
+    setIconTooltipState('')
     setHeaderSubtitleState('')
     setHeaderActionsState(null)
     setPaneSizeState('small')
@@ -82,8 +96,9 @@ export function RightPaneProvider({ children }: { children: ReactNode }) {
   return (
     <RightPaneContext.Provider
       value={{
-        content, title, setContent, setTitle,
+        content, contentKey, title, setContent, setTitle,
         headerIcon, setHeaderIcon,
+        iconTooltip, setIconTooltip,
         headerSubtitle, setHeaderSubtitle,
         clearPane,
         headerActions, setHeaderActions,
@@ -102,9 +117,10 @@ export function useRightPane(): RightPaneContextValue {
   const ctx = useContext(RightPaneContext)
   if (!ctx) {
     return {
-      content: null, title: '',
+      content: null, contentKey: 0, title: '',
       setContent: () => {}, setTitle: () => {},
       headerIcon: null, setHeaderIcon: () => {},
+      iconTooltip: '', setIconTooltip: () => {},
       headerSubtitle: '', setHeaderSubtitle: () => {},
       clearPane: () => {},
       headerActions: null, setHeaderActions: () => {},
