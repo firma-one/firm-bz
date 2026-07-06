@@ -1649,9 +1649,12 @@ export const sendRecurringReminderEmails = inngest.createFunction(
 // ---------------------------------------------------------------------------
 
 /**
- * Sends reminder emails to all engagement members when a Deliverable due date
- * is approaching. Fires at 24h and 1h before the due date.
+ * Notifies all engagement members when a Deliverable due date is approaching.
+ * Fires at 24h and 1h before the due date, sending both an email and an in-app
+ * DELIVERABLE_DUE_REMINDER notification to every member.
  * Cancelled when the due date is cleared or changed (same documentId).
+ * Skips silently at fire time if the date was changed or the deliverable is
+ * already approved.
  */
 export const sendDeliverableDueReminder = inngest.createFunction(
     {
@@ -1663,58 +1666,90 @@ export const sendDeliverableDueReminder = inngest.createFunction(
         }],
     },
     async ({ event, step }: any) => {
-        const { documentId, documentName, dueDate, memberUserIds, boardUrl } = event.data
+        const { documentId, documentName, dueDate, memberUserIds, boardUrl, firmId, clientId, engagementId } = event.data
         const due = new Date(dueDate)
+        const dueDay = due.toISOString().slice(0, 10)
 
-        const sendToMembers = async (subject: string, body: string) => {
+        // Fetch current state at fire time — skip stale (date-changed) or approved deliverables
+        const getState = async () => {
+            const doc = await prisma.engagementDocument.findUnique({
+                where: { id: documentId },
+                select: { dueDate: true, settings: true },
+            })
+            if (!doc) return { dateStillSet: false, isApproved: false }
+            const { parseSettingsFromDb } = await import("@/lib/sharing-settings")
+            let isApproved = false
+            try { isApproved = parseSettingsFromDb(doc.settings as any).activity?.status === 'approved' } catch { /* ignore */ }
+            return { dateStillSet: doc.dueDate?.toISOString() === dueDate, isApproved }
+        }
+
+        const sendEmails = async (action: string, entityName: string) => {
             const { createAdminClient } = await import("@/utils/supabase/admin")
             const { sendEmail } = await import("@/lib/email")
+            const { renderReminderEmail } = await import("@/lib/email-templates/reminder")
             const admin = createAdminClient()
             const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
             const cta = boardUrl ? `${appUrl}${boardUrl}` : null
-            const ctaLink = cta ? `<p><a href="${cta}" style="color:#5A78FF">View Deliverable &rarr;</a></p>` : ''
+            const { subject, html } = renderReminderEmail({
+                entityName,
+                action,
+                ctaUrl: cta,
+                ctaLabel: 'View Deliverable →',
+                kind: 'created',
+            })
             await Promise.allSettled((memberUserIds as string[]).map(async (userId: string) => {
                 const { data } = await admin.auth.admin.getUserById(userId)
                 const email = data?.user?.email
                 if (!email) return
-                await sendEmail(email, subject, `${body}${ctaLink}`)
+                await sendEmail(email, subject, html)
             }))
         }
 
-        const isDateStillSet = async () => {
-            const doc = await prisma.engagementDocument.findUnique({
-                where: { id: documentId },
-                select: { dueDate: true },
-            })
-            return doc?.dueDate?.toISOString() === dueDate
+        const createInAppNotifications = async (title: string, windowKey: string) => {
+            const rows = (memberUserIds as string[]).map((userId) => ({
+                firmId: firmId ?? null,
+                clientId: clientId ?? null,
+                engagementId: engagementId ?? null,
+                documentId,
+                userId,
+                type: 'DELIVERABLE_DUE_REMINDER',
+                title,
+                body: `Due ${dueDay}`,
+                ctaUrl: boardUrl ?? null,
+                metadata: { dueDate, window: windowKey },
+                channels: { inApp: true, email: false },
+                dedupeKey: `deliverable:${documentId}:duerem:${windowKey}:${dueDay}`,
+            }))
+            if (rows.length) {
+                await (prisma as any).notification.createMany({ data: rows, skipDuplicates: true })
+            }
+        }
+
+        // Fires one reminder window: skip if stale/approved, else email + in-app notify all members
+        const fire = async (windowKey: '24h' | '1h', whenLabel: string) => {
+            const { dateStillSet, isApproved } = await getState()
+            if (!dateStillSet) return { skipped: 'date-changed' }
+            if (isApproved) return { skipped: 'approved' }
+            await sendEmails(
+                `Due ${whenLabel}: ${documentName}`,
+                `<p><strong>${documentName}</strong> is due ${whenLabel} (<strong>${dueDay}</strong>).</p>`
+            )
+            await createInAppNotifications(`${documentName} is due ${whenLabel}`, windowKey)
+            return { sent: true }
         }
 
         // 24h reminder
         const at24h = new Date(due.getTime() - 24 * 60 * 60 * 1000)
         if (at24h > new Date()) {
             await step.sleepUntil("wait-24h", at24h.toISOString())
-            await step.run("send-24h", async () => {
-                if (!(await isDateStillSet())) return { skipped: 'date-changed' }
-                await sendToMembers(
-                    `Due tomorrow: ${documentName}`,
-                    `<p><strong>${documentName}</strong> is due tomorrow (<strong>${due.toISOString().slice(0, 10)}</strong>).</p>`
-                )
-                return { sent: true }
-            })
+            await step.run("send-24h", () => fire('24h', 'tomorrow'))
         }
 
         // 1h reminder
         const at1h = new Date(due.getTime() - 60 * 60 * 1000)
         if (at1h > new Date()) {
             await step.sleepUntil("wait-1h", at1h.toISOString())
-            await step.run("send-1h", async () => {
-                if (!(await isDateStillSet())) return { skipped: 'date-changed' }
-                await sendToMembers(
-                    `Due in 1 hour: ${documentName}`,
-                    `<p><strong>${documentName}</strong> is due in 1 hour (<strong>${due.toISOString().slice(0, 10)}</strong>).</p>`
-                )
-                return { sent: true }
-            })
+            await step.run("send-1h", () => fire('1h', 'in 1 hour'))
         }
 
         return { documentId, dueDate }

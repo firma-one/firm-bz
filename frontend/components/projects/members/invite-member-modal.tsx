@@ -104,7 +104,7 @@ export function InviteMemberModal({ projectId, open, onOpenChange, personas, pre
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[480px] border-[#e5e7eb] p-0 gap-0 rounded-[2px] bg-[#f9f9fb]">
+            <DialogContent className="sm:max-w-[480px] border-[#e5e7eb] p-0 gap-0 rounded bg-[#f9f9fb]">
                 <VisuallyHidden><DialogTitle>Invite to Engagement</DialogTitle></VisuallyHidden>
 
                 {/* Header */}
@@ -157,7 +157,7 @@ export function InviteMemberModal({ projectId, open, onOpenChange, personas, pre
                                 <SelectTrigger className={inputCls}>
                                     <SelectValue placeholder="Select a persona" />
                                 </SelectTrigger>
-                                <SelectContent className="rounded-[2px] border border-[#e5e7eb] bg-white shadow-md py-0.5 min-w-[var(--radix-select-trigger-width)]">
+                                <SelectContent className="rounded border border-[#e5e7eb] bg-white shadow-md py-0.5 min-w-[var(--radix-select-trigger-width)]">
                                     {personas.map((p) => (
                                         <SelectItem key={p.id} value={p.id} className="cursor-pointer rounded-none py-1 px-2.5 !text-[0.8125rem] text-[#45474c] outline-none focus:bg-[#f9f9fb] data-[state=checked]:bg-primary/10 data-[state=checked]:border-l-2 data-[state=checked]:border-brand-accent data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-[#f9f9fb]">
                                             {p.displayName}
@@ -191,14 +191,14 @@ export function InviteMemberModal({ projectId, open, onOpenChange, personas, pre
 
                     {/* Footer */}
                     <div className="px-5 py-3 border-t border-[#e5e7eb] bg-white flex items-center justify-end gap-3">
-                        <Button type="button" variant="outline" className="rounded-[2px] w-28 text-[10px] font-headline font-bold tracking-widest uppercase" onClick={() => onOpenChange(false)}>
+                        <Button type="button" variant="outline" className="rounded w-28 text-[10px] font-headline font-bold tracking-widest uppercase" onClick={() => onOpenChange(false)}>
                             Cancel
                         </Button>
                         <Button
                             type="submit"
                             variant="greenCta"
                             disabled={isSandboxFirm || isSubmitting || !selectedPersonaId || !email || !!emailError}
-                            className="rounded-[2px] w-36 text-[10px] font-headline font-bold tracking-widest uppercase text-white"
+                            className="rounded w-36 text-[10px] font-headline font-bold tracking-widest uppercase text-white"
                         >
                             {isSubmitting ? <LoadingSpinner size="sm" /> : 'Send Invitation'}
                         </Button>

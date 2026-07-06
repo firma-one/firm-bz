@@ -18,7 +18,7 @@ import {
   type DraggableAttributes,
 } from '@dnd-kit/core'
 import type { SyntheticListenerMap } from '@dnd-kit/core/dist/hooks/utilities'
-import { Share2, User, Lock, ListTodo, CheckCircle, Eye, GripVertical, FolderOpen, Clock, Copy, Check, Search, MessagesSquare, Link2, ScanEye, X, RefreshCw, ChevronDown, Filter, CheckCircle2, Trash2, BookOpenText, PenLine, PackagePlus, PackageCheck } from 'lucide-react'
+import { Share2, User, Lock, ListTodo, CheckCircle, Eye, GripVertical, FolderOpen, Clock, Copy, Check, Search, MessagesSquare, Link2, ScanEye, X, RefreshCw, ChevronDown, ChevronLeft, ChevronRight, Filter, CheckCircle2, Trash2, BookOpenText, PenLine, PackagePlus, PackageCheck } from 'lucide-react'
 import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
 import { DocumentBreadcrumb } from '@/components/ui/document-breadcrumb'
 import { DocumentIcon } from '@/components/ui/document-icon'
@@ -1569,23 +1569,22 @@ export function EngagementSharesTab({
   const [detailShareId, setDetailShareId] = useState<string | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
-  const [filterShared, setFilterShared] = useState<'all' | 'by_me' | 'by_others' | 'with_collaborator' | 'with_viewer' | 'pending_approval'>('all')
-  const [filterSharedOpen, setFilterSharedOpen] = useState(false)
-  const [filterTypes, setFilterTypes] = useState<Set<string>>(new Set())
-  const [filterTypeOpen, setFilterTypeOpen] = useState(false)
-  const [filterModified, setFilterModified] = useState<'any' | '7d' | '30d' | 'year'>('any')
-  const [filterModifiedOpen, setFilterModifiedOpen] = useState(false)
+  const [filterOverdue, setFilterOverdue] = useState(false)
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [intakeActionInProgress, setIntakeActionInProgress] = useState<string | null>(null)
   const [openDeliverableId, setOpenDeliverableId] = useState<string | null>(null)
   const [savingId, setSavingId] = useState<string | null>(null)
+  const [approvedCollapsed, setApprovedCollapsed] = useState(false)
   // Stable ref — panel registers its setStatus here so drag-drop can update it without remounting
   const panelStatusSetterRef = React.useRef<((s: ActivityStatus) => void) | null>(null)
 
-  // Clear highlight when the right pane is closed externally (e.g. user opens Comments instead)
+  // Clear highlight and hash when the right pane is closed externally (e.g. X button or tab switch)
   useEffect(() => {
-    if (!rightPane.content) setOpenDeliverableId(null)
+    if (!rightPane.content) {
+      setOpenDeliverableId(null)
+      window.history.replaceState(null, '', window.location.pathname + window.location.search)
+    }
   }, [rightPane.content])
 
   const { addToast } = useToast()
@@ -1796,6 +1795,7 @@ export function EngagementSharesTab({
   const handleOpenDeliverableDetail = useCallback(
     (share: ShareRecord) => {
       setOpenDeliverableId(share.id)
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#doc-file:${share.documentId}`)
       rightPane.setTitle(share.docId ?? share.documentName)
       rightPane.setHeaderSubtitle(share.documentName)
       rightPane.setHeaderIcon(<PackagePlus className="h-4 w-4" />)
@@ -1834,7 +1834,7 @@ export function EngagementSharesTab({
             )
           }}
           externalStatusRef={panelStatusSetterRef}
-          onClose={() => { setOpenDeliverableId(null); rightPane.clearPane() }}
+          onClose={() => { setOpenDeliverableId(null); rightPane.clearPane(); window.history.replaceState(null, '', window.location.pathname + window.location.search) }}
         />
       )
     },
@@ -1855,7 +1855,6 @@ export function EngagementSharesTab({
     if (share) {
       deeplinkHandledRef.current = true
       handleOpenDeliverableDetail(share)
-      window.history.replaceState(null, '', window.location.pathname + window.location.search)
     }
   }, [isLoading, shares, handleOpenDeliverableDetail])
 
@@ -1888,42 +1887,17 @@ export function EngagementSharesTab({
     const q = searchQuery.trim().toLowerCase()
     return shares.filter((s) => {
       if (q.length > 0) {
-        const hay = [s.documentName, s.createdByEmail, s.updatedByEmail, s.createdBy, s.updatedBy]
+        const hay = [s.documentName, s.docId, s.createdByEmail, s.updatedByEmail, s.createdBy, s.updatedBy]
           .filter(Boolean).join(' ').toLowerCase()
         if (!hay.includes(q)) return false
       }
-      if (filterTypes.size > 0) {
-        const m = (s.documentMimeType ?? '').toLowerCase()
-        const isFolder = m.includes('folder')
-        const matched =
-          (filterTypes.has('folder') && isFolder) ||
-          (filterTypes.has('document') && !isFolder && (m.includes('document') || m.includes('wordprocessingml'))) ||
-          (filterTypes.has('spreadsheet') && !isFolder && (m.includes('spreadsheet') || m.includes('spreadsheetml'))) ||
-          (filterTypes.has('presentation') && !isFolder && (m.includes('presentation') || m.includes('presentationml'))) ||
-          (filterTypes.has('image') && !isFolder && m.includes('image')) ||
-          (filterTypes.has('other') && !isFolder &&
-            !m.includes('folder') && !m.includes('document') && !m.includes('wordprocessingml') &&
-            !m.includes('spreadsheet') && !m.includes('spreadsheetml') &&
-            !m.includes('presentation') && !m.includes('presentationml') &&
-            !m.includes('image'))
-        if (!matched) return false
+      if (filterOverdue) {
+        if (!s.dueDate) return false
+        if (new Date(s.dueDate).getTime() >= Date.now()) return false
       }
-      if (filterModified !== 'any') {
-        const t = new Date(s.updatedAt).getTime()
-        const now = Date.now()
-        const day = 86400000
-        if (filterModified === '7d' && now - t > 7 * day) return false
-        if (filterModified === '30d' && now - t > 30 * day) return false
-        if (filterModified === 'year' && new Date(s.updatedAt).getFullYear() !== new Date().getFullYear()) return false
-      }
-      if (filterShared === 'by_me') return !!currentUserEmail && s.createdByEmail === currentUserEmail
-      if (filterShared === 'by_others') return !currentUserEmail || s.createdByEmail !== currentUserEmail
-      if (filterShared === 'with_collaborator') return !!s.settings.externalCollaborator
-      if (filterShared === 'with_viewer') return !!s.settings.guest
-      if (filterShared === 'pending_approval') return !!s.pendingApproval
       return true
     })
-  }, [shares, searchQuery, filterTypes, filterModified, filterShared, currentUserEmail])
+  }, [shares, searchQuery, filterOverdue])
 
   const byLane = React.useMemo(() => {
     const toDo: ShareRecord[] = []
@@ -2134,80 +2108,18 @@ export function EngagementSharesTab({
       <div className="shrink-0 pt-1 pb-2.5 flex items-center gap-2">
         {/* Left: filters */}
         <div className="flex items-center gap-2">
-          {/* Type filter */}
-          <DropdownMenu open={filterTypeOpen} onOpenChange={setFilterTypeOpen}>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className={cn("h-8 gap-1.5 text-xs bg-white rounded-[2px] border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors", filterTypes.size > 0 && "border-slate-400 ring-1 ring-slate-300")}>
-                <Filter className="h-3 w-3 opacity-60" />
-                Type
-                {filterTypes.size > 0 && <span className="ml-0.5 bg-slate-200 text-slate-800 px-1.5 rounded-full text-[10px] font-medium">{filterTypes.size}</span>}
-                <ChevronDown className="h-3 w-3 opacity-50" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-[200px] py-1 text-xs rounded-[2px]">
-              <div className="flex items-center justify-between px-2 py-1.5 border-b border-slate-100">
-                <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 p-0 font-medium">Type</DropdownMenuLabel>
-                <DropdownMenuItem onSelect={() => setFilterTypeOpen(false)} className="text-xs rounded-[2px] bg-slate-900 text-white hover:bg-slate-800 hover:text-white focus:bg-slate-800 focus:text-white p-1.5 px-2 cursor-pointer">Done</DropdownMenuItem>
-              </div>
-              <DropdownMenuCheckboxItem checked={filterTypes.size === 0} onCheckedChange={() => setFilterTypes(new Set())} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Any type</DropdownMenuCheckboxItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuCheckboxItem checked={filterTypes.has('folder')} onCheckedChange={() => setFilterTypes(prev => { const n = new Set(prev); n.has('folder') ? n.delete('folder') : n.add('folder'); return n })} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Folders</DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem checked={filterTypes.has('document')} onCheckedChange={() => setFilterTypes(prev => { const n = new Set(prev); n.has('document') ? n.delete('document') : n.add('document'); return n })} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Documents</DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem checked={filterTypes.has('spreadsheet')} onCheckedChange={() => setFilterTypes(prev => { const n = new Set(prev); n.has('spreadsheet') ? n.delete('spreadsheet') : n.add('spreadsheet'); return n })} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Spreadsheets</DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem checked={filterTypes.has('presentation')} onCheckedChange={() => setFilterTypes(prev => { const n = new Set(prev); n.has('presentation') ? n.delete('presentation') : n.add('presentation'); return n })} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Presentations</DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem checked={filterTypes.has('image')} onCheckedChange={() => setFilterTypes(prev => { const n = new Set(prev); n.has('image') ? n.delete('image') : n.add('image'); return n })} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Images</DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem checked={filterTypes.has('other')} onCheckedChange={() => setFilterTypes(prev => { const n = new Set(prev); n.has('other') ? n.delete('other') : n.add('other'); return n })} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Other</DropdownMenuCheckboxItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {/* Overdue toggle */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setFilterOverdue((v) => !v)}
+            className={cn("h-8 gap-1.5 text-xs rounded border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors", filterOverdue ? "bg-red-50 border-red-300 text-red-700 ring-1 ring-red-200 hover:bg-red-50 hover:text-red-700" : "bg-white")}
+          >
+            <Clock className="h-3 w-3 opacity-60" />
+            Overdue
+          </Button>
 
-          {/* People filter */}
-          <DropdownMenu open={filterSharedOpen} onOpenChange={setFilterSharedOpen}>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className={cn("h-8 gap-1.5 text-xs bg-white rounded-[2px] border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors", filterShared !== 'all' && "border-slate-400 ring-1 ring-slate-300")}>
-                <Filter className="h-3 w-3 opacity-60" />
-                People
-                {filterShared !== 'all' && <span className="ml-0.5 bg-slate-200 text-slate-800 px-1.5 rounded-full text-[10px] font-medium">1</span>}
-                <ChevronDown className="h-3 w-3 opacity-50" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-[220px] py-1 text-xs rounded-[2px]">
-              <div className="flex items-center justify-between px-2 py-1.5 border-b border-slate-100">
-                <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 p-0 font-medium">People</DropdownMenuLabel>
-                <DropdownMenuItem onSelect={() => setFilterSharedOpen(false)} className="text-xs rounded-[2px] bg-slate-900 text-white hover:bg-slate-800 hover:text-white focus:bg-slate-800 focus:text-white p-1.5 px-2 cursor-pointer">Done</DropdownMenuItem>
-              </div>
-              <DropdownMenuCheckboxItem checked={filterShared === 'all'} onCheckedChange={() => setFilterShared('all')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">All</DropdownMenuCheckboxItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuCheckboxItem checked={filterShared === 'by_me'} onCheckedChange={() => setFilterShared(filterShared === 'by_me' ? 'all' : 'by_me')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Shared by me</DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem checked={filterShared === 'by_others'} onCheckedChange={() => setFilterShared(filterShared === 'by_others' ? 'all' : 'by_others')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Shared by others</DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem checked={filterShared === 'with_collaborator'} onCheckedChange={() => setFilterShared(filterShared === 'with_collaborator' ? 'all' : 'with_collaborator')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Shared with Collaborator (External)</DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem checked={filterShared === 'with_viewer'} onCheckedChange={() => setFilterShared(filterShared === 'with_viewer' ? 'all' : 'with_viewer')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Shared with Reviewer</DropdownMenuCheckboxItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuCheckboxItem checked={filterShared === 'pending_approval'} onCheckedChange={() => setFilterShared(filterShared === 'pending_approval' ? 'all' : 'pending_approval')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Pending Approval</DropdownMenuCheckboxItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
 
-          {/* Modified filter */}
-          <DropdownMenu open={filterModifiedOpen} onOpenChange={setFilterModifiedOpen}>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className={cn("h-8 gap-1.5 text-xs bg-white rounded-[2px] border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors", filterModified !== 'any' && "border-slate-400 ring-1 ring-slate-300")}>
-                <Filter className="h-3 w-3 opacity-60" />
-                Modified
-                {filterModified !== 'any' && <span className="ml-0.5 bg-slate-200 text-slate-800 px-1.5 rounded-full text-[10px] font-medium">1</span>}
-                <ChevronDown className="h-3 w-3 opacity-50" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-[180px] py-1 text-xs rounded-[2px]">
-              <div className="flex items-center justify-between px-2 py-1.5 border-b border-slate-100">
-                <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 p-0 font-medium">Modified</DropdownMenuLabel>
-                <DropdownMenuItem onSelect={() => setFilterModifiedOpen(false)} className="text-xs rounded-[2px] bg-slate-900 text-white hover:bg-slate-800 hover:text-white focus:bg-slate-800 focus:text-white p-1.5 px-2 cursor-pointer">Done</DropdownMenuItem>
-              </div>
-              <DropdownMenuCheckboxItem checked={filterModified === 'any'} onCheckedChange={() => setFilterModified('any')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Any time</DropdownMenuCheckboxItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuCheckboxItem checked={filterModified === '7d'} onCheckedChange={() => setFilterModified(filterModified === '7d' ? 'any' : '7d')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Last 7 days</DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem checked={filterModified === '30d'} onCheckedChange={() => setFilterModified(filterModified === '30d' ? 'any' : '30d')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">Last 30 days</DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem checked={filterModified === 'year'} onCheckedChange={() => setFilterModified(filterModified === 'year' ? 'any' : 'year')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">This year</DropdownMenuCheckboxItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
 
         {/* Right: refresh + search */}
@@ -2226,7 +2138,7 @@ export function EngagementSharesTab({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Quick search ..."
-              className="pl-9 pr-8 h-8 text-sm border-slate-200 w-56 rounded-[2px]"
+              className="pl-9 pr-8 h-8 text-sm border-slate-200 w-56 rounded"
             />
             {searchQuery.trim().length > 0 && (
               <button
@@ -2253,12 +2165,12 @@ export function EngagementSharesTab({
             <div className="flex flex-col items-center justify-center h-64 text-slate-500 bg-white/60 rounded-2xl border border-slate-200/60 mx-2">
               <Share2 className="h-11 w-11 mb-3 text-slate-300" />
               <p className="text-sm font-medium text-slate-600">
-                {searchQuery.trim().length > 0 || filterShared !== 'all' ? 'No matches' : 'No shared documents yet'}
+                {searchQuery.trim().length > 0 || filterOverdue ? 'No matches' : 'No deliverables yet'}
               </p>
               <p className="text-xs mt-1 text-slate-400">
-                {searchQuery.trim().length > 0 || filterShared !== 'all'
+                {searchQuery.trim().length > 0 || filterOverdue
                   ? 'Try adjusting your search or filter.'
-                  : 'Share documents from the Files tab to see them here'}
+                  : 'Mark a folder as a Deliverable from the Files tab to see it here'}
               </p>
             </div>
           ) : viewMode === 'grid' ? (
@@ -2316,61 +2228,121 @@ export function EngagementSharesTab({
                 onDragStart={handleDragStart}
                 onDragEnd={handleDragEnd}
               >
-                <div className="grid grid-cols-4 gap-4 min-h-[360px]">
-                  {LANES.map((lane) => (
-                    <motion.div
-                      key={lane.status}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="flex flex-col rounded border border-[#e5e7eb] bg-white overflow-hidden"
-                    >
-                      <div className="flex items-center gap-2 px-3 py-2.5 border-b border-[#e5e7eb]">
-                        <div className={cn('rounded p-1', lane.iconBg)}>
-                          {lane.icon}
+                <div
+                  className="grid gap-4 min-h-[360px]"
+                  style={{ gridTemplateColumns: approvedCollapsed ? '1fr 1fr 1fr 36px' : '1fr 1fr 1fr 1fr' }}
+                >
+                  {LANES.map((lane) => {
+                    const laneCount = byLane[lane.status].length
+                    const totalCount = filteredShares.length
+                    const lanePct = totalCount > 0 ? (laneCount / totalCount) * 100 : 0
+                    const LANE_COLOR: Record<ActivityStatus, string> = {
+                      to_do: '#9ca3af',
+                      in_progress: '#5A78FF',
+                      in_review: '#f97316',
+                      approved: '#069668',
+                    }
+
+                    if (lane.status === 'approved' && approvedCollapsed) {
+                      return (
+                        <motion.div
+                          key={lane.status}
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          className="flex flex-col items-center rounded border border-primary/20 bg-primary/5 overflow-hidden cursor-pointer select-none py-3 gap-2"
+                          onClick={() => setApprovedCollapsed(false)}
+                          title={`${laneCount} Approved — click to expand`}
+                        >
+                          <div className={cn('rounded p-1', lane.iconBg)}>
+                            {lane.icon}
+                          </div>
+                          <span className="text-[10px] font-bold text-primary tabular-nums">{laneCount}</span>
+                          <div className="flex-1 flex items-center justify-center">
+                            <span
+                              className="text-[10px] font-semibold text-primary/70 whitespace-nowrap"
+                              style={{ writingMode: 'vertical-lr', transform: 'rotate(180deg)' }}
+                            >
+                              Approved
+                            </span>
+                          </div>
+                          <ChevronRight className="h-3 w-3 text-primary/50" />
+                        </motion.div>
+                      )
+                    }
+
+                    return (
+                      <motion.div
+                        key={lane.status}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="flex flex-col rounded border border-[#e5e7eb] bg-white overflow-hidden"
+                      >
+                        <div className="flex items-center gap-2 px-3 py-2.5 border-b border-[#e5e7eb]">
+                          <div className={cn('rounded p-1', lane.iconBg)}>
+                            {lane.icon}
+                          </div>
+                          <span className="text-xs font-semibold text-[#1b1b1d]">{lane.label}</span>
+                          <span className="text-[11px] text-[#9a9ba0] ml-0.5 tabular-nums">
+                            {totalCount > 0 ? `${laneCount}/${totalCount}` : laneCount}
+                          </span>
+                          {lane.status === 'approved' && (
+                            <button
+                              onClick={() => setApprovedCollapsed(true)}
+                              className="ml-auto text-[#9a9ba0] hover:text-[#45474c] transition-colors shrink-0"
+                              title="Collapse Approved column"
+                            >
+                              <ChevronLeft className="h-3.5 w-3.5" />
+                            </button>
+                          )}
                         </div>
-                        <span className="text-xs font-semibold text-[#1b1b1d]">{lane.label}</span>
-                        <span className="text-[11px] text-[#9a9ba0] ml-0.5">({byLane[lane.status].length})</span>
-                      </div>
-                      <DroppableLane id={lane.status} className="flex-1 overflow-y-auto p-3 space-y-2.5 min-h-[120px]">
-                        <AnimatePresence mode="popLayout">
-                          {byLane[lane.status].map((share) => (
-                            <DraggableCard
-                              key={share.id}
-                              id={share.id}
-                              share={share}
-                              laneStatus={lane.status}
-                              formatDate={formatDate}
-                              getDocumentForMenu={getDocumentForMenu}
-                              showActions
-                              canManage={canManage}
-                              isApprovedLane={lane.status === 'approved'}
-                              onShareSaved={refreshData}
-                              handleSecureOpen={handleSecureOpenShare}
-                              isRegrantingId={isRegrantingId}
-                              onOpenComments={handleOpenComments}
-                              onOpenPreview={handleOpenPreview}
-                              extCollaboratorLabel={projExtCollaborator}
-                              viewerLabel={projViewer}
-                              onParentFolderClick={onOpenInFiles ? handleOpenParentFolder : undefined}
-                              onOpenInFilesForFolder={onOpenInFiles ? handleOpenInFilesForFolder : undefined}
-                              onOpenDetail={handleOpenDeliverableDetail}
-                              isDetailOpen={share.id === openDeliverableId}
-                              isPaneOpen={!!openDeliverableId}
-                              isExternalPersona={restrictToSharedOnly}
-                              isExternalViewer={isExternalViewer}
-                              deeplinkBase={deeplinkBase}
-                              generalFolderId={generalFolderId}
-                              currentUserId={currentUserId}
-                              onIntakeAction={handleIntakeAction}
-                              intakeActionInProgress={intakeActionInProgress}
-                              isSaving={savingId === share.id}
-                              onUntagAsDeliverable={handleUntagAsDeliverable}
-                            />
-                          ))}
-                        </AnimatePresence>
-                      </DroppableLane>
-                    </motion.div>
-                  ))}
+                        {/* Mini progress bar */}
+                        <div className="h-0.5 bg-[#f3f4f6] shrink-0">
+                          <div
+                            className="h-full transition-all duration-300"
+                            style={{ width: `${lanePct}%`, backgroundColor: LANE_COLOR[lane.status] }}
+                          />
+                        </div>
+                        <DroppableLane id={lane.status} className="flex-1 overflow-y-auto p-3 space-y-2.5 min-h-[120px]">
+                          <AnimatePresence mode="popLayout">
+                            {byLane[lane.status].map((share) => (
+                              <DraggableCard
+                                key={share.id}
+                                id={share.id}
+                                share={share}
+                                laneStatus={lane.status}
+                                formatDate={formatDate}
+                                getDocumentForMenu={getDocumentForMenu}
+                                showActions
+                                canManage={canManage}
+                                isApprovedLane={lane.status === 'approved'}
+                                onShareSaved={refreshData}
+                                handleSecureOpen={handleSecureOpenShare}
+                                isRegrantingId={isRegrantingId}
+                                onOpenComments={handleOpenComments}
+                                onOpenPreview={handleOpenPreview}
+                                extCollaboratorLabel={projExtCollaborator}
+                                viewerLabel={projViewer}
+                                onParentFolderClick={onOpenInFiles ? handleOpenParentFolder : undefined}
+                                onOpenInFilesForFolder={onOpenInFiles ? handleOpenInFilesForFolder : undefined}
+                                onOpenDetail={handleOpenDeliverableDetail}
+                                isDetailOpen={share.id === openDeliverableId}
+                                isPaneOpen={!!openDeliverableId}
+                                isExternalPersona={restrictToSharedOnly}
+                                isExternalViewer={isExternalViewer}
+                                deeplinkBase={deeplinkBase}
+                                generalFolderId={generalFolderId}
+                                currentUserId={currentUserId}
+                                onIntakeAction={handleIntakeAction}
+                                intakeActionInProgress={intakeActionInProgress}
+                                isSaving={savingId === share.id}
+                                onUntagAsDeliverable={handleUntagAsDeliverable}
+                              />
+                            ))}
+                          </AnimatePresence>
+                        </DroppableLane>
+                      </motion.div>
+                    )
+                  })}
                 </div>
 
                 <DragOverlay dropAnimation={{ duration: 200, easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)' }}>

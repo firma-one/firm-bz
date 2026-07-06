@@ -1483,13 +1483,13 @@ export function DocumentActionMenu({
           onClick={() => setShowDueDatePicker(false)}
         >
           <div
-            className="bg-white rounded-[2px] shadow-xl max-w-md w-full mx-4 modal-content z-[1000000]"
+            className="bg-white rounded shadow-xl max-w-md w-full mx-4 modal-content z-[1000000]"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="p-4 border-b border-gray-200">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 bg-orange-100 rounded-[2px] flex items-center justify-center">
+                  <div className="w-10 h-10 bg-orange-100 rounded flex items-center justify-center">
                     <Calendar className="h-5 w-5 text-orange-600" />
                   </div>
                   <div>
@@ -1503,7 +1503,7 @@ export function DocumentActionMenu({
                 </div>
                 <button
                   onClick={() => setShowDueDatePicker(false)}
-                  className="text-gray-400 hover:text-gray-600 p-1 rounded-[2px] hover:bg-gray-100 transition-colors"
+                  className="text-gray-400 hover:text-gray-600 p-1 rounded hover:bg-gray-100 transition-colors"
                 >
                   <XSquare className="h-5 w-5" />
                 </button>

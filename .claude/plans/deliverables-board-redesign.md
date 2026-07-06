@@ -21,7 +21,7 @@
 
 ## Phase 1 — Schema & Data Layer
 
-### 1A. DOC_ID auto-numbering on EngagementDocument
+### 1A. DOC_ID auto-numbering on EngagementDocument ✅ IMPLEMENTED
 
 **Goal:** Every document (file or Deliverable folder) gets a Jira-style short ID like `NVQ-7` (files) or `NVQ-D-3` (deliverable folders).
 
@@ -68,7 +68,7 @@ No backfill needed — the Board has never been in production use (beta flag onl
 
 ---
 
-### 1B. Folder-sharing becomes "Mark as Deliverable" — INHERITED children
+### 1B. Folder-sharing becomes "Mark as Deliverable" — INHERITED children ✅ IMPLEMENTED
 
 **Current behaviour:** Sharing a folder inserts one `EngagementDocumentSharingUser` row for the folder.
 
@@ -112,7 +112,7 @@ When a file is added to a Deliverable folder that is already `in_progress`+, ins
 
 ---
 
-### 1C. ActivityStatus rename
+### 1C. ActivityStatus rename ✅ IMPLEMENTED
 
 Update `lib/sharing-settings.ts`:
 ```typescript
@@ -141,7 +141,7 @@ export const STAGE_ROLE_MAP = {
 
 ---
 
-## Phase 2 — Role Rename: `eng_viewer` → "Reviewer"
+## Phase 2 — Role Rename: `eng_viewer` → "Reviewer" ✅ IMPLEMENTED
 
 **What changes:** The *display name* stored in `platform.personas` for slug `eng_viewer` changes from `"Viewer (External)"` to `"Reviewer"`. The slug itself does NOT change.
 
@@ -172,7 +172,7 @@ grep -rn "Viewer (External)\|Guest\b\|eng_viewer.*display\|displayName.*viewer" 
 
 ---
 
-## Phase 3 — Action Menu: "Mark as Deliverable" (folders only)
+## Phase 3 — Action Menu: "Mark as Deliverable" (folders only) ✅ IMPLEMENTED
 
 **Current:** Action Menu → Share → Share → opens `DocumentShareModal` (supports files & folders).
 
@@ -360,7 +360,7 @@ Write path in `sharing/activity/route.ts` already uses `'approved'` — no code 
 
 ---
 
-## Phase 4 — Deliverables Board (promote from Beta)
+## Phase 4 — Deliverables Board (promote from Beta) ✅ IMPLEMENTED
 
 **Goal:** The Board tab becomes the primary delivery surface, visible to all roles (not just internal + beta). The existing Shares tab remains but is now secondary.
 
@@ -448,7 +448,17 @@ Each INHERITED file can have one designated assignee — a single member from th
 
 ---
 
-## Phase 4E — Due Date Reminders ⏸ ON HOLD
+## Phase 4E — Due Date Reminders ✅ IMPLEMENTED (deliverable-level)
+
+> **Implemented for deliverable folders.** On due-date set: schedules Inngest
+> 24h + 1h reminders (`deliverable.due_date.set`) that send email **and** in-app
+> `DELIVERABLE_DUE_REMINDER` notifications to all engagement members, with a
+> board-card CTA deeplink. Skips silently at fire time if the date changed or the
+> deliverable is already approved. On clear/change: cancels pending reminders
+> (`deliverable.due_date.cancelled`) and retracts (dismisses) already-delivered
+> due-date/reminder notifications for the document. Child-document due-date
+> reminders remain out of scope (MVP).
+> Files: `due-date/route.ts`, `lib/inngest/functions.ts` (`sendDeliverableDueReminder`), `lib/inngest/types.ts`.
 
 > Implement after Phase 4D (Deliverable detail panel) is stable.
 
@@ -481,7 +491,7 @@ Since the Deliverable folder is visible to everyone from tagging time, all engag
 
 ---
 
-## Phase 4F — Assignee Dropdown (Document level) ⏸ ON HOLD
+## Phase 4F — Assignee Dropdown (Document level) ✅ IMPLEMENTED
 
 > Can be implemented alongside or after Phase 4D.
 
@@ -523,7 +533,26 @@ Since the Deliverable folder is visible to everyone from tagging time, all engag
 
 ---
 
-## Phase 5 — Intake: Restrict to Deliverable Folders Only ⏸ ON HOLD
+## Phase 5 — Intake: Restrict to Deliverable Folders Only ✅ IMPLEMENTED (UI-gate approach)
+
+> **Shipped as a lightweight UI visibility gate rather than server-side enforcement.**
+> The EC/EV "New File / Folder" button is hidden unless the current folder is a
+> Deliverable (any status) AND not approved. Full server-side rejection of
+> out-of-folder intake uploads was deemed higher-risk (shared upload path,
+> post-upload cleanup) and deferred — the UI gate prevents the bad upload from
+> starting in the first place.
+>
+> **Implemented:**
+> - `linked-files/route.ts` — EC/EV `mapRow` now populates `isDeliverable` +
+>   `deliverableStatus` (previously only the internal path did). This also makes
+>   the approved-lock work for external roles.
+> - `engagement-file-list.tsx` — new `currentFolderIsDeliverable` tracker
+>   (additive on folder click, re-eval on breadcrumb, reset on root switch);
+>   EC/EV button branch gated on it instead of `currentFolderType === 'general'`.
+> - Known limitation: deep-link-into-deliverable starts fail-closed until the
+>   user navigates (matches existing approved-tracker behavior).
+>
+> Original server-enforcement plan retained below for reference.
 
 > Implement after Phases 1–4 are stable in production. Happy path first, intake restriction second.
 
@@ -612,40 +641,178 @@ Parse `#[A-Z]{2,4}-\d+` tokens in rendered comment text:
 - Render as a styled `<span>` chip (monospace, primary color, clickable)
 - On click: navigate to the Files tab and scroll/highlight the matching file row (use `docId` lookup — find file by `docId` in current files list, then trigger the same selection mechanism as clicking a row)
 
-### docId display chip (~1 hr)
+### docId display chip (~1 hr) ✅ IMPLEMENTED
 
 Show `NVQ-7` as a subtle monospace badge next to filenames in:
 
-- Files tab row (small grey chip, right of filename)
-- Board card header and subtask list (Phase 4C/4D)
+- ✅ Files tab — dedicated "ID" column before the Name column (monospace primary-colored text; dash for files without a docId)
+- ✅ Board card header — DOC ID as primary title (row 1, bold mono primary); filename as smaller muted subtext (row 2)
+- ✅ Board card subtask list — docId chip shown in subtask rows inside deliverable detail panel
+- ✅ `DriveFile.docId` type field added to `lib/types.ts`
+- ✅ EC/EV path (`linked-files/route.ts`) — `docId` included in `select` and `mapRow`
+- ✅ EL/EM path (`linked-files/route.ts`) — `docIdByExternal` Map built from `enrichRows`; `docId` included in `files.map(...)`
+- ✅ `engagement-file-list.tsx` — dedicated checkbox column + ID column + Name column in header (`24px 72px minmax(0, 1fr) ...`)
+- ✅ `engagement-file-row.tsx` — matching grid; checkbox always visible; file icon stays in Name column
 
 ---
 
-## Phase 7 — Engagement Overview: Deliverables Timeline Chart ⏸ ON HOLD
+## Phase 7 & 8 — Deliverables Analytics in Engagement Overview (All Roles) ✅ IMPLEMENTED
 
+> **Shipped.** Overview tab opened to all roles; deliverables progress chart + Delivery Health score added, with internal data stripped at the API layer for EC/EV.
+>
+> - `insights/route.ts` — `shares` query extended with `fileName/docId/dueDate/isFolder`; new `deliverables: DeliverableProgress[]` (folders with `share.createdAt`, with `isOverdue`) and `deliveryHealth: DeliveryHealthScore` (penalty-based, mirrors `healthScore`). External-persona branch returns ONLY deliverables analytics — all internal sections (folder/storage health, sensitive files, threads, invitations, internal healthScore) zeroed.
+> - `engagement-workspace.tsx` — Overview tab visible to all roles (removed `canViewInternalTabs` gate on trigger + content); `isExternalPersona` computed from `restrictToSharedOnly`/view-as and passed to the dashboard; "Internal only" lock hidden for externals.
+> - `engagement-insights-dashboard.tsx` — `isExternalPersona` prop; `DeliverablesRing` (SVG donut: stage distribution amber→blue→indigo→green, % approved in center, count legend, overdue callout, empty state) + `DeliveryHealthCard`; externals get an early-return with just these two, internals get them appended as a new "Deliverables" section.
+> - `avgDaysPerStage` is a proxy (days sitting in current stage — we don't track full transition history).
+> - ⚠️ **Verify before prod:** confirm the API response for a real EC/EV session omits internal data (defense-in-depth is at the API layer, but test all four roles).
+
+### Phase 7C — Revision Rounds & Approval Cycle Time KPIs ✅ IMPLEMENTED
+
+> **Refined during implementation (approved):**
+> - **Revision rounds use TRUE rework**, not the `DOCUMENT_SHARE_CHANGED` proxy — counts backward status transitions (later stage → earlier stage) from `DOCUMENT_STATUS_CHANGED` audit metadata `{ oldStatus, newStatus }`.
+> - Added a **First-Time-Right ring** to the Engagement Health card (approved deliverables never sent back vs reworked) — it also feeds the Overall Health Score (`−1 per reworked-share ratio`, max −10).
+> - KPIs shipped as metric cards (Avg Revision Rounds · Avg Approval Cycle) + a "Revision Rounds" top-5 detail card, per the ring-vs-card recommendation (durations/counts → cards; first-pass ratio → ring).
+
+**Goal:** Add two more KPIs to the Overview dashboard, riding on the same `insights/route.ts` data layer as Phase 7/8: revision rounds per deliverable, and approval cycle time.
+
+**Data sources:**
+- **Revision rounds** — count of `DOCUMENT_SHARE_CHANGED` audit events per document from `PlatformAuditEvent` (already indexed on `(engagementId, projectDocumentId, eventAt)`)
+- **Approval cycle time** — `settings.share.finalizedAt - settings.share.createdAt`, already stored in the `settings` JSON on each share — no new data needed
+
+**Files to modify:**
+
+1. [frontend/app/api/projects/[projectId]/insights/route.ts](frontend/app/api/projects/[projectId]/insights/route.ts)
+   - Add new interfaces: `DeliverableRevisionMetric` and `ApprovalCycleMetric`
+   - Add to `Promise.all`: query `PlatformAuditEvent` where `engagementId = projectId` and `eventType IN ('DOCUMENT_SHARE_CHANGED', 'DOCUMENT_SHARE_CREATED')`, select `projectDocumentId` and `eventType`
+   - Group by `projectDocumentId`, count `DOCUMENT_SHARE_CHANGED` → `revisionMetrics[]`
+   - From the existing `deliverables`/`shares` array: compute `cycleDays = finalizedAt - createdAt` for each share that has both timestamps → `approvalCycleMetric { avgCycleDays, medianCycleDays, deliverableCount, approvedCount }`
+   - Add both to `EngagementInsightsResponse`
+
+2. [frontend/components/projects/engagement-insights-dashboard.tsx](frontend/components/projects/engagement-insights-dashboard.tsx)
+   - Add two new `StatTile` entries to the KPI strip:
+     - "Avg Revision Rounds" — `RefreshCw` icon, violet color, average rounds across all deliverables
+     - "Avg Approval Cycle" — `Clock` icon, color-coded (green ≤7d, amber ≤14d, red >14d)
+   - Add a detail card "Revision Rounds" listing top-5 deliverables by revision count with a `×` count badge
+
+**Verification:**
+1. Insights dashboard shows "Avg Revision Rounds" and "Avg Approval Cycle" stat tiles
+2. A `DOCUMENT_SHARE_CHANGED` audit event increments the revision count for that document
+3. Finalizing a share computes `avgCycleDays` correctly
+4. Empty state (no shares): both tiles show `—` with placeholder sub-text
+
+---
+
+Original design notes retained below.
+
+> **Phases 7 and 8 are combined** — they touch the same two files (`insights/route.ts` for data, `engagement-insights-dashboard.tsx` for display), share one access-gate relaxation (opening the Overview/Analytics tab to external roles), and Phase 8's score is computed from the same `deliverables` array Phase 7's chart renders. Do them as one unit.
+>
 > Implement after Phases 1–4 are stable in production.
 
-**Goal:** A new chart in the Engagement Overview (Analytics tab) visible to ALL roles. Y-axis = Deliverable names; X-axis = stages; bar fills left-to-right as deliverable progresses.
+**Combined goal:** In the Engagement Overview (Analytics tab), add — visible to **all** roles including EC/EV:
+- **(Phase 7)** a horizontal deliverables progress chart (one row per deliverable, bar fills by stage)
+- **(Phase 8)** a second "Delivery Health" score card alongside the existing folder/storage `healthScore`
 
-**Chart type recommendation:** Horizontal "stage progress" bars — each deliverable is one row; the bar fills to represent current stage (25% = To Do, 50% = In Progress, 75% = In Review, 100% = Approved). Color shifts from amber → blue → green as it progresses. Overdue deliverables get a red accent on the due date marker. This is more informative than a Gantt (which requires start/end dates we don't always have) and more compact than a full Kanban.
+**Total effort: ≈ 2.5–3 days** (Phase 7 ≈ 1.5–2d, Phase 8 ≈ +0.5–1d riding on Phase 7's data layer + card pattern).
 
-**Alternative considered:** Swimlane timeline (Gantt-like with date on X-axis) — better for deadline tracking but requires all deliverables to have due dates set.
+### What already exists (lowers the estimate)
 
-**Recommended library:** `recharts` (already likely in deps) with a custom `BarChart` using horizontal layout, or a lightweight custom SVG renderer to avoid a new dep.
+- ✅ **`recharts@^3.1.2` is already a dependency** and already imported in `engagement-insights-dashboard.tsx` — no new dep; reuse the existing chart pattern (or use plain CSS bars, simpler for stage-fill).
+- ✅ **The insights route already iterates deliverable/shared docs and reads `activity.status`** — `insights/route.ts:459-470` builds `sharesProgress`, with the legacy `done → approved` normalization already applied (`rawStatus === 'done' ? 'approved'`).
+- ✅ **`healthScore` penalty-accumulator** (`insights/route.ts:635-662`) and the **Health Score KPI tile** (`engagement-insights-dashboard.tsx:1104-1153`) are direct templates for a second score + card. There is even a **commented-out delivery-penalty stub** at `insights/route.ts:656`.
+- ✅ `docId`, `dueDate`, `isFolder`, `fileName` all exist on `EngagementDocument`; `ActivityStatus = 'to_do' | 'in_progress' | 'in_review' | 'approved'`.
 
-**Data source:** `/api/projects/[projectId]/insights/route.ts` — add `deliverables` array to response:
-```typescript
-interface DeliverableProgress {
-  id: string
-  docId: string       // e.g. "NAV-D-1"
-  name: string
-  stage: ActivityStatus
-  dueDate: string | null
-  isOverdue: boolean
-}
-```
+### Implementation method (ordered)
 
-**Access gate change:** The Analytics tab in `engagement-workspace.tsx` (line 320) currently requires `canViewInternalTabs`. Make it visible to all roles. Internal-only data points (folder health, storage health, sensitive files, audit events) remain hidden for external roles — pass `isExternalPersona` prop to `EngagementInsightsDashboard` and conditionally render those cards.
+**Step 1 — Shared data layer (backend, `insights/route.ts`) — ~0.5 day**
+
+The existing `shares` query (`insights/route.ts:355-366`) selects only `id, settings` **and includes intake files** (via the `engagement_document_sharing_users` join), not just folders.
+
+- Extend that raw SQL to also select `ed."fileName", ed."docId", ed."dueDate", ed."isFolder"`.
+- **Filter the deliverables set to folders only:** `ed."isFolder" = true AND (ed.settings->'share'->>'createdAt') IS NOT NULL`. ⚠️ Without this, intake files render as fake deliverable rows.
+- Map to a new `deliverables: DeliverableProgress[]` on the response:
+  ```typescript
+  interface DeliverableProgress {
+    id: string
+    docId: string | null      // e.g. "NVQ-7" (nullable — older folders may lack one)
+    name: string
+    stage: ActivityStatus      // reuse the done→approved normalization already in the shares loop
+    dueDate: string | null
+    isOverdue: boolean         // dueDate < now AND stage !== 'approved'
+  }
+  ```
+- **Phase 8 score** — compute `deliveryHealth: DeliveryHealthScore` from that same array, using the existing penalty pattern:
+  ```typescript
+  interface DeliveryHealthScore {
+    score: number             // 0–100
+    level: 'good' | 'warning' | 'critical'
+    penalties: DeliveryPenalty[]
+    approvedCount: number
+    overdueCount: number
+    avgDaysPerStage: Record<ActivityStatus, number>
+  }
+  ```
+
+  | Condition | Penalty |
+  |-----------|---------|
+  | Deliverable overdue (past dueDate, not Approved) | -10 per deliverable (max -40) |
+  | >30% deliverables still in To Do after kickoff+14d | -15 |
+  | Any deliverable in In Review > 14 days without move | -10 per (max -20) |
+  | 0 Approved deliverables past engagement mid-point | -15 |
+  | All deliverables Approved | +10 bonus (score can exceed 100, capped at 100) |
+
+  **Level thresholds:** ≥80 = good, 50–79 = warning, <50 = critical. (`kickoffDate` and `dueDate` are already selected on the `engagement` query at `insights/route.ts:313`.)
+- Add both `deliverables` and `deliveryHealth` to the `EngagementInsightsResponse` interface (`insights/route.ts:119`) so they flow to the typed client automatically.
+
+**Step 2 — Access gate relaxation (shared) — ~0.5–1 day — HIGHEST RISK (see below)**
+
+- `insights/route.ts:302` currently hard-`403`s non-internal users (`if (!canViewInternal) return Forbidden`). Relax to let external roles through, but derive an `isExternalPersona` flag and **omit the internal-only payload sections at the API layer** for externals (folder health, storage health, sensitive files, unanswered threads, audit events, duplicates). Do NOT rely on client-side hiding alone — sensitive data must never be sent over the wire to an external persona.
+- `engagement-workspace.tsx` — the Overview/analytics tab is gated by `canViewInternalTabs` in **two** places: the tab trigger (`:323`) and the tab content render (`:570`). Open both to all roles.
+- `engagement-insights-dashboard.tsx` — add an `isExternalPersona` prop (none exists today; props interface at `:1037`) and conditionally render only the deliverables chart + delivery-health card for externals; keep all existing internal cards behind the flag.
+
+**Step 3 — Phase 7 chart UI (`engagement-insights-dashboard.tsx`) — ~0.5–1 day**
+
+- New component: horizontal "stage progress" bars — one row per deliverable, bar fills by stage (25% To Do, 50% In Progress, 75% In Review, 100% Approved). Color amber → blue → green as it progresses; overdue rows get a red due-date accent.
+- Row label: `docId` chip + deliverable name. Empty state when `deliverables.length === 0`.
+- CSS bars are simpler/lighter than recharts for a pure stage-fill; recharts (`BarChart` `layout="vertical"`) is the fallback if axis ticks/tooltips are wanted.
+- **Rejected alternative:** Gantt/swimlane (date X-axis) — needs due dates on every deliverable, which we don't always have.
+
+**Step 4 — Phase 8 card UI (`engagement-insights-dashboard.tsx`) — ~0.25 day**
+
+- New `DeliveryHealthCard` cloned from the existing Health Score tile (`:1104-1153`): score value + `level` badge (good/warning/critical) + penalty list. Sits beside the existing Drive Health card. Visible to all roles.
+
+**Step 5 — Test across all four roles — ~0.5 day**
+
+- Verify EL/EM see everything; EC/EV see ONLY the chart + delivery-health and **no** internal card leaks (confirm the API response itself omits internal sections for externals, not just the UI).
+
+### The one real risk
+
+Steps 1, 3, 4 are low-risk template/derivation work. **Step 2 is the crux and the entire regression surface.** The insights route hard-403s externals today, and the dashboard renders cards that must never reach EC/EV — storage health, sensitive-file detection, unanswered internal threads, folder/audit health. Under-gating leaks internal firm analytics to external clients. Treat data omission at the **API layer** as the source of truth and test the response payload per role.
+
+---
+
+## Phase 8 — Delivery Health Score (Second Score) ⏸ ON HOLD
+
+> **Merged into "Phase 7 & 8 — Deliverables Analytics in Engagement Overview" above.** Phase 8's `DeliveryHealthScore` interface, scoring table, level thresholds, and `DeliveryHealthCard` display are documented there (Step 1 for the score computation, Step 4 for the card), because it shares the `deliverables` data array and the access-gate relaxation with Phase 7.
+
+---
+
+## Phase 9 — Search by DOC_ID ⏸ ON HOLD
+
+> Implement after Phases 1–4 are stable. Depends on DOC_ID being populated (Phase 1A).
+
+**Goal:** The Engagement → Files search bar should support lookup by DOC_ID (e.g. `NVQ-7` or `#NVQ-7`) in addition to file name / content search.
+
+**Behaviour:**
+- In the existing Files search input (`engagement-search-panel.tsx`), detect input matching `#?[A-Z]{2,4}-\d+`
+- Short-circuit the vector/text search; query `EngagementDocument WHERE docId = $input AND engagementId = $engagementId`
+- If found: surface as a top result with a "Jump to" label; clicking navigates to the file in the Files list
+- If not found: fall through to normal name/content search results with a subtle "No document found for NVQ-7" hint
+
+**Files to modify:**
+- `app/api/projects/[projectId]/search/route.ts` — detect DOC_ID pattern in query param; add `docId` exact-match branch before vector search
+- `components/projects/engagement-search-panel.tsx` — detect `#` prefix or ID pattern in input; pin the matched result to the top
+
+**Note:** Global search (firm-wide, cross-engagement) is not yet built. When it is (see Global Document Search in `docs/mvp/todo.md`), DOC_ID search should be extended there too.
 
 ---
 
@@ -716,60 +883,6 @@ Each event is a single row in a vertically stacked list inside the tab panel:
 
 ---
 
-## Phase 9 — Search by DOC_ID ⏸ ON HOLD
-
-> Implement after Phases 1–4 are stable. Depends on DOC_ID being populated (Phase 1A).
-
-**Goal:** The Engagement → Files search bar should support lookup by DOC_ID (e.g. `NVQ-7` or `#NVQ-7`) in addition to file name / content search.
-
-**Behaviour:**
-- In the existing Files search input (`engagement-search-panel.tsx`), detect input matching `#?[A-Z]{2,4}-\d+`
-- Short-circuit the vector/text search; query `EngagementDocument WHERE docId = $input AND engagementId = $engagementId`
-- If found: surface as a top result with a "Jump to" label; clicking navigates to the file in the Files list
-- If not found: fall through to normal name/content search results with a subtle "No document found for NVQ-7" hint
-
-**Files to modify:**
-- `app/api/projects/[projectId]/search/route.ts` — detect DOC_ID pattern in query param; add `docId` exact-match branch before vector search
-- `components/projects/engagement-search-panel.tsx` — detect `#` prefix or ID pattern in input; pin the matched result to the top
-
-**Note:** Global search (firm-wide, cross-engagement) is not yet built. When it is (see Global Document Search in `docs/mvp/todo.md`), DOC_ID search should be extended there too.
-
----
-
-## Phase 8 — Delivery Health Score (Second Score) ⏸ ON HOLD
-
-> Implement after Phases 1–4 are stable in production.
-
-**Add alongside** the existing `healthScore` (folder/storage).
-
-**New interface** in `insights/route.ts`:
-```typescript
-interface DeliveryHealthScore {
-  score: number          // 0–100
-  level: 'good' | 'warning' | 'critical'
-  penalties: DeliveryPenalty[]
-  approvedCount: number
-  overdueCount: number
-  avgDaysPerStage: Record<ActivityStatus, number>
-}
-```
-
-**Scoring logic:**
-
-| Condition | Penalty |
-|-----------|---------|
-| Deliverable overdue (past dueDate, not Approved) | -10 per deliverable (max -40) |
-| >30% deliverables still in To Do after kickoff+14d | -15 |
-| Any deliverable in In Review > 14 days without move | -10 per (max -20) |
-| 0 Approved deliverables past engagement mid-point | -15 |
-| All deliverables Approved | +10 bonus (score can reach 110, capped at 100) |
-
-**Level thresholds:** ≥80 = good, 50–79 = warning, <50 = critical.
-
-**Display:** New `DeliveryHealthCard` component in `engagement-insights-dashboard.tsx` shown alongside the existing `FolderHealthCard`. Visible to all roles.
-
----
-
 ## Action Center Integration
 
 **For external roles (EC/EV):** In the Reminders Panel, surface "In Review" deliverables assigned to them (i.e., `eng_viewer` members) as action items:
@@ -784,18 +897,24 @@ interface DeliveryHealthScore {
 
 ## Implementation Order
 
-1. **Phase 1A** — DOC_ID schema + prefix derivation utility (schema first; no UI yet)
-2. **Phase 1C** — ActivityStatus rename + backward compat (low risk, JSON field)
-3. **Phase 2** — Rename `eng_viewer` display name to "Reviewer" (DB + UI sweep)
-4. **Phase 1B** — Mark as Deliverable + INHERITED children logic (core data model change)
-5. **Phase 3** — Action menu changes (folders only, no modal)
-6. **Phase 4A/4B** — Promote Board tab, update swimlane labels
-7. **Phase 4C/4D** — Deliverable detail panel (Jira card modal)
-8. **Phase 5** — ⏸ ON HOLD — Intake restriction to Deliverable folders (after Phases 1–4 stable)
-9. **Phase 6** — ✅ COMPLETE — Move comments entry point to Deliverable panel
-9a. **Phase 6A** — ⏸ ON HOLD — `#DOC_ID` tag autocomplete in comments (depends on Phase 1A wire-up)
-10. **Phase 7** — ⏸ ON HOLD — Engagement Overview timeline chart + open to all roles
-11. **Phase 8** — ⏸ ON HOLD — Delivery Health Score
+1. ✅ **Phase 1A** — DOC_ID schema + prefix derivation utility + wired into all creation routes
+2. ✅ **Phase 1C** — ActivityStatus rename + backward compat
+3. ✅ **Phase 2** — Rename `eng_viewer` display name to "Reviewer"
+4. ✅ **Phase 1B** — Mark as Deliverable + INHERITED children logic
+5. ✅ **Phase 3** — Action menu changes (folders only, no modal)
+6. ✅ **Phase 4A/4B** — Promote Board tab, update swimlane labels
+7. ✅ **Phase 4C/4D** — Deliverable detail panel (Jira card modal)
+8. ✅ **Phase 4E (Board)** — Board interaction rules + drag permissions
+9. ✅ **Phase 4F (Board)** — Board audit fixes
+10. ✅ **Phase 4F (Panel)** — Assignee dropdown (document level)
+11. ✅ **Phase 6** — Move comments entry point to Deliverable panel
+12. ✅ **Phase 3B** — Approved deliverable lock / unlock rules
+13. ✅ **Phase 4E (Reminders)** — Due date reminders for deliverables (email + in-app, deliverable-level)
+14. **Phase 6A** — ⏸ ON HOLD — `#DOC_ID` tag autocomplete in comments
+15. ✅ **Phase 5** — Intake restriction to Deliverable folders (shipped as EC/EV upload-button UI gate)
+16–17. ✅ **Phase 7 & 8 (combined)** — Deliverables analytics in Engagement Overview: progress chart + Delivery Health score, opened to all roles
+18. **Phase 9** — ⏸ ON HOLD — Search by DOC_ID
+19. **Phase 10** — ⏸ ON HOLD — History tab in Deliverable detail panel
 
 ---
 

@@ -225,7 +225,7 @@ export function EngagementSettingsForm({
                                 <SelectTrigger id="engagement-status" className={inputCls}>
                                     <SelectValue placeholder="Select status" />
                                 </SelectTrigger>
-                                <SelectContent side="bottom" align="start" sideOffset={6} className="z-[70] border border-[#e5e7eb] bg-white shadow-sm rounded-[2px] py-0.5 min-w-[var(--radix-select-trigger-width)]">
+                                <SelectContent side="bottom" align="start" sideOffset={6} className="z-[70] border border-[#e5e7eb] bg-white shadow-sm rounded py-0.5 min-w-[var(--radix-select-trigger-width)]">
                                     <SelectItem value="PLANNED" className={selectItemCls}>Planned</SelectItem>
                                     <SelectItem value="ACTIVE" className={selectItemCls}>Active</SelectItem>
                                     <SelectItem value="PAUSED" className={selectItemCls}>Paused</SelectItem>
@@ -385,7 +385,7 @@ export function EngagementSettingsForm({
             {/* Actions bar */}
             <div className="flex items-center gap-3">
                 {onCancel && (
-                    <Button type="button" variant="outline" className="rounded-[2px] w-32 text-[10px] font-headline font-bold tracking-widest uppercase" onClick={onCancel}>
+                    <Button type="button" variant="outline" className="rounded w-32 text-[10px] font-headline font-bold tracking-widest uppercase" onClick={onCancel}>
                         Cancel
                     </Button>
                 )}
@@ -393,7 +393,7 @@ export function EngagementSettingsForm({
                     onClick={handleSaveProperties}
                     disabled={saving || isSandboxFirm}
                     variant="greenCta"
-                    className="rounded-[2px] w-32 text-[10px] font-headline font-bold tracking-widest uppercase text-white"
+                    className="rounded w-32 text-[10px] font-headline font-bold tracking-widest uppercase text-white"
                 >
                     {saving ? 'Saving…' : 'Save'}
                 </Button>
@@ -421,7 +421,7 @@ export function EngagementSettingsForm({
                             type="button"
                             onClick={() => setIsDeleteDialogOpen(true)}
                             disabled={isSandboxFirm || deleting}
-                            className="rounded-[2px] bg-red-700 text-white hover:bg-red-800 border-0 text-[10px] font-headline font-bold tracking-widest uppercase"
+                            className="rounded bg-red-700 text-white hover:bg-red-800 border-0 text-[10px] font-headline font-bold tracking-widest uppercase"
                         >
                             {deleting ? 'Deleting…' : 'Delete engagement'}
                         </Button>

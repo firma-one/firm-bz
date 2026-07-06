@@ -137,8 +137,8 @@ export function CurrentPlanSummary({
     const valueClass = 'font-bold text-primary'
     const shell = cn(
         variant === 'embedded'
-            ? 'rounded-[2px] border-2 border-primary/30 bg-primary/5 px-4 py-4 sm:px-5 shadow-md'
-            : 'rounded-[2px] border-2 border-primary/30 bg-primary/5 px-4 py-4 sm:px-5 shadow-md'
+            ? 'rounded border-2 border-primary/30 bg-primary/5 px-4 py-4 sm:px-5 shadow-md'
+            : 'rounded border-2 border-primary/30 bg-primary/5 px-4 py-4 sm:px-5 shadow-md'
     )
 
     if (loading) {
@@ -219,7 +219,7 @@ export function CurrentPlanSummary({
                         <Button
                             type="button"
                             variant="blackCta"
-                            className="h-auto py-1.5 px-4 gap-2 rounded-[2px] text-[10px] font-headline font-bold tracking-widest uppercase"
+                            className="h-auto py-1.5 px-4 gap-2 rounded text-[10px] font-headline font-bold tracking-widest uppercase"
                             disabled={portalLoading}
                             onClick={() => void openBillingPortal()}
                         >

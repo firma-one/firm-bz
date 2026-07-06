@@ -336,14 +336,19 @@ export async function POST(request: NextRequest) {
                 const folderInShared = sharedIds.includes(folderId)
                 const folderUnderShared = !folderInShared && isFolderUnderSharedFolderDB(folderId, sharedIds, parentMap)
 
-                // When folderId is a shared folder or its descendant, show all direct children.
-                // Otherwise restrict to only children that appear in allowSet.
+                // When folderId is the shared deliverable folder itself or a descendant,
+                // show only children that have a GRANTED or INHERITED sharing row for this user
+                // (written by lane transitions). This ensures children are gated by workflow stage
+                // even though the folder itself is always visible to EC/EV from day 1.
+                // Otherwise (browsing a parent/ancestor folder) restrict to items in allowSet.
                 const [dbRows, intakeRows] = await Promise.all([
                     prisma.engagementDocument.findMany({
                         where: {
                             engagementId: engagementContext.projectId,
                             parentId: folderId,
-                            ...(folderInShared || folderUnderShared ? {} : { externalId: { in: Array.from(allowSet) } }),
+                            ...(folderInShared || folderUnderShared
+                                ? { sharingUsers: { some: { userId: user.id, sharingPermissionStatus: { in: ['GRANTED', 'INHERITED'] as any[] } } } }
+                                : { externalId: { in: Array.from(allowSet) } }),
                             // Exclude docs pending approval by someone else — only the uploader sees their own PENDING items (via intakeRows below)
                             NOT: { sharingUsers: { some: { sharingPermissionStatus: 'PENDING' as any, userId: { not: user.id } } } },
                         },
@@ -419,6 +424,7 @@ export async function POST(request: NextRequest) {
                 )
                 const mapRow = (row: any) => {
                     const fresh = freshMetaMap.get(row.externalId)
+                    const s = (row.settings as Record<string, any>) || {}
                     return ({
                     id: row.externalId,
                     name: row.fileName,
@@ -441,6 +447,8 @@ export async function POST(request: NextRequest) {
                     dueDate: row.dueDate ? (row.dueDate as Date).toISOString() : null,
                     docId: (row as any).docId ?? null,
                     lock: getLock(row.settings),
+                    isDeliverable: !!(s.share?.createdAt),
+                    deliverableStatus: s.share?.createdAt ? (s.activity?.status ?? null) : null,
                     isPendingApproval: intakeExternalIds.has(row.externalId),
                     pendingUploaderId: intakeUploaderByExternal.get(row.externalId) ?? null,
                 })}

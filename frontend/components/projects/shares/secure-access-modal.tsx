@@ -50,7 +50,7 @@ export function SecureAccessModal({
             }}
         >
             <DialogContent
-                className="sm:max-w-sm border-[#e5e7eb] p-0 gap-0 rounded-[2px] bg-[#f9f9fb]"
+                className="sm:max-w-sm border-[#e5e7eb] p-0 gap-0 rounded bg-[#f9f9fb]"
                 hideClose={isLoading}
                 onInteractOutside={(e) => { if (isLoading) e.preventDefault() }}
                 onEscapeKeyDown={(e) => { if (isLoading) e.preventDefault() }}
@@ -83,16 +83,16 @@ export function SecureAccessModal({
                 {/* Body */}
                 <div className="p-5 space-y-4">
                     {error ? (
-                        <div className="flex items-start gap-3 p-3 rounded-[2px] bg-white border border-destructive/20">
+                        <div className="flex items-start gap-3 p-3 rounded bg-white border border-destructive/20">
                             <AlertCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
                             <p className="text-xs text-[#1b1b1d] leading-relaxed">{error}</p>
                         </div>
                     ) : (
                         <>
                             {/* File preview strip */}
-                            <div className="flex items-center gap-3 p-3 rounded-[2px] bg-white border border-[#e5e7eb]">
+                            <div className="flex items-center gap-3 p-3 rounded bg-white border border-[#e5e7eb]">
                                 {proxyThumbnailUrl ? (
-                                    <div className="h-10 w-10 rounded-[2px] overflow-hidden shrink-0 border border-[#e5e7eb]">
+                                    <div className="h-10 w-10 rounded overflow-hidden shrink-0 border border-[#e5e7eb]">
                                         <img
                                             src={proxyThumbnailUrl}
                                             alt={fileName}
@@ -112,7 +112,7 @@ export function SecureAccessModal({
                             </div>
 
                             {/* Email destination */}
-                            <div className="flex items-center gap-3 p-3 rounded-[2px] bg-white border border-[#e5e7eb]">
+                            <div className="flex items-center gap-3 p-3 rounded bg-white border border-[#e5e7eb]">
                                 <div className="h-7 w-7 rounded flex items-center justify-center shrink-0 bg-[#f9f9fb] border border-[#e5e7eb]">
                                     <Mail className="h-4 w-4 text-[#45474c]" />
                                 </div>
@@ -146,7 +146,7 @@ export function SecureAccessModal({
                         variant="blackCta"
                         onClick={onClose}
                         disabled={isLoading}
-                        className="rounded-[2px] text-[10px] font-headline font-bold tracking-widest uppercase disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="rounded text-[10px] font-headline font-bold tracking-widest uppercase disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {error ? 'Close' : isLoading ? 'Please wait…' : 'I understand. Close this message'}
                     </Button>

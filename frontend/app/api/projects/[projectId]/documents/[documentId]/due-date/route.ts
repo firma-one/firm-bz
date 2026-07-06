@@ -5,6 +5,7 @@ import { resolveProjectContext } from '@/lib/resolve-project-context'
 import { canViewProjectSettings, canViewProject } from '@/lib/permission-helpers'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { sendEmail } from '@/lib/email'
+import { renderReminderEmail } from '@/lib/email-templates/reminder'
 import { safeInngestSend } from '@/lib/inngest/client'
 import { parseSettingsFromDb } from '@/lib/sharing-settings'
 
@@ -55,6 +56,22 @@ export async function PATCH(
     // Always cancel any existing scheduled reminder for this document
     await safeInngestSend('deliverable.due_date.cancelled', { documentId })
 
+    // If the due date was cleared or changed, retract any already-delivered
+    // due-date / reminder notifications for this document so members don't see
+    // stale "due on X" or "due tomorrow" items referencing the old date.
+    const prevDue = doc.dueDate ? doc.dueDate.toISOString() : null
+    const nextDue = dueDate ? dueDate.toISOString() : null
+    if (prevDue !== nextDue) {
+      await (prisma as any).notification.updateMany({
+        where: {
+          documentId: doc.id,
+          type: { in: ['DOCUMENT_DUE_DATE_SET', 'DELIVERABLE_DUE_REMINDER'] },
+          dismissedAt: null,
+        },
+        data: { dismissedAt: new Date() },
+      })
+    }
+
     if (dueDate) {
       // In-app notifications for all members
       const rows = memberUserIds.map((userId) => ({
@@ -76,14 +93,28 @@ export async function PATCH(
       }
 
       if (isDeliverableFolder) {
+        // Resolve slugs so the reminder CTA deep-links to the Board card
+        const eng = await prisma.engagement.findUnique({
+          where: { id: projectId },
+          select: { slug: true, client: { select: { slug: true, firm: { select: { slug: true } } } } },
+        })
+        const firmSlug = eng?.client?.firm?.slug ?? ''
+        const clientSlug = eng?.client?.slug ?? ''
+        const engSlug = eng?.slug ?? ''
+        const boardUrl = firmSlug && clientSlug && engSlug
+          ? `/d/f/${firmSlug}/c/${clientSlug}/e/${engSlug}/board#doc-file:${doc.id}`
+          : null
+
         // Schedule 24h + 1h reminders via Inngest for deliverable folders
         await safeInngestSend('deliverable.due_date.set', {
           documentId: doc.id,
           documentName: doc.fileName,
           dueDate: dueDate.toISOString(),
           memberUserIds,
-          // boardUrl is resolved client-side and deep-linked via the notification CTA; leave null here
-          boardUrl: null,
+          firmId: doc.firmId,
+          clientId: doc.clientId ?? ctx.clientId,
+          engagementId: projectId,
+          boardUrl,
         })
       } else {
         // Non-deliverable: immediate email if within 24h (existing behaviour)
@@ -95,11 +126,12 @@ export async function PATCH(
               const { data } = await admin.auth.admin.getUserById(userId)
               const email = data?.user?.email
               if (!email) return
-              await sendEmail(
-                email,
-                'Document due soon',
-                `<p><strong>Document due soon</strong></p><p><strong>${doc.fileName}</strong> is due on <strong>${dueDate.toISOString().slice(0, 10)}</strong>.</p>`
-              )
+              const { subject, html } = renderReminderEmail({
+                entityName: `${doc.fileName} is due on ${dueDate.toISOString().slice(0, 10)}.`,
+                action: 'Document due soon',
+                kind: 'created',
+              })
+              await sendEmail(email, subject, html)
             } catch { /* ignore */ }
           }))
         }

@@ -71,7 +71,7 @@ export function FirmSwitchDialog({
 
     return (
         <Dialog open={open} onOpenChange={handleCancel}>
-            <DialogContent className="sm:max-w-[420px] border-[#e5e7eb] p-0 gap-0 rounded-[2px]">
+            <DialogContent className="sm:max-w-[420px] border-[#e5e7eb] p-0 gap-0 rounded">
 
                 <VisuallyHidden><DialogTitle>Switch Firm</DialogTitle></VisuallyHidden>
 
@@ -114,7 +114,7 @@ export function FirmSwitchDialog({
                     <Button
                         type="button"
                         variant="outline"
-                        className="!rounded-[2px] text-[10px] font-headline font-bold tracking-widest uppercase border-gray-300"
+                        className="!rounded text-[10px] font-headline font-bold tracking-widest uppercase border-gray-300"
                         onClick={handleCancel}
                         disabled={isLoading}
                     >

@@ -35,7 +35,7 @@ export default async function SubscriptionLockedPage({
                 <div className="rounded-lg border border-slate-100 bg-slate-50 px-4 py-3 text-sm text-slate-600">
                     Nothing has been deleted. All documents, clients, and engagements are preserved.
                 </div>
-                <Button asChild className="w-full bg-slate-900 text-white hover:bg-slate-800 rounded-[2px]">
+                <Button asChild className="w-full bg-slate-900 text-white hover:bg-slate-800 rounded">
                     <Link href="/d/billing">Reactivate subscription</Link>
                 </Button>
                 <p className="text-xs text-slate-400">

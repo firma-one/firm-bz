@@ -171,11 +171,13 @@ export async function PUT(
 
       const now = new Date().toISOString()
 
-      // Mark folder as Deliverable in settings
+      // Mark folder as Deliverable in settings.
+      // Both EC and EV are enabled immediately so the folder appears in Files for all roles.
+      // Children remain hidden until INHERITED sharing rows are written by lane transitions.
       const settings = buildSettingsForDb((doc.settings as Record<string, unknown>) || null, {
         share: {
-          externalCollaborator: { enabled: false },
-          guest: { enabled: false, options: {} },
+          externalCollaborator: { enabled: true },
+          guest: { enabled: true, options: {} },
         },
         activity: { status: 'to_do', updatedAt: now },
         actorId: user.id,

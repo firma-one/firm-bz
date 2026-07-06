@@ -220,7 +220,7 @@ export function MigrationProgressPanel({ status, migrationStartedAt, onMigration
                     onClick={(e) => { e.stopPropagation(); handleForceUnlock() }}
                     disabled={unlocking}
                     title="Unlock workspace"
-                    className="h-5 w-5 flex items-center justify-center rounded-[3px] bg-rose-100 text-rose-600 hover:bg-rose-200 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="h-5 w-5 flex items-center justify-center rounded bg-rose-100 text-rose-600 hover:bg-rose-200 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {unlocking ? <Loader2 className="h-3 w-3 animate-spin" /> : <LockOpen className="h-3 w-3" />}
                   </button>
@@ -231,7 +231,7 @@ export function MigrationProgressPanel({ status, migrationStartedAt, onMigration
                     onClick={(e) => { e.stopPropagation(); handleCancel() }}
                     disabled={cancelling}
                     title="Cancel migration"
-                    className="h-5 w-5 flex items-center justify-center rounded-[3px] bg-rose-100 text-rose-600 hover:bg-rose-200 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="h-5 w-5 flex items-center justify-center rounded bg-rose-100 text-rose-600 hover:bg-rose-200 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {cancelling ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
                   </button>
@@ -239,7 +239,7 @@ export function MigrationProgressPanel({ status, migrationStartedAt, onMigration
               </>
             )}
             <div
-              className="h-5 w-5 flex items-center justify-center rounded-[3px] bg-primary/10 text-primary/60 hover:bg-primary/20 cursor-pointer transition-colors"
+              className="h-5 w-5 flex items-center justify-center rounded bg-primary/10 text-primary/60 hover:bg-primary/20 cursor-pointer transition-colors"
               onClick={() => setExpanded(e => !e)}
             >
               {expanded ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}

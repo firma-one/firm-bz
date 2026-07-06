@@ -52,7 +52,7 @@ export function FirmInviteModal({ firmId, open, onOpenChange, onSuccess }: FirmI
 
     return (
         <Dialog open={open} onOpenChange={handleOpenChange}>
-            <DialogContent className="sm:max-w-[480px] border-[#e5e7eb] p-0 gap-0 rounded-[2px] bg-[#f9f9fb]">
+            <DialogContent className="sm:max-w-[480px] border-[#e5e7eb] p-0 gap-0 rounded bg-[#f9f9fb]">
                 <VisuallyHidden><DialogTitle>Invite Firm Administrator</DialogTitle></VisuallyHidden>
 
                 {/* Header */}
@@ -105,14 +105,14 @@ export function FirmInviteModal({ firmId, open, onOpenChange, onSuccess }: FirmI
 
                     {/* Footer */}
                     <div className="px-5 py-3 border-t border-[#e5e7eb] bg-white flex items-center justify-end gap-3">
-                        <Button type="button" variant="outline" className="rounded-[2px] w-28 text-[10px] font-headline font-bold tracking-widest uppercase" onClick={() => handleOpenChange(false)}>
+                        <Button type="button" variant="outline" className="rounded w-28 text-[10px] font-headline font-bold tracking-widest uppercase" onClick={() => handleOpenChange(false)}>
                             Cancel
                         </Button>
                         <Button
                             type="submit"
                             variant="greenCta"
                             disabled={isSandboxFirm || isSubmitting || !email.trim()}
-                            className="rounded-[2px] w-36 text-[10px] font-headline font-bold tracking-widest uppercase text-white"
+                            className="rounded w-36 text-[10px] font-headline font-bold tracking-widest uppercase text-white"
                         >
                             {isSubmitting ? <LoadingSpinner size="sm" /> : 'Send Invitation'}
                         </Button>

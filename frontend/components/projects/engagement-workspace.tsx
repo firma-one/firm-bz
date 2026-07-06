@@ -129,6 +129,9 @@ export function EngagementWorkspace({
     const pathname = usePathname()
     const router = useRouter()
     const { viewAsPersonaSlug } = useViewAs()
+    // External roles (EC/EV) — including internal users previewing via "view as".
+    // Drives the Overview tab: externals get only the deliverables analytics section.
+    const isExternalPersona = restrictToSharedOnly || viewAsPersonaSlug === 'eng_ext_collaborator' || viewAsPersonaSlug === 'eng_viewer'
     const [liveFileCount, setLiveFileCount] = useState<number | undefined>(fileCount)
     useEffect(() => { setLiveFileCount(fileCount) }, [fileCount])
     const [filesNavSlot, setFilesNavSlot] = useState<HTMLDivElement | null>(null)
@@ -291,7 +294,7 @@ export function EngagementWorkspace({
 
             <Tabs value={currentTab} onValueChange={handleTabChange} className="flex-1 flex flex-col min-h-0">
                 {/* Tab strip — full-width white with border-b, scrollable for many tabs */}
-                <div className="bg-white border border-[#e5e7eb] rounded mb-3 shrink-0 flex items-center h-14">
+                <div className="bg-white border border-[#e5e7eb] rounded mb-3 shrink-0 flex items-center h-14 overflow-hidden">
                     <div className="flex-1 min-w-0 relative h-full">
                     {canScrollLeft && (
                         <button
@@ -320,17 +323,15 @@ export function EngagementWorkspace({
                     <div ref={tabsScrollRef} className="overflow-x-auto h-full [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" style={{ scrollPaddingLeft: canScrollLeft ? 40 : 0, scrollPaddingRight: canScrollRight ? 40 : 0 }}>
                     <div className="flex items-center h-full min-w-max" style={{ paddingLeft: canScrollLeft ? 56 : 0, paddingRight: canScrollRight ? 56 : 0 }}>
                         <TabsList className="h-full p-0 bg-transparent rounded-none inline-flex justify-start gap-0 border-0">
-                            {canViewInternalTabs && (
-                                <TabsTrigger
-                                    value="analytics"
-                                    className="relative group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
-                                >
-                                    <BarChart3 className="w-4 h-4 mr-2" />
-                                    Overview
-                                    <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
-                                    {pendingTab === 'analytics' && <span className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden"><span className="absolute inset-y-0 w-1/2 bg-brand-accent animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full" /></span>}
-                                </TabsTrigger>
-                            )}
+                            <TabsTrigger
+                                value="analytics"
+                                className="relative group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                            >
+                                <BarChart3 className="w-4 h-4 mr-2" />
+                                Overview
+                                {!isExternalPersona && <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>}
+                                {pendingTab === 'analytics' && <span className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden"><span className="absolute inset-y-0 w-1/2 bg-brand-accent animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full" /></span>}
+                            </TabsTrigger>
                             <TabsTrigger
                                 value="files"
                                 data-demo-tour="engagement-files-tab"
@@ -567,7 +568,7 @@ export function EngagementWorkspace({
                             />
                         )}
                     </div>
-                ) : (canViewInternalTabs && currentTab === 'analytics') ? (
+                ) : (currentTab === 'analytics') ? (
                     <div className="flex-1 overflow-y-auto custom-scrollbar pt-3">
                         <ErrorBoundary context="ProjectInsights">
                             <EngagementInsightsDashboard
@@ -575,6 +576,7 @@ export function EngagementWorkspace({
                                 orgSlug={orgSlug}
                                 clientSlug={clientSlug}
                                 engagementSlug={engagementSlug}
+                                isExternalPersona={isExternalPersona}
                             />
                         </ErrorBoundary>
                     </div>

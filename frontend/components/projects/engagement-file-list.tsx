@@ -320,6 +320,9 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
     const [currentFolderType, setCurrentFolderType] = useState<'general' | 'confidential' | 'staging'>('general')
     // Tracks whether the current folder is an approved deliverable (locks write ops)
     const [currentFolderIsApprovedDeliverable, setCurrentFolderIsApprovedDeliverable] = useState(false)
+    // True when the current folder is a Deliverable (any status) or is nested inside one.
+    // Gates the EC/EV "New File / Folder" button — externals can only upload inside a Deliverable.
+    const [currentFolderIsDeliverable, setCurrentFolderIsDeliverable] = useState(false)
 
     // Core State
     const [currentFolderId, setCurrentFolderId] = useState<string | null>(null)
@@ -1499,6 +1502,10 @@ const handleRefresh = async () => {
                 !!(file.isDeliverable && (file as any).deliverableStatus === 'approved')
                 || currentFolderIsApprovedDeliverable
             )
+            // Entering a Deliverable folder (any status) OR navigating deeper inside one
+            setCurrentFolderIsDeliverable(
+                !!file.isDeliverable || currentFolderIsDeliverable
+            )
             window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#doc-file:${file.projectDocumentId ?? file.id}`)
         }
     }
@@ -1517,6 +1524,7 @@ const handleRefresh = async () => {
         setCurrentFolderIsApprovedDeliverable(
             !!(folderInList?.isDeliverable && (folderInList as any).deliverableStatus === 'approved')
         )
+        setCurrentFolderIsDeliverable(!!folderInList?.isDeliverable)
         const rootIds = [generalFolderId, confidentialFolderId, stagingFolderId].filter(Boolean)
         if (rootIds.includes(id)) {
             // Root folders are restored by default on load — no hash needed
@@ -1534,6 +1542,7 @@ const handleRefresh = async () => {
         setCurrentFolderId(folderId)
         setCurrentFolderType(type)
         setCurrentFolderIsApprovedDeliverable(false)
+        setCurrentFolderIsDeliverable(false)
         setBreadcrumbs([{ id: folderId, name: type, clickable: true, isEngagementRoot: true }])
         // Root folders are restored by default on load — clear the hash
         window.history.replaceState(null, '', window.location.pathname + window.location.search)
@@ -1795,15 +1804,15 @@ const handleRefresh = async () => {
 
                 {/* New Document button portaled into the workspace nav bar slot */}
                 {navSlot && createPortal(
-                    (isSandboxFirm || (!isAtProjectRoot && !currentFolderIsApprovedDeliverable && (canEdit || (restrictToSharedOnly && currentFolderType === 'general')))) ? (
+                    (isSandboxFirm || (!isAtProjectRoot && !currentFolderIsApprovedDeliverable && (canEdit || (restrictToSharedOnly && currentFolderIsDeliverable)))) ? (
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button data-demo-tour="engagement-upload-btn" disabled={loading || isLoadingFolders || isUploading || isUploadInitiating} className="h-auto px-4 py-1.5 rounded-[2px] bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-primary hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1.5">
+                                <Button data-demo-tour="engagement-upload-btn" disabled={loading || isLoadingFolders || isUploading || isUploadInitiating} className="h-auto px-4 py-1.5 rounded bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-primary hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1.5">
                                     <Upload className="h-3.5 w-3.5" />
                                     New File / Folder
                                 </Button>
                             </DropdownMenuTrigger>
-                                <DropdownMenuContent align="start" className="w-[280px] py-1 rounded-[2px]">
+                                <DropdownMenuContent align="start" className="w-[280px] py-1 rounded">
                                 {isSandboxFirm && (
                                     <div className="absolute inset-0 z-10 rounded-[inherit] pointer-events-auto cursor-not-allowed bg-transparent" />
                                 )}
@@ -1960,17 +1969,17 @@ const handleRefresh = async () => {
                     <div className="flex items-center gap-2">
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button disabled={loading} variant="outline" size="sm" className="h-8 gap-1.5 text-xs bg-white rounded-[2px] border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+                                <Button disabled={loading} variant="outline" size="sm" className="h-8 gap-1.5 text-xs bg-white rounded border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
                                     <Filter className="h-3 w-3 opacity-60" />
                                     Type
                                     {filterTypes.size > 0 && <span className="ml-0.5 bg-slate-200 text-slate-800 px-1.5 rounded-full text-[10px] font-medium">{filterTypes.size}</span>}
                                     <ChevronDown className="h-3 w-3 opacity-50" />
                                 </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" className="w-[200px] py-1 text-xs rounded-[2px]">
+                            <DropdownMenuContent align="start" className="w-[200px] py-1 text-xs rounded">
                                 <div className="flex items-center justify-between px-2 py-1.5 border-b border-slate-100">
                                     <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 p-0 font-medium">Type</DropdownMenuLabel>
-                                    <DropdownMenuItem className="text-xs rounded-[2px] bg-slate-900 text-white hover:bg-slate-800 hover:text-white focus:bg-slate-800 focus:text-white p-1.5 px-2 cursor-pointer">
+                                    <DropdownMenuItem className="text-xs rounded bg-slate-900 text-white hover:bg-slate-800 hover:text-white focus:bg-slate-800 focus:text-white p-1.5 px-2 cursor-pointer">
                                         Done
                                     </DropdownMenuItem>
                                 </div>
@@ -2002,17 +2011,17 @@ const handleRefresh = async () => {
                         {/* ... Other Filters (unchanged) ... */}
                         <DropdownMenu open={peopleFilterOpen} onOpenChange={setPeopleFilterOpen}>
                             <DropdownMenuTrigger asChild>
-                                <Button disabled={loading} variant="outline" size="sm" className={cn("h-8 gap-1.5 text-xs bg-white rounded-[2px] border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors", (filterOwner !== 'any' || filterShared !== 'all') && "border-slate-400 ring-1 ring-slate-300")}>
+                                <Button disabled={loading} variant="outline" size="sm" className={cn("h-8 gap-1.5 text-xs bg-white rounded border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors", (filterOwner !== 'any' || filterShared !== 'all') && "border-slate-400 ring-1 ring-slate-300")}>
                                     <Filter className="h-3 w-3 opacity-60" />
                                     People
                                     {(filterOwner !== 'any' || filterShared !== 'all') && <span className="ml-0.5 bg-slate-200 text-slate-800 px-1.5 rounded-full text-[10px] font-medium">{(filterOwner !== 'any' ? 1 : 0) + (filterShared !== 'all' ? 1 : 0)}</span>}
                                     <ChevronDown className="h-3 w-3 opacity-50" />
                                 </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" className="w-[200px] py-1 text-xs rounded-[2px]">
+                            <DropdownMenuContent align="start" className="w-[200px] py-1 text-xs rounded">
                                 <div className="flex items-center justify-between px-2 py-1.5 border-b border-slate-100">
                                     <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 p-0 font-medium">People</DropdownMenuLabel>
-                                    <DropdownMenuItem onSelect={() => setPeopleFilterOpen(false)} className="text-xs rounded-[2px] bg-slate-900 text-white hover:bg-slate-800 hover:text-white focus:bg-slate-800 focus:text-white p-1.5 px-2 cursor-pointer">
+                                    <DropdownMenuItem onSelect={() => setPeopleFilterOpen(false)} className="text-xs rounded bg-slate-900 text-white hover:bg-slate-800 hover:text-white focus:bg-slate-800 focus:text-white p-1.5 px-2 cursor-pointer">
                                         Done
                                     </DropdownMenuItem>
                                 </div>
@@ -2064,17 +2073,17 @@ const handleRefresh = async () => {
 
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button disabled={loading} variant="outline" size="sm" className={cn("h-8 gap-1.5 text-xs bg-white rounded-[2px] border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors", filterModified !== 'any' && "border-slate-400 ring-1 ring-slate-300")}>
+                                <Button disabled={loading} variant="outline" size="sm" className={cn("h-8 gap-1.5 text-xs bg-white rounded border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors", filterModified !== 'any' && "border-slate-400 ring-1 ring-slate-300")}>
                                     <Filter className="h-3 w-3 opacity-60" />
                                     Modified
                                     {filterModified !== 'any' && <span className="ml-0.5 bg-slate-200 text-slate-800 px-1.5 rounded-full text-[10px] font-medium">1</span>}
                                     <ChevronDown className="h-3 w-3 opacity-50" />
                                 </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" className="w-[180px] py-1 text-xs rounded-[2px]">
+                            <DropdownMenuContent align="start" className="w-[180px] py-1 text-xs rounded">
                                 <div className="flex items-center justify-between px-2 py-1.5 border-b border-slate-100">
                                     <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 p-0 font-medium">Modified</DropdownMenuLabel>
-                                    <DropdownMenuItem className="text-xs rounded-[2px] bg-slate-900 text-white hover:bg-slate-800 hover:text-white focus:bg-slate-800 focus:text-white p-1.5 px-2 cursor-pointer">
+                                    <DropdownMenuItem className="text-xs rounded bg-slate-900 text-white hover:bg-slate-800 hover:text-white focus:bg-slate-800 focus:text-white p-1.5 px-2 cursor-pointer">
                                         Done
                                     </DropdownMenuItem>
                                 </div>
@@ -2095,14 +2104,14 @@ const handleRefresh = async () => {
 
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button disabled={loading} variant="outline" size="sm" className="h-8 gap-1.5 text-xs bg-white rounded-[2px] border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+                                <Button disabled={loading} variant="outline" size="sm" className="h-8 gap-1.5 text-xs bg-white rounded border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
                                     <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24" fill="currentColor" className="h-3.5 w-3.5">
                                         <path d="M120-240v-80h240v80H120Zm0-200v-80h480v80H120Zm0-200v-80h720v80H120Z" />
                                     </svg>
                                     Sort
                                 </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" className="w-[220px] py-1 text-xs rounded-[2px]">
+                            <DropdownMenuContent align="start" className="w-[220px] py-1 text-xs rounded">
                                 <DropdownMenuLabel className="text-xs uppercase tracking-wider text-slate-400">Sort by</DropdownMenuLabel>
                                 <DropdownMenuCheckboxItem className="text-xs" checked={sortConfig.sortBy === 'name'} onCheckedChange={() => setSortBy('name')}>
                                     Name
@@ -2144,7 +2153,7 @@ const handleRefresh = async () => {
                                     setFilterModified('any')
                                     setFilterShared('all')
                                 }}
-                                className="h-8 px-2.5 text-xs rounded-[2px] border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+                                className="h-8 px-2.5 text-xs rounded border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition-colors"
                             >
                                 Clear all
                             </button>
@@ -2488,7 +2497,7 @@ const handleRefresh = async () => {
                                     {orgSlug && clientSlug && (
                                         <a
                                             href={`/d/f/${orgSlug}/c/${clientSlug}?tab=settings`}
-                                            className="inline-flex items-center gap-1.5 h-8 px-4 rounded-[2px] bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:brightness-105 transition-all"
+                                            className="inline-flex items-center gap-1.5 h-8 px-4 rounded bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:brightness-105 transition-all"
                                         >
                                             Go to Client Settings
                                         </a>
@@ -2503,7 +2512,7 @@ const handleRefresh = async () => {
                                         type="button"
                                         disabled={provisioning}
                                         onClick={() => void handleProvisionDriveFolder()}
-                                        className="inline-flex items-center gap-1.5 h-8 px-4 rounded-[2px] bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:brightness-105 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                                        className="inline-flex items-center gap-1.5 h-8 px-4 rounded bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:brightness-105 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                                     >
                                         {provisioning ? 'Setting up…' : 'Set up Drive Folder'}
                                     </button>
@@ -2522,7 +2531,7 @@ const handleRefresh = async () => {
                             {orgSlug && (
                                 <a
                                     href={`/d/f/${orgSlug}?tab=settings&section=storage`}
-                                    className="inline-flex items-center gap-1.5 h-8 px-4 rounded-[2px] bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:brightness-105 transition-all"
+                                    className="inline-flex items-center gap-1.5 h-8 px-4 rounded bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:brightness-105 transition-all"
                                 >
                                     Go to Settings
                                 </a>
@@ -2543,7 +2552,7 @@ const handleRefresh = async () => {
                             {canManage && orgSlug && (
                                 <a
                                     href={`/d/f/${orgSlug}?tab=settings&section=storage`}
-                                    className="inline-flex items-center gap-1.5 h-8 px-4 rounded-[2px] bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:brightness-105 transition-all"
+                                    className="inline-flex items-center gap-1.5 h-8 px-4 rounded bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:brightness-105 transition-all"
                                 >
                                     Go to Document Storage
                                 </a>
@@ -2908,7 +2917,7 @@ const handleRefresh = async () => {
 
                 {/* Folder upload confirmation modal (in-app, avoids browser "trust this site" wording) */}
                 <Dialog open={isFolderUploadModalOpen} onOpenChange={setIsFolderUploadModalOpen}>
-                    <DialogContent className="sm:max-w-[440px] border-[#e5e7eb] p-0 gap-0 rounded-[2px]">
+                    <DialogContent className="sm:max-w-[440px] border-[#e5e7eb] p-0 gap-0 rounded">
                         <VisuallyHidden><DialogTitle>Upload a folder</DialogTitle></VisuallyHidden>
 
                         {/* Header */}
@@ -2929,7 +2938,7 @@ const handleRefresh = async () => {
                                 <li>Folder structure preserved</li>
                                 <li>Sent directly to your Google Drive and never pass through our servers</li>
                             </ul>
-                            <div className="flex items-start gap-2 rounded-[2px] border border-[#e5e7eb] bg-[#f9f9fb] px-3 py-2.5">
+                            <div className="flex items-start gap-2 rounded border border-[#e5e7eb] bg-[#f9f9fb] px-3 py-2.5">
                                 <Info className="h-4 w-4 shrink-0 text-[#45474c] mt-0.5" />
                                 <p className="text-xs text-[#1b1b1d] font-medium leading-relaxed">
                                     Your browser may prompt you to confirm the folder selection.
@@ -2942,7 +2951,7 @@ const handleRefresh = async () => {
                             <Button
                                 type="button"
                                 variant="outline"
-                                className="!rounded-[2px] text-[10px] font-headline font-bold tracking-widest uppercase border-gray-300"
+                                className="!rounded text-[10px] font-headline font-bold tracking-widest uppercase border-gray-300"
                                 onClick={() => setIsFolderUploadModalOpen(false)}
                             >
                                 Cancel
@@ -2963,7 +2972,7 @@ const handleRefresh = async () => {
 
                 {/* Create Item Dialog */}
                 <Dialog open={isCreateItemOpen} onOpenChange={(open) => { if (!loading) setIsCreateItemOpen(open) }}>
-                    <DialogContent className="sm:max-w-[440px] border-[#e5e7eb] p-0 gap-0 rounded-[2px]">
+                    <DialogContent className="sm:max-w-[440px] border-[#e5e7eb] p-0 gap-0 rounded">
                         <VisuallyHidden><DialogTitle>
                             {createItemType === 'folder' ? 'New Folder' : createItemType === 'doc' ? 'New Google Doc' : createItemType === 'sheet' ? 'New Google Sheet' : createItemType === 'slide' ? 'New Google Slide' : createItemType === 'form' ? 'New Google Form' : createItemType === 'drawing' ? 'New Google Drawing' : createItemType === 'map' ? 'New Google Map' : createItemType === 'site' ? 'New Google Site' : 'New Google Script'}
                         </DialogTitle></VisuallyHidden>
@@ -2995,7 +3004,7 @@ const handleRefresh = async () => {
                         </div>
                         {/* Footer */}
                         <div className="px-5 py-3 border-t border-[#e5e7eb] bg-white flex items-center justify-end gap-3">
-                            <Button type="button" variant="outline" className="rounded-[2px] w-24 text-[10px] font-headline font-bold tracking-widest uppercase" onClick={() => setIsCreateItemOpen(false)} disabled={loading}>Cancel</Button>
+                            <Button type="button" variant="outline" className="rounded w-24 text-[10px] font-headline font-bold tracking-widest uppercase" onClick={() => setIsCreateItemOpen(false)} disabled={loading}>Cancel</Button>
                             <Button type="button" variant="greenCta" className="min-w-[7rem] text-[10px] font-headline font-bold tracking-widest uppercase" onClick={handleCreateItem} disabled={!newItemName.trim() || loading}>
                                 {loading ? <><LoadingSpinner size="sm" className="h-4 w-4 mr-1.5" />Creating…</> : 'Create'}
                             </Button>
@@ -3123,7 +3132,7 @@ const handleRefresh = async () => {
 
                 {/* Revoke external access confirmation */}
                 <Dialog open={!!unshareConfirmFile} onOpenChange={(open) => { if (!open) setUnshareConfirmFile(null) }}>
-                    <DialogContent className="sm:max-w-sm border-[#e5e7eb] p-0 gap-0 rounded-[2px] bg-[#f9f9fb]">
+                    <DialogContent className="sm:max-w-sm border-[#e5e7eb] p-0 gap-0 rounded bg-[#f9f9fb]">
                         <VisuallyHidden><DialogTitle>Revoke external access</DialogTitle></VisuallyHidden>
                         {/* Header */}
                         <div className="px-5 py-4 border-b border-[#e5e7eb] bg-white flex items-start gap-3">
@@ -3148,14 +3157,14 @@ const handleRefresh = async () => {
                                 variant="outline"
                                 onClick={() => setUnshareConfirmFile(null)}
                                 disabled={unshareInProgress}
-                                className="rounded-[2px] text-[10px] font-headline font-bold tracking-widest uppercase border-[#e5e7eb] text-[#45474c] hover:bg-[#f9f9fb]"
+                                className="rounded text-[10px] font-headline font-bold tracking-widest uppercase border-[#e5e7eb] text-[#45474c] hover:bg-[#f9f9fb]"
                             >
                                 Cancel
                             </Button>
                             <Button
                                 onClick={() => unshareConfirmFile && handleUnshare(unshareConfirmFile)}
                                 disabled={unshareInProgress}
-                                className="rounded-[2px] bg-red-600 hover:bg-red-700 text-white text-[10px] font-headline font-bold tracking-widest uppercase shadow-sm"
+                                className="rounded bg-red-600 hover:bg-red-700 text-white text-[10px] font-headline font-bold tracking-widest uppercase shadow-sm"
                             >
                                 {unshareInProgress ? <LoadingSpinner className="h-3.5 w-3.5" /> : 'Revoke Access'}
                             </Button>

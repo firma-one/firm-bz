@@ -131,7 +131,7 @@ export function AddFirmModal({ trigger, open: controlledOpen, onOpenChange: cont
             <Dialog open={open} onOpenChange={handleOpenChange}>
                 {!isControlled && <DialogTrigger asChild>{renderTrigger()}</DialogTrigger>}
 
-                <DialogContent className="sm:max-w-[860px] border-[#e5e7eb] p-0 gap-0 rounded-[2px] bg-[#f9f9fb] max-h-[90vh] overflow-y-auto">
+                <DialogContent className="sm:max-w-[860px] border-[#e5e7eb] p-0 gap-0 rounded bg-[#f9f9fb] max-h-[90vh] overflow-y-auto">
                     <VisuallyHidden><DialogTitle>New Firm</DialogTitle></VisuallyHidden>
 
                     {/* Header */}
@@ -231,7 +231,7 @@ export function AddFirmModal({ trigger, open: controlledOpen, onOpenChange: cont
                         {/* Footer */}
                         <div className="px-5 py-3 border-t border-[#e5e7eb] bg-white flex items-center justify-end gap-3 sticky bottom-0">
                             <Button type="button" variant="outline"
-                                className="rounded-[2px] w-32 text-[10px] font-headline font-bold tracking-widest uppercase"
+                                className="rounded w-32 text-[10px] font-headline font-bold tracking-widest uppercase"
                                 onClick={() => handleOpenChange(false)}
                                 disabled={isDismissDisabled}>
                                 Cancel
@@ -239,7 +239,7 @@ export function AddFirmModal({ trigger, open: controlledOpen, onOpenChange: cont
                             <Button type="submit"
                                 variant="greenCta"
                                 disabled={isFormDisabled || !name.trim()}
-                                className="rounded-[2px] w-40 text-[10px] font-headline font-bold tracking-widest uppercase">
+                                className="rounded w-40 text-[10px] font-headline font-bold tracking-widest uppercase">
                                 {creating ? <LoadingSpinner size="sm" /> : 'Create'}
                             </Button>
                         </div>

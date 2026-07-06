@@ -68,7 +68,7 @@ function ReminderRow({ r, isPending, acting, onDone, onUndoDone, onHide, onShow,
     const Icon = getEntityIcon(r.entityKey)
     return (
         <div
-            className={`group grid px-3 py-2 rounded-[2px] border transition-all ${
+            className={`group grid px-3 py-2 rounded border transition-all ${
                 isPending
                     ? 'border-[#e5e7eb] bg-[#f9f9fb] opacity-60'
                     : hidden
@@ -103,7 +103,7 @@ function ReminderRow({ r, isPending, acting, onDone, onUndoDone, onHide, onShow,
                             type="button"
                             disabled={acting === r.id || isPending}
                             onClick={() => hidden ? onShow(r.id) : onHide(r.id)}
-                            className="shrink-0 h-6 w-6 inline-flex items-center justify-center rounded-[2px] border border-[#e5e7eb] bg-white text-[#45474c]/50 hover:text-[#45474c] hover:border-[#e5e7eb] disabled:opacity-40 transition-colors"
+                            className="shrink-0 h-6 w-6 inline-flex items-center justify-center rounded border border-[#e5e7eb] bg-white text-[#45474c]/50 hover:text-[#45474c] hover:border-[#e5e7eb] disabled:opacity-40 transition-colors"
                         >
                             {hidden ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
                         </button>
@@ -265,7 +265,7 @@ export function RemindersPanel({ onCountChange }: Props) {
             </Tip>
 
             {open ? (
-                <div className="absolute right-0 top-full mt-2 w-[340px] border border-[#e5e7eb] rounded-[2px] shadow-lg z-50 overflow-hidden">
+                <div className="absolute right-0 top-full mt-2 w-[340px] border border-[#e5e7eb] rounded shadow-lg z-50 overflow-hidden">
                     {/* Header */}
                     <div className="px-4 py-3 bg-[#f9f9fb] border-b border-[#e5e7eb] flex items-center justify-between">
                         <div className="flex items-center gap-2">
@@ -286,14 +286,14 @@ export function RemindersPanel({ onCountChange }: Props) {
                                 <button
                                     type="button"
                                     onClick={() => setShowHidden((v) => !v)}
-                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-[2px] text-[11px] font-medium text-[#45474c] hover:text-[#1b1b1d] hover:bg-[#f3f4f6] transition-colors"
+                                    className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium text-[#45474c] hover:text-[#1b1b1d] hover:bg-[#f3f4f6] transition-colors"
                                 >
                                     {showHidden ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
                                     {`Hidden · ${hidden.length}`}
                                 </button>
                             ) : null}
                             <button type="button" onClick={() => setOpen(false)} aria-label="Close"
-                                className="p-1 rounded-[2px] hover:bg-[#f3f4f6] text-[#45474c] hover:text-[#1b1b1d] transition-colors">
+                                className="p-1 rounded hover:bg-[#f3f4f6] text-[#45474c] hover:text-[#1b1b1d] transition-colors">
                                 <SquareX className="h-4 w-4" />
                             </button>
                         </div>
@@ -305,7 +305,7 @@ export function RemindersPanel({ onCountChange }: Props) {
                         {loading ? (
                             <div className="space-y-1.5">
                                 {[1, 2, 3].map((i) => (
-                                    <div key={i} className="px-3 py-2 rounded-[2px] border border-[#e5e7eb] bg-white animate-pulse" style={{ borderLeftWidth: '3px', borderLeftColor: '#E8B99F' }}>
+                                    <div key={i} className="px-3 py-2 rounded border border-[#e5e7eb] bg-white animate-pulse" style={{ borderLeftWidth: '3px', borderLeftColor: '#E8B99F' }}>
                                         <div className="flex items-start gap-1.5">
                                             <div className="h-3.5 w-3.5 rounded bg-[#f3f4f6] shrink-0 mt-0.5" />
                                             <div className="flex-1 space-y-1.5">

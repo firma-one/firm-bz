@@ -168,7 +168,7 @@ export function RemindersTable({ initialReminders }: Props) {
             <Button
               variant="outline"
               size="sm"
-              className={`h-8 gap-1.5 text-xs bg-white rounded-[2px] border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors ${statusFilter !== 'all' ? 'border-slate-400 ring-1 ring-slate-300' : ''}`}
+              className={`h-8 gap-1.5 text-xs bg-white rounded border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors ${statusFilter !== 'all' ? 'border-slate-400 ring-1 ring-slate-300' : ''}`}
             >
               <Filter className="h-3 w-3 opacity-60" />
               Status
@@ -176,10 +176,10 @@ export function RemindersTable({ initialReminders }: Props) {
               <ChevronDown className="h-3 w-3 opacity-50" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-[180px] py-1 text-xs rounded-[2px]">
+          <DropdownMenuContent align="start" className="w-[180px] py-1 text-xs rounded">
             <div className="flex items-center justify-between px-2 py-1.5 border-b border-slate-100">
               <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 p-0 font-medium">Status</DropdownMenuLabel>
-              <DropdownMenuItem className="text-xs rounded-[2px] bg-slate-900 text-white hover:bg-slate-800 hover:text-white focus:bg-slate-800 focus:text-white p-1.5 px-2 cursor-pointer" onSelect={() => {}}>
+              <DropdownMenuItem className="text-xs rounded bg-slate-900 text-white hover:bg-slate-800 hover:text-white focus:bg-slate-800 focus:text-white p-1.5 px-2 cursor-pointer" onSelect={() => {}}>
                 Done
               </DropdownMenuItem>
             </div>
@@ -200,7 +200,7 @@ export function RemindersTable({ initialReminders }: Props) {
             <Button
               variant="outline"
               size="sm"
-              className={`h-8 gap-1.5 text-xs bg-white rounded-[2px] border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors ${entityFilter !== 'all' ? 'border-slate-400 ring-1 ring-slate-300' : ''}`}
+              className={`h-8 gap-1.5 text-xs bg-white rounded border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors ${entityFilter !== 'all' ? 'border-slate-400 ring-1 ring-slate-300' : ''}`}
             >
               <Filter className="h-3 w-3 opacity-60" />
               Type
@@ -208,10 +208,10 @@ export function RemindersTable({ initialReminders }: Props) {
               <ChevronDown className="h-3 w-3 opacity-50" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-[180px] py-1 text-xs rounded-[2px]">
+          <DropdownMenuContent align="start" className="w-[180px] py-1 text-xs rounded">
             <div className="flex items-center justify-between px-2 py-1.5 border-b border-slate-100">
               <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 p-0 font-medium">Type</DropdownMenuLabel>
-              <DropdownMenuItem className="text-xs rounded-[2px] bg-slate-900 text-white hover:bg-slate-800 hover:text-white focus:bg-slate-800 focus:text-white p-1.5 px-2 cursor-pointer" onSelect={() => {}}>
+              <DropdownMenuItem className="text-xs rounded bg-slate-900 text-white hover:bg-slate-800 hover:text-white focus:bg-slate-800 focus:text-white p-1.5 px-2 cursor-pointer" onSelect={() => {}}>
                 Done
               </DropdownMenuItem>
             </div>
@@ -228,7 +228,7 @@ export function RemindersTable({ initialReminders }: Props) {
         </DropdownMenu>
 
         {(statusFilter !== 'all' || entityFilter !== 'all') && (
-          <button type="button" onClick={() => { setStatusFilter('all'); setEntityFilter('all') }} className="h-8 px-2.5 text-xs rounded-[2px] border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+          <button type="button" onClick={() => { setStatusFilter('all'); setEntityFilter('all') }} className="h-8 px-2.5 text-xs rounded border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition-colors">
             Clear all
           </button>
         )}
@@ -304,7 +304,7 @@ export function RemindersTable({ initialReminders }: Props) {
                     disabled={isActing}
                     onClick={() => handleMarkDone(r.id)}
                     title="Mark done"
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-[2px] border border-[#e5e7eb] bg-white text-[0.75rem] text-[#45474c] hover:text-emerald-600 hover:border-emerald-300 disabled:opacity-40 transition-colors"
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded border border-[#e5e7eb] bg-white text-[0.75rem] text-[#45474c] hover:text-emerald-600 hover:border-emerald-300 disabled:opacity-40 transition-colors"
                   >
                     <CheckCircle2 className="h-3.5 w-3.5" />
                     Done

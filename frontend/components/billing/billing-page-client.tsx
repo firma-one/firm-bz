@@ -17,11 +17,11 @@ import { cn } from '@/lib/utils'
 
 
 const cardSurface = cn(
-    'rounded-[2px] border border-[#e5e7eb] bg-white shadow-sm'
+    'rounded border border-[#e5e7eb] bg-white shadow-sm'
 )
 
 const trustIconTileClass = cn(
-    'flex h-10 w-10 shrink-0 items-center justify-center rounded-[2px]',
+    'flex h-10 w-10 shrink-0 items-center justify-center rounded',
     'border border-[#e5e7eb] bg-[#f9f9fb] text-[#45474c]'
 )
 
@@ -214,7 +214,7 @@ export function BillingPageClient({
         }
         return (
             <div className="relative mx-auto max-w-5xl space-y-6 pb-10 px-4 sm:px-5 md:px-6">
-                <div className="rounded-[2px] border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-950">
+                <div className="rounded border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-950">
                     <p className="font-medium">Billing isn&apos;t available for your role on this workspace.</p>
                     <p className="mt-1 text-amber-900/90">
                         Ask an owner to assign billing access, or continue onboarding to connect Google Drive.
@@ -225,7 +225,7 @@ export function BillingPageClient({
                         <button
                             type="button"
                             onClick={() => void onSkipToConnectDrive()}
-                            className="inline-flex h-8 items-center rounded-[2px] border border-[#e5e7eb] bg-white px-3 text-xs font-medium text-[#45474c] transition hover:bg-[#f9f9fb] hover:text-[#1b1b1d]"
+                            className="inline-flex h-8 items-center rounded border border-[#e5e7eb] bg-white px-3 text-xs font-medium text-[#45474c] transition hover:bg-[#f9f9fb] hover:text-[#1b1b1d]"
                         >
                             Skip to Google Drive
                         </button>
@@ -278,7 +278,7 @@ export function BillingPageClient({
                             data-onboarding-billing-skip-tour
                             onClick={() => void onSkipToConnectDrive()}
                             className={cn(
-                                'h-auto px-4 py-1.5 rounded-[2px] bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-primary hover:brightness-105 shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex shrink-0 items-center justify-center'
+                                'h-auto px-4 py-1.5 rounded bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-primary hover:brightness-105 shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex shrink-0 items-center justify-center'
                             )}
                             aria-label="Skip subscribing for now and continue to connect Google Drive"
                         >
@@ -305,12 +305,12 @@ export function BillingPageClient({
                     </>
                 ) : null}
                 {paidPlanIntent && (
-                    <div className="mt-3 rounded-[2px] border border-primary/25 bg-primary/8 px-3 py-2 text-xs text-[#1b1b1d]">
+                    <div className="mt-3 rounded border border-primary/25 bg-primary/8 px-3 py-2 text-xs text-[#1b1b1d]">
                         You currently have an active Free plan. You can upgrade now, or skip and continue.
                     </div>
                 )}
                 {skipMessage && (
-                    <div className="rounded-[2px] border border-[#e5e7eb] bg-[#f9f9fb] px-3 py-2 text-xs text-[#45474c]">
+                    <div className="rounded border border-[#e5e7eb] bg-[#f9f9fb] px-3 py-2 text-xs text-[#45474c]">
                         {skipMessage}
                     </div>
                 )}
@@ -350,7 +350,7 @@ export function BillingPageClient({
                                 href="/pricing"
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="mt-auto inline-flex w-full items-center gap-1.5 rounded-[2px] border border-[#e5e7eb] bg-white px-3 py-1.5 text-xs font-medium text-[#1b1b1d] shadow-sm hover:bg-[#f9f9fb]"
+                                className="mt-auto inline-flex w-full items-center gap-1.5 rounded border border-[#e5e7eb] bg-white px-3 py-1.5 text-xs font-medium text-[#1b1b1d] shadow-sm hover:bg-[#f9f9fb]"
                             >
                                 <Rows3 className="h-3.5 w-3.5 opacity-70" aria-hidden />
                                 {upgradeCopy.ctaComparePlans}
@@ -366,7 +366,7 @@ export function BillingPageClient({
                                 href="/resources/faq"
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="mt-auto inline-flex w-full items-center gap-1.5 rounded-[2px] border border-[#e5e7eb] bg-white px-3 py-1.5 text-xs font-medium text-[#1b1b1d] shadow-sm hover:bg-[#f9f9fb]"
+                                className="mt-auto inline-flex w-full items-center gap-1.5 rounded border border-[#e5e7eb] bg-white px-3 py-1.5 text-xs font-medium text-[#1b1b1d] shadow-sm hover:bg-[#f9f9fb]"
                             >
                                 <HelpCircle className="h-3.5 w-3.5 opacity-70" aria-hidden />
                                 FAQs
@@ -378,7 +378,7 @@ export function BillingPageClient({
             </ul>
 
             <div className="flex flex-col gap-4 sm:flex-row sm:items-stretch sm:gap-4">
-                <div className="flex min-w-0 items-start gap-3.5 sm:w-1/4 sm:shrink-0 rounded-[2px] border-2 border-primary/30 bg-primary/5 px-4 py-4 sm:px-5 shadow-md">
+                <div className="flex min-w-0 items-start gap-3.5 sm:w-1/4 sm:shrink-0 rounded border-2 border-primary/30 bg-primary/5 px-4 py-4 sm:px-5 shadow-md">
                     <span className={trustIconTileClass}>
                         <CreditCard className="h-5 w-5" aria-hidden />
                     </span>
@@ -438,7 +438,7 @@ export function BillingPageClient({
                         type="button"
                         onClick={handleSkipUpgrade}
                         disabled={skipSubmitting}
-                        className="inline-flex h-8 items-center rounded-[2px] border border-[#e5e7eb] bg-white px-3 text-xs font-medium text-[#45474c] transition hover:bg-[#f9f9fb] hover:text-[#1b1b1d] disabled:opacity-60"
+                        className="inline-flex h-8 items-center rounded border border-[#e5e7eb] bg-white px-3 text-xs font-medium text-[#45474c] transition hover:bg-[#f9f9fb] hover:text-[#1b1b1d] disabled:opacity-60"
                     >
                         {skipSubmitting ? 'Saving…' : 'Skip for now'}
                     </button>

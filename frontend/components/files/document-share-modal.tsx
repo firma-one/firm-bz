@@ -184,7 +184,7 @@ export function DocumentShareModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[480px] border-[#e5e7eb] p-0 gap-0 rounded-[2px] bg-[#f9f9fb]">
+      <DialogContent className="sm:max-w-[480px] border-[#e5e7eb] p-0 gap-0 rounded bg-[#f9f9fb]">
         {/* Header */}
         <DialogHeader className="px-5 py-4 border-b border-[#e5e7eb] bg-white">
           <DialogTitle className="text-[11px] font-headline font-bold tracking-widest uppercase text-[#1b1b1d] leading-tight">Share document</DialogTitle>
@@ -196,14 +196,14 @@ export function DocumentShareModal({
 
         {!initialLoadDone ? (
           <div className="p-5 space-y-3" aria-busy="true" aria-label="Loading share settings">
-            <Skeleton className="h-[68px] w-full rounded-[2px]" />
-            <Skeleton className="h-[68px] w-full rounded-[2px]" />
+            <Skeleton className="h-[68px] w-full rounded" />
+            <Skeleton className="h-[68px] w-full rounded" />
           </div>
         ) : (
           <div className="p-5 space-y-5">
             {isSandboxFirm && <SandboxInfoBanner />}
             {/* External Collaborator (platform.personas.eng_ext_collaborator) */}
-            <div className="rounded-[2px] border border-[#e5e7eb] bg-white overflow-hidden">
+            <div className="rounded border border-[#e5e7eb] bg-white overflow-hidden">
               <div className="flex items-center justify-between gap-4 px-4 py-3">
                 <div className="flex items-center gap-3 min-w-0">
                   <Users className="h-4 w-4 text-[#45474c] shrink-0" />
@@ -254,7 +254,7 @@ export function DocumentShareModal({
             </div>
 
             {/* Guest (platform.personas.eng_viewer): main toggle + options enclosed in one tile */}
-            <div className="rounded-[2px] border border-[#e5e7eb] bg-white overflow-hidden">
+            <div className="rounded border border-[#e5e7eb] bg-white overflow-hidden">
               <div className="flex items-center justify-between gap-4 px-4 py-3">
                 <div className="flex items-center gap-3 min-w-0">
                   <UserCircle className="h-4 w-4 text-[#45474c] shrink-0" />
@@ -366,7 +366,7 @@ export function DocumentShareModal({
         <div className="px-5 py-3 border-t border-[#e5e7eb] bg-white flex items-center justify-end gap-2">
           <Button
             variant="outline"
-            className="rounded-[2px] text-[10px] font-headline font-bold tracking-widest uppercase border-[#e5e7eb] text-[#45474c] hover:bg-[#f9f9fb]"
+            className="rounded text-[10px] font-headline font-bold tracking-widest uppercase border-[#e5e7eb] text-[#45474c] hover:bg-[#f9f9fb]"
             onClick={() => onOpenChange(false)}
             disabled={saving}
           >
@@ -374,7 +374,7 @@ export function DocumentShareModal({
           </Button>
           <Button
             variant="greenCta"
-            className="rounded-[2px] text-[10px] font-headline font-bold tracking-widest uppercase"
+            className="rounded text-[10px] font-headline font-bold tracking-widest uppercase"
             onClick={handleSave}
             disabled={isSandboxFirm || saving || !initialLoadDone || !hasChanges}
           >

@@ -67,6 +67,18 @@ export async function GET(
   // ── Default: document rollup ──────────────────────────────────────────────
   const q = request.nextUrl.searchParams.get('q')?.trim().toLowerCase() || ''
 
+  // Build the external-user set so we can flag threads awaiting a firm reply.
+  // Mirror the exact rule the insights route uses for `unansweredThreads` so
+  // the Action Center count and per-thread pips agree byte-for-byte.
+  const EXTERNAL_ROLES = new Set(['eng_ext_collaborator', 'eng_viewer'])
+  const engagementMembers = await prisma.engagementMember.findMany({
+    where: { engagementId: projectId },
+    select: { userId: true, role: true },
+  })
+  const externalUserIds = new Set(
+    engagementMembers.filter((m) => EXTERNAL_ROLES.has(m.role)).map((m) => m.userId)
+  )
+
   const docs = await prisma.engagementDocument.findMany({
     where: {
       engagementId: projectId,
@@ -85,7 +97,7 @@ export async function GET(
   })
 
   // Latest message per document (small N; acceptable to do one query per doc for now)
-  const latestByDocId: Record<string, { createdAt: string; preview: string; authorUserId: string | null }> = {}
+  const latestByDocId: Record<string, { createdAt: string; preview: string; authorUserId: string | null; authorIsExternal: boolean }> = {}
   await Promise.all(
     docIds.map(async (docId) => {
       const latest = await prisma.docCommentMessage.findFirst({
@@ -98,6 +110,8 @@ export async function GET(
         createdAt: latest.createdAt.toISOString(),
         preview: latest.content.slice(0, 220),
         authorUserId: latest.authorUserId ?? null,
+        // True when the last message is from EC/EV — i.e. the firm hasn't replied yet.
+        authorIsExternal: latest.authorUserId ? externalUserIds.has(latest.authorUserId) : false,
       }
     })
   )

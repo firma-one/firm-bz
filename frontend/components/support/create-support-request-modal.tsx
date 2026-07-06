@@ -225,7 +225,7 @@ export function CreateSupportRequestModal({ firmSlug, trigger }: CreateSupportRe
       {wrapTrigger(trigger || (
         <button
           type="button"
-          className="h-auto px-4 py-1.5 rounded-[2px] bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:brightness-105 shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all inline-flex items-center gap-1.5"
+          className="h-auto px-4 py-1.5 rounded bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:brightness-105 shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all inline-flex items-center gap-1.5"
         >
           <LifeBuoy className="h-3.5 w-3.5" />
           New Request
@@ -233,7 +233,7 @@ export function CreateSupportRequestModal({ firmSlug, trigger }: CreateSupportRe
       ))}
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-[500px] p-0 border-[#e5e7eb] !rounded-[2px] overflow-hidden max-h-[90vh] flex flex-col gap-0">
+        <DialogContent className="sm:max-w-[500px] p-0 border-[#e5e7eb] !rounded overflow-hidden max-h-[90vh] flex flex-col gap-0">
 
           {/* Modal header */}
           <div className="border-b border-[#e5e7eb] px-6 py-5 shrink-0">
@@ -280,7 +280,7 @@ export function CreateSupportRequestModal({ firmSlug, trigger }: CreateSupportRe
                         type="button"
                         disabled={isLoading}
                         onClick={() => setSelectedType(type.id)}
-                        className="flex flex-col items-center gap-2 px-2 py-4 rounded-[2px] border text-center transition-all"
+                        className="flex flex-col items-center gap-2 px-2 py-4 rounded border text-center transition-all"
                         style={isActive ? {
                           backgroundColor: type.activeBgColor,
                           borderColor: type.activeBorderColor,
@@ -318,7 +318,7 @@ export function CreateSupportRequestModal({ firmSlug, trigger }: CreateSupportRe
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder={placeholders[selectedType]}
-                  className="border-[#e5e7eb] rounded-[2px] text-[0.8125rem] text-[#1b1b1d] placeholder:text-[#45474c]/50 focus:border-primary focus:ring-primary/20 disabled:opacity-60 min-h-32 resize-none"
+                  className="border-[#e5e7eb] rounded text-[0.8125rem] text-[#1b1b1d] placeholder:text-[#45474c]/50 focus:border-primary focus:ring-primary/20 disabled:opacity-60 min-h-32 resize-none"
                   disabled={isLoading}
                   required
                 />
@@ -356,7 +356,7 @@ export function CreateSupportRequestModal({ firmSlug, trigger }: CreateSupportRe
                   onDragLeave={() => setIsDragOver(false)}
                   onDrop={handleDrop}
                   className={cn(
-                    "border border-dashed rounded-[2px] px-4 py-5 text-center transition-colors cursor-pointer",
+                    "border border-dashed rounded px-4 py-5 text-center transition-colors cursor-pointer",
                     isDragOver
                       ? "border-primary bg-[#f0faf6]"
                       : "border-[#d1d5db] bg-[#f9f9fb] hover:border-primary/50 hover:bg-[#f9f9fb]"
@@ -418,14 +418,14 @@ export function CreateSupportRequestModal({ firmSlug, trigger }: CreateSupportRe
                 type="button"
                 onClick={() => setOpen(false)}
                 disabled={isLoading}
-                className="px-4 py-2 text-[0.8125rem] font-medium text-[#45474c] bg-white border border-[#e5e7eb] rounded-[2px] hover:bg-[#f3f4f6] hover:text-[#1b1b1d] transition-colors disabled:opacity-50"
+                className="px-4 py-2 text-[0.8125rem] font-medium text-[#45474c] bg-white border border-[#e5e7eb] rounded hover:bg-[#f3f4f6] hover:text-[#1b1b1d] transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={!description.trim() || isLoading}
-                className="group inline-flex items-center gap-2 px-4 py-2 rounded-[2px] bg-[#1a5c3a] hover:bg-[#164f32] text-white text-xs font-headline font-bold tracking-widest uppercase transition-all shadow-[0_1px_2px_rgba(0,0,0,0.25),inset_0_1px_0_rgba(255,255,255,0.08)] hover:shadow-[0_4px_8px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.08)] hover:-translate-y-px active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none disabled:translate-y-0"
+                className="group inline-flex items-center gap-2 px-4 py-2 rounded bg-[#1a5c3a] hover:bg-[#164f32] text-white text-xs font-headline font-bold tracking-widest uppercase transition-all shadow-[0_1px_2px_rgba(0,0,0,0.25),inset_0_1px_0_rgba(255,255,255,0.08)] hover:shadow-[0_4px_8px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.08)] hover:-translate-y-px active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none disabled:translate-y-0"
               >
                 {isLoading ? (
                   <>

@@ -91,7 +91,7 @@ const PRICING_PAGE_BILLING_TOGGLE_BTN =
 /** Track + segment chrome: billing peach trial vs neutral slate (matches checkout / trust cards). */
 function billingToggleTrackClass(peachAccent: boolean) {
     return cn(
-        'inline-flex w-max max-w-[calc(100%-4.5rem)] shrink-0 items-stretch gap-0.5 rounded-[2px] p-0.5',
+        'inline-flex w-max max-w-[calc(100%-4.5rem)] shrink-0 items-stretch gap-0.5 rounded p-0.5',
         peachAccent
             ? 'border border-[#c49a82]/55 bg-gradient-to-b from-[#ECC0AA]/38 to-[#ECC0AA]/14 shadow-[inset_0_1px_3px_rgba(61,42,34,0.09)]'
             : 'border border-primary/30 bg-primary/10 shadow-[inset_0_1px_2px_rgba(var(--primary-rgb),0.08)]'
@@ -258,7 +258,7 @@ function savingsPercentAnnualVsMonthly(monthlyCents: number, annualPeriodCents: 
 /** Shared panel: Polar trust copy + portal actions or Compare plans (inside Billing & plans card). */
 const billingTrustPanelClass = (compact: boolean, blueAccentTrial?: boolean) =>
     cn(
-        'rounded-[2px] shadow-sm',
+        'rounded shadow-sm',
         blueAccentTrial
             ? 'border border-[#ECC0AA]/55 bg-gradient-to-br from-[#ECC0AA]/32 via-white to-slate-50/80'
             : 'border border-[#e5e7eb] bg-[#f9f9fb]',
@@ -267,14 +267,14 @@ const billingTrustPanelClass = (compact: boolean, blueAccentTrial?: boolean) =>
 
 /** Green CTA (Manage Subscription & plan checkout CTAs). */
 const polarBillingCtaButtonClass = cn(
-    'text-sm font-semibold rounded-[2px]',
+    'text-sm font-semibold rounded',
     'bg-primary text-white hover:bg-primary hover:brightness-105 hover:text-white',
     'shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all'
 )
 
 /** Billing page trial: primary checkout filled with #ECC0AA */
 const polarBillingPeachCtaClass = cn(
-    'rounded-[2px] text-sm font-semibold',
+    'rounded text-sm font-semibold',
     '!border-2 !border-[#c49a82]/70 !bg-[#ECC0AA] !text-[#3d2a22]',
     'shadow-[0_2px_6px_rgba(61,42,34,0.1),0_8px_24px_-8px_rgba(236,192,170,0.55)]',
     'transition-[transform,background-color,border-color,box-shadow,color] duration-200 ease-out',
@@ -284,7 +284,7 @@ const polarBillingPeachCtaClass = cn(
 
 /** Match profile billing inner / account cards */
 const planCardBase = cn(
-    'relative flex h-full flex-col overflow-hidden rounded-[2px] border border-[#e5e7eb]',
+    'relative flex h-full flex-col overflow-hidden rounded border border-[#e5e7eb]',
     'bg-white',
     'shadow-sm',
     'transition-all duration-300 ease-out'
@@ -1113,7 +1113,7 @@ export function PolarPlansPicker({
         return (
             <div
                 className={cn(
-                    'rounded-[2px] border border-amber-200/90 bg-gradient-to-br from-amber-50 to-orange-50/50 px-4 py-3.5 text-sm text-amber-950 shadow-sm',
+                    'rounded border border-amber-200/90 bg-gradient-to-br from-amber-50 to-orange-50/50 px-4 py-3.5 text-sm text-amber-950 shadow-sm',
                     className
                 )}
             >
@@ -1190,7 +1190,7 @@ export function PolarPlansPicker({
     return (
         <div className={cn('space-y-6', className)}>
             {showAdminOnlyBlock ? (
-                <div className="rounded-[2px] border border-amber-200/80 bg-amber-50/60 px-4 py-3 text-sm text-amber-950 shadow-sm">
+                <div className="rounded border border-amber-200/80 bg-amber-50/60 px-4 py-3 text-sm text-amber-950 shadow-sm">
                     {upgradeCopy.billingPortalAdminOnlyHint}
                 </div>
             ) : null}
@@ -1424,7 +1424,7 @@ export function PolarPlansPicker({
                                                         type="button"
                                                         variant="manageBillingCta"
                                                         className={cn(
-                                                            'h-11 w-full rounded-[2px]',
+                                                            'h-11 w-full rounded',
                                                             blueAccentTrial &&
                                                                 '!border-[#c49a82] !bg-[#ECC0AA]/40 !text-[#3d2a22] hover:!border-[#b07d62] hover:!bg-[#ECC0AA]/65 hover:!text-[#241814]'
                                                         )}
@@ -1443,7 +1443,7 @@ export function PolarPlansPicker({
                                                 ) : (
                                                     <div
                                                         className={cn(
-                                                            'rounded-[2px] border px-4 py-3 text-center shadow-sm',
+                                                            'rounded border px-4 py-3 text-center shadow-sm',
                                                             blueAccentTrial
                                                                 ? 'border-[#ECC0AA]/60 bg-[#ECC0AA]/22 shadow-[0_2px_12px_-6px_rgba(236,192,170,0.45)]'
                                                                 : 'border-slate-200/80 bg-white/90'
@@ -1659,7 +1659,7 @@ export function PolarPlansPicker({
                                                     type="button"
                                                     variant="manageBillingCta"
                                                     className={cn(
-                                                        'h-11 w-full rounded-[2px]',
+                                                        'h-11 w-full rounded',
                                                         blueAccentTrial &&
                                                             '!border-[#c49a82] !bg-[#ECC0AA]/40 !text-[#3d2a22] hover:!border-[#b07d62] hover:!bg-[#ECC0AA]/65 hover:!text-[#241814]'
                                                     )}
@@ -1678,7 +1678,7 @@ export function PolarPlansPicker({
                                             ) : (
                                                 <div
                                                     className={cn(
-                                                        'rounded-[2px] border px-4 py-3 text-center shadow-sm',
+                                                        'rounded border px-4 py-3 text-center shadow-sm',
                                                         blueAccentTrial
                                                             ? 'border-[#ECC0AA]/60 bg-[#ECC0AA]/22 shadow-[0_2px_12px_-6px_rgba(236,192,170,0.45)]'
                                                             : 'border-slate-200/80 bg-white/90'
@@ -1697,7 +1697,7 @@ export function PolarPlansPicker({
                                         ) : isFreeTier ? (
                                             <div
                                                 className={cn(
-                                                    'rounded-[2px] border px-4 py-3 text-center shadow-sm',
+                                                    'rounded border px-4 py-3 text-center shadow-sm',
                                                     blueAccentTrial
                                                         ? 'border-[#ECC0AA]/45 bg-[#ECC0AA]/14'
                                                         : 'border-slate-200/80 bg-white/90'

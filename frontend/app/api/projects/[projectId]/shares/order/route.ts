@@ -7,6 +7,7 @@ import { canManageProject } from '@/lib/permission-helpers'
 import { syncDocumentSharingUsers } from '@/lib/sync-document-sharing'
 import { STAGE_ROLE_MAP } from '@/lib/deliverable-stage-roles'
 import { EngagementRole, DocumentSharingPermissionStatus } from '@prisma/client'
+import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 
 const STAGE_ORDER: Record<ActivityStatus, number> = { to_do: 0, in_progress: 1, in_review: 2, approved: 3 }
 
@@ -73,6 +74,20 @@ export async function PUT(
         where: { id: share.id },
         data: { settings, updatedAt: new Date() },
       })
+
+      // Emit DOCUMENT_STATUS_CHANGED on any actual stage change so revision-round
+      // metrics (Phase 7C) count board drags too, not just single-doc PATCHes.
+      if (oldStatus !== u.status) {
+        audit(AUDIT_EVENT.DOCUMENT_STATUS_CHANGED)
+          .scope(AUDIT_SCOPE.DOCUMENT)
+          .firm(share.firmId)
+          .client(ctx.clientId)
+          .engagement(projectId)
+          .document(share.id)
+          .actor(user.id)
+          .meta({ fileName: share.fileName, oldStatus: oldStatus ?? null, newStatus: u.status })
+          .fireAndForget()
+      }
 
       if (Object.keys(shareUpdate).length > 0) {
         const shareId = share.id

@@ -11,7 +11,13 @@ const transporter = nodemailer.createTransport({
     },
 })
 
-export async function sendEmail(to: string, subject: string, html: string) {
+export interface EmailAttachment {
+    filename: string
+    content: Buffer
+    contentType: string
+}
+
+export async function sendEmail(to: string, subject: string, html: string, attachments?: EmailAttachment[]) {
     if (!process.env.SMTP_HOST) {
         logger.warn("SMTP_HOST not configured. Email not sent", 'Email', { subject, to })
         return
@@ -23,6 +29,7 @@ export async function sendEmail(to: string, subject: string, html: string) {
             to,
             subject,
             html,
+            ...(attachments?.length ? { attachments } : {}),
         })
         // Log email delivery without exposing full email address
         const emailDomain = to.split('@')[1] || 'unknown'

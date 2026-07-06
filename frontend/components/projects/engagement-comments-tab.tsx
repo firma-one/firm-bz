@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
-import { AtSign, Search, ArrowRight, MessagesSquare } from 'lucide-react'
+import { AtSign, Search, ArrowRight, ArrowUp, MessagesSquare } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
@@ -29,7 +29,7 @@ type DocRow = {
   projectDocumentId: string
   documentName: string
   count: number
-  latest: { createdAt: string; preview: string } | null
+  latest: { createdAt: string; preview: string; authorIsExternal?: boolean } | null
 }
 
 type MentionRow = {
@@ -209,6 +209,15 @@ export function EngagementCommentsTab({
                         <span className="shrink-0 inline-flex items-center rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary tabular-nums leading-none">
                           {r.count}
                         </span>
+                        {r.latest?.authorIsExternal && (
+                            <span
+                                className="shrink-0 inline-flex items-center gap-0.5 rounded-full bg-amber-50 border border-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600 leading-none"
+                                title="Last message is from an external contributor — awaiting your reply."
+                            >
+                                <ArrowUp className="h-2.5 w-2.5" />
+                                Awaiting reply
+                            </span>
+                        )}
                       </div>
                       {r.latest ? (
                         <div className="mt-0.5 text-xs text-[#45474c] line-clamp-1">

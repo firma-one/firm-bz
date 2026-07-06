@@ -478,7 +478,7 @@ export function ClientSettingsForm({
                                 ].join(' ')}>
                                     <SelectValue />
                                 </SelectTrigger>
-                                <SelectContent className="rounded-[2px] border border-[#e5e7eb] bg-white shadow-md py-0.5 min-w-[var(--radix-select-trigger-width)]">
+                                <SelectContent className="rounded border border-[#e5e7eb] bg-white shadow-md py-0.5 min-w-[var(--radix-select-trigger-width)]">
                                     <SelectItem value="PROSPECT" className="cursor-pointer rounded-none py-1 px-2.5 !text-[0.8125rem] text-[#45474c] outline-none focus:bg-[#f9f9fb] data-[state=checked]:bg-primary/10 data-[state=checked]:border-l-2 data-[state=checked]:border-brand-accent data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-[#f9f9fb]">Prospect</SelectItem>
                                     <SelectItem value="ACTIVE" className="cursor-pointer rounded-none py-1 px-2.5 !text-[0.8125rem] text-[#45474c] outline-none focus:bg-[#f9f9fb] data-[state=checked]:bg-primary/10 data-[state=checked]:border-l-2 data-[state=checked]:border-brand-accent data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-[#f9f9fb]">Active</SelectItem>
                                     <SelectItem value="ON_HOLD" className="cursor-pointer rounded-none py-1 px-2.5 !text-[0.8125rem] text-[#45474c] outline-none focus:bg-[#f9f9fb] data-[state=checked]:bg-primary/10 data-[state=checked]:border-l-2 data-[state=checked]:border-brand-accent data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-[#f9f9fb]">On hold</SelectItem>
@@ -620,10 +620,10 @@ export function ClientSettingsForm({
 
             {/* Actions bar */}
             <div className="flex items-center gap-3">
-                <Button type="button" variant="outline" className="rounded-[2px] w-32 text-[10px] font-headline font-bold tracking-widest uppercase" onClick={() => router.push(`/d/f/${orgSlug}/c/${clientSlug}?tab=projects`)}>
+                <Button type="button" variant="outline" className="rounded w-32 text-[10px] font-headline font-bold tracking-widest uppercase" onClick={() => router.push(`/d/f/${orgSlug}/c/${clientSlug}?tab=projects`)}>
                     Cancel
                 </Button>
-                <Button onClick={handleSave} disabled={isSandboxFirm || saving || !detailsDirty} variant="greenCta" className="rounded-[2px] w-32 text-[10px] font-headline font-bold tracking-widest uppercase text-white">
+                <Button onClick={handleSave} disabled={isSandboxFirm || saving || !detailsDirty} variant="greenCta" className="rounded w-32 text-[10px] font-headline font-bold tracking-widest uppercase text-white">
                     {saving ? 'Saving…' : 'Save'}
                 </Button>
             </div>
@@ -910,7 +910,7 @@ export function ClientSettingsForm({
                         {/* Save branding */}
                         <div className="mt-4 flex items-center gap-3">
                             <Button onClick={() => void handleSaveBrand()} disabled={isSandboxFirm || savingBrand || !brandDirty} variant="greenCta"
-                                className="rounded-[2px] w-40 text-[10px] font-headline font-bold tracking-widest uppercase text-white">
+                                className="rounded w-40 text-[10px] font-headline font-bold tracking-widest uppercase text-white">
                                 {savingBrand ? 'Saving…' : 'Save'}
                             </Button>
                         </div>
@@ -932,7 +932,7 @@ export function ClientSettingsForm({
                     <div className="overflow-hidden min-h-0">
                     <div className="p-4 border-t border-red-200 bg-red-50/40 space-y-3">
                         <p className="text-xs text-[#45474c]">Permanently delete this client. All engagements and members will be removed. This cannot be undone.</p>
-                        <Button type="button" onClick={() => setDeleteConfirmOpen(true)} disabled={isSandboxFirm || deleting} className="rounded-[2px] bg-red-700 text-white hover:bg-red-800 border-0 text-[10px] font-headline font-bold tracking-widest uppercase">
+                        <Button type="button" onClick={() => setDeleteConfirmOpen(true)} disabled={isSandboxFirm || deleting} className="rounded bg-red-700 text-white hover:bg-red-800 border-0 text-[10px] font-headline font-bold tracking-widest uppercase">
                             {deleting ? 'Deleting…' : 'Delete client'}
                         </Button>
                     </div>
