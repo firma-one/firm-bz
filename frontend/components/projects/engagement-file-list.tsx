@@ -181,7 +181,6 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
     const [descendantIdsForEC, setDescendantIdsForEC] = useState<Set<string>>(new Set())
     const [descendantIdsForGuest, setDescendantIdsForGuest] = useState<Set<string>>(new Set())
     const [sharedByMeExternalIds, setSharedByMeExternalIds] = useState<Set<string>>(new Set())
-    const [filterShared, setFilterShared] = useState<'all' | 'by_me' | 'by_others' | 'with_collaborator' | 'with_viewer' | 'pending_intake'>('all')
     const [bookmarkIdByDocumentId, setBookmarkIdByDocumentId] = useState<Map<string, string>>(new Map())
 
     useEffect(() => {
@@ -1641,26 +1640,13 @@ const handleRefresh = async () => {
             if (typeof va === 'string' && typeof vb === 'string') return va.localeCompare(vb) * direction
             return ((Number(va) || 0) - (Number(vb) || 0)) * direction
         }
-        if (filterShared !== 'all') {
-            result = result.filter(f => {
-                if (filterShared === 'by_me') return sharedByMeExternalIds.has(f.id)
-                if (filterShared === 'by_others') {
-                    const isShared = sharedExternalIds.has(f.id) || ancestorFolderIds.has(f.id)
-                    return isShared && !sharedByMeExternalIds.has(f.id)
-                }
-                if (filterShared === 'with_collaborator') return sharedExternalIdsForEC.has(f.id) || ancestorFolderIdsForEC.has(f.id) || descendantIdsForEC.has(f.id)
-                if (filterShared === 'with_viewer') return sharedExternalIdsForGuest.has(f.id) || ancestorFolderIdsForGuest.has(f.id) || descendantIdsForGuest.has(f.id)
-                if (filterShared === 'pending_intake') return !!f.isPendingApproval
-                return true
-            })
-        }
         if (sortConfig.foldersFirst) {
             const folders = result.filter(f => f.mimeType === 'application/vnd.google-apps.folder').sort(cmp)
             const rest = result.filter(f => f.mimeType !== 'application/vnd.google-apps.folder').sort(cmp)
             return [...folders, ...rest]
         }
         return result.sort(cmp)
-    }, [files, sortConfig, filterTypes, filterOwner, filterModified, filterShared, sharedByMeExternalIds, sharedExternalIds, sharedExternalIdsForEC, sharedExternalIdsForGuest, ancestorFolderIds, ancestorFolderIdsForEC, ancestorFolderIdsForGuest, descendantIdsForEC, descendantIdsForGuest, session?.user?.email, breadcrumbs])
+    }, [files, sortConfig, filterTypes, filterOwner, filterModified, session?.user?.email, breadcrumbs])
 
     const TableHeader = ({ label }: { label: string }) => (
         <div className="flex items-center gap-1 text-[0.8125rem] font-medium text-[#45474c] select-none">
@@ -2011,10 +1997,10 @@ const handleRefresh = async () => {
                         {/* ... Other Filters (unchanged) ... */}
                         <DropdownMenu open={peopleFilterOpen} onOpenChange={setPeopleFilterOpen}>
                             <DropdownMenuTrigger asChild>
-                                <Button disabled={loading} variant="outline" size="sm" className={cn("h-8 gap-1.5 text-xs bg-white rounded border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors", (filterOwner !== 'any' || filterShared !== 'all') && "border-slate-400 ring-1 ring-slate-300")}>
+                                <Button disabled={loading} variant="outline" size="sm" className={cn("h-8 gap-1.5 text-xs bg-white rounded border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors", filterOwner !== 'any' && "border-slate-400 ring-1 ring-slate-300")}>
                                     <Filter className="h-3 w-3 opacity-60" />
                                     People
-                                    {(filterOwner !== 'any' || filterShared !== 'all') && <span className="ml-0.5 bg-slate-200 text-slate-800 px-1.5 rounded-full text-[10px] font-medium">{(filterOwner !== 'any' ? 1 : 0) + (filterShared !== 'all' ? 1 : 0)}</span>}
+                                    {filterOwner !== 'any' && <span className="ml-0.5 bg-slate-200 text-slate-800 px-1.5 rounded-full text-[10px] font-medium">1</span>}
                                     <ChevronDown className="h-3 w-3 opacity-50" />
                                 </Button>
                             </DropdownMenuTrigger>
@@ -2025,7 +2011,7 @@ const handleRefresh = async () => {
                                         Done
                                     </DropdownMenuItem>
                                 </div>
-                                <DropdownMenuCheckboxItem checked={filterOwner === 'any' && filterShared === 'all'} onCheckedChange={() => { setFilterOwner('any'); setFilterShared('all') }} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
+                                <DropdownMenuCheckboxItem checked={filterOwner === 'any'} onCheckedChange={() => setFilterOwner('any')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
                                     <User className="h-3.5 w-3.5 mr-2" />
                                     Anyone
                                 </DropdownMenuCheckboxItem>
@@ -2044,29 +2030,6 @@ const handleRefresh = async () => {
                                 <DropdownMenuCheckboxItem checked={filterOwner === 'private-me'} onCheckedChange={() => setFilterOwner(filterOwner === 'private-me' ? 'any' : 'private-me')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
                                     <User className="h-3.5 w-3.5 mr-2" />
                                     Private to me
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuSeparator />
-                                <div className="px-2 pt-1.5 pb-0.5">
-                                    <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 p-0 font-medium">Shared</DropdownMenuLabel>
-                                </div>
-                                <DropdownMenuCheckboxItem checked={filterShared === 'by_me'} onCheckedChange={() => setFilterShared(filterShared === 'by_me' ? 'all' : 'by_me')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
-                                    Shared by me
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem checked={filterShared === 'by_others'} onCheckedChange={() => setFilterShared(filterShared === 'by_others' ? 'all' : 'by_others')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
-                                    Shared by others
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem checked={filterShared === 'with_collaborator'} onCheckedChange={() => setFilterShared(filterShared === 'with_collaborator' ? 'all' : 'with_collaborator')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
-                                    Shared with Collaborator (External)
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem checked={filterShared === 'with_viewer'} onCheckedChange={() => setFilterShared(filterShared === 'with_viewer' ? 'all' : 'with_viewer')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
-                                    Shared with Reviewer
-                                </DropdownMenuCheckboxItem>
-                                <DropdownMenuSeparator />
-                                <div className="px-2 pt-1.5 pb-0.5">
-                                    <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 p-0 font-medium">Intake</DropdownMenuLabel>
-                                </div>
-                                <DropdownMenuCheckboxItem checked={filterShared === 'pending_intake'} onCheckedChange={() => setFilterShared(filterShared === 'pending_intake' ? 'all' : 'pending_intake')} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
-                                    Pending Review
                                 </DropdownMenuCheckboxItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
@@ -2144,14 +2107,13 @@ const handleRefresh = async () => {
                             </DropdownMenuContent>
                         </DropdownMenu>
 
-                        {(filterTypes.size > 0 || filterOwner !== 'any' || filterModified !== 'any' || filterShared !== 'all') && (
+                        {(filterTypes.size > 0 || filterOwner !== 'any' || filterModified !== 'any') && (
                             <button
                                 type="button"
                                 onClick={() => {
                                     setFilterTypes(new Set())
                                     setFilterOwner('any')
                                     setFilterModified('any')
-                                    setFilterShared('all')
                                 }}
                                 className="h-8 px-2.5 text-xs rounded border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition-colors"
                             >

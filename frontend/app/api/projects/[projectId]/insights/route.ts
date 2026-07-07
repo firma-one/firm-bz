@@ -29,6 +29,11 @@ export interface FolderHealthIssue {
   count: number
 }
 
+export interface FolderHealthPenalty {
+  label: string
+  points: number
+}
+
 export interface FolderHealthReport {
   score: number
   totalFolders: number
@@ -38,6 +43,7 @@ export interface FolderHealthReport {
   deeplyNestedFolders: number
   emptyFolders: number
   issues: FolderHealthIssue[]
+  penalties: FolderHealthPenalty[]
 }
 
 export interface StaleFileItem {
@@ -129,6 +135,7 @@ export interface StorageHealthReport {
   staleTotalBytes: number
   duplicateGroups: DuplicateGroup[]
   duplicateCount: number
+  badlyNamedCount: number
 }
 
 export interface RecentDocumentItem {
@@ -273,7 +280,7 @@ function buildFolderHealthReport(docs: { id: string; externalId: string; isFolde
   const totalFolders = docs.filter((d) => d.isFolder).length
   const totalFiles = docs.filter((d) => !d.isFolder).length
 
-  // Score calculation
+  // Score calculation — penalties applied by caller after all metrics are known
   let score = 100
   score -= Math.min(25, deeplyNestedFolders * 5)
   if (orphanedFiles > 5) score -= 10
@@ -293,7 +300,7 @@ function buildFolderHealthReport(docs: { id: string; externalId: string; isFolde
     issues.push({ type: 'empty_folder', severity: 'info', label: `${emptyFolders} empty folder${emptyFolders > 1 ? 's' : ''}`, count: emptyFolders })
   }
 
-  return { score, totalFolders, totalFiles, maxDepth, orphanedFiles, deeplyNestedFolders, emptyFolders, issues }
+  return { score, totalFolders, totalFiles, maxDepth, orphanedFiles, deeplyNestedFolders, emptyFolders, issues, penalties: [] as FolderHealthPenalty[] }
 }
 
 function normalizeBaseName(fileName: string): string {
@@ -305,57 +312,80 @@ function normalizeBaseName(fileName: string): string {
     .trim()
 }
 
+// Levenshtein distance for fuzzy name matching
+function levenshtein(a: string, b: string): number {
+  const m = a.length, n = b.length
+  const dp: number[][] = Array.from({ length: m + 1 }, (_, i) => [i, ...Array(n).fill(0)])
+  for (let j = 0; j <= n; j++) dp[0][j] = j
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1]
+        ? dp[i - 1][j - 1]
+        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1])
+    }
+  }
+  return dp[m][n]
+}
+
+function nameSimilarity(a: string, b: string): number {
+  const maxLen = Math.max(a.length, b.length)
+  if (maxLen === 0) return 1
+  return 1 - levenshtein(a, b) / maxLen
+}
+
 function buildDuplicateGroups(
   files: { id: string; fileName: string; fileSizeNum: number; mimeType: string | null; folderPath: string | null }[]
 ): { groups: DuplicateGroup[]; count: number } {
   const groups: DuplicateGroup[] = []
   const seenIds = new Set<string>()
 
-  // Exact size duplicates (same non-zero size, not Google-native formats)
-  const sizeMap = new Map<number, typeof files>()
-  for (const f of files) {
-    if (f.fileSizeNum <= 0 || f.mimeType?.startsWith('application/vnd.google-apps')) continue
-    const g = sizeMap.get(f.fileSizeNum) ?? []
-    g.push(f)
-    sizeMap.set(f.fileSizeNum, g)
-  }
-  for (const [size, group] of Array.from(sizeMap.entries())) {
-    if (group.length < 2) continue
-    groups.push({
-      type: 'exact',
-      baseKey: `size:${size}`,
-      files: group.map(f => { seenIds.add(f.id); return { documentId: f.id, fileName: f.fileName, folderPath: f.folderPath } }),
-    })
-  }
-
-  // Name-based near-duplicates (same extension + same normalized base name).
-  // Including the extension in the key prevents cross-format false positives
-  // (e.g. report.pdf ≠ report.docx — different formats, not duplicates).
-  const nameMap = new Map<string, typeof files>()
+  // Group by extension first, then find identical or ≥90% similar base names
+  const byExt = new Map<string, typeof files>()
   for (const f of files) {
     const ext = (f.fileName.match(/\.([^.]+)$/)?.[1] ?? '').toLowerCase()
-    const base = normalizeBaseName(f.fileName)
-    if (!base || base.length < 6) continue
-    const key = `${ext}:${base}`
-    const g = nameMap.get(key) ?? []
+    const g = byExt.get(ext) ?? []
     g.push(f)
-    nameMap.set(key, g)
+    byExt.set(ext, g)
   }
-  for (const [key, group] of Array.from(nameMap.entries())) {
+
+  for (const [ext, group] of Array.from(byExt.entries())) {
     if (group.length < 2) continue
-    // Skip groups already fully covered by exact-size groups
-    const newFiles = group.filter(f => !seenIds.has(f.id))
-    if (newFiles.length < 2) continue
-    newFiles.forEach(f => seenIds.add(f.id))
-    groups.push({
-      type: 'name',
-      baseKey: key,
-      files: group.map(f => ({ documentId: f.id, fileName: f.fileName, folderPath: f.folderPath })),
-    })
+    const bases = group.map(f => normalizeBaseName(f.fileName))
+    const matched = new Set<number>()
+
+    for (let i = 0; i < group.length; i++) {
+      if (matched.has(i) || bases[i].length < 3) continue
+      const cluster: typeof files = []
+      for (let j = i; j < group.length; j++) {
+        if (bases[j].length < 3) continue
+        if (nameSimilarity(bases[i], bases[j]) >= 0.9) {
+          cluster.push(group[j])
+          matched.add(j)
+        }
+      }
+      if (cluster.length < 2) continue
+      const freshFiles = cluster.filter(f => !seenIds.has(f.id))
+      if (freshFiles.length < 2) continue
+      freshFiles.forEach(f => seenIds.add(f.id))
+      groups.push({
+        type: bases[i] === bases[cluster[1] ? 1 : 0] ? 'exact' : 'name',
+        baseKey: `${ext}:${bases[i]}`,
+        files: freshFiles.map(f => ({ documentId: f.id, fileName: f.fileName, folderPath: f.folderPath })),
+      })
+    }
   }
 
   const count = new Set(groups.flatMap(g => g.files.map(f => f.documentId))).size
   return { groups, count }
+}
+
+const BADLY_NAMED_PATTERN = /^(untitled|new file|new folder|copy of|document|spreadsheet|presentation|slide|sheet|folder|file|unnamed|noname|temp|tmp|test|asdf|draft)(\s*\d*)?$/i
+
+function countBadlyNamed(files: { fileName: string; isFolder: boolean }[]): number {
+  return files.filter((f) => {
+    const base = f.fileName.replace(/\.[^.]+$/, '').trim()
+    return BADLY_NAMED_PATTERN.test(base)
+  }).length
 }
 
 /**
@@ -601,6 +631,24 @@ export async function GET(
       fileDocsWithSizes.map(d => ({ id: d.id, fileName: d.fileName, fileSizeNum: d.fileSizeNum, mimeType: d.mimeType, folderPath: getFolderPath(d.parentId) }))
     )
 
+    const badlyNamedCount = countBadlyNamed(docs)
+
+    // Build folder health penalties from all 6 signals + structure
+    const folderPenalties: FolderHealthPenalty[] = []
+    if (badlyNamedCount > 0) folderPenalties.push({ label: `${badlyNamedCount} badly named file${badlyNamedCount > 1 ? 's' : ''}`, points: Math.min(15, badlyNamedCount * 3) })
+    if (duplicateCount > 0) folderPenalties.push({ label: `${duplicateCount} duplicate file${duplicateCount > 1 ? 's' : ''}`, points: Math.min(10, duplicateCount * 2) })
+    if (allStale.length > 0) folderPenalties.push({ label: `${allStale.length} stale file${allStale.length > 1 ? 's' : ''} (6+ months)`, points: Math.min(10, allStale.length * 2) })
+    if (allLarge.length > 0) folderPenalties.push({ label: `${allLarge.length} large file${allLarge.length > 1 ? 's' : ''} (>50 MB)`, points: Math.min(5, allLarge.length * 2) })
+    if (folderHealth.deeplyNestedFolders > 0) folderPenalties.push({ label: `${folderHealth.deeplyNestedFolders} deeply nested folder${folderHealth.deeplyNestedFolders > 1 ? 's' : ''} (3+ levels)`, points: Math.min(25, folderHealth.deeplyNestedFolders * 5) })
+    if (folderHealth.orphanedFiles > 5) folderPenalties.push({ label: `${folderHealth.orphanedFiles} files at root without a folder`, points: folderHealth.orphanedFiles > 15 ? 20 : 10 })
+    if (folderHealth.emptyFolders > 3) folderPenalties.push({ label: `${folderHealth.emptyFolders} empty folders`, points: 5 })
+    if (folderHealth.maxDepth >= 6) folderPenalties.push({ label: 'Folder depth ≥ 6 levels', points: 15 })
+    folderPenalties.sort((a, b) => b.points - a.points)
+
+    const totalFolderDeducted = folderPenalties.reduce((s, p) => s + p.points, 0)
+    const folderHealthScore = Math.max(0, Math.min(100, 100 - totalFolderDeducted))
+    const folderHealthWithAllSignals = { ...folderHealth, score: folderHealthScore, penalties: folderPenalties }
+
     const storageHealth: StorageHealthReport = {
       totalFiles: fileDocsOnly.length,
       totalSizeBytes,
@@ -609,6 +657,7 @@ export async function GET(
       staleTotalBytes,
       duplicateGroups: duplicateGroups.slice(0, 20),
       duplicateCount,
+      badlyNamedCount,
       staleFiles: allStale.slice(0, 10).map((d) => ({
         documentId: d.id,
         fileName: d.fileName,
@@ -989,7 +1038,7 @@ export async function GET(
       engagementDaysUntilDue,
       kickoffDate,
       engagementCreatedAt: engagement?.createdAt ? engagement.createdAt.toISOString() : null,
-      folderHealth,
+      folderHealth: folderHealthWithAllSignals,
       storageHealth,
       pendingInvitations,
       memberCount: members.length,
@@ -1021,8 +1070,8 @@ export async function GET(
         sensitiveFiles: [],
         pendingInvitations: [],
         membersByRole: {},
-        folderHealth: { score: 0, totalFolders: 0, totalFiles: 0, maxDepth: 0, orphanedFiles: 0, deeplyNestedFolders: 0, emptyFolders: 0, issues: [] },
-        storageHealth: { totalFiles: 0, totalSizeBytes: 0, staleFiles: [], largeFiles: [], staleCount: 0, largeCount: 0, staleTotalBytes: 0, duplicateGroups: [], duplicateCount: 0 },
+        folderHealth: { score: 0, totalFolders: 0, totalFiles: 0, maxDepth: 0, orphanedFiles: 0, deeplyNestedFolders: 0, emptyFolders: 0, issues: [], penalties: [] },
+        storageHealth: { totalFiles: 0, totalSizeBytes: 0, staleFiles: [], largeFiles: [], staleCount: 0, largeCount: 0, staleTotalBytes: 0, duplicateGroups: [], duplicateCount: 0, badlyNamedCount: 0 },
         healthScore: { score: 0, level: 'good', penalties: [] },
         pendingApprovalSharesCount: 0,
         // Internal workflow metrics — not exposed to external roles.

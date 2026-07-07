@@ -41,6 +41,11 @@ import {
     Mail,
     X,
     Download,
+    FileQuestion,
+    FileType,
+    FolderMinus,
+    FolderX,
+    FolderTree,
 } from 'lucide-react'
 import { getFileTypeLabel, formatRelativeTime, formatFileSize } from '@/lib/utils'
 import { InsightCard } from '@/components/dashboard/insight-card'
@@ -1310,8 +1315,11 @@ function EngagementActionCenterV2({ data, loading, engagementBase, setRefreshTic
     const duplicatesCount = data?.storageHealth.duplicateCount ?? 0
     const staleCount = data?.storageHealth.staleCount ?? 0
     const largeCount = data?.storageHealth.largeCount ?? 0
+    const badlyNamedCount = data?.storageHealth.badlyNamedCount ?? 0
     const sensitiveCount = data?.sensitiveFiles.length ?? 0
-    const folderIssuesCount = data?.folderHealth.issues.length ?? 0
+    const emptyFoldersCount = data?.folderHealth.emptyFolders ?? 0
+    const orphanedFilesCount = data?.folderHealth.orphanedFiles ?? 0
+    const deepFoldersCount = data?.folderHealth.deeplyNestedFolders ?? 0
 
     const delivery: ActionRowItem[] = [
         { key: 'overdue', label: 'Overdue deliverables', count: overdueCount, severity: 'critical', icon: AlertTriangle,
@@ -1341,8 +1349,11 @@ function EngagementActionCenterV2({ data, loading, engagementBase, setRefreshTic
         { key: 'sensitive', label: 'Sensitive files', count: sensitiveCount, severity: 'critical', icon: FileWarning,
           sub: sensitiveCount > 0 ? 'flagged by content pattern' : undefined,
           href: '/files' },
+        { key: 'poorly-named', label: 'Poorly named files', count: badlyNamedCount, severity: 'warning', icon: FileType,
+          sub: badlyNamedCount > 0 ? 'default or meaningless file names' : undefined,
+          href: '/files' },
         { key: 'duplicates', label: 'Duplicate files', count: duplicatesCount, severity: 'warning', icon: FileWarning,
-          sub: duplicatesCount > 0 ? 'exact size or name match' : undefined,
+          sub: duplicatesCount > 0 ? '≥90% name match, same extension' : undefined,
           onDrilldown: duplicatesCount > 0 ? () => setDrilldown('duplicates') : undefined },
         { key: 'stale', label: 'Stale files', count: staleCount, severity: 'warning', icon: Archive,
           sub: staleCount > 0 ? 'not modified in 6+ months' : undefined,
@@ -1350,8 +1361,14 @@ function EngagementActionCenterV2({ data, loading, engagementBase, setRefreshTic
         { key: 'large', label: 'Large files', count: largeCount, severity: 'warning', icon: HardDrive,
           sub: largeCount > 0 ? 'over 50 MB' : undefined,
           href: '/files' },
-        { key: 'folder', label: 'Folder-structure issues', count: folderIssuesCount, severity: 'info', icon: FolderOpen,
-          sub: folderIssuesCount > 0 ? 'deep nesting, empties, orphans' : undefined,
+        { key: 'orphaned', label: 'Orphaned files', count: orphanedFilesCount, severity: 'info', icon: FileQuestion,
+          sub: orphanedFilesCount > 0 ? 'files with no parent folder' : undefined,
+          href: '/files' },
+        { key: 'empty-folders', label: 'Empty folders', count: emptyFoldersCount, severity: 'info', icon: FolderMinus,
+          sub: emptyFoldersCount > 0 ? 'folders with no contents' : undefined,
+          href: '/files' },
+        { key: 'deep-folders', label: 'Deep folder nesting', count: deepFoldersCount, severity: 'info', icon: FolderTree,
+          sub: deepFoldersCount > 0 ? 'folders > 3 levels deep' : undefined,
           href: '/files' },
     ]
 
@@ -1736,6 +1753,235 @@ function DeliveryTimeline({ deliverables, engagementCreatedAt, kickoffDate, enga
     )
 }
 
+// ─── File Organization card body ─────────────────────────────────────────────
+function FolderHealthRing({ label, tooltip, icon: Icon, segments, centerTop, centerBottom }: {
+    label: string
+    tooltip: string
+    icon: React.ElementType
+    // Each segment: shown in ring + legend. Pass bad segments first, ok last.
+    segments: { legendLabel: string; hex: string; value: number; isIssue?: boolean }[]
+    centerTop: React.ReactNode
+    centerBottom: React.ReactNode
+}) {
+    const total = segments.reduce((s, i) => s + i.value, 0)
+    // If all values are 0, show a flat gray track
+    const donutSegments = total === 0
+        ? [{ value: 1, hex: RING.gray }]
+        : segments.filter((s) => s.value > 0).map((s) => ({ value: s.value, hex: s.hex }))
+
+    return (
+        <div className="flex flex-col items-center gap-3">
+            <p className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
+                <Icon className="h-4 w-4 text-gray-400" />
+                {label}
+                <InfoTip ariaLabel={`About ${label}`} text={tooltip} />
+            </p>
+            <Donut
+                size={108}
+                thickness={13}
+                segments={donutSegments}
+                total={total === 0 ? 1 : total}
+                centerTop={centerTop}
+                centerBottom={centerBottom}
+            />
+            <div className="flex flex-col gap-1.5 w-full max-w-[220px]">
+                {segments.map((s) => (
+                    <div key={s.legendLabel} className="flex items-center gap-2 text-xs">
+                        <span className="h-2.5 w-2.5 rounded-sm shrink-0" style={{ backgroundColor: s.value === 0 && !s.isIssue ? RING.gray : s.hex }} />
+                        <span className="text-gray-600 truncate">{s.legendLabel}</span>
+                        <span className="ml-auto font-semibold text-gray-800 tabular-nums">{s.value}</span>
+                    </div>
+                ))}
+                <div className="flex items-center gap-2 text-xs pt-1.5 mt-0.5 border-t border-gray-100">
+                    <span className="text-gray-500">Total</span>
+                    <span className="ml-auto font-semibold text-gray-800 tabular-nums">{total}</span>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+function FolderHealthBody({ storageHealth, folderHealth }: {
+    storageHealth: EngagementInsightsResponse['storageHealth']
+    folderHealth: EngagementInsightsResponse['folderHealth']
+}) {
+    const score = folderHealth.score
+    const scoreHex = score >= 80 ? RING.green : score >= 50 ? RING.amber : RING.red
+    const scoreTextClass = score >= 80 ? 'text-green-600' : score >= 50 ? 'text-amber-600' : 'text-red-600'
+    const label = scoreLabel(score)
+    const penalties = [...(folderHealth.penalties ?? [])].sort((a, b) => b.points - a.points)
+    const totalDeducted = penalties.reduce((s, p) => s + p.points, 0)
+
+    const severityLabel = (pts: number) => pts >= 15 ? { text: 'HIGH', cls: 'bg-red-50 text-red-600 border-red-100' } : pts >= 8 ? { text: 'MED', cls: 'bg-amber-50 text-amber-600 border-amber-100' } : { text: 'LOW', cls: 'bg-slate-50 text-slate-500 border-slate-200' }
+    const deductClass = (pts: number) => pts >= 15 ? 'text-red-600 font-bold' : pts >= 8 ? 'text-amber-600 font-semibold' : 'text-slate-400 font-medium'
+
+    const totalArtifacts = storageHealth.totalFiles + folderHealth.totalFolders
+    const totalFiles = storageHealth.totalFiles
+    const totalFolders = folderHealth.totalFolders
+
+    const ragText = (n: number) => n > 0 ? 'text-amber-600' : 'text-gray-400'
+
+    // 8 KPI rings — order determines grid position (score ring is cell 1, these fill cells 2–9)
+    // Row 1: Score | Total Artifacts | Poorly Named
+    // Row 2: Duplicates | Empty Folders | Folders > 3L depth
+    // Row 3: Orphaned Files | Stale Files | Large Files
+    const rings = [
+        {
+            label: 'Total Artifacts',
+            tooltip: `All files and folders indexed. ${totalFiles} files + ${totalFolders} folders = ${totalArtifacts} total.`,
+            icon: FileText,
+            segments: [
+                { legendLabel: 'Files', hex: RING.blue, value: totalFiles },
+                { legendLabel: 'Folders', hex: RING.indigo, value: totalFolders },
+            ],
+            centerTop: <span className="text-xl font-bold leading-none text-gray-700 tabular-nums">{totalArtifacts}</span>,
+            centerBottom: <span className="text-[10px] text-gray-400 mt-0.5">total</span>,
+        },
+        {
+            label: 'Poorly Named',
+            tooltip: 'Files or folders with default/meaningless names like "Untitled", "New File", "Copy of", etc.',
+            icon: FileType,
+            segments: [
+                { legendLabel: 'Issue', hex: RING.amber, value: storageHealth.badlyNamedCount, isIssue: true },
+                { legendLabel: 'OK', hex: RING.green, value: totalArtifacts - storageHealth.badlyNamedCount },
+            ],
+            centerTop: <span className={`text-xl font-bold leading-none tabular-nums ${ragText(storageHealth.badlyNamedCount)}`}>{storageHealth.badlyNamedCount}</span>,
+            centerBottom: <span className="text-[10px] text-gray-400 mt-0.5">/ {totalArtifacts}</span>,
+        },
+        {
+            label: 'Duplicates',
+            tooltip: 'Files with identical or near-identical names (≥90% match) and the same extension.',
+            icon: FileWarning,
+            segments: [
+                { legendLabel: 'Issue', hex: RING.amber, value: storageHealth.duplicateCount, isIssue: true },
+                { legendLabel: 'OK', hex: RING.green, value: totalArtifacts - storageHealth.duplicateCount },
+            ],
+            centerTop: <span className={`text-xl font-bold leading-none tabular-nums ${ragText(storageHealth.duplicateCount)}`}>{storageHealth.duplicateCount}</span>,
+            centerBottom: <span className="text-[10px] text-gray-400 mt-0.5">/ {totalArtifacts}</span>,
+        },
+        {
+            label: 'Empty Folders',
+            tooltip: 'Folders with no files or subfolders inside. Remove them to keep the structure clean.',
+            icon: FolderMinus,
+            segments: [
+                { legendLabel: 'Issue', hex: RING.amber, value: folderHealth.emptyFolders, isIssue: true },
+                { legendLabel: 'OK', hex: RING.green, value: totalFolders - folderHealth.emptyFolders },
+            ],
+            centerTop: <span className={`text-xl font-bold leading-none tabular-nums ${ragText(folderHealth.emptyFolders)}`}>{folderHealth.emptyFolders}</span>,
+            centerBottom: <span className="text-[10px] text-gray-400 mt-0.5">/ {totalFolders}</span>,
+        },
+        {
+            label: 'Folders > 3L depth',
+            tooltip: 'Folders nested more than 3 levels deep. A shallow structure is easier to navigate — aim to keep depth at 3 or fewer.',
+            icon: FolderTree,
+            segments: [
+                { legendLabel: 'Issue', hex: RING.amber, value: folderHealth.deeplyNestedFolders, isIssue: true },
+                { legendLabel: 'OK', hex: RING.green, value: totalFolders - folderHealth.deeplyNestedFolders },
+            ],
+            centerTop: <span className={`text-xl font-bold leading-none tabular-nums ${ragText(folderHealth.deeplyNestedFolders)}`}>{folderHealth.deeplyNestedFolders}</span>,
+            centerBottom: <span className="text-[10px] text-gray-400 mt-0.5">/ {totalFolders}</span>,
+        },
+        {
+            label: 'Orphaned Files',
+            tooltip: 'Files sitting at the root level with no parent folder. Move them into an appropriate folder.',
+            icon: FileQuestion,
+            segments: [
+                { legendLabel: 'Issue', hex: RING.amber, value: folderHealth.orphanedFiles, isIssue: true },
+                { legendLabel: 'OK', hex: RING.green, value: totalFiles - folderHealth.orphanedFiles },
+            ],
+            centerTop: <span className={`text-xl font-bold leading-none tabular-nums ${ragText(folderHealth.orphanedFiles)}`}>{folderHealth.orphanedFiles}</span>,
+            centerBottom: <span className="text-[10px] text-gray-400 mt-0.5">/ {totalFiles}</span>,
+        },
+        {
+            label: 'Stale Files',
+            tooltip: 'Files not modified in the last 6 months. Candidates for archival or deletion.',
+            icon: Clock,
+            segments: [
+                { legendLabel: 'Issue', hex: RING.amber, value: storageHealth.staleCount, isIssue: true },
+                { legendLabel: 'OK', hex: RING.green, value: totalFiles - storageHealth.staleCount },
+            ],
+            centerTop: <span className={`text-xl font-bold leading-none tabular-nums ${ragText(storageHealth.staleCount)}`}>{storageHealth.staleCount}</span>,
+            centerBottom: <span className="text-[10px] text-gray-400 mt-0.5">/ {totalFiles}</span>,
+        },
+        {
+            label: 'Large Files',
+            tooltip: 'Files larger than 50 MB. Consider splitting or archiving to keep the workspace efficient.',
+            icon: HardDrive,
+            segments: [
+                { legendLabel: 'Issue', hex: RING.amber, value: storageHealth.largeCount, isIssue: true },
+                { legendLabel: 'OK', hex: RING.green, value: totalFiles - storageHealth.largeCount },
+            ],
+            centerTop: <span className={`text-xl font-bold leading-none tabular-nums ${ragText(storageHealth.largeCount)}`}>{storageHealth.largeCount}</span>,
+            centerBottom: <span className="text-[10px] text-gray-400 mt-0.5">/ {totalFiles}</span>,
+        },
+    ]
+
+    return (
+        <div className="p-6 flex flex-col gap-6">
+            {/* 3×3 grid: score ring first, then 8 KPI rings */}
+            <div className="grid grid-cols-3 gap-8">
+                {/* Score ring — cell 1 */}
+                <div className="flex flex-col items-center gap-3">
+                    <p className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
+                        <FolderOpen className="h-4 w-4 text-gray-400" />
+                        Overall Score
+                        <InfoTip ariaLabel="About Folder Health Score" text="File organization quality (0–100). Penalizes badly named files, duplicates, stale files, large files, deeply nested folders, empty folders, and orphaned files." />
+                    </p>
+                    <Donut
+                        total={100}
+                        size={108}
+                        thickness={13}
+                        segments={[{ value: score, hex: scoreHex }]}
+                        centerTop={<span className={`text-2xl font-bold leading-none tabular-nums ${scoreTextClass}`}>{score}</span>}
+                        centerBottom={<span className="text-[10px] text-gray-400 mt-0.5">/ 100</span>}
+                    />
+                    <div className="flex flex-col gap-1.5 w-full max-w-[220px]">
+                        <div className="flex items-center gap-2 text-xs">
+                            <span className="h-2.5 w-2.5 rounded-sm shrink-0" style={{ backgroundColor: scoreHex }} />
+                            <span className="text-gray-600 truncate">{label}</span>
+                        </div>
+                        {totalDeducted > 0 && (
+                            <p className="text-xs text-gray-400 tabular-nums">100 − <span className="text-red-500 font-medium">{totalDeducted}</span> = <span className={`font-semibold ${scoreTextClass}`}>{score}</span></p>
+                        )}
+                    </div>
+                </div>
+                {/* 8 KPI rings */}
+                {rings.map((r) => (
+                    <FolderHealthRing
+                        key={r.label}
+                        label={r.label}
+                        tooltip={r.tooltip}
+                        icon={r.icon}
+                        segments={r.segments}
+                        centerTop={r.centerTop}
+                        centerBottom={r.centerBottom}
+                    />
+                ))}
+            </div>
+
+            {/* Factors list */}
+            {penalties.length > 0 ? (
+                <div className="pt-4 border-t border-gray-100 flex flex-col gap-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Factors</p>
+                    {penalties.map((p) => {
+                        const sev = severityLabel(p.points)
+                        return (
+                            <div key={p.label} className="flex items-center gap-1.5 text-[11px]">
+                                <span className={`h-2 w-2 rounded-full shrink-0 ${p.points >= 15 ? 'bg-red-400' : p.points >= 8 ? 'bg-amber-400' : 'bg-slate-300'}`} />
+                                <span className="text-gray-600 truncate flex-1">{p.label}</span>
+                                <span className={`text-[9px] font-semibold px-1 py-0.5 rounded border shrink-0 ${sev.cls}`}>{sev.text}</span>
+                                <span className={`tabular-nums shrink-0 ${deductClass(p.points)}`}>−{p.points}</span>
+                            </div>
+                        )
+                    })}
+                </div>
+            ) : (
+                <p className="pt-4 border-t border-gray-100 text-[11px] text-green-600 font-medium text-center">All clear — no issues found</p>
+            )}
+        </div>
+    )
+}
+
 // Engagement Health card body: 3 rings (Health Score gauge · Delivery Status · Delivery Schedule)
 // plus the health-score risk breakdown. Health Score excludes file-organization issues.
 function EngagementHealthBody({ health, deliverables, planningHygiene, commentThreads, pace, firstTimeRight, inFlightWithRework, engagementCreatedAt, kickoffDate, engagementDueDate }: { health?: EngagementHealthScore; deliverables: DeliverableProgress[]; planningHygiene?: PlanningHygiene; commentThreads?: CommentThreads; pace?: EngagementPace; firstTimeRight?: FirstTimeRight; inFlightWithRework?: number; engagementCreatedAt?: string | null; kickoffDate?: string | null; engagementDueDate?: string | null }) {
@@ -2026,28 +2272,53 @@ export function EngagementInsightsDashboard({
         const html2canvas = html2canvasMod.default ?? (html2canvasMod as any)
         const JsPDF = (jsPDFMod as any).jsPDF ?? jsPDFMod.default
 
-        // Deep-clone the element into a top-level absolute container so that no
-        // flex / overflow ancestor can clamp its height to the viewport.
-        // The container sits at document (0,0) — above the scrolled viewport — so
-        // it is invisible to the user during the brief layout pass.
+        const captureW = el.offsetWidth
+        // Measure from the already-rendered live element — its layout has fully settled.
+        // The clone's grid/flex layout may not settle within a single rAF, so prefer
+        // the live scrollHeight and use the clone only to escape overflow ancestors.
+        const liveScrollH = el.scrollHeight
+
+        // Deep-clone into a top-level absolute container at document (0,0) so that
+        // no flex/overflow ancestor can clip the canvas region. Remove any height
+        // constraints on the clone so it expands to its full natural height.
         const clone = el.cloneNode(true) as HTMLElement
+        clone.style.cssText += ';height:auto!important;max-height:none!important;overflow:visible!important;'
+
+        // --- PDF text-rendering fixes ---
+        // html2canvas does not render `text-overflow: ellipsis`, so truncated spans
+        // just hard-clip mid-word. Remove the constraint and let labels wrap instead.
+        clone.querySelectorAll('.truncate').forEach((node) => {
+            const span = node as HTMLElement
+            span.classList.remove('truncate')
+            span.style.overflow = 'visible'
+            span.style.whiteSpace = 'normal'
+            span.style.textOverflow = 'unset'
+        })
+        // Lift the 260 px max-width on the health-score factors container so the
+        // now-wrapping labels have the full column width available.
+        const factorsContainer = clone.querySelector('#ring-health > :last-child') as HTMLElement | null
+        if (factorsContainer) factorsContainer.style.maxWidth = 'none'
+        // --------------------------------
+
         const offscreen = document.createElement('div')
-        offscreen.style.cssText = `position:absolute;top:0;left:0;width:${el.offsetWidth}px;background:#ffffff;z-index:99999;pointer-events:none;`
+        // Give the offscreen wrapper a guaranteed large height so the clone is never
+        // vertically constrained, and overflow:visible so nothing is clipped.
+        offscreen.style.cssText = `position:absolute;top:0;left:0;width:${captureW}px;min-height:${liveScrollH}px;height:auto;overflow:visible;background:#ffffff;z-index:99999;pointer-events:none;`
         offscreen.appendChild(clone)
         document.body.appendChild(offscreen)
 
-        // Wait for flex/SVG layout to fully settle in the cloned tree.
-        // rAF alone can miss async style passes; a 0ms timeout yields to the browser task queue.
-        await new Promise<void>((r) => requestAnimationFrame(() => setTimeout(r, 0)))
+        // Two rAFs + 100 ms: first rAF commits the element to the render tree,
+        // second rAF lets the browser complete its layout pass, timeout flushes
+        // any deferred style calculations (e.g. grid auto-rows, SVG viewBox).
+        await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 100))))
 
-        const captureW = el.offsetWidth
-        const captureH = clone.scrollHeight
+        // Use whichever height is larger: the settled clone (which now has wrapped
+        // text, so may be taller than the live element) or the live scroll height.
+        const captureH = Math.max(clone.scrollHeight, liveScrollH)
 
-        // html2canvas sign convention: windowBounds.top = -options.scrollY
-        // canvas-Y of element = getBoundingClientRect().top + (-options.scrollY)
-        // Clone is at absolute top:0, so getBoundingClientRect().top = -window.scrollY.
-        // To anchor the element at canvas-Y = 0:
-        //   -window.scrollY + (-options.scrollY) = 0  →  options.scrollY = -window.scrollY
+        // html2canvas sign convention: canvas-Y = getBoundingClientRect().top - (-scrollY_option)
+        // Clone is at absolute top:0 → getBoundingClientRect().top = -window.scrollY.
+        // To anchor canvas-Y = 0: -window.scrollY + window.scrollY = 0 ✓
         const canvas = await html2canvas(clone, {
             scale: 1.5,
             useCORS: true,
@@ -2355,47 +2626,7 @@ export function EngagementInsightsDashboard({
                                 theme="blue"
                                 subtext={`${data.storageHealth.totalFiles} file${data.storageHealth.totalFiles === 1 ? '' : 's'} · ${data.folderHealth.totalFolders} folder${data.folderHealth.totalFolders === 1 ? '' : 's'} · max depth ${data.folderHealth.maxDepth} · ${formatBytes(data.storageHealth.totalSizeBytes)}`}
                             >
-                                <div className="p-6 flex flex-col gap-4">
-                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                                        <TileWithTip text="Total non-folder documents indexed for this engagement, plus their combined size." ariaLabel="About Total Files">
-                                            <StatTile icon={FileText} label="Total Files" count={data.storageHealth.totalFiles} sub={formatBytes(data.storageHealth.totalSizeBytes)} colorClass="bg-blue-50 text-blue-600" />
-                                        </TileWithTip>
-                                        <TileWithTip text="Documents shared with external collaborators or reviewers (includes intake-uploaded files with PENDING/GRANTED sharing rows)." ariaLabel="About Total Shared">
-                                            <StatTile icon={Share2} label="Total Shared" count={data.sharedDocsCount} colorClass="bg-indigo-50 text-indigo-600" />
-                                        </TileWithTip>
-                                        <TileWithTip text="Files that appear to duplicate another file by exact size or by name (same normalized base + extension). Doesn't count Google-native formats." ariaLabel="About Duplicates">
-                                            <StatTile icon={FileWarning} label="Duplicates" count={data.storageHealth.duplicateCount} colorClass={data.storageHealth.duplicateCount > 0 ? 'bg-amber-50 text-amber-600' : 'bg-green-50 text-green-600'} />
-                                        </TileWithTip>
-                                        <TileWithTip text="Files not modified in the last 6 months. Candidates for archival." ariaLabel="About Stale Files">
-                                            <StatTile icon={Archive} label="Stale Files" sub="6+ months" count={data.storageHealth.staleCount} colorClass={data.storageHealth.staleCount > 0 ? 'bg-amber-50 text-amber-600' : 'bg-green-50 text-green-600'} />
-                                        </TileWithTip>
-                                        <TileWithTip text="Files larger than 50 MB. Consider archiving or splitting to keep the workspace efficient." ariaLabel="About Large Files">
-                                            <StatTile icon={HardDrive} label="Large Files" sub=">50 MB" count={data.storageHealth.largeCount} colorClass={data.storageHealth.largeCount > 0 ? 'bg-amber-50 text-amber-600' : 'bg-green-50 text-green-600'} />
-                                        </TileWithTip>
-                                        <TileWithTip text="Folder structure quality (0–100). Penalized by deeply nested folders (3+ levels), orphaned files, and empty folders. This score does NOT feed Overall Health." ariaLabel="About Folder Health">
-                                            <StatTile icon={FolderOpen} label="Folder Health" count={`${data.folderHealth.score}/100`} sub={scoreLabel(data.folderHealth.score)} colorClass="bg-green-50 text-green-600" />
-                                        </TileWithTip>
-                                    </div>
-
-                                    {/* Folder-structure issues */}
-                                    {data.folderHealth.issues.length === 0 ? (
-                                        <div className="rounded-md border border-green-100 bg-green-50/60 px-3 py-2 flex items-center gap-2">
-                                            <CheckCircle2 className="h-3.5 w-3.5 text-green-600 shrink-0" />
-                                            <span className="text-xs text-green-700 font-medium">Folder structure looks clean</span>
-                                        </div>
-                                    ) : (
-                                        <div className="rounded-md border border-gray-100 divide-y divide-gray-50">
-                                            {data.folderHealth.issues.map((issue) => (
-                                                <div key={issue.type} className="flex items-start gap-2 px-3 py-2">
-                                                    <div className={`p-1 rounded shrink-0 mt-0.5 ${issue.severity === 'warning' ? 'bg-amber-50' : 'bg-blue-50'}`}>
-                                                        <AlertTriangle className={`h-3 w-3 ${issue.severity === 'warning' ? 'text-amber-600' : 'text-blue-500'}`} />
-                                                    </div>
-                                                    <span className="text-xs text-gray-700">{issue.label}</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
+                                <FolderHealthBody storageHealth={data.storageHealth} folderHealth={data.folderHealth} />
                             </InsightCard>
                         )}
 
