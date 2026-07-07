@@ -14,11 +14,11 @@ export function DemoTourOutroModal() {
       <div className="absolute inset-0 bg-black/40" onClick={closeOutroModal} />
 
       {/* Modal */}
-      <div className="relative bg-white rounded-[2px] shadow-2xl border border-[#e5e7eb] w-full max-w-sm mx-4 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+      <div className="relative bg-white rounded shadow-2xl border border-[#e5e7eb] w-full max-w-sm mx-4 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
 
         {/* Header */}
         <div className="bg-primary/8 border-b border-[#e5e7eb] px-5 py-4 flex items-center gap-3">
-          <div className="h-9 w-9 rounded-[2px] bg-primary flex items-center justify-center shrink-0">
+          <div className="h-9 w-9 rounded bg-primary flex items-center justify-center shrink-0">
             <MapPinned className="h-4 w-4 text-white" />
           </div>
           <div className="flex-1 min-w-0">
@@ -49,7 +49,7 @@ export function DemoTourOutroModal() {
           <button
             type="button"
             onClick={closeOutroModal}
-            className="flex-1 h-9 rounded-[2px] bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:brightness-105 transition-all flex items-center justify-center gap-1.5"
+            className="flex-1 h-9 rounded bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:brightness-105 transition-all flex items-center justify-center gap-1.5"
           >
             <CheckCircle2 className="h-3.5 w-3.5" /> Done
           </button>
@@ -59,7 +59,7 @@ export function DemoTourOutroModal() {
               closeOutroModal()
               if (slugs?.firmSlug) void restartTour(slugs.firmSlug)
             }}
-            className="flex-1 h-9 rounded-[2px] border border-[#e5e7eb] text-[10px] font-headline font-bold tracking-widest uppercase text-[#45474c] hover:bg-[#f3f4f6] transition-colors flex items-center justify-center gap-1.5"
+            className="flex-1 h-9 rounded border border-[#e5e7eb] text-[10px] font-headline font-bold tracking-widest uppercase text-[#45474c] hover:bg-[#f3f4f6] transition-colors flex items-center justify-center gap-1.5"
           >
             <Play className="h-3.5 w-3.5" /> Replay
           </button>

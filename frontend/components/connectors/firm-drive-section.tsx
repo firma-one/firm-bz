@@ -358,13 +358,13 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
     return (
       <div className="space-y-3">
         <div className="flex items-center gap-3">
-          <Skeleton className="h-9 w-9 rounded-[2px] shrink-0" />
+          <Skeleton className="h-9 w-9 rounded shrink-0" />
           <div className="space-y-1.5 flex-1">
             <Skeleton className="h-3.5 w-32" />
             <Skeleton className="h-3 w-48" />
           </div>
         </div>
-        <Skeleton className="h-16 w-full rounded-[2px]" />
+        <Skeleton className="h-16 w-full rounded" />
       </div>
     )
   }
@@ -383,7 +383,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
               const isPersonalDrive = driveRoot?.workspaceRootLocation === 'PERSONAL'
 
               return (
-                <div key={connector.id} className="relative rounded-[2px] border border-[#e5e7eb] bg-white overflow-hidden">
+                <div key={connector.id} className="relative rounded border border-[#e5e7eb] bg-white overflow-hidden">
                   {/* Watermark number */}
                   <span className="pointer-events-none select-none absolute -left-1 -bottom-6 text-[8rem] font-black leading-none text-[#e8eaed]/50 z-0 tracking-tighter">
                     {connectorIndex + 1}
@@ -391,7 +391,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                   {/* Account row */}
                   <div className="relative z-10 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 py-3">
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="h-9 w-9 shrink-0 bg-white border border-[#e5e7eb] rounded-[2px] flex items-center justify-center p-1.5">
+                      <div className="h-9 w-9 shrink-0 bg-white border border-[#e5e7eb] rounded flex items-center justify-center p-1.5">
                         <GoogleDriveProductMark width={20} height={20} />
                       </div>
                       <div className="min-w-0">
@@ -406,7 +406,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                                 if (e.key === 'Enter') void handleSaveName(connector.id)
                                 if (e.key === 'Escape') setEditingId(null)
                               }}
-                              className="rounded-[2px] border border-primary bg-white px-2 py-0.5 text-[0.8125rem] font-bold text-[#1b1b1d] focus:outline-none focus:ring-1 focus:ring-primary w-44"
+                              className="rounded border border-primary bg-white px-2 py-0.5 text-[0.8125rem] font-bold text-[#1b1b1d] focus:outline-none focus:ring-1 focus:ring-primary w-44"
                             />
                             <button type="button" onClick={() => setEditingId(null)}
                               className="text-[#9a9ba0] hover:text-[#45474c] transition-colors">
@@ -433,7 +433,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Button type="button" variant="outline" size="sm"
-                                className="h-8 px-3 text-xs border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] rounded-[2px]"
+                                className="h-8 px-3 text-xs border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] rounded"
                                 onClick={() => void handleTestConnection(connector)}
                                 disabled={isTesting || isSandboxFirm}>
                                 {isTesting
@@ -449,7 +449,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                             <TooltipTrigger asChild>
                               <span tabIndex={isPersonalDrive ? 0 : undefined} className={isPersonalDrive ? 'cursor-not-allowed' : undefined}>
                                 <Button type="button" variant="outline" size="sm"
-                                  className="h-8 px-3 text-xs border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] rounded-[2px]"
+                                  className="h-8 px-3 text-xs border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] rounded"
                                   onClick={() => void handleOpenSwitchModal(connector)}
                                   disabled={loading || isPersonalDrive || isSandboxFirm}>
                                   <SwitchCamera className="w-3.5 h-3.5 mr-1.5" />Switch
@@ -467,7 +467,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                             <TooltipTrigger asChild>
                               <span tabIndex={connector.attachedClients.length > 0 ? 0 : undefined} className={connector.attachedClients.length > 0 ? 'cursor-not-allowed' : undefined}>
                                 <Button type="button" variant="outline" size="sm"
-                                  className="h-8 px-3 text-xs border-[#e5e7eb] bg-white text-rose-600 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 rounded-[2px]"
+                                  className="h-8 px-3 text-xs border-[#e5e7eb] bg-white text-rose-600 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 rounded"
                                   onClick={() => setDisconnectTarget(connector)}
                                   disabled={isSandboxFirm || connector.attachedClients.length > 0}>
                                   <Unplug className="w-3.5 h-3.5 mr-1.5" />Disconnect
@@ -485,7 +485,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                         <>
                           {isEditing ? (
                             <Button type="button" variant="outline" size="sm"
-                              className="h-8 px-3 text-xs border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] rounded-[2px]"
+                              className="h-8 px-3 text-xs border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] rounded"
                               onClick={() => void handleSaveName(connector.id)}
                               disabled={savingName}>
                               {savingName ? <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Check className="w-3.5 h-3.5 mr-1.5" />}
@@ -495,7 +495,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Button type="button" variant="outline" size="sm"
-                                  className="h-8 px-3 text-xs border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] rounded-[2px]"
+                                  className="h-8 px-3 text-xs border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] rounded"
                                   onClick={() => { setEditNameValue(connector.name || ''); setEditingId(connector.id) }}
                                   disabled={isSandboxFirm}>
                                   <Pencil className="w-3.5 h-3.5 mr-1.5" />Edit
@@ -507,7 +507,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Button type="button" size="sm"
-                                className="h-8 px-3 text-xs bg-primary text-white hover:bg-primary hover:brightness-105 hover:text-white rounded-[2px] border-0"
+                                className="h-8 px-3 text-xs bg-primary text-white hover:bg-primary hover:brightness-105 hover:text-white rounded border-0"
                                 onClick={() => handleReconnect(connector)}
                                 disabled={isSandboxFirm || loading}>
                                 {loading ? <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Plug className="w-3.5 h-3.5 mr-1.5" />}Reconnect
@@ -518,7 +518,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Button type="button" variant="outline" size="sm"
-                                className="h-8 px-3 text-xs border-[#e5e7eb] bg-white text-rose-600 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 rounded-[2px]"
+                                className="h-8 px-3 text-xs border-[#e5e7eb] bg-white text-rose-600 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 rounded"
                                 onClick={() => setRemoveTarget(connector)}
                                 disabled={isSandboxFirm}>
                                 <Trash2 className="w-3.5 h-3.5 mr-1.5" />Remove
@@ -560,7 +560,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                       return (
                         <>
                           <div className="pl-12 pr-4 pt-3 pb-1 flex items-center gap-3">
-                            <div className="h-9 w-9 shrink-0 bg-[#f9f9fb] border border-[#e5e7eb] rounded-[2px] flex items-center justify-center p-1.5">
+                            <div className="h-9 w-9 shrink-0 bg-[#f9f9fb] border border-[#e5e7eb] rounded flex items-center justify-center p-1.5">
                               <Users className="w-4 h-4 text-[#45474c]" strokeWidth={1.75} />
                             </div>
                             <div>
@@ -580,7 +580,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                                 const isAttachedHere = client.connectorId === connector.id
                                 const isWorking = attachingClientId === client.id || detachingClientId === client.id
                                 return (
-                                  <div key={client.id} className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-[2px] hover:bg-[#f9f9fb] transition-colors">
+                                  <div key={client.id} className="flex items-center justify-between gap-2 px-2 py-1.5 rounded hover:bg-[#f9f9fb] transition-colors">
                                     <div className="flex items-center gap-2 min-w-0">
                                       {isAttachedHere
                                         ? <SquareCheck className="w-3.5 h-3.5 shrink-0 text-emerald-500" />
@@ -600,7 +600,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                                               type="button"
                                               disabled={isSandboxFirm}
                                               onClick={() => void handleDetachClient(connector.id, client.id)}
-                                              className="p-1 rounded-[2px] text-rose-400 hover:text-rose-600 hover:bg-rose-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                              className="p-1 rounded text-rose-400 hover:text-rose-600 hover:bg-rose-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                                             >
                                               <Unlink className="w-3.5 h-3.5" />
                                             </button>
@@ -614,7 +614,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                                               type="button"
                                               disabled={isSandboxFirm || !driveRoot?.rootFolderId}
                                               onClick={() => void handleAttachClient(connector.id, client.id)}
-                                              className="p-1 rounded-[2px] text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                              className="p-1 rounded text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                                             >
                                               <Link className="w-3.5 h-3.5" />
                                             </button>
@@ -650,16 +650,16 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
             <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#45474c] flex-1 text-left">
               {connectors.length === 0 ? 'Connect storage account' : 'Add new connection'}
             </p>
-            <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-[2px] border border-[#e5e7eb] bg-white text-[#45474c] group-hover:border-[#1b1b1d] transition-colors">
+            <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded border border-[#e5e7eb] bg-white text-[#45474c] group-hover:border-[#1b1b1d] transition-colors">
               {addNewOpen
                 ? <span className="text-[10px] font-bold leading-none">−</span>
                 : <span className="text-[10px] font-bold leading-none">+</span>
               }
             </span>
           </button>
-          {addNewOpen && <div className="flex flex-col gap-0.5 border border-[#e5e7eb] rounded-[2px] p-1">
-            <div className="flex items-start gap-2.5 px-2.5 py-2.5 rounded-[2px] hover:bg-slate-50 transition-colors">
-              <div className="h-8 w-8 shrink-0 bg-white border border-[#e5e7eb] rounded-[2px] flex items-center justify-center p-1.5 mt-0.5">
+          {addNewOpen && <div className="flex flex-col gap-0.5 border border-[#e5e7eb] rounded p-1">
+            <div className="flex items-start gap-2.5 px-2.5 py-2.5 rounded hover:bg-slate-50 transition-colors">
+              <div className="h-8 w-8 shrink-0 bg-white border border-[#e5e7eb] rounded flex items-center justify-center p-1.5 mt-0.5">
                 {loading ? <RefreshCw className="w-3.5 h-3.5 text-[#45474c] animate-spin" /> : <GoogleDriveProductMark width={18} height={18} />}
               </div>
               <div className="flex flex-col min-w-0 flex-1 gap-1.5">
@@ -675,13 +675,13 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                     onBlur={() => setFriendlyNameTouched(true)}
                     placeholder='Connection name, e.g. "Acme Corp Drive"'
                     disabled={loading || isSandboxFirm}
-                    className="flex-1 rounded-[2px] border border-[#e5e7eb] bg-white px-2.5 py-1.5 text-xs text-[#1b1b1d] placeholder:text-[#9a9ba0] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary disabled:opacity-50"
+                    className="flex-1 rounded border border-[#e5e7eb] bg-white px-2.5 py-1.5 text-xs text-[#1b1b1d] placeholder:text-[#9a9ba0] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary disabled:opacity-50"
                   />
                   <button
                     type="button"
                     disabled={loading || isSandboxFirm || !friendlyName.trim()}
                     onClick={handleConnect}
-                    className="shrink-0 h-7 w-7 rounded-[2px] bg-primary text-white flex items-center justify-center hover:brightness-105 transition-all disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
+                    className="shrink-0 h-7 w-7 rounded bg-primary text-white flex items-center justify-center hover:brightness-105 transition-all disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
                   >
                     {loading ? <RefreshCw className="w-3 h-3 animate-spin" /> : <ArrowRight className="w-3.5 h-3.5" />}
                   </button>
@@ -692,8 +692,8 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
               </div>
             </div>
             <div className="h-px bg-[#f3f4f6] mx-2" />
-            <div className="flex items-start gap-2.5 px-2.5 py-2.5 rounded-[2px] cursor-not-allowed opacity-50">
-              <div className="h-8 w-8 shrink-0 bg-white border border-[#e5e7eb] rounded-[2px] flex items-center justify-center p-1.5 mt-0.5">
+            <div className="flex items-start gap-2.5 px-2.5 py-2.5 rounded cursor-not-allowed opacity-50">
+              <div className="h-8 w-8 shrink-0 bg-white border border-[#e5e7eb] rounded flex items-center justify-center p-1.5 mt-0.5">
                 <svg viewBox="0 0 24 24" width="18" height="18" xmlns="http://www.w3.org/2000/svg">
                   <path d="M9.25 7.25A6.25 6.25 0 0 1 21.5 10a4.5 4.5 0 0 1-.5 8.996H5a4 4 0 0 1-.68-7.938A6.25 6.25 0 0 1 9.25 7.25Z" fill="#0078D4"/>
                 </svg>
@@ -701,7 +701,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
               <div className="flex flex-col min-w-0 flex-1 gap-0.5 justify-center">
                 <div className="flex items-center gap-2">
                   <span className="text-[0.8125rem] font-semibold text-[#1b1b1d] leading-snug">Microsoft OneDrive</span>
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-[#9a9ba0] border border-[#e5e7eb] rounded-[2px] px-1.5 py-0.5 leading-none">Coming Soon</span>
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-[#9a9ba0] border border-[#e5e7eb] rounded px-1.5 py-0.5 leading-none">Coming Soon</span>
                 </div>
                 <span className="text-xs text-[#9a9ba0]">Connect your OneDrive or SharePoint</span>
               </div>
@@ -751,7 +751,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
           subtitle="This action cannot be undone."
           description="Permanently delete this Google Drive connection. This cannot be undone."
           extra={removeTarget && removeTarget.attachedClients.length > 0 ? (
-            <div className="flex gap-2.5 rounded-[2px] border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
+            <div className="flex gap-2.5 rounded border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
               <span>
                 This connector is attached to{' '}

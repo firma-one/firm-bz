@@ -29,6 +29,11 @@ export interface FolderHealthIssue {
   count: number
 }
 
+export interface FolderHealthPenalty {
+  label: string
+  points: number
+}
+
 export interface FolderHealthReport {
   score: number
   totalFolders: number
@@ -38,6 +43,7 @@ export interface FolderHealthReport {
   deeplyNestedFolders: number
   emptyFolders: number
   issues: FolderHealthIssue[]
+  penalties: FolderHealthPenalty[]
 }
 
 export interface StaleFileItem {
@@ -88,6 +94,37 @@ export interface EngagementHealthScore {
   penalties: HealthPenalty[]
 }
 
+// ── Deliverables analytics (Phase 7 & 8) ──────────────────────────────────────
+export type DeliverableStage = 'to_do' | 'in_progress' | 'in_review' | 'approved'
+
+export interface DeliverableProgress {
+  id: string
+  docId: string | null        // e.g. "NVQ-7"
+  name: string
+  stage: DeliverableStage
+  dueDate: string | null
+  isOverdue: boolean          // dueDate < now AND not yet approved
+  createdAt: string | null    // settings.share.createdAt — when marked a Deliverable (bar start on the timeline)
+  finalizedAt: string | null  // settings.share.finalizedAt — when approved (bar end for completed bars)
+}
+
+export interface DeliveryPenalty {
+  label: string
+  points: number
+}
+
+export interface DeliveryHealthScore {
+  score: number               // 0-100
+  level: 'good' | 'warning' | 'critical'
+  penalties: DeliveryPenalty[]
+  approvedCount: number
+  overdueCount: number
+  totalCount: number
+  // Avg days deliverables have been sitting in their current stage (proxy — we
+  // don't track full per-stage transition history).
+  avgDaysPerStage: Record<DeliverableStage, number>
+}
+
 export interface StorageHealthReport {
   totalFiles: number
   totalSizeBytes: number
@@ -98,6 +135,7 @@ export interface StorageHealthReport {
   staleTotalBytes: number
   duplicateGroups: DuplicateGroup[]
   duplicateCount: number
+  badlyNamedCount: number
 }
 
 export interface RecentDocumentItem {
@@ -114,6 +152,49 @@ export interface SensitiveFileItem {
   documentId: string
   fileName: string
   driveWebViewLink?: string
+}
+
+// Inputs that feed the Overall Health Score, each surfaced as its own ring.
+// Planning hygiene tracks three coverage gaps across IN-FLIGHT (non-approved) work.
+export interface PlanningHygiene {
+  deliverableTotal: number        // in-flight deliverable folders
+  deliverableWithDueDate: number
+  docTotal: number                // in-flight subtasks (non-folder docs inside them)
+  docWithDueDate: number
+  docWithAssignee: number
+}
+
+export interface CommentThreads {
+  answered: number
+  unanswered: number
+  total: number
+}
+
+export interface EngagementPace {
+  deliveredPct: number   // % of deliverables approved
+  timePct: number        // % of engagement duration elapsed
+  hasDeadline: boolean
+}
+
+// Phase 7C — revision rounds per deliverable + approval cycle time.
+export interface DeliverableRevisionMetric {
+  documentId: string
+  docId: string | null
+  name: string
+  revisions: number   // count of DOCUMENT_SHARE_CHANGED audit events for the deliverable
+}
+
+export interface ApprovalCycleMetric {
+  avgCycleDays: number | null    // finalizedAt − createdAt, averaged across approved deliverables
+  medianCycleDays: number | null
+  deliverableCount: number       // deliverables shared (have createdAt)
+  approvedCount: number          // deliverables finalized (have finalizedAt)
+}
+
+export interface FirstTimeRight {
+  firstTime: number    // approved deliverables that had zero revision rounds
+  reworked: number     // approved deliverables sent back at least once
+  totalApproved: number
 }
 
 export interface EngagementInsightsResponse {
@@ -134,6 +215,14 @@ export interface EngagementInsightsResponse {
   sharedDocsCount: number
   pendingApprovalSharesCount: number
   healthScore: EngagementHealthScore
+  deliverables: DeliverableProgress[]
+  deliveryHealth: DeliveryHealthScore
+  planningHygiene: PlanningHygiene
+  commentThreads: CommentThreads
+  pace: EngagementPace
+  revisionMetrics: DeliverableRevisionMetric[]
+  approvalCycle: ApprovalCycleMetric
+  firstTimeRight: FirstTimeRight
 }
 
 const SENSITIVE_PATTERN =
@@ -191,7 +280,7 @@ function buildFolderHealthReport(docs: { id: string; externalId: string; isFolde
   const totalFolders = docs.filter((d) => d.isFolder).length
   const totalFiles = docs.filter((d) => !d.isFolder).length
 
-  // Score calculation
+  // Score calculation — penalties applied by caller after all metrics are known
   let score = 100
   score -= Math.min(25, deeplyNestedFolders * 5)
   if (orphanedFiles > 5) score -= 10
@@ -211,7 +300,7 @@ function buildFolderHealthReport(docs: { id: string; externalId: string; isFolde
     issues.push({ type: 'empty_folder', severity: 'info', label: `${emptyFolders} empty folder${emptyFolders > 1 ? 's' : ''}`, count: emptyFolders })
   }
 
-  return { score, totalFolders, totalFiles, maxDepth, orphanedFiles, deeplyNestedFolders, emptyFolders, issues }
+  return { score, totalFolders, totalFiles, maxDepth, orphanedFiles, deeplyNestedFolders, emptyFolders, issues, penalties: [] as FolderHealthPenalty[] }
 }
 
 function normalizeBaseName(fileName: string): string {
@@ -223,57 +312,80 @@ function normalizeBaseName(fileName: string): string {
     .trim()
 }
 
+// Levenshtein distance for fuzzy name matching
+function levenshtein(a: string, b: string): number {
+  const m = a.length, n = b.length
+  const dp: number[][] = Array.from({ length: m + 1 }, (_, i) => [i, ...Array(n).fill(0)])
+  for (let j = 0; j <= n; j++) dp[0][j] = j
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1]
+        ? dp[i - 1][j - 1]
+        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1])
+    }
+  }
+  return dp[m][n]
+}
+
+function nameSimilarity(a: string, b: string): number {
+  const maxLen = Math.max(a.length, b.length)
+  if (maxLen === 0) return 1
+  return 1 - levenshtein(a, b) / maxLen
+}
+
 function buildDuplicateGroups(
   files: { id: string; fileName: string; fileSizeNum: number; mimeType: string | null; folderPath: string | null }[]
 ): { groups: DuplicateGroup[]; count: number } {
   const groups: DuplicateGroup[] = []
   const seenIds = new Set<string>()
 
-  // Exact size duplicates (same non-zero size, not Google-native formats)
-  const sizeMap = new Map<number, typeof files>()
-  for (const f of files) {
-    if (f.fileSizeNum <= 0 || f.mimeType?.startsWith('application/vnd.google-apps')) continue
-    const g = sizeMap.get(f.fileSizeNum) ?? []
-    g.push(f)
-    sizeMap.set(f.fileSizeNum, g)
-  }
-  for (const [size, group] of Array.from(sizeMap.entries())) {
-    if (group.length < 2) continue
-    groups.push({
-      type: 'exact',
-      baseKey: `size:${size}`,
-      files: group.map(f => { seenIds.add(f.id); return { documentId: f.id, fileName: f.fileName, folderPath: f.folderPath } }),
-    })
-  }
-
-  // Name-based near-duplicates (same extension + same normalized base name).
-  // Including the extension in the key prevents cross-format false positives
-  // (e.g. report.pdf ≠ report.docx — different formats, not duplicates).
-  const nameMap = new Map<string, typeof files>()
+  // Group by extension first, then find identical or ≥90% similar base names
+  const byExt = new Map<string, typeof files>()
   for (const f of files) {
     const ext = (f.fileName.match(/\.([^.]+)$/)?.[1] ?? '').toLowerCase()
-    const base = normalizeBaseName(f.fileName)
-    if (!base || base.length < 6) continue
-    const key = `${ext}:${base}`
-    const g = nameMap.get(key) ?? []
+    const g = byExt.get(ext) ?? []
     g.push(f)
-    nameMap.set(key, g)
+    byExt.set(ext, g)
   }
-  for (const [key, group] of Array.from(nameMap.entries())) {
+
+  for (const [ext, group] of Array.from(byExt.entries())) {
     if (group.length < 2) continue
-    // Skip groups already fully covered by exact-size groups
-    const newFiles = group.filter(f => !seenIds.has(f.id))
-    if (newFiles.length < 2) continue
-    newFiles.forEach(f => seenIds.add(f.id))
-    groups.push({
-      type: 'name',
-      baseKey: key,
-      files: group.map(f => ({ documentId: f.id, fileName: f.fileName, folderPath: f.folderPath })),
-    })
+    const bases = group.map(f => normalizeBaseName(f.fileName))
+    const matched = new Set<number>()
+
+    for (let i = 0; i < group.length; i++) {
+      if (matched.has(i) || bases[i].length < 3) continue
+      const cluster: typeof files = []
+      for (let j = i; j < group.length; j++) {
+        if (bases[j].length < 3) continue
+        if (nameSimilarity(bases[i], bases[j]) >= 0.9) {
+          cluster.push(group[j])
+          matched.add(j)
+        }
+      }
+      if (cluster.length < 2) continue
+      const freshFiles = cluster.filter(f => !seenIds.has(f.id))
+      if (freshFiles.length < 2) continue
+      freshFiles.forEach(f => seenIds.add(f.id))
+      groups.push({
+        type: bases[i] === bases[cluster[1] ? 1 : 0] ? 'exact' : 'name',
+        baseKey: `${ext}:${bases[i]}`,
+        files: freshFiles.map(f => ({ documentId: f.id, fileName: f.fileName, folderPath: f.folderPath })),
+      })
+    }
   }
 
   const count = new Set(groups.flatMap(g => g.files.map(f => f.documentId))).size
   return { groups, count }
+}
+
+const BADLY_NAMED_PATTERN = /^(untitled|new file|new folder|copy of|document|spreadsheet|presentation|slide|sheet|folder|file|unnamed|noname|temp|tmp|test|asdf|draft)(\s*\d*)?$/i
+
+function countBadlyNamed(files: { fileName: string; isFolder: boolean }[]): number {
+  return files.filter((f) => {
+    const base = f.fileName.replace(/\.[^.]+$/, '').trim()
+    return BADLY_NAMED_PATTERN.test(base)
+  }).length
 }
 
 /**
@@ -299,7 +411,9 @@ export async function GET(
       canViewProjectInternalTabs(ctx.firmId, ctx.clientId, ctx.projectId),
     ])
     if (!canView) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    if (!canViewInternal) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    // External roles (EC/EV) may view the Overview, but only the deliverables analytics
+    // section — all internal-only data is stripped from their response below.
+    const isExternalPersona = !canViewInternal
 
     const today = new Date()
     today.setHours(0, 0, 0, 0)
@@ -325,6 +439,7 @@ export async function GET(
           dueDate: true,
           externalId: true,
           updatedBy: true,
+          settings: true,
         },
       }),
       prisma.docCommentMessage.findMany({
@@ -353,7 +468,7 @@ export async function GET(
       }),
       // Shares progress — documents explicitly shared via modal (createdAt set) or intake (sharing row)
       (prisma as any).$queryRawUnsafe(
-        `SELECT DISTINCT ed.id, ed.settings
+        `SELECT DISTINCT ed.id, ed.settings, ed."fileName", ed."docId", ed."dueDate", ed."isFolder"
          FROM platform.engagement_documents ed
          LEFT JOIN platform.engagement_document_sharing_users su
            ON su."projectDocumentId" = ed.id AND su."sharingPermissionStatus" IN ('GRANTED', 'PENDING')
@@ -363,7 +478,7 @@ export async function GET(
              OR su.id IS NOT NULL
            )`,
         projectId
-      ) as Promise<{ id: string; settings: unknown }[]>,
+      ) as Promise<{ id: string; settings: unknown; fileName: string; docId: string | null; dueDate: Date | null; isFolder: boolean }[]>,
       // Count of shares pending approval
       (prisma.engagementDocument as any).count({
         where: {
@@ -516,6 +631,24 @@ export async function GET(
       fileDocsWithSizes.map(d => ({ id: d.id, fileName: d.fileName, fileSizeNum: d.fileSizeNum, mimeType: d.mimeType, folderPath: getFolderPath(d.parentId) }))
     )
 
+    const badlyNamedCount = countBadlyNamed(docs)
+
+    // Build folder health penalties from all 6 signals + structure
+    const folderPenalties: FolderHealthPenalty[] = []
+    if (badlyNamedCount > 0) folderPenalties.push({ label: `${badlyNamedCount} badly named file${badlyNamedCount > 1 ? 's' : ''}`, points: Math.min(15, badlyNamedCount * 3) })
+    if (duplicateCount > 0) folderPenalties.push({ label: `${duplicateCount} duplicate file${duplicateCount > 1 ? 's' : ''}`, points: Math.min(10, duplicateCount * 2) })
+    if (allStale.length > 0) folderPenalties.push({ label: `${allStale.length} stale file${allStale.length > 1 ? 's' : ''} (6+ months)`, points: Math.min(10, allStale.length * 2) })
+    if (allLarge.length > 0) folderPenalties.push({ label: `${allLarge.length} large file${allLarge.length > 1 ? 's' : ''} (>50 MB)`, points: Math.min(5, allLarge.length * 2) })
+    if (folderHealth.deeplyNestedFolders > 0) folderPenalties.push({ label: `${folderHealth.deeplyNestedFolders} deeply nested folder${folderHealth.deeplyNestedFolders > 1 ? 's' : ''} (3+ levels)`, points: Math.min(25, folderHealth.deeplyNestedFolders * 5) })
+    if (folderHealth.orphanedFiles > 5) folderPenalties.push({ label: `${folderHealth.orphanedFiles} files at root without a folder`, points: folderHealth.orphanedFiles > 15 ? 20 : 10 })
+    if (folderHealth.emptyFolders > 3) folderPenalties.push({ label: `${folderHealth.emptyFolders} empty folders`, points: 5 })
+    if (folderHealth.maxDepth >= 6) folderPenalties.push({ label: 'Folder depth ≥ 6 levels', points: 15 })
+    folderPenalties.sort((a, b) => b.points - a.points)
+
+    const totalFolderDeducted = folderPenalties.reduce((s, p) => s + p.points, 0)
+    const folderHealthScore = Math.max(0, Math.min(100, 100 - totalFolderDeducted))
+    const folderHealthWithAllSignals = { ...folderHealth, score: folderHealthScore, penalties: folderPenalties }
+
     const storageHealth: StorageHealthReport = {
       totalFiles: fileDocsOnly.length,
       totalSizeBytes,
@@ -524,6 +657,7 @@ export async function GET(
       staleTotalBytes,
       duplicateGroups: duplicateGroups.slice(0, 20),
       duplicateCount,
+      badlyNamedCount,
       staleFiles: allStale.slice(0, 10).map((d) => ({
         documentId: d.id,
         fileName: d.fileName,
@@ -639,23 +773,259 @@ export async function GET(
     if ((unansweredThreads?.length ?? 0) > 0) penalties.push({ label: `${unansweredThreads.length} unanswered thread${unansweredThreads.length > 1 ? 's' : ''}`, points: Math.min(20, unansweredThreads.length * 5) })
     if (overdueDocCount > 0) penalties.push({ label: `${overdueDocCount} overdue doc${overdueDocCount > 1 ? 's' : ''}`, points: Math.min(15, overdueDocCount * 5) })
     if ((sensitiveFiles?.length ?? 0) > 0) penalties.push({ label: `${sensitiveFiles.length} sensitive file${sensitiveFiles.length > 1 ? 's' : ''}`, points: Math.min(20, sensitiveFiles.length * 5) })
-    if ((storageHealth.staleCount ?? 0) > 0) penalties.push({ label: `${storageHealth.staleCount} stale file${storageHealth.staleCount > 1 ? 's' : ''}`, points: Math.min(15, storageHealth.staleCount * 3) })
-    if ((storageHealth.largeCount ?? 0) > 0) penalties.push({ label: `${storageHealth.largeCount} large file${storageHealth.largeCount > 1 ? 's' : ''}`, points: Math.min(10, storageHealth.largeCount * 2) })
-    if ((storageHealth.duplicateCount ?? 0) > 0) penalties.push({ label: `${storageHealth.duplicateCount} duplicate${storageHealth.duplicateCount > 1 ? 's' : ''}`, points: Math.min(10, storageHealth.duplicateCount * 2) })
+    // NOTE: file-organization issues (stale/large/duplicate files) are intentionally
+    // excluded from the engagement Health Score — they belong to the File Organization
+    // section, not engagement health. Do not re-add them here.
     const days = engagementDaysUntilDue ?? null
     if (days !== null) {
-      if (days < -30)      penalties.push({ label: `Engagement ${Math.abs(days)} days overdue`, points: 25 })
-      else if (days < -7)  penalties.push({ label: `Engagement ${Math.abs(days)} days overdue`, points: 20 })
-      else if (days < 0)   penalties.push({ label: `Engagement ${Math.abs(days)} day${Math.abs(days) === 1 ? '' : 's'} overdue`, points: 15 })
+      // An overdue engagement is the single most serious health signal — any overdue
+      // engagement alone drives the score into "critical" (<50), and it escalates from there.
+      if (days < -30)      penalties.push({ label: `Engagement ${Math.abs(days)} days overdue`, points: 80 })
+      else if (days < -7)  penalties.push({ label: `Engagement ${Math.abs(days)} days overdue`, points: 65 })
+      else if (days < 0)   penalties.push({ label: `Engagement ${Math.abs(days)} day${Math.abs(days) === 1 ? '' : 's'} overdue`, points: 55 })
       else if (days === 0) penalties.push({ label: 'Engagement due today', points: 12 })
       else if (days === 1) penalties.push({ label: 'Engagement due tomorrow', points: 8 })
       else if (days === 2) penalties.push({ label: 'Engagement due in 2 days', points: 5 })
     }
-    // if (sharesProgress.total > 0) {
-    //   const deliveryPct = Math.round((sharesProgress.approved / sharesProgress.total) * 100)
-    //   if (deliveryPct < 50) penalties.push({ label: `${deliveryPct}% deliverables approved`, points: Math.min(25, Math.round((50 - deliveryPct) / 2)) })
-    // }
+    // Assignee-coverage and pace penalties are appended after those metrics are
+    // computed below; the Overall Health Score is finalized there.
 
+    // ── Deliverables analytics (Phase 7 & 8) ──────────────────────────────────
+    // Deliverables = shared rows that are folders with settings.share.createdAt set.
+    // (The shares set also includes intake files via the sharing-user join; filter them out.)
+    const nowMs = Date.now()
+    const DAY_MS = 86400000
+    const normalizeStage = (raw: unknown): DeliverableStage => {
+      const s = raw === 'done' ? 'approved' : raw
+      return (s === 'in_progress' || s === 'in_review' || s === 'approved') ? s : 'to_do'
+    }
+    const deliverableRows = (shares as any[]).filter((s) => {
+      const st = s.settings as any
+      return s.isFolder === true && !!st?.share?.createdAt
+    })
+    const deliverables: DeliverableProgress[] = deliverableRows.map((s) => {
+      const st = s.settings as any
+      const stage = normalizeStage(st?.activity?.status ?? 'to_do')
+      const dueMs = s.dueDate ? new Date(s.dueDate).getTime() : null
+      const createdRaw = st?.share?.createdAt
+      const finalizedRaw = st?.share?.finalizedAt
+      return {
+        id: s.id as string,
+        docId: (s.docId as string | null) ?? null,
+        name: (s.fileName as string) ?? 'Untitled',
+        stage,
+        dueDate: s.dueDate ? new Date(s.dueDate).toISOString() : null,
+        isOverdue: dueMs != null && stage !== 'approved' && dueMs < nowMs,
+        createdAt: createdRaw ? new Date(createdRaw).toISOString() : null,
+        finalizedAt: finalizedRaw ? new Date(finalizedRaw).toISOString() : null,
+      }
+    })
+
+    // Delivery health score — starts at 100, penalties subtract, all-approved adds a bonus.
+    const totalDeliverables = deliverables.length
+    const approvedCount = deliverables.filter((d) => d.stage === 'approved').length
+    const overdueCount = deliverables.filter((d) => d.isOverdue).length
+    const deliveryPenalties: DeliveryPenalty[] = []
+
+    if (overdueCount > 0) {
+      deliveryPenalties.push({ label: `${overdueCount} overdue deliverable${overdueCount > 1 ? 's' : ''}`, points: Math.min(40, overdueCount * 10) })
+    }
+    if (totalDeliverables > 0 && kickoffDate) {
+      const daysSinceKickoff = Math.floor((nowMs - new Date(kickoffDate).getTime()) / DAY_MS)
+      if (daysSinceKickoff > 14) {
+        const toDoCount = deliverables.filter((d) => d.stage === 'to_do').length
+        const toDoPct = toDoCount / totalDeliverables
+        if (toDoPct > 0.3) deliveryPenalties.push({ label: `${Math.round(toDoPct * 100)}% still in To Do`, points: 15 })
+      }
+    }
+    const stalledInReview = deliverableRows.filter((s) => {
+      const st = s.settings as any
+      if (normalizeStage(st?.activity?.status ?? 'to_do') !== 'in_review') return false
+      const upd = st?.activity?.updatedAt ? new Date(st.activity.updatedAt).getTime() : null
+      return upd != null && (nowMs - upd) > 14 * DAY_MS
+    }).length
+    if (stalledInReview > 0) {
+      deliveryPenalties.push({ label: `${stalledInReview} stalled in review (14+ days)`, points: Math.min(20, stalledInReview * 10) })
+    }
+    if (totalDeliverables > 0 && approvedCount === 0 && kickoffDate && engagementDueDate) {
+      const start = new Date(kickoffDate).getTime()
+      const end = new Date(engagementDueDate).getTime()
+      if (end > start && nowMs > start + (end - start) / 2) {
+        deliveryPenalties.push({ label: 'No approved deliverables past mid-point', points: 15 })
+      }
+    }
+
+    const avgDaysPerStage: Record<DeliverableStage, number> = { to_do: 0, in_progress: 0, in_review: 0, approved: 0 }
+    for (const stage of ['to_do', 'in_progress', 'in_review', 'approved'] as DeliverableStage[]) {
+      const rows = deliverableRows.filter((s) => normalizeStage((s.settings as any)?.activity?.status ?? 'to_do') === stage)
+      if (rows.length === 0) continue
+      const totalDays = rows.reduce((sum, s) => {
+        const upd = (s.settings as any)?.activity?.updatedAt ? new Date((s.settings as any).activity.updatedAt).getTime() : nowMs
+        return sum + Math.max(0, (nowMs - upd) / DAY_MS)
+      }, 0)
+      avgDaysPerStage[stage] = Math.round(totalDays / rows.length)
+    }
+
+    const allApproved = totalDeliverables > 0 && approvedCount === totalDeliverables
+    const deliveryPenaltyTotal = deliveryPenalties.reduce((sum, p) => sum + p.points, 0)
+    const deliveryScoreValue = Math.max(0, Math.min(100, 100 - deliveryPenaltyTotal + (allApproved ? 10 : 0)))
+    const deliveryLevel: DeliveryHealthScore['level'] = deliveryScoreValue >= 80 ? 'good' : deliveryScoreValue >= 50 ? 'warning' : 'critical'
+    const deliveryHealth: DeliveryHealthScore = {
+      score: deliveryScoreValue,
+      level: deliveryLevel,
+      penalties: deliveryPenalties,
+      approvedCount,
+      overdueCount,
+      totalCount: totalDeliverables,
+      avgDaysPerStage,
+    }
+
+    // ── Overall Health Score inputs (Phase 7 & 8) ─────────────────────────────
+    // Planning hygiene — subtasks (non-folder docs, any depth) inside IN-FLIGHT
+    // deliverable folders that are fully planned: BOTH an assignee and a due date.
+    // Approved deliverables are completed, so their subtasks are intentionally excluded.
+    const deliverableFolderExtIds = new Set(
+      docs
+        .filter((d) => {
+          if (!d.isFolder) return false
+          const s = d.settings as any
+          if (!s?.share?.createdAt) return false
+          const status = s?.activity?.status === 'done' ? 'approved' : s?.activity?.status
+          return status !== 'approved'
+        })
+        .map((d) => d.externalId)
+    )
+    const childrenByParent = new Map<string, typeof docs>()
+    for (const d of docs) {
+      if (!d.parentId) continue
+      if (!childrenByParent.has(d.parentId)) childrenByParent.set(d.parentId, [])
+      childrenByParent.get(d.parentId)!.push(d)
+    }
+    const subtaskDocs: typeof docs = []
+    const folderQueue = Array.from(deliverableFolderExtIds)
+    const visitedFolders = new Set<string>()
+    while (folderQueue.length) {
+      const ext = folderQueue.shift()!
+      if (visitedFolders.has(ext)) continue
+      visitedFolders.add(ext)
+      for (const child of childrenByParent.get(ext) ?? []) {
+        if (child.isFolder) folderQueue.push(child.externalId)
+        else subtaskDocs.push(child)
+      }
+    }
+    const docWithDueDate = subtaskDocs.filter((d) => !!d.dueDate).length
+    const docWithAssignee = subtaskDocs.filter((d) => {
+      try { return !!((d.settings as any)?.assigneeUserId) } catch { return false }
+    }).length
+    const inFlightDeliverables = deliverables.filter((d) => d.stage !== 'approved')
+    const planningHygiene: PlanningHygiene = {
+      deliverableTotal: inFlightDeliverables.length,
+      deliverableWithDueDate: inFlightDeliverables.filter((d) => !!d.dueDate).length,
+      docTotal: subtaskDocs.length,
+      docWithDueDate,
+      docWithAssignee,
+    }
+
+    // Comment responsiveness — answered vs unanswered threads.
+    const totalThreads = commentsByDoc.size
+    const commentThreads: CommentThreads = {
+      answered: Math.max(0, totalThreads - unansweredThreads.length),
+      unanswered: unansweredThreads.length,
+      total: totalThreads,
+    }
+
+    // Pace — % delivered vs % of engagement duration elapsed.
+    const deliveredPct = totalDeliverables > 0 ? Math.round((approvedCount / totalDeliverables) * 100) : 0
+    const paceStartStr = kickoffDate ?? (engagement?.createdAt ? engagement.createdAt.toISOString() : null)
+    let paceTimePct = 0
+    let paceHasDeadline = false
+    if (engagementDueDate && paceStartStr) {
+      const start = new Date(paceStartStr).getTime()
+      const end = new Date(engagementDueDate).getTime()
+      if (end > start) {
+        paceHasDeadline = true
+        paceTimePct = Math.round(Math.max(0, Math.min(100, ((nowMs - start) / (end - start)) * 100)))
+      }
+    }
+    const pace: EngagementPace = { deliveredPct, timePct: paceTimePct, hasDeadline: paceHasDeadline }
+
+    // Finalize the Overall Health Score: append planning-hygiene + pace penalties to
+    // the penalties gathered earlier (threads / overdue docs / sensitive / overdue engagement).
+    const hygieneCovs: number[] = []
+    if (planningHygiene.deliverableTotal > 0) hygieneCovs.push(planningHygiene.deliverableWithDueDate / planningHygiene.deliverableTotal)
+    if (planningHygiene.docTotal > 0) {
+      hygieneCovs.push(planningHygiene.docWithDueDate / planningHygiene.docTotal)
+      hygieneCovs.push(planningHygiene.docWithAssignee / planningHygiene.docTotal)
+    }
+    if (hygieneCovs.length > 0) {
+      const avgCov = hygieneCovs.reduce((a, b) => a + b, 0) / hygieneCovs.length
+      const gapPoints = Math.min(15, Math.round((1 - avgCov) * 15))
+      if (gapPoints > 0) penalties.push({ label: `Planning gaps (${Math.round(avgCov * 100)}% set up)`, points: gapPoints })
+    }
+    if (paceHasDeadline && totalDeliverables > 0) {
+      const paceGap = paceTimePct - deliveredPct
+      if (paceGap > 15) penalties.push({ label: `Behind pace (${deliveredPct}% delivered vs ${paceTimePct}% elapsed)`, points: Math.min(20, Math.round((paceGap - 15) / 2) + 5) })
+    }
+
+    // ── Phase 7C — Revision rounds, first-time-right, approval cycle ───────────
+    // Revision rounds = TRUE rework: backward status transitions (later stage →
+    // earlier stage), read from DOCUMENT_STATUS_CHANGED metadata { oldStatus, newStatus }.
+    const STAGE_ORDER: Record<string, number> = { to_do: 0, in_progress: 1, in_review: 2, done: 3, approved: 3 }
+    const statusEvents = await prisma.platformAuditEvent.findMany({
+      where: { engagementId: projectId, eventType: 'DOCUMENT_STATUS_CHANGED' },
+      select: { projectDocumentId: true, metadata: true },
+    })
+    const revisionByDoc = new Map<string, number>()
+    for (const ev of statusEvents) {
+      if (!ev.projectDocumentId) continue
+      const m = ev.metadata as any
+      const oldIdx = STAGE_ORDER[m?.oldStatus as string]
+      const newIdx = STAGE_ORDER[m?.newStatus as string]
+      if (oldIdx === undefined || newIdx === undefined) continue
+      if (newIdx < oldIdx) revisionByDoc.set(ev.projectDocumentId, (revisionByDoc.get(ev.projectDocumentId) ?? 0) + 1)
+    }
+    const revisionMetrics: DeliverableRevisionMetric[] = deliverables
+      .map((d) => ({ documentId: d.id, docId: d.docId, name: d.name, revisions: revisionByDoc.get(d.id) ?? 0 }))
+      .sort((a, b) => b.revisions - a.revisions)
+
+    // First-time-right — approved deliverables that were never sent back.
+    const approvedDelivs = deliverables.filter((d) => d.stage === 'approved')
+    const firstTimeCount = approvedDelivs.filter((d) => (revisionByDoc.get(d.id) ?? 0) === 0).length
+    const firstTimeRight: FirstTimeRight = {
+      firstTime: firstTimeCount,
+      reworked: approvedDelivs.length - firstTimeCount,
+      totalApproved: approvedDelivs.length,
+    }
+    if (firstTimeRight.totalApproved > 0 && firstTimeRight.reworked > 0) {
+      const pts = Math.min(10, Math.round((firstTimeRight.reworked / firstTimeRight.totalApproved) * 10))
+      if (pts > 0) penalties.push({ label: `${firstTimeRight.reworked} deliverable${firstTimeRight.reworked > 1 ? 's' : ''} reworked before approval`, points: pts })
+    }
+
+    // Approval cycle time — finalizedAt − createdAt across deliverables that have both.
+    const cycleDaysList: number[] = []
+    for (const s of deliverableRows) {
+      const st = s.settings as any
+      const created = st?.share?.createdAt
+      const finalized = st?.share?.finalizedAt
+      if (created && finalized) {
+        const days = (new Date(finalized).getTime() - new Date(created).getTime()) / DAY_MS
+        if (Number.isFinite(days) && days >= 0) cycleDaysList.push(days)
+      }
+    }
+    const sortedCycle = [...cycleDaysList].sort((a, b) => a - b)
+    const rawMedian = sortedCycle.length === 0
+      ? null
+      : sortedCycle.length % 2 === 1
+        ? sortedCycle[(sortedCycle.length - 1) / 2]
+        : (sortedCycle[sortedCycle.length / 2 - 1] + sortedCycle[sortedCycle.length / 2]) / 2
+    const approvalCycle: ApprovalCycleMetric = {
+      avgCycleDays: cycleDaysList.length ? Math.round((cycleDaysList.reduce((a, b) => a + b, 0) / cycleDaysList.length) * 10) / 10 : null,
+      medianCycleDays: rawMedian !== null ? Math.round(rawMedian * 10) / 10 : null,
+      deliverableCount: deliverableRows.length,
+      approvedCount: cycleDaysList.length,
+    }
+
+    // Finalize the Overall Health Score (after all penalty inputs are gathered).
     const healthPenalty = penalties.reduce((sum, p) => sum + p.points, 0)
     const healthScoreValue = Math.max(0, 100 - healthPenalty)
     const healthLevel: EngagementHealthScore['level'] = healthScoreValue >= 80 ? 'good' : healthScoreValue >= 50 ? 'warning' : 'critical'
@@ -668,7 +1038,7 @@ export async function GET(
       engagementDaysUntilDue,
       kickoffDate,
       engagementCreatedAt: engagement?.createdAt ? engagement.createdAt.toISOString() : null,
-      folderHealth,
+      folderHealth: folderHealthWithAllSignals,
       storageHealth,
       pendingInvitations,
       memberCount: members.length,
@@ -679,6 +1049,39 @@ export async function GET(
       sharedDocsCount: shares.length,
       pendingApprovalSharesCount,
       healthScore,
+      deliverables,
+      deliveryHealth,
+      planningHygiene,
+      commentThreads,
+      pace,
+      revisionMetrics,
+      approvalCycle,
+      firstTimeRight,
+    }
+
+    // External roles (EC/EV): return ONLY the deliverables analytics; strip all
+    // internal-only data at the API layer so it never reaches the client.
+    if (isExternalPersona) {
+      const externalResponse: EngagementInsightsResponse = {
+        ...response,
+        unansweredThreads: [],
+        documentsDueSoon: [],
+        recentDocuments: [],
+        sensitiveFiles: [],
+        pendingInvitations: [],
+        membersByRole: {},
+        folderHealth: { score: 0, totalFolders: 0, totalFiles: 0, maxDepth: 0, orphanedFiles: 0, deeplyNestedFolders: 0, emptyFolders: 0, issues: [], penalties: [] },
+        storageHealth: { totalFiles: 0, totalSizeBytes: 0, staleFiles: [], largeFiles: [], staleCount: 0, largeCount: 0, staleTotalBytes: 0, duplicateGroups: [], duplicateCount: 0, badlyNamedCount: 0 },
+        healthScore: { score: 0, level: 'good', penalties: [] },
+        pendingApprovalSharesCount: 0,
+        // Internal workflow metrics — not exposed to external roles.
+        planningHygiene: { deliverableTotal: 0, deliverableWithDueDate: 0, docTotal: 0, docWithDueDate: 0, docWithAssignee: 0 },
+        commentThreads: { answered: 0, unanswered: 0, total: 0 },
+        revisionMetrics: [],
+        approvalCycle: { avgCycleDays: null, medianCycleDays: null, deliverableCount: 0, approvedCount: 0 },
+        firstTimeRight: { firstTime: 0, reworked: 0, totalApproved: 0 },
+      }
+      return NextResponse.json(externalResponse)
     }
 
     return NextResponse.json(response)

@@ -90,23 +90,23 @@ export function GoogleDriveConnectorTab({
     <>
       <TabsContent value="google-drive" className="mt-0">
         {isLoadingData ? (
-          <div className="rounded-[2px] border border-[#e5e7eb] bg-white shadow-sm overflow-hidden">
+          <div className="rounded border border-[#e5e7eb] bg-white shadow-sm overflow-hidden">
             <div className="flex items-center gap-4 px-5 py-4 border-b border-[#e5e7eb]">
               <Skeleton className="h-10 w-10 rounded-xl flex-shrink-0" />
               <div className="space-y-2 flex-1"><Skeleton className="h-4 w-32" /><Skeleton className="h-3 w-56" /></div>
             </div>
-            <div className="px-5 py-4 border-b border-[#e5e7eb] space-y-3"><Skeleton className="h-3 w-14" /><Skeleton className="h-14 w-full rounded-[2px]" /></div>
-            <div className="px-5 py-4 space-y-3"><Skeleton className="h-3 w-20" /><Skeleton className="h-14 w-full rounded-[2px]" /></div>
+            <div className="px-5 py-4 border-b border-[#e5e7eb] space-y-3"><Skeleton className="h-3 w-14" /><Skeleton className="h-14 w-full rounded" /></div>
+            <div className="px-5 py-4 space-y-3"><Skeleton className="h-3 w-20" /><Skeleton className="h-14 w-full rounded" /></div>
           </div>
         ) : (
           <TooltipProvider delayDuration={300}>
             <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
-              <div className="rounded-[2px] border border-[#e5e7eb] bg-white shadow-sm overflow-hidden">
+              <div className="rounded border border-[#e5e7eb] bg-white shadow-sm overflow-hidden">
 
                 {/* Header */}
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between px-5 py-4">
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="h-10 w-10 shrink-0 bg-white border border-[#e5e7eb] rounded-[2px] flex items-center justify-center p-2 shadow-sm">
+                    <div className="h-10 w-10 shrink-0 bg-white border border-[#e5e7eb] rounded flex items-center justify-center p-2 shadow-sm">
                       <GoogleDriveProductMark width={24} height={24} />
                     </div>
                     <div className="min-w-0">
@@ -115,7 +115,7 @@ export function GoogleDriveConnectorTab({
                     </div>
                   </div>
                   {existingConnections.length === 0 && (
-                    <Button onClick={onConnectGoogleDrive} disabled={loading} className="shrink-0 h-auto px-4 py-1.5 rounded-[2px] bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-primary hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1.5">
+                    <Button onClick={onConnectGoogleDrive} disabled={loading} className="shrink-0 h-auto px-4 py-1.5 rounded bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-primary hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1.5">
                       <SquarePlus className="w-3.5 h-3.5" />
                       {loading ? 'Connecting...' : 'Connect'}
                     </Button>
@@ -125,13 +125,13 @@ export function GoogleDriveConnectorTab({
                 {/* Multi-account switcher */}
                 {existingConnections.length > 1 && (
                   <div className="border-t border-[#e5e7eb] px-5 py-3 bg-gray-50/50">
-                    <div className="flex flex-wrap bg-[#f9f9fb] border border-[#e5e7eb] p-1 rounded-[2px] gap-1">
+                    <div className="flex flex-wrap bg-[#f9f9fb] border border-[#e5e7eb] p-1 rounded gap-1">
                       {existingConnections.map(c => {
                         const isActive = activeAccountId === c.id
                         const isConnected = c.status === 'ACTIVE'
                         return (
                           <button key={c.id} type="button" onClick={() => onSetActiveAccountId(c.id)}
-                            className={`flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-[2px] transition-all ${isActive ? 'bg-white shadow-sm border border-[#e5e7eb] text-[#1b1b1d]' : 'text-[#45474c] hover:text-[#1b1b1d] hover:bg-white/60'}`}>
+                            className={`flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded transition-all ${isActive ? 'bg-white shadow-sm border border-[#e5e7eb] text-[#1b1b1d]' : 'text-[#45474c] hover:text-[#1b1b1d] hover:bg-white/60'}`}>
                             <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isConnected ? 'bg-primary' : 'bg-red-400'}`} />
                             <span className="truncate max-w-[200px]">{c.email}</span>
                           </button>
@@ -149,11 +149,11 @@ export function GoogleDriveConnectorTab({
                       <div className="px-5 pt-3.5 pb-2">
                         <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#45474c]">Account</p>
                       </div>
-                      <div className={`mx-5 mb-4 rounded-[2px] border border-[#e5e7eb] ${activeConnection.status !== 'ACTIVE' ? 'bg-amber-50/40' : 'bg-[#f9f9fb]/60'}`}>
+                      <div className={`mx-5 mb-4 rounded border border-[#e5e7eb] ${activeConnection.status !== 'ACTIVE' ? 'bg-amber-50/40' : 'bg-[#f9f9fb]/60'}`}>
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 py-3">
                           <div className="flex items-center gap-3 min-w-0">
-                            <Avatar className="h-9 w-9 rounded-[2px] shrink-0">
-                              <AvatarFallback className="rounded-[2px] bg-white border border-[#e5e7eb] text-sm font-bold text-[#45474c] uppercase select-none">
+                            <Avatar className="h-9 w-9 rounded shrink-0">
+                              <AvatarFallback className="rounded bg-white border border-[#e5e7eb] text-sm font-bold text-[#45474c] uppercase select-none">
                                 {(activeConnection.name || activeConnection.email || 'G').charAt(0)}
                               </AvatarFallback>
                             </Avatar>
@@ -177,7 +177,7 @@ export function GoogleDriveConnectorTab({
                                 <Tooltip>
                                   <TooltipTrigger asChild>
                                     <Button type="button" variant="outline" size="sm"
-                                      className="h-8 px-3 text-xs border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] rounded-[2px]"
+                                      className="h-8 px-3 text-xs border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] rounded"
                                       onClick={() => onTestConnection(activeConnection.id)}
                                       disabled={testingConnection === activeConnection.id || isMigrationLocked}>
                                       {testingConnection === activeConnection.id
@@ -193,7 +193,7 @@ export function GoogleDriveConnectorTab({
                                   <TooltipTrigger asChild>
                                     <span tabIndex={isPersonalDrive ? 0 : undefined} className={isPersonalDrive ? 'cursor-not-allowed' : undefined}>
                                       <Button type="button" variant="outline" size="sm"
-                                        className="h-8 px-3 text-xs border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] rounded-[2px]"
+                                        className="h-8 px-3 text-xs border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] rounded"
                                         onClick={() => onSetSwitchModalOpen(true)}
                                         disabled={loading || isPersonalDrive || isMigrationLocked}>
                                         <SwitchCamera className="w-3.5 h-3.5 mr-1.5" />Switch
@@ -222,7 +222,7 @@ export function GoogleDriveConnectorTab({
                                 <Tooltip>
                                   <TooltipTrigger asChild>
                                     <Button type="button" variant="outline" size="sm"
-                                      className="h-8 px-3 text-xs border-[#e5e7eb] bg-white text-rose-600 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 rounded-[2px]"
+                                      className="h-8 px-3 text-xs border-[#e5e7eb] bg-white text-rose-600 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 rounded"
                                       onClick={() => onDisconnect(activeConnection.id)}
                                       disabled={isMigrationLocked}>
                                       <Unlink className="w-3.5 h-3.5 mr-1.5" />Disconnect
@@ -235,7 +235,7 @@ export function GoogleDriveConnectorTab({
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <Button type="button" size="sm"
-                                    className="h-8 px-3 text-xs bg-primary text-white hover:bg-primary hover:brightness-105 hover:text-white rounded-[2px] border-0"
+                                    className="h-8 px-3 text-xs bg-primary text-white hover:bg-primary hover:brightness-105 hover:text-white rounded border-0"
                                     onClick={() => onConnectGoogleDrive()}>
                                     <Link className="w-3.5 h-3.5 mr-1.5" />Reconnect
                                   </Button>
@@ -270,7 +270,7 @@ export function GoogleDriveConnectorTab({
                           />
                         </div>
                       ) : (
-                        <div className="mx-5 mb-5 rounded-[2px] border border-dashed border-amber-200 bg-amber-50/40 px-4 py-5 text-center text-sm text-amber-950/90">
+                        <div className="mx-5 mb-5 rounded border border-dashed border-amber-200 bg-amber-50/40 px-4 py-5 text-center text-sm text-amber-950/90">
                           <span className="font-medium">Reconnect</span> Google Drive above to view or change your workspace folder.
                         </div>
                       )}
@@ -299,7 +299,7 @@ export function GoogleDriveConnectorTab({
 
                     {/* Google Workspace tip — shown at bottom once connected */}
                     <div className="border-t border-[#e5e7eb] px-5 py-3">
-                      <div className="flex gap-2.5 rounded-[2px] border border-[#e5e7eb] bg-[#f9f9fb] px-3.5 py-3 text-xs text-[#45474c]">
+                      <div className="flex gap-2.5 rounded border border-[#e5e7eb] bg-[#f9f9fb] px-3.5 py-3 text-xs text-[#45474c]">
                         <Info className="h-3.5 w-3.5 shrink-0 mt-0.5 text-[#45474c]" />
                         <p className="leading-relaxed">
                           <span className="font-semibold text-[#1b1b1d]">Google Workspace?</span> We recommend a dedicated service account not tied to any individual — so Drive access isn&apos;t disrupted if someone leaves.{' '}
@@ -327,7 +327,7 @@ export function GoogleDriveConnectorTab({
 
                     {/* Google Workspace tip — shown before connecting too */}
                     <div className="border-t border-[#e5e7eb] px-5 py-3">
-                      <div className="flex gap-2.5 rounded-[2px] border border-primary/25 bg-primary/8 px-3.5 py-3 text-xs text-[#1b1b1d]">
+                      <div className="flex gap-2.5 rounded border border-primary/25 bg-primary/8 px-3.5 py-3 text-xs text-[#1b1b1d]">
                         <Info className="h-3.5 w-3.5 shrink-0 mt-0.5 text-primary" />
                         <p className="leading-relaxed">
                           <span className="font-bold text-primary">Google Workspace?</span> We recommend connecting with a dedicated service account not tied to any individual user — so your firm&apos;s Drive access isn&apos;t disrupted if someone leaves.{' '}

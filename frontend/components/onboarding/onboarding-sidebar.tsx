@@ -128,7 +128,7 @@ export function OnboardingSidebar() {
     const steps = ONBOARDING_STEPS.filter((s) => s.id !== 0)
 
     return (
-        <div className="flex flex-col h-full bg-white border-r border-[#e5e7eb] rounded-[2px] overflow-hidden">
+        <div className="flex flex-col h-full bg-white border-r border-[#e5e7eb] rounded overflow-hidden">
             {/* Steps: fixed-height connectors in the timeline column (not stretched by copy height). */}
             <div className="flex-1 overflow-y-auto custom-scrollbar px-4 py-4 pt-4">
                 <div className="flex flex-col gap-0">

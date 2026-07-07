@@ -179,17 +179,17 @@ export function NotificationsTable({ initialNotifications, onRefresh }: Props) {
     return (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm" className={`h-8 gap-1.5 text-xs bg-white rounded-[2px] border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors ${isActive ? 'border-slate-400 ring-1 ring-slate-300' : ''}`}>
+          <Button variant="outline" size="sm" className={`h-8 gap-1.5 text-xs bg-white rounded border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors ${isActive ? 'border-slate-400 ring-1 ring-slate-300' : ''}`}>
             <Filter className="h-3 w-3 opacity-60" />
             {label}
             {isActive && <span className="ml-0.5 bg-slate-200 text-slate-800 px-1.5 rounded-full text-[10px] font-medium">1</span>}
             <ChevronDown className="h-3 w-3 opacity-50" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-[180px] py-1 text-xs rounded-[2px]">
+        <DropdownMenuContent align="start" className="w-[180px] py-1 text-xs rounded">
           <div className="flex items-center justify-between px-2 py-1.5 border-b border-slate-100">
             <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 p-0 font-medium">{label}</DropdownMenuLabel>
-            <DropdownMenuItem className="text-xs rounded-[2px] bg-slate-900 text-white hover:bg-slate-800 hover:text-white focus:bg-slate-800 focus:text-white p-1.5 px-2 cursor-pointer" onSelect={() => {}}>Done</DropdownMenuItem>
+            <DropdownMenuItem className="text-xs rounded bg-slate-900 text-white hover:bg-slate-800 hover:text-white focus:bg-slate-800 focus:text-white p-1.5 px-2 cursor-pointer" onSelect={() => {}}>Done</DropdownMenuItem>
           </div>
           <DropdownMenuCheckboxItem checked={value === first} onCheckedChange={() => onChange(first)} onSelect={(e) => e.preventDefault()} className="text-xs py-1.5 pl-8">
             {options[first]}
@@ -213,7 +213,7 @@ export function NotificationsTable({ initialNotifications, onRefresh }: Props) {
         <FilterDropdown label="Scope" value={scopeFilter} options={SCOPE_LABELS} onChange={setScopeFilter} />
         <FilterDropdown label="Priority" value={priorityFilter} options={PRIORITY_LABELS} onChange={setPriorityFilter} />
         {hasActiveFilters && (
-          <button type="button" onClick={clearAll} className="h-8 px-2.5 text-xs rounded-[2px] border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition-colors">
+          <button type="button" onClick={clearAll} className="h-8 px-2.5 text-xs rounded border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition-colors">
             Clear all
           </button>
         )}
@@ -226,7 +226,7 @@ export function NotificationsTable({ initialNotifications, onRefresh }: Props) {
               type="button"
               disabled={refreshing}
               onClick={async () => { setRefreshing(true); await onRefresh(); setRefreshing(false) }}
-              className="inline-flex items-center gap-1.5 h-8 px-2.5 text-xs rounded-[2px] border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-900 disabled:opacity-40 transition-colors"
+              className="inline-flex items-center gap-1.5 h-8 px-2.5 text-xs rounded border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-900 disabled:opacity-40 transition-colors"
               title="Refresh"
             >
               <RotateCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
@@ -295,16 +295,16 @@ export function NotificationsTable({ initialNotifications, onRefresh }: Props) {
                 {/* Actions */}
                 <div className="flex items-center justify-end gap-1">
                   {n.ctaUrl && (
-                    <a href={n.ctaUrl} className="inline-flex items-center justify-center h-7 w-7 rounded-[2px] border border-[#e5e7eb] bg-white text-[#45474c] hover:text-primary hover:border-primary/40 transition-colors" title="Open link">
+                    <a href={n.ctaUrl} className="inline-flex items-center justify-center h-7 w-7 rounded border border-[#e5e7eb] bg-white text-[#45474c] hover:text-primary hover:border-primary/40 transition-colors" title="Open link">
                       <ExternalLink className="h-3.5 w-3.5" />
                     </a>
                   )}
                   {!n.readAt && (
-                    <button type="button" disabled={isActing} onClick={() => handleMarkRead(n.id)} title="Mark read" className="inline-flex items-center justify-center h-7 w-7 rounded-[2px] border border-[#e5e7eb] bg-white text-[#45474c] hover:text-emerald-600 hover:border-emerald-300 disabled:opacity-40 transition-colors">
+                    <button type="button" disabled={isActing} onClick={() => handleMarkRead(n.id)} title="Mark read" className="inline-flex items-center justify-center h-7 w-7 rounded border border-[#e5e7eb] bg-white text-[#45474c] hover:text-emerald-600 hover:border-emerald-300 disabled:opacity-40 transition-colors">
                       <CheckCheck className="h-3.5 w-3.5" />
                     </button>
                   )}
-                  <button type="button" disabled={isActing} onClick={() => handleDelete(n.id)} title="Delete" className="inline-flex items-center justify-center h-7 w-7 rounded-[2px] border border-[#e5e7eb] bg-white text-[#45474c] hover:text-red-600 hover:border-red-300 disabled:opacity-40 transition-colors">
+                  <button type="button" disabled={isActing} onClick={() => handleDelete(n.id)} title="Delete" className="inline-flex items-center justify-center h-7 w-7 rounded border border-[#e5e7eb] bg-white text-[#45474c] hover:text-red-600 hover:border-red-300 disabled:opacity-40 transition-colors">
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 </div>

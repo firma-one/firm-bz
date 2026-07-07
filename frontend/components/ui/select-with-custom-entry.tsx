@@ -66,7 +66,7 @@ export function SelectWithCustomEntry({
                 </div>
             </div>
             <DropdownMenuContent
-                className="w-[var(--radix-dropdown-menu-trigger-width)] rounded-[2px] border border-[#e5e7eb] bg-white shadow-md py-0.5 p-0"
+                className="w-[var(--radix-dropdown-menu-trigger-width)] rounded border border-[#e5e7eb] bg-white shadow-md py-0.5 p-0"
                 onCloseAutoFocus={(e) => e.preventDefault()}
             >
                 {options.map((label) => (

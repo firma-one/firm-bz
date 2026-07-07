@@ -708,7 +708,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                         <History className="h-4 w-4 mx-auto" />
                       </button>
                       {recentsPopoverOpen && (
-                        <div className="absolute left-full top-0 ml-2 w-56 bg-white border border-[#e5e7eb] rounded-[2px] shadow-md z-50 py-1.5">
+                        <div className="absolute left-full top-0 ml-2 w-56 bg-white border border-[#e5e7eb] rounded shadow-md z-50 py-1.5">
                           <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#9ca3af]">Recent</div>
                           {recents.slice(0, MAX_SIDEBAR_RECENTS).map((item) => (
                             <Link
@@ -1019,7 +1019,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                             <SelectValue placeholder="View as..." />
                           </SelectTrigger>
                           <SelectContent
-                            className="rounded-[2px] border border-[#e5e7eb] bg-white shadow-md py-0.5 min-w-[var(--radix-select-trigger-width)] max-h-[var(--radix-select-content-available-height)]"
+                            className="rounded border border-[#e5e7eb] bg-white shadow-md py-0.5 min-w-[var(--radix-select-trigger-width)] max-h-[var(--radix-select-content-available-height)]"
                             data-view-as-select
                           >
                             {personas.map((p) => (

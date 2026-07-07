@@ -211,7 +211,7 @@ export function ProfilePageClient({
                         onClick={handleSaveName}
                         disabled={saving || !isDirty}
                         variant="greenCta"
-                        className="rounded-[2px] min-w-[8rem] text-[10px] font-headline font-bold tracking-widest uppercase"
+                        className="rounded min-w-[8rem] text-[10px] font-headline font-bold tracking-widest uppercase"
                     >
                         {saving ? 'Saving…' : 'Save'}
                     </Button>
@@ -241,7 +241,7 @@ export function ProfilePageClient({
                 </p>
             </header>
 
-            <div className="rounded-[2px] border border-[#e5e7eb] bg-white shadow-sm overflow-hidden">
+            <div className="rounded border border-[#e5e7eb] bg-white shadow-sm overflow-hidden">
                 <ProfileBubblePopupContent
                     name={displayName}
                     email={email}

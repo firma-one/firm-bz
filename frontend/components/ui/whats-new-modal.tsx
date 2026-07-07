@@ -54,7 +54,7 @@ export function WhatsNewModal({ isOpen, onClose, onRead, releases }: WhatsNewMod
               <div key={release.version} className={cn('px-5 py-3.5', i === 0 && 'bg-[#fafaf9]')}>
                 <div className="flex items-center gap-2 mb-1">
                   <span className={cn(
-                    'text-[10px] font-bold tracking-wide px-1.5 py-0.5 rounded-[3px]',
+                    'text-[10px] font-bold tracking-wide px-1.5 py-0.5 rounded',
                     i === 0
                       ? 'bg-[#1b1b1d] text-white'
                       : 'bg-[#f0edee] text-[#6b7280]'
@@ -62,7 +62,7 @@ export function WhatsNewModal({ isOpen, onClose, onRead, releases }: WhatsNewMod
                     v{release.version}
                   </span>
                   {i === 0 && (
-                    <span className="text-[10px] font-semibold text-green-700 bg-green-50 border border-green-200 px-1.5 py-0.5 rounded-[3px]">
+                    <span className="text-[10px] font-semibold text-green-700 bg-green-50 border border-green-200 px-1.5 py-0.5 rounded">
                       Latest
                     </span>
                   )}

@@ -118,7 +118,7 @@ export default function WorkspacePickerPage() {
                         {isAdminOnAnyFirm && (
                         <button
                             type="button"
-                            className="h-auto px-4 py-1.5 rounded-[2px] bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:brightness-105 shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all inline-flex items-center gap-1.5"
+                            className="h-auto px-4 py-1.5 rounded bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:brightness-105 shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all inline-flex items-center gap-1.5"
                             onClick={() => setAddFirmOpen(true)}
                         >
                             <SquarePlus className="h-3.5 w-3.5" />
@@ -138,7 +138,7 @@ export default function WorkspacePickerPage() {
                             <button
                                 key={firm.id}
                                 type="button"
-                                className={`group relative flex flex-col gap-4 p-5 rounded-[2px] border bg-white shadow-md hover:shadow-lg text-left transition-all overflow-hidden h-48 ${firm.sandboxOnly ? 'border-dashed border-[#e5e7eb] hover:border-[#e5e7eb]' : 'border-[#e5e7eb] hover:border-primary/40'}`}
+                                className={`group relative flex flex-col gap-4 p-5 rounded border bg-white shadow-md hover:shadow-lg text-left transition-all overflow-hidden h-48 ${firm.sandboxOnly ? 'border-dashed border-[#e5e7eb] hover:border-[#e5e7eb]' : 'border-[#e5e7eb] hover:border-primary/40'}`}
                                 onClick={() => handleFirmClick(firm)}
                             >
                                 {/* Brand corner decoration */}
@@ -160,7 +160,7 @@ export default function WorkspacePickerPage() {
                                 })()}
                                 <div className="flex items-start justify-between">
                                     <div
-                                        className={`h-12 w-12 rounded-[2px] flex items-center justify-center flex-shrink-0 overflow-hidden ${firm.sandboxOnly ? 'bg-[#f9f9fb] border border-[#e5e7eb]' : 'border'}`}
+                                        className={`h-12 w-12 rounded flex items-center justify-center flex-shrink-0 overflow-hidden ${firm.sandboxOnly ? 'bg-[#f9f9fb] border border-[#e5e7eb]' : 'border'}`}
                                         style={!firm.sandboxOnly && firm.themeColor
                                             ? { backgroundColor: `${firm.themeColor}18`, borderColor: `${firm.themeColor}33` }
                                             : !firm.sandboxOnly ? undefined : undefined}
@@ -214,11 +214,11 @@ export default function WorkspacePickerPage() {
                                     key={org.id}
                                     type="button"
                                     disabled={joiningId !== null}
-                                    className="group relative flex flex-col gap-4 p-5 rounded-[2px] border border-[#e5e7eb] bg-white shadow-md hover:shadow-lg hover:border-primary/40 text-left transition-all disabled:opacity-50 h-48"
+                                    className="group relative flex flex-col gap-4 p-5 rounded border border-[#e5e7eb] bg-white shadow-md hover:shadow-lg hover:border-primary/40 text-left transition-all disabled:opacity-50 h-48"
                                     onClick={() => handleJoin(org)}
                                 >
                                     <div className="flex items-start justify-between">
-                                        <div className="h-12 w-12 rounded-[2px] bg-[#f9f9fb] border border-[#e5e7eb] flex items-center justify-center flex-shrink-0">
+                                        <div className="h-12 w-12 rounded bg-[#f9f9fb] border border-[#e5e7eb] flex items-center justify-center flex-shrink-0">
                                             {joiningId === org.id ? (
                                                 <Loader2 className="h-5 w-5 text-[#45474c] animate-spin" />
                                             ) : (

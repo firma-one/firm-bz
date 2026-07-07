@@ -66,7 +66,7 @@ export function ClientDriveSection({
     return (
       <div className="space-y-3 px-1 py-1">
         <div className="flex items-center gap-3">
-          <Skeleton className="h-9 w-9 rounded-[2px] shrink-0" />
+          <Skeleton className="h-9 w-9 rounded shrink-0" />
           <div className="space-y-1.5 flex-1">
             <Skeleton className="h-3.5 w-32" />
             <Skeleton className="h-3 w-48" />
@@ -79,8 +79,8 @@ export function ClientDriveSection({
   return (
     <div>
       {connectorId ? (
-        <div className="rounded-[2px] border border-[#e5e7eb] bg-white px-4 py-3 flex items-center gap-3">
-          <div className="h-8 w-8 shrink-0 bg-white border border-[#e5e7eb] rounded-[2px] flex items-center justify-center p-1.5">
+        <div className="rounded border border-[#e5e7eb] bg-white px-4 py-3 flex items-center gap-3">
+          <div className="h-8 w-8 shrink-0 bg-white border border-[#e5e7eb] rounded flex items-center justify-center p-1.5">
             <GoogleDriveProductMark width={18} height={18} />
           </div>
           <SquareCheck className="w-4 h-4 shrink-0 text-emerald-500" />
@@ -96,7 +96,7 @@ export function ClientDriveSection({
             type="button"
             variant="outline"
             size="sm"
-            className="h-7 px-2 text-xs border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] gap-1 shrink-0 rounded-[2px]"
+            className="h-7 px-2 text-xs border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] gap-1 shrink-0 rounded"
             onClick={() => router.push(`/d/f/${orgSlug}?tab=settings&section=storage`)}
           >
             <ExternalLink className="w-3 h-3" />
@@ -104,8 +104,8 @@ export function ClientDriveSection({
           </Button>
         </div>
       ) : (
-        <div className="rounded-[2px] border border-[#e5e7eb] bg-white px-4 py-3 flex items-center gap-3">
-          <div className="h-8 w-8 shrink-0 bg-white border border-[#e5e7eb] rounded-[2px] flex items-center justify-center p-1.5 opacity-40">
+        <div className="rounded border border-[#e5e7eb] bg-white px-4 py-3 flex items-center gap-3">
+          <div className="h-8 w-8 shrink-0 bg-white border border-[#e5e7eb] rounded flex items-center justify-center p-1.5 opacity-40">
             <GoogleDriveProductMark width={18} height={18} />
           </div>
           <Square className="w-4 h-4 shrink-0 text-[#d1d5db]" />
@@ -117,7 +117,7 @@ export function ClientDriveSection({
             type="button"
             variant="outline"
             size="sm"
-            className="h-7 px-2 text-xs border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] gap-1 shrink-0 rounded-[2px]"
+            className="h-7 px-2 text-xs border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] gap-1 shrink-0 rounded"
             onClick={() => router.push(`/d/f/${orgSlug}?tab=settings&section=storage`)}
           >
             <ExternalLink className="w-3 h-3" />

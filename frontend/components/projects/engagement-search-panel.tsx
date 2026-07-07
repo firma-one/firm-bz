@@ -24,7 +24,7 @@ function HighlightText({ text, highlight }: { text: string; highlight: string })
     <>
       {parts.map((part, i) =>
         part.toLowerCase() === highlight.toLowerCase() ? (
-          <span key={i} className="bg-indigo-100 text-indigo-900 font-medium rounded-[2px] px-0.5">
+          <span key={i} className="bg-indigo-100 text-indigo-900 font-medium rounded px-0.5">
             {part}
           </span>
         ) : (

@@ -209,7 +209,7 @@ export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigg
                 ),
             )}
             <Dialog open={open} onOpenChange={setOpen}>
-                <DialogContent className="sm:max-w-[900px] border-[#e5e7eb] max-h-[90vh] overflow-y-auto p-0 gap-0 rounded-[2px] bg-[#f9f9fb]">
+                <DialogContent className="sm:max-w-[900px] border-[#e5e7eb] max-h-[90vh] overflow-y-auto p-0 gap-0 rounded bg-[#f9f9fb]">
 
                     <VisuallyHidden><DialogTitle>New Client</DialogTitle></VisuallyHidden>
 
@@ -265,7 +265,7 @@ export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigg
                                                 <SelectTrigger id="new-client-status" className={inputCls}>
                                                     <SelectValue />
                                                 </SelectTrigger>
-                                                <SelectContent className="rounded-[2px] border border-[#e5e7eb] bg-white shadow-md py-0.5 min-w-[var(--radix-select-trigger-width)]">
+                                                <SelectContent className="rounded border border-[#e5e7eb] bg-white shadow-md py-0.5 min-w-[var(--radix-select-trigger-width)]">
                                                     <SelectItem value="PROSPECT" className="cursor-pointer rounded-none py-1 px-2.5 !text-[0.8125rem] text-[#45474c] outline-none focus:bg-[#f9f9fb] data-[state=checked]:bg-primary/10 data-[state=checked]:border-l-2 data-[state=checked]:border-brand-accent data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-[#f9f9fb]">Prospect</SelectItem>
                                                     <SelectItem value="ACTIVE" className="cursor-pointer rounded-none py-1 px-2.5 !text-[0.8125rem] text-[#45474c] outline-none focus:bg-[#f9f9fb] data-[state=checked]:bg-primary/10 data-[state=checked]:border-l-2 data-[state=checked]:border-brand-accent data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-[#f9f9fb]">Active</SelectItem>
                                                     <SelectItem value="ON_HOLD" className="cursor-pointer rounded-none py-1 px-2.5 !text-[0.8125rem] text-[#45474c] outline-none focus:bg-[#f9f9fb] data-[state=checked]:bg-primary/10 data-[state=checked]:border-l-2 data-[state=checked]:border-brand-accent data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-[#f9f9fb]">On hold</SelectItem>
@@ -400,14 +400,14 @@ export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigg
 
                         {/* Footer */}
                         <div className="px-5 py-3 border-t border-[#e5e7eb] bg-white flex items-center justify-end gap-3">
-                            <Button type="button" variant="outline" className="rounded-[2px] w-32 text-[10px] font-headline font-bold tracking-widest uppercase" onClick={() => setOpen(false)} disabled={isLoading}>
+                            <Button type="button" variant="outline" className="rounded w-32 text-[10px] font-headline font-bold tracking-widest uppercase" onClick={() => setOpen(false)} disabled={isLoading}>
                                 Cancel
                             </Button>
                             <Button
                                 variant="greenCta"
                                 type="submit"
                                 disabled={isDisabled || !name.trim()}
-                                className="rounded-[2px] w-32 text-[10px] font-headline font-bold tracking-widest uppercase text-white"
+                                className="rounded w-32 text-[10px] font-headline font-bold tracking-widest uppercase text-white"
                             >
                                 {isLoading ? <LoadingSpinner size="sm" /> : 'Create'}
                             </Button>

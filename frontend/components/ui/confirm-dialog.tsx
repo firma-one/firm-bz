@@ -68,7 +68,7 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-sm border-[#e5e7eb] p-0 gap-0 rounded-[2px] bg-[#f9f9fb]">
+      <DialogContent className="sm:max-w-sm border-[#e5e7eb] p-0 gap-0 rounded bg-[#f9f9fb]">
         <VisuallyHidden><DialogTitle>{title}</DialogTitle></VisuallyHidden>
 
         {/* Header */}
@@ -98,7 +98,7 @@ export function ConfirmDialog({
             variant="outline"
             onClick={onCancel}
             disabled={loading}
-            className="rounded-[2px] text-[10px] font-headline font-bold tracking-widest uppercase border-[#e5e7eb] text-[#45474c] hover:bg-[#f9f9fb]"
+            className="rounded text-[10px] font-headline font-bold tracking-widest uppercase border-[#e5e7eb] text-[#45474c] hover:bg-[#f9f9fb]"
           >
             {cancelLabel}
           </Button>
@@ -106,7 +106,7 @@ export function ConfirmDialog({
             <Button
               onClick={onConfirm}
               disabled={loading}
-              className={`rounded-[2px] text-[10px] font-headline font-bold tracking-widest uppercase ${CONFIRM_BTN[confirmVariant]}`}
+              className={`rounded text-[10px] font-headline font-bold tracking-widest uppercase ${CONFIRM_BTN[confirmVariant]}`}
             >
               {loading ? <svg className="h-3 w-3 animate-spin text-white/80" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" /></svg> : confirmLabel}
             </Button>

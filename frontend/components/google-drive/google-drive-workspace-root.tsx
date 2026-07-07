@@ -361,7 +361,7 @@ export function GoogleDriveWorkspaceRoot({
             {/* Single clean row */}
             <div className="flex items-center gap-3 min-w-0">
               {/* Icon */}
-              <div className="shrink-0 flex h-9 w-9 items-center justify-center rounded-[2px] border border-[#e5e7eb] bg-[#f9f9fb]" aria-hidden>
+              <div className="shrink-0 flex h-9 w-9 items-center justify-center rounded border border-[#e5e7eb] bg-[#f9f9fb]" aria-hidden>
                 <Warehouse className="h-4.5 w-4.5 text-[#45474c]" strokeWidth={2} />
               </div>
 
@@ -394,7 +394,7 @@ export function GoogleDriveWorkspaceRoot({
                         href={driveUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 rounded-[2px] h-8 px-3 text-xs font-medium text-[#45474c] bg-white border border-[#e5e7eb] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] transition-colors"
+                        className="inline-flex items-center gap-1.5 rounded h-8 px-3 text-xs font-medium text-[#45474c] bg-white border border-[#e5e7eb] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] transition-colors"
                         aria-label="Open in Google Drive"
                       >
                         Open
@@ -409,7 +409,7 @@ export function GoogleDriveWorkspaceRoot({
                     <button
                       type="button"
                       className={cn(
-                        "inline-flex items-center gap-1.5 rounded-[2px] h-8 px-4 text-[10px] font-headline font-bold tracking-widest uppercase text-white bg-primary hover:bg-primary hover:brightness-105 shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all",
+                        "inline-flex items-center gap-1.5 rounded h-8 px-4 text-[10px] font-headline font-bold tracking-widest uppercase text-white bg-primary hover:bg-primary hover:brightness-105 shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all",
                         (!accessToken || WORKSPACE_MIGRATE_DISABLED || migrationLocked) && "opacity-40 cursor-not-allowed",
                       )}
                       onClick={() => {
@@ -459,7 +459,7 @@ export function GoogleDriveWorkspaceRoot({
         ) : (
           <TooltipProvider delayDuration={300}>
             <div className="flex items-center gap-3 min-w-0">
-              <div className="shrink-0 flex h-9 w-9 items-center justify-center rounded-[2px] border border-[#e5e7eb] bg-[#f9f9fb]" aria-hidden>
+              <div className="shrink-0 flex h-9 w-9 items-center justify-center rounded border border-[#e5e7eb] bg-[#f9f9fb]" aria-hidden>
                 <FolderOpen className="h-4.5 w-4.5 text-[#45474c]" strokeWidth={1.75} />
               </div>
               <p className="min-w-0 flex-1 text-[0.8125rem] text-[#45474c]">
@@ -470,7 +470,7 @@ export function GoogleDriveWorkspaceRoot({
                   <button
                     type="button"
                     className={cn(
-                      "inline-flex items-center gap-1.5 rounded-[2px] h-8 px-4 text-[10px] font-headline font-bold tracking-widest uppercase text-white bg-primary hover:bg-primary hover:brightness-105 shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all shrink-0",
+                      "inline-flex items-center gap-1.5 rounded h-8 px-4 text-[10px] font-headline font-bold tracking-widest uppercase text-white bg-primary hover:bg-primary hover:brightness-105 shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all shrink-0",
                       (!accessToken || WORKSPACE_MIGRATE_DISABLED || migrationLocked) && "opacity-40 cursor-not-allowed",
                     )}
                     onClick={() => {
@@ -517,7 +517,7 @@ export function GoogleDriveWorkspaceRoot({
         }}
       >
         <DialogContent
-          className="sm:max-w-2xl max-h-[90vh] overflow-y-auto rounded-[2px]"
+          className="sm:max-w-2xl max-h-[90vh] overflow-y-auto rounded"
           onInteractOutside={(e) => {
             // Block outside-click close on step 3 (confirmation) and while picker result is pending.
             if (wizardStep === 3 || pendingFolder !== null) e.preventDefault()
@@ -541,9 +541,9 @@ export function GoogleDriveWorkspaceRoot({
                   type="button"
                   onClick={startMyDriveFlow}
                   disabled={saving}
-                  className="group flex flex-col items-start gap-3 rounded-[2px] border border-[#e5e7eb] bg-white p-4 text-left transition-all hover:border-[#1b1b1d] hover:bg-[#f9f9fb] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
+                  className="group flex flex-col items-start gap-3 rounded border border-[#e5e7eb] bg-white p-4 text-left transition-all hover:border-[#1b1b1d] hover:bg-[#f9f9fb] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
                 >
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[2px] border border-[#e5e7eb] bg-[#f9f9fb]">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded border border-[#e5e7eb] bg-[#f9f9fb]">
                     {saving ? <RefreshCw className="h-6 w-6 text-[#45474c] animate-spin" /> : <GoogleDriveIcon size={28} />}
                   </div>
                   <div>
@@ -555,9 +555,9 @@ export function GoogleDriveWorkspaceRoot({
                   type="button"
                   onClick={startSharedDriveFlow}
                   disabled={saving}
-                  className="group flex flex-col items-start gap-3 rounded-[2px] border border-[#e5e7eb] bg-white p-4 text-left transition-all hover:border-[#1b1b1d] hover:bg-[#f9f9fb] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
+                  className="group flex flex-col items-start gap-3 rounded border border-[#e5e7eb] bg-white p-4 text-left transition-all hover:border-[#1b1b1d] hover:bg-[#f9f9fb] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
                 >
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[2px] border border-[#e5e7eb] bg-[#f9f9fb]">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded border border-[#e5e7eb] bg-[#f9f9fb]">
                     <GoogleSharedDriveIcon size={28} />
                   </div>
                   <div>
@@ -578,17 +578,17 @@ export function GoogleDriveWorkspaceRoot({
               {wizardStep === 1 ? (
                 <div className="space-y-3">
                   {/* Generated name box */}
-                  <div className="flex items-center justify-between gap-2 rounded-[2px] border border-[#e5e7eb] bg-[#f9f9fb] px-3 py-2.5">
+                  <div className="flex items-center justify-between gap-2 rounded border border-[#e5e7eb] bg-[#f9f9fb] px-3 py-2.5">
                     <code className="min-w-0 break-all text-xs font-mono text-[#1b1b1d]">{generatedFolderName}</code>
                     <div className="flex shrink-0 gap-1.5">
-                      <Button size="sm" variant="outline" className="h-7 px-2.5 text-xs rounded-[2px] border-[#e5e7eb]" onClick={() => void copyGeneratedFolderName()}>
+                      <Button size="sm" variant="outline" className="h-7 px-2.5 text-xs rounded border-[#e5e7eb]" onClick={() => void copyGeneratedFolderName()}>
                         {hasCopied ? (
                           <><CheckCircle2 className="mr-1 h-3 w-3 text-emerald-600" />Copied</>
                         ) : (
                           <><Copy className="mr-1 h-3 w-3" />Copy</>
                         )}
                       </Button>
-                      <Button size="sm" variant="outline" className="h-7 px-2.5 text-xs rounded-[2px] border-[#e5e7eb]" onClick={regenerateFolderName}>
+                      <Button size="sm" variant="outline" className="h-7 px-2.5 text-xs rounded border-[#e5e7eb]" onClick={regenerateFolderName}>
                         <RefreshCw className="mr-1 h-3 w-3" />New name
                       </Button>
                     </div>
@@ -623,10 +623,10 @@ export function GoogleDriveWorkspaceRoot({
 
                   {/* Actions */}
                   <div className="flex items-center justify-between pt-1">
-                    <Button variant="ghost" size="sm" className="h-8 px-3 text-xs text-[#45474c] rounded-[2px]" onClick={resetFlow}>
+                    <Button variant="ghost" size="sm" className="h-8 px-3 text-xs text-[#45474c] rounded" onClick={resetFlow}>
                       Change location
                     </Button>
-                    <Button variant="greenCta" size="sm" className="h-8 px-4 text-xs rounded-[2px]" onClick={() => setWizardStep(2)}>
+                    <Button variant="greenCta" size="sm" className="h-8 px-4 text-xs rounded" onClick={() => setWizardStep(2)}>
                       Select Folder<ArrowRight className="ml-1.5 h-3.5 w-3.5" />
                     </Button>
                   </div>
@@ -658,12 +658,12 @@ export function GoogleDriveWorkspaceRoot({
                   )}
                   <div className="flex items-center gap-2 pt-1">
                     <Button type="button" variant="outline" size="sm"
-                      className="h-8 px-3 text-xs rounded-[2px] border-[#e5e7eb] text-[#45474c] hover:bg-[#f9f9fb]"
+                      className="h-8 px-3 text-xs rounded border-[#e5e7eb] text-[#45474c] hover:bg-[#f9f9fb]"
                       onClick={() => setWizardStep(1)}>
                       <ArrowRight className="h-3.5 w-3.5 rotate-180 mr-1" />Back
                     </Button>
                     <Button type="button" variant="outline" size="sm"
-                      className="h-8 px-3 text-xs rounded-[2px] border-[#e5e7eb] text-[#45474c] hover:bg-[#f9f9fb]"
+                      className="h-8 px-3 text-xs rounded border-[#e5e7eb] text-[#45474c] hover:bg-[#f9f9fb]"
                       onClick={() => resetFlow()}>
                       <ArrowRightLeft className="h-3.5 w-3.5 mr-1" />Change
                     </Button>
@@ -677,7 +677,7 @@ export function GoogleDriveWorkspaceRoot({
                       onImport={(items) => void handleFolderPicked(items as { id: string; name: string }[])}
                     >
                       <Button type="button" variant="greenCta"
-                        className="flex-1 h-8 text-xs font-headline font-bold tracking-widest uppercase rounded-[2px]"
+                        className="flex-1 h-8 text-xs font-headline font-bold tracking-widest uppercase rounded"
                         disabled={saving}>
                         {saving
                           ? <><RefreshCw className="h-3.5 w-3.5 mr-1.5 shrink-0 animate-spin" />Applying…</>
@@ -692,7 +692,7 @@ export function GoogleDriveWorkspaceRoot({
               {wizardStep === 3 && pendingFolder ? (
                 <div className="space-y-3">
                   {/* From → To */}
-                  <div className="rounded-[2px] border border-[#e5e7eb] divide-y divide-[#e5e7eb] overflow-hidden">
+                  <div className="rounded border border-[#e5e7eb] divide-y divide-[#e5e7eb] overflow-hidden">
                     <div className="px-4 py-3 flex items-start gap-3 bg-[#f9f9fb]/60">
                       <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#45474c] w-10 shrink-0 pt-0.5">From</span>
                       <div className="min-w-0">
@@ -718,7 +718,7 @@ export function GoogleDriveWorkspaceRoot({
                   </div>
 
                   {/* Maintenance warning */}
-                  <div className="rounded-[2px] border border-[#e5e7eb] bg-[#f9f9fb] px-3.5 py-3 flex gap-3">
+                  <div className="rounded border border-[#e5e7eb] bg-[#f9f9fb] px-3.5 py-3 flex gap-3">
                     <div className="w-0.5 shrink-0 rounded-full bg-[#45474c]/30 self-stretch" />
                     <div>
                       <p className="text-xs font-semibold text-[#1b1b1d]">
@@ -736,12 +736,12 @@ export function GoogleDriveWorkspaceRoot({
                   {/* Actions */}
                   <div className="flex items-center gap-2 pt-1">
                     <Button type="button" variant="outline" size="sm"
-                      className="h-8 px-3 text-xs rounded-[2px] border-[#e5e7eb] text-[#45474c] hover:bg-[#f9f9fb]"
+                      className="h-8 px-3 text-xs rounded border-[#e5e7eb] text-[#45474c] hover:bg-[#f9f9fb]"
                       onClick={() => setWizardStep(2)}>
                       <ArrowRight className="h-3.5 w-3.5 rotate-180 mr-1" />Back
                     </Button>
                     <Button type="button" variant="greenCta"
-                      className="flex-1 h-8 text-xs font-headline font-bold tracking-widest uppercase rounded-[2px]"
+                      className="flex-1 h-8 text-xs font-headline font-bold tracking-widest uppercase rounded"
                       disabled={saving}
                       onClick={() => void confirmMigration()}>
                       {saving ? "Starting…" : "Start Migration"}

@@ -817,7 +817,7 @@ export function DocumentDocCommentsPane({ engagementId, documentId, documentName
                 <button
                   type="button"
                   onClick={closeMentionPicker}
-                  className="font-mono text-[10px] font-bold uppercase tracking-widest text-white bg-primary hover:bg-primary/90 px-4 py-1.5 rounded-[2px] transition-colors"
+                  className="font-mono text-[10px] font-bold uppercase tracking-widest text-white bg-primary hover:bg-primary/90 px-4 py-1.5 rounded transition-colors"
                 >
                   Done
                 </button>

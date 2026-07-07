@@ -199,7 +199,7 @@ export function ClientContactsTab({
               variant="ghost"
               size="sm"
               data-demo-tour="client-add-contact-btn"
-              className="h-auto px-4 py-1.5 rounded-[2px] bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-primary hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1.5"
+              className="h-auto px-4 py-1.5 rounded bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-primary hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1.5"
               onClick={openAdd}
             >
               <UserPlus className="h-4 w-4" />
@@ -299,7 +299,7 @@ export function ClientContactsTab({
 
       {/* Add / Edit modal */}
       <Dialog open={modalOpen} onOpenChange={(open) => { if (!open) closeModal() }}>
-        <DialogContent className="sm:max-w-[560px] border-[#e5e7eb] max-h-[90vh] overflow-y-auto p-0 gap-0 rounded-[2px]">
+        <DialogContent className="sm:max-w-[560px] border-[#e5e7eb] max-h-[90vh] overflow-y-auto p-0 gap-0 rounded">
           <VisuallyHidden><DialogTitle>{isEditing ? 'Edit Contact' : 'New Client Contact'}</DialogTitle></VisuallyHidden>
 
           {/* Header */}
@@ -391,13 +391,13 @@ export function ClientContactsTab({
 
           {/* Footer */}
           <div className="px-5 py-3 border-t border-[#e5e7eb] flex items-center justify-end gap-3">
-            <Button variant="outline" className="rounded-[2px] text-[10px] font-headline font-bold tracking-widest uppercase" disabled={isPending} onClick={closeModal}>
+            <Button variant="outline" className="rounded text-[10px] font-headline font-bold tracking-widest uppercase" disabled={isPending} onClick={closeModal}>
               Cancel
             </Button>
             <Button
               variant="greenCta"
               disabled={isSandboxFirm || !canManage || isPending || !draft.name.trim()}
-              className="rounded-[2px] min-w-[8rem] text-[10px] font-headline font-bold tracking-widest uppercase text-white"
+              className="rounded min-w-[8rem] text-[10px] font-headline font-bold tracking-widest uppercase text-white"
               onClick={handleSubmit}
             >
               {isPending ? 'Saving…' : isEditing ? 'Save changes' : 'Create'}

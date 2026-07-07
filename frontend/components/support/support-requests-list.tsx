@@ -267,7 +267,7 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
                 <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-[#45474c] p-0 font-medium">Type</DropdownMenuLabel>
                 {filterTypes.length > 0 && (
                   <button
-                    className="text-xs rounded-[2px] bg-[#1b1b1d] text-white hover:bg-[#333] px-2 py-1"
+                    className="text-xs rounded bg-[#1b1b1d] text-white hover:bg-[#333] px-2 py-1"
                     onClick={() => setFilterTypes([])}
                   >
                     Clear
@@ -311,7 +311,7 @@ export function SupportRequestsList({ firmSlug }: SupportRequestsListProps) {
                 <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-[#45474c] p-0 font-medium">Status</DropdownMenuLabel>
                 {filterStatuses.length > 0 && (
                   <button
-                    className="text-xs rounded-[2px] bg-[#1b1b1d] text-white hover:bg-[#333] px-2 py-1"
+                    className="text-xs rounded bg-[#1b1b1d] text-white hover:bg-[#333] px-2 py-1"
                     onClick={() => setFilterStatuses([])}
                   >
                     Clear

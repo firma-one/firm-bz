@@ -253,3 +253,31 @@ export interface ReminderRecurringCancelledEvent {
   name: 'reminder.recurring.cancelled'
   data: { reminderId: string }
 }
+
+/**
+ * Fired when a due date is set on a Deliverable folder. Schedules email + in-app
+ * reminders to all engagement members at 24h and 1h before the due date.
+ * Cancelled via 'deliverable.due_date.cancelled' matching documentId.
+ */
+export interface DeliverableDueDateSetEvent {
+  name: 'deliverable.due_date.set'
+  data: {
+    documentId: string          // deliverable folder id — used as cancel key
+    documentName: string
+    dueDate: string             // ISO UTC
+    memberUserIds: string[]     // all engagement members to notify
+    firmId: string | null
+    clientId: string | null
+    engagementId: string | null
+    boardUrl: string | null     // CTA deep-link to the Board card
+  }
+}
+
+/**
+ * Fired when a Deliverable due date is cleared or changed — cancels the
+ * sleeping reminder run for that documentId (a fresh set event reschedules it).
+ */
+export interface DeliverableDueDateCancelledEvent {
+  name: 'deliverable.due_date.cancelled'
+  data: { documentId: string }
+}

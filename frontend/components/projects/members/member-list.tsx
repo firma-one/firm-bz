@@ -218,7 +218,7 @@ export function MemberList({ members, invitations, personas, onRefresh, canManag
                                     <Button
                                         variant="ghost"
                                         size="sm"
-                                        className="h-auto px-3 py-1 rounded-[2px] bg-primary text-white text-[10px] font-bold tracking-widest uppercase hover:bg-primary hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1 shrink-0"
+                                        className="h-auto px-3 py-1 rounded bg-primary text-white text-[10px] font-bold tracking-widest uppercase hover:bg-primary hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1 shrink-0"
                                         onClick={() => onInviteWithPersona(persona.id)}
                                     >
                                         <SquarePlus className="h-3.5 w-3.5" />
@@ -438,7 +438,7 @@ export function MemberList({ members, invitations, personas, onRefresh, canManag
                             </RadioGroup>
                         </div>
                         <DialogFooter>
-                            <Button variant="outline" className="rounded-[2px]" onClick={() => setEditingMember(null)}>Cancel</Button>
+                            <Button variant="outline" className="rounded" onClick={() => setEditingMember(null)}>Cancel</Button>
                             <Button
                                 onClick={handleUpdateRole}
                                 disabled={actionLoading === "DIALOG_UPDATING"}

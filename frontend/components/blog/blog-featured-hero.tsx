@@ -66,5 +66,5 @@ export function BlogFeaturedHero({
 }
 
 function cnChip(extra: string) {
-  return `rounded-[2px] px-3 py-1 text-[10px] font-bold uppercase tracking-widest [font-family:var(--font-kinetic-headline),system-ui,sans-serif] ${extra}`
+  return `rounded px-3 py-1 text-[10px] font-bold uppercase tracking-widest [font-family:var(--font-kinetic-headline),system-ui,sans-serif] ${extra}`
 }

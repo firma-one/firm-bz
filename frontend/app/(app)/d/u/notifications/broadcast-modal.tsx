@@ -72,7 +72,7 @@ export function BroadcastModal({ open, onOpenChange, broadcastScopes, onSent }: 
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[520px] border-[#e5e7eb] p-0 gap-0 rounded-[2px]">
+      <DialogContent className="sm:max-w-[520px] border-[#e5e7eb] p-0 gap-0 rounded">
         <VisuallyHidden><DialogTitle>New Broadcast</DialogTitle></VisuallyHidden>
 
         {/* Header */}
@@ -109,7 +109,7 @@ export function BroadcastModal({ open, onOpenChange, broadcastScopes, onSent }: 
                     type="button"
                     disabled={!enabled}
                     onClick={() => enabled && setScope(s)}
-                    className={`h-9 rounded-[2px] border px-2 text-xs font-semibold transition-colors ${
+                    className={`h-9 rounded border px-2 text-xs font-semibold transition-colors ${
                       !enabled
                         ? 'border-[#e5e7eb] bg-[#f9f9fb] text-[#45474c] cursor-not-allowed opacity-40'
                         : isActive
@@ -133,7 +133,7 @@ export function BroadcastModal({ open, onOpenChange, broadcastScopes, onSent }: 
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g. System maintenance tonight"
-              className="w-full h-9 rounded-[2px] border border-[#e5e7eb] bg-white px-2.5 text-sm text-[#1b1b1d] placeholder:text-[#9ca3af] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+              className="w-full h-9 rounded border border-[#e5e7eb] bg-white px-2.5 text-sm text-[#1b1b1d] placeholder:text-[#9ca3af] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
             />
           </div>
 
@@ -147,7 +147,7 @@ export function BroadcastModal({ open, onOpenChange, broadcastScopes, onSent }: 
               onChange={(e) => setMessage(e.target.value.slice(0, 1000))}
               placeholder="Broadcast message (max 1000 chars)…"
               rows={5}
-              className="w-full rounded-[2px] border border-[#e5e7eb] bg-white px-2.5 py-2 text-sm text-[#1b1b1d] placeholder:text-[#9ca3af] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary resize-none"
+              className="w-full rounded border border-[#e5e7eb] bg-white px-2.5 py-2 text-sm text-[#1b1b1d] placeholder:text-[#9ca3af] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary resize-none"
             />
             <p className="text-[11px] text-[#9ca3af] mt-1 text-right">{message.length}/1000</p>
           </div>
@@ -159,7 +159,7 @@ export function BroadcastModal({ open, onOpenChange, broadcastScopes, onSent }: 
             type="button"
             onClick={handleClose}
             disabled={sending}
-            className="h-9 px-4 rounded-[2px] border border-[#e5e7eb] bg-white text-sm text-[#45474c] hover:bg-[#f3f4f6] disabled:opacity-50 transition-colors"
+            className="h-9 px-4 rounded border border-[#e5e7eb] bg-white text-sm text-[#45474c] hover:bg-[#f3f4f6] disabled:opacity-50 transition-colors"
           >
             Cancel
           </button>
@@ -167,7 +167,7 @@ export function BroadcastModal({ open, onOpenChange, broadcastScopes, onSent }: 
             type="button"
             disabled={sending || message.trim().length === 0}
             onClick={handleSend}
-            className="h-9 px-4 rounded-[2px] bg-primary text-white text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 transition-colors"
+            className="h-9 px-4 rounded bg-primary text-white text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 transition-colors"
           >
             {sending ? 'Sending…' : 'Send'}
           </button>

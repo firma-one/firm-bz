@@ -656,7 +656,7 @@ export function AppTopbar() {
           </button>
           </Tip>
           {showRecentsDropdown ? (
-            <div className="absolute right-0 top-full mt-2 w-[340px] border border-[#e5e7eb] rounded-[2px] shadow-lg z-50 overflow-hidden">
+            <div className="absolute right-0 top-full mt-2 w-[340px] border border-[#e5e7eb] rounded shadow-lg z-50 overflow-hidden">
               {/* Header */}
               <div className="px-4 py-3 bg-[#f9f9fb] border-b border-[#e5e7eb] flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -668,7 +668,7 @@ export function AppTopbar() {
                   )}
                 </div>
                 <button type="button" onClick={() => setShowRecentsDropdown(false)} aria-label="Close"
-                  className="p-1 rounded-[2px] hover:bg-[#f3f4f6] text-[#45474c] hover:text-[#1b1b1d] transition-colors">
+                  className="p-1 rounded hover:bg-[#f3f4f6] text-[#45474c] hover:text-[#1b1b1d] transition-colors">
                   <SquareX className="h-4 w-4" />
                 </button>
               </div>
@@ -686,7 +686,7 @@ export function AppTopbar() {
                       key={item.href}
                       href={item.href}
                       onClick={() => setShowRecentsDropdown(false)}
-                      className="grid px-3 py-2 rounded-[2px] border border-[#e5e7eb] bg-white hover:border-[#e5e7eb] hover:shadow-sm transition-all group"
+                      className="grid px-3 py-2 rounded border border-[#e5e7eb] bg-white hover:border-[#e5e7eb] hover:shadow-sm transition-all group"
                       style={{ borderLeftWidth: '3px', borderLeftColor: item.type === 'client' ? '#5A78FF' : '#06966A' }}
                     >
                       {/* Line 1: icon + name + chevron */}
@@ -751,7 +751,7 @@ export function AppTopbar() {
           </button>
           </Tip>
           {showBookmarksDropdown ? (
-            <div className="absolute right-0 top-full mt-2 w-[360px] bg-white border border-[#e5e7eb] rounded-[2px] shadow-lg z-50 overflow-hidden">
+            <div className="absolute right-0 top-full mt-2 w-[360px] bg-white border border-[#e5e7eb] rounded shadow-lg z-50 overflow-hidden">
               <div className="px-4 py-3 border-b border-[#e5e7eb] bg-[#f9f9fb]">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
@@ -761,7 +761,7 @@ export function AppTopbar() {
                     ) : null}
                   </div>
                   <button type="button" onClick={() => setShowBookmarksDropdown(false)} aria-label="Close"
-                    className="p-1 rounded-[2px] hover:bg-[#f3f4f6] text-[#45474c] hover:text-[#1b1b1d] transition-colors">
+                    className="p-1 rounded hover:bg-[#f3f4f6] text-[#45474c] hover:text-[#1b1b1d] transition-colors">
                     <X className="h-4 w-4" />
                   </button>
                 </div>
@@ -770,7 +770,7 @@ export function AppTopbar() {
                     value={bookmarkQuery}
                     onChange={(e) => { setBookmarkQuery(e.target.value) }}
                     placeholder="Search bookmarks…"
-                    className="w-full h-8 rounded-[2px] border border-[#e5e7eb] bg-white px-2.5 text-[0.8125rem] text-[#1b1b1d] placeholder:text-[#45474c] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                    className="w-full h-8 rounded border border-[#e5e7eb] bg-white px-2.5 text-[0.8125rem] text-[#1b1b1d] placeholder:text-[#45474c] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
                   />
                 </div>
               </div>
@@ -793,7 +793,7 @@ export function AppTopbar() {
                   return (
                     <>
                       {visible.map((b) => (
-                        <div key={b.id} className="group flex items-start gap-2 p-3 rounded-[2px] border border-[#e5e7eb] bg-white hover:bg-[#f9f9fb]">
+                        <div key={b.id} className="group flex items-start gap-2 p-3 rounded border border-[#e5e7eb] bg-white hover:bg-[#f9f9fb]">
                           <button
                             type="button"
                             className="flex-1 min-w-0 text-left"
@@ -816,7 +816,7 @@ export function AppTopbar() {
                           </button>
                           <button
                             type="button"
-                            className="p-1 rounded-[2px] hover:bg-[#f3f4f6] text-[#45474c] hover:text-[#1b1b1d] opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="p-1 rounded hover:bg-[#f3f4f6] text-[#45474c] hover:text-[#1b1b1d] opacity-0 group-hover:opacity-100 transition-opacity"
                             title="Remove"
                             onClick={async () => {
                               try {
@@ -879,7 +879,7 @@ export function AppTopbar() {
           </button>
           </Tip>
           {showNotificationsDropdown ? (
-            <div className="absolute right-0 top-full mt-2 w-[360px] bg-white border border-[#e5e7eb] rounded-[2px] shadow-lg z-50 overflow-hidden">
+            <div className="absolute right-0 top-full mt-2 w-[360px] bg-white border border-[#e5e7eb] rounded shadow-lg z-50 overflow-hidden">
               <div className="px-4 py-3 border-b border-[#e5e7eb] bg-[#f9f9fb]">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
@@ -890,7 +890,7 @@ export function AppTopbar() {
                   </div>
                   <div className="flex items-center gap-1">
                     <button type="button" onClick={() => setShowNotificationsDropdown(false)} aria-label="Close"
-                      className="p-1 rounded-[2px] hover:bg-[#f3f4f6] text-[#45474c] hover:text-[#1b1b1d] transition-colors">
+                      className="p-1 rounded hover:bg-[#f3f4f6] text-[#45474c] hover:text-[#1b1b1d] transition-colors">
                       <X className="h-4 w-4" />
                     </button>
                   </div>
@@ -898,7 +898,7 @@ export function AppTopbar() {
                 <div className="mt-2 grid grid-cols-2 gap-2">
                   <button
                     type="button"
-                    className="h-9 rounded-[2px] border border-[#e5e7eb] bg-white px-2 text-xs font-semibold text-[#1b1b1d] hover:border-primary/50 hover:bg-[#f9f9fb] whitespace-nowrap"
+                    className="h-9 rounded border border-[#e5e7eb] bg-white px-2 text-xs font-semibold text-[#1b1b1d] hover:border-primary/50 hover:bg-[#f9f9fb] whitespace-nowrap"
                     title="Clear all notifications"
                     onClick={async () => {
                       try {
@@ -927,7 +927,7 @@ export function AppTopbar() {
                   </button>
                   <button
                     type="button"
-                    className="h-9 rounded-[2px] border border-[#e5e7eb] bg-white px-2 text-xs font-semibold text-[#1b1b1d] hover:border-primary/50 hover:bg-[#f9f9fb] whitespace-nowrap disabled:opacity-50"
+                    className="h-9 rounded border border-[#e5e7eb] bg-white px-2 text-xs font-semibold text-[#1b1b1d] hover:border-primary/50 hover:bg-[#f9f9fb] whitespace-nowrap disabled:opacity-50"
                     onClick={() => setShowBroadcastComposer((v) => !v)}
                     disabled={!canBroadcast}
                     title={canBroadcast ? 'Send a broadcast to a team' : 'Broadcasts are available to admins'}
@@ -944,7 +944,7 @@ export function AppTopbar() {
                   </button>
                 </div>
                 {canBroadcast && showBroadcastComposer ? (
-                  <div className="mt-3 rounded-[2px] border border-[#e5e7eb] bg-white p-2.5">
+                  <div className="mt-3 rounded border border-[#e5e7eb] bg-white p-2.5">
                     <div className="mb-2 flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 min-w-0">
                         <div className="text-[11px] font-semibold text-[#1b1b1d] whitespace-nowrap">Scope</div>
@@ -965,7 +965,7 @@ export function AppTopbar() {
                             key={s}
                             type="button"
                             disabled={!enabled}
-                            className={`h-9 rounded-[2px] border px-2 text-xs font-semibold transition-colors whitespace-nowrap ${
+                            className={`h-9 rounded border px-2 text-xs font-semibold transition-colors whitespace-nowrap ${
                               !enabled
                                 ? 'border-[#e5e7eb] bg-[#f9f9fb] text-[#45474c] cursor-not-allowed'
                                 : isActive
@@ -984,21 +984,21 @@ export function AppTopbar() {
                       value={broadcastTitle}
                       onChange={(e) => setBroadcastTitle(e.target.value)}
                       placeholder="Title (optional)"
-                      className="w-full h-8 rounded-[2px] border border-[#e5e7eb] bg-white px-2.5 text-xs text-[#1b1b1d] placeholder:text-[#45474c] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                      className="w-full h-8 rounded border border-[#e5e7eb] bg-white px-2.5 text-xs text-[#1b1b1d] placeholder:text-[#45474c] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
                     />
                     <textarea
                       value={broadcastText}
                       onChange={(e) => setBroadcastText(e.target.value.slice(0, 1000))}
                       placeholder="Broadcast message (max 1000 chars)…"
                       rows={4}
-                      className="mt-2 w-full rounded-[2px] border border-[#e5e7eb] bg-white px-2.5 py-2 text-xs text-[#1b1b1d] placeholder:text-[#45474c] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary resize-none"
+                      className="mt-2 w-full rounded border border-[#e5e7eb] bg-white px-2.5 py-2 text-xs text-[#1b1b1d] placeholder:text-[#45474c] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary resize-none"
                     />
                     <div className="mt-2 flex items-center justify-between">
                       <div className="text-[11px] text-[#45474c]">{broadcastText.length}/1000</div>
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          className="h-9 w-9 inline-flex items-center justify-center rounded-[2px] border border-[#e5e7eb] bg-white text-[#1b1b1d] hover:bg-[#f9f9fb] disabled:opacity-60"
+                          className="h-9 w-9 inline-flex items-center justify-center rounded border border-[#e5e7eb] bg-white text-[#1b1b1d] hover:bg-[#f9f9fb] disabled:opacity-60"
                           disabled={broadcastSending}
                           onClick={() => {
                             setShowBroadcastComposer(false)
@@ -1011,7 +1011,7 @@ export function AppTopbar() {
                         </button>
                         <button
                           type="button"
-                          className="h-9 w-9 inline-flex items-center justify-center rounded-[2px] bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+                          className="h-9 w-9 inline-flex items-center justify-center rounded bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
                           disabled={broadcastSending || broadcastText.trim().length === 0}
                           onClick={async () => {
                             try {
@@ -1074,7 +1074,7 @@ export function AppTopbar() {
                       key={n.id}
                       role="button"
                       tabIndex={0}
-                      className={`group w-full text-left p-3 rounded-[2px] border border-[#e5e7eb] bg-white transition-colors hover:bg-[#f9f9fb] cursor-pointer ${
+                      className={`group w-full text-left p-3 rounded border border-[#e5e7eb] bg-white transition-colors hover:bg-[#f9f9fb] cursor-pointer ${
                         n.readAt ? 'opacity-60' : ''
                       }`}
                       style={{
@@ -1126,7 +1126,7 @@ export function AppTopbar() {
                               <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <button
                                   type="button"
-                                  className="h-7 w-7 inline-flex items-center justify-center rounded-[2px] border border-[#e5e7eb] bg-white hover:bg-[#f9f9fb]"
+                                  className="h-7 w-7 inline-flex items-center justify-center rounded border border-[#e5e7eb] bg-white hover:bg-[#f9f9fb]"
                                   title="Clear this alert"
                                   onClick={async (e) => {
                                     e.stopPropagation()

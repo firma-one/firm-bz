@@ -189,7 +189,7 @@ export function AddEngagementModal({ firmSlug, clientSlug, firmSandboxOnly = fal
                 ),
             )}
             <Dialog open={open} onOpenChange={setOpen}>
-                <DialogContent className="sm:max-w-[860px] border-[#e5e7eb] max-h-[90vh] overflow-y-auto p-0 gap-0 rounded-[2px]">
+                <DialogContent className="sm:max-w-[860px] border-[#e5e7eb] max-h-[90vh] overflow-y-auto p-0 gap-0 rounded">
                     <VisuallyHidden><DialogTitle>New Engagement</DialogTitle></VisuallyHidden>
 
                     {/* Header */}
@@ -257,7 +257,7 @@ export function AddEngagementModal({ firmSlug, clientSlug, firmSandboxOnly = fal
                                                 <SelectTrigger id="eng-status" className={inputCls}>
                                                     <SelectValue placeholder="Select status" />
                                                 </SelectTrigger>
-                                                <SelectContent side="bottom" align="start" sideOffset={6} className="border border-[#e5e7eb] bg-white shadow-sm rounded-[2px] py-0.5 min-w-[var(--radix-select-trigger-width)]">
+                                                <SelectContent side="bottom" align="start" sideOffset={6} className="border border-[#e5e7eb] bg-white shadow-sm rounded py-0.5 min-w-[var(--radix-select-trigger-width)]">
                                                     <SelectItem value="PLANNED">Planned</SelectItem>
                                                     <SelectItem value="ACTIVE">Active</SelectItem>
                                                     <SelectItem value="PAUSED">Paused</SelectItem>
@@ -429,14 +429,14 @@ export function AddEngagementModal({ firmSlug, clientSlug, firmSandboxOnly = fal
 
                         {/* Footer */}
                         <div className="px-5 py-3 border-t border-[#e5e7eb] flex items-center justify-end gap-3">
-                            <Button type="button" variant="outline" className="rounded-[2px] w-32 text-[10px] font-headline font-bold tracking-widest uppercase" onClick={() => setOpen(false)} disabled={isLoading}>
+                            <Button type="button" variant="outline" className="rounded w-32 text-[10px] font-headline font-bold tracking-widest uppercase" onClick={() => setOpen(false)} disabled={isLoading}>
                                 Cancel
                             </Button>
                             <Button
                                 variant="greenCta"
                                 type="submit"
                                 disabled={isDisabled || !name.trim()}
-                                className="rounded-[2px] min-w-[8rem] text-[10px] font-headline font-bold tracking-widest uppercase text-white"
+                                className="rounded min-w-[8rem] text-[10px] font-headline font-bold tracking-widest uppercase text-white"
                             >
                                 {isLoading ? <LoadingSpinner size="sm" /> : 'Create'}
                             </Button>

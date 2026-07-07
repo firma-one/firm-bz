@@ -65,7 +65,7 @@ export function SwitchAccountModal({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-md rounded-[2px]">
+      <DialogContent className="max-w-md rounded">
         <DialogHeader>
           <DialogTitle className="text-[0.9375rem] font-bold text-[#1b1b1d]">Switch Google account</DialogTitle>
           <DialogDescription className="text-xs text-[#45474c] mt-1.5">
@@ -75,7 +75,7 @@ export function SwitchAccountModal({
         </DialogHeader>
 
         {/* Admin list */}
-        <div className="flex flex-col gap-1 overflow-y-auto border border-slate-200 rounded-[2px] p-1 max-h-[200px]">
+        <div className="flex flex-col gap-1 overflow-y-auto border border-slate-200 rounded p-1 max-h-[200px]">
           {admins.length === 0 && (
             <p className="text-xs text-slate-400 text-center py-4">No firm administrators found.</p>
           )}
@@ -89,7 +89,7 @@ export function SwitchAccountModal({
                 disabled={isCurrent}
                 onClick={() => setSelectedUserId(admin.userId)}
                 className={cn(
-                  'flex items-center gap-2.5 px-2 py-1.5 rounded-[2px] text-left transition-colors w-full',
+                  'flex items-center gap-2.5 px-2 py-1.5 rounded text-left transition-colors w-full',
                   isCurrent
                     ? 'opacity-50 cursor-not-allowed bg-slate-50'
                     : isSelected
@@ -120,14 +120,14 @@ export function SwitchAccountModal({
           <Button
             variant="outline"
             size="sm"
-            className="h-8 px-4 text-xs rounded-[2px] border-[#e5e7eb]"
+            className="h-8 px-4 text-xs rounded border-[#e5e7eb]"
             onClick={() => handleOpenChange(false)}
           >
             Cancel
           </Button>
           <Button
             size="sm"
-            className="h-8 px-4 text-xs rounded-[2px] bg-primary text-white border-0 hover:bg-primary hover:brightness-105"
+            className="h-8 px-4 text-xs rounded bg-primary text-white border-0 hover:bg-primary hover:brightness-105"
             disabled={!selectedAdmin || loading}
             onClick={() => selectedAdmin && onConfirm(selectedAdmin.email)}
           >

@@ -3,8 +3,9 @@ const MONO = `'SFMono-Regular',Consolas,'Liberation Mono',Menlo,Courier,monospac
 const HEADLINE_FONT = `'Helvetica Neue',Helvetica,Arial,sans-serif`
 
 // ─── Shared badge HTML (email-safe inline badges) ────────────────────────────
-const STD_BADGE = `<span style="display:inline-block;background-color:#dcfce7;border:1px solid #86efac;padding:1px 6px;font-size:11px;font-weight:700;color:#166534;border-radius:3px;vertical-align:middle;line-height:1.6;font-family:${FONT};">★ Standard</span>`
-const PRO_BADGE = `<span style="display:inline-block;background-color:#dbeafe;border:1px solid #bfdbfe;padding:1px 6px;font-size:11px;font-weight:700;color:#1e3a8a;border-radius:3px;vertical-align:middle;line-height:1.6;font-family:${FONT};">Pro ✦</span>`
+const BADGE_RADIUS = '4px'
+const STD_BADGE = `<span style="display:inline-block;background-color:#dcfce7;border:1px solid #86efac;padding:1px 6px;font-size:11px;font-weight:700;color:#166534;border-radius:${BADGE_RADIUS};vertical-align:middle;line-height:1.6;font-family:${FONT};">★ Standard</span>`
+const PRO_BADGE = `<span style="display:inline-block;background-color:#dbeafe;border:1px solid #bfdbfe;padding:1px 6px;font-size:11px;font-weight:700;color:#1e3a8a;border-radius:${BADGE_RADIUS};vertical-align:middle;line-height:1.6;font-family:${FONT};">Pro ✦</span>`
 
 // ─── Logo block ───────────────────────────────────────────────────────────────
 const LOGO_HTML = `

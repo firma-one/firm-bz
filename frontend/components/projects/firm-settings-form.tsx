@@ -413,7 +413,7 @@ export function FirmSettingsForm({
         <div className="flex items-center gap-3 pt-2">
             <Button type="button" variant="greenCta" onClick={() => void handleSave()}
                 disabled={isSandboxFirm || saving || !loaded || !mainDirty}
-                className="rounded-[2px] w-32 text-[10px] font-headline font-bold tracking-widest uppercase text-white">
+                className="rounded w-32 text-[10px] font-headline font-bold tracking-widest uppercase text-white">
                 {saving ? 'Saving…' : 'Save'}
             </Button>
         </div>
@@ -423,7 +423,7 @@ export function FirmSettingsForm({
         <div className="flex items-center gap-3 pt-2">
             <Button type="button" variant="greenCta" onClick={() => void handleSave({ skipNavigation: true })}
                 disabled={isSandboxFirm || saving || !loaded || !appDirty}
-                className="rounded-[2px] w-32 text-[10px] font-headline font-bold tracking-widest uppercase text-white">
+                className="rounded w-32 text-[10px] font-headline font-bold tracking-widest uppercase text-white">
                 {saving ? 'Saving…' : 'Save'}
             </Button>
         </div>
@@ -632,7 +632,7 @@ export function FirmSettingsForm({
                             </div>
                             <div className="mt-4 flex items-center gap-3">
                                 <Button onClick={() => void handleSaveBrand()} disabled={isSandboxFirm || savingBrand || !brandDirty} variant="greenCta"
-                                    className="rounded-[2px] w-40 text-[10px] font-headline font-bold tracking-widest uppercase text-white">
+                                    className="rounded w-40 text-[10px] font-headline font-bold tracking-widest uppercase text-white">
                                     {savingBrand ? 'Saving…' : 'Save'}
                                 </Button>
                             </div>
@@ -835,7 +835,7 @@ export function FirmSettingsForm({
                         <div className="p-5 border-t border-red-200 bg-red-50/40">
                             <p className="text-sm text-[#45474c] mb-4">Permanently delete this firm. All clients, projects, and members will be removed. This cannot be undone.</p>
                             <Button type="button" onClick={() => setDeleteConfirmOpen(true)} disabled={isSandboxFirm || deleting}
-                                className="rounded-[2px] bg-red-700 text-white hover:bg-red-800 border-0 text-[10px] font-headline font-bold tracking-widest uppercase shadow-sm hover:shadow-[0_4px_12px_-2px_rgba(185,28,28,0.35)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all">
+                                className="rounded bg-red-700 text-white hover:bg-red-800 border-0 text-[10px] font-headline font-bold tracking-widest uppercase shadow-sm hover:shadow-[0_4px_12px_-2px_rgba(185,28,28,0.35)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all">
                                 {deleting ? 'Deleting…' : 'Delete firm'}
                             </Button>
                         </div>

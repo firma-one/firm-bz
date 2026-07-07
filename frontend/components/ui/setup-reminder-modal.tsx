@@ -205,7 +205,7 @@ export function SetupReminderModal({
       tabIndex={-1}
     >
       <div
-        className="bg-white rounded-[2px] shadow-2xl border border-slate-200 w-full max-w-sm mx-4 p-5 flex flex-col gap-4"
+        className="bg-white rounded shadow-2xl border border-slate-200 w-full max-w-sm mx-4 p-5 flex flex-col gap-4"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -231,13 +231,13 @@ export function SetupReminderModal({
 
         {/* Content preview (e.g. comment text) */}
         {contentPreview && (
-          <p className="text-xs text-slate-500 bg-slate-50 rounded-[2px] border border-slate-100 px-3 py-2 leading-relaxed break-words">
+          <p className="text-xs text-slate-500 bg-slate-50 rounded border border-slate-100 px-3 py-2 leading-relaxed break-words">
             {contentPreview.length > 80 ? contentPreview.slice(0, 80) + '…' : contentPreview}
           </p>
         )}
 
         {success ? (
-          <div className="flex items-center gap-2 bg-primary/10 text-primary text-sm font-medium px-3 py-2 rounded-[2px]">
+          <div className="flex items-center gap-2 bg-primary/10 text-primary text-sm font-medium px-3 py-2 rounded">
             <CalendarClock className="h-4 w-4 shrink-0" />
             Reminder set
           </div>
@@ -251,7 +251,7 @@ export function SetupReminderModal({
               {!currentUser && members.length === 0 ? (
                 <p className="text-xs text-slate-400">No members to assign to.</p>
               ) : (
-                <div className="flex flex-col gap-1 overflow-y-auto border border-slate-200 rounded-[2px] p-1" style={{ maxHeight: '180px' }}>
+                <div className="flex flex-col gap-1 overflow-y-auto border border-slate-200 rounded p-1" style={{ maxHeight: '180px' }}>
                   {/* "Remind Me" row — always first if currentUser provided */}
                   {currentUser && (() => {
                     const selected = selectedIds.has(currentUser.userId)
@@ -263,7 +263,7 @@ export function SetupReminderModal({
                         type="button"
                         onClick={() => toggleMember(currentUser.userId)}
                         className={cn(
-                          'flex items-center gap-2.5 px-2.5 py-2 rounded-[2px] text-left transition-colors w-full',
+                          'flex items-center gap-2.5 px-2.5 py-2 rounded text-left transition-colors w-full',
                           selected
                             ? 'bg-primary/10 text-primary ring-1 ring-primary/30'
                             : 'hover:bg-slate-50 text-slate-800'
@@ -300,7 +300,7 @@ export function SetupReminderModal({
                         type="button"
                         onClick={() => toggleMember(m.userId)}
                         className={cn(
-                          'flex items-center gap-2.5 px-2.5 py-2 rounded-[2px] text-left transition-colors w-full',
+                          'flex items-center gap-2.5 px-2.5 py-2 rounded text-left transition-colors w-full',
                           selected
                             ? 'bg-primary/10 text-primary ring-1 ring-primary/30'
                             : 'hover:bg-slate-50 text-slate-800'
@@ -341,13 +341,13 @@ export function SetupReminderModal({
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-1">
-              <Button variant="outline" size="sm" className="rounded-[2px] w-32 text-[10px] font-headline font-bold tracking-widest uppercase" onClick={handleClose}>
+              <Button variant="outline" size="sm" className="rounded w-32 text-[10px] font-headline font-bold tracking-widest uppercase" onClick={handleClose}>
                 Cancel
               </Button>
               <Button
                 variant="default"
                 size="sm"
-                className="rounded-[2px] w-32 text-[10px] font-headline font-bold tracking-widest uppercase bg-primary hover:bg-primary hover:brightness-105"
+                className="rounded w-32 text-[10px] font-headline font-bold tracking-widest uppercase bg-primary hover:bg-primary hover:brightness-105"
                 disabled={submitting || !hasChanges}
                 onClick={() => void handleSubmit()}
               >
