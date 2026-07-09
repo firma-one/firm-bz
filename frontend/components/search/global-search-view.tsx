@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { Search, Folder, Sparkles, X, Building2, Briefcase, Package, Hash, FileText, ArrowUpRight, History, Trash2, Brush, CalendarClock } from 'lucide-react'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { UserAvatarWithTooltip } from '@/components/ui/user-avatar-with-tooltip'
@@ -249,6 +250,13 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
   // until the user confirms (Enter) or closes the picker, so partial toggling doesn't
   // re-trigger a search on every Space press.
   const [pendingFileTypes, setPendingFileTypes] = useState<FileTypeOption[]>([])
+  // The picker dropdown is rendered via a portal (see render below) so it can escape the firm
+  // page's `overflow-y-auto` tab-content wrapper (firm-clients-view.tsx), which otherwise clips
+  // any `position: absolute` descendant that extends past its scrolled viewport — no z-index can
+  // fix that, since z-index only affects paint order within a stacking context, not clipping
+  // across an overflow boundary. Position is computed from the composer's viewport rect and kept
+  // in sync while the picker is open.
+  const [pickerPosition, setPickerPosition] = useState<{ top: number; left: number; width: number } | null>(null)
   const composerRef = useRef<HTMLDivElement>(null)
   const pickerRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLInputElement>(null)
@@ -439,6 +447,24 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
     document.addEventListener('mousedown', onClickOutside)
     return () => document.removeEventListener('mousedown', onClickOutside)
   }, [closePicker, pickerStage, commitFileTypes])
+
+  // Recompute the portaled picker's position from the composer's live viewport rect whenever it
+  // opens, and keep it in sync on scroll (capture phase, so scrolling inside the clipping
+  // ancestor — which doesn't bubble a window-level scroll event — still updates it) and resize.
+  useEffect(() => {
+    if (!pickerOpen) { setPickerPosition(null); return }
+    const updatePosition = () => {
+      const rect = composerRef.current?.getBoundingClientRect()
+      if (rect) setPickerPosition({ top: rect.bottom + 4, left: rect.left, width: rect.width })
+    }
+    updatePosition()
+    window.addEventListener('scroll', updatePosition, true)
+    window.addEventListener('resize', updatePosition)
+    return () => {
+      window.removeEventListener('scroll', updatePosition, true)
+      window.removeEventListener('resize', updatePosition)
+    }
+  }, [pickerOpen])
 
   const runSearch = useCallback(async () => {
     if (!accessToken) return
@@ -656,7 +682,7 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                       setDebouncedQuery(searchQuery)
                     }
                   }}
-                  placeholder={chips.length === 0 ? 'Search by document content or topic, e.g. SEO strategy documents' : 'Add more to your search...'}
+                  placeholder={chips.length === 0 ? 'Search by filename or topic, e.g. SEO strategy documents' : 'Add more to your search...'}
                   className="flex-1 min-w-[10rem] py-1 px-1 border-0 bg-transparent text-sm font-medium shadow-none focus:outline-none focus:ring-0"
                   autoFocus
                   aria-label="Document search"
@@ -678,10 +704,11 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
               </div>
             </div>
 
-            {pickerOpen && (
+            {pickerOpen && pickerPosition && createPortal(
               <div
                 ref={pickerRef}
-                className="absolute z-20 top-full left-0 mt-1 w-full max-w-xs rounded-md border border-ki-outline bg-ki-surface shadow-lg py-1"
+                style={{ position: 'fixed', top: pickerPosition.top, left: pickerPosition.left, width: pickerPosition.width, maxWidth: 320 }}
+                className="z-50 rounded-md border border-ki-outline bg-ki-surface shadow-lg py-1"
               >
                 <div className="px-2.5 py-1.5 border-b border-ki-outline text-[10px] font-mono font-medium uppercase tracking-widest text-ki-on-surface-variant">
                   {STAGE_LABEL[pickerStage]}
@@ -770,21 +797,30 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                     )
                   })}
                 </div>
-                <div className="px-2.5 py-1.5 border-t border-ki-outline flex items-center gap-2 text-[9px] font-mono text-ki-on-surface-variant">
-                  <span><kbd className="px-1 py-0.5 rounded border border-ki-outline bg-ki-surface-low">↑↓</kbd> Navigate</span>
-                  {pickerStage === 'type' ? (
-                    <>
+                <div className="px-2.5 py-1.5 border-t border-ki-outline flex items-center justify-between gap-2 text-[9px] font-mono text-ki-on-surface-variant">
+                  <div className="flex items-center gap-2">
+                    <span><kbd className="px-1 py-0.5 rounded border border-ki-outline bg-ki-surface-low">↑↓</kbd> Navigate</span>
+                    {pickerStage === 'type' ? (
                       <span><kbd className="px-1 py-0.5 rounded border border-ki-outline bg-ki-surface-low">Space</kbd> Toggle</span>
-                      <span><kbd className="px-1 py-0.5 rounded border border-ki-outline bg-ki-surface-low">Enter</kbd> Apply</span>
-                    </>
-                  ) : (
-                    <>
-                      <span><kbd className="px-1 py-0.5 rounded border border-ki-outline bg-ki-surface-low">Enter</kbd> Select</span>
-                      <span><kbd className="px-1 py-0.5 rounded border border-ki-outline bg-ki-surface-low">Tab</kbd> Skip</span>
-                    </>
+                    ) : (
+                      <>
+                        <span><kbd className="px-1 py-0.5 rounded border border-ki-outline bg-ki-surface-low">Enter</kbd> Select</span>
+                        <span><kbd className="px-1 py-0.5 rounded border border-ki-outline bg-ki-surface-low">Tab</kbd> Skip</span>
+                      </>
+                    )}
+                  </div>
+                  {pickerStage === 'type' && (
+                    <button
+                      type="button"
+                      onClick={commitFileTypes}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-primary/10 text-primary font-bold hover:bg-primary/20 transition-colors"
+                    >
+                      <kbd className="px-1 py-0.5 rounded border border-primary/30 bg-ki-surface">Enter</kbd> Apply
+                    </button>
                   )}
                 </div>
-              </div>
+              </div>,
+              document.body
             )}
           </div>
 
