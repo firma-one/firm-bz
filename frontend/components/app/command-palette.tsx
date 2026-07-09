@@ -83,6 +83,14 @@ function buildItems(firmSlug: string | null, canManageOrg: boolean): CommandItem
       href: firmBase,
       group: "Firm",
     })
+    items.push({
+      id: "doc-search",
+      label: "Doc Search",
+      description: "Search documents across the firm",
+      icon: <Search className="h-4 w-4" />,
+      href: `${firmBase}?tab=doc-search`,
+      group: "Firm",
+    })
     if (canManageOrg) {
       items.push({
         id: "settings",

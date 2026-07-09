@@ -2,12 +2,13 @@
 
 import { useState, useEffect, useTransition } from 'react'
 import { ClientSummary, getFirmName } from '@/lib/actions/hierarchy'
-import { UserPlus, Building2, LayoutGrid, List, Home, ChevronRight, Settings, Users, ClipboardList, UserCog, LayoutDashboard, Lock, Printer } from 'lucide-react'
+import { UserPlus, Building2, LayoutGrid, List, Home, ChevronRight, Settings, Users, ClipboardList, UserCog, LayoutDashboard, Lock, Printer, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ClientList } from './client-list'
 import { AddClientModal } from './add-client-modal'
 import { FirmSettingsForm } from './firm-settings-form'
 import { FirmMembersTab } from './members/firm-members-tab'
+import { GlobalSearchView } from '@/components/search/global-search-view'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useSearchParams, usePathname, useRouter } from 'next/navigation'
 import { EngagementAuditPane } from './engagement-audit-pane'
@@ -45,11 +46,13 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
             ? 'settings'
             : tabParam === 'audit' && canViewOrgAudit
                 ? 'audit'
-                : tabParam === 'members' && canViewOrgAudit
-                    ? 'members'
-                    : tabParam === 'analytics' && canViewOrgAudit
-                        ? 'analytics'
-                        : 'clients'
+                : tabParam === 'doc-search'
+                    ? 'doc-search'
+                    : tabParam === 'members' && canViewOrgAudit
+                        ? 'members'
+                        : tabParam === 'analytics' && canViewOrgAudit
+                            ? 'analytics'
+                            : 'clients'
 
     // Clear pending state once searchParams catches up
     useEffect(() => {
@@ -189,6 +192,15 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                                     </span>
                                 )}
                                 {pendingTab === 'clients' && <span className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden"><span className="absolute inset-y-0 w-1/2 bg-brand-accent animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full" /></span>}
+                            </TabsTrigger>
+                            <TabsTrigger
+                                value="doc-search"
+                                data-demo-tour="firm-doc-search-tab"
+                                className="relative h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                            >
+                                <Search className="w-4 h-4 mr-2" />
+                                Doc Search
+                                {pendingTab === 'doc-search' && <span className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden"><span className="absolute inset-y-0 w-1/2 bg-brand-accent animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full" /></span>}
                             </TabsTrigger>
                             {canViewOrgAudit && (
                                 <TabsTrigger
@@ -333,6 +345,16 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                                     orgSlug={orgSlug}
                                     canManage={canViewOrgAudit}
                                 />
+                            </div>
+                        </TabsContent>
+                    )}
+
+                    {(orgId ?? (clients[0]?.firmId ?? clients[0]?.firmId)) && (
+                        <TabsContent value="doc-search" className="m-0 h-full">
+                            <div className="py-1 h-full">
+                                <ErrorBoundary context="GlobalSearchTab">
+                                    <GlobalSearchView firmId={orgId ?? clients[0]?.firmId ?? ''} />
+                                </ErrorBoundary>
                             </div>
                         </TabsContent>
                     )}

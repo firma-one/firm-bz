@@ -26,6 +26,7 @@ import {
   Lock,
   Megaphone,
   Bookmark,
+  Search,
 } from "lucide-react"
 import { WhatsNewModal } from "@/components/ui/whats-new-modal"
 import { useWhatsNew, type ReleaseMeta } from "@/lib/use-whats-new"
@@ -394,6 +395,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
   // Active state helpers
   const isInsightsActive = searchParams.get('tab') === 'analytics'
   const isSettingsActive = searchParams.get('tab') === 'settings'
+  const isDocumentSearchActive = searchParams.get('tab') === 'doc-search'
   const isSupportActive = pathname.startsWith('/d/support')
   const isRemindersPageActive = pathname.startsWith('/d/u/reminders')
   const isClientsActive =
@@ -547,6 +549,11 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                           <Users className={`h-3.5 w-3.5 mr-2 shrink-0 ${isClientsActive ? 'text-primary' : 'text-[#45474c]'}`} />
                           <span>Clients</span>
                         </Link>
+                        <Link href={`${firmScopedNavBase}?tab=doc-search`} className={`flex items-center transition-colors pl-2 pr-2 py-1.5 text-[0.8125rem] ${isDocumentSearchActive ? 'bg-primary/10 border-l-2 border-brand-accent text-primary font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}>
+                          <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-1.5" />
+                          <Search className={`h-3.5 w-3.5 mr-2 shrink-0 ${isDocumentSearchActive ? 'text-primary' : 'text-[#45474c]'}`} />
+                          <span>Doc Search</span>
+                        </Link>
                         {canManageOrg && (
                           <Link href={`${firmScopedNavBase}?tab=settings`} className={`group/lock flex w-full items-center transition-colors pl-2 pr-3 py-1.5 text-[0.8125rem] ${isSettingsActive ? 'bg-primary/10 border-l-2 border-brand-accent text-primary font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}>
                             <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-1.5" />
@@ -587,6 +594,14 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                           </Link>
                         </TooltipTrigger>
                         <TooltipContent side="right">Clients</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Link href={`${firmScopedNavBase}?tab=doc-search`} className={navLinkClass(isDocumentSearchActive)}>
+                            <Search className={navIconClass(isDocumentSearchActive)} />
+                          </Link>
+                        </TooltipTrigger>
+                        <TooltipContent side="right">Doc Search</TooltipContent>
                       </Tooltip>
                       {canManageOrg && (
                         <Tooltip>
