@@ -289,13 +289,13 @@ export function EngagementFileRow({
                                     <div className="flex w-full min-w-0 items-center gap-3">
                                         <mark
                                             className={cn(
-                                                "file-deeplink-highlight block w-max max-w-[calc(100%-2rem)] min-w-0 text-[0.8125rem] font-medium text-left",
+                                                "file-deeplink-highlight block max-w-full min-w-0 text-[0.8125rem] font-medium text-left",
                                                 isFolder
                                                     ? "text-[#1b1b1d] hover:text-[#45474c] cursor-pointer"
                                                     : "text-[#45474c]"
                                             )}
                                         >
-                                            <span className="block min-w-0 break-words">
+                                            <span className="block min-w-0 truncate">
                                                 {file.name}
                                             </span>
                                         </mark>
