@@ -1697,7 +1697,7 @@ const handleRefresh = async () => {
                                                         <button
                                                             type="button"
                                                             className={cn(
-                                                                "flex items-center hover:bg-slate-100 px-2 py-1 rounded transition-colors max-w-[180px] border-0 bg-transparent cursor-pointer",
+                                                                "flex items-center min-w-0 hover:bg-slate-100 px-2 py-1 rounded transition-colors max-w-[180px] border-0 bg-transparent cursor-pointer",
                                                                 index === breadcrumbs.length - 1 ? "text-slate-900 bg-slate-50" : "hover:text-slate-900"
                                                             )}
                                                             title={`Switch root: ${currentRootLabel}`}
@@ -1706,7 +1706,7 @@ const handleRefresh = async () => {
                                                             {currentFolderType === 'confidential' && <FolderLock className="h-3.5 w-3.5 mr-1.5 text-red-500 flex-shrink-0" />}
                                                             {currentFolderType === 'staging' && <Inbox className="h-3.5 w-3.5 mr-1.5 text-amber-500 flex-shrink-0" />}
                                                             {!currentFolderType && <Folder className="h-3.5 w-3.5 mr-1.5 text-slate-400 flex-shrink-0" />}
-                                                            <span className="truncate capitalize">{currentRootLabel}</span>
+                                                            <span className="truncate min-w-0 capitalize">{currentRootLabel}</span>
                                                             <ChevronDown className="h-3.5 w-3.5 ml-1 text-slate-400 flex-shrink-0" />
                                                         </button>
                                                     </DropdownMenuTrigger>
@@ -1771,13 +1771,13 @@ const handleRefresh = async () => {
                                                     type="button"
                                                     onClick={() => handleBreadcrumbClick(index, item.id)}
                                                     className={cn(
-                                                        "flex items-center hover:bg-slate-100 px-2 py-1 rounded transition-colors max-w-[180px]",
+                                                        "flex items-center min-w-0 hover:bg-slate-100 px-2 py-1 rounded transition-colors max-w-[180px]",
                                                         index === breadcrumbs.length - 1 ? "text-slate-900 bg-slate-50" : "hover:text-slate-900"
                                                     )}
                                                     title={item.name}
                                                 >
                                                     <Folder className="h-3.5 w-3.5 mr-1.5 text-slate-400 flex-shrink-0" />
-                                                    <span className="truncate">{item.name}</span>
+                                                    <span className="truncate min-w-0">{item.name}</span>
                                                 </button>
                                             )}
                                         </div>
