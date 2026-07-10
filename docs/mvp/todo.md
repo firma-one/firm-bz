@@ -25,6 +25,13 @@ See [`.claude/plans/beta-feedback-fixes.md`](../../.claude/plans/beta-feedback-f
 
 ## Search & Discovery
 
+- [ ] **Doc Search: Snippet Summaries + Browser-Side Query Embedding** — [plan](../../.claude/plans/doc-search-snippet-and-client-embeddings.md)
+  - #1 Replace 250MB distilbart index-time summarizer with an extractive text snippet (`SEARCH_SUMMARY_MODE` switch; legacy path retained until sign-off) — implemented, pending Deepak's DB verification
+  - #1b Widen summarizable mime types: Google Sheets/Slides via Drive export, and modern Office (docx/pptx/xlsx) + PDF parsed in-memory (officeparser / pdf-parse; 15MB size guard; no disk writes) — implemented alongside #1
+  - #1c System-admin "Re-index documents" button per firm on `/system/user-data-map` (POST `/api/system/user-data-map/reindex`) — implemented, replaces the delete-and-reupload workaround
+  - #2 Embed search queries in the browser (preloaded MiniLM worker, `NEXT_PUBLIC_CLIENT_EMBEDDINGS`, server fallback) — approved, value under discussion
+  - NL query interpreter ("#4", prose → inferred filter chips) evaluated and dropped 2026-07-09 — explicit @ picker chips remain the design
+
 - [ ] **Global Document Search** — [plan](../../.claude/plans/global-search-share-status-overview-metrics.md)
   - Cross-engagement search (e.g. "find all legal docs for NaviQure AI"); currently scoped to one project at a time
   - Extend `prepareTextForEmbedding` to include `clientName` and `engagementTitle` in the vector string; update all `indexFile` callers to pass names

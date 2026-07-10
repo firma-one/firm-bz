@@ -2145,28 +2145,83 @@ export class GoogleDriveConnector {
         accessToken = await this.refreshAccessToken(connectionId)
       }
 
-      // 1. Get metadata to determine if it's indexable
+      // 1. Get metadata to determine if / how it's indexable
       const metaRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=name,mimeType,size`, {
         headers: { 'Authorization': `Bearer ${accessToken}` }
       })
       if (!metaRes.ok) return null
       const metadata = await metaRes.json()
+      const mime: string = metadata.mimeType
+      const size = metadata.size ? Number(metadata.size) : 0
 
-      let downloadUrl: string
-      if (metadata.mimeType === 'application/vnd.google-apps.document') {
-        downloadUrl = `https://www.googleapis.com/drive/v3/files/${fileId}/export?mimeType=text/plain`
-      } else if (metadata.mimeType === 'text/plain' || metadata.mimeType === 'application/json' || metadata.mimeType === 'text/markdown') {
-        downloadUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`
-      } else {
-        return null // Not a text-based file we can easily summarize
+      // Guard: skip oversized binaries. Snippet extraction only needs the leading text —
+      // a 50MB spreadsheet parse would burn far more memory than the resulting snippet
+      // could ever justify. Google-native exports don't report size here (server-generated),
+      // so this cap applies to binary downloads only.
+      const MAX_SIZE_BYTES = 15 * 1024 * 1024
+      if (size > 0 && size > MAX_SIZE_BYTES) return null
+
+      // Google-native formats: use Drive's server-side export → plain text/CSV
+      const nativeExport: Record<string, string> = {
+        'application/vnd.google-apps.document': 'text/plain',
+        'application/vnd.google-apps.spreadsheet': 'text/csv', // first sheet only — enough topical signal
+        'application/vnd.google-apps.presentation': 'text/plain',
+      }
+      if (nativeExport[mime]) {
+        const res = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${fileId}/export?mimeType=${encodeURIComponent(nativeExport[mime])}`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        )
+        if (!res.ok) return null
+        return await res.text()
       }
 
-      const res = await fetch(downloadUrl, {
-        headers: { 'Authorization': `Bearer ${accessToken}` }
-      })
+      // Text formats: download and return as-is
+      if (mime === 'text/plain' || mime === 'application/json' || mime === 'text/markdown' || mime === 'text/csv') {
+        const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        })
+        if (!res.ok) return null
+        return await res.text()
+      }
 
+      // Modern Office (docx / pptx / xlsx) and PDF: download as ArrayBuffer and parse
+      // entirely in memory — nothing ever lands on the server's filesystem. Legacy binary
+      // formats (.doc / .ppt / .xls) fall through and return null.
+      const OFFICE_MIMES = new Set([
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      ])
+      const isPdf = mime === 'application/pdf'
+      if (!OFFICE_MIMES.has(mime) && !isPdf) return null
+
+      const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      })
       if (!res.ok) return null
-      return await res.text()
+      const buf = Buffer.from(await res.arrayBuffer())
+      if (buf.byteLength > MAX_SIZE_BYTES) return null
+
+      if (isPdf) {
+        // pdf-parse v2 API: PDFParse class over pdfjs. `data` accepts a Node Buffer directly
+        // (converted internally to Uint8Array). Parser lives in memory; destroy() releases it.
+        const { PDFParse } = await import('pdf-parse')
+        const parser = new PDFParse({ data: buf })
+        try {
+          const result = await parser.getText()
+          return typeof result.text === 'string' ? result.text : null
+        } finally {
+          await parser.destroy().catch(() => { /* ignore */ })
+        }
+      }
+
+      // officeparser v7 API: OfficeParser.parseOffice(buffer) returns a structured AST;
+      // toText() flattens it to a plain string. Buffer path is fully in-memory.
+      const { OfficeParser } = await import('officeparser')
+      const ast = await OfficeParser.parseOffice(buf)
+      const text = ast.toText()
+      return typeof text === 'string' ? text : null
 
     } catch (e) {
       logger.error('getFileText failed', e as Error)

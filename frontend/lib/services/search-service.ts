@@ -1,6 +1,7 @@
 import { prisma } from '../prisma'
 import { generateEmbedding, prepareTextForEmbedding } from '../embeddings'
 import { generateSummary } from '../summarization'
+import { extractSnippet } from '../snippet'
 import { logger } from '../logger'
 import { assignDocId } from '../doc-id'
 
@@ -87,15 +88,31 @@ export class SearchService {
                     driveParentId = meta.parents[0]
                 }
 
+                // Widened alongside SEARCH_SUMMARY_MODE=snippet: with the free extractive
+                // path, every format googleDriveConnector.getFileText can decode now feeds
+                // into content-based embeddings. Google-native Sheets/Slides via export API;
+                // modern Office (docx/pptx/xlsx) and PDFs parsed in-memory (officeparser /
+                // pdf-parse). Legacy .doc/.ppt/.xls and scanned PDFs stay filename-only.
                 const isSummarizable = [
                     'application/vnd.google-apps.document',
-                    'text/plain', 'text/markdown', 'application/json'
+                    'application/vnd.google-apps.spreadsheet',
+                    'application/vnd.google-apps.presentation',
+                    'text/plain', 'text/markdown', 'text/csv', 'application/json',
+                    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+                    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    'application/pdf',
                 ].includes(meta.mimeType)
 
                 if (isSummarizable && connectorId) {
                     const text = await googleDriveConnector.getFileText(connectorId, params.externalId)
                     if (text) {
-                        summary = await generateSummary(text)
+                        // SEARCH_SUMMARY_MODE=model re-enables the legacy distilbart summarizer
+                        // (lib/summarization.ts, retained until snippet mode is signed off);
+                        // default is the extractive snippet — no ML model at index time.
+                        summary = process.env.SEARCH_SUMMARY_MODE === 'model'
+                            ? await generateSummary(text)
+                            : extractSnippet(text)
                         if (summary) {
                             driveMetadata.summary = summary
                         }

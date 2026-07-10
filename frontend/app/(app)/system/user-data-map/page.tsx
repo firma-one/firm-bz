@@ -2,7 +2,7 @@
 
 import { FormEvent, useCallback, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { ChevronRight, Copy, Database, Search, Shield, Trash2 } from 'lucide-react'
+import { ChevronRight, Copy, Database, RotateCw, Search, Shield, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
@@ -16,6 +16,21 @@ import {
 import type { UserDataMapResult } from '@/lib/system/user-data-map'
 
 type ApiResponse = { data?: UserDataMapResult; error?: string }
+
+type ReindexApiResponse = {
+    data?: {
+        totalIndexed: number
+        engagements: Array<{
+            engagementId: string
+            name: string
+            status: 'indexed' | 'skipped'
+            indexedCount: number
+            reason?: string
+            capped?: boolean
+        }>
+    }
+    error?: string
+}
 
 type HardResetApiResponse = {
     data?: {
@@ -57,6 +72,7 @@ export default function UserDataMapPage() {
     const [deleteAuthAccount, setDeleteAuthAccount] = useState(false)
     const [hardResetLoading, setHardResetLoading] = useState(false)
     const [hardResetError, setHardResetError] = useState<string | null>(null)
+    const [reindexState, setReindexState] = useState<Record<string, { loading: boolean; message?: string; error?: string }>>({})
 
     const sortedFindings = useMemo(() => {
         if (!result) return []
@@ -124,6 +140,31 @@ export default function UserDataMapPage() {
             setHardResetLoading(false)
         }
     }
+
+    const runReindex = useCallback(async (firmId: string) => {
+        setReindexState((s) => ({ ...s, [firmId]: { loading: true } }))
+        try {
+            const response = await fetch('/api/system/user-data-map/reindex', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ firmId }),
+            })
+            const body = (await response.json().catch(() => ({}))) as ReindexApiResponse
+            if (!response.ok || !body.data) {
+                setReindexState((s) => ({ ...s, [firmId]: { loading: false, error: body.error ?? 'Re-index failed' } }))
+                return
+            }
+            const indexed = body.data.engagements.filter((e) => e.status === 'indexed')
+            const skipped = body.data.engagements.filter((e) => e.status === 'skipped')
+            const capped = indexed.some((e) => e.capped)
+            const parts = [`Indexed ${body.data.totalIndexed} files across ${indexed.length} engagement${indexed.length === 1 ? '' : 's'}`]
+            if (skipped.length > 0) parts.push(`${skipped.length} skipped (${skipped.map((e) => `${e.name}: ${e.reason}`).join('; ')})`)
+            if (capped) parts.push('some engagements hit the 200-file cap')
+            setReindexState((s) => ({ ...s, [firmId]: { loading: false, message: parts.join(' — ') } }))
+        } catch {
+            setReindexState((s) => ({ ...s, [firmId]: { loading: false, error: 'Re-index failed' } }))
+        }
+    }, [])
 
     const copySql = async (id: string, sql: string) => {
         try {
@@ -286,7 +327,28 @@ export default function UserDataMapPage() {
                                                 default
                                             </span>
                                         ) : null}
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            className="ml-auto shrink-0"
+                                            disabled={reindexState[firm.id]?.loading}
+                                            onClick={() => void runReindex(firm.id)}
+                                        >
+                                            <RotateCw className={cn('mr-2 h-3.5 w-3.5', reindexState[firm.id]?.loading && 'animate-spin')} />
+                                            {reindexState[firm.id]?.loading ? 'Re-indexing…' : 'Re-index documents'}
+                                        </Button>
                                     </div>
+                                    {reindexState[firm.id]?.message ? (
+                                        <p className="mt-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+                                            {reindexState[firm.id]!.message}
+                                        </p>
+                                    ) : null}
+                                    {reindexState[firm.id]?.error ? (
+                                        <p className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                                            {reindexState[firm.id]!.error}
+                                        </p>
+                                    ) : null}
                                     <dl className="mt-2 grid grid-cols-1 gap-1 text-sm md:grid-cols-2 xl:grid-cols-3">
                                         <DataRow label="Firm ID" value={firm.id} mono />
                                         <DataRow label="Connector" value={firm.connectorId ?? 'None'} mono />

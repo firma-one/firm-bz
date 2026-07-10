@@ -89,6 +89,11 @@ interface ResolvedFilters {
 
 type FilterStage = 'client' | 'engagement' | 'deliverable' | 'dateRange' | 'type'
 
+// Single source of truth for stage order — used for chip display order, the @/Tab auto-advance
+// scan, and the filter-badge row. Client/Engagement/Deliverable stay first (hierarchical), with
+// Type before Time at the end.
+const FILTER_STAGE_ORDER: FilterStage[] = ['client', 'engagement', 'deliverable', 'type', 'dateRange']
+
 interface SelectedChip {
   stage: FilterStage
   id: string
@@ -263,6 +268,11 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
   // setChips (React batches the update), so the advance is deferred to an effect keyed off chips
   // itself rather than called synchronously right after setChips.
   const autoAdvanceRequested = useRef(false)
+  // How the picker was opened for the current stage — 'keyboard' (via @ or Tab-skip) keeps the
+  // guided auto-advance-through-remaining-stages flow; 'mouse' (clicking an empty filter badge
+  // directly) is a one-off lookup with no forced sequence, so selecting a value just closes back
+  // to the badge row rather than auto-opening the next stage.
+  const pickerOpenedVia = useRef<'keyboard' | 'mouse'>('keyboard')
   const composerRef = useRef<HTMLDivElement>(null)
   const pickerRef = useRef<HTMLDivElement>(null)
   const pickerInputRef = useRef<HTMLInputElement>(null)
@@ -280,12 +290,11 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
     ? (typeChip.id.split(',').filter(Boolean) as FileTypeOption[])
     : []
 
-  // Chips always display in a fixed canonical order (Client, Engagement, Deliverable, Time, Type)
-  // regardless of the order they were selected/re-selected in — e.g. removing and re-adding
-  // Deliverable after Time was already set must not move Deliverable after Time visually.
-  const CHIP_DISPLAY_ORDER: FilterStage[] = ['client', 'engagement', 'deliverable', 'dateRange', 'type']
+  // Chips always display in FILTER_STAGE_ORDER regardless of the order they were
+  // selected/re-selected in — e.g. removing and re-adding Deliverable after Type was already set
+  // must not move Deliverable after Type visually.
   const orderedChips = useMemo(
-    () => [...chips].sort((a, b) => CHIP_DISPLAY_ORDER.indexOf(a.stage) - CHIP_DISPLAY_ORDER.indexOf(b.stage)),
+    () => [...chips].sort((a, b) => FILTER_STAGE_ORDER.indexOf(a.stage) - FILTER_STAGE_ORDER.indexOf(b.stage)),
     [chips]
   )
 
@@ -367,7 +376,8 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
   // explicit fresh "@" press once the picker is fully closed — which naturally restarts this same
   // scan from index 0, since `pickerOpen` is false at that point.
   const openPickerAtNextStage = useCallback(() => {
-    const order: FilterStage[] = ['client', 'engagement', 'deliverable', 'dateRange', 'type']
+    pickerOpenedVia.current = 'keyboard'
+    const order = FILTER_STAGE_ORDER
     const isFilled: Record<FilterStage, boolean> = {
       client: !!clientChip,
       engagement: !!engagementChip,
@@ -398,6 +408,20 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
     setFocusedChipIndex(null)
     if (nextStage === 'type') setPendingFileTypes(selectedFileTypes)
   }, [clientChip, engagementChip, deliverableChip, dateRangeChip, typeChip, pickerOpen, pickerStage, closePicker, selectedFileTypes])
+
+  // Mouse entry point: clicking an empty filter badge opens exactly that stage's picker directly,
+  // no scanning/sequencing — the badge row lets a user pick any stage in any order. Selecting a
+  // value afterward (selectChip/commitFileTypes) checks pickerOpenedVia and skips auto-advance for
+  // this path, closing back to the badge row instead of chaining into the next stage.
+  const openPickerAtStage = useCallback((stage: FilterStage) => {
+    pickerOpenedVia.current = 'mouse'
+    setPickerStage(stage)
+    setPickerQuery('')
+    setPickerFocusedIndex(0)
+    setPickerOpen(true)
+    setFocusedChipIndex(null)
+    if (stage === 'type') setPendingFileTypes(selectedFileTypes)
+  }, [selectedFileTypes])
 
   const selectChip = useCallback((entity: PickerEntity) => {
     setChips((prev) => {
@@ -439,13 +463,19 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
 
       return [...cleared, ...backfilled, { stage: pickerStage, id: entity.id, name: entity.name }]
     })
-    // Auto-advance into the next eligible stage within the same @ session, deferred to the
-    // chips-effect below since `chips` state hasn't updated yet at this point in the callback.
-    // Focus is handled by openPickerAtNextStage/closePicker depending on the outcome — not here,
-    // since focusing the textarea unconditionally would steal focus away from the picker input
-    // when there's another stage to advance into.
-    autoAdvanceRequested.current = true
-  }, [pickerStage, pickerData])
+    if (pickerOpenedVia.current === 'keyboard') {
+      // Auto-advance into the next eligible stage within the same @ session, deferred to the
+      // chips-effect below since `chips` state hasn't updated yet at this point in the callback.
+      // Focus is handled by openPickerAtNextStage/closePicker depending on the outcome — not here,
+      // since focusing the textarea unconditionally would steal focus away from the picker input
+      // when there's another stage to advance into.
+      autoAdvanceRequested.current = true
+    } else {
+      // Mouse-driven badge click — a one-off lookup with no forced sequence. Close back to the
+      // badge row instead of chaining into the next stage.
+      closePicker()
+    }
+  }, [pickerStage, pickerData, closePicker])
 
   // Type is multi-select: Space toggles a category into pendingFileTypes without closing the
   // picker; "any" is exclusive with every other category (selecting it clears the rest, and
@@ -471,7 +501,7 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
       const name = pendingFileTypes.map((t) => FILE_TYPE_LABEL[t]).join(', ')
       return [...withoutType, { stage: 'type', id: pendingFileTypes.join(','), name }]
     })
-    if (advanceAfter) autoAdvanceRequested.current = true
+    if (advanceAfter && pickerOpenedVia.current === 'keyboard') autoAdvanceRequested.current = true
     else closePicker()
   }, [pendingFileTypes, closePicker])
 
@@ -660,7 +690,33 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
             <div>
               <h1 className="font-headline text-2xl font-semibold tracking-tight text-ki-on-surface">Document Search</h1>
               <p className="text-sm text-ki-on-surface-variant mt-1">
-                Search documents across every client and engagement you have access to. Type <span className="font-mono font-medium text-primary">@</span> to filter by client, engagement, deliverable, time, or type.
+                Search documents across every client and engagement you have access to.
+              </p>
+              <p className="flex items-center gap-1 text-xs text-ki-on-surface-variant mt-1">
+                Type
+                <kbd className="px-1 py-0.5 rounded border border-primary/30 bg-primary/10 font-mono font-bold text-primary">@</kbd>
+                to filter by client, engagement, deliverable, doc-type, or time
+              </p>
+              <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-ki-on-surface-variant mt-1.5">
+                <span className="inline-flex items-center gap-1">
+                  <kbd className="px-1 py-0.5 rounded border border-ki-outline bg-ki-surface-low font-mono">↑↓</kbd>
+                  Navigate
+                </span>
+                <span className="text-ki-outline-variant">•</span>
+                <span className="inline-flex items-center gap-1">
+                  <kbd className="px-1 py-0.5 rounded border border-ki-outline bg-ki-surface-low font-mono">Tab</kbd>
+                  Skip
+                </span>
+                <span className="text-ki-outline-variant">•</span>
+                <span className="inline-flex items-center gap-1">
+                  <kbd className="px-1 py-0.5 rounded border border-ki-outline bg-ki-surface-low font-mono">Enter</kbd>
+                  Select
+                </span>
+                <span className="text-ki-outline-variant">•</span>
+                <span className="inline-flex items-center gap-1">
+                  <kbd className="px-1 py-0.5 rounded border border-ki-outline bg-ki-surface-low font-mono">Space</kbd>
+                  Multi-select Toggle
+                </span>
               </p>
             </div>
             <button
@@ -680,114 +736,160 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
           </div>
 
           <div ref={composerRef} className="relative mt-4">
-            <div className="flex rounded-md border border-ki-outline bg-ki-surface shadow-sm overflow-hidden transition-all focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/5">
-              <div className="flex flex-col justify-center py-3 pl-4 pr-2 shrink-0">
-                <Search className="h-4 w-4 text-primary" />
-              </div>
-              <div className="flex-1 min-w-0 flex flex-wrap items-center gap-1.5 px-1 py-2.5">
-                {orderedChips.map((chip, index) => {
-                  const Icon = STAGE_ICON[chip.stage]
-                  const isFocused = focusedChipIndex === index
-                  return (
-                    <button
-                      key={chip.stage}
-                      type="button"
-                      ref={(el) => { chipRefs.current[index] = el }}
-                      tabIndex={-1}
-                      onFocus={() => setFocusedChipIndex(index)}
-                      onClick={() => setFocusedChipIndex(index)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Backspace' || e.key === 'Delete') {
-                          e.preventDefault()
-                          removeChip(chip.stage)
-                          return
-                        }
-                        if (e.key === 'ArrowLeft') {
-                          e.preventDefault()
-                          if (index > 0) setFocusedChipIndex(index - 1)
-                          return
-                        }
-                        if (e.key === 'ArrowRight') {
-                          e.preventDefault()
-                          if (index < orderedChips.length - 1) setFocusedChipIndex(index + 1)
-                          else { setFocusedChipIndex(null); textareaRef.current?.focus() }
-                          return
-                        }
-                        if (e.key === 'Escape') {
-                          setFocusedChipIndex(null)
-                          textareaRef.current?.focus()
-                        }
-                      }}
-                      className={cn(
-                        'inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border shrink-0 transition-colors focus:outline-none font-mono',
-                        isFocused
-                          ? 'bg-red-50 text-red-700 border-red-300 ring-1 ring-red-300'
-                          : 'bg-primary/10 text-primary border-primary/20 hover:bg-primary/15'
-                      )}
-                    >
-                      <Icon className="h-3 w-3" />
-                      {chip.name}
-                      <span
-                        role="button"
+            <div className="rounded-md border border-ki-outline bg-ki-surface shadow-sm overflow-hidden transition-all focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/5">
+              {/* Row 1 — filters only, inside the same bordered control as the search input below.
+                  Every stage always has a fixed slot in canonical order: a filled pill (icon +
+                  value + remove ×) once selected, or the same pill shape in a muted/outline
+                  "empty" state (icon only) that's a direct mouse entry point — click it to open
+                  that exact stage's picker, no @ or sequencing required. Selecting a value (via
+                  mouse or keyboard) turns the same slot into the filled pill in place. Engagement/
+                  Deliverable badges are disabled until their parent (Client/Engagement) is set,
+                  matching the same hierarchy gating the keyboard flow already enforces. */}
+              <div className="flex flex-wrap items-center gap-1.5 px-3 pt-2.5 pb-1.5 border-b border-ki-outline">
+                {FILTER_STAGE_ORDER.map((stage) => {
+                  const chip = orderedChips.find((c) => c.stage === stage) || null
+                  const index = chip ? orderedChips.indexOf(chip) : -1
+                  const Icon = STAGE_ICON[stage]
+                  const isFocused = chip !== null && focusedChipIndex === index
+                  const isGated = (stage === 'engagement' && !clientChip) || (stage === 'deliverable' && !engagementChip)
+
+                  if (chip) {
+                    return (
+                      <button
+                        key={stage}
+                        type="button"
+                        ref={(el) => { chipRefs.current[index] = el }}
                         tabIndex={-1}
-                        onClick={(e) => { e.stopPropagation(); removeChip(chip.stage) }}
-                        className={cn('ml-0.5 -mr-0.5 rounded', isFocused ? 'hover:bg-red-100' : 'hover:bg-primary/20')}
-                        aria-label={`Remove ${STAGE_LABEL[chip.stage]} filter`}
+                        onFocus={() => setFocusedChipIndex(index)}
+                        onClick={() => setFocusedChipIndex(index)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Backspace' || e.key === 'Delete') {
+                            e.preventDefault()
+                            removeChip(chip.stage)
+                            return
+                          }
+                          if (e.key === 'ArrowLeft') {
+                            e.preventDefault()
+                            if (index > 0) setFocusedChipIndex(index - 1)
+                            return
+                          }
+                          if (e.key === 'ArrowRight') {
+                            e.preventDefault()
+                            if (index < orderedChips.length - 1) setFocusedChipIndex(index + 1)
+                            else { setFocusedChipIndex(null); textareaRef.current?.focus() }
+                            return
+                          }
+                          if (e.key === 'Escape') {
+                            setFocusedChipIndex(null)
+                            textareaRef.current?.focus()
+                          }
+                        }}
+                        className={cn(
+                          'inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border shrink-0 transition-colors focus:outline-none font-mono',
+                          isFocused
+                            ? 'bg-red-50 text-red-700 border-red-300 ring-1 ring-red-300'
+                            : 'bg-primary/10 text-primary border-primary/20 hover:bg-primary/15'
+                        )}
                       >
-                        <X className="h-3 w-3" />
-                      </span>
-                    </button>
+                        <Icon className="h-3 w-3" />
+                        {chip.name}
+                        <span
+                          role="button"
+                          tabIndex={-1}
+                          onClick={(e) => { e.stopPropagation(); removeChip(chip.stage) }}
+                          className={cn('ml-0.5 -mr-0.5 rounded', isFocused ? 'hover:bg-red-100' : 'hover:bg-primary/20')}
+                          aria-label={`Remove ${STAGE_LABEL[chip.stage]} filter`}
+                        >
+                          <X className="h-3 w-3" />
+                        </span>
+                      </button>
+                    )
+                  }
+
+                  return (
+                    <Tooltip key={stage}>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          disabled={isGated}
+                          onClick={() => openPickerAtStage(stage)}
+                          aria-label={`Filter by ${STAGE_LABEL[stage]}`}
+                          className={cn(
+                            'inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border shrink-0 transition-colors focus:outline-none font-mono',
+                            isGated
+                              ? 'border-ki-outline-variant text-ki-outline-variant cursor-not-allowed opacity-50'
+                              : 'border-ki-outline text-ki-on-surface-variant bg-ki-surface-low hover:border-primary/40 hover:text-primary hover:bg-primary/10'
+                          )}
+                        >
+                          <Icon className="h-3 w-3" />
+                          {STAGE_LABEL[stage]}
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom">
+                        {isGated
+                          ? `Select ${STAGE_LABEL[stage === 'engagement' ? 'client' : 'engagement']} first`
+                          : `Filter by ${STAGE_LABEL[stage]}`}
+                      </TooltipContent>
+                    </Tooltip>
                   )
                 })}
-                <input
-                  ref={textareaRef}
-                  type="text"
-                  value={searchQuery}
-                  onFocus={() => setFocusedChipIndex(null)}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === '@' && !pickerOpen
-                      && (pickerData.clients.length > 0 || pickerData.engagements.length > 0 || pickerData.deliverables.length > 0)) {
-                      e.preventDefault()
-                      openPickerAtNextStage()
-                      return
-                    }
-                    const atStart = (e.currentTarget.selectionStart ?? 0) === 0 && (e.currentTarget.selectionEnd ?? 0) === 0
-                    if ((e.key === 'Backspace' || e.key === 'ArrowLeft') && atStart && chips.length > 0) {
-                      e.preventDefault()
-                      setFocusedChipIndex(chips.length - 1)
-                      return
-                    }
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      setDebouncedQuery(searchQuery)
-                    }
-                  }}
-                  placeholder={chips.length === 0 ? 'Search by filename or topic, e.g. SEO strategy documents' : 'Add more to your search...'}
-                  className="flex-1 min-w-[10rem] py-1 px-1 border-0 bg-transparent text-sm font-medium shadow-none focus:outline-none focus:ring-0"
-                  autoFocus
-                  aria-label="Document search"
-                />
               </div>
-              <div className="flex flex-col justify-center py-2 pl-1.5 pr-3 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearchQuery('')
-                    setChips([])
-                    setFocusedChipIndex(null)
-                    setPendingFileTypes([])
-                    closePicker()
-                  }}
-                  disabled={!searchQuery.trim() && chips.length === 0}
-                  className={cn(
-                    'p-1 rounded-full',
-                    (searchQuery.trim() || chips.length > 0) ? 'text-ki-on-surface-variant hover:bg-ki-surface-low' : 'text-ki-outline-variant'
-                  )}
-                  aria-label="Clear search"
-                >
-                  <X className="h-4 w-4" />
-                </button>
+
+              <div className="flex">
+                <div className="flex flex-col justify-center py-3 pl-4 pr-2 shrink-0">
+                  <Search className="h-4 w-4 text-primary" />
+                </div>
+                <div className="flex-1 min-w-0 flex items-center px-1 py-2.5">
+                  <input
+                    ref={textareaRef}
+                    type="text"
+                    value={searchQuery}
+                    onFocus={() => setFocusedChipIndex(null)}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === '@' && !pickerOpen
+                        && (pickerData.clients.length > 0 || pickerData.engagements.length > 0 || pickerData.deliverables.length > 0)) {
+                        e.preventDefault()
+                        openPickerAtNextStage()
+                        return
+                      }
+                      const atStart = (e.currentTarget.selectionStart ?? 0) === 0 && (e.currentTarget.selectionEnd ?? 0) === 0
+                      if ((e.key === 'Backspace' || e.key === 'ArrowLeft') && atStart && chips.length > 0) {
+                        e.preventDefault()
+                        setFocusedChipIndex(chips.length - 1)
+                        return
+                      }
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        setDebouncedQuery(searchQuery)
+                      }
+                    }}
+                    placeholder="Search by filename or topic, e.g. SEO strategy documents"
+                    className="flex-1 min-w-[10rem] py-1 px-1 border-0 bg-transparent text-sm font-medium shadow-none focus:outline-none focus:ring-0"
+                    autoFocus
+                    aria-label="Document search"
+                  />
+                </div>
+                <div className="flex flex-col justify-center py-2 pl-1.5 pr-3 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery('')
+                      setChips([])
+                      setFocusedChipIndex(null)
+                      setPendingFileTypes([])
+                      closePicker()
+                    }}
+                    disabled={!searchQuery.trim() && chips.length === 0}
+                    className={cn(
+                      'p-1 rounded-full',
+                      (searchQuery.trim() || chips.length > 0) ? 'text-ki-on-surface-variant hover:bg-ki-surface-low' : 'text-ki-outline-variant'
+                    )}
+                    aria-label="Clear search"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
             </div>
 
