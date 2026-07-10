@@ -28,6 +28,10 @@ unset GH_TOKEN && gh pr create --repo firma-one/firm-bz --title "..." --body "..
 
 `GH_TOKEN` env var may be set but invalid — unsetting it falls back to the valid keyring token (`deepaksshettigar`). **Never create a PR without explicit user instruction.**
 
+**Don't cut a PR mid-feature.** Only open/merge a PR once the current round of changes for a feature is actually done — not at an arbitrary checkpoint while a file is still being actively edited in the same session. A PR opened mid-edit can snapshot a partial state, silently leaving later changes unshipped (this happened with PR #73: a ~22-hour, single-commit squash titled "extractive snippet summaries" was cut mid-session and missed the second half of a Doc Search UI overhaul that kept going in the same conversation).
+
+**Verify before/after merging a PR to main**: run `git diff --stat origin/main origin/dev` (after fetching) — if it's non-empty right after a "ship it" PR, something didn't make the cut. This is the cheapest way to catch a partial-snapshot PR before it causes a "why isn't this on Production" confusion later.
+
 ## Plans
 All plans must be created under `.claude/plans/` in the project root. Never save plans to `~/.claude/plans/` or any other location.
 
