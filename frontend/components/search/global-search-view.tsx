@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { Search, Folder, Sparkles, X, Building2, Briefcase, Package, Hash, FileText, ArrowUpRight, History, Trash2, Brush, CalendarClock } from 'lucide-react'
+import { Search, Folder, Sparkles, X, Building2, Briefcase, Package, Hash, FileText, ArrowUpRight, History, BrushCleaning, CalendarClock } from 'lucide-react'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { UserAvatarWithTooltip } from '@/components/ui/user-avatar-with-tooltip'
 import { formatRelativeTime, formatDateTimeWithTZ, cn } from '@/lib/utils'
@@ -257,8 +257,15 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
   // across an overflow boundary. Position is computed from the composer's viewport rect and kept
   // in sync while the picker is open.
   const [pickerPosition, setPickerPosition] = useState<{ top: number; left: number; width: number } | null>(null)
+  // Set right after selectChip/commitFileTypes commits a chip, to auto-advance into the next
+  // eligible stage once `chips` state has actually updated — openPickerAtNextStage reads
+  // clientChip/engagementChip/etc. derived from `chips`, which are still stale immediately after
+  // setChips (React batches the update), so the advance is deferred to an effect keyed off chips
+  // itself rather than called synchronously right after setChips.
+  const autoAdvanceRequested = useRef(false)
   const composerRef = useRef<HTMLDivElement>(null)
   const pickerRef = useRef<HTMLDivElement>(null)
+  const pickerInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLInputElement>(null)
   const chipRefs = useRef<Array<HTMLButtonElement | null>>([])
 
@@ -334,17 +341,31 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
     ? stageOptions.filter((o) => o.name.toLowerCase().includes(pickerQuery.trim().toLowerCase()))
     : stageOptions
 
+  // Closing the picker (whether via Escape, click-outside, or auto-advance finding nothing left
+  // to pick) always hands focus back to the main search input — this is the one place where the
+  // @ session is genuinely "done."
   const closePicker = useCallback(() => {
     setPickerOpen(false)
     setPickerQuery('')
+    textareaRef.current?.focus()
   }, [])
 
-  // "@" opens the staged picker at whichever stage isn't filled yet, same trigger mechanism
-  // as the Comments mention picker: consume the keypress, never insert "@" into the text.
-  // Client/Engagement/Deliverable are hierarchical (each narrows the next), but Time has no
-  // dependency on them — pressing "@" again while the picker is already open cycles forward
-  // through the remaining unfilled stages (wrapping to Time even if Client/Engagement/
-  // Deliverable are still unset), so Time is always reachable without completing the others.
+  // "@" opens the staged picker at whichever stage is next eligible, same trigger mechanism as
+  // the Comments mention picker: consume the keypress, never insert "@" into the text.
+  // Client/Engagement/Deliverable are hierarchical (each narrows the next) — Engagement is only
+  // eligible once Client is set, Deliverable only once Engagement is set, so an empty Client
+  // means Engagement/Deliverable are skipped over entirely, not just optionally offered. Time and
+  // Type have no such dependency and are always eligible. Selecting a chip (selectChip/
+  // commitFileTypes) calls this again afterward to auto-advance into the next eligible stage
+  // within the same @ session; Tab still skips the current stage without selecting.
+  //
+  // Linear scan only, NEVER wraps around — a single @ session walks forward through
+  // ['client','engagement','deliverable','dateRange','type'] exactly once and stops for good once
+  // it falls off the end, even if an earlier stage (e.g. Engagement, skipped via Tab) is still
+  // unfilled. Auto-chaining back to a skipped stage without the user asking again would silently
+  // reopen a picker they'd already moved past. A skipped stage only becomes reachable again via an
+  // explicit fresh "@" press once the picker is fully closed — which naturally restarts this same
+  // scan from index 0, since `pickerOpen` is false at that point.
   const openPickerAtNextStage = useCallback(() => {
     const order: FilterStage[] = ['client', 'engagement', 'deliverable', 'dateRange', 'type']
     const isFilled: Record<FilterStage, boolean> = {
@@ -354,14 +375,19 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
       dateRange: !!dateRangeChip,
       type: !!typeChip,
     }
+    const isEligible = (stage: FilterStage): boolean => {
+      if (isFilled[stage]) return false
+      if (stage === 'engagement') return !!clientChip
+      if (stage === 'deliverable') return !!engagementChip
+      return true
+    }
     const startIndex = pickerOpen ? order.indexOf(pickerStage) + 1 : 0
     let nextStage: FilterStage | null = null
-    for (let i = 0; i < order.length; i++) {
-      const candidate = order[(startIndex + i) % order.length]
-      if (!isFilled[candidate]) { nextStage = candidate; break }
+    for (let i = startIndex; i < order.length; i++) {
+      if (isEligible(order[i])) { nextStage = order[i]; break }
     }
     if (!nextStage) {
-      // Every stage is already filled — nothing left to pick, just close if open.
+      // Fell off the end of this pass — stop for good, don't wrap back to a skipped stage.
       if (pickerOpen) closePicker()
       return
     }
@@ -386,11 +412,40 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
         : pickerStage === 'engagement'
           ? withoutStage.filter((c) => c.stage !== 'deliverable')
           : withoutStage
-      return [...cleared, { stage: pickerStage, id: entity.id, name: entity.name }]
+
+      // Backfill upstream chips the user skipped past — e.g. picking an Engagement directly
+      // (via Tab-skip past Client, or the @-cycle jumping ahead) should still show its owning
+      // Client as a chip, since every Engagement/Deliverable belongs to exactly one Client/
+      // Engagement. Only fills in a stage that's genuinely missing; never overrides an existing
+      // explicit selection.
+      const backfilled: SelectedChip[] = []
+      if (pickerStage === 'engagement' && entity.clientId && !cleared.some((c) => c.stage === 'client')) {
+        const client = pickerData.clients.find((c) => c.id === entity.clientId)
+        if (client) backfilled.push({ stage: 'client', id: client.id, name: client.name })
+      }
+      if (pickerStage === 'deliverable' && entity.engagementId) {
+        if (!cleared.some((c) => c.stage === 'engagement')) {
+          const engagement = pickerData.engagements.find((e) => e.id === entity.engagementId)
+          if (engagement) backfilled.push({ stage: 'engagement', id: engagement.id, name: engagement.name })
+          if (engagement?.clientId && !cleared.some((c) => c.stage === 'client')) {
+            const client = pickerData.clients.find((c) => c.id === engagement.clientId)
+            if (client) backfilled.push({ stage: 'client', id: client.id, name: client.name })
+          }
+        } else if (entity.clientId && !cleared.some((c) => c.stage === 'client')) {
+          const client = pickerData.clients.find((c) => c.id === entity.clientId)
+          if (client) backfilled.push({ stage: 'client', id: client.id, name: client.name })
+        }
+      }
+
+      return [...cleared, ...backfilled, { stage: pickerStage, id: entity.id, name: entity.name }]
     })
-    closePicker()
-    textareaRef.current?.focus()
-  }, [pickerStage, closePicker])
+    // Auto-advance into the next eligible stage within the same @ session, deferred to the
+    // chips-effect below since `chips` state hasn't updated yet at this point in the callback.
+    // Focus is handled by openPickerAtNextStage/closePicker depending on the outcome — not here,
+    // since focusing the textarea unconditionally would steal focus away from the picker input
+    // when there's another stage to advance into.
+    autoAdvanceRequested.current = true
+  }, [pickerStage, pickerData])
 
   // Type is multi-select: Space toggles a category into pendingFileTypes without closing the
   // picker; "any" is exclusive with every other category (selecting it clears the rest, and
@@ -405,15 +460,19 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
     })
   }, [])
 
-  const commitFileTypes = useCallback(() => {
+  // advanceAfter: true for an explicit confirm (Enter, Apply click) — auto-advances into the next
+  // eligible stage within the same @ session, same as selectChip. False for click-outside (just
+  // close, don't pop open a new dropdown) and Tab-skip (which already advances separately itself,
+  // so committing here must not also advance or the picker would skip two stages at once).
+  const commitFileTypes = useCallback((advanceAfter: boolean) => {
     setChips((prev) => {
       const withoutType = prev.filter((c) => c.stage !== 'type')
       if (pendingFileTypes.length === 0) return withoutType
       const name = pendingFileTypes.map((t) => FILE_TYPE_LABEL[t]).join(', ')
       return [...withoutType, { stage: 'type', id: pendingFileTypes.join(','), name }]
     })
-    closePicker()
-    textareaRef.current?.focus()
+    if (advanceAfter) autoAdvanceRequested.current = true
+    else closePicker()
   }, [pendingFileTypes, closePicker])
 
   const removeChip = useCallback((stage: FilterStage) => {
@@ -436,11 +495,33 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
     }
   }, [focusedChipIndex, chips.length])
 
+  // Focus the picker's own filter input whenever it opens or advances to a new stage. The input's
+  // `autoFocus` prop only fires on its first real DOM mount — when auto-advance changes
+  // pickerStage while the picker stays open (same JSX position, so React reuses the existing
+  // input node instead of remounting it), autoFocus never re-fires, so focus would otherwise be
+  // left wherever it last was (e.g. stolen back to the main search box), stranding keyboard users.
+  useEffect(() => {
+    if (pickerOpen) pickerInputRef.current?.focus()
+  }, [pickerOpen, pickerStage])
+
+  // Deferred auto-advance: selectChip/commitFileTypes set autoAdvanceRequested and commit a chip,
+  // then this effect (which only re-runs once `chips` has actually updated) opens the next
+  // eligible stage — openPickerAtNextStage reads clientChip/engagementChip/etc. derived from the
+  // now-current `chips`, so eligibility (e.g. Engagement only after Client is set) reflects the
+  // selection that was just made, not stale pre-update state.
+  useEffect(() => {
+    if (autoAdvanceRequested.current) {
+      autoAdvanceRequested.current = false
+      openPickerAtNextStage()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chips])
+
   useEffect(() => {
     const onClickOutside = (e: MouseEvent) => {
       if (pickerRef.current && !pickerRef.current.contains(e.target as Node)
         && composerRef.current && !composerRef.current.contains(e.target as Node)) {
-        if (pickerStage === 'type') commitFileTypes()
+        if (pickerStage === 'type') commitFileTypes(false)
         else closePicker()
       }
     }
@@ -691,7 +772,13 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
               <div className="flex flex-col justify-center py-2 pl-1.5 pr-3 shrink-0">
                 <button
                   type="button"
-                  onClick={() => { setSearchQuery(''); setChips([]); setFocusedChipIndex(null) }}
+                  onClick={() => {
+                    setSearchQuery('')
+                    setChips([])
+                    setFocusedChipIndex(null)
+                    setPendingFileTypes([])
+                    closePicker()
+                  }}
                   disabled={!searchQuery.trim() && chips.length === 0}
                   className={cn(
                     'p-1 rounded-full',
@@ -714,6 +801,7 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                   {STAGE_LABEL[pickerStage]}
                 </div>
                 <input
+                  ref={pickerInputRef}
                   autoFocus
                   value={pickerQuery}
                   onChange={(e) => { setPickerQuery(e.target.value); setPickerFocusedIndex(0) }}
@@ -721,7 +809,6 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                     if (e.key === 'Escape') {
                       closePicker()
                       e.stopPropagation()
-                      textareaRef.current?.focus()
                       return
                     }
                     if (e.key === '@') {
@@ -744,22 +831,18 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                     } else if (e.key === 'Enter') {
                       e.preventDefault()
                       if (pickerStage === 'type') {
-                        commitFileTypes()
+                        commitFileTypes(true)
                       } else if (filteredOptions[pickerFocusedIndex]) {
                         selectChip(filteredOptions[pickerFocusedIndex])
                       }
                     } else if (e.key === 'Tab') {
-                      // Skip this stage without selecting, advance to the next one.
+                      // Skip this stage without selecting, advance to the next eligible one
+                      // (Engagement/Deliverable are only eligible once their parent is set).
                       e.preventDefault()
-                      if (pickerStage === 'type' && pendingFileTypes.length > 0) commitFileTypes()
-                      const order: FilterStage[] = ['client', 'engagement', 'deliverable', 'dateRange', 'type']
-                      const nextIndex = order.indexOf(pickerStage) + 1
-                      if (nextIndex < order.length) {
-                        setPickerStage(order[nextIndex])
-                        setPickerQuery('')
-                        setPickerFocusedIndex(0)
+                      if (pickerStage === 'type' && pendingFileTypes.length > 0) {
+                        commitFileTypes(true)
                       } else {
-                        closePicker()
+                        openPickerAtNextStage()
                       }
                     }
                   }}
@@ -803,19 +886,24 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                     {pickerStage === 'type' ? (
                       <span><kbd className="px-1 py-0.5 rounded border border-ki-outline bg-ki-surface-low">Space</kbd> Toggle</span>
                     ) : (
-                      <>
-                        <span><kbd className="px-1 py-0.5 rounded border border-ki-outline bg-ki-surface-low">Enter</kbd> Select</span>
-                        <span><kbd className="px-1 py-0.5 rounded border border-ki-outline bg-ki-surface-low">Tab</kbd> Skip</span>
-                      </>
+                      <span><kbd className="px-1 py-0.5 rounded border border-ki-outline bg-ki-surface-low">Enter</kbd> Select</span>
                     )}
                   </div>
-                  {pickerStage === 'type' && (
+                  {pickerStage === 'type' ? (
                     <button
                       type="button"
-                      onClick={commitFileTypes}
+                      onClick={() => commitFileTypes(true)}
                       className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-primary/10 text-primary font-bold hover:bg-primary/20 transition-colors"
                     >
                       <kbd className="px-1 py-0.5 rounded border border-primary/30 bg-ki-surface">Enter</kbd> Apply
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={openPickerAtNextStage}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-ki-on-surface-variant hover:bg-ki-surface-low hover:text-ki-on-surface font-bold transition-colors"
+                    >
+                      <kbd className="px-1 py-0.5 rounded border border-ki-outline bg-ki-surface-low">Tab</kbd> Skip
                     </button>
                   )}
                 </div>
@@ -975,18 +1063,23 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
       </div>
 
       {historyOpen && (
-        <aside className="w-80 shrink-0 border border-ki-outline bg-ki-surface flex flex-col min-h-0 my-4 mr-4 rounded-md overflow-hidden">
+        <aside className="w-80 shrink-0 border border-ki-outline bg-ki-surface flex flex-col min-h-0 mb-4 mr-4 rounded-md overflow-hidden">
           <div className="shrink-0 px-4 py-3 border-b border-ki-outline flex items-center justify-between">
             <p className="text-[10px] font-mono font-bold uppercase tracking-widest text-ki-on-surface">Search History</p>
             {searchHistory.length > 0 && (
-              <button
-                type="button"
-                onClick={clearAllHistory}
-                className="inline-flex items-center gap-1 text-[10px] font-mono text-ki-on-surface-variant hover:text-primary transition-colors"
-              >
-                <Brush className="h-3 w-3" />
-                Clear all
-              </button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={clearAllHistory}
+                    className="p-1 rounded text-ki-on-surface-variant hover:text-primary hover:bg-ki-surface-low transition-colors"
+                    aria-label="Clear all search history"
+                  >
+                    <BrushCleaning className="h-3.5 w-3.5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="left">Clear all history</TooltipContent>
+              </Tooltip>
             )}
           </div>
           <div className="flex-1 min-h-0 overflow-y-auto">
@@ -1037,14 +1130,19 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                             )}
                           </div>
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => deleteHistoryEntry(entry.id)}
-                          className="absolute top-3 right-3 p-1 rounded text-ki-on-surface-variant opacity-0 group-hover:opacity-100 hover:bg-ki-surface hover:text-error transition-all"
-                          aria-label="Remove from history"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              onClick={() => deleteHistoryEntry(entry.id)}
+                              className="absolute top-3 right-3 p-1 rounded text-ki-on-surface-variant opacity-0 group-hover:opacity-100 hover:bg-ki-surface hover:text-error transition-all"
+                              aria-label="Clear from history"
+                            >
+                              <BrushCleaning className="h-3 w-3" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="left">Clear from history</TooltipContent>
+                        </Tooltip>
                       </div>
                     </li>
                   )
