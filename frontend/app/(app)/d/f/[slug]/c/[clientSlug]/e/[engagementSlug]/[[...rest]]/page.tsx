@@ -88,7 +88,7 @@ export default async function EngagementPage({ params }: PageProps) {
   const isFirmAdmin = await canManageOrganization(org.id)
   const enableBetaFeatures = (org.settings as Record<string, unknown> | null)?.enableBetaFeatures === true
 
-  const defaultTab = canViewInternalTabs ? 'analytics' : 'files'
+  const defaultTab = 'analytics'
   const pathSegments = parseRest(rest, defaultTab)
 
   const basePath = `/d/f/${slug}/c/${clientSlug}/e/${engagementSlug}`
@@ -99,7 +99,7 @@ export default async function EngagementPage({ params }: PageProps) {
   if (pathSegments.tab === 'audit' && !canManage) {
     redirect(`${basePath}/files`)
   }
-  if (['members', 'analytics', 'sources'].includes(pathSegments.tab) && !canViewInternalTabs) {
+  if (['members', 'sources'].includes(pathSegments.tab) && !canViewInternalTabs) {
     redirect(`${basePath}/files`)
   }
   if (pathSegments.tab === 'wiki' && (!enableBetaFeatures || !canViewInternalTabs)) {

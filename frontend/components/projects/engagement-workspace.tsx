@@ -329,8 +329,7 @@ export function EngagementWorkspace({
                             >
                                 <BarChart3 className="w-4 h-4 mr-2" />
                                 Overview
-                                {!isExternalPersona && <span title="Internal only"><Lock className="w-2.5 h-2.5 ml-1 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>}
-                                {pendingTab === 'analytics' && <span className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden"><span className="absolute inset-y-0 w-1/2 bg-brand-accent animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full" /></span>}
+                                                {pendingTab === 'analytics' && <span className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden"><span className="absolute inset-y-0 w-1/2 bg-brand-accent animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full" /></span>}
                             </TabsTrigger>
                             <TabsTrigger
                                 value="files"

@@ -1289,12 +1289,13 @@ function ACSectionV2({ title, icon: Icon, items, engagementBase, headerAction }:
     )
 }
 
-function EngagementActionCenterV2({ data, loading, engagementBase, setRefreshTick }: {
+function EngagementActionCenterV2({ data, loading, engagementBase, setRefreshTick, deliveryActionsOnly = false }: {
     data: EngagementInsightsResponse | null
     loading: boolean
     engagementBase: string
     projectId: string
     setRefreshTick: React.Dispatch<React.SetStateAction<number>>
+    deliveryActionsOnly?: boolean
 }) {
     const [drilldown, setDrilldown] = useState<'duplicates' | null>(null)
 
@@ -1401,7 +1402,9 @@ function EngagementActionCenterV2({ data, loading, engagementBase, setRefreshTic
                 ) : (
                     <div className="flex flex-col gap-4">
                         <ACSectionV2 title="Delivery Actions" icon={Package} items={delivery} engagementBase={engagementBase} />
-                        <ACSectionV2 title="Housekeeping" icon={Archive} items={housekeeping} engagementBase={engagementBase} />
+                        {!deliveryActionsOnly && (
+                            <ACSectionV2 title="Housekeeping" icon={Archive} items={housekeeping} engagementBase={engagementBase} />
+                        )}
                     </div>
                 )}
             </div>
@@ -2406,15 +2409,18 @@ export function EngagementInsightsDashboard({
         ? deltaColor(data.engagementDaysUntilDue)
         : ''
 
-    // External roles (EC/EV): only the deliverables analytics — no internal cards.
+    // External roles (EC/EV): Engagement Insights section + Action Center with Delivery Actions only.
     if (isExternalPersona) {
+        const inFlightIds = new Set((data?.deliverables ?? []).filter((d) => d.stage !== 'approved').map((d) => d.id))
+        const inFlightWithRework = (data?.revisionMetrics ?? []).filter((r) => inFlightIds.has(r.documentId) && r.revisions > 0).length
         return (
             <TooltipProvider delayDuration={150}>
-            <div className="pb-6">
-                <div className="bg-white border border-[#e5e7eb] rounded flex flex-col shadow-md overflow-hidden">
-                    <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 22rem', gap: '1.5rem', paddingBottom: '1.5rem', alignItems: 'stretch' }}>
+                {/* Left: Engagement Insights */}
+                <div className="bg-white border border-[#e5e7eb] rounded p-6 flex flex-col gap-6 shadow-md">
+                    <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                            <h2 className="text-lg font-bold text-gray-900">Deliverables</h2>
+                            <h2 className="text-lg font-bold text-gray-900">Engagement Insights</h2>
                             {dueLabel && (
                                 <span className={`text-[11px] font-medium px-2.5 py-0.5 rounded-full border ${dueBadgeColor}`}>Due: {dueLabel}</span>
                             )}
@@ -2424,11 +2430,15 @@ export function EngagementInsightsDashboard({
                         </button>
                     </div>
                     {loading ? (
-                        <div className="h-48 m-6 rounded-2xl bg-gray-100 animate-pulse" />
-                    ) : (
-                        <EngagementHealthBody deliverables={data?.deliverables ?? []} engagementCreatedAt={data?.engagementCreatedAt ?? null} kickoffDate={data?.kickoffDate ?? null} engagementDueDate={data?.engagementDueDate ?? null} />
-                    )}
+                        <div className="h-48 rounded-2xl bg-gray-100 animate-pulse" />
+                    ) : data ? (
+                        <InsightCard title="Engagement Health" icon={Heart} theme="red" subtext="Delivery status and schedule">
+                            <EngagementHealthBody deliverables={data.deliverables ?? []} engagementCreatedAt={data.engagementCreatedAt ?? null} kickoffDate={data.kickoffDate ?? null} engagementDueDate={data.engagementDueDate ?? null} inFlightWithRework={inFlightWithRework} />
+                        </InsightCard>
+                    ) : null}
                 </div>
+                {/* Right: Action Center — Delivery Actions only */}
+                <EngagementActionCenterV2 data={data} loading={loading} engagementBase={engagementBase} projectId={projectId} setRefreshTick={setRefreshTick} deliveryActionsOnly />
             </div>
             </TooltipProvider>
         )
