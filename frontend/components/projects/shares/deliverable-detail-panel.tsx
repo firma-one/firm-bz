@@ -108,10 +108,10 @@ const STAGE_ICON: Record<ActivityStatus, React.ReactNode> = {
 }
 
 const STAGE_COLOR: Record<ActivityStatus, string> = {
-  to_do: 'bg-[#f3f4f6] text-[#45474c]',
-  in_progress: 'bg-[#eff2ff] text-[#5A78FF]',
-  in_review: 'bg-[#fff7ed] text-[#c2410c]',
-  approved: 'bg-primary/10 text-primary',
+  to_do: 'bg-[#f3b52f] text-white',
+  in_progress: 'bg-[#3b5bfd] text-white',
+  in_review: 'bg-[#7c3aed] text-white',
+  approved: 'bg-primary text-white',
 }
 
 
@@ -264,6 +264,16 @@ function SubtaskRow({
             <ChevronDown className={cn('h-3 w-3 transition-transform duration-300 ease-in-out', expanded && 'rotate-180')} />
           </button>
         )}
+        <TooltipProvider delayDuration={300}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className={cn('flex items-center justify-center h-5 w-5 rounded shrink-0', STAGE_COLOR[status])}>
+                {STAGE_ICON_SMALL[status]}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs">{STAGE_LABELS[status]}</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
         <div className="shrink-0">
           <DocumentActionMenu
             document={docForMenu}
@@ -326,9 +336,12 @@ function SubtaskRow({
                   <button
                     type="button"
                     disabled={saving || disabled}
-                    className="w-40 flex items-center gap-1.5 h-9 px-2 rounded border border-[#e5e7eb] bg-white text-[10px] font-bold font-mono uppercase tracking-widest text-[#45474c] hover:bg-[#f9f9fb] transition-colors data-[state=open]:bg-[#f9f9fb] disabled:opacity-50 disabled:cursor-not-allowed"
+                    className={cn(
+                      'w-40 flex items-center gap-1.5 h-9 px-2 rounded border border-[#e5e7eb] bg-white text-[10px] font-bold font-mono uppercase tracking-widest text-[#45474c] hover:bg-[#f9f9fb] transition-colors data-[state=open]:bg-[#f9f9fb] disabled:opacity-50 disabled:cursor-not-allowed',
+                      disabled && 'pointer-events-none'
+                    )}
                   >
-                    <span className={cn('flex items-center justify-center h-4 w-4 rounded shrink-0', STAGE_COLOR[status])}>
+                    <span className={cn('flex items-center justify-center h-5 w-5 rounded shrink-0', STAGE_COLOR[status])}>
                       {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : STAGE_ICON_SMALL[status]}
                     </span>
                     <span className="flex-1 text-left">{STAGE_LABELS[status]}</span>
@@ -376,7 +389,7 @@ function SubtaskRow({
                           disabled={isDeliverableApproved}
                           className={cn(
                             'flex-1 min-w-0 flex items-center gap-1.5 h-9 px-2 text-[10px] transition-colors bg-white text-[#45474c] hover:bg-[#f9f9fb]',
-                            isDeliverableApproved && 'opacity-50 cursor-not-allowed'
+                            isDeliverableApproved && 'opacity-50 cursor-not-allowed pointer-events-none'
                           )}
                         >
                           {savingAssignee ? (
@@ -743,7 +756,7 @@ export function DeliverableDetailPanel({
               {movingStatus ? (
                 <Loader2 className="h-3 w-3 animate-spin shrink-0" />
               ) : (
-                <span className={cn('flex items-center justify-center h-4 w-4 rounded shrink-0', STAGE_COLOR[status])}>
+                <span className={cn('flex items-center justify-center h-5 w-5 rounded shrink-0', STAGE_COLOR[status])}>
                   {STAGE_ICON_SMALL[status]}
                 </span>
               )}
@@ -781,7 +794,7 @@ export function DeliverableDetailPanel({
         ) : (
           <>
             <span className="inline-flex items-center gap-1.5 h-9 px-2 rounded border border-[#e5e7eb] bg-white text-[10px] font-bold font-mono uppercase tracking-widest text-[#45474c]">
-              <span className={cn('flex items-center justify-center h-4 w-4 rounded shrink-0', STAGE_COLOR[status])}>
+              <span className={cn('flex items-center justify-center h-5 w-5 rounded shrink-0', STAGE_COLOR[status])}>
                 {STAGE_ICON_SMALL[status]}
               </span>
               {STAGE_LABELS[status]}

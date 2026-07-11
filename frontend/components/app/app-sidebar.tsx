@@ -241,6 +241,9 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
   // Collapsed recents popover
   const [recentsPopoverOpen, setRecentsPopoverOpen] = useState(false)
 
+  // Resources section collapse
+  const [isResourcesOpen, setIsResourcesOpen] = useState(false)
+
   const [billingPlanState, setBillingPlanState] = useState<BillingCurrentPlanState | null>(null)
   const [billingPlanLoading, setBillingPlanLoading] = useState(false)
 
@@ -928,38 +931,51 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
 
                   <SeparatorLine />
 
-                  {/* RESOURCES */}
+                  {/* RESOURCES — expanded: inline accordion (collapsed by default); collapsed sidebar: icons navigate */}
                   <div className={isCollapsed ? 'w-full flex items-center gap-0.5' : 'pt-2'}>
                     {!isCollapsed && (
                       <>
-                        <h3 className={`d-sidebar-section flex items-center px-3 ${spaceTitle}`}>
+                        <button
+                          type="button"
+                          onClick={() => setIsResourcesOpen((v) => !v)}
+                          className={`d-sidebar-section w-full flex items-center px-3 ${spaceTitle} hover:opacity-80 transition-opacity`}
+                        >
                           <BookOpen className="h-3 w-3 shrink-0 mr-1.5 text-[#45474c]" />
-                          Resources
-                        </h3>
-                        <div className="ml-1 space-y-0.5">
-                          <Link
-                            href="/resources/faq"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className={`flex items-center transition-colors pl-2 pr-2 py-1.5 text-[0.8125rem] ${pathname?.startsWith('/resources/faq') ? 'bg-primary/10 border-l-2 border-brand-accent text-primary font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}
-                          >
-                            <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-1.5" />
-                            <HelpCircle className={`h-3.5 w-3.5 mr-2 shrink-0 ${pathname?.startsWith('/resources/faq') ? 'text-primary' : 'text-[#45474c]'}`} />
-                            <span className="flex-1">FAQs</span>
-                            <ArrowUpRight className="h-3 w-3 shrink-0 text-[#45474c]/40" />
-                          </Link>
-                          <button
-                            type="button"
-                            onClick={() => setIsWhatsNewOpen(true)}
-                            className="relative flex items-center w-full transition-colors pl-2 pr-2 py-1.5 text-[0.8125rem] text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]"
-                          >
-                            <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-1.5" />
-                            <Megaphone className="h-3.5 w-3.5 mr-2 shrink-0 text-[#45474c]" />
-                            <span className="flex-1 text-left">What&apos;s New</span>
-                            {hasUnread && (
-                              <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
-                            )}
-                          </button>
+                          <span className="flex-1 text-left">Resources</span>
+                          {hasUnread && (
+                            <span className="mr-1.5 w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
+                          )}
+                          <ChevronDown className={`h-3 w-3 shrink-0 text-[#9ca3af] transition-transform duration-200 ${isResourcesOpen ? 'rotate-180' : ''}`} />
+                        </button>
+
+                        <div className={`grid transition-all duration-200 ease-out ${isResourcesOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
+                          <div className="overflow-hidden">
+                            <div className="ml-1 space-y-0.5 pt-0.5">
+                              <Link
+                                href="/resources/faq"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className={`flex items-center transition-colors pl-2 pr-2 py-1.5 text-[0.8125rem] ${pathname?.startsWith('/resources/faq') ? 'bg-primary/10 border-l-2 border-brand-accent text-primary font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}
+                              >
+                                <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-1.5" />
+                                <HelpCircle className={`h-3.5 w-3.5 mr-2 shrink-0 ${pathname?.startsWith('/resources/faq') ? 'text-primary' : 'text-[#45474c]'}`} />
+                                <span className="flex-1">FAQs</span>
+                                <ArrowUpRight className="h-3 w-3 shrink-0 text-[#45474c]/40" />
+                              </Link>
+                              <button
+                                type="button"
+                                onClick={() => setIsWhatsNewOpen(true)}
+                                className="relative flex items-center w-full transition-colors pl-2 pr-2 py-1.5 text-[0.8125rem] text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]"
+                              >
+                                <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-1.5" />
+                                <Megaphone className="h-3.5 w-3.5 mr-2 shrink-0 text-[#45474c]" />
+                                <span className="flex-1 text-left">What&apos;s New</span>
+                                {hasUnread && (
+                                  <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
+                                )}
+                              </button>
+                            </div>
+                          </div>
                         </div>
                       </>
                     )}

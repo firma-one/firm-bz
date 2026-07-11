@@ -20,6 +20,7 @@ import { EngagementCommentsTab } from './engagement-comments-tab'
 import { EngagementWikiTab } from './wiki/engagement-wiki-tab'
 import type { LwCrmEngagementStatus } from '@/lib/actions/project'
 import { AddReminderPopover } from './add-reminder-popover'
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 
 export interface ProjectPathSegments {
     tab: string
@@ -208,32 +209,53 @@ export function EngagementWorkspace({
             <nav className="flex items-center gap-1.5 mb-4">
                 <Home className="h-4 w-4 text-[#45474c] opacity-60" />
                 <ChevronRight className="h-3.5 w-3.5 text-[#d1d5db]" />
-                <Building2 className="h-4 w-4 text-[#45474c] opacity-60" />
-                <Link
-                    href={`/d/f/${orgSlug}`}
-                    className="font-mono text-[11px] text-[#45474c] opacity-60 uppercase tracking-tighter hover:opacity-100 transition-opacity"
-                >
-                    {orgName || 'Organization'}
-                </Link>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Link
+                            href={`/d/f/${orgSlug}`}
+                            className="flex items-center gap-1.5 hover:opacity-100"
+                        >
+                            <Building2 className="h-4 w-4 text-[#45474c] opacity-60" />
+                            <span className="font-mono text-[11px] text-[#45474c] opacity-60 uppercase tracking-tighter transition-opacity">
+                                {orgName || 'Organization'}
+                            </span>
+                        </Link>
+                    </TooltipTrigger>
+                    <TooltipContent>Firm</TooltipContent>
+                </Tooltip>
                 {clientName && (
                     <>
                         <ChevronRight className="h-3.5 w-3.5 text-[#d1d5db]" />
-                        <Users className="h-4 w-4 text-[#45474c] opacity-60" />
-                        <Link
-                            href={`/d/f/${orgSlug}/c/${clientSlug}`}
-                            className="font-mono text-[11px] text-[#45474c] opacity-60 uppercase tracking-tighter hover:opacity-100 transition-opacity"
-                        >
-                            {clientName}
-                        </Link>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Link
+                                    href={`/d/f/${orgSlug}/c/${clientSlug}`}
+                                    className="flex items-center gap-1.5 hover:opacity-100"
+                                >
+                                    <Users className="h-4 w-4 text-[#45474c] opacity-60" />
+                                    <span className="font-mono text-[11px] text-[#45474c] opacity-60 uppercase tracking-tighter transition-opacity">
+                                        {clientName}
+                                    </span>
+                                </Link>
+                            </TooltipTrigger>
+                            <TooltipContent>Client</TooltipContent>
+                        </Tooltip>
                     </>
                 )}
                 {projectName && (
                     <>
                         <ChevronRight className="h-3.5 w-3.5 text-[#d1d5db]" />
-                        <Briefcase className="h-4 w-4 text-primary" />
-                        <span className="font-mono text-[11px] font-bold text-[#1b1b1d] uppercase tracking-tighter">
-                            {projectName}
-                        </span>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <span className="flex items-center gap-1.5">
+                                    <Briefcase className="h-4 w-4 text-primary" />
+                                    <span className="font-mono text-[11px] font-bold text-[#1b1b1d] uppercase tracking-tighter">
+                                        {projectName}
+                                    </span>
+                                </span>
+                            </TooltipTrigger>
+                            <TooltipContent>Engagement</TooltipContent>
+                        </Tooltip>
                     </>
                 )}
             </nav>
@@ -575,7 +597,10 @@ export function EngagementWorkspace({
                                 orgSlug={orgSlug}
                                 clientSlug={clientSlug}
                                 engagementSlug={engagementSlug}
-                                isExternalPersona={isExternalPersona}
+                                isFirmAdmin={isFirmAdmin}
+                                firmName={orgName}
+                                clientName={clientName}
+                                engagementName={projectName}
                             />
                         </ErrorBoundary>
                     </div>

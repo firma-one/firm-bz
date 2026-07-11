@@ -15,7 +15,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog'
-import { AlertTriangle, Bell, Building2, ChevronDown, Check, DollarSign, FileText, FlaskConical, Globe, HardDrive, ImageIcon, ImagePlus, Info, Linkedin, Lock, MapPin, MessagesSquare, Palette, RefreshCw, RotateCcw, Shield, Trash2, Type, User, Users2, X } from 'lucide-react'
+import { AlertTriangle, BarChart2, Bell, Building2, ChevronDown, Check, DollarSign, FileText, FlaskConical, Globe, HardDrive, ImageIcon, ImagePlus, Info, Linkedin, Lock, MapPin, MessagesSquare, Palette, RefreshCw, RotateCcw, Shield, Trash2, Type, User, Users2, X } from 'lucide-react'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip'
@@ -122,6 +122,10 @@ export function FirmSettingsForm({
     const [mentionEmailOnCreate, setMentionEmailOnCreate] = useState(true)
     const [allowDomainAccess, setAllowDomainAccess] = useState(false)
     const [allowedEmailDomain, setAllowedEmailDomain] = useState('')
+    // Which sections external members (Contributor / Reviewer) can see on Overview
+    const [extEngagementHealth, setExtEngagementHealth] = useState(true)
+    const [extFileOrganization, setExtFileOrganization] = useState(false)
+    const [extDocumentActivity, setExtDocumentActivity] = useState(false)
     const [saving, setSaving] = useState(false)
     const [mainDirty, setMainDirty] = useState(false)
     const [appDirty, setAppDirty] = useState(false)
@@ -202,6 +206,10 @@ export function FirmSettingsForm({
                     setRecurringFrequencyDays(rc.recurring?.frequencyDays ?? 1)
                     setStartDaysBeforeDue(rc.recurring?.startDaysBeforeDue ?? 7)
                     setMentionEmailOnCreate(rc.mentionEmailOnCreate ?? true)
+                    const es = (settings.externalSections as Record<string, boolean>) ?? {}
+                    setExtEngagementHealth(es.engagementHealth ?? true)
+                    setExtFileOrganization(es.fileOrganization ?? false)
+                    setExtDocumentActivity(es.documentActivity ?? false)
                     const savedDomainAccess = firm.allowDomainAccess === true
                     const savedDomain = firm.allowedEmailDomain ?? ''
                     if (!savedDomainAccess && !savedDomain) {
@@ -365,6 +373,11 @@ export function FirmSettingsForm({
                     },
                     mentionEmailOnCreate,
                 },
+                externalSections: {
+                    engagementHealth: extEngagementHealth,
+                    fileOrganization: extFileOrganization,
+                    documentActivity: extDocumentActivity,
+                },
             })
             setMainDirty(false); setAppDirty(false)
             addToast({ type: 'success', title: 'Saved', message: 'Firm details updated.' })
@@ -422,7 +435,7 @@ export function FirmSettingsForm({
     const appSave = (
         <div className="flex items-center gap-3 pt-2">
             <Button type="button" variant="greenCta" onClick={() => void handleSave({ skipNavigation: true })}
-                disabled={isSandboxFirm || saving || !loaded || !appDirty}
+                disabled={isSandboxFirm || saving || !loaded || (!appDirty && !mainDirty)}
                 className="rounded w-32 text-[10px] font-headline font-bold tracking-widest uppercase text-white">
                 {saving ? 'Saving…' : 'Save'}
             </Button>
@@ -655,143 +668,177 @@ export function FirmSettingsForm({
                 <div className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${openSection === 'appsettings' ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
                     <div className="overflow-hidden min-h-0">
                         <div className="p-5 border-t border-[#e5e7eb] bg-white">
-                            <div className="grid grid-cols-2 gap-4">
+                            {/* Row 1 + Row 2 laid out as two explicit column wrappers */}
+                            <div className="flex gap-4">
 
-                            {/* Domain Access */}
-                            <div className="bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
-                                <p className={fieldLabel}><span className="inline-flex items-center gap-1"><Shield className="h-3 w-3" /> Domain access</span></p>
-                                <div className="flex items-center justify-between gap-4">
-                                    <Label htmlFor="allow-domain" className="text-xs text-[#1b1b1d] cursor-pointer">
-                                        Enable access for <span className="font-semibold">{allowedEmailDomain || 'your domain'}</span>
-                                        <span className="block text-[#9a9ba0] font-normal mt-0.5">Users with this email domain can join without an invitation.</span>
-                                    </Label>
-                                    <Switch id="allow-domain" checked={allowDomainAccess} onCheckedChange={(v) => { setAllowDomainAccess(v); setAppDirty(true) }} disabled={isSandboxFirm || !loaded} />
-                                </div>
-                                {allowDomainAccess && (
-                                    <div>
-                                        <label htmlFor="allowed-email-domain" className={fieldLabel}>
-                                            <span className="inline-flex items-center gap-1"><Shield className="h-3 w-3" /> Email domain</span>
-                                        </label>
-                                        <Input id="allowed-email-domain" value={allowedEmailDomain} onChange={(e) => { setAllowedEmailDomain(e.target.value); setAppDirty(true) }} placeholder="e.g. acme.com" disabled={isSandboxFirm} className={`font-mono ${inputCls}`} />
-                                        {isPublicDomain && <p className="mt-1 text-[10px] text-amber-600">Public email domains (e.g. gmail.com) are not recommended for firm access.</p>}
-                                    </div>
-                                )}
-                            </div>
+                                {/* Col 1: Domain Access (row 1) + Email Reminders (row 2, grows to fill) */}
+                                <div className="flex flex-col gap-4 flex-1">
 
-                            {/* Regional */}
-                            <div className="bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
-                                <p className={fieldLabel}>Regional</p>
-                                <div>
-                                    <label className={fieldLabel}>
-                                        <span className="inline-flex items-center gap-1"><DollarSign className="h-3 w-3" /> Currency <span className="text-[#9a9ba0] normal-case tracking-normal font-sans font-normal">— optional</span></span>
-                                    </label>
-                                    <div className="relative w-full mt-1">
-                                        <DropdownMenu open={currencyOpen} onOpenChange={setCurrencyOpen}>
-                                            <DropdownMenuTrigger asChild disabled={isSandboxFirm}>
-                                                <button className="w-full h-9 flex items-center rounded border border-[#e5e7eb] bg-white px-3 pr-7 text-xs text-[#1b1b1d] disabled:cursor-not-allowed disabled:opacity-60 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary">
-                                                    <span className={`flex-1 text-left truncate ${currencyCode || (currencyIsCustom && currencyCustom) ? 'text-[#1b1b1d]' : 'text-[#9a9ba0]'}`}>
-                                                        {currencyCode ? WORLD_CURRENCIES.find((c) => c.code === currencyCode)?.label ?? currencyCode : currencyIsCustom && currencyCustom ? `Other: ${currencyCustom}` : 'Select…'}
-                                                    </span>
-                                                </button>
-                                            </DropdownMenuTrigger>
-                                            <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center">
-                                                {(currencyCode || (currencyIsCustom && currencyCustom)) && !isSandboxFirm ? (
-                                                    <button type="button" className="pointer-events-auto p-0.5 rounded text-[#9a9ba0] hover:text-[#1b1b1d] hover:bg-gray-100 transition-colors" onClick={(e) => { e.stopPropagation(); setCurrencyCode(''); setCurrencyIsCustom(false); setCurrencyCustom(''); setAppDirty(true) }} aria-label="Clear"><X className="h-3 w-3" /></button>
-                                                ) : (
-                                                    <ChevronDown className="h-3 w-3 text-[#45474c]" />
-                                                )}
+                                    {/* Row 1 */}
+                                    <div className="bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
+                                        <p className={fieldLabel}><span className="inline-flex items-center gap-1"><Shield className="h-3 w-3" /> Domain access</span></p>
+                                        <div className="flex items-center justify-between gap-4">
+                                            <Label htmlFor="allow-domain" className="text-xs text-[#1b1b1d] cursor-pointer">
+                                                Enable access for <span className="font-semibold">{allowedEmailDomain || 'your domain'}</span>
+                                                <span className="block text-[#9a9ba0] font-normal mt-0.5">Users with this email domain can join without an invitation.</span>
+                                            </Label>
+                                            <Switch id="allow-domain" checked={allowDomainAccess} onCheckedChange={(v) => { setAllowDomainAccess(v); setAppDirty(true) }} disabled={isSandboxFirm || !loaded} />
+                                        </div>
+                                        {allowDomainAccess && (
+                                            <div>
+                                                <label htmlFor="allowed-email-domain" className={fieldLabel}>
+                                                    <span className="inline-flex items-center gap-1"><Shield className="h-3 w-3" /> Email domain</span>
+                                                </label>
+                                                <Input id="allowed-email-domain" value={allowedEmailDomain} onChange={(e) => { setAllowedEmailDomain(e.target.value); setAppDirty(true) }} placeholder="e.g. acme.com" disabled={isSandboxFirm} className={`font-mono ${inputCls}`} />
+                                                {isPublicDomain && <p className="mt-1 text-[10px] text-amber-600">Public email domains (e.g. gmail.com) are not recommended for firm access.</p>}
                                             </div>
-                                            <DropdownMenuContent className="w-[var(--radix-dropdown-menu-trigger-width)] p-1 max-h-72 overflow-y-auto rounded" onCloseAutoFocus={(e) => e.preventDefault()}>
-                                                {(currencyCode || currencyIsCustom) && (<><DropdownMenuItem className="flex items-center gap-2 cursor-pointer text-sm rounded text-[#45474c] hover:text-red-600" onSelect={() => { setCurrencyCode(''); setCurrencyIsCustom(false); setCurrencyCustom(''); setCurrencyOpen(false); setAppDirty(true) }}><span className="text-[#9a9ba0]">×</span> Clear selection</DropdownMenuItem><DropdownMenuSeparator /></>)}
-                                                {WORLD_CURRENCIES.map((cur) => (
-                                                    <DropdownMenuItem key={cur.code} className="flex items-center justify-between cursor-pointer text-sm rounded" onSelect={() => { setCurrencyCode(cur.code); setCurrencyIsCustom(false); setCurrencyCustom(''); setCurrencyOpen(false); setAppDirty(true) }}>
-                                                        {cur.label}
-                                                        {currencyCode === cur.code && !currencyIsCustom && <Check className="h-4 w-4 text-primary shrink-0" />}
-                                                    </DropdownMenuItem>
-                                                ))}
-                                                <DropdownMenuSeparator />
-                                                <div className="px-2 py-1.5 flex items-center gap-2">
-                                                    <input value={currencyIsCustom ? currencyCustom : ''} onChange={(e) => { setCurrencyCustom(e.target.value); setCurrencyIsCustom(true); setCurrencyCode(''); setAppDirty(true) }} onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') setCurrencyOpen(false) }} onClick={(e) => e.stopPropagation()} placeholder="Other (enter symbol)…" className="flex-1 text-sm text-[#1b1b1d] placeholder:text-[#9a9ba0] outline-none bg-transparent" />
-                                                    {currencyIsCustom && currencyCustom && <Check className="h-4 w-4 text-primary shrink-0" />}
+                                        )}
+                                    </div>
+
+                                    {/* Row 2 — grows to match col 2 height */}
+                                    <div className="bg-white rounded border border-[#e5e7eb] p-4 space-y-3 flex-1">
+                                        <p className={`${fieldLabel} mb-1`}>Email Reminders</p>
+                                        <div className="flex items-center justify-between gap-4">
+                                            <div className="flex items-start gap-2.5">
+                                                <Bell className="h-4 w-4 text-[#45474c] mt-0.5 shrink-0" />
+                                                <div>
+                                                    <div className="text-sm font-semibold text-[#1b1b1d]">Immediate notification</div>
+                                                    <p className="text-xs text-[#45474c] mt-0.5">Send an email when a reminder is created.</p>
                                                 </div>
-                                            </DropdownMenuContent>
-                                        </DropdownMenu>
-                                    </div>
-                                    <p className="mt-1 text-xs text-[#9a9ba0]">Prefix on contract values.</p>
-                                </div>
-                            </div>
-
-                            {/* Email Reminders */}
-                            <div className="bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
-                                <p className={`${fieldLabel} mb-1`}>Email Reminders</p>
-                                <div className="flex items-center justify-between gap-4">
-                                    <div className="flex items-start gap-2.5">
-                                        <Bell className="h-4 w-4 text-[#45474c] mt-0.5 shrink-0" />
-                                        <div>
-                                            <div className="text-sm font-semibold text-[#1b1b1d]">Immediate notification</div>
-                                            <p className="text-xs text-[#45474c] mt-0.5">Send an email when a reminder is created.</p>
-                                        </div>
-                                    </div>
-                                    <Switch checked={immediateOnCreate} onCheckedChange={(v) => { setImmediateOnCreate(v); setAppDirty(true) }} disabled={isSandboxFirm || !loaded} aria-label="Immediate notification on create" />
-                                </div>
-                                <div className="flex items-center justify-between gap-4">
-                                    <div className="flex items-start gap-2.5">
-                                        <RefreshCw className="h-4 w-4 text-[#45474c] mt-0.5 shrink-0" />
-                                        <div>
-                                            <div className="text-sm font-semibold text-[#1b1b1d]">Recurring emails</div>
-                                            <p className="text-xs text-[#45474c] mt-0.5">Send repeat reminder emails until marked done.</p>
-                                        </div>
-                                    </div>
-                                    <Switch checked={recurringEnabled} onCheckedChange={(v) => { setRecurringEnabled(v); setAppDirty(true) }} disabled={isSandboxFirm || !loaded} aria-label="Recurring reminder emails" />
-                                </div>
-                                {recurringEnabled && (
-                                    <div className="pl-6 space-y-2 border-l-2 border-[#f0f0f2] ml-2">
-                                        <div>
-                                            <label className={fieldLabel}>Frequency (every N days)</label>
-                                            <Select value={String(recurringFrequencyDays)} onValueChange={(v) => { setRecurringFrequencyDays(Number(v)); setAppDirty(true) }} disabled={isSandboxFirm || !loaded}>
-                                                <SelectTrigger className={inputCls}><SelectValue /></SelectTrigger>
-                                                <SelectContent>{[1, 3, 7, 14].map((n) => <SelectItem key={n} value={String(n)}>{n === 1 ? 'Every day' : `Every ${n} days`}</SelectItem>)}</SelectContent>
-                                            </Select>
-                                        </div>
-                                        <div>
-                                            <label className={fieldLabel}>Start before due date</label>
-                                            <Select value={String(startDaysBeforeDue)} onValueChange={(v) => { setStartDaysBeforeDue(Number(v)); setAppDirty(true) }} disabled={isSandboxFirm || !loaded}>
-                                                <SelectTrigger className={inputCls}><SelectValue /></SelectTrigger>
-                                                <SelectContent>{[1, 3, 7, 14, 21, 30].map((n) => <SelectItem key={n} value={String(n)}>{n} {n === 1 ? 'day' : 'days'} before</SelectItem>)}</SelectContent>
-                                            </Select>
-                                        </div>
-                                    </div>
-                                )}
-                                <div className="flex items-center justify-between gap-4 pt-1 border-t border-[#f0f0f2]">
-                                    <div className="flex items-start gap-2.5">
-                                        <MessagesSquare className="h-4 w-4 text-[#45474c] mt-0.5 shrink-0" />
-                                        <div>
-                                            <div className="text-sm font-semibold text-[#1b1b1d]">Email on @mention</div>
-                                            <p className="text-xs text-[#45474c] mt-0.5">Send an email when a user is @mentioned in a comment.</p>
-                                        </div>
-                                    </div>
-                                    <Switch checked={mentionEmailOnCreate} onCheckedChange={(v) => { setMentionEmailOnCreate(v); setAppDirty(true) }} disabled={isSandboxFirm || !loaded} aria-label="Email on @mention" />
-                                </div>
-                            </div>
-
-                            {/* Beta features */}
-                            <div className="bg-white rounded border border-[#e5e7eb] p-4">
-                                <div className="flex items-center justify-between gap-4">
-                                    <div className="flex items-start gap-2.5">
-                                        <FlaskConical className="h-4 w-4 text-[#45474c] mt-0.5 shrink-0" />
-                                        <div>
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-sm font-semibold text-[#1b1b1d]">Beta features</span>
-                                                <span className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 leading-none">Beta</span>
                                             </div>
-                                            <p className="text-xs text-[#45474c] mt-0.5">Enables <strong>Dossier</strong> and <strong>Board</strong>. Internal personas only.</p>
+                                            <Switch checked={immediateOnCreate} onCheckedChange={(v) => { setImmediateOnCreate(v); setAppDirty(true) }} disabled={isSandboxFirm || !loaded} aria-label="Immediate notification on create" />
+                                        </div>
+                                        <div className="flex items-center justify-between gap-4">
+                                            <div className="flex items-start gap-2.5">
+                                                <RefreshCw className="h-4 w-4 text-[#45474c] mt-0.5 shrink-0" />
+                                                <div>
+                                                    <div className="text-sm font-semibold text-[#1b1b1d]">Recurring emails</div>
+                                                    <p className="text-xs text-[#45474c] mt-0.5">Send repeat reminder emails until marked done.</p>
+                                                </div>
+                                            </div>
+                                            <Switch checked={recurringEnabled} onCheckedChange={(v) => { setRecurringEnabled(v); setAppDirty(true) }} disabled={isSandboxFirm || !loaded} aria-label="Recurring reminder emails" />
+                                        </div>
+                                        {recurringEnabled && (
+                                            <div className="pl-6 space-y-2 border-l-2 border-[#f0f0f2] ml-2">
+                                                <div>
+                                                    <label className={fieldLabel}>Frequency (every N days)</label>
+                                                    <Select value={String(recurringFrequencyDays)} onValueChange={(v) => { setRecurringFrequencyDays(Number(v)); setAppDirty(true) }} disabled={isSandboxFirm || !loaded}>
+                                                        <SelectTrigger className={inputCls}><SelectValue /></SelectTrigger>
+                                                        <SelectContent>{[1, 3, 7, 14].map((n) => <SelectItem key={n} value={String(n)}>{n === 1 ? 'Every day' : `Every ${n} days`}</SelectItem>)}</SelectContent>
+                                                    </Select>
+                                                </div>
+                                                <div>
+                                                    <label className={fieldLabel}>Start before due date</label>
+                                                    <Select value={String(startDaysBeforeDue)} onValueChange={(v) => { setStartDaysBeforeDue(Number(v)); setAppDirty(true) }} disabled={isSandboxFirm || !loaded}>
+                                                        <SelectTrigger className={inputCls}><SelectValue /></SelectTrigger>
+                                                        <SelectContent>{[1, 3, 7, 14, 21, 30].map((n) => <SelectItem key={n} value={String(n)}>{n} {n === 1 ? 'day' : 'days'} before</SelectItem>)}</SelectContent>
+                                                    </Select>
+                                                </div>
+                                            </div>
+                                        )}
+                                        <div className="flex items-center justify-between gap-4 pt-1 border-t border-[#f0f0f2]">
+                                            <div className="flex items-start gap-2.5">
+                                                <MessagesSquare className="h-4 w-4 text-[#45474c] mt-0.5 shrink-0" />
+                                                <div>
+                                                    <div className="text-sm font-semibold text-[#1b1b1d]">Email on @mention</div>
+                                                    <p className="text-xs text-[#45474c] mt-0.5">Send an email when a user is @mentioned in a comment.</p>
+                                                </div>
+                                            </div>
+                                            <Switch checked={mentionEmailOnCreate} onCheckedChange={(v) => { setMentionEmailOnCreate(v); setAppDirty(true) }} disabled={isSandboxFirm || !loaded} aria-label="Email on @mention" />
                                         </div>
                                     </div>
-                                    <Switch checked={enableBetaFeatures} onCheckedChange={(v) => { setEnableBetaFeatures(v); setAppDirty(true) }} disabled={isSandboxFirm || !loaded} aria-label="Enable beta features" />
-                                </div>
-                            </div>
 
-                            </div>{/* end grid */}
+                                </div>{/* end col 1 */}
+
+                                {/* Col 2: Regional (row 1) + Overview + Beta stacked (row 2) */}
+                                <div className="flex flex-col gap-4 flex-1">
+
+                                    {/* Row 1 */}
+                                    <div className="bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
+                                        <p className={fieldLabel}>Regional</p>
+                                        <div>
+                                            <label className={fieldLabel}>
+                                                <span className="inline-flex items-center gap-1"><DollarSign className="h-3 w-3" /> Currency <span className="text-[#9a9ba0] normal-case tracking-normal font-sans font-normal">— optional</span></span>
+                                            </label>
+                                            <div className="relative w-full mt-1">
+                                                <DropdownMenu open={currencyOpen} onOpenChange={setCurrencyOpen}>
+                                                    <DropdownMenuTrigger asChild disabled={isSandboxFirm}>
+                                                        <button className="w-full h-9 flex items-center rounded border border-[#e5e7eb] bg-white px-3 pr-7 text-xs text-[#1b1b1d] disabled:cursor-not-allowed disabled:opacity-60 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary">
+                                                            <span className={`flex-1 text-left truncate ${currencyCode || (currencyIsCustom && currencyCustom) ? 'text-[#1b1b1d]' : 'text-[#9a9ba0]'}`}>
+                                                                {currencyCode ? WORLD_CURRENCIES.find((c) => c.code === currencyCode)?.label ?? currencyCode : currencyIsCustom && currencyCustom ? `Other: ${currencyCustom}` : 'Select…'}
+                                                            </span>
+                                                        </button>
+                                                    </DropdownMenuTrigger>
+                                                    <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center">
+                                                        {(currencyCode || (currencyIsCustom && currencyCustom)) && !isSandboxFirm ? (
+                                                            <button type="button" className="pointer-events-auto p-0.5 rounded text-[#9a9ba0] hover:text-[#1b1b1d] hover:bg-gray-100 transition-colors" onClick={(e) => { e.stopPropagation(); setCurrencyCode(''); setCurrencyIsCustom(false); setCurrencyCustom(''); setAppDirty(true) }} aria-label="Clear"><X className="h-3 w-3" /></button>
+                                                        ) : (
+                                                            <ChevronDown className="h-3 w-3 text-[#45474c]" />
+                                                        )}
+                                                    </div>
+                                                    <DropdownMenuContent className="w-[var(--radix-dropdown-menu-trigger-width)] p-1 max-h-72 overflow-y-auto rounded" onCloseAutoFocus={(e) => e.preventDefault()}>
+                                                        {(currencyCode || currencyIsCustom) && (<><DropdownMenuItem className="flex items-center gap-2 cursor-pointer text-sm rounded text-[#45474c] hover:text-red-600" onSelect={() => { setCurrencyCode(''); setCurrencyIsCustom(false); setCurrencyCustom(''); setCurrencyOpen(false); setAppDirty(true) }}><span className="text-[#9a9ba0]">×</span> Clear selection</DropdownMenuItem><DropdownMenuSeparator /></>)}
+                                                        {WORLD_CURRENCIES.map((cur) => (
+                                                            <DropdownMenuItem key={cur.code} className="flex items-center justify-between cursor-pointer text-sm rounded" onSelect={() => { setCurrencyCode(cur.code); setCurrencyIsCustom(false); setCurrencyCustom(''); setCurrencyOpen(false); setAppDirty(true) }}>
+                                                                {cur.label}
+                                                                {currencyCode === cur.code && !currencyIsCustom && <Check className="h-4 w-4 text-primary shrink-0" />}
+                                                            </DropdownMenuItem>
+                                                        ))}
+                                                        <DropdownMenuSeparator />
+                                                        <div className="px-2 py-1.5 flex items-center gap-2">
+                                                            <input value={currencyIsCustom ? currencyCustom : ''} onChange={(e) => { setCurrencyCustom(e.target.value); setCurrencyIsCustom(true); setCurrencyCode(''); setAppDirty(true) }} onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') setCurrencyOpen(false) }} onClick={(e) => e.stopPropagation()} placeholder="Other (enter symbol)…" className="flex-1 text-sm text-[#1b1b1d] placeholder:text-[#9a9ba0] outline-none bg-transparent" />
+                                                            {currencyIsCustom && currencyCustom && <Check className="h-4 w-4 text-primary shrink-0" />}
+                                                        </div>
+                                                    </DropdownMenuContent>
+                                                </DropdownMenu>
+                                            </div>
+                                            <p className="mt-1 text-xs text-[#9a9ba0]">Prefix on contract values.</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Row 2: Overview + Beta stacked, grows to match col 1 */}
+                                    <div className="flex flex-col gap-4 flex-1">
+
+                                        {/* Overview visibility */}
+                                        <div className="bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
+                                            <p className={fieldLabel}><span className="inline-flex items-center gap-1"><BarChart2 className="h-3 w-3" /> Overview — Contributor &amp; Reviewer visibility</span></p>
+                                            <p className="text-[11px] text-[#9a9ba0]">Choose which sections external members see on the engagement Overview page. Internal members always see everything.</p>
+                                            <div className="flex flex-col gap-2.5">
+                                                {([
+                                                    { label: 'Engagement Health', value: extEngagementHealth, set: setExtEngagementHealth },
+                                                    { label: 'File Organization', value: extFileOrganization, set: setExtFileOrganization },
+                                                    { label: 'Document Activity', value: extDocumentActivity, set: setExtDocumentActivity },
+                                                ]).map(({ label, value, set }) => (
+                                                    <div key={label} className="flex items-center justify-between gap-4">
+                                                        <span className="text-xs text-[#1b1b1d]">{label}</span>
+                                                        <Switch checked={value} onCheckedChange={(v) => { set(v); setAppDirty(true) }} disabled={isSandboxFirm || !loaded} aria-label={label} />
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* Beta features */}
+                                        <div className="bg-white rounded border border-[#e5e7eb] p-4">
+                                            <div className="flex items-center justify-between gap-4">
+                                                <div className="flex items-start gap-2.5">
+                                                    <FlaskConical className="h-4 w-4 text-[#45474c] mt-0.5 shrink-0" />
+                                                    <div>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className={fieldLabel}>Beta features</span>
+                                                            <span className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 leading-none">Beta</span>
+                                                        </div>
+                                                        <p className="text-xs text-[#45474c] mt-0.5">Enables <strong>Engagement &gt; Dossier</strong>. Internal personas only.</p>
+                                                    </div>
+                                                </div>
+                                                <Switch checked={enableBetaFeatures} onCheckedChange={(v) => { setEnableBetaFeatures(v); setAppDirty(true) }} disabled={isSandboxFirm || !loaded} aria-label="Enable beta features" />
+                                            </div>
+                                        </div>
+
+                                    </div>{/* end row 2 col 2 */}
+
+                                </div>{/* end col 2 */}
+
+                            </div>{/* end flex row */}
                             {appSave}
                         </div>
                     </div>

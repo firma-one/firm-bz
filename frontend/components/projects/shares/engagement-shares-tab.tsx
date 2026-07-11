@@ -130,6 +130,74 @@ interface EngagementSharesTabProps {
   orgSlug?: string
 }
 
+/** Per-lane color theme: header pill, icon, count badge, progress bar, and card accents all derive from this. */
+const LANE_THEME: Record<ActivityStatus, {
+  headerBg: string
+  headerBorder: string
+  iconBg: string
+  iconColor: string
+  labelColor: string
+  countBg: string
+  countColor: string
+  progressColor: string
+  cardIconBg: string
+  cardIconColor: string
+  docIdColor: string
+}> = {
+  to_do: {
+    headerBg: 'bg-[#fdf3e0]',
+    headerBorder: 'border-[#f5e2b8]',
+    iconBg: 'bg-[#f3b52f]',
+    iconColor: 'text-white',
+    labelColor: 'text-[#9a6b12]',
+    countBg: 'bg-[#f9e6bd]',
+    countColor: 'text-[#9a6b12]',
+    progressColor: '#f3b52f',
+    cardIconBg: 'bg-[#fdf3e0]',
+    cardIconColor: 'text-[#c8891a]',
+    docIdColor: 'text-[#c8891a]',
+  },
+  in_progress: {
+    headerBg: 'bg-[#e7edff]',
+    headerBorder: 'border-[#c9d7ff]',
+    iconBg: 'bg-[#3b5bfd]',
+    iconColor: 'text-white',
+    labelColor: 'text-[#2a3fb0]',
+    countBg: 'bg-[#d3ddff]',
+    countColor: 'text-[#2a3fb0]',
+    progressColor: '#3b5bfd',
+    cardIconBg: 'bg-[#e7edff]',
+    cardIconColor: 'text-[#3b5bfd]',
+    docIdColor: 'text-[#3b5bfd]',
+  },
+  in_review: {
+    headerBg: 'bg-[#f1eaff]',
+    headerBorder: 'border-[#ddd0ff]',
+    iconBg: 'bg-[#7c3aed]',
+    iconColor: 'text-white',
+    labelColor: 'text-[#5b21b6]',
+    countBg: 'bg-[#e2d4ff]',
+    countColor: 'text-[#5b21b6]',
+    progressColor: '#7c3aed',
+    cardIconBg: 'bg-[#f1eaff]',
+    cardIconColor: 'text-[#7c3aed]',
+    docIdColor: 'text-[#7c3aed]',
+  },
+  approved: {
+    headerBg: 'bg-[#e2f6ea]',
+    headerBorder: 'border-[#bfe9d1]',
+    iconBg: 'bg-[#0d9f5f]',
+    iconColor: 'text-white',
+    labelColor: 'text-[#0d6b41]',
+    countBg: 'bg-[#c7ecd8]',
+    countColor: 'text-[#0d6b41]',
+    progressColor: '#0d9f5f',
+    cardIconBg: 'bg-[#e2f6ea]',
+    cardIconColor: 'text-[#0d9f5f]',
+    docIdColor: 'text-[#0d9f5f]',
+  },
+}
+
 const LANES: {
   status: ActivityStatus
   label: string
@@ -139,26 +207,26 @@ const LANES: {
     {
       status: 'to_do',
       label: 'To Do',
-      icon: <ListTodo className="h-3.5 w-3.5 text-[#45474c]" />,
-      iconBg: 'bg-[#f3f4f6]',
+      icon: <ListTodo className={cn('h-3.5 w-3.5', LANE_THEME.to_do.iconColor)} />,
+      iconBg: LANE_THEME.to_do.iconBg,
     },
     {
       status: 'in_progress',
       label: 'In Progress',
-      icon: <PenLine className="h-3.5 w-3.5 text-[#5A78FF]" />,
-      iconBg: 'bg-[#eff2ff]',
+      icon: <PenLine className={cn('h-3.5 w-3.5', LANE_THEME.in_progress.iconColor)} />,
+      iconBg: LANE_THEME.in_progress.iconBg,
     },
     {
       status: 'in_review',
       label: 'In Review',
-      icon: <Eye className="h-3.5 w-3.5 text-[#c2410c]" />,
-      iconBg: 'bg-[#fff7ed]',
+      icon: <Eye className={cn('h-3.5 w-3.5', LANE_THEME.in_review.iconColor)} />,
+      iconBg: LANE_THEME.in_review.iconBg,
     },
     {
       status: 'approved',
       label: 'Approved',
-      icon: <CheckCircle className="h-3.5 w-3.5 text-primary" />,
-      iconBg: 'bg-primary/10',
+      icon: <CheckCircle className={cn('h-3.5 w-3.5', LANE_THEME.approved.iconColor)} />,
+      iconBg: LANE_THEME.approved.iconBg,
     },
   ]
 
@@ -182,22 +250,22 @@ function DroppableLane({
   className,
 }: {
   id: string
-  children: React.ReactNode
+  children: React.ReactNode | ((isOver: boolean) => React.ReactNode)
   className?: string
 }) {
   const { setNodeRef, isOver } = useDroppable({ id })
   return (
     <div ref={setNodeRef} className={cn(className, isOver && 'bg-primary/5 rounded')}>
-      {children}
+      {typeof children === 'function' ? children(isOver) : children}
     </div>
   )
 }
 
 const CARD_ACCENT: Record<ActivityStatus, { iconPillBg: string }> = {
-  to_do: { iconPillBg: 'bg-[#f3f4f6]' },
-  in_progress: { iconPillBg: 'bg-[#eff2ff]' },
-  in_review: { iconPillBg: 'bg-[#fff7ed]' },
-  approved: { iconPillBg: 'bg-primary/10' },
+  to_do: { iconPillBg: LANE_THEME.to_do.cardIconBg },
+  in_progress: { iconPillBg: LANE_THEME.in_progress.cardIconBg },
+  in_review: { iconPillBg: LANE_THEME.in_review.cardIconBg },
+  approved: { iconPillBg: LANE_THEME.approved.cardIconBg },
 }
 
 function DraggableCard({
@@ -287,17 +355,19 @@ function DraggableCard({
       ref={(node) => { setNodeRef(node); setDropRef(node) }}
       layout
       initial={{ opacity: 0, scale: 0.98 }}
-      animate={{ opacity: 1, scale: 1 }}
+      animate={{ opacity: isDragging ? 0 : 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.98 }}
-      transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+      transition={{
+        scale: { type: 'spring', stiffness: 400, damping: 30 },
+        opacity: { duration: isDragging ? 0.28 : 0.18, ease: 'easeOut' },
+      }}
       whileHover={!isDragging && !isSaving ? { y: -2, boxShadow: '0 4px 12px -2px rgba(0,0,0,0.08)' } : undefined}
       className={cn(
         'relative rounded overflow-hidden select-none border transition-all duration-200',
-        isApprovedLane ? 'bg-primary/5 shadow-sm' : 'bg-white shadow-sm',
-        isDetailOpen && 'ring-2 ring-primary border-primary/40 shadow-md',
-        !isDetailOpen && (isApprovedLane ? 'border-primary/10' : 'border-[#e5e7eb]'),
-        isBlocked && 'opacity-40',
-        isDragging && 'opacity-60 shadow-md z-10 scale-[1.02]',
+        isDragging ? 'shadow-none bg-transparent' : (isApprovedLane ? 'bg-[#0d9f5f]/5 shadow-sm' : 'bg-white shadow-sm'),
+        isDetailOpen && 'shadow-md',
+        isDragging ? 'border-transparent' : (isApprovedLane ? 'border-[#0d9f5f]/10' : 'border-[#e5e7eb]'),
+        isBlocked && 'opacity-60 blur-[1.5px] saturate-50',
         isOver && !isDragging && 'ring-1 ring-primary/30 ring-inset',
         isSaving && 'pointer-events-none'
       )}
@@ -310,6 +380,7 @@ function DraggableCard({
       <ShareCardContent
         share={share}
         iconPillBg={iconPillBg}
+        laneStatus={laneStatus}
         formatDate={formatDate}
         getDocumentForMenu={getDocumentForMenu}
         showActions={showActions}
@@ -345,6 +416,7 @@ function DraggableCard({
 function ShareCardContent({
   share,
   iconPillBg,
+  laneStatus,
   formatDate,
   getDocumentForMenu,
   showActions,
@@ -374,6 +446,7 @@ function ShareCardContent({
 }: {
   share: ShareRecord
   iconPillBg: string
+  laneStatus?: ActivityStatus
   formatDate: (s: string) => string
   getDocumentForMenu: (s: ShareRecord) => { id: string; name: string; mimeType?: string; externalId: string }
   showActions: boolean
@@ -409,10 +482,13 @@ function ShareCardContent({
   const intakeApproveAction = isFolder ? 'approve-folder' : 'approve'
   const intakeRejectAction = isFolder ? 'reject-folder' : 'reject'
   const intakeWithdrawAction = isFolder ? 'withdraw-folder' : 'withdraw'
+  const laneTheme = laneStatus ? LANE_THEME[laneStatus] : undefined
+  const cardIconColor = laneTheme?.cardIconColor ?? 'text-primary'
+  const docIdColor = laneTheme?.docIdColor ?? 'text-primary'
 
   return (
     <>
-      <div className={cn('border-b', isApprovedLane ? 'bg-primary/[0.06] border-primary/10' : 'bg-[#f9f9fb] border-[#e5e7eb]', isPending && 'opacity-80')}>
+      <div className={cn('border-b', isApprovedLane ? 'bg-[#0d9f5f]/[0.06] border-[#0d9f5f]/10' : 'bg-[#fdfdfe] border-[#f1f1f3]', isPending && 'opacity-80')}>
         <div
           className="flex items-center gap-2.5 px-3 pt-2.5 pb-2 group/drag"
           {...(dragListeners ?? {})}
@@ -424,8 +500,8 @@ function ShareCardContent({
           <div className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded', iconPillBg)}>
             {share.documentMimeType?.includes('folder') ? (
               isFinalized
-                ? <PackageCheck className="h-4 w-4 text-primary" />
-                : <PackagePlus className="h-4 w-4 text-primary" />
+                ? <PackageCheck className={cn('h-4 w-4', cardIconColor)} />
+                : <PackagePlus className={cn('h-4 w-4', cardIconColor)} />
             ) : (
               <DocumentIcon mimeType={share.documentMimeType ?? undefined} className="h-4 w-4" />
             )}
@@ -434,7 +510,7 @@ function ShareCardContent({
             {/* Row 1: DOC ID (primary) */}
             {share.docId && (
               <div className="flex items-center gap-1.5 mb-0.5">
-                <span className="text-[11px] font-bold font-mono text-primary tracking-wide">{share.docId}</span>
+                <span className={cn('text-[11px] font-bold font-mono tracking-wide', docIdColor)}>{share.docId}</span>
                 {isFinalized && (
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -450,7 +526,7 @@ function ShareCardContent({
               className={cn(
                 'truncate cursor-pointer transition-colors flex items-center gap-1.5',
                 share.docId
-                  ? 'text-[11px] font-normal text-[#9a9ba0] hover:text-[#45474c]'
+                  ? 'text-[11px] font-medium text-[#5b5d64] hover:text-[#1b1b1d]'
                   : 'text-[13px] font-semibold text-[#1b1b1d] hover:text-primary'
               )}
             >
@@ -544,7 +620,7 @@ function ShareCardContent({
         <div className="flex items-center justify-between">
           <RelativeDateTime
             date={share.updatedAt}
-            textClassName="text-[11px] text-[#9a9ba0]"
+            textClassName="text-[11px] text-[#6b6d75]"
             iconClassName="text-[#9a9ba0] hover:text-[#45474c]"
             tooltipSide="top"
           />
@@ -623,48 +699,18 @@ function ShareCardContent({
             {isRegrantingId === share.id && <LoadingSpinner size="sm" className="min-h-0 ml-0.5" />}
           </div>
         </div>
-        {/* Shared by */}
+        {/* Updated by */}
         <div className="flex items-center gap-1.5">
-          <span className="text-[10px] text-[#9a9ba0] w-14 shrink-0 whitespace-nowrap">
-            {isPending ? 'Uploaded by' : 'Shared by'}
-          </span>
+          <span className="text-[10px] font-medium text-[#6b6d75] w-14 shrink-0 whitespace-nowrap">Updated by</span>
           <TooltipProvider>
             <ProfileBubbleWithPopup
-              name={share.createdByName || share.createdByEmail || 'Team Member'}
-              email={share.createdByEmail || ''}
-              avatarUrl={share.createdByAvatarUrl}
+              name={(share.updatedByName || share.updatedByEmail) ?? (share.createdByName || share.createdByEmail || 'Team Member')}
+              email={(share.updatedByEmail ?? share.createdByEmail) || ''}
+              avatarUrl={share.updatedByAvatarUrl ?? share.createdByAvatarUrl}
               size="default"
             />
           </TooltipProvider>
         </div>
-        {/* Shared with — hide when pending */}
-        {!isPending && (share.settings?.externalCollaborator || share.settings?.guest) && (
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] text-[#9a9ba0] w-14 shrink-0 whitespace-nowrap">Shared with</span>
-            <div className="flex items-center gap-1">
-              {share.settings?.externalCollaborator && (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="h-5 w-5 rounded-lg bg-primary/10 text-primary flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EC</div>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="text-xs">{extCollaboratorLabel}</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              )}
-              {share.settings?.guest && (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="h-5 w-5 rounded-lg bg-[#f3f4f6] text-[#45474c] flex items-center justify-center text-[9px] font-semibold shrink-0 cursor-default">EV</div>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="text-xs">{viewerLabel}</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              )}
-            </div>
-          </div>
-        )}
         {(() => {
           const total = share.subtaskCount ?? 0
           const approved = share.approvedSubtaskCount ?? 0
@@ -675,7 +721,7 @@ function ShareCardContent({
               <div className="flex-1 h-1 rounded-full bg-[#e5e7eb] overflow-hidden">
                 <div className="h-full rounded-full bg-primary transition-all duration-300" style={{ width: `${pct}%` }} />
               </div>
-              <span className="text-[9px] font-semibold text-[#9a9ba0] tabular-nums shrink-0">{approved}/{total}</span>
+              <span className="text-[9px] font-semibold text-[#6b6d75] tabular-nums shrink-0">{approved}/{total}</span>
             </div>
           )
         })()}
@@ -2153,8 +2199,8 @@ export function EngagementSharesTab({
         </div>
       </div>
 
-      <div className={cn('flex flex-1 min-h-0 overflow-hidden gap-4 rounded', viewMode === 'board' ? '' : 'bg-white border border-[#e5e7eb]')}>
-        <div className={cn('flex-1 min-w-0 overflow-auto rounded', viewMode === 'list' ? 'bg-white' : viewMode === 'board' ? '' : 'bg-white p-4')}>
+      <div className={cn('flex flex-1 overflow-hidden gap-4 rounded', viewMode === 'board' ? 'bg-white min-h-[calc(100vh-220px)]' : 'min-h-0 bg-white border border-[#e5e7eb]')}>
+        <div className={cn('flex-1 min-w-0 overflow-auto rounded', viewMode === 'list' ? 'bg-white' : viewMode === 'board' ? 'bg-white p-4' : 'bg-white p-4')}>
           {isLoading ? (
             <div className="flex items-center justify-center min-h-[200px]">
               <LoadingSpinner size="md" className="min-h-0" />
@@ -2229,19 +2275,14 @@ export function EngagementSharesTab({
                 onDragEnd={handleDragEnd}
               >
                 <div
-                  className="grid gap-4 min-h-[360px]"
-                  style={{ gridTemplateColumns: approvedCollapsed ? '1fr 1fr 1fr 36px' : '1fr 1fr 1fr 1fr' }}
+                  className="grid gap-4 min-h-[360px] items-start"
+                  style={{ gridTemplateColumns: approvedCollapsed ? 'minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 36px' : 'repeat(4, minmax(0, 1fr))' }}
                 >
                   {LANES.map((lane) => {
                     const laneCount = byLane[lane.status].length
                     const totalCount = filteredShares.length
                     const lanePct = totalCount > 0 ? (laneCount / totalCount) * 100 : 0
-                    const LANE_COLOR: Record<ActivityStatus, string> = {
-                      to_do: '#9ca3af',
-                      in_progress: '#5A78FF',
-                      in_review: '#f97316',
-                      approved: '#069668',
-                    }
+                    const theme = LANE_THEME[lane.status]
 
                     if (lane.status === 'approved' && approvedCollapsed) {
                       return (
@@ -2249,23 +2290,23 @@ export function EngagementSharesTab({
                           key={lane.status}
                           initial={{ opacity: 0 }}
                           animate={{ opacity: 1 }}
-                          className="flex flex-col items-center rounded border border-primary/20 bg-primary/5 overflow-hidden cursor-pointer select-none py-3 gap-2"
+                          className={cn('flex flex-col items-center rounded border overflow-hidden cursor-pointer select-none py-3 gap-2', theme.headerBg, theme.headerBorder)}
                           onClick={() => setApprovedCollapsed(false)}
                           title={`${laneCount} Approved — click to expand`}
                         >
                           <div className={cn('rounded p-1', lane.iconBg)}>
                             {lane.icon}
                           </div>
-                          <span className="text-[10px] font-bold text-primary tabular-nums">{laneCount}</span>
+                          <span className={cn('text-[10px] font-bold tabular-nums', theme.labelColor)}>{laneCount}</span>
                           <div className="flex-1 flex items-center justify-center">
                             <span
-                              className="text-[10px] font-semibold text-primary/70 whitespace-nowrap"
+                              className={cn('text-[10px] font-semibold whitespace-nowrap opacity-80', theme.labelColor)}
                               style={{ writingMode: 'vertical-lr', transform: 'rotate(180deg)' }}
                             >
                               Approved
                             </span>
                           </div>
-                          <ChevronRight className="h-3 w-3 text-primary/50" />
+                          <ChevronRight className={cn('h-3 w-3 opacity-60', theme.labelColor)} />
                         </motion.div>
                       )
                     }
@@ -2275,70 +2316,90 @@ export function EngagementSharesTab({
                         key={lane.status}
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
-                        className="flex flex-col rounded border border-[#e5e7eb] bg-white overflow-hidden"
+                        className="flex flex-col"
                       >
-                        <div className="flex items-center gap-2 px-3 py-2.5 border-b border-[#e5e7eb]">
-                          <div className={cn('rounded p-1', lane.iconBg)}>
-                            {lane.icon}
+                        {/* Swimlane header: its own card, separate from the body */}
+                        <div className={cn('flex flex-col rounded border overflow-hidden shrink-0', theme.headerBg, theme.headerBorder)}>
+                          <div className="flex items-center gap-2 px-3 py-2.5">
+                            <div className={cn('rounded p-1', lane.iconBg)}>
+                              {lane.icon}
+                            </div>
+                            <span className={cn('text-xs font-semibold', theme.labelColor)}>{lane.label}</span>
+                            <span className={cn('text-[11px] ml-0.5 tabular-nums px-1.5 py-0.5 rounded font-medium', theme.countBg, theme.countColor)}>
+                              {totalCount > 0 ? `${laneCount}/${totalCount}` : laneCount}
+                            </span>
+                            {lane.status === 'approved' && (
+                              <button
+                                onClick={() => setApprovedCollapsed(true)}
+                                className={cn('ml-auto transition-colors shrink-0 opacity-60 hover:opacity-100', theme.labelColor)}
+                                title="Collapse Approved column"
+                              >
+                                <ChevronLeft className="h-3.5 w-3.5" />
+                              </button>
+                            )}
                           </div>
-                          <span className="text-xs font-semibold text-[#1b1b1d]">{lane.label}</span>
-                          <span className="text-[11px] text-[#9a9ba0] ml-0.5 tabular-nums">
-                            {totalCount > 0 ? `${laneCount}/${totalCount}` : laneCount}
-                          </span>
-                          {lane.status === 'approved' && (
-                            <button
-                              onClick={() => setApprovedCollapsed(true)}
-                              className="ml-auto text-[#9a9ba0] hover:text-[#45474c] transition-colors shrink-0"
-                              title="Collapse Approved column"
-                            >
-                              <ChevronLeft className="h-3.5 w-3.5" />
-                            </button>
+                          {/* Mini progress bar */}
+                          <div className="h-1 bg-black/5 shrink-0">
+                            <div
+                              className="h-full transition-all duration-300"
+                              style={{ width: `${lanePct}%`, backgroundColor: theme.progressColor }}
+                            />
+                          </div>
+                        </div>
+                        {/* Swimlane body: gray container sized to its contents, not the tallest column */}
+                        <DroppableLane id={lane.status} className="flex flex-col mt-2 rounded bg-[#f9f9fb] p-3 gap-2.5">
+                          {(isOver) => (
+                            <>
+                              <AnimatePresence mode="popLayout">
+                                {byLane[lane.status].map((share) => (
+                                  <DraggableCard
+                                    key={share.id}
+                                    id={share.id}
+                                    share={share}
+                                    laneStatus={lane.status}
+                                    formatDate={formatDate}
+                                    getDocumentForMenu={getDocumentForMenu}
+                                    showActions
+                                    canManage={canManage}
+                                    isApprovedLane={lane.status === 'approved'}
+                                    onShareSaved={refreshData}
+                                    handleSecureOpen={handleSecureOpenShare}
+                                    isRegrantingId={isRegrantingId}
+                                    onOpenComments={handleOpenComments}
+                                    onOpenPreview={handleOpenPreview}
+                                    extCollaboratorLabel={projExtCollaborator}
+                                    viewerLabel={projViewer}
+                                    onParentFolderClick={onOpenInFiles ? handleOpenParentFolder : undefined}
+                                    onOpenInFilesForFolder={onOpenInFiles ? handleOpenInFilesForFolder : undefined}
+                                    onOpenDetail={handleOpenDeliverableDetail}
+                                    isDetailOpen={share.id === openDeliverableId}
+                                    isPaneOpen={!!openDeliverableId}
+                                    isExternalPersona={restrictToSharedOnly}
+                                    isExternalViewer={isExternalViewer}
+                                    deeplinkBase={deeplinkBase}
+                                    generalFolderId={generalFolderId}
+                                    currentUserId={currentUserId}
+                                    onIntakeAction={handleIntakeAction}
+                                    intakeActionInProgress={intakeActionInProgress}
+                                    isSaving={savingId === share.id}
+                                    onUntagAsDeliverable={handleUntagAsDeliverable}
+                                  />
+                                ))}
+                              </AnimatePresence>
+                              {laneCount === 0 && (
+                                <div
+                                  className={cn(
+                                    'h-[164px] rounded border border-dashed flex items-center justify-center text-[11px] font-medium transition-colors',
+                                    isOver
+                                      ? 'border-primary/40 text-primary bg-primary/5'
+                                      : 'border-[#d8d9dd] text-[#b4b5ba]'
+                                  )}
+                                >
+                                  Drop here
+                                </div>
+                              )}
+                            </>
                           )}
-                        </div>
-                        {/* Mini progress bar */}
-                        <div className="h-0.5 bg-[#f3f4f6] shrink-0">
-                          <div
-                            className="h-full transition-all duration-300"
-                            style={{ width: `${lanePct}%`, backgroundColor: LANE_COLOR[lane.status] }}
-                          />
-                        </div>
-                        <DroppableLane id={lane.status} className="flex-1 overflow-y-auto p-3 space-y-2.5 min-h-[120px]">
-                          <AnimatePresence mode="popLayout">
-                            {byLane[lane.status].map((share) => (
-                              <DraggableCard
-                                key={share.id}
-                                id={share.id}
-                                share={share}
-                                laneStatus={lane.status}
-                                formatDate={formatDate}
-                                getDocumentForMenu={getDocumentForMenu}
-                                showActions
-                                canManage={canManage}
-                                isApprovedLane={lane.status === 'approved'}
-                                onShareSaved={refreshData}
-                                handleSecureOpen={handleSecureOpenShare}
-                                isRegrantingId={isRegrantingId}
-                                onOpenComments={handleOpenComments}
-                                onOpenPreview={handleOpenPreview}
-                                extCollaboratorLabel={projExtCollaborator}
-                                viewerLabel={projViewer}
-                                onParentFolderClick={onOpenInFiles ? handleOpenParentFolder : undefined}
-                                onOpenInFilesForFolder={onOpenInFiles ? handleOpenInFilesForFolder : undefined}
-                                onOpenDetail={handleOpenDeliverableDetail}
-                                isDetailOpen={share.id === openDeliverableId}
-                                isPaneOpen={!!openDeliverableId}
-                                isExternalPersona={restrictToSharedOnly}
-                                isExternalViewer={isExternalViewer}
-                                deeplinkBase={deeplinkBase}
-                                generalFolderId={generalFolderId}
-                                currentUserId={currentUserId}
-                                onIntakeAction={handleIntakeAction}
-                                intakeActionInProgress={intakeActionInProgress}
-                                isSaving={savingId === share.id}
-                                onUntagAsDeliverable={handleUntagAsDeliverable}
-                              />
-                            ))}
-                          </AnimatePresence>
                         </DroppableLane>
                       </motion.div>
                     )
@@ -2352,15 +2413,14 @@ export function EngagementSharesTab({
                     const status = (share.activity?.status ?? 'to_do') as ActivityStatus
                     const accent = CARD_ACCENT[status]
                     return (
-                      <motion.div
-                        layoutId={activeId}
-                        className="rounded overflow-hidden w-[280px] border border-[#e5e7eb] bg-white shadow-md"
+                      <div
+                        className="rounded overflow-hidden w-[280px] border border-[#e5e7eb] bg-white shadow-xl scale-[1.03]"
                         style={{ cursor: 'grabbing' }}
                       >
-                        <div className="h-1.5 bg-[#f9f9fb] border-b border-[#e5e7eb]" />
                         <ShareCardContent
                           share={share}
                           iconPillBg={CARD_ACCENT[status].iconPillBg}
+                          laneStatus={status}
                           formatDate={formatDate}
                           getDocumentForMenu={getDocumentForMenu}
                           showActions={false}
@@ -2375,7 +2435,7 @@ export function EngagementSharesTab({
                           onParentFolderClick={onOpenInFiles ? handleOpenParentFolder : undefined}
                           generalFolderId={generalFolderId}
                         />
-                      </motion.div>
+                      </div>
                     )
                   })() : null}
                 </DragOverlay>

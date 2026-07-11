@@ -400,7 +400,7 @@ export async function getFirmReminderConfig(firmId: string): Promise<FirmReminde
 
 export async function updateFirm(
     firmSlug: string,
-    data: { name?: string; branding?: FirmBranding; currency?: FirmCurrency; enableBetaFeatures?: boolean; internalMemo?: string | null; industry?: string | null; companySizeBracket?: string | null; companyWebsite?: string | null; linkedInUrl?: string | null; billingAddress?: string | null; notes?: string | null; allowDomainAccess?: boolean; allowedEmailDomain?: string | null; reminderEmailConfig?: FirmReminderEmailConfig }
+    data: { name?: string; branding?: FirmBranding; currency?: FirmCurrency; enableBetaFeatures?: boolean; internalMemo?: string | null; industry?: string | null; companySizeBracket?: string | null; companyWebsite?: string | null; linkedInUrl?: string | null; billingAddress?: string | null; notes?: string | null; allowDomainAccess?: boolean; allowedEmailDomain?: string | null; reminderEmailConfig?: FirmReminderEmailConfig; externalSections?: { engagementHealth: boolean; fileOrganization: boolean; documentActivity: boolean } }
 ): Promise<void> {
     const supabase = await createClient()
     const { data: { user }, error } = await supabase.auth.getUser()
@@ -415,7 +415,7 @@ export async function updateFirm(
     let payload: any = {}
     if (data.name !== undefined) payload.name = data.name
 
-    if (data.branding !== undefined || data.currency !== undefined || data.enableBetaFeatures !== undefined || data.reminderEmailConfig !== undefined || data.internalMemo !== undefined || data.industry !== undefined || data.companySizeBracket !== undefined || data.companyWebsite !== undefined || data.linkedInUrl !== undefined || data.billingAddress !== undefined || data.notes !== undefined) {
+    if (data.branding !== undefined || data.currency !== undefined || data.enableBetaFeatures !== undefined || data.reminderEmailConfig !== undefined || data.internalMemo !== undefined || data.industry !== undefined || data.companySizeBracket !== undefined || data.companyWebsite !== undefined || data.linkedInUrl !== undefined || data.billingAddress !== undefined || data.notes !== undefined || data.externalSections !== undefined) {
         const current = (firm.settings as Record<string, unknown>) || {}
         if (data.branding !== undefined) {
             const existing = (current.branding as Record<string, unknown>) ?? {}
@@ -466,6 +466,9 @@ export async function updateFirm(
         }
         if (data.reminderEmailConfig !== undefined) {
             payload.settings = { ...(payload.settings ?? current), reminderEmailConfig: data.reminderEmailConfig }
+        }
+        if (data.externalSections !== undefined) {
+            payload.settings = { ...(payload.settings ?? current), externalSections: data.externalSections }
         }
     }
 

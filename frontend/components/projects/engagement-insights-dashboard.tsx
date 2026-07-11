@@ -44,8 +44,10 @@ import {
     FileQuestion,
     FileType,
     FolderMinus,
-    FolderX,
     FolderTree,
+    Settings,
+    Pencil,
+    NotebookPen,
 } from 'lucide-react'
 import { getFileTypeLabel, formatRelativeTime, formatFileSize } from '@/lib/utils'
 import { InsightCard } from '@/components/dashboard/insight-card'
@@ -53,7 +55,61 @@ import { StatTile } from '@/components/ui/stat-tile'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { DocumentIcon } from '@/components/ui/document-icon'
-import type { EngagementInsightsResponse, UnansweredThreadItem, DocumentDueDateItem, RecentDocumentItem, SensitiveFileItem, DeliverableProgress, DeliveryHealthScore, DeliverableStage, EngagementHealthScore, PlanningHygiene, CommentThreads, EngagementPace, DeliverableRevisionMetric, ApprovalCycleMetric, FirstTimeRight } from '@/app/api/projects/[projectId]/insights/route'
+import type { EngagementInsightsResponse, UnansweredThreadItem, DocumentDueDateItem, RecentDocumentItem, SensitiveFileItem, DeliverableProgress, DeliverableStage, EngagementHealthScore, PlanningHygiene, CommentThreads, EngagementPace, FirstTimeRight } from '@/app/api/projects/[projectId]/insights/route'
+import { updateEngagementInsightsSummary } from '@/lib/actions/project'
+
+// ─── Ring Registry ────────────────────────────────────────────────────────────
+// Stable IDs for every ring. Used by Firm Settings to hide/show rings.
+// Adding a new ring: pick a new ID, add it here and in the relevant Body component.
+// If absent from firm.settings.insightsConfig.hiddenRings, the ring is visible (safe default).
+export const RING_REGISTRY = [
+    // Engagement Health
+    { id: 'engagement.health_score',        group: 'Engagement Health', label: 'Overall Health Score' },
+    { id: 'engagement.delivery_status',     group: 'Engagement Health', label: 'Delivery Status' },
+    { id: 'engagement.delivery_schedule',   group: 'Engagement Health', label: 'Delivery Schedule' },
+    { id: 'engagement.planning_hygiene',    group: 'Engagement Health', label: 'Planning Hygiene' },
+    { id: 'engagement.comment_responsiveness', group: 'Engagement Health', label: 'Comment Responsiveness' },
+    { id: 'engagement.pace',                group: 'Engagement Health', label: 'Pace' },
+    { id: 'engagement.first_time_right',    group: 'Engagement Health', label: 'First-Time-Right' },
+    // File Organization
+    { id: 'folder.overall_score',           group: 'File Organization', label: 'Overall Score' },
+    { id: 'folder.total_artifacts',         group: 'File Organization', label: 'Total Artifacts' },
+    { id: 'folder.poorly_named',            group: 'File Organization', label: 'Poorly Named' },
+    { id: 'folder.duplicates',              group: 'File Organization', label: 'Duplicates' },
+    { id: 'folder.empty_folders',           group: 'File Organization', label: 'Empty Folders' },
+    { id: 'folder.deep_folders',            group: 'File Organization', label: 'Folders > 3L depth' },
+    { id: 'folder.orphaned_files',          group: 'File Organization', label: 'Orphaned Files' },
+    { id: 'folder.stale_files',             group: 'File Organization', label: 'Stale Files' },
+    { id: 'folder.large_files',             group: 'File Organization', label: 'Large Files' },
+] as const
+
+export type RingId = typeof RING_REGISTRY[number]['id']
+
+export const SECTION_REGISTRY = [
+    { id: 'team_status',        label: 'Team Status' },
+    { id: 'file_organization',  label: 'File Organization' },
+    { id: 'document_activity',  label: 'Document Activity' },
+] as const
+
+export const ACTION_REGISTRY = [
+    // Delivery Actions
+    { id: 'delivery.overdue',    group: 'Delivery Actions', label: 'Overdue deliverables' },
+    { id: 'delivery.in-review',  group: 'Delivery Actions', label: 'In review — awaiting approval' },
+    { id: 'delivery.reworked',   group: 'Delivery Actions', label: 'Awaiting rework' },
+    { id: 'delivery.planning',   group: 'Delivery Actions', label: 'Planning gaps' },
+    { id: 'delivery.threads',    group: 'Delivery Actions', label: 'Unanswered comments' },
+    { id: 'delivery.intake',     group: 'Delivery Actions', label: 'Intake awaiting review' },
+    { id: 'delivery.invites',    group: 'Delivery Actions', label: 'Pending invitations' },
+    // Housekeeping
+    { id: 'housekeeping.sensitive',     group: 'Housekeeping', label: 'Sensitive files' },
+    { id: 'housekeeping.poorly-named',  group: 'Housekeeping', label: 'Poorly named files' },
+    { id: 'housekeeping.duplicates',    group: 'Housekeeping', label: 'Duplicate files' },
+    { id: 'housekeeping.stale',         group: 'Housekeeping', label: 'Stale files' },
+    { id: 'housekeeping.large',         group: 'Housekeeping', label: 'Large files' },
+    { id: 'housekeeping.orphaned',      group: 'Housekeeping', label: 'Orphaned files' },
+    { id: 'housekeeping.empty-folders', group: 'Housekeeping', label: 'Empty folders' },
+    { id: 'housekeeping.deep-folders',  group: 'Housekeeping', label: 'Deep folder nesting' },
+] as const
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -138,12 +194,6 @@ function deltaColor(days: number): string {
     if (days <= 3) return 'bg-orange-50 text-orange-700 border-orange-200'
     if (days <= 7) return 'bg-amber-50 text-amber-700 border-amber-200'
     return 'bg-slate-50 text-slate-600 border-slate-200'
-}
-
-function scoreColor(score: number): string {
-    if (score >= 80) return 'text-green-600'
-    if (score >= 60) return 'text-amber-600'
-    return 'text-red-600'
 }
 
 function scoreLabel(score: number): string {
@@ -1289,15 +1339,30 @@ function ACSectionV2({ title, icon: Icon, items, engagementBase, headerAction }:
     )
 }
 
-function EngagementActionCenterV2({ data, loading, engagementBase, setRefreshTick, deliveryActionsOnly = false }: {
+function EngagementActionCenterV2({ data, loading, engagementBase, setRefreshTick }: {
     data: EngagementInsightsResponse | null
     loading: boolean
     engagementBase: string
     projectId: string
     setRefreshTick: React.Dispatch<React.SetStateAction<number>>
-    deliveryActionsOnly?: boolean
 }) {
     const [drilldown, setDrilldown] = useState<'duplicates' | null>(null)
+
+    // Contextual gating: AC item is visible only if its linked ring/section is visible.
+    const hiddenRings = data?.insightsConfig?.hiddenRings ?? []
+    const hiddenSections = data?.insightsConfig?.hiddenSections ?? []
+    const ringVisible = (id: string) => !hiddenRings.includes(id)
+    const sectionVisible = (id: string) => !hiddenSections.includes(id)
+
+    // Ring → AC item map (delivery)
+    // overdue       → delivery_schedule
+    // in-review     → delivery_status
+    // reworked      → first_time_right
+    // planning      → planning_hygiene
+    // threads       → comment_responsiveness
+    // intake        → delivery_status (intake is part of the delivery funnel)
+    // invites       → team_status section
+    // Housekeeping items → their corresponding folder ring
 
     // Derived counts — kept close to source of truth in EngagementInsightsResponse.
     const overdueCount = (data?.deliverables ?? []).filter((d) => d.isOverdue).length
@@ -1322,56 +1387,77 @@ function EngagementActionCenterV2({ data, loading, engagementBase, setRefreshTic
     const orphanedFilesCount = data?.folderHealth.orphanedFiles ?? 0
     const deepFoldersCount = data?.folderHealth.deeplyNestedFolders ?? 0
 
-    const delivery: ActionRowItem[] = [
+    const allDelivery: (ActionRowItem & { gatingRing?: string; gatingSection?: string })[] = [
         { key: 'overdue', label: 'Overdue deliverables', count: overdueCount, severity: 'critical', icon: AlertTriangle,
           sub: overdueCount > 0 ? 'past due date, not yet approved' : 'nothing overdue',
-          href: '/board', ringId: 'ring-schedule', ringLabel: 'Delivery Schedule' },
+          href: '/board', ringId: 'ring-schedule', ringLabel: 'Delivery Schedule',
+          gatingRing: 'engagement.delivery_schedule' },
         { key: 'in-review', label: 'In review — awaiting approval', count: inReviewCount, severity: 'info', icon: Eye,
           sub: inReviewCount > 0 ? 'ready for your review' : undefined,
-          href: '/board', ringId: 'ring-status', ringLabel: 'Delivery Status' },
+          href: '/board', ringId: 'ring-status', ringLabel: 'Delivery Status',
+          gatingRing: 'engagement.delivery_status' },
         { key: 'reworked', label: 'Awaiting rework', count: reworkedCount, severity: 'warning', icon: RefreshCw,
           sub: reworkedCount > 0 ? `${reworkedInFlight.reduce((s, r) => s + r.revisions, 0)} backward transitions` : undefined,
-          href: '/board', ringId: 'ring-ftr', ringLabel: 'First-Time-Right' },
+          href: '/board', ringId: 'ring-ftr', ringLabel: 'First-Time-Right',
+          gatingRing: 'engagement.first_time_right' },
         { key: 'planning', label: 'Planning gaps', count: planningGaps, severity: 'warning', icon: ClipboardCheck,
           sub: planningGaps > 0 ? 'missing due dates or assignees' : undefined,
-          href: '/board', ringId: 'ring-planning', ringLabel: 'Planning Hygiene' },
+          href: '/board', ringId: 'ring-planning', ringLabel: 'Planning Hygiene',
+          gatingRing: 'engagement.planning_hygiene' },
         { key: 'threads', label: 'Unanswered comments', count: threadsCount, severity: 'warning', icon: MessagesSquare,
           sub: threadsCount > 0 ? 'client waiting on a reply' : undefined,
-          href: '/comments', ringId: 'ring-comments', ringLabel: 'Comment Responsiveness' },
+          href: '/comments', ringId: 'ring-comments', ringLabel: 'Comment Responsiveness',
+          gatingRing: 'engagement.comment_responsiveness' },
         { key: 'intake', label: 'Intake awaiting review', count: intakeCount, severity: 'info', icon: MailOpen,
           sub: intakeCount > 0 ? 'files submitted by clients' : undefined,
-          href: '/board' },
+          href: '/board',
+          gatingRing: 'engagement.delivery_status' },
         { key: 'invites', label: 'Pending invitations', count: pendingInvitesCount, severity: 'info', icon: Users,
           sub: pendingInvitesCount > 0 ? 'awaiting acceptance' : undefined,
-          href: '/members' },
+          href: '/members',
+          gatingSection: 'team_status' },
     ]
 
-    const housekeeping: ActionRowItem[] = [
+    const allHousekeeping: (ActionRowItem & { gatingRing?: string })[] = [
         { key: 'sensitive', label: 'Sensitive files', count: sensitiveCount, severity: 'critical', icon: FileWarning,
           sub: sensitiveCount > 0 ? 'flagged by content pattern' : undefined,
-          href: '/files' },
+          href: '/files',
+          gatingRing: 'folder.overall_score' },
         { key: 'poorly-named', label: 'Poorly named files', count: badlyNamedCount, severity: 'warning', icon: FileType,
           sub: badlyNamedCount > 0 ? 'default or meaningless file names' : undefined,
-          href: '/files' },
+          href: '/files',
+          gatingRing: 'folder.poorly_named' },
         { key: 'duplicates', label: 'Duplicate files', count: duplicatesCount, severity: 'warning', icon: FileWarning,
           sub: duplicatesCount > 0 ? '≥90% name match, same extension' : undefined,
-          onDrilldown: duplicatesCount > 0 ? () => setDrilldown('duplicates') : undefined },
+          onDrilldown: duplicatesCount > 0 ? () => setDrilldown('duplicates') : undefined,
+          gatingRing: 'folder.duplicates' },
         { key: 'stale', label: 'Stale files', count: staleCount, severity: 'warning', icon: Archive,
           sub: staleCount > 0 ? 'not modified in 6+ months' : undefined,
-          href: '/files' },
+          href: '/files',
+          gatingRing: 'folder.stale_files' },
         { key: 'large', label: 'Large files', count: largeCount, severity: 'warning', icon: HardDrive,
           sub: largeCount > 0 ? 'over 50 MB' : undefined,
-          href: '/files' },
+          href: '/files',
+          gatingRing: 'folder.large_files' },
         { key: 'orphaned', label: 'Orphaned files', count: orphanedFilesCount, severity: 'info', icon: FileQuestion,
           sub: orphanedFilesCount > 0 ? 'files with no parent folder' : undefined,
-          href: '/files' },
+          href: '/files',
+          gatingRing: 'folder.orphaned_files' },
         { key: 'empty-folders', label: 'Empty folders', count: emptyFoldersCount, severity: 'info', icon: FolderMinus,
           sub: emptyFoldersCount > 0 ? 'folders with no contents' : undefined,
-          href: '/files' },
+          href: '/files',
+          gatingRing: 'folder.empty_folders' },
         { key: 'deep-folders', label: 'Deep folder nesting', count: deepFoldersCount, severity: 'info', icon: FolderTree,
           sub: deepFoldersCount > 0 ? 'folders > 3 levels deep' : undefined,
-          href: '/files' },
+          href: '/files',
+          gatingRing: 'folder.deep_folders' },
     ]
+
+    const delivery = allDelivery.filter(r =>
+        (r.gatingRing ? ringVisible(r.gatingRing) : true) &&
+        (r.gatingSection ? sectionVisible(r.gatingSection) : true)
+    )
+    const housekeeping = allHousekeeping.filter(r => r.gatingRing ? ringVisible(r.gatingRing) : true)
 
     return (
         <div className="sticky top-4">
@@ -1388,7 +1474,7 @@ function EngagementActionCenterV2({ data, loading, engagementBase, setRefreshTic
                     </button>
                 </div>
 
-                {loading ? (
+                {(loading || !data) ? (
                     <div className="flex flex-col gap-4">
                         <div className="h-40 rounded-2xl bg-gray-100 animate-pulse" />
                         <div className="h-32 rounded-2xl bg-gray-100 animate-pulse" />
@@ -1401,8 +1487,10 @@ function EngagementActionCenterV2({ data, loading, engagementBase, setRefreshTic
                     />
                 ) : (
                     <div className="flex flex-col gap-4">
-                        <ACSectionV2 title="Delivery Actions" icon={Package} items={delivery} engagementBase={engagementBase} />
-                        {!deliveryActionsOnly && (
+                        {delivery.length > 0 && (
+                            <ACSectionV2 title="Delivery Actions" icon={Package} items={delivery} engagementBase={engagementBase} />
+                        )}
+                        {housekeeping.length > 0 && (
                             <ACSectionV2 title="Housekeeping" icon={Archive} items={housekeeping} engagementBase={engagementBase} />
                         )}
                     </div>
@@ -1556,10 +1644,17 @@ function DeliveryTimeline({ deliverables, engagementCreatedAt, kickoffDate, enga
     const spanMs = Math.max(1, maxMs - minMs)
     const pct = (ms: number) => Math.max(0, Math.min(100, ((ms - minMs) / spanMs) * 100))
 
-    // 3-tick x-axis labels: start, middle, end.
-    const midMs = minMs + spanMs / 2
+    // 5-tick x-axis labels: start, 25%, 50%, 75%, end.
     const fmt = (ms: number) => new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+    const tickMs = [0, 0.25, 0.5, 0.75, 1].map(f => minMs + spanMs * f)
     const todayPct = pct(nowMs)
+
+    // Engagement start marker — kickoff preferred, falls back to created date. Only shown in All view.
+    const engStartRaw = kickoffDate ?? engagementCreatedAt
+    const engStartMs = engStartRaw ? new Date(engStartRaw).getTime() : null
+    const engStartPct = engStartMs !== null ? pct(engStartMs) : null
+    const engStartInWindow = zoomWindow === 'full' && engStartPct !== null && engStartPct >= 0 && engStartPct <= 100
+    const engStartLabel = kickoffDate ? 'Kickoff' : 'Start'
 
     // Engagement due date marker
     const engDueMs = engagementDueDate ? new Date(engagementDueDate).getTime() : null
@@ -1580,6 +1675,11 @@ function DeliveryTimeline({ deliverables, engagementCreatedAt, kickoffDate, enga
 
     // Nudge count: in-flight deliverables still missing a due date
     const noDueDateCount = enriched.filter((d) => d.isOpenEnded).length
+
+    // Nudge count: deliverables with a due date beyond the engagement due date
+    const beyondEngDueCount = engDueMs !== null
+        ? enriched.filter((d) => !d.isOpenEnded && d.effectiveEndMs > engDueMs).length
+        : 0
 
     return (
         <div className="col-span-full flex flex-col gap-4 pt-5 border-t border-gray-100">
@@ -1620,9 +1720,11 @@ function DeliveryTimeline({ deliverables, engagementCreatedAt, kickoffDate, enga
 
                         // Right-label: show the anchor date in small text below stage label
                         const anchorLabel = d.dueDate
-                            ? `Due ${fmt(new Date(d.dueDate).getTime())}`
-                            : d.stage === 'approved' && d.finalizedAt
+                            ? (d.stage === 'approved' && d.finalizedAt
                                 ? `Approved ${fmt(new Date(d.finalizedAt).getTime())}`
+                                : `Due ${fmt(new Date(d.dueDate).getTime())}`)
+                            : d.stage === 'approved'
+                                ? (d.finalizedAt ? `Approved ${fmt(new Date(d.finalizedAt).getTime())}` : 'Approved')
                                 : 'No due date'
 
                         return (
@@ -1641,6 +1743,14 @@ function DeliveryTimeline({ deliverables, engagementCreatedAt, kickoffDate, enga
                                 <div className="relative flex-1 h-7">
                                     {/* Full-width track lane */}
                                     <div className="absolute inset-0 rounded bg-gray-50/80" />
+                                    {/* Engagement start marker — dotted green line, All view only */}
+                                    {engStartInWindow && (
+                                        <div
+                                            className="absolute top-0 bottom-0 w-px pointer-events-none z-20"
+                                            style={{ left: `${engStartPct}%`, borderLeft: '1.5px dotted #6ee7b7' }}
+                                            title={`${engStartLabel}: ${fmt(engStartMs!)}`}
+                                        />
+                                    )}
                                     {/* Engagement due date marker — solid line */}
                                     {engDueInWindow && (
                                         <div
@@ -1704,36 +1814,99 @@ function DeliveryTimeline({ deliverables, engagementCreatedAt, kickoffDate, enga
 
                     {/* X-axis ticks */}
                     {(() => {
-                        // Collision detection: if "today" and "Eng. due" labels are within 8% of
-                        // each other, stagger "Eng. due" to the second row to prevent overlap.
-                        const collision = engDueInWindow && engDuePct !== null
+                        // Critical event ticks — pinned to exact dates, always shown when in window
+                        const criticalTicks: { ms: number; pctVal: number; label: string; color: string }[] = []
+                        if (engStartInWindow && engStartMs !== null && engStartPct !== null)
+                            criticalTicks.push({ ms: engStartMs, pctVal: engStartPct, label: engStartLabel, color: '#6ee7b7' })
+                        criticalTicks.push({ ms: nowMs, pctVal: todayPct, label: 'today', color: 'var(--color-primary, #6366f1)' })
+                        if (engDueInWindow && engDueMs !== null && engDuePct !== null)
+                            criticalTicks.push({ ms: engDueMs, pctVal: engDuePct, label: 'Engagement\nDue Date', color: engDueColor })
+
+                        // Filter the 5 interval ticks — suppress any that land within 6% of a critical tick
+                        const filteredTickMs = tickMs.filter(ms => {
+                            const p = pct(ms)
+                            return criticalTicks.every(c => Math.abs(c.pctVal - p) >= 6)
+                        })
+
+                        // Collision detection for named labels (row 1 vs row 2)
+                        const engDueCollision = engDueInWindow && engDuePct !== null
                             && Math.abs(todayPct - engDuePct) < 8
+                        const engStartCollision = engStartInWindow && engStartPct !== null
+                            && (Math.abs(todayPct - engStartPct) < 8
+                                || (engDueInWindow && engDuePct !== null && Math.abs(engDuePct - engStartPct) < 8))
+                        const anyCollision = engDueCollision || engStartCollision
+                        const ROW0 = '0px'
+                        const ROW1 = '16px'
+                        const ROW2 = '30px'
                         return (
                             <div className="flex items-center gap-4 mt-1">
                                 <div className="w-44 shrink-0" />
-                                <div className={`relative flex-1 text-[10px] text-gray-400 ${collision ? 'h-9' : 'h-5'}`}>
-                                    <span className="absolute left-0 top-0">{fmt(minMs)}</span>
-                                    <span className="absolute left-1/2 -translate-x-1/2 top-0">{fmt(midMs)}</span>
-                                    <span className="absolute right-0 top-0">{fmt(maxMs)}</span>
-                                    {/* Today label — always on row 0 */}
+                                <div className={`relative flex-1 text-[10px] text-gray-400 ${anyCollision ? 'h-14' : 'h-10'}`}>
+                                    {/* Row 0: interval ticks (suppressed near critical events) */}
+                                    {filteredTickMs.map((ms, i) => {
+                                        const p = pct(ms)
+                                        return (
+                                            <span
+                                                key={i}
+                                                className="absolute whitespace-nowrap text-gray-400"
+                                                style={{
+                                                    top: ROW0,
+                                                    left: p <= 2 ? '0%' : p >= 98 ? '100%' : `${p}%`,
+                                                    transform: p <= 2 ? 'none' : p >= 98 ? 'translateX(-100%)' : 'translateX(-50%)',
+                                                }}
+                                            >
+                                                {fmt(ms)}
+                                            </span>
+                                        )
+                                    })}
+                                    {/* Row 0: critical event date ticks — styled by event color */}
+                                    {criticalTicks.map((ct) => (
+                                        <span
+                                            key={ct.ms}
+                                            className="absolute whitespace-nowrap font-medium"
+                                            style={{
+                                                top: ROW0,
+                                                left: ct.pctVal <= 2 ? '0%' : ct.pctVal >= 98 ? '100%' : `${ct.pctVal}%`,
+                                                transform: ct.pctVal <= 2 ? 'none' : ct.pctVal >= 98 ? 'translateX(-100%)' : 'translateX(-50%)',
+                                                color: ct.color,
+                                            }}
+                                        >
+                                            {fmt(ct.ms)}
+                                        </span>
+                                    ))}
+                                    {/* Row 1: Today named label */}
                                     <span
-                                        className="absolute top-0 text-[10px] font-medium text-primary whitespace-nowrap"
-                                        style={{ left: `${todayPct}%`, transform: 'translateX(-50%)' }}
+                                        className="absolute text-[10px] font-medium text-primary whitespace-nowrap"
+                                        style={{ top: ROW1, left: `${todayPct}%`, transform: 'translateX(-50%)' }}
                                     >
                                         today
                                     </span>
-                                    {/* Engagement due date label — row 0 normally, row 1 on collision */}
-                                    {engDueInWindow && engDueMs !== null && (
+                                    {/* Row 1 (or row 2 on collision): Engagement Start named label */}
+                                    {engStartInWindow && engStartPct !== null && (
                                         <span
                                             className="absolute text-[10px] font-medium whitespace-nowrap"
                                             style={{
+                                                top: engStartCollision ? ROW2 : ROW1,
+                                                left: `${engStartPct}%`,
+                                                transform: 'translateX(-50%)',
+                                                color: '#6ee7b7',
+                                            }}
+                                        >
+                                            {engStartLabel}
+                                        </span>
+                                    )}
+                                    {/* Row 1 (or row 2 on collision): Engagement Due Date named label */}
+                                    {engDueInWindow && engDueMs !== null && (
+                                        <span
+                                            className="absolute text-[10px] font-medium text-center leading-tight"
+                                            style={{
+                                                top: engDueCollision ? ROW2 : ROW1,
                                                 left: `${engDuePct}%`,
-                                                top: collision ? '18px' : '0px',
                                                 transform: 'translateX(-50%)',
                                                 color: engDueColor,
                                             }}
                                         >
-                                            Eng. due
+                                            Engagement<br />Due Date
                                         </span>
                                     )}
                                 </div>
@@ -1750,6 +1923,12 @@ function DeliveryTimeline({ deliverables, engagementCreatedAt, kickoffDate, enga
             {noDueDateCount > 0 && (
                 <p className="text-[10px] text-amber-600 mt-0.5">
                     {noDueDateCount} deliverable{noDueDateCount > 1 ? 's' : ''} {noDueDateCount > 1 ? 'have' : 'has'} no due date — {noDueDateCount > 1 ? 'their bars extend' : 'its bar extends'} to today. Add a due date to schedule {noDueDateCount > 1 ? 'them' : 'it'} and lift Planning Hygiene.
+                </p>
+            )}
+            {/* Nudge: deliverables planned beyond the engagement due date */}
+            {beyondEngDueCount > 0 && (
+                <p className="text-[10px] text-rose-600 mt-0.5">
+                    {beyondEngDueCount} deliverable{beyondEngDueCount > 1 ? 's are' : ' is'} due after the engagement end date — {beyondEngDueCount > 1 ? 'their planned dates extend' : 'its planned date extends'} beyond the scope of this engagement. Review {beyondEngDueCount > 1 ? 'their' : 'its'} due date{beyondEngDueCount > 1 ? 's' : ''} or update the engagement timeline.
                 </p>
             )}
         </div>
@@ -1804,10 +1983,12 @@ function FolderHealthRing({ label, tooltip, icon: Icon, segments, centerTop, cen
     )
 }
 
-function FolderHealthBody({ storageHealth, folderHealth }: {
+function FolderHealthBody({ storageHealth, folderHealth, hiddenRings = [] }: {
     storageHealth: EngagementInsightsResponse['storageHealth']
     folderHealth: EngagementInsightsResponse['folderHealth']
+    hiddenRings?: string[]
 }) {
+    const show = (id: string) => !hiddenRings.includes(id)
     const score = folderHealth.score
     const scoreHex = score >= 80 ? RING.green : score >= 50 ? RING.amber : RING.red
     const scoreTextClass = score >= 80 ? 'text-green-600' : score >= 50 ? 'text-amber-600' : 'text-red-600'
@@ -1828,8 +2009,9 @@ function FolderHealthBody({ storageHealth, folderHealth }: {
     // Row 1: Score | Total Artifacts | Poorly Named
     // Row 2: Duplicates | Empty Folders | Folders > 3L depth
     // Row 3: Orphaned Files | Stale Files | Large Files
-    const rings = [
+    const allRings = [
         {
+            id: 'folder.total_artifacts',
             label: 'Total Artifacts',
             tooltip: `All files and folders indexed. ${totalFiles} files + ${totalFolders} folders = ${totalArtifacts} total.`,
             icon: FileText,
@@ -1841,6 +2023,7 @@ function FolderHealthBody({ storageHealth, folderHealth }: {
             centerBottom: <span className="text-[10px] text-gray-400 mt-0.5">total</span>,
         },
         {
+            id: 'folder.poorly_named',
             label: 'Poorly Named',
             tooltip: 'Files or folders with default/meaningless names like "Untitled", "New File", "Copy of", etc.',
             icon: FileType,
@@ -1852,6 +2035,7 @@ function FolderHealthBody({ storageHealth, folderHealth }: {
             centerBottom: <span className="text-[10px] text-gray-400 mt-0.5">/ {totalArtifacts}</span>,
         },
         {
+            id: 'folder.duplicates',
             label: 'Duplicates',
             tooltip: 'Files with identical or near-identical names (≥90% match) and the same extension.',
             icon: FileWarning,
@@ -1863,6 +2047,7 @@ function FolderHealthBody({ storageHealth, folderHealth }: {
             centerBottom: <span className="text-[10px] text-gray-400 mt-0.5">/ {totalArtifacts}</span>,
         },
         {
+            id: 'folder.empty_folders',
             label: 'Empty Folders',
             tooltip: 'Folders with no files or subfolders inside. Remove them to keep the structure clean.',
             icon: FolderMinus,
@@ -1874,6 +2059,7 @@ function FolderHealthBody({ storageHealth, folderHealth }: {
             centerBottom: <span className="text-[10px] text-gray-400 mt-0.5">/ {totalFolders}</span>,
         },
         {
+            id: 'folder.deep_folders',
             label: 'Folders > 3L depth',
             tooltip: 'Folders nested more than 3 levels deep. A shallow structure is easier to navigate — aim to keep depth at 3 or fewer.',
             icon: FolderTree,
@@ -1885,6 +2071,7 @@ function FolderHealthBody({ storageHealth, folderHealth }: {
             centerBottom: <span className="text-[10px] text-gray-400 mt-0.5">/ {totalFolders}</span>,
         },
         {
+            id: 'folder.orphaned_files',
             label: 'Orphaned Files',
             tooltip: 'Files sitting at the root level with no parent folder. Move them into an appropriate folder.',
             icon: FileQuestion,
@@ -1896,6 +2083,7 @@ function FolderHealthBody({ storageHealth, folderHealth }: {
             centerBottom: <span className="text-[10px] text-gray-400 mt-0.5">/ {totalFiles}</span>,
         },
         {
+            id: 'folder.stale_files',
             label: 'Stale Files',
             tooltip: 'Files not modified in the last 6 months. Candidates for archival or deletion.',
             icon: Clock,
@@ -1907,6 +2095,7 @@ function FolderHealthBody({ storageHealth, folderHealth }: {
             centerBottom: <span className="text-[10px] text-gray-400 mt-0.5">/ {totalFiles}</span>,
         },
         {
+            id: 'folder.large_files',
             label: 'Large Files',
             tooltip: 'Files larger than 50 MB. Consider splitting or archiving to keep the workspace efficient.',
             icon: HardDrive,
@@ -1918,13 +2107,14 @@ function FolderHealthBody({ storageHealth, folderHealth }: {
             centerBottom: <span className="text-[10px] text-gray-400 mt-0.5">/ {totalFiles}</span>,
         },
     ]
+    const rings = allRings.filter(r => show(r.id))
 
     return (
         <div className="p-6 flex flex-col gap-6">
             {/* 3×3 grid: score ring first, then 8 KPI rings */}
             <div className="grid grid-cols-3 gap-8">
                 {/* Score ring — cell 1 */}
-                <div className="flex flex-col items-center gap-3">
+                {show('folder.overall_score') && <div className="flex flex-col items-center gap-3">
                     <p className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
                         <FolderOpen className="h-4 w-4 text-gray-400" />
                         Overall Score
@@ -1947,7 +2137,7 @@ function FolderHealthBody({ storageHealth, folderHealth }: {
                             <p className="text-xs text-gray-400 tabular-nums">100 − <span className="text-red-500 font-medium">{totalDeducted}</span> = <span className={`font-semibold ${scoreTextClass}`}>{score}</span></p>
                         )}
                     </div>
-                </div>
+                </div>}
                 {/* 8 KPI rings */}
                 {rings.map((r) => (
                     <FolderHealthRing
@@ -1987,7 +2177,8 @@ function FolderHealthBody({ storageHealth, folderHealth }: {
 
 // Engagement Health card body: 3 rings (Health Score gauge · Delivery Status · Delivery Schedule)
 // plus the health-score risk breakdown. Health Score excludes file-organization issues.
-function EngagementHealthBody({ health, deliverables, planningHygiene, commentThreads, pace, firstTimeRight, inFlightWithRework, engagementCreatedAt, kickoffDate, engagementDueDate }: { health?: EngagementHealthScore; deliverables: DeliverableProgress[]; planningHygiene?: PlanningHygiene; commentThreads?: CommentThreads; pace?: EngagementPace; firstTimeRight?: FirstTimeRight; inFlightWithRework?: number; engagementCreatedAt?: string | null; kickoffDate?: string | null; engagementDueDate?: string | null }) {
+function EngagementHealthBody({ health, deliverables, planningHygiene, commentThreads, pace, firstTimeRight, inFlightWithRework, engagementCreatedAt, kickoffDate, engagementDueDate, hiddenRings = [] }: { health?: EngagementHealthScore; deliverables: DeliverableProgress[]; planningHygiene?: PlanningHygiene; commentThreads?: CommentThreads; pace?: EngagementPace; firstTimeRight?: FirstTimeRight; inFlightWithRework?: number; engagementCreatedAt?: string | null; kickoffDate?: string | null; engagementDueDate?: string | null; hiddenRings?: string[] }) {
+    const show = (id: string) => !hiddenRings.includes(id)
     const total = deliverables.length
 
     // Ring 1 — Health Score gauge
@@ -2057,7 +2248,7 @@ function EngagementHealthBody({ health, deliverables, planningHygiene, commentTh
         <div className="p-6 flex flex-col gap-6">
             <div className={`grid grid-cols-1 ${health ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-8`}>
                 {/* Ring 1 — Health Score (internal only; stripped from external responses) */}
-                {health && (
+                {health && show('engagement.health_score') && (
                     <div id="ring-health" className="flex flex-col items-center gap-3 scroll-mt-24">
                         <p className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
                             <Heart className="h-4 w-4 text-gray-400" /> Overall Health Score
@@ -2099,6 +2290,7 @@ function EngagementHealthBody({ health, deliverables, planningHygiene, commentTh
                     </div>
                 )}
                 {/* Ring 2 — Delivery Status */}
+                {show('engagement.delivery_status') && (
                 <div id="ring-status" className="flex flex-col items-center gap-3 scroll-mt-24">
                     <p className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
                         <Package className="h-4 w-4 text-gray-400" /> Delivery Status
@@ -2110,7 +2302,9 @@ function EngagementHealthBody({ health, deliverables, planningHygiene, commentTh
                         centerBottom={<span className="text-[10px] text-gray-400 mt-0.5">approved</span>}
                     />
                 </div>
+                )}
                 {/* Ring 3 — Delivery Schedule */}
+                {show('engagement.delivery_schedule') && (
                 <div id="ring-schedule" className="flex flex-col items-center gap-3 scroll-mt-24">
                     <p className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
                         <CalendarClock className="h-4 w-4 text-gray-400" /> Delivery Schedule
@@ -2122,9 +2316,9 @@ function EngagementHealthBody({ health, deliverables, planningHygiene, commentTh
                         centerBottom={<span className="text-[10px] text-gray-400 mt-0.5">on schedule</span>}
                     />
                 </div>
-                {/* Rings 4-6 — Overall Health Score inputs (internal only) */}
-                {health && (
-                    <>
+                )}
+                {/* Rings 4-7 — Planning Hygiene, Comment Responsiveness, Pace, First-Time-Right */}
+                {show('engagement.planning_hygiene') && (
                         <div id="ring-planning" className="flex flex-col items-center gap-3 scroll-mt-24">
                             <p className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
                                 <ClipboardCheck className="h-4 w-4 text-gray-400" /> Planning Hygiene
@@ -2154,6 +2348,8 @@ function EngagementHealthBody({ health, deliverables, planningHygiene, commentTh
                                 </>
                             )}
                         </div>
+                )}
+                {show('engagement.comment_responsiveness') && (
                         <div id="ring-comments" className="flex flex-col items-center gap-3 scroll-mt-24">
                             <p className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
                                 <MessagesSquare className="h-4 w-4 text-gray-400" /> Comment Responsiveness
@@ -2168,6 +2364,8 @@ function EngagementHealthBody({ health, deliverables, planningHygiene, commentTh
                                 centerBottom={<span className="text-[10px] text-gray-400 mt-0.5">answered</span>}
                             />
                         </div>
+                )}
+                {show('engagement.pace') && (
                         <div id="ring-pace" className="flex flex-col items-center gap-3 scroll-mt-24">
                             <p className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
                                 <Gauge className="h-4 w-4 text-gray-400" /> Pace
@@ -2193,7 +2391,9 @@ function EngagementHealthBody({ health, deliverables, planningHygiene, commentTh
                                 )}
                             </div>
                         </div>
-                        {/* Ring 7 — First-Time-Right (approved deliverables only) */}
+                )}
+                {/* Ring 7 — First-Time-Right (approved deliverables only) */}
+                {show('engagement.first_time_right') && (
                         <div id="ring-ftr" className="flex flex-col items-center gap-3 scroll-mt-24">
                             <p className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
                                 <Target className="h-4 w-4 text-gray-400" /> First-Time-Right
@@ -2223,7 +2423,6 @@ function EngagementHealthBody({ health, deliverables, planningHygiene, commentTh
                                 </p>
                             )}
                         </div>
-                    </>
                 )}
                 {/* Visual 8 — Delivery Timeline (spans full width across all 3 columns) */}
                 <DeliveryTimeline
@@ -2242,8 +2441,10 @@ export interface EngagementInsightsDashboardProps {
     orgSlug?: string
     clientSlug?: string
     engagementSlug?: string
-    /** External roles (EC/EV): render only the deliverables analytics section. */
-    isExternalPersona?: boolean
+    isFirmAdmin?: boolean
+    firmName?: string
+    clientName?: string
+    engagementName?: string
 }
 
 export function EngagementInsightsDashboard({
@@ -2251,7 +2452,10 @@ export function EngagementInsightsDashboard({
     orgSlug = '',
     clientSlug = '',
     engagementSlug = '',
-    isExternalPersona = false,
+    isFirmAdmin = false,
+    firmName,
+    clientName,
+    engagementName,
 }: EngagementInsightsDashboardProps) {
     const { session } = useAuth()
     const [data, setData] = useState<EngagementInsightsResponse | null>(null)
@@ -2261,6 +2465,9 @@ export function EngagementInsightsDashboard({
     const [shareError, setShareError] = useState<string | null>(null)
     const [dlState, setDlState] = useState<'idle' | 'capturing' | 'done'>('idle')
     const healthCardRef = useRef<HTMLDivElement>(null)
+    const [summaryEditing, setSummaryEditing] = useState(false)
+    const [summaryDraft, setSummaryDraft] = useState('')
+    const [summarySaving, setSummarySaving] = useState(false)
 
     const engagementBase = orgSlug && clientSlug && engagementSlug
         ? `/d/f/${orgSlug}/c/${clientSlug}/e/${engagementSlug}`
@@ -2313,11 +2520,12 @@ export function EngagementInsightsDashboard({
         // Two rAFs + 100 ms: first rAF commits the element to the render tree,
         // second rAF lets the browser complete its layout pass, timeout flushes
         // any deferred style calculations (e.g. grid auto-rows, SVG viewBox).
-        await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 100))))
+        await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 200))))
 
         // Use whichever height is larger: the settled clone (which now has wrapped
         // text, so may be taller than the live element) or the live scroll height.
-        const captureH = Math.max(clone.scrollHeight, liveScrollH)
+        // Add 80px buffer so content at the very bottom is never clipped by the canvas edge.
+        const captureH = Math.max(clone.scrollHeight, liveScrollH) + 40
 
         // html2canvas sign convention: canvas-Y = getBoundingClientRect().top - (-scrollY_option)
         // Clone is at absolute top:0 → getBoundingClientRect().top = -window.scrollY.
@@ -2396,10 +2604,21 @@ export function EngagementInsightsDashboard({
             headers: { Authorization: `Bearer ${session.access_token}` },
         })
             .then((r) => r.json())
-            .then((d) => setData(d))
+            .then((d) => { setData(d); setSummaryDraft(d?.insightsSummary ?? '') })
             .catch((e) => console.error('Failed to load engagement insights', e))
             .finally(() => setLoading(false))
     }, [projectId, session, refreshTick])
+
+    const handleSummarySave = async () => {
+        setSummarySaving(true)
+        try {
+            await updateEngagementInsightsSummary(projectId, summaryDraft.trim() || null)
+            setData((prev) => prev ? { ...prev, insightsSummary: summaryDraft.trim() || null } : prev)
+            setSummaryEditing(false)
+        } finally {
+            setSummarySaving(false)
+        }
+    }
 
     const dueLabel = data?.engagementDaysUntilDue != null
         ? deltaLabel(data.engagementDaysUntilDue)
@@ -2409,40 +2628,8 @@ export function EngagementInsightsDashboard({
         ? deltaColor(data.engagementDaysUntilDue)
         : ''
 
-    // External roles (EC/EV): Engagement Insights section + Action Center with Delivery Actions only.
-    if (isExternalPersona) {
-        const inFlightIds = new Set((data?.deliverables ?? []).filter((d) => d.stage !== 'approved').map((d) => d.id))
-        const inFlightWithRework = (data?.revisionMetrics ?? []).filter((r) => inFlightIds.has(r.documentId) && r.revisions > 0).length
-        return (
-            <TooltipProvider delayDuration={150}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 22rem', gap: '1.5rem', paddingBottom: '1.5rem', alignItems: 'stretch' }}>
-                {/* Left: Engagement Insights */}
-                <div className="bg-white border border-[#e5e7eb] rounded p-6 flex flex-col gap-6 shadow-md">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            <h2 className="text-lg font-bold text-gray-900">Engagement Insights</h2>
-                            {dueLabel && (
-                                <span className={`text-[11px] font-medium px-2.5 py-0.5 rounded-full border ${dueBadgeColor}`}>Due: {dueLabel}</span>
-                            )}
-                        </div>
-                        <button onClick={() => setRefreshTick((t) => t + 1)} className="p-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors" title="Refresh">
-                            <RefreshCw className={`h-4 w-4 text-gray-700 ${loading ? 'animate-spin' : ''}`} />
-                        </button>
-                    </div>
-                    {loading ? (
-                        <div className="h-48 rounded-2xl bg-gray-100 animate-pulse" />
-                    ) : data ? (
-                        <InsightCard title="Engagement Health" icon={Heart} theme="red" subtext="Delivery status and schedule">
-                            <EngagementHealthBody deliverables={data.deliverables ?? []} engagementCreatedAt={data.engagementCreatedAt ?? null} kickoffDate={data.kickoffDate ?? null} engagementDueDate={data.engagementDueDate ?? null} inFlightWithRework={inFlightWithRework} />
-                        </InsightCard>
-                    ) : null}
-                </div>
-                {/* Right: Action Center — Delivery Actions only */}
-                <EngagementActionCenterV2 data={data} loading={loading} engagementBase={engagementBase} projectId={projectId} setRefreshTick={setRefreshTick} deliveryActionsOnly />
-            </div>
-            </TooltipProvider>
-        )
-    }
+    const hiddenSections = data?.insightsConfig?.hiddenSections ?? []
+    const showSection = (id: string) => !hiddenSections.includes(id)
 
     return (
         <TooltipProvider delayDuration={150}>
@@ -2480,71 +2667,85 @@ export function EngagementInsightsDashboard({
                             theme={data.healthScore?.level === 'critical' ? 'red' : data.healthScore?.level === 'warning' ? 'amber' : 'green'}
                             subtext={`Overall Health ${data.healthScore?.score ?? '—'}/100 · ${data.deliverables?.length ?? 0} deliverable${(data.deliverables?.length ?? 0) === 1 ? '' : 's'}`}
                             headerExtra={
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1">
+                                    {isFirmAdmin && (
+                                        <>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <button
+                                                    onClick={() => { setSummaryDraft(data.insightsSummary ?? ''); setSummaryEditing(true) }}
+                                                    className="p-1.5 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                                                    aria-label="Add engagement summary"
+                                                >
+                                                    <NotebookPen className="h-4 w-4" />
+                                                </button>
+                                            </TooltipTrigger>
+                                            <TooltipContent side="bottom" className="text-xs">Add engagement summary</TooltipContent>
+                                        </Tooltip>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <Link
+                                                    href={`/d/f/${orgSlug}?tab=settings&section=appsettings`}
+                                                    className="p-1.5 rounded text-violet-400 hover:text-violet-600 hover:bg-violet-50 transition-colors"
+                                                    aria-label="Display, Print & Sharing settings"
+                                                >
+                                                    <Settings className="h-4 w-4" />
+                                                </Link>
+                                            </TooltipTrigger>
+                                            <TooltipContent side="bottom" className="text-xs">Display, Print & Sharing settings</TooltipContent>
+                                        </Tooltip>
+                                        </>
+                                    )}
                                     <Tooltip>
                                         <TooltipTrigger asChild>
-                                            <Button
-                                                variant="greenCta"
-                                                size="sm"
+                                            <button
                                                 onClick={handleDownloadHealth}
                                                 disabled={dlState !== 'idle'}
-                                                className={`gap-2 text-[10px] font-headline font-bold tracking-widest uppercase${dlState !== 'idle' ? ' cursor-wait' : ''}`}
+                                                className={`p-1.5 rounded transition-colors${dlState !== 'idle' ? ' cursor-wait opacity-50' : ' text-blue-400 hover:text-blue-600 hover:bg-blue-50'}`}
+                                                aria-label="Download PDF"
                                             >
-                                                {dlState === 'capturing' ? (
-                                                    <><RefreshCw className="h-3 w-3 animate-spin" /> Capturing…</>
-                                                ) : dlState === 'done' ? (
-                                                    <><Check className="h-3 w-3" /> Downloaded</>
-                                                ) : (
-                                                    <><Download className="h-3 w-3" /> Download</>
-                                                )}
-                                            </Button>
+                                                {dlState === 'capturing' ? <RefreshCw className="h-4 w-4 animate-spin" /> : dlState === 'done' ? <Check className="h-4 w-4 text-green-600" /> : <Download className="h-4 w-4" />}
+                                            </button>
                                         </TooltipTrigger>
-                                        <TooltipContent side="bottom" className="text-xs">
-                                            Download engagement health report as PDF
-                                        </TooltipContent>
+                                        <TooltipContent side="bottom" className="text-xs">Download health report as PDF</TooltipContent>
                                     </Tooltip>
                                     <Tooltip>
                                         <TooltipTrigger asChild>
-                                            <Button
-                                                variant="greenCta"
-                                                size="sm"
+                                            <button
                                                 onClick={handleShareHealth}
                                                 disabled={shareState !== 'idle' && shareState !== 'error'}
-                                                className={`gap-2 text-[10px] font-headline font-bold tracking-widest uppercase${shareState !== 'idle' && shareState !== 'error' ? ' cursor-wait' : ''}`}
+                                                className={`p-1.5 rounded transition-colors${shareState !== 'idle' && shareState !== 'error' ? ' cursor-wait opacity-50' : shareState === 'error' ? ' text-red-500' : ' text-emerald-400 hover:text-emerald-600 hover:bg-emerald-50'}`}
+                                                aria-label="Share PDF"
                                             >
-                                                {shareState === 'capturing' ? (
-                                                    <><RefreshCw className="h-3 w-3 animate-spin" /> Capturing…</>
-                                                ) : shareState === 'sending' ? (
-                                                    <><RefreshCw className="h-3 w-3 animate-spin" /> Sending…</>
-                                                ) : shareState === 'sent' ? (
-                                                    <><Check className="h-3 w-3" /> Sent</>
-                                                ) : shareState === 'error' ? (
-                                                    <><X className="h-3 w-3" /> Error</>
-                                                ) : (
-                                                    <><Mail className="h-3 w-3" /> Share</>
-                                                )}
-                                            </Button>
+                                                {shareState === 'capturing' || shareState === 'sending' ? <RefreshCw className="h-4 w-4 animate-spin" /> : shareState === 'sent' ? <Check className="h-4 w-4 text-green-600" /> : shareState === 'error' ? <X className="h-4 w-4" /> : <Mail className="h-4 w-4" />}
+                                            </button>
                                         </TooltipTrigger>
                                         <TooltipContent side="bottom" className="text-xs">
-                                            {shareState === 'error'
-                                                ? (shareError ?? 'Something went wrong — try again')
-                                                : `Email health report PDF to ${memberCount} team member${memberCount === 1 ? '' : 's'}`}
+                                            {shareState === 'error' ? (shareError ?? 'Something went wrong — try again') : `Email health report PDF to ${memberCount} team member${memberCount === 1 ? '' : 's'}`}
                                         </TooltipContent>
                                     </Tooltip>
                                 </div>
                             }
                         >
                             <div ref={healthCardRef}>
+                                {/* PDF header — firm / client / engagement identity + report date */}
+                                {(firmName || clientName || engagementName) && (
+                                    <div className="px-6 pt-5 pb-3 border-b border-gray-100 flex items-center justify-between gap-4 flex-wrap">
+                                        <div className="flex items-baseline gap-2 flex-wrap">
+                                            {firmName && <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{firmName}</span>}
+                                            {firmName && clientName && <span className="text-gray-300 text-xs">›</span>}
+                                            {clientName && <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{clientName}</span>}
+                                            {(firmName || clientName) && engagementName && <span className="text-gray-300 text-xs">›</span>}
+                                            {engagementName && <span className="text-sm font-bold text-gray-800">{engagementName}</span>}
+                                        </div>
+                                        <span className="text-[11px] text-gray-400 shrink-0">
+                                            Report date: {new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}{' '}
+                                            {new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', timeZoneName: 'short' })}
+                                        </span>
+                                    </div>
+                                )}
                                 {/* Quick-stats row — inside the card so they export with the PDF */}
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-6 pb-0">
-                                    <TileWithTip text="Members invited to the engagement who haven't yet accepted. Includes internal (EL/EM) and external (EC/EV) invites." ariaLabel="About Pending Invites">
-                                        <StatTile
-                                            icon={Users}
-                                            label="Pending Invites"
-                                            count={data.pendingInvitations.length}
-                                            colorClass="bg-[#5A78FF]/5 text-[#5A78FF]"
-                                        />
-                                    </TileWithTip>
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 p-6 pb-0">
                                     <TileWithTip text="% of the engagement's planned duration that has elapsed, from kickoff (or engagement creation) to due date. Amber ≥60%, red ≥85%." ariaLabel="About Time Lapsed">
                                         {(() => {
                                             if (!data.engagementDueDate) return <StatTile icon={Timer} label="Time Lapsed" count="—" colorClass="bg-gray-50 text-gray-400" />
@@ -2595,7 +2796,20 @@ export function EngagementInsightsDashboard({
                                         })()}
                                     </TileWithTip>
                                 </div>
-                                <EngagementHealthBody health={data.healthScore} deliverables={data.deliverables ?? []} planningHygiene={data.planningHygiene} commentThreads={data.commentThreads} pace={data.pace} firstTimeRight={data.firstTimeRight} inFlightWithRework={inFlightWithRework} engagementCreatedAt={data.engagementCreatedAt} kickoffDate={data.kickoffDate} engagementDueDate={data.engagementDueDate} />
+                                <EngagementHealthBody health={data.healthScore} deliverables={data.deliverables ?? []} planningHygiene={data.planningHygiene} commentThreads={data.commentThreads} pace={data.pace} firstTimeRight={data.firstTimeRight} inFlightWithRework={inFlightWithRework} engagementCreatedAt={data.engagementCreatedAt} kickoffDate={data.kickoffDate} engagementDueDate={data.engagementDueDate} hiddenRings={data.insightsConfig?.hiddenRings ?? []} />
+                                {/* Engagement Summary — inside healthCardRef so it captures in PDF/email */}
+                                {data.insightsSummary && (
+                                    <div className="mx-6 mb-8 mt-2 border border-gray-100 rounded-lg p-4 pb-8 bg-gray-50 flex flex-col gap-1.5">
+                                        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Engagement Summary</span>
+                                        <p className="text-sm text-gray-600 whitespace-pre-wrap leading-relaxed">{data.insightsSummary}</p>
+                                    </div>
+                                )}
+                                {/* End of report marker */}
+                                <div className="mx-6 mb-4 flex items-center gap-3">
+                                    <div className="flex-1 h-px bg-gray-100" />
+                                    <span className="text-[10px] font-headline font-bold tracking-widest uppercase text-gray-300">End of Report</span>
+                                    <div className="flex-1 h-px bg-gray-100" />
+                                </div>
                             </div>
                         </InsightCard>
                     )
@@ -2610,38 +2824,40 @@ export function EngagementInsightsDashboard({
                 ) : (
                     <div className="flex flex-col gap-6">
                         {/* Team Status */}
-                        <InsightCard
-                            title="Team Status"
-                            count={data?.memberCount ?? 0}
-                            icon={Users}
-                            theme="blue"
-                            subtext="Members & pending invitations"
-                            headerExtra={
-                                engagementBase ? (
-                                    <Link href={`${engagementBase}/members`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700 transition-colors">
-                                        Manage
-                                        <ArrowUpRight className="h-3 w-3" />
-                                    </Link>
-                                ) : undefined
-                            }
-                        >
-                            {data && <TeamStatusBody data={data} />}
-                        </InsightCard>
+                        {showSection('team_status') && (
+                            <InsightCard
+                                title="Team Status"
+                                count={data?.memberCount ?? 0}
+                                icon={Users}
+                                theme="blue"
+                                subtext="Members & pending invitations"
+                                headerExtra={
+                                    engagementBase ? (
+                                        <Link href={`${engagementBase}/members`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-700 transition-colors">
+                                            Manage
+                                            <ArrowUpRight className="h-3 w-3" />
+                                        </Link>
+                                    ) : undefined
+                                }
+                            >
+                                {data && <TeamStatusBody data={data} />}
+                            </InsightCard>
+                        )}
 
                         {/* File Organization */}
-                        {data && (
+                        {showSection('file_organization') && data && (
                             <InsightCard
                                 title="File Organization"
                                 icon={FolderOpen}
                                 theme="blue"
                                 subtext={`${data.storageHealth.totalFiles} file${data.storageHealth.totalFiles === 1 ? '' : 's'} · ${data.folderHealth.totalFolders} folder${data.folderHealth.totalFolders === 1 ? '' : 's'} · max depth ${data.folderHealth.maxDepth} · ${formatBytes(data.storageHealth.totalSizeBytes)}`}
                             >
-                                <FolderHealthBody storageHealth={data.storageHealth} folderHealth={data.folderHealth} />
+                                <FolderHealthBody storageHealth={data.storageHealth} folderHealth={data.folderHealth} hiddenRings={data.insightsConfig?.hiddenRings ?? []} />
                             </InsightCard>
                         )}
 
                         {/* Document Activity */}
-                        {data && (
+                        {showSection('document_activity') && data && (
                             <DocActivitySection data={data} engagementBase={engagementBase} />
                         )}
                     </div>
@@ -2650,6 +2866,66 @@ export function EngagementInsightsDashboard({
 
             {/* Right: Action Center */}
             <EngagementActionCenterV2 data={data} loading={loading} engagementBase={engagementBase} projectId={projectId} setRefreshTick={setRefreshTick} />
+
+            {/* Engagement Summary modal */}
+            {summaryEditing && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center">
+                    {/* Backdrop */}
+                    <div
+                        className="absolute inset-0 bg-black/40"
+                        onClick={() => !summarySaving && setSummaryEditing(false)}
+                    />
+                    {/* Dialog */}
+                    <div className="relative z-10 bg-[#f9f9fb] rounded border border-[#e5e7eb] shadow-2xl w-full max-w-lg mx-4 flex flex-col gap-0 overflow-hidden">
+                        {/* Header */}
+                        <div className="flex items-start gap-3 px-5 py-4 border-b border-[#e5e7eb] bg-white">
+                            <div className="mt-0.5 h-7 w-7 rounded flex items-center justify-center shrink-0 bg-primary/10 ring-1 ring-primary/20">
+                                <NotebookPen className="h-4 w-4 text-primary" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <p className="text-[10px] font-headline font-bold tracking-widest uppercase text-[#45474c]">Engagement Summary</p>
+                                <p className="text-xs text-gray-400 mt-0.5">Visible to all members · included in PDF and email exports</p>
+                            </div>
+                            <button
+                                onClick={() => !summarySaving && setSummaryEditing(false)}
+                                className="p-1 rounded text-gray-400 hover:text-gray-600 transition-colors"
+                                aria-label="Close"
+                            >
+                                <X className="h-4 w-4" />
+                            </button>
+                        </div>
+                        {/* Body */}
+                        <div className="px-5 py-4">
+                            <textarea
+                                value={summaryDraft}
+                                onChange={(e) => setSummaryDraft(e.target.value)}
+                                rows={6}
+                                placeholder="Add a summary note for this engagement…"
+                                className="w-full text-sm text-gray-700 bg-white border border-[#e5e7eb] rounded px-3 py-2.5 resize-none focus:outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary/40 placeholder:text-gray-300 transition-shadow"
+                                autoFocus
+                            />
+                        </div>
+                        {/* Footer */}
+                        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-[#e5e7eb] bg-white">
+                            <button
+                                onClick={() => setSummaryEditing(false)}
+                                disabled={summarySaving}
+                                className="rounded text-[10px] font-headline font-bold tracking-widest uppercase border border-[#e5e7eb] text-[#45474c] hover:bg-[#f9f9fb] px-3 py-1.5 transition-colors disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleSummarySave}
+                                disabled={summarySaving}
+                                className="rounded text-[10px] font-headline font-bold tracking-widest uppercase bg-primary hover:brightness-105 text-white shadow-sm px-3 py-1.5 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                            >
+                                {summarySaving && <RefreshCw className="h-3 w-3 animate-spin" />}
+                                {summarySaving ? 'Saving…' : 'Save'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
         </TooltipProvider>
     )
