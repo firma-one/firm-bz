@@ -182,13 +182,13 @@ function DroppableLane({
   className,
 }: {
   id: string
-  children: React.ReactNode
+  children: React.ReactNode | ((isOver: boolean) => React.ReactNode)
   className?: string
 }) {
   const { setNodeRef, isOver } = useDroppable({ id })
   return (
     <div ref={setNodeRef} className={cn(className, isOver && 'bg-primary/5 rounded')}>
-      {children}
+      {typeof children === 'function' ? children(isOver) : children}
     </div>
   )
 }
@@ -412,7 +412,7 @@ function ShareCardContent({
 
   return (
     <>
-      <div className={cn('border-b', isApprovedLane ? 'bg-primary/[0.06] border-primary/10' : 'bg-[#f9f9fb] border-[#e5e7eb]', isPending && 'opacity-80')}>
+      <div className={cn('border-b', isApprovedLane ? 'bg-primary/[0.06] border-primary/10' : 'bg-[#fdfdfe] border-[#f1f1f3]', isPending && 'opacity-80')}>
         <div
           className="flex items-center gap-2.5 px-3 pt-2.5 pb-2 group/drag"
           {...(dragListeners ?? {})}
@@ -450,7 +450,7 @@ function ShareCardContent({
               className={cn(
                 'truncate cursor-pointer transition-colors flex items-center gap-1.5',
                 share.docId
-                  ? 'text-[11px] font-normal text-[#9a9ba0] hover:text-[#45474c]'
+                  ? 'text-[11px] font-medium text-[#5b5d64] hover:text-[#1b1b1d]'
                   : 'text-[13px] font-semibold text-[#1b1b1d] hover:text-primary'
               )}
             >
@@ -544,7 +544,7 @@ function ShareCardContent({
         <div className="flex items-center justify-between">
           <RelativeDateTime
             date={share.updatedAt}
-            textClassName="text-[11px] text-[#9a9ba0]"
+            textClassName="text-[11px] text-[#6b6d75]"
             iconClassName="text-[#9a9ba0] hover:text-[#45474c]"
             tooltipSide="top"
           />
@@ -625,7 +625,7 @@ function ShareCardContent({
         </div>
         {/* Shared by */}
         <div className="flex items-center gap-1.5">
-          <span className="text-[10px] text-[#9a9ba0] w-14 shrink-0 whitespace-nowrap">
+          <span className="text-[10px] font-medium text-[#6b6d75] w-14 shrink-0 whitespace-nowrap">
             {isPending ? 'Uploaded by' : 'Shared by'}
           </span>
           <TooltipProvider>
@@ -640,7 +640,7 @@ function ShareCardContent({
         {/* Shared with — hide when pending */}
         {!isPending && (share.settings?.externalCollaborator || share.settings?.guest) && (
           <div className="flex items-center gap-1.5">
-            <span className="text-[10px] text-[#9a9ba0] w-14 shrink-0 whitespace-nowrap">Shared with</span>
+            <span className="text-[10px] font-medium text-[#6b6d75] w-14 shrink-0 whitespace-nowrap">Shared with</span>
             <div className="flex items-center gap-1">
               {share.settings?.externalCollaborator && (
                 <TooltipProvider>
@@ -675,7 +675,7 @@ function ShareCardContent({
               <div className="flex-1 h-1 rounded-full bg-[#e5e7eb] overflow-hidden">
                 <div className="h-full rounded-full bg-primary transition-all duration-300" style={{ width: `${pct}%` }} />
               </div>
-              <span className="text-[9px] font-semibold text-[#9a9ba0] tabular-nums shrink-0">{approved}/{total}</span>
+              <span className="text-[9px] font-semibold text-[#6b6d75] tabular-nums shrink-0">{approved}/{total}</span>
             </div>
           )
         })()}
@@ -2153,8 +2153,8 @@ export function EngagementSharesTab({
         </div>
       </div>
 
-      <div className={cn('flex flex-1 min-h-0 overflow-hidden gap-4 rounded', viewMode === 'board' ? '' : 'bg-white border border-[#e5e7eb]')}>
-        <div className={cn('flex-1 min-w-0 overflow-auto rounded', viewMode === 'list' ? 'bg-white' : viewMode === 'board' ? '' : 'bg-white p-4')}>
+      <div className={cn('flex flex-1 overflow-hidden gap-4 rounded', viewMode === 'board' ? 'bg-white min-h-[calc(100vh-220px)]' : 'min-h-0 bg-white border border-[#e5e7eb]')}>
+        <div className={cn('flex-1 min-w-0 overflow-auto rounded', viewMode === 'list' ? 'bg-white' : viewMode === 'board' ? 'bg-white p-4' : 'bg-white p-4')}>
           {isLoading ? (
             <div className="flex items-center justify-center min-h-[200px]">
               <LoadingSpinner size="md" className="min-h-0" />
@@ -2229,8 +2229,8 @@ export function EngagementSharesTab({
                 onDragEnd={handleDragEnd}
               >
                 <div
-                  className="grid gap-4 min-h-[360px]"
-                  style={{ gridTemplateColumns: approvedCollapsed ? '1fr 1fr 1fr 36px' : '1fr 1fr 1fr 1fr' }}
+                  className="grid gap-4 min-h-[360px] items-start"
+                  style={{ gridTemplateColumns: approvedCollapsed ? 'minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 36px' : 'repeat(4, minmax(0, 1fr))' }}
                 >
                   {LANES.map((lane) => {
                     const laneCount = byLane[lane.status].length
@@ -2240,7 +2240,7 @@ export function EngagementSharesTab({
                       to_do: '#9ca3af',
                       in_progress: '#5A78FF',
                       in_review: '#f97316',
-                      approved: '#069668',
+                      approved: 'hsl(var(--primary))',
                     }
 
                     if (lane.status === 'approved' && approvedCollapsed) {
@@ -2275,70 +2275,90 @@ export function EngagementSharesTab({
                         key={lane.status}
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
-                        className="flex flex-col rounded border border-[#e5e7eb] bg-white overflow-hidden"
+                        className="flex flex-col"
                       >
-                        <div className="flex items-center gap-2 px-3 py-2.5 border-b border-[#e5e7eb]">
-                          <div className={cn('rounded p-1', lane.iconBg)}>
-                            {lane.icon}
+                        {/* Swimlane header: its own card, separate from the body */}
+                        <div className="flex flex-col rounded border border-[#e5e7eb] bg-white overflow-hidden shrink-0">
+                          <div className="flex items-center gap-2 px-3 py-2.5">
+                            <div className={cn('rounded p-1', lane.iconBg)}>
+                              {lane.icon}
+                            </div>
+                            <span className="text-xs font-semibold text-[#1b1b1d]">{lane.label}</span>
+                            <span className="text-[11px] text-[#9a9ba0] ml-0.5 tabular-nums">
+                              {totalCount > 0 ? `${laneCount}/${totalCount}` : laneCount}
+                            </span>
+                            {lane.status === 'approved' && (
+                              <button
+                                onClick={() => setApprovedCollapsed(true)}
+                                className="ml-auto text-[#9a9ba0] hover:text-[#45474c] transition-colors shrink-0"
+                                title="Collapse Approved column"
+                              >
+                                <ChevronLeft className="h-3.5 w-3.5" />
+                              </button>
+                            )}
                           </div>
-                          <span className="text-xs font-semibold text-[#1b1b1d]">{lane.label}</span>
-                          <span className="text-[11px] text-[#9a9ba0] ml-0.5 tabular-nums">
-                            {totalCount > 0 ? `${laneCount}/${totalCount}` : laneCount}
-                          </span>
-                          {lane.status === 'approved' && (
-                            <button
-                              onClick={() => setApprovedCollapsed(true)}
-                              className="ml-auto text-[#9a9ba0] hover:text-[#45474c] transition-colors shrink-0"
-                              title="Collapse Approved column"
-                            >
-                              <ChevronLeft className="h-3.5 w-3.5" />
-                            </button>
+                          {/* Mini progress bar */}
+                          <div className="h-0.5 bg-[#f3f4f6] shrink-0">
+                            <div
+                              className="h-full transition-all duration-300"
+                              style={{ width: `${lanePct}%`, backgroundColor: LANE_COLOR[lane.status] }}
+                            />
+                          </div>
+                        </div>
+                        {/* Swimlane body: gray container sized to its contents, not the tallest column */}
+                        <DroppableLane id={lane.status} className="flex flex-col mt-2 rounded bg-[#f9f9fb] p-3 gap-2.5 min-h-[220px]">
+                          {(isOver) => (
+                            <>
+                              <AnimatePresence mode="popLayout">
+                                {byLane[lane.status].map((share) => (
+                                  <DraggableCard
+                                    key={share.id}
+                                    id={share.id}
+                                    share={share}
+                                    laneStatus={lane.status}
+                                    formatDate={formatDate}
+                                    getDocumentForMenu={getDocumentForMenu}
+                                    showActions
+                                    canManage={canManage}
+                                    isApprovedLane={lane.status === 'approved'}
+                                    onShareSaved={refreshData}
+                                    handleSecureOpen={handleSecureOpenShare}
+                                    isRegrantingId={isRegrantingId}
+                                    onOpenComments={handleOpenComments}
+                                    onOpenPreview={handleOpenPreview}
+                                    extCollaboratorLabel={projExtCollaborator}
+                                    viewerLabel={projViewer}
+                                    onParentFolderClick={onOpenInFiles ? handleOpenParentFolder : undefined}
+                                    onOpenInFilesForFolder={onOpenInFiles ? handleOpenInFilesForFolder : undefined}
+                                    onOpenDetail={handleOpenDeliverableDetail}
+                                    isDetailOpen={share.id === openDeliverableId}
+                                    isPaneOpen={!!openDeliverableId}
+                                    isExternalPersona={restrictToSharedOnly}
+                                    isExternalViewer={isExternalViewer}
+                                    deeplinkBase={deeplinkBase}
+                                    generalFolderId={generalFolderId}
+                                    currentUserId={currentUserId}
+                                    onIntakeAction={handleIntakeAction}
+                                    intakeActionInProgress={intakeActionInProgress}
+                                    isSaving={savingId === share.id}
+                                    onUntagAsDeliverable={handleUntagAsDeliverable}
+                                  />
+                                ))}
+                              </AnimatePresence>
+                              {laneCount === 0 && (
+                                <div
+                                  className={cn(
+                                    'flex-1 rounded border border-dashed flex items-center justify-center text-[11px] font-medium transition-colors',
+                                    isOver
+                                      ? 'border-primary/40 text-primary bg-primary/5'
+                                      : 'border-[#d8d9dd] text-[#b4b5ba]'
+                                  )}
+                                >
+                                  Drop here
+                                </div>
+                              )}
+                            </>
                           )}
-                        </div>
-                        {/* Mini progress bar */}
-                        <div className="h-0.5 bg-[#f3f4f6] shrink-0">
-                          <div
-                            className="h-full transition-all duration-300"
-                            style={{ width: `${lanePct}%`, backgroundColor: LANE_COLOR[lane.status] }}
-                          />
-                        </div>
-                        <DroppableLane id={lane.status} className="flex-1 overflow-y-auto p-3 space-y-2.5 min-h-[120px]">
-                          <AnimatePresence mode="popLayout">
-                            {byLane[lane.status].map((share) => (
-                              <DraggableCard
-                                key={share.id}
-                                id={share.id}
-                                share={share}
-                                laneStatus={lane.status}
-                                formatDate={formatDate}
-                                getDocumentForMenu={getDocumentForMenu}
-                                showActions
-                                canManage={canManage}
-                                isApprovedLane={lane.status === 'approved'}
-                                onShareSaved={refreshData}
-                                handleSecureOpen={handleSecureOpenShare}
-                                isRegrantingId={isRegrantingId}
-                                onOpenComments={handleOpenComments}
-                                onOpenPreview={handleOpenPreview}
-                                extCollaboratorLabel={projExtCollaborator}
-                                viewerLabel={projViewer}
-                                onParentFolderClick={onOpenInFiles ? handleOpenParentFolder : undefined}
-                                onOpenInFilesForFolder={onOpenInFiles ? handleOpenInFilesForFolder : undefined}
-                                onOpenDetail={handleOpenDeliverableDetail}
-                                isDetailOpen={share.id === openDeliverableId}
-                                isPaneOpen={!!openDeliverableId}
-                                isExternalPersona={restrictToSharedOnly}
-                                isExternalViewer={isExternalViewer}
-                                deeplinkBase={deeplinkBase}
-                                generalFolderId={generalFolderId}
-                                currentUserId={currentUserId}
-                                onIntakeAction={handleIntakeAction}
-                                intakeActionInProgress={intakeActionInProgress}
-                                isSaving={savingId === share.id}
-                                onUntagAsDeliverable={handleUntagAsDeliverable}
-                              />
-                            ))}
-                          </AnimatePresence>
                         </DroppableLane>
                       </motion.div>
                     )

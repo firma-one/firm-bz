@@ -857,6 +857,20 @@ export async function provisionEngagementDriveFolder(engagementId: string): Prom
     return { connectorRootFolderId: result.projectId }
 }
 
+export async function updateEngagementInsightsSummary(projectId: string, summary: string | null) {
+    await assertCanManageProject(projectId)
+    const project = await prisma.engagement.findFirst({
+        where: { id: projectId, isDeleted: false },
+        select: { settings: true },
+    })
+    if (!project) throw new Error('Project not found')
+    const existingSettings = (project.settings as Record<string, unknown> | null) ?? {}
+    await prisma.engagement.update({
+        where: { id: projectId },
+        data: { settings: { ...existingSettings, insightsSummary: summary ?? null } },
+    })
+}
+
 // Backward-compatible aliases during Project -> Engagement rename rollout.
 export const createProject = createEngagement
 export const getProjectFolderIds = getEngagementFolderIds

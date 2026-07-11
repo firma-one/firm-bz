@@ -197,13 +197,70 @@ export interface FirstTimeRight {
   totalApproved: number
 }
 
+export interface InsightsConfig {
+  hiddenRings: string[]
+  hiddenSections: string[]
+  hiddenActions: string[]
+}
+
+// Which sections are visible to external members — stored in firm.settings.externalSections.
+// Internal members always see everything.
+export interface ExternalSectionsConfig {
+  engagementHealth: boolean   // default: true
+  fileOrganization: boolean   // default: false
+  documentActivity: boolean   // default: false
+}
+
+const EXTERNAL_SECTION_DEFAULTS: ExternalSectionsConfig = {
+  engagementHealth: true,
+  fileOrganization: false,
+  documentActivity: false,
+}
+
+function buildExternalConfig(sections: ExternalSectionsConfig): InsightsConfig {
+  const hiddenSections: string[] = ['team_status']
+  if (!sections.fileOrganization) hiddenSections.push('file_organization')
+  if (!sections.documentActivity) hiddenSections.push('document_activity')
+
+  const hiddenRings: string[] = []
+  if (!sections.engagementHealth) {
+    hiddenRings.push(
+      'engagement.health_score', 'engagement.delivery_status', 'engagement.delivery_schedule',
+      'engagement.planning_hygiene', 'engagement.comment_responsiveness', 'engagement.pace',
+      'engagement.first_time_right',
+    )
+  }
+  if (!sections.fileOrganization) {
+    hiddenRings.push(
+      'folder.overall_score', 'folder.total_artifacts', 'folder.poorly_named',
+      'folder.duplicates', 'folder.empty_folders', 'folder.deep_folders',
+      'folder.orphaned_files', 'folder.stale_files', 'folder.large_files',
+    )
+  }
+
+  const hiddenActions: string[] = []
+  if (!sections.fileOrganization) {
+    hiddenActions.push(
+      'housekeeping.sensitive', 'housekeeping.poorly-named', 'housekeeping.duplicates',
+      'housekeeping.stale', 'housekeeping.large', 'housekeeping.orphaned',
+      'housekeeping.empty-folders', 'housekeeping.deep-folders',
+    )
+  }
+
+  return { hiddenRings, hiddenSections, hiddenActions }
+}
+
+const INTERNAL_CONFIG: InsightsConfig = { hiddenRings: [], hiddenSections: [], hiddenActions: [] }
+
 export interface EngagementInsightsResponse {
+  insightsConfig: InsightsConfig
   unansweredThreads: UnansweredThreadItem[]
   documentsDueSoon: DocumentDueDateItem[]
   engagementDueDate: string | null
   engagementDaysUntilDue: number | null
   kickoffDate: string | null
   engagementCreatedAt: string | null
+  insightsSummary: string | null
   folderHealth: FolderHealthReport
   storageHealth: StorageHealthReport
   pendingInvitations: { email: string; expireAt: string; daysUntilExpiry: number }[]
@@ -421,10 +478,14 @@ export async function GET(
     staleThreshold.setDate(today.getDate() - 180)
     const largeSizeThreshold = 50 * 1024 * 1024 // 50 MB
 
-    const [engagement, docs, comments, members, invitations, driveConnector, shares, pendingApprovalSharesCount] = await Promise.all([
+    const [engagement, firm, docs, comments, members, invitations, driveConnector, shares, pendingApprovalSharesCount] = await Promise.all([
       prisma.engagement.findUnique({
         where: { id: projectId },
-        select: { dueDate: true, name: true, connectorRootFolderId: true, kickoffDate: true, createdAt: true },
+        select: { dueDate: true, name: true, connectorRootFolderId: true, kickoffDate: true, createdAt: true, settings: true },
+      }),
+      prisma.firm.findUnique({
+        where: { id: ctx.firmId },
+        select: { settings: true },
       }),
       prisma.engagementDocument.findMany({
         where: { engagementId: projectId, status: { not: 'ARCHIVED' } },
@@ -1031,13 +1092,23 @@ export async function GET(
     const healthLevel: EngagementHealthScore['level'] = healthScoreValue >= 80 ? 'good' : healthScoreValue >= 50 ? 'warning' : 'critical'
     const healthScore: EngagementHealthScore = { score: healthScoreValue, level: healthLevel, penalties }
 
+    const savedSections = (firm?.settings as Record<string, unknown>)?.externalSections as Partial<ExternalSectionsConfig> | undefined
+    const externalSections: ExternalSectionsConfig = {
+      engagementHealth: savedSections?.engagementHealth ?? EXTERNAL_SECTION_DEFAULTS.engagementHealth,
+      fileOrganization: savedSections?.fileOrganization ?? EXTERNAL_SECTION_DEFAULTS.fileOrganization,
+      documentActivity: savedSections?.documentActivity ?? EXTERNAL_SECTION_DEFAULTS.documentActivity,
+    }
+    const insightsConfig: InsightsConfig = isExternalPersona ? buildExternalConfig(externalSections) : INTERNAL_CONFIG
+
     const response: EngagementInsightsResponse = {
+      insightsConfig,
       unansweredThreads,
       documentsDueSoon,
       engagementDueDate,
       engagementDaysUntilDue,
       kickoffDate,
       engagementCreatedAt: engagement?.createdAt ? engagement.createdAt.toISOString() : null,
+      insightsSummary: ((engagement?.settings as Record<string, unknown> | null)?.insightsSummary as string | null) ?? null,
       folderHealth: folderHealthWithAllSignals,
       storageHealth,
       pendingInvitations,
@@ -1059,29 +1130,24 @@ export async function GET(
       firstTimeRight,
     }
 
-    // External roles (EC/EV): return ONLY the deliverables analytics; strip all
-    // internal-only data at the API layer so it never reaches the client.
+    // External roles (EC/EV): strip data they must never see regardless of config.
+    // Only zero out fields that are always hidden from externals (File Org, Team Status, Document Activity).
+    // Fields tied to visible rings (unansweredThreads → Comment Responsiveness, documentsDueSoon → header)
+    // must pass through as-is so the real values are shown.
     if (isExternalPersona) {
-      const externalResponse: EngagementInsightsResponse = {
+      return NextResponse.json({
         ...response,
-        unansweredThreads: [],
-        documentsDueSoon: [],
-        recentDocuments: [],
-        sensitiveFiles: [],
+        // Team Status — always hidden for externals
         pendingInvitations: [],
         membersByRole: {},
+        // File Organization — always hidden for externals
         folderHealth: { score: 0, totalFolders: 0, totalFiles: 0, maxDepth: 0, orphanedFiles: 0, deeplyNestedFolders: 0, emptyFolders: 0, issues: [], penalties: [] },
         storageHealth: { totalFiles: 0, totalSizeBytes: 0, staleFiles: [], largeFiles: [], staleCount: 0, largeCount: 0, staleTotalBytes: 0, duplicateGroups: [], duplicateCount: 0, badlyNamedCount: 0 },
-        healthScore: { score: 0, level: 'good', penalties: [] },
+        sensitiveFiles: [],
+        // Document Activity — always hidden for externals
+        recentDocuments: [],
         pendingApprovalSharesCount: 0,
-        // Internal workflow metrics — not exposed to external roles.
-        planningHygiene: { deliverableTotal: 0, deliverableWithDueDate: 0, docTotal: 0, docWithDueDate: 0, docWithAssignee: 0 },
-        commentThreads: { answered: 0, unanswered: 0, total: 0 },
-        revisionMetrics: [],
-        approvalCycle: { avgCycleDays: null, medianCycleDays: null, deliverableCount: 0, approvedCount: 0 },
-        firstTimeRight: { firstTime: 0, reworked: 0, totalApproved: 0 },
-      }
-      return NextResponse.json(externalResponse)
+      } satisfies EngagementInsightsResponse)
     }
 
     return NextResponse.json(response)

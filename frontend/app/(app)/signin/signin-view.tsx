@@ -11,7 +11,7 @@ import { ArrowLeft, ArrowRight, Check, Lock, Shield } from 'lucide-react'
 import { KineticFloatingEmailField } from '@/components/signup/kinetic-floating-email-field'
 import { OTPInput, type OTPInputHandle } from '@/components/signup/otp-input'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
-import { Turnstile } from '@marsidev/react-turnstile'
+import { Turnstile, type TurnstileInstance } from '@marsidev/react-turnstile'
 import { useSignInFlow } from './use-sign-in-flow'
 
 const H = '[font-family:var(--font-kinetic-headline),system-ui,sans-serif]'
@@ -25,6 +25,8 @@ const OUTLINE_SECONDARY =
 
 export function SigninView() {
   const otpInputRef = useRef<OTPInputHandle>(null)
+  const emailTurnstileRef = useRef<TurnstileInstance>(undefined)
+  const otpTurnstileRef = useRef<TurnstileInstance>(undefined)
   const {
     step,
     email,
@@ -204,13 +206,18 @@ export function SigninView() {
                       {showTurnstile && (
                         <div className="mt-3 flex justify-start">
                           <Turnstile
+                            ref={emailTurnstileRef}
                             siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'}
                             onSuccess={handleTurnstileSuccess}
                             onError={() => {
-                              setError('Captcha verification failed. Please try again.')
+                              setError('Captcha verification failed. Retrying…')
                               setTurnstileToken(null)
+                              emailTurnstileRef.current?.reset()
                             }}
-                            onExpire={() => setTurnstileToken(null)}
+                            onExpire={() => {
+                              setTurnstileToken(null)
+                              emailTurnstileRef.current?.reset()
+                            }}
                           />
                         </div>
                       )}
@@ -378,13 +385,18 @@ export function SigninView() {
                       {showTurnstile && step === 'otp-verify' && (
                         <div className="flex justify-start">
                           <Turnstile
+                            ref={otpTurnstileRef}
                             siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'}
                             onSuccess={handleTurnstileSuccess}
                             onError={() => {
-                              setError('Captcha verification failed. Please try again.')
+                              setError('Captcha verification failed. Retrying…')
                               setTurnstileToken(null)
+                              otpTurnstileRef.current?.reset()
                             }}
-                            onExpire={() => setTurnstileToken(null)}
+                            onExpire={() => {
+                              setTurnstileToken(null)
+                              otpTurnstileRef.current?.reset()
+                            }}
                           />
                         </div>
                       )}
