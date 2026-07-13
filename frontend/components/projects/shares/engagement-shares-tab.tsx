@@ -1614,6 +1614,7 @@ export function EngagementSharesTab({
   const [finalizingId, setFinalizingId] = useState<string | null>(null)
   const [detailShareId, setDetailShareId] = useState<string | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
+  const [dropZoneReady, setDropZoneReady] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [filterOverdue, setFilterOverdue] = useState(false)
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null)
@@ -1985,11 +1986,13 @@ export function EngagementSharesTab({
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(event.active.id as string)
+    requestAnimationFrame(() => setDropZoneReady(true))
   }
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event
     setActiveId(null)
+    setDropZoneReady(false)
     if (!over) return
     const shareId = active.id as string
     const overId = String(over.id)
@@ -2351,7 +2354,7 @@ export function EngagementSharesTab({
                           {(isOver) => (
                             <>
                               <AnimatePresence mode="popLayout">
-                                {byLane[lane.status].map((share) => (
+                                {byLane[lane.status].filter(s => s.id !== activeId).map((share) => (
                                   <DraggableCard
                                     key={share.id}
                                     id={share.id}
@@ -2386,7 +2389,7 @@ export function EngagementSharesTab({
                                   />
                                 ))}
                               </AnimatePresence>
-                              {laneCount === 0 && (
+                              {(activeId ? dropZoneReady : true) && byLane[lane.status].filter(s => s.id !== activeId).length === 0 && (
                                 <div
                                   className={cn(
                                     'h-[164px] rounded border border-dashed flex items-center justify-center text-[11px] font-medium transition-colors',
