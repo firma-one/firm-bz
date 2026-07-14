@@ -57,6 +57,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { DocumentIcon } from '@/components/ui/document-icon'
 import type { EngagementInsightsResponse, UnansweredThreadItem, DocumentDueDateItem, RecentDocumentItem, SensitiveFileItem, DeliverableProgress, DeliverableStage, EngagementHealthScore, PlanningHygiene, CommentThreads, EngagementPace, FirstTimeRight } from '@/app/api/projects/[projectId]/insights/route'
 import { updateEngagementInsightsSummary } from '@/lib/actions/project'
+import { RelativeDateTime } from '@/components/ui/relative-date-time'
 
 // ─── Ring Registry ────────────────────────────────────────────────────────────
 // Stable IDs for every ring. Used by Firm Settings to hide/show rings.
@@ -2436,12 +2437,300 @@ function EngagementHealthBody({ health, deliverables, planningHygiene, commentTh
     )
 }
 
+// ─── Sandbox Insights Preview ─────────────────────────────────────────────────
+// Uses the same internal components as the real dashboard but with static mock data.
+
+const SANDBOX_DELIVERABLES: DeliverableProgress[] = [
+    { id: 'd1', docId: 'VFH-46', name: '01_Research & Insights',       stage: 'approved',    dueDate: null,                                                                    finalizedAt: new Date(Date.now() - 10 * 86400000).toISOString(), isOverdue: false, createdAt: new Date(Date.now() - 30 * 86400000).toISOString() },
+    { id: 'd2', docId: 'VFH-54', name: '02_Strategy & Messaging',      stage: 'in_review',   dueDate: new Date(Date.now() +  5 * 86400000).toISOString(), finalizedAt: null,   isOverdue: false, createdAt: new Date(Date.now() - 25 * 86400000).toISOString() },
+    { id: 'd3', docId: 'VFH-84', name: '03_Enablement & Launch',       stage: 'in_progress', dueDate: new Date(Date.now() + 12 * 86400000).toISOString(), finalizedAt: null,   isOverdue: false, createdAt: new Date(Date.now() - 20 * 86400000).toISOString() },
+    { id: 'd4', docId: 'VFH-65', name: '04_Compliance & Legal Review', stage: 'in_review',   dueDate: new Date(Date.now() -  2 * 86400000).toISOString(), finalizedAt: null,   isOverdue: true,  createdAt: new Date(Date.now() - 18 * 86400000).toISOString() },
+]
+
+const SANDBOX_HEALTH: EngagementHealthScore = {
+    score: 74, level: 'warning', penalties: [],
+}
+
+const SANDBOX_PLANNING: PlanningHygiene = {
+    deliverableTotal: 4, deliverableWithDueDate: 3,
+    docTotal: 22, docWithDueDate: 14, docWithAssignee: 16,
+}
+
+const SANDBOX_THREADS: CommentThreads = {
+    total: 8, unanswered: 2, answered: 6,
+}
+
+const SANDBOX_PACE: EngagementPace = {
+    deliveredPct: 25, timePct: 52, hasDeadline: true,
+}
+
+const SANDBOX_FTR: FirstTimeRight = {
+    firstTime: 1, reworked: 0, totalApproved: 1,
+}
+
+function SandboxInsightsPreview({ projectName, firmName, clientName, engagementName }: {
+    projectName?: string
+    firmName?: string
+    clientName?: string
+    engagementName?: string
+}) {
+    const dueInDays = 16
+    const dueBadgeColor = 'bg-slate-50 text-slate-600 border-slate-200'
+
+    return (
+        <TooltipProvider delayDuration={150}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 22rem', gap: '1.5rem', paddingBottom: '1.5rem', alignItems: 'stretch' }}>
+            {/* Left card */}
+            <div className="bg-white border border-[#e5e7eb] rounded p-6 flex flex-col gap-6 shadow-md">
+                {/* Header */}
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <h2 className="text-lg font-bold text-gray-900">Engagement Insights</h2>
+                        <span className={`text-[11px] font-medium px-2.5 py-0.5 rounded-full border ${dueBadgeColor}`}>
+                            Due: In {dueInDays}d
+                        </span>
+                    </div>
+                    <div className="p-1.5 rounded-lg bg-gray-100">
+                        <RefreshCw className="h-4 w-4 text-gray-700" />
+                    </div>
+                </div>
+
+                {/* Engagement Health InsightCard */}
+                <InsightCard
+                    title="Engagement Health"
+                    icon={Heart}
+                    theme="green"
+                    subtext={`Overall Health ${SANDBOX_HEALTH.score}/100 · ${SANDBOX_DELIVERABLES.length} deliverables`}
+                    headerExtra={
+                        <div className="flex items-center gap-1">
+                            <button className="p-1.5 rounded text-gray-400" aria-label="Add engagement summary"><NotebookPen className="h-4 w-4" /></button>
+                            <button className="p-1.5 rounded text-blue-400" aria-label="Download PDF"><Download className="h-4 w-4" /></button>
+                            <button className="p-1.5 rounded text-emerald-400" aria-label="Share PDF"><Mail className="h-4 w-4" /></button>
+                        </div>
+                    }
+                >
+                    <div>
+                        {/* PDF header */}
+                        {(firmName || clientName || engagementName) && (
+                            <div className="px-6 pt-5 pb-3 border-b border-gray-100 flex items-center justify-between gap-4 flex-wrap">
+                                <div className="flex items-baseline gap-2 flex-wrap">
+                                    {firmName && <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{firmName}</span>}
+                                    {firmName && clientName && <span className="text-gray-300 text-xs">›</span>}
+                                    {clientName && <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{clientName}</span>}
+                                    {(firmName || clientName) && engagementName && <span className="text-gray-300 text-xs">›</span>}
+                                    {engagementName && <span className="text-sm font-bold text-gray-800">{engagementName}</span>}
+                                </div>
+                            </div>
+                        )}
+                        {/* Stat tiles */}
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 p-6 pb-0">
+                            <StatTile icon={Timer} label="Time Lapsed" count="52%" sub="16d left · from Jun 3" colorClass="bg-green-50 text-green-600" />
+                            <StatTile icon={RefreshCw} label="Avg Revision Rounds" count="1.2" sub="per deliverable" colorClass="bg-violet-50 text-violet-600" />
+                            <StatTile icon={Clock} label="Avg Time to Approval" count="9d" sub="To Do → Approved · 1 deliverable" colorClass="bg-amber-50 text-amber-600" />
+                        </div>
+                        <EngagementHealthBody
+                            health={SANDBOX_HEALTH}
+                            deliverables={SANDBOX_DELIVERABLES}
+                            planningHygiene={SANDBOX_PLANNING}
+                            commentThreads={SANDBOX_THREADS}
+                            pace={SANDBOX_PACE}
+                            firstTimeRight={SANDBOX_FTR}
+                            inFlightWithRework={1}
+                            engagementCreatedAt={new Date(Date.now() - 35 * 86400000).toISOString()}
+                            kickoffDate={new Date(Date.now() - 30 * 86400000).toISOString()}
+                            engagementDueDate={new Date(Date.now() + dueInDays * 86400000).toISOString()}
+                            hiddenRings={[]}
+                        />
+                        <div className="mx-6 mb-4 flex items-center gap-3">
+                            <div className="flex-1 h-px bg-gray-100" />
+                            <span className="text-[10px] font-headline font-bold tracking-widest uppercase text-gray-300">End of Report</span>
+                            <div className="flex-1 h-px bg-gray-100" />
+                        </div>
+                    </div>
+                </InsightCard>
+
+                {/* Team Status */}
+                <InsightCard title="Team Status" count={5} icon={Users} theme="blue" subtext="Members & pending invitations">
+                    <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-8">
+                        <div className="flex flex-col items-center gap-3">
+                            <p className="text-sm font-semibold text-gray-700 flex items-center gap-1.5"><Users className="h-4 w-4 text-gray-400" /> On Team vs Invited</p>
+                            <RingWithLegend
+                                items={[{ label: 'On team', hex: RING.green, value: 5 }, { label: 'Invited', hex: RING.gray, value: 1 }]}
+                                centerTop={<span className="text-xl font-bold text-gray-900 tabular-nums leading-none">83%</span>}
+                                centerBottom={<span className="text-[10px] text-gray-400 mt-0.5">on team</span>}
+                            />
+                        </div>
+                        <div className="flex flex-col items-center gap-3">
+                            <p className="text-sm font-semibold text-gray-700 flex items-center gap-1.5"><Users className="h-4 w-4 text-gray-400" /> Distribution by Role</p>
+                            <RingWithLegend
+                                items={[
+                                    { label: 'Admin', hex: RING.green, value: 1 },
+                                    { label: 'Member', hex: RING.blue, value: 2 },
+                                    { label: 'Collaborator', hex: RING.indigo, value: 2 },
+                                ]}
+                                centerTop={<span className="text-xl font-bold text-gray-900 tabular-nums leading-none">5</span>}
+                                centerBottom={<span className="text-[10px] text-gray-400 mt-0.5">members</span>}
+                            />
+                        </div>
+                        <div className="flex flex-col items-center gap-3">
+                            <p className="text-sm font-semibold text-gray-700 flex items-center gap-1.5"><Users className="h-4 w-4 text-gray-400" /> Internal vs External</p>
+                            <RingWithLegend
+                                items={[{ label: 'Internal', hex: RING.green, value: 3 }, { label: 'External', hex: RING.indigo, value: 2 }]}
+                                centerTop={<span className="text-xl font-bold text-gray-900 tabular-nums leading-none">60%</span>}
+                                centerBottom={<span className="text-[10px] text-gray-400 mt-0.5">internal</span>}
+                            />
+                        </div>
+                    </div>
+                </InsightCard>
+
+                {/* File Organization */}
+                <InsightCard title="File Organization" icon={FolderOpen} theme="blue" subtext="23 files · 8 folders · max depth 3 · 14.2 MB">
+                    <FolderHealthBody
+                        storageHealth={{ totalFiles: 23, totalSizeBytes: 14898278, duplicateCount: 1, staleCount: 0, largeCount: 0, badlyNamedCount: 2, staleFiles: [], largeFiles: [], staleTotalBytes: 0, duplicateGroups: [] }}
+                        folderHealth={{ score: 88, totalFolders: 8, totalFiles: 23, maxDepth: 3, deeplyNestedFolders: 0, emptyFolders: 0, orphanedFiles: 0, issues: [], penalties: [] }}
+                        hiddenRings={[]}
+                    />
+                </InsightCard>
+
+                {/* Document Activity */}
+                <div className="bg-white rounded border border-[#e5e7eb] shadow-md">
+                    <div className="p-4 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap">
+                        <div className="flex items-center gap-2">
+                            <Activity className="h-4 w-4 text-gray-500" />
+                            <h3 className="text-sm font-semibold text-gray-900">Document Activity</h3>
+                            <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">Recent 3</span>
+                        </div>
+                        <div className="flex bg-gray-100 p-0.5 rounded-lg">
+                            {(['24h', '1 wk', '1 mo'] as const).map((t) => (
+                                <span key={t} className={`px-3 py-1 text-xs font-medium rounded-md ${t === '1 wk' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>{t}</span>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="divide-y divide-[#e5e7eb]">
+                        {[
+                            { name: 'GTM_Strategy_Deck_v3.pptx', folder: 'Q2_Go-To-Market / 01_Strategy', size: '2.4 MB', by: 'Deepak', daysAgo: 0, mime: 'application/vnd.ms-powerpoint' },
+                            { name: 'ICP_Analysis_Final.docx', folder: 'Q2_Go-To-Market / 02_Research', size: '840 KB', by: 'Deepak', daysAgo: 1, mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
+                            { name: 'Brand_Positioning_Brief.pdf', folder: 'Q2_Go-To-Market / 03_Brand', size: '1.1 MB', by: 'Deepak', daysAgo: 3, mime: 'application/pdf' },
+                        ].map((f) => {
+                            const ts = new Date(Date.now() - f.daysAgo * 86400000).toISOString()
+                            return (
+                                <div key={f.name} className="flex items-center gap-3 px-4 py-3">
+                                    <div className={`p-2 rounded-lg shrink-0 ${getDocTypeBgColor(f.mime)}`}>
+                                        <DocumentIcon mimeType={f.mime} size={14} />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <p className="text-sm font-medium text-gray-900 truncate">{f.name}</p>
+                                        <p className="text-[11px] text-gray-400 truncate">
+                                            {f.folder} · {f.size} · {f.by} · {formatRelativeTime(ts)}
+                                        </p>
+                                    </div>
+                                </div>
+                            )
+                        })}
+                    </div>
+                </div>
+            </div>
+
+            {/* Right: Action Center */}
+            <div className="flex flex-col gap-4">
+                <SandboxActionCenter />
+            </div>
+        </div>
+        </TooltipProvider>
+    )
+}
+
+function SandboxActionCenter() {
+    const deliveryItems: ActionRowItem[] = [
+        { key: 'planning',  label: 'Planning gaps',                 count: 9, severity: 'warning',  icon: ClipboardCheck, sub: 'missing due dates or assignees' },
+        { key: 'overdue',   label: 'Overdue deliverables',          count: 1, severity: 'critical', icon: AlertTriangle,  sub: 'past due date, not yet approved' },
+        { key: 'in-review', label: 'In review — awaiting approval', count: 2, severity: 'info',     icon: Eye,            sub: 'ready for your review' },
+        { key: 'rework',    label: 'Awaiting rework',               count: 0, severity: 'warning',  icon: RefreshCw },
+        { key: 'threads',   label: 'Unanswered comments',           count: 0, severity: 'warning',  icon: MessagesSquare },
+        { key: 'intake',    label: 'Intake awaiting review',        count: 0, severity: 'info',     icon: MailOpen },
+        { key: 'invites',   label: 'Pending invitations',           count: 0, severity: 'info',     icon: Users },
+    ]
+    const housekeepingItems: ActionRowItem[] = [
+        { key: 'sensitive',     label: 'Sensitive files',      count: 0, severity: 'critical', icon: FileWarning },
+        { key: 'poorly-named',  label: 'Poorly named files',   count: 0, severity: 'warning',  icon: FileType },
+        { key: 'duplicates',    label: 'Duplicate files',      count: 0, severity: 'warning',  icon: FileWarning },
+        { key: 'stale',         label: 'Stale files',          count: 0, severity: 'warning',  icon: Archive },
+        { key: 'large',         label: 'Large files',          count: 0, severity: 'warning',  icon: HardDrive },
+        { key: 'orphaned',      label: 'Orphaned files',       count: 0, severity: 'info',     icon: FileQuestion },
+        { key: 'empty-folders', label: 'Empty folders',        count: 0, severity: 'info',     icon: FolderMinus },
+        { key: 'deep-folders',  label: 'Deep folder nesting',  count: 0, severity: 'info',     icon: FolderTree },
+    ]
+
+    return (
+        <div className="sticky top-4">
+            <div className="bg-white border border-[#e5e7eb] rounded p-6 flex flex-col gap-6 shadow-md">
+                <div className="flex items-center justify-between">
+                    <h2 className="text-lg font-bold text-gray-900">Action Center</h2>
+                    <div className="p-1.5 rounded-lg bg-gray-100">
+                        <RefreshCw className="h-4 w-4 text-gray-700" />
+                    </div>
+                </div>
+                <div className="flex flex-col gap-4">
+                    <SandboxACSection title="Delivery Actions" icon={Package} items={deliveryItems} />
+                    <SandboxACSection title="Housekeeping" icon={Archive} items={housekeepingItems} />
+                </div>
+            </div>
+        </div>
+    )
+}
+
+function SandboxACSection({ title, icon: Icon, items }: { title: string; icon: React.ElementType; items: ActionRowItem[] }) {
+    const sorted = [...items].sort((a, b) => (b.count > 0 ? 1 : 0) - (a.count > 0 ? 1 : 0) || b.count - a.count)
+    const attentionCount = items.filter((i) => i.count > 0).length
+    return (
+        <div className="border border-[#e5e7eb] rounded bg-white">
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100">
+                <Icon className="h-3.5 w-3.5 text-gray-400" />
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 flex-1">{title}</span>
+                {attentionCount > 0 ? (
+                    <span className="text-[10px] font-medium text-amber-600 bg-amber-50 border border-amber-100 px-1.5 py-0.5 rounded-full">
+                        {attentionCount} to review
+                    </span>
+                ) : (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-medium text-green-600">
+                        <CheckCircle2 className="h-3 w-3" /> All clear
+                    </span>
+                )}
+            </div>
+            <div className="p-1 flex flex-col">
+                {sorted.map((item) => {
+                    const sev = item.count === 0 ? 'ok' : item.severity
+                    const dot = sev === 'critical' ? 'bg-red-500' : sev === 'warning' ? 'bg-amber-500' : sev === 'info' ? 'bg-primary' : 'bg-gray-300'
+                    const numText = sev === 'critical' ? 'text-red-600' : sev === 'warning' ? 'text-amber-600' : sev === 'info' ? 'text-primary' : 'text-gray-400'
+                    const iconTint = sev === 'critical' ? 'bg-red-50 text-red-600' : sev === 'warning' ? 'bg-amber-50 text-amber-600' : sev === 'info' ? 'bg-primary/10 text-primary' : 'bg-gray-50 text-gray-400'
+                    return (
+                        <div key={item.key} className="flex items-center gap-2.5 px-3 py-2 rounded-md">
+                            <div className={`p-1.5 rounded-md shrink-0 ${iconTint}`}>
+                                <item.icon className="h-3.5 w-3.5" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5">
+                                    <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${dot}`} />
+                                    <span className="text-xs font-medium text-gray-500 truncate">{item.label}</span>
+                                </div>
+                                {item.sub && <p className="text-[10px] text-gray-400 truncate mt-0.5 pl-3">{item.sub}</p>}
+                            </div>
+                            <span className={`text-sm font-bold tabular-nums shrink-0 ${numText}`}>{item.count}</span>
+                        </div>
+                    )
+                })}
+            </div>
+        </div>
+    )
+}
+
 export interface EngagementInsightsDashboardProps {
     projectId: string
     orgSlug?: string
     clientSlug?: string
     engagementSlug?: string
     isFirmAdmin?: boolean
+    isSandboxFirm?: boolean
     firmName?: string
     clientName?: string
     engagementName?: string
@@ -2453,6 +2742,7 @@ export function EngagementInsightsDashboard({
     clientSlug = '',
     engagementSlug = '',
     isFirmAdmin = false,
+    isSandboxFirm = false,
     firmName,
     clientName,
     engagementName,
@@ -2607,7 +2897,7 @@ export function EngagementInsightsDashboard({
             .then((d) => { setData(d); setSummaryDraft(d?.insightsSummary ?? '') })
             .catch((e) => console.error('Failed to load engagement insights', e))
             .finally(() => setLoading(false))
-    }, [projectId, session, refreshTick])
+    }, [projectId, session?.access_token, refreshTick])
 
     const handleSummarySave = async () => {
         setSummarySaving(true)
@@ -2630,6 +2920,19 @@ export function EngagementInsightsDashboard({
 
     const hiddenSections = data?.insightsConfig?.hiddenSections ?? []
     const showSection = (id: string) => !hiddenSections.includes(id)
+
+    if (isSandboxFirm) {
+        return (
+            <div className="p-4">
+                <SandboxInsightsPreview
+                    projectName={engagementName}
+                    firmName={firmName}
+                    clientName={clientName}
+                    engagementName={engagementName}
+                />
+            </div>
+        )
+    }
 
     return (
         <TooltipProvider delayDuration={150}>

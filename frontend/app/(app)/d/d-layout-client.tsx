@@ -27,7 +27,7 @@ import { AppShellHintStrip } from '@/components/layout/app-shell-hint-strip'
 import { useFirmMaintenanceStatus } from '@/lib/hooks/use-firm-maintenance-status'
 import { usePlatformMaintenanceStatus } from '@/lib/hooks/use-platform-maintenance-status'
 import { useAuth } from '@/lib/auth-context'
-import { Megaphone } from 'lucide-react'
+import { Megaphone, Info } from 'lucide-react'
 import { DemoTourProvider, useDemoTour, readDemoTourSeen, loadTourProgress } from '@/lib/demo-tour-context'
 import { DemoTour } from '@/components/app/demo-tour'
 import { DemoTourIntroModal } from '@/components/app/demo-tour-intro-modal'
@@ -192,6 +192,14 @@ function AppLayoutContent({ children, isSystemAdmin }: { children: React.ReactNo
                 </header>
 
                 <ViewAsBanner />
+                {isDemoFirm && (
+                    <div className="flex items-center gap-2 px-4 py-2 bg-rose-50 border-b border-rose-200 text-rose-950 shrink-0">
+                        <Info className="h-3.5 w-3.5 shrink-0 text-rose-600" />
+                        <span className="text-[0.75rem] font-medium">
+                            This is a demo firm — sample data is shown for preview only. Sign up for a paid plan to manage real client files.
+                        </span>
+                    </div>
+                )}
 
                 {/* ── Body row: sidebar | main | right pane ── */}
                 <div className="flex flex-1 overflow-hidden print:block print:overflow-visible">

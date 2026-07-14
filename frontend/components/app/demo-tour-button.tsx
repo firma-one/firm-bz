@@ -1,6 +1,6 @@
 "use client"
 
-import { Map } from "lucide-react"
+import { MapPinned } from "lucide-react"
 import { useDemoTour } from "@/lib/demo-tour-context"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { usePathname } from "next/navigation"
@@ -26,7 +26,7 @@ export function DemoTourButton({ firmSlug }: DemoTourButtonProps) {
             className="h-11 w-11 rounded-full bg-primary text-white shadow-lg hover:brightness-105 hover:shadow-xl transition-all flex items-center justify-center"
             aria-label="Restart guided tour"
           >
-            <Map className="h-5 w-5" />
+            <MapPinned className="h-5 w-5" />
           </button>
         </TooltipTrigger>
         <TooltipContent side="left" sideOffset={8}>

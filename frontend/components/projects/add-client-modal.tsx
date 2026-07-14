@@ -23,6 +23,7 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { SelectWithCustomEntry } from "@/components/ui/select-with-custom-entry"
+import { OptionalFieldsSection } from "@/components/ui/optional-fields-toggle"
 import { createClient, type LwCrmClientStatus } from '@/lib/actions/client'
 import { useOrgSandbox } from '@/lib/use-org-sandbox'
 import { DateTimePicker } from '@/components/ui/date-time-picker'
@@ -62,6 +63,7 @@ export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigg
     const [error, setError] = useState<string | null>(null)
     const [capBlocked, setCapBlocked] = useState(false)
     const [capMessage, setCapMessage] = useState<string | null>(null)
+    const [showOptional, setShowOptional] = useState(false)
 
     const router = useRouter()
 
@@ -186,6 +188,7 @@ export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigg
             setCompanySizeBracket('')
             setBillingAddress('')
             setError(null)
+            setShowOptional(false)
 
             window.dispatchEvent(new CustomEvent('firma-reminders-updated'))
             router.push(`/d/f/${orgSlug}?tab=clients`, { scroll: false })
@@ -243,10 +246,10 @@ export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigg
                                 </div>
                             )}
 
-                            <div className="grid grid-cols-3 gap-3">
+                            <div className="space-y-3">
 
-                                {/* IDENTITY — col-span-2 */}
-                                <div className="col-span-2 bg-white rounded border border-[#e5e7eb] p-3 space-y-3">
+                                {/* IDENTITY — always visible, mandatory fields */}
+                                <div className="bg-white rounded border border-[#e5e7eb] p-3 space-y-3">
                                     <p className={fieldLabel}>Identity</p>
 
                                     {/* Name (3/4) + Status (1/4) */}
@@ -277,8 +280,11 @@ export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigg
 
                                 </div>
 
+                                <OptionalFieldsSection open={showOptional} onToggle={() => setShowOptional((v) => !v)}>
+                                <div className="grid grid-cols-3 gap-3">
+
                                 {/* COMPANY — col-span-1, row-span-2 */}
-                                <div className="row-span-2 bg-white rounded border border-[#e5e7eb] p-3 space-y-3">
+                                <div className="row-span-2 space-y-3">
                                     <p className={fieldLabel}>Company</p>
 
                                     <div>
@@ -325,7 +331,7 @@ export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigg
                                 </div>
 
                                 {/* CRM — col-span-2 */}
-                                <div className="col-span-2 bg-white rounded border border-[#e5e7eb] p-3 space-y-3">
+                                <div className="col-span-2 space-y-3">
                                     <p className={fieldLabel}>CRM</p>
 
                                     {/* Row 1: Lead Source + Tags */}
@@ -394,6 +400,9 @@ export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigg
                                         <textarea id="new-client-memo" value={internalMemo} onChange={(e) => setInternalMemo(e.target.value)} placeholder="Private notes, call summaries, relationship context…" rows={2} disabled={isDisabled} className={textareaCls} />
                                     </div>
                                 </div>
+
+                                </div>
+                                </OptionalFieldsSection>
 
                             </div>
                         </div>

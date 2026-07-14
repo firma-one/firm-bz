@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Building2, FileText, Globe, Linkedin, Lock, MapPin, SquarePlus, Users2 } from "lucide-react"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { SelectWithCustomEntry } from "@/components/ui/select-with-custom-entry"
+import { OptionalFieldsSection } from "@/components/ui/optional-fields-toggle"
 import { createFirm, updateFirm } from '@/lib/actions/firms'
 
 const fieldLabel = 'font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] block mb-1'
@@ -57,6 +58,7 @@ export function AddFirmModal({ trigger, open: controlledOpen, onOpenChange: cont
 
     const [creating, setCreating] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const [showOptional, setShowOptional] = useState(false)
 
 
     // Details
@@ -82,6 +84,7 @@ export function AddFirmModal({ trigger, open: controlledOpen, onOpenChange: cont
         setIndustry(''); setCompanySizeBracket('')
         setCompanyWebsite(''); setLinkedInUrl('')
         setBillingAddress(''); setNotes('')
+        setShowOptional(false)
     }
 
     const handleOpenChange = (newOpen: boolean) => {
@@ -162,70 +165,71 @@ export function AddFirmModal({ trigger, open: controlledOpen, onOpenChange: cont
                     )}
 
                     <form onSubmit={handleCreate}>
-                        <div className="p-4">
-                            <div className="grid grid-cols-2 gap-4 items-stretch">
-
-                                {/* LEFT — Details */}
-                                <div className="flex flex-col">
-                                    <div className="bg-white rounded border border-[#e5e7eb] p-4 space-y-3 flex-1">
-                                        <p className={fieldLabel}>Details</p>
-                                        <div>
-                                            <label htmlFor="cf-name" className={fieldLabel}>
-                                                <span className="inline-flex items-center gap-1"><Building2 className="h-3 w-3" /> Firm name <span className="text-red-500 normal-case tracking-normal font-sans">*</span></span>
-                                            </label>
-                                            <Input id="cf-name" value={name} onChange={(e) => setName(e.target.value)}
-                                                placeholder="e.g. Acme Consulting" disabled={isFormDisabled} required autoFocus className={inputCls} />
-                                        </div>
-                                        <div>
-                                            <label htmlFor="cf-memo" className={fieldLabel}>
-                                                <span className="inline-flex items-center gap-1"><Lock className="h-3 w-3" /> Internal memo <span className="text-[#9a9ba0] normal-case tracking-normal font-sans font-normal">— internal only</span></span>
-                                            </label>
-                                            <textarea id="cf-memo" value={internalMemo} onChange={(e) => setInternalMemo(e.target.value)}
-                                                placeholder="Private notes, context about this firm…" rows={2}
-                                                disabled={isFormDisabled} className={textareaCls} />
-                                        </div>
-                                        <div>
-                                            <label htmlFor="cf-industry" className={fieldLabel}><span className="inline-flex items-center gap-1"><Building2 className="h-3 w-3" /> Industry</span></label>
-                                            <Input id="cf-industry" value={industry} onChange={(e) => setIndustry(e.target.value)}
-                                                placeholder="e.g. Technology" disabled={isFormDisabled} className={inputCls} />
-                                        </div>
-                                        <div>
-                                            <label htmlFor="cf-size" className={fieldLabel}><span className="inline-flex items-center gap-1"><Users2 className="h-3 w-3" /> Company size</span></label>
-                                            <SelectWithCustomEntry id="cf-size" value={companySizeBracket} onChange={setCompanySizeBracket}
-                                                options={['<10', '11–50', '51–200', '201–1000', '1000+']} placeholder="Select size bracket…"
-                                                customEntryHint="Custom…" disabled={isFormDisabled} />
-                                        </div>
-                                    </div>
+                        <div className="p-4 space-y-3">
+                            <div className="bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
+                                <div>
+                                    <label htmlFor="cf-name" className={fieldLabel}>
+                                        <span className="inline-flex items-center gap-1"><Building2 className="h-3 w-3" /> Firm name <span className="text-red-500 normal-case tracking-normal font-sans">*</span></span>
+                                    </label>
+                                    <Input id="cf-name" value={name} onChange={(e) => setName(e.target.value)}
+                                        placeholder="e.g. Acme Consulting" disabled={isFormDisabled} required autoFocus className={inputCls} />
                                 </div>
-
-                                {/* RIGHT — Company */}
-                                <div className="bg-white rounded border border-[#e5e7eb] p-4 flex flex-col gap-3 h-full">
-                                    <p className={fieldLabel}>Company</p>
-                                    <div className="shrink-0">
-                                        <label htmlFor="cf-website" className={fieldLabel}><span className="inline-flex items-center gap-1"><Globe className="h-3 w-3" /> Website</span></label>
-                                        <Input id="cf-website" type="url" value={companyWebsite} onChange={(e) => setCompanyWebsite(e.target.value)}
-                                            placeholder="https://…" disabled={isFormDisabled} className={inputCls} />
-                                    </div>
-                                    <div className="shrink-0">
-                                        <label htmlFor="cf-linkedin" className={fieldLabel}><span className="inline-flex items-center gap-1"><Linkedin className="h-3 w-3" /> LinkedIn</span></label>
-                                        <Input id="cf-linkedin" value={linkedInUrl} onChange={(e) => setLinkedInUrl(e.target.value)}
-                                            placeholder="https://linkedin.com/company/…" disabled={isFormDisabled} className={inputCls} />
-                                    </div>
-                                    <div className="flex flex-col flex-1">
-                                        <label htmlFor="cf-billing" className={fieldLabel}><span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" /> Billing address</span></label>
-                                        <textarea id="cf-billing" value={billingAddress} onChange={(e) => setBillingAddress(e.target.value)}
-                                            placeholder={"123 Main St\nCity, State ZIP\nCountry"}
-                                            disabled={isFormDisabled} className={`${textareaCls} flex-1 resize-none`} />
-                                    </div>
-                                    <div className="flex flex-col flex-1">
-                                        <label htmlFor="cf-notes" className={fieldLabel}><span className="inline-flex items-center gap-1"><FileText className="h-3 w-3" /> Notes</span></label>
-                                        <textarea id="cf-notes" value={notes} onChange={(e) => setNotes(e.target.value)}
-                                            placeholder="Additional details about the firm"
-                                            disabled={isFormDisabled} className={`${textareaCls} flex-1 resize-none`} />
-                                    </div>
-                                </div>
-
                             </div>
+
+                            <OptionalFieldsSection open={showOptional} onToggle={() => setShowOptional((v) => !v)}>
+                                    <div className="grid grid-cols-2 gap-4 items-stretch">
+
+                                        {/* LEFT — Details */}
+                                        <div className="flex flex-col gap-3">
+                                            <div>
+                                                <label htmlFor="cf-memo" className={fieldLabel}>
+                                                    <span className="inline-flex items-center gap-1"><Lock className="h-3 w-3" /> Internal memo <span className="text-[#9a9ba0] normal-case tracking-normal font-sans font-normal">— internal only</span></span>
+                                                </label>
+                                                <textarea id="cf-memo" value={internalMemo} onChange={(e) => setInternalMemo(e.target.value)}
+                                                    placeholder="Private notes, context about this firm…" rows={2}
+                                                    disabled={isFormDisabled} className={textareaCls} />
+                                            </div>
+                                            <div>
+                                                <label htmlFor="cf-industry" className={fieldLabel}><span className="inline-flex items-center gap-1"><Building2 className="h-3 w-3" /> Industry</span></label>
+                                                <Input id="cf-industry" value={industry} onChange={(e) => setIndustry(e.target.value)}
+                                                    placeholder="e.g. Technology" disabled={isFormDisabled} className={inputCls} />
+                                            </div>
+                                            <div>
+                                                <label htmlFor="cf-size" className={fieldLabel}><span className="inline-flex items-center gap-1"><Users2 className="h-3 w-3" /> Company size</span></label>
+                                                <SelectWithCustomEntry id="cf-size" value={companySizeBracket} onChange={setCompanySizeBracket}
+                                                    options={['<10', '11–50', '51–200', '201–1000', '1000+']} placeholder="Select size bracket…"
+                                                    customEntryHint="Custom…" disabled={isFormDisabled} />
+                                            </div>
+                                        </div>
+
+                                        {/* RIGHT — Company */}
+                                        <div className="flex flex-col gap-3">
+                                            <div className="shrink-0">
+                                                <label htmlFor="cf-website" className={fieldLabel}><span className="inline-flex items-center gap-1"><Globe className="h-3 w-3" /> Website</span></label>
+                                                <Input id="cf-website" type="url" value={companyWebsite} onChange={(e) => setCompanyWebsite(e.target.value)}
+                                                    placeholder="https://…" disabled={isFormDisabled} className={inputCls} />
+                                            </div>
+                                            <div className="shrink-0">
+                                                <label htmlFor="cf-linkedin" className={fieldLabel}><span className="inline-flex items-center gap-1"><Linkedin className="h-3 w-3" /> LinkedIn</span></label>
+                                                <Input id="cf-linkedin" value={linkedInUrl} onChange={(e) => setLinkedInUrl(e.target.value)}
+                                                    placeholder="https://linkedin.com/company/…" disabled={isFormDisabled} className={inputCls} />
+                                            </div>
+                                            <div className="flex flex-col flex-1">
+                                                <label htmlFor="cf-billing" className={fieldLabel}><span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" /> Billing address</span></label>
+                                                <textarea id="cf-billing" value={billingAddress} onChange={(e) => setBillingAddress(e.target.value)}
+                                                    placeholder={"123 Main St\nCity, State ZIP\nCountry"}
+                                                    disabled={isFormDisabled} className={`${textareaCls} flex-1 resize-none`} />
+                                            </div>
+                                            <div className="flex flex-col flex-1">
+                                                <label htmlFor="cf-notes" className={fieldLabel}><span className="inline-flex items-center gap-1"><FileText className="h-3 w-3" /> Notes</span></label>
+                                                <textarea id="cf-notes" value={notes} onChange={(e) => setNotes(e.target.value)}
+                                                    placeholder="Additional details about the firm"
+                                                    disabled={isFormDisabled} className={`${textareaCls} flex-1 resize-none`} />
+                                            </div>
+                                        </div>
+
+                                    </div>
+                            </OptionalFieldsSection>
                         </div>
 
                         {/* Footer */}

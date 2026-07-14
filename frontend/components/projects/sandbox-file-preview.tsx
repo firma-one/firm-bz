@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Info, Folder, Link2, MessagesSquare, MoreVertical } from 'lucide-react'
+import { Folder, Link2, MessagesSquare, MoreVertical } from 'lucide-react'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
 import { DocumentActionMenu } from '@/components/ui/document-action-menu'
@@ -265,11 +265,6 @@ export function SandboxFilePreview({ projectName, onOpenCommentPane, onOpenSearc
 
     return (
         <div className="relative select-none">
-            {/* Preview banner */}
-            <div className="sticky top-0 z-10 flex items-center gap-2 px-4 py-2 bg-rose-50 border-b border-rose-200 text-rose-950">
-                <Info className="h-3.5 w-3.5 shrink-0 text-rose-600" />
-                <span className="text-[0.75rem] font-medium">This is a demo firm — sample files are shown for preview only. Sign up for a paid plan to manage real client files.</span>
-            </div>
             {/* File rows */}
             <div className="divide-y divide-[#e5e7eb]">
                 {buildSandboxPreviewFiles(projectName).map((file) => (
