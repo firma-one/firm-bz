@@ -3,6 +3,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import ReactMarkdown from 'react-markdown'
+import rehypeRaw from 'rehype-raw'
 import remarkGfm from 'remark-gfm'
 
 import { Header } from '@/components/layout/Header'
@@ -152,7 +153,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
       <article className="relative flex min-h-screen flex-col">
         <Header />
 
-        <main className={cn(MARKETING_PAGE_SHELL, 'relative z-10 w-full flex-1 pb-16 md:pb-24')}>
+        <main className={cn(MARKETING_PAGE_SHELL, 'relative z-10 w-full flex-1 pb-16 pt-24 md:pb-24 lg:pt-28')}>
           <div className="mb-10 flex flex-col gap-6 md:flex-row md:flex-wrap md:items-start md:justify-between lg:mb-12">
             <MarketingBreadcrumb
               className="mb-0"
@@ -268,6 +269,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
               >
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
+                  rehypePlugins={[rehypeRaw]}
                   components={{
                     h1: ({ node: _node, ...props }) => (
                       <h1 {...props} className={cn(hx, 'text-3xl md:text-4xl')} />

@@ -82,7 +82,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
     <div className="relative flex min-h-screen flex-col">
       <Header />
 
-      <main className={cn(MARKETING_PAGE_SHELL, 'relative z-10 w-full flex-1 pb-16 md:pb-24')}>
+      <main className={cn(MARKETING_PAGE_SHELL, 'relative z-10 w-full flex-1 pb-16 pt-24 md:pb-24 lg:pt-28')}>
         <MarketingBreadcrumb
           items={[
             { label: 'Resources' },
