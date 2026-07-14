@@ -27,6 +27,8 @@ export function SigninView() {
   const otpInputRef = useRef<OTPInputHandle>(null)
   const emailTurnstileRef = useRef<TurnstileInstance>(undefined)
   const otpTurnstileRef = useRef<TurnstileInstance>(undefined)
+  const emailTurnstileErrorCount = useRef(0)
+  const otpTurnstileErrorCount = useRef(0)
   const {
     step,
     email,
@@ -208,9 +210,15 @@ export function SigninView() {
                           <Turnstile
                             ref={emailTurnstileRef}
                             siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'}
-                            onSuccess={handleTurnstileSuccess}
+                            onSuccess={(token) => {
+                              emailTurnstileErrorCount.current = 0
+                              handleTurnstileSuccess(token)
+                            }}
                             onError={() => {
-                              setError('Captcha verification failed. Retrying…')
+                              emailTurnstileErrorCount.current += 1
+                              if (emailTurnstileErrorCount.current > 1) {
+                                setError('Captcha verification failed. Retrying…')
+                              }
                               setTurnstileToken(null)
                               emailTurnstileRef.current?.reset()
                             }}
@@ -387,9 +395,15 @@ export function SigninView() {
                           <Turnstile
                             ref={otpTurnstileRef}
                             siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'}
-                            onSuccess={handleTurnstileSuccess}
+                            onSuccess={(token) => {
+                              otpTurnstileErrorCount.current = 0
+                              handleTurnstileSuccess(token)
+                            }}
                             onError={() => {
-                              setError('Captcha verification failed. Retrying…')
+                              otpTurnstileErrorCount.current += 1
+                              if (otpTurnstileErrorCount.current > 1) {
+                                setError('Captcha verification failed. Retrying…')
+                              }
                               setTurnstileToken(null)
                               otpTurnstileRef.current?.reset()
                             }}

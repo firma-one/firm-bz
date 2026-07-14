@@ -14,6 +14,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { SquarePlus, Info, Activity, AlignLeft, Banknote, CalendarCheck, CalendarClock, FileText, Lock, Tag, X, CornerDownLeft } from "lucide-react"
 import { SelectWithCustomEntry } from '@/components/ui/select-with-custom-entry'
+import { OptionalFieldsSection } from "@/components/ui/optional-fields-toggle"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { SandboxInfoBanner } from "@/components/ui/sandbox-info-banner"
 import { DateTimePicker } from "@/components/ui/date-time-picker"
@@ -49,6 +50,7 @@ export function AddEngagementModal({ firmSlug, clientSlug, firmSandboxOnly = fal
     const [capBlocked, setCapBlocked] = useState(false)
     const [capMessage, setCapMessage] = useState<string | null>(null)
     const [currencySymbol, setCurrencySymbol] = useState('')
+    const [showOptional, setShowOptional] = useState(false)
     const router = useRouter()
 
     useEffect(() => {
@@ -160,6 +162,7 @@ export function AddEngagementModal({ firmSlug, clientSlug, firmSandboxOnly = fal
             setTagInput('')
             setInternalMemo('')
             setError(null)
+            setShowOptional(false)
             router.push(`/d/f/${firmSlug}/c/${clientSlug}?tab=projects`, { scroll: false })
             onSaved?.()
         } catch (error: any) {
@@ -222,52 +225,54 @@ export function AddEngagementModal({ firmSlug, clientSlug, firmSandboxOnly = fal
                                 </div>
                             )}
 
-                            {/* Tile grid — mirrors Engagement Settings layout */}
+                            {/* DETAILS — always visible, mandatory fields */}
+                            <div className="bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
+                                <p className={fieldLabel}>Details</p>
+
+                                {/* Name + Status */}
+                                <div className="grid grid-cols-[3fr_1fr] gap-3">
+                                    <div>
+                                        <label htmlFor="eng-name" className={fieldLabel}>
+                                            <span className="inline-flex items-center gap-1">
+                                                <FileText className="h-3 w-3" /> Name <span className="text-red-500 normal-case tracking-normal font-sans">*</span>
+                                            </span>
+                                        </label>
+                                        <input
+                                            id="eng-name"
+                                            value={name}
+                                            onChange={(e) => setName(e.target.value)}
+                                            placeholder="e.g. Q1 Audit"
+                                            required={!isSandboxFirm}
+                                            disabled={isDisabled}
+                                            className={`flex h-9 w-full rounded border border-[#e5e7eb] bg-white px-3 py-2 text-xs font-normal text-[#1b1b1d] placeholder:text-[#9a9ba0] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed`}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label htmlFor="eng-status" className={fieldLabel}>
+                                            <span className="inline-flex items-center gap-1">
+                                                <Activity className="h-3 w-3" /> Status <span className="text-red-500 normal-case tracking-normal font-sans">*</span>
+                                            </span>
+                                        </label>
+                                        <Select value={status} onValueChange={(v) => setStatus(v as LwCrmEngagementStatus)} disabled={isDisabled}>
+                                            <SelectTrigger id="eng-status" className={inputCls}>
+                                                <SelectValue placeholder="Select status" />
+                                            </SelectTrigger>
+                                            <SelectContent side="bottom" align="start" sideOffset={6} className="border border-[#e5e7eb] bg-white shadow-sm rounded py-0.5 min-w-[var(--radix-select-trigger-width)]">
+                                                <SelectItem value="PLANNED">Planned</SelectItem>
+                                                <SelectItem value="ACTIVE">Active</SelectItem>
+                                                <SelectItem value="PAUSED">Paused</SelectItem>
+                                                <SelectItem value="COMPLETED">Completed</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <OptionalFieldsSection open={showOptional} onToggle={() => setShowOptional((v) => !v)}>
                             <div className="grid grid-cols-3 gap-3 items-stretch">
 
-                                {/* DETAILS — col-span-2, row 1 */}
-                                <div className="col-span-2 bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
-                                    <p className={fieldLabel}>Details</p>
-
-                                    {/* Name + Status */}
-                                    <div className="grid grid-cols-[3fr_1fr] gap-3">
-                                        <div>
-                                            <label htmlFor="eng-name" className={fieldLabel}>
-                                                <span className="inline-flex items-center gap-1">
-                                                    <FileText className="h-3 w-3" /> Name <span className="text-red-500 normal-case tracking-normal font-sans">*</span>
-                                                </span>
-                                            </label>
-                                            <input
-                                                id="eng-name"
-                                                value={name}
-                                                onChange={(e) => setName(e.target.value)}
-                                                placeholder="e.g. Q1 Audit"
-                                                required={!isSandboxFirm}
-                                                disabled={isDisabled}
-                                                className={`flex h-9 w-full rounded border border-[#e5e7eb] bg-white px-3 py-2 text-xs font-normal text-[#1b1b1d] placeholder:text-[#9a9ba0] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed`}
-                                            />
-                                        </div>
-                                        <div>
-                                            <label htmlFor="eng-status" className={fieldLabel}>
-                                                <span className="inline-flex items-center gap-1">
-                                                    <Activity className="h-3 w-3" /> Status <span className="text-red-500 normal-case tracking-normal font-sans">*</span>
-                                                </span>
-                                            </label>
-                                            <Select value={status} onValueChange={(v) => setStatus(v as LwCrmEngagementStatus)} disabled={isDisabled}>
-                                                <SelectTrigger id="eng-status" className={inputCls}>
-                                                    <SelectValue placeholder="Select status" />
-                                                </SelectTrigger>
-                                                <SelectContent side="bottom" align="start" sideOffset={6} className="border border-[#e5e7eb] bg-white shadow-sm rounded py-0.5 min-w-[var(--radix-select-trigger-width)]">
-                                                    <SelectItem value="PLANNED">Planned</SelectItem>
-                                                    <SelectItem value="ACTIVE">Active</SelectItem>
-                                                    <SelectItem value="PAUSED">Paused</SelectItem>
-                                                    <SelectItem value="COMPLETED">Completed</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-                                    </div>
-
-                                    {/* Description */}
+                                {/* DETAILS (cont.) — Description */}
+                                <div className="col-span-2 space-y-3">
                                     <div>
                                         <label htmlFor="eng-description" className={fieldLabel}>
                                             <span className="inline-flex items-center gap-1"><AlignLeft className="h-3 w-3" /> Description</span>
@@ -285,7 +290,7 @@ export function AddEngagementModal({ firmSlug, clientSlug, firmSandboxOnly = fal
                                 </div>
 
                                 {/* COMMERCIAL — col-span-1, row-span-2 */}
-                                <div className="row-span-2 bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
+                                <div className="row-span-2 space-y-3">
                                     <p className={fieldLabel}>Commercial</p>
 
                                     {/* Contract type */}
@@ -385,7 +390,7 @@ export function AddEngagementModal({ firmSlug, clientSlug, firmSandboxOnly = fal
                                 </div>
 
                                 {/* TRACKING — col-span-2, row 2: dates + internal memo */}
-                                <div className="col-span-2 bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
+                                <div className="col-span-2 space-y-3">
                                     <p className={fieldLabel}>Tracking</p>
 
                                     {/* Start date + End date */}
@@ -425,6 +430,7 @@ export function AddEngagementModal({ firmSlug, clientSlug, firmSandboxOnly = fal
                                 </div>
 
                             </div>
+                            </OptionalFieldsSection>
                         </div>
 
                         {/* Footer */}

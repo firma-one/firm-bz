@@ -347,6 +347,7 @@ export function EngagementWorkspace({
                         <TabsList className="h-full p-0 bg-transparent rounded-none inline-flex justify-start gap-0 border-0">
                             <TabsTrigger
                                 value="analytics"
+                                data-demo-tour="engagement-overview-tab"
                                 className="relative group/lock h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                             >
                                 <BarChart3 className="w-4 h-4 mr-2" />
@@ -598,6 +599,7 @@ export function EngagementWorkspace({
                                 clientSlug={clientSlug}
                                 engagementSlug={engagementSlug}
                                 isFirmAdmin={isFirmAdmin}
+                                isSandboxFirm={firmSandboxOnly}
                                 firmName={orgName}
                                 clientName={clientName}
                                 engagementName={projectName}

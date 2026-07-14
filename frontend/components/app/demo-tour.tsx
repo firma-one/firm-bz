@@ -86,15 +86,23 @@ function makeSteps(firmSlug: string, clientSlug: string | null, engSlug: string 
       placement: "bottom" as const,
       route: `${client}?tab=projects`,
     }] : []),
-    // 10 – Engagement header / overview
+    // 10 – Engagement title/header
     ...(eng ? [{
       target: '[data-demo-tour="engagement-header"]',
-      title: "Engagement Overview",
+      title: "Engagement",
       content: <p className="text-xs leading-relaxed text-[#45474c]">The engagement header shows the project name, status, and key metadata. Everything for this engagement lives here.</p>,
       placement: "bottom" as const,
-      route: `${eng}/files`,
+      route: `${eng}/analytics`,
     }] : []),
-    // 11 – Files tab
+    // 11 – Overview tab
+    ...(eng ? [{
+      target: '[data-demo-tour="engagement-overview-tab"]',
+      title: "Engagement Overview",
+      content: <p className="text-xs leading-relaxed text-[#45474c]">The Overview tab surfaces engagement-level insights — progress, activity, and key metrics at a glance.</p>,
+      placement: "bottom" as const,
+      route: `${eng}/analytics`,
+    }] : []),
+    // 12 – Files tab
     ...(eng ? [{
       target: '[data-demo-tour="engagement-files-tab"]',
       title: "Files",
@@ -102,7 +110,7 @@ function makeSteps(firmSlug: string, clientSlug: string | null, engSlug: string 
       placement: "bottom" as const,
       route: `${eng}/files`,
     }] : []),
-    // 12 – Upload button
+    // 13 – New File / Folder button
     ...(eng ? [{
       target: '[data-demo-tour="engagement-upload-btn"]',
       title: "Upload Files & Create Folders",
@@ -110,7 +118,7 @@ function makeSteps(firmSlug: string, clientSlug: string | null, engSlug: string 
       placement: "bottom" as const,
       route: `${eng}/files`,
     }] : []),
-    // 13 – Document action menu
+    // 14 – Document action menu
     ...(eng ? [{
       target: '[data-demo-tour="document-action-trigger"]',
       title: "Document Actions",
@@ -118,7 +126,7 @@ function makeSteps(firmSlug: string, clientSlug: string | null, engSlug: string 
       placement: "left" as const,
       route: `${eng}/files`,
     }] : []),
-    // 14 – Board view (Deliverables)
+    // 15 – Board view (Deliverables)
     ...(eng ? [{
       target: '[data-demo-tour="engagement-board-tab"]',
       title: "Deliverables Board",
@@ -133,7 +141,7 @@ function makeSteps(firmSlug: string, clientSlug: string | null, engSlug: string 
       placement: "bottom" as const,
       route: `${eng}/board`,
     }] : []),
-    // 15 – Comments tab
+    // 16 – Comments tab
     ...(eng ? [{
       target: '[data-demo-tour="engagement-comments-tab"]',
       title: "Comments",
@@ -141,7 +149,7 @@ function makeSteps(firmSlug: string, clientSlug: string | null, engSlug: string 
       placement: "bottom" as const,
       route: `${eng}/comments`,
     }] : []),
-    // 16 – Audit tab
+    // 17 – Audit tab
     ...(eng ? [{
       target: '[data-demo-tour="engagement-audit-tab"]',
       title: "Engagement Audit",
@@ -149,7 +157,7 @@ function makeSteps(firmSlug: string, clientSlug: string | null, engSlug: string 
       placement: "bottom" as const,
       route: `${eng}/audit`,
     }] : []),
-    // 17 – Members tab
+    // 18 – Members tab
     ...(eng ? [{
       target: '[data-demo-tour="engagement-members-tab"]',
       title: "Engagement Members",
@@ -157,7 +165,7 @@ function makeSteps(firmSlug: string, clientSlug: string | null, engSlug: string 
       placement: "bottom" as const,
       route: `${eng}/members`,
     }] : []),
-    // 18 – Settings tab
+    // 19 – Settings tab
     ...(eng ? [{
       target: '[data-demo-tour="engagement-settings-tab"]',
       title: "Engagement Settings",
@@ -165,7 +173,7 @@ function makeSteps(firmSlug: string, clientSlug: string | null, engSlug: string 
       placement: "bottom" as const,
       route: `${eng}/settings`,
     }] : []),
-    // 19 – Firm Switcher
+    // 20 – Firm Switcher
     {
       target: '[data-demo-tour="firm-switcher"]',
       title: "Firm Switcher",
@@ -173,7 +181,7 @@ function makeSteps(firmSlug: string, clientSlug: string | null, engSlug: string 
       placement: "right" as const,
       route: firm,
     },
-    // 20 – Support
+    // 21 – Support
     {
       target: '[data-demo-tour="sidebar-support"]',
       title: "Support",
@@ -188,7 +196,7 @@ function makeSteps(firmSlug: string, clientSlug: string | null, engSlug: string 
       placement: "right" as const,
       route: firm,
     },
-    // 21 – Recent
+    // 22 – Recent
     {
       target: '[data-demo-tour="sidebar-recent"]',
       title: "Recent",
@@ -196,7 +204,7 @@ function makeSteps(firmSlug: string, clientSlug: string | null, engSlug: string 
       placement: "right" as const,
       route: firm,
     },
-    // 22 – Reminders
+    // 23 – Reminders
     {
       target: '[data-demo-tour="sidebar-reminders"]',
       title: "Reminders",
@@ -204,7 +212,7 @@ function makeSteps(firmSlug: string, clientSlug: string | null, engSlug: string 
       placement: "right" as const,
       route: firm,
     },
-    // 23 – Bookmarks
+    // 24 – Bookmarks
     {
       target: '[data-demo-tour="sidebar-bookmarks"]',
       title: "Bookmarks",
@@ -212,7 +220,7 @@ function makeSteps(firmSlug: string, clientSlug: string | null, engSlug: string 
       placement: "right" as const,
       route: firm,
     },
-    // 24 – View As
+    // 25 – View As
     {
       target: '[data-demo-tour="view-as-selector"]',
       title: "View As",
@@ -220,7 +228,7 @@ function makeSteps(firmSlug: string, clientSlug: string | null, engSlug: string 
       placement: "right" as const,
       route: firm,
     },
-    // 25 – Profile trigger (last step)
+    // 26 – Profile trigger (last step)
     {
       target: '[data-checkout-hint-profile="trigger"]',
       title: "Profile Menu",

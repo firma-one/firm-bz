@@ -24,7 +24,7 @@ import {
     computeSignupProgressIndex,
     type SignupStepKey,
 } from '@/components/signup/signup-step-progress'
-import { Turnstile } from '@marsidev/react-turnstile'
+import { Turnstile, type TurnstileInstance } from '@marsidev/react-turnstile'
 import { checkEmailExists, sendOTPWithTurnstile } from '@/app/actions/send-otp'
 import { sendEvent, ANALYTICS_EVENTS } from "@/lib/analytics"
 import { logger } from '@/lib/logger'
@@ -109,6 +109,12 @@ export function SignupForm({
     const firstNameInputRef = useRef<HTMLInputElement>(null)
     const emailInputRef = useRef<HTMLInputElement>(null)
     const otpInputRef = useRef<OTPInputHandle>(null)
+    const infoTurnstileRef = useRef<TurnstileInstance>(undefined)
+    const otpSendTurnstileRef = useRef<TurnstileInstance>(undefined)
+    const otpResendTurnstileRef = useRef<TurnstileInstance>(undefined)
+    const infoTurnstileErrorCount = useRef(0)
+    const otpSendTurnstileErrorCount = useRef(0)
+    const otpResendTurnstileErrorCount = useRef(0)
     const isSplitLight = layout === 'split-light'
 
     // Form state
@@ -553,6 +559,7 @@ export function SignupForm({
                                     }
                                 >
                                     <Turnstile
+                                        ref={infoTurnstileRef}
                                         className={isSplitLight ? 'min-w-0 w-full' : 'min-w-0'}
                                         siteKey={
                                             process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ||
@@ -560,18 +567,24 @@ export function SignupForm({
                                         }
                                         options={turnstileOptions(isSplitLight)}
                                         onSuccess={(token) => {
+                                            infoTurnstileErrorCount.current = 0
                                             setTurnstileToken(token)
                                             // Auto-trigger email check after Turnstile success
                                             handleEmailCheckWithOTP(token)
                                         }}
                                         onError={() => {
-                                            setError('Captcha verification failed. Please try again.')
-                                            setTurnstileToken(null)
-                                            setShowTurnstile(false)
+                                            infoTurnstileErrorCount.current += 1
+                                            if (infoTurnstileErrorCount.current > 1) {
+                                                setError('Captcha verification failed. Please try again.')
+                                                setShowTurnstile(false)
+                                            } else {
+                                                setTurnstileToken(null)
+                                                infoTurnstileRef.current?.reset()
+                                            }
                                         }}
                                         onExpire={() => {
                                             setTurnstileToken(null)
-                                            setShowTurnstile(false)
+                                            infoTurnstileRef.current?.reset()
                                         }}
                                     />
                                 </div>
@@ -814,6 +827,7 @@ export function SignupForm({
                                     }
                                 >
                                     <Turnstile
+                                        ref={otpSendTurnstileRef}
                                         className={isSplitLight ? 'min-w-0 w-full' : 'min-w-0'}
                                         siteKey={
                                             process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ||
@@ -821,16 +835,22 @@ export function SignupForm({
                                         }
                                         options={turnstileOptions(isSplitLight)}
                                         onSuccess={(token) => {
+                                            otpSendTurnstileErrorCount.current = 0
                                             setTurnstileToken(token)
                                             setError('')
                                             sendOTPWithToken(token)
                                         }}
                                         onError={() => {
-                                            setError('Captcha verification failed. Please try again.')
+                                            otpSendTurnstileErrorCount.current += 1
+                                            if (otpSendTurnstileErrorCount.current > 1) {
+                                                setError('Captcha verification failed. Please try again.')
+                                            }
                                             setTurnstileToken(null)
+                                            otpSendTurnstileRef.current?.reset()
                                         }}
                                         onExpire={() => {
                                             setTurnstileToken(null)
+                                            otpSendTurnstileRef.current?.reset()
                                         }}
                                     />
                                 </div>
@@ -992,6 +1012,7 @@ export function SignupForm({
                                     }
                                 >
                                     <Turnstile
+                                        ref={otpResendTurnstileRef}
                                         className={isSplitLight ? 'min-w-0 w-full' : 'min-w-0'}
                                         siteKey={
                                             process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ||
@@ -999,16 +1020,22 @@ export function SignupForm({
                                         }
                                         options={turnstileOptions(isSplitLight)}
                                         onSuccess={(token) => {
+                                            otpResendTurnstileErrorCount.current = 0
                                             setTurnstileToken(token)
                                             // Auto-trigger resend after Turnstile success
                                             handleSendOTP()
                                         }}
                                         onError={() => {
-                                            setError('Captcha verification failed. Please try again.')
+                                            otpResendTurnstileErrorCount.current += 1
+                                            if (otpResendTurnstileErrorCount.current > 1) {
+                                                setError('Captcha verification failed. Please try again.')
+                                            }
                                             setTurnstileToken(null)
+                                            otpResendTurnstileRef.current?.reset()
                                         }}
                                         onExpire={() => {
                                             setTurnstileToken(null)
+                                            otpResendTurnstileRef.current?.reset()
                                         }}
                                     />
                                 </div>

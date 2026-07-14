@@ -2203,7 +2203,7 @@ export function EngagementSharesTab({
       </div>
 
       <div className={cn('flex flex-1 overflow-hidden gap-4 rounded', viewMode === 'board' ? 'bg-white min-h-[calc(100vh-220px)]' : 'min-h-0 bg-white border border-[#e5e7eb]')}>
-        <div className={cn('flex-1 min-w-0 overflow-auto rounded', viewMode === 'list' ? 'bg-white' : viewMode === 'board' ? 'bg-white p-4' : 'bg-white p-4')}>
+        <div className={cn('flex-1 min-w-0 overflow-auto rounded', viewMode === 'list' ? 'bg-white' : viewMode === 'board' ? 'bg-white' : 'bg-white p-4')}>
           {isLoading ? (
             <div className="flex items-center justify-center min-h-[200px]">
               <LoadingSpinner size="md" className="min-h-0" />
