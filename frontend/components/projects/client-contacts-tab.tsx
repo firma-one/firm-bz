@@ -11,7 +11,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
-import { createClientContact, deleteClientContact, listClientContacts, setClientContactPrimary, updateClientContact, type ClientContactRecord } from '@/lib/actions/client'
+import { createClientContact, deleteClientContact, listClientContacts, updateClientContact, type ClientContactRecord } from '@/lib/actions/client'
 import { SandboxInfoBanner } from '@/components/ui/sandbox-info-banner'
 import { useOrgSandbox } from '@/lib/use-org-sandbox'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -240,30 +240,6 @@ export function ClientContactsTab({
                   {c.notes && <div className="text-xs text-slate-500 mt-1 line-clamp-1">{c.notes}</div>}
                 </div>
                 <div className="flex items-center gap-0.5 shrink-0">
-                  {!c.isPrimary && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          className="h-7 w-7 rounded-md inline-flex items-center justify-center text-amber-400 hover:text-amber-600 hover:bg-amber-50 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
-                          disabled={!canManage || isPending}
-                          onClick={() => {
-                            startTransition(async () => {
-                              try {
-                                await setClientContactPrimary(orgSlug, clientSlug, c.id)
-                                setContacts((prev) => prev.map((x) => ({ ...x, isPrimary: x.id === c.id })))
-                              } catch (e) {
-                                addToast({ type: 'error', title: 'Failed', message: e instanceof Error ? e.message : 'Could not set primary contact.' })
-                              }
-                            })
-                          }}
-                        >
-                          <Star className="h-4 w-4" />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side="top" className="text-xs">Set as primary</TooltipContent>
-                    </Tooltip>
-                  )}
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <button

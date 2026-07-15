@@ -18,7 +18,7 @@ import {
   type DraggableAttributes,
 } from '@dnd-kit/core'
 import type { SyntheticListenerMap } from '@dnd-kit/core/dist/hooks/utilities'
-import { Share2, User, Lock, ListTodo, CheckCircle, Eye, GripVertical, FolderOpen, Clock, Copy, Check, Search, MessagesSquare, Link2, ScanEye, X, RefreshCw, ChevronDown, ChevronLeft, ChevronRight, Filter, CheckCircle2, Trash2, BookOpenText, PenLine, PackagePlus, PackageCheck } from 'lucide-react'
+import { Share2, User, Lock, ListTodo, CheckCircle, Eye, GripVertical, FolderOpen, Clock, Copy, Check, Search, MessagesSquare, Link2, ScanEye, X, RefreshCw, ChevronDown, ChevronLeft, ChevronRight, Filter, CheckCircle2, Trash2, BookOpenText, PenLine, PackagePlus, PackageCheck, CalendarDays } from 'lucide-react'
 import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
 import { DocumentBreadcrumb } from '@/components/ui/document-breadcrumb'
 import { DocumentIcon } from '@/components/ui/document-icon'
@@ -48,7 +48,7 @@ import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import { DocumentDocCommentsPane } from '@/components/projects/document-doc-comments-pane'
 import { DocumentBlobPreviewPane } from '@/components/files/document-blob-preview-pane'
 import { formatDistanceToNow } from 'date-fns'
-import { cn } from '@/lib/utils'
+import { cn, formatFullDate } from '@/lib/utils'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useProjectPersonaLabels } from '@/lib/hooks/use-project-persona-labels'
 import { useToast } from '@/components/ui/toast'
@@ -618,12 +618,17 @@ function ShareCardContent({
       <div className={cn('px-3 pb-3 pt-2 bg-white space-y-1.5', isPending && 'opacity-60')}>
         {/* Datetime + quick links */}
         <div className="flex items-center justify-between">
-          <RelativeDateTime
-            date={share.updatedAt}
-            textClassName="text-[11px] text-[#6b6d75]"
-            iconClassName="text-[#9a9ba0] hover:text-[#45474c]"
-            tooltipSide="top"
-          />
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className={cn('inline-flex items-center gap-1 text-[11px]', share.dueDate ? 'text-[#6b6d75]' : 'italic text-[#9a9ba0]')}>
+                  <CalendarDays className="h-3.5 w-3.5 text-[#9a9ba0]" />
+                  {share.dueDate ? formatFullDate(share.dueDate) : 'Not Set'}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent variant="light" side="top">Due date</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
             <TooltipProvider>
               <Tooltip>

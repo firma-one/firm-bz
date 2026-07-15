@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { CalendarClock, Copy, Check, Loader2, Square, SquareCheck } from 'lucide-react'
+import { AlarmClock, Copy, Check, Loader2, Square, SquareCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DateTimePicker } from '@/components/ui/date-time-picker'
 import { DocumentIcon } from '@/components/ui/document-icon'
@@ -210,7 +210,7 @@ export function SetupReminderModal({
       >
         {/* Header */}
         <div className="flex items-center gap-2">
-          <CalendarClock className="h-4 w-4 shrink-0" style={{ color: '#C4572B' }} />
+          <AlarmClock className="h-4 w-4 shrink-0" style={{ color: '#C4572B' }} />
           <h2 className="text-sm font-semibold text-slate-900">Setup Reminder</h2>
         </div>
 
@@ -238,7 +238,7 @@ export function SetupReminderModal({
 
         {success ? (
           <div className="flex items-center gap-2 bg-primary/10 text-primary text-sm font-medium px-3 py-2 rounded">
-            <CalendarClock className="h-4 w-4 shrink-0" />
+            <AlarmClock className="h-4 w-4 shrink-0" />
             Reminder set
           </div>
         ) : (
@@ -278,7 +278,7 @@ export function SetupReminderModal({
                         </div>
 
                         <div className="shrink-0 flex items-center gap-1">
-                          {wasExisting && selected && <CalendarClock className="h-3 w-3 text-primary opacity-60" />}
+                          {wasExisting && selected && <AlarmClock className="h-3 w-3 text-primary opacity-60" />}
                           {selected ? <SquareCheck className="h-4 w-4 text-primary" /> : <Square className="h-4 w-4 text-slate-300" />}
                         </div>
                       </button>
@@ -315,7 +315,7 @@ export function SetupReminderModal({
                         </div>
 
                         <div className="shrink-0 flex items-center gap-1">
-                          {wasExisting && selected && <CalendarClock className="h-3 w-3 text-primary opacity-60" />}
+                          {wasExisting && selected && <AlarmClock className="h-3 w-3 text-primary opacity-60" />}
                           {selected ? <SquareCheck className="h-4 w-4 text-primary" /> : <Square className="h-4 w-4 text-slate-300" />}
                         </div>
                       </button>
@@ -353,7 +353,7 @@ export function SetupReminderModal({
               >
                 {submitting
                   ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
-                  : <CalendarClock className="h-3.5 w-3.5 mr-1" />}
+                  : <AlarmClock className="h-3.5 w-3.5 mr-1" />}
                 Save
               </Button>
             </div>

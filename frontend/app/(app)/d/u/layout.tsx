@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Home, User, ChevronRight, Clock, Bell, Bookmark, BellRing } from "lucide-react"
+import { Home, User, ChevronRight, Clock, AlarmClock, Bookmark, BellRing } from "lucide-react"
 import { useState, useCallback, useEffect, type ReactNode } from "react"
 import { LayoutContext } from "./layout-context"
 import { supabase } from "@/lib/supabase"
@@ -10,7 +10,7 @@ import { supabase } from "@/lib/supabase"
 const TABS = [
   { label: 'Profile',       href: '/d/u/profile',       icon: User,    beta: false },
   { label: 'Recent',        href: '/d/u/recent',        icon: Clock,   beta: false },
-  { label: 'Reminders',     href: '/d/u/reminders',     icon: Bell,    beta: false },
+  { label: 'Reminders',     href: '/d/u/reminders',     icon: AlarmClock, beta: false },
   { label: 'Bookmarks',     href: '/d/u/bookmarks',     icon: Bookmark,beta: false },
   { label: 'Notifications', href: '/d/u/notifications', icon: BellRing,beta: true  },
 ]
