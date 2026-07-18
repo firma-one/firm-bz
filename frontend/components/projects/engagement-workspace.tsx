@@ -19,7 +19,6 @@ import { EngagementAuditPane } from './engagement-audit-pane'
 import { EngagementCommentsTab } from './engagement-comments-tab'
 import { EngagementWikiTab } from './wiki/engagement-wiki-tab'
 import type { LwCrmEngagementStatus } from '@/lib/actions/project'
-import { AddReminderPopover } from './add-reminder-popover'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 
 export interface ProjectPathSegments {
@@ -289,15 +288,6 @@ export function EngagementWorkspace({
                                 const color = days < 0 ? 'bg-red-50 text-red-700 border-red-200' : days <= 7 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-[#f0edee] text-[#45474c] border-[#e5e7eb]'
                                 return <span className={`shrink-0 rounded font-mono text-[10px] border px-2 py-0.5 ${color}`}>{label}</span>
                             })()}
-                            {firmId && projectId && (
-                                <AddReminderPopover
-                                    entityKey="platform.engagements"
-                                    entityValue={projectId}
-                                    entityName={projectName ?? 'Engagement'}
-                                    firmId={firmId}
-                                    ctaUrl={`/d/f/${orgSlug}/c/${clientSlug}/e/${engagementSlug ?? ''}`}
-                                />
-                            )}
                         </div>
                         <div className="flex items-center gap-2 mt-1 flex-wrap">
                             <p className="text-sm text-[#45474c]">Manage files, sharing and collaboration for this engagement.</p>

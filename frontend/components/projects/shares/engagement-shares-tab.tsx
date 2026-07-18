@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { DocumentPreviewPanelContent } from '@/components/files/document-edit-sheet'
 import { FilePreviewSheet } from '@/components/files/file-preview-sheet'
 import { useRightPane } from '@/lib/right-pane-context'
 import {
@@ -1845,9 +1844,10 @@ export function EngagementSharesTab({
   )
 
   const handleOpenDeliverableDetail = useCallback(
-    (share: ShareRecord) => {
+    (share: ShareRecord, initialTab?: 'details' | 'delivery' | 'comments') => {
       setOpenDeliverableId(share.id)
-      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#doc-file:${share.documentId}`)
+      const hashSuffix = initialTab === 'comments' ? ':comments' : ''
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#doc-file:${share.documentId}${hashSuffix}`)
       rightPane.setTitle(share.docId ?? share.documentName)
       rightPane.setHeaderSubtitle(share.documentName)
       rightPane.setHeaderIcon(<PackagePlus className="h-4 w-4" />)
@@ -1867,6 +1867,27 @@ export function EngagementSharesTab({
           roleSlug={roleSlug}
           orgSlug={orgSlug}
           deeplinkBase={deeplinkBase}
+          initialTab={initialTab}
+          onOpenSubtaskDocument={(subtask) => {
+            void handleSecureOpen({
+              documentId: subtask.documentId,
+              externalId: subtask.externalId ?? subtask.documentId,
+              fileName: subtask.fileName,
+              mimeType: subtask.mimeType ?? undefined,
+              projectId,
+            }, subtask.documentId)
+          }}
+          onPreviewSubtaskDocument={(subtask) => {
+            rightPane.setTitle(subtask.fileName)
+            rightPane.setHeaderSubtitle('')
+            rightPane.setHeaderIcon(<ScanEye className="h-4 w-4" />)
+            rightPane.setContent(
+              <DocumentBlobPreviewPane
+                document={{ id: subtask.documentId, name: subtask.fileName }}
+                projectId={projectId}
+              />
+            )
+          }}
           onStatusChange={(newStatus) => {
             setShares((prev) =>
               prev.map((s) =>
@@ -1890,23 +1911,24 @@ export function EngagementSharesTab({
         />
       )
     },
-    [rightPane, projectId, canManage, isExternalViewer, orgSlug, roleSlug, restrictToSharedOnly]
+    [rightPane, projectId, canManage, isExternalViewer, orgSlug, roleSlug, restrictToSharedOnly, handleSecureOpen]
   )
 
   // Capture the hash at mount so re-renders don't lose it before shares load
   const initialHashRef = React.useRef(typeof window !== 'undefined' ? window.location.hash : '')
   const deeplinkHandledRef = React.useRef(false)
 
-  // Deeplink: #doc-file:<projectDocumentId> → open that deliverable's detail panel
+  // Deeplink: #doc-file:<projectDocumentId>[:comments] → open that deliverable's detail
+  // panel, landing on the Comments tab when the optional suffix is present.
   useEffect(() => {
     if (isLoading || shares.length === 0 || deeplinkHandledRef.current) return
-    const match = initialHashRef.current.match(/^#doc-file:([^:]+)$/)
+    const match = initialHashRef.current.match(/^#doc-file:([^:]+)(:comments)?$/)
     if (!match) return
-    const docId = match[1]
+    const [, docId, commentsSuffix] = match
     const share = shares.find((s) => s.documentId === docId)
     if (share) {
       deeplinkHandledRef.current = true
-      handleOpenDeliverableDetail(share)
+      handleOpenDeliverableDetail(share, commentsSuffix ? 'comments' : undefined)
     }
   }, [isLoading, shares, handleOpenDeliverableDetail])
 
@@ -2282,9 +2304,10 @@ export function EngagementSharesTab({
                 onDragStart={handleDragStart}
                 onDragEnd={handleDragEnd}
               >
+                <div className="overflow-x-auto min-h-[360px]">
                 <div
                   className="grid gap-4 min-h-[360px] items-start"
-                  style={{ gridTemplateColumns: approvedCollapsed ? 'minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 36px' : 'repeat(4, minmax(0, 1fr))' }}
+                  style={{ gridTemplateColumns: approvedCollapsed ? 'minmax(240px, 1fr) minmax(240px, 1fr) minmax(240px, 1fr) 36px' : 'repeat(4, minmax(240px, 1fr))' }}
                 >
                   {LANES.map((lane) => {
                     const laneCount = byLane[lane.status].length
@@ -2355,7 +2378,7 @@ export function EngagementSharesTab({
                           </div>
                         </div>
                         {/* Swimlane body: gray container sized to its contents, not the tallest column */}
-                        <DroppableLane id={lane.status} className="flex flex-col mt-2 rounded bg-[#f9f9fb] p-3 gap-2.5">
+                        <DroppableLane id={lane.status} className="flex flex-col mt-2 rounded bg-[#fbfbfc] p-3 gap-2.5">
                           {(isOver) => (
                             <>
                               <AnimatePresence mode="popLayout">
@@ -2412,6 +2435,7 @@ export function EngagementSharesTab({
                       </motion.div>
                     )
                   })}
+                </div>
                 </div>
 
                 <DragOverlay dropAnimation={{ duration: 200, easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)' }}>

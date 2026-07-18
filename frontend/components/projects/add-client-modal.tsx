@@ -12,7 +12,7 @@ import { VisuallyHidden } from "@radix-ui/react-visually-hidden"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { UserPlus, X, CornerDownLeft, Linkedin, Users2, MapPin, User, Activity, Share2, CalendarCheck, CalendarClock, Building2, Globe, FileText, Tag, Lock } from "lucide-react"
+import { UserPlus, Linkedin, Users2, MapPin, User, Activity, Share2, CalendarCheck, Building2, Globe, FileText, Lock } from "lucide-react"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { SandboxInfoBanner } from "@/components/ui/sandbox-info-banner"
 import {
@@ -217,7 +217,7 @@ export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigg
                     <VisuallyHidden><DialogTitle>New Client</DialogTitle></VisuallyHidden>
 
                     {/* Header */}
-                    <div className="px-5 py-4 border-b border-[#e5e7eb] bg-white flex items-start gap-3">
+                    <div className="px-5 py-4 border-b border-[#e5e7eb] bg-white flex items-start gap-3 sticky top-0 z-10">
                         <div className="mt-0.5 h-7 w-7 rounded bg-primary/10 flex items-center justify-center shrink-0">
                             <UserPlus className="h-3.5 w-3.5 text-primary" />
                         </div>
@@ -269,10 +269,10 @@ export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigg
                                                     <SelectValue />
                                                 </SelectTrigger>
                                                 <SelectContent className="rounded border border-[#e5e7eb] bg-white shadow-md py-0.5 min-w-[var(--radix-select-trigger-width)]">
-                                                    <SelectItem value="PROSPECT" className="cursor-pointer rounded-none py-1 px-2.5 !text-[0.8125rem] text-[#45474c] outline-none focus:bg-[#f9f9fb] data-[state=checked]:bg-primary/10 data-[state=checked]:border-l-2 data-[state=checked]:border-brand-accent data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-[#f9f9fb]">Prospect</SelectItem>
-                                                    <SelectItem value="ACTIVE" className="cursor-pointer rounded-none py-1 px-2.5 !text-[0.8125rem] text-[#45474c] outline-none focus:bg-[#f9f9fb] data-[state=checked]:bg-primary/10 data-[state=checked]:border-l-2 data-[state=checked]:border-brand-accent data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-[#f9f9fb]">Active</SelectItem>
-                                                    <SelectItem value="ON_HOLD" className="cursor-pointer rounded-none py-1 px-2.5 !text-[0.8125rem] text-[#45474c] outline-none focus:bg-[#f9f9fb] data-[state=checked]:bg-primary/10 data-[state=checked]:border-l-2 data-[state=checked]:border-brand-accent data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-[#f9f9fb]">On hold</SelectItem>
-                                                    <SelectItem value="PAST" className="cursor-pointer rounded-none py-1 px-2.5 !text-[0.8125rem] text-[#45474c] outline-none focus:bg-[#f9f9fb] data-[state=checked]:bg-primary/10 data-[state=checked]:border-l-2 data-[state=checked]:border-brand-accent data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-[#f9f9fb]">Past</SelectItem>
+                                                    <SelectItem value="PROSPECT" className="cursor-pointer rounded-none px-2.5 text-[#45474c] outline-none focus:bg-[#f9f9fb] data-[state=checked]:bg-primary/10 data-[state=checked]:border-l-2 data-[state=checked]:border-brand-accent data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-[#f9f9fb]">Prospect</SelectItem>
+                                                    <SelectItem value="ACTIVE" className="cursor-pointer rounded-none px-2.5 text-[#45474c] outline-none focus:bg-[#f9f9fb] data-[state=checked]:bg-primary/10 data-[state=checked]:border-l-2 data-[state=checked]:border-brand-accent data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-[#f9f9fb]">Active</SelectItem>
+                                                    <SelectItem value="ON_HOLD" className="cursor-pointer rounded-none px-2.5 text-[#45474c] outline-none focus:bg-[#f9f9fb] data-[state=checked]:bg-primary/10 data-[state=checked]:border-l-2 data-[state=checked]:border-brand-accent data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-[#f9f9fb]">On hold</SelectItem>
+                                                    <SelectItem value="PAST" className="cursor-pointer rounded-none px-2.5 text-[#45474c] outline-none focus:bg-[#f9f9fb] data-[state=checked]:bg-primary/10 data-[state=checked]:border-l-2 data-[state=checked]:border-brand-accent data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-[#f9f9fb]">Past</SelectItem>
                                                 </SelectContent>
                                             </Select>
                                         </div>
@@ -334,47 +334,14 @@ export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigg
                                 <div className="col-span-2 space-y-3">
                                     <p className={fieldLabel}>CRM</p>
 
-                                    {/* Row 1: Lead Source + Tags */}
-                                    <div className="grid grid-cols-2 gap-3">
+                                    {/* Row 1: Lead Source + Lead Conversion Date (disabled when not PROSPECT) + Client Onboarding Date (disabled when PROSPECT) */}
+                                    <div className="grid grid-cols-3 gap-3">
                                         <div>
                                             <label htmlFor="new-client-lead-source" className={fieldLabel}>
                                                 <span className="inline-flex items-center gap-1"><Share2 className="h-3 w-3" /> Lead source</span>
                                             </label>
                                             <SelectWithCustomEntry id="new-client-lead-source" value={leadSource} onChange={setLeadSource} options={['Referral', 'Inbound', 'Outbound', 'Conference', 'Existing Network']} placeholder="Select source…" customEntryHint="Other…" disabled={isDisabled} />
                                             <p className="mt-1 text-[10px] text-[#9a9ba0]">How did you acquire the lead?</p>
-                                        </div>
-                                        <div>
-                                            <label htmlFor="new-client-tags" className={fieldLabel}>
-                                                <span className="inline-flex items-center gap-1"><Tag className="h-3 w-3" /> Tags</span>
-                                            </label>
-                                            <div
-                                                className={`flex flex-wrap gap-1.5 min-h-[36px] w-full rounded border px-3 py-2 transition-colors cursor-text ${isDisabled ? 'border-[#e5e7eb] bg-[#f9f9fb] opacity-50 cursor-not-allowed' : 'border-[#e5e7eb] bg-white focus-within:ring-1 focus-within:ring-primary focus-within:border-primary'}`}
-                                                onClick={() => tagInputRef.current?.focus()}
-                                            >
-                                                {tags.map((tag) => (
-                                                    <span key={tag} className="inline-flex items-center gap-1 rounded bg-[#f3f4f6] border border-[#e5e7eb] px-2 py-0.5 text-[11px] font-medium text-[#45474c]">
-                                                        {tag}
-                                                        {!isDisabled && (
-                                                            <button type="button" onClick={(e) => { e.stopPropagation(); removeTag(tag) }} className="text-[#9a9ba0] hover:text-[#1b1b1d] transition-colors" aria-label={`Remove ${tag}`}>
-                                                                <X className="h-3 w-3" />
-                                                            </button>
-                                                        )}
-                                                    </span>
-                                                ))}
-                                                <input ref={tagInputRef} id="new-client-tags" value={tagInput} onChange={handleTagChange} onKeyDown={handleTagKeyDown} onBlur={() => { if (tagInput.trim()) commitTag(tagInput) }} placeholder={tags.length === 0 ? 'Type a tag, press Enter or comma…' : ''} disabled={isDisabled} className="flex-1 min-w-[120px] bg-transparent outline-none placeholder:text-[#9a9ba0] text-[#1b1b1d] text-xs disabled:cursor-not-allowed" />
-                                                <CornerDownLeft className="h-3 w-3 text-primary shrink-0 self-center ml-1" />
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Row 2: Follow-up date + Lead Conversion Date (disabled when not PROSPECT) + Client Onboarding Date (disabled when PROSPECT) */}
-                                    <div className="grid grid-cols-3 gap-3">
-                                        <div>
-                                            <label className={fieldLabel}>
-                                                <span className="inline-flex items-center gap-1"><CalendarClock className="h-3 w-3" /> Follow-up date</span>
-                                            </label>
-                                            <DateTimePicker value={followUpDate} onChange={setFollowUpDate} placeholder="Select date" disabled={isDisabled} defaultTime="09:00" />
-                                            <p className="mt-1 text-[10px] text-[#9a9ba0]">When to next follow up?</p>
                                         </div>
                                         <div>
                                             <label className={fieldLabel}>
@@ -408,7 +375,7 @@ export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigg
                         </div>
 
                         {/* Footer */}
-                        <div className="px-5 py-3 border-t border-[#e5e7eb] bg-white flex items-center justify-end gap-3">
+                        <div className="px-5 py-3 border-t border-[#e5e7eb] bg-white flex items-center justify-end gap-3 sticky bottom-0 z-10">
                             <Button type="button" variant="outline" className="rounded w-32 text-[10px] font-headline font-bold tracking-widest uppercase" onClick={() => setOpen(false)} disabled={isLoading}>
                                 Cancel
                             </Button>

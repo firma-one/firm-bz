@@ -2109,48 +2109,91 @@ function FolderHealthBody({ storageHealth, folderHealth, hiddenRings = [] }: {
         },
     ]
     const rings = allRings.filter(r => show(r.id))
+    const showScoreRing = show('folder.overall_score')
+    // Row 1 = score ring (if shown) + first KPI rings, filling out 3 columns
+    const row1KpiCount = showScoreRing ? 2 : 3
+    const hasMoreRows = rings.length > row1KpiCount
+    const [expanded, setExpanded] = useState(false)
+    const gridRef = useRef<HTMLDivElement>(null)
+    const [fullHeight, setFullHeight] = useState<number | null>(null)
+
+    useEffect(() => {
+        if (gridRef.current) {
+            setFullHeight(gridRef.current.scrollHeight)
+        }
+    }, [rings.length, showScoreRing])
 
     return (
         <div className="p-6 flex flex-col gap-6">
             {/* 3×3 grid: score ring first, then 8 KPI rings */}
-            <div className="grid grid-cols-3 gap-8">
-                {/* Score ring — cell 1 */}
-                {show('folder.overall_score') && <div className="flex flex-col items-center gap-3">
-                    <p className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
-                        <FolderOpen className="h-4 w-4 text-gray-400" />
-                        Overall Score
-                        <InfoTip ariaLabel="About Folder Health Score" text="File organization quality (0–100). Penalizes badly named files, duplicates, stale files, large files, deeply nested folders, empty folders, and orphaned files." />
-                    </p>
-                    <Donut
-                        total={100}
-                        size={108}
-                        thickness={13}
-                        segments={[{ value: score, hex: scoreHex }]}
-                        centerTop={<span className={`text-2xl font-bold leading-none tabular-nums ${scoreTextClass}`}>{score}</span>}
-                        centerBottom={<span className="text-[10px] text-gray-400 mt-0.5">/ 100</span>}
-                    />
-                    <div className="flex flex-col gap-1.5 w-full max-w-[220px]">
-                        <div className="flex items-center gap-2 text-xs">
-                            <span className="h-2.5 w-2.5 rounded-sm shrink-0" style={{ backgroundColor: scoreHex }} />
-                            <span className="text-gray-600 truncate">{label}</span>
+            <div className="relative">
+                <div
+                    ref={gridRef}
+                    className="grid grid-cols-3 gap-8 overflow-hidden transition-[max-height] duration-700 ease-[cubic-bezier(0.65,0,0.35,1)]"
+                    style={{ maxHeight: !expanded && hasMoreRows ? 220 : (fullHeight ?? 1200) }}
+                >
+                    {/* Score ring — cell 1 */}
+                    {showScoreRing && <div className="flex flex-col items-center gap-3">
+                        <p className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
+                            <FolderOpen className="h-4 w-4 text-gray-400" />
+                            Overall Score
+                            <InfoTip ariaLabel="About Folder Health Score" text="File organization quality (0–100). Penalizes badly named files, duplicates, stale files, large files, deeply nested folders, empty folders, and orphaned files." />
+                        </p>
+                        <Donut
+                            total={100}
+                            size={108}
+                            thickness={13}
+                            segments={[{ value: score, hex: scoreHex }]}
+                            centerTop={<span className={`text-2xl font-bold leading-none tabular-nums ${scoreTextClass}`}>{score}</span>}
+                            centerBottom={<span className="text-[10px] text-gray-400 mt-0.5">/ 100</span>}
+                        />
+                        <div className="flex flex-col gap-1.5 w-full max-w-[220px]">
+                            <div className="flex items-center gap-2 text-xs">
+                                <span className="h-2.5 w-2.5 rounded-sm shrink-0" style={{ backgroundColor: scoreHex }} />
+                                <span className="text-gray-600 truncate">{label}</span>
+                            </div>
+                            {totalDeducted > 0 && (
+                                <p className="text-xs text-gray-400 tabular-nums">100 − <span className="text-red-500 font-medium">{totalDeducted}</span> = <span className={`font-semibold ${scoreTextClass}`}>{score}</span></p>
+                            )}
                         </div>
-                        {totalDeducted > 0 && (
-                            <p className="text-xs text-gray-400 tabular-nums">100 − <span className="text-red-500 font-medium">{totalDeducted}</span> = <span className={`font-semibold ${scoreTextClass}`}>{score}</span></p>
-                        )}
+                    </div>}
+                    {/* 8 KPI rings */}
+                    {rings.map((r, i) => (
+                        <div
+                            key={r.label}
+                            className="transition-opacity duration-500 ease-in-out"
+                            style={{
+                                opacity: expanded || i < row1KpiCount ? 1 : 0,
+                                transitionDelay: expanded && i >= row1KpiCount ? '200ms' : '0ms',
+                            }}
+                        >
+                            <FolderHealthRing
+                                label={r.label}
+                                tooltip={r.tooltip}
+                                icon={r.icon}
+                                segments={r.segments}
+                                centerTop={r.centerTop}
+                                centerBottom={r.centerBottom}
+                            />
+                        </div>
+                    ))}
+                </div>
+                <div
+                    className="pointer-events-none absolute inset-x-0 h-28 bg-gradient-to-t from-white via-white/90 to-transparent transition-opacity duration-500 ease-in-out"
+                    style={{ bottom: '2.5rem', opacity: !expanded && hasMoreRows ? 1 : 0 }}
+                />
+                {hasMoreRows && (
+                    <div className="relative flex justify-center mt-3">
+                        <button
+                            type="button"
+                            onClick={() => setExpanded(v => !v)}
+                            className="flex items-center gap-1.5 text-sm font-semibold text-gray-700 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 border border-gray-300 px-4 py-1.5 rounded-full transition-colors"
+                        >
+                            {expanded ? 'Show less' : 'Show more'}
+                            <ChevronDown className={`h-4 w-4 transition-transform duration-300 ${expanded ? 'rotate-180' : ''}`} />
+                        </button>
                     </div>
-                </div>}
-                {/* 8 KPI rings */}
-                {rings.map((r) => (
-                    <FolderHealthRing
-                        key={r.label}
-                        label={r.label}
-                        tooltip={r.tooltip}
-                        icon={r.icon}
-                        segments={r.segments}
-                        centerTop={r.centerTop}
-                        centerBottom={r.centerBottom}
-                    />
-                ))}
+                )}
             </div>
 
             {/* Factors list */}

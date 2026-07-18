@@ -15,7 +15,6 @@ import { ClientContactsTab } from './client-contacts-tab'
 import { ClientMembersTab } from './members/client-members-tab'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import Link from 'next/link'
-import { AddReminderPopover } from './add-reminder-popover'
 
 interface ClientProjectViewProps {
     clients: HierarchyClient[]
@@ -162,16 +161,6 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                                         <h1 className="font-headline text-3xl md:text-4xl font-bold tracking-tight text-[#1b1b1d]">
                                             {selectedClient.name}
                                         </h1>
-                                        {firmId && selectedClient.id && (
-                                            <AddReminderPopover
-                                                entityKey="platform.clients"
-                                                entityValue={selectedClient.id}
-                                                entityName={selectedClient.name}
-                                                firmId={firmId}
-                                                ctaUrl={`/d/f/${firmSlug}/c/${selectedClient.slug}`}
-                                                disabled={false}
-                                            />
-                                        )}
                                         {selectedClient.status && (
                                             <span className={`px-2 py-0.5 rounded font-mono text-[10px] tracking-tight uppercase shrink-0 border ${
                                                 selectedClient.status === 'ACTIVE'   ? 'bg-[#f0edee] text-[#45474c] border-[#e5e7eb]' :
@@ -183,14 +172,6 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                                                 {selectedClient.status === 'ON_HOLD' ? 'On Hold' : selectedClient.status.charAt(0) + selectedClient.status.slice(1).toLowerCase()}
                                             </span>
                                         )}
-                                        {selectedClient.followUpDate && (() => {
-                                            const today = new Date(); today.setHours(0, 0, 0, 0)
-                                            const due = new Date(selectedClient.followUpDate); due.setHours(0, 0, 0, 0)
-                                            const days = Math.round((due.getTime() - today.getTime()) / 86400000)
-                                            const label = days < 0 ? `${Math.abs(days)}d overdue` : days === 0 ? 'Follow up today' : days === 1 ? 'Follow up tomorrow' : `Follow up in ${days}d`
-                                            const color = days < 0 ? 'bg-red-50 text-red-700 border-red-200' : days <= 7 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-[#f0edee] text-[#45474c] border-[#e5e7eb]'
-                                            return <span className={`shrink-0 rounded font-mono text-[10px] border px-2 py-0.5 ${color}`}>{label}</span>
-                                        })()}
                                     </div>
                                     <div className="flex items-center gap-2 mt-1 flex-wrap">
                                         <p className="text-sm text-[#45474c]">Manage engagements and client settings.</p>

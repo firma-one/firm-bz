@@ -1074,7 +1074,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                               <SelectItem
                                 key={p.slug}
                                 value={p.slug}
-                                className="cursor-pointer rounded-none py-1 px-2.5 !text-[0.8125rem] text-[#45474c] outline-none focus:bg-[#f9f9fb] data-[state=checked]:bg-primary/10 data-[state=checked]:border-l-2 data-[state=checked]:border-brand-accent data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-[#f9f9fb]"
+                                className="cursor-pointer rounded-none px-2.5 !text-[0.8125rem] text-[#45474c] outline-none focus:bg-[#f9f9fb] data-[state=checked]:bg-primary/10 data-[state=checked]:border-l-2 data-[state=checked]:border-brand-accent data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-[#f9f9fb]"
                                 endAdornment={p.description ? (
                                   <Tooltip>
                                     <TooltipTrigger asChild>

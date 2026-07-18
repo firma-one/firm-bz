@@ -17,7 +17,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog'
-import { AlertTriangle, ChevronDown, ImageIcon, ImagePlus, Info, Lock, Linkedin, Palette, RotateCcw, Trash2, Type, Users2, MapPin, X, CornerDownLeft, User, Activity, Building2, Globe, FileText, Tag, Share2, CalendarClock, CalendarCheck } from 'lucide-react'
+import { AlertTriangle, ChevronDown, ImageIcon, ImagePlus, Info, Lock, Linkedin, Palette, RotateCcw, Trash2, Type, Users2, MapPin, User, Activity, Building2, Globe, FileText, Share2, CalendarCheck } from 'lucide-react'
 import { SelectWithCustomEntry } from '@/components/ui/select-with-custom-entry'
 import { DateTimePicker } from '@/components/ui/date-time-picker'
 import { SandboxInfoBanner } from '@/components/ui/sandbox-info-banner'
@@ -479,10 +479,10 @@ export function ClientSettingsForm({
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent className="rounded border border-[#e5e7eb] bg-white shadow-md py-0.5 min-w-[var(--radix-select-trigger-width)]">
-                                    <SelectItem value="PROSPECT" className="cursor-pointer rounded-none py-1 px-2.5 !text-[0.8125rem] text-[#45474c] outline-none focus:bg-[#f9f9fb] data-[state=checked]:bg-primary/10 data-[state=checked]:border-l-2 data-[state=checked]:border-brand-accent data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-[#f9f9fb]">Prospect</SelectItem>
-                                    <SelectItem value="ACTIVE" className="cursor-pointer rounded-none py-1 px-2.5 !text-[0.8125rem] text-[#45474c] outline-none focus:bg-[#f9f9fb] data-[state=checked]:bg-primary/10 data-[state=checked]:border-l-2 data-[state=checked]:border-brand-accent data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-[#f9f9fb]">Active</SelectItem>
-                                    <SelectItem value="ON_HOLD" className="cursor-pointer rounded-none py-1 px-2.5 !text-[0.8125rem] text-[#45474c] outline-none focus:bg-[#f9f9fb] data-[state=checked]:bg-primary/10 data-[state=checked]:border-l-2 data-[state=checked]:border-brand-accent data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-[#f9f9fb]">On hold</SelectItem>
-                                    <SelectItem value="PAST" className="cursor-pointer rounded-none py-1 px-2.5 !text-[0.8125rem] text-[#45474c] outline-none focus:bg-[#f9f9fb] data-[state=checked]:bg-primary/10 data-[state=checked]:border-l-2 data-[state=checked]:border-brand-accent data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-[#f9f9fb]">Past</SelectItem>
+                                    <SelectItem value="PROSPECT" className="cursor-pointer rounded-none px-2.5 text-[#45474c] outline-none focus:bg-[#f9f9fb] data-[state=checked]:bg-primary/10 data-[state=checked]:border-l-2 data-[state=checked]:border-brand-accent data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-[#f9f9fb]">Prospect</SelectItem>
+                                    <SelectItem value="ACTIVE" className="cursor-pointer rounded-none px-2.5 text-[#45474c] outline-none focus:bg-[#f9f9fb] data-[state=checked]:bg-primary/10 data-[state=checked]:border-l-2 data-[state=checked]:border-brand-accent data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-[#f9f9fb]">Active</SelectItem>
+                                    <SelectItem value="ON_HOLD" className="cursor-pointer rounded-none px-2.5 text-[#45474c] outline-none focus:bg-[#f9f9fb] data-[state=checked]:bg-primary/10 data-[state=checked]:border-l-2 data-[state=checked]:border-brand-accent data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-[#f9f9fb]">On hold</SelectItem>
+                                    <SelectItem value="PAST" className="cursor-pointer rounded-none px-2.5 text-[#45474c] outline-none focus:bg-[#f9f9fb] data-[state=checked]:bg-primary/10 data-[state=checked]:border-l-2 data-[state=checked]:border-brand-accent data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-[#f9f9fb]">Past</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
@@ -547,47 +547,14 @@ export function ClientSettingsForm({
                 <div className="col-span-2 bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
                     <p className={fieldLabel}>CRM</p>
 
-                    {/* Row 1: Lead Source + Tags */}
-                    <div className="grid grid-cols-2 gap-3">
+                    {/* Row 1: Lead Source + Lead Conversion Date (disabled when not PROSPECT) + Client Onboarding Date (disabled when PROSPECT) */}
+                    <div className="grid grid-cols-3 gap-3">
                         <div>
                             <label htmlFor="client-lead-source" className={fieldLabel}>
                                 <span className="inline-flex items-center gap-1"><Share2 className="h-3 w-3" /> Lead source</span>
                             </label>
                             <SelectWithCustomEntry id="client-lead-source" value={leadSource} onChange={setLeadSourceD} options={['Referral', 'Inbound', 'Outbound', 'Conference', 'Existing Network']} placeholder="Select source…" customEntryHint="Other…" disabled={isSandboxFirm} />
                             <p className="mt-1 text-[10px] text-[#9a9ba0]">How did you acquire the lead?</p>
-                        </div>
-                        <div>
-                            <label htmlFor="client-tags" className={fieldLabel}>
-                                <span className="inline-flex items-center gap-1"><Tag className="h-3 w-3" /> Tags</span>
-                            </label>
-                            <div
-                                className={`flex flex-wrap gap-1.5 min-h-[36px] w-full rounded border px-3 py-2 transition-colors cursor-text ${isSandboxFirm ? 'border-[#e5e7eb] bg-[#f9f9fb] opacity-50 cursor-not-allowed' : 'border-[#e5e7eb] bg-white focus-within:ring-1 focus-within:ring-primary focus-within:border-primary'}`}
-                                onClick={() => tagInputRef.current?.focus()}
-                            >
-                                {tags.map((tag) => (
-                                    <span key={tag} className="inline-flex items-center gap-1 rounded bg-[#f3f4f6] border border-[#e5e7eb] px-2 py-0.5 text-[11px] font-medium text-[#45474c]">
-                                        {tag}
-                                        {!isSandboxFirm && (
-                                            <button type="button" onClick={(e) => { e.stopPropagation(); removeTag(tag) }} className="text-[#9a9ba0] hover:text-[#1b1b1d] transition-colors" aria-label={`Remove ${tag}`}>
-                                                <X className="h-3 w-3" />
-                                            </button>
-                                        )}
-                                    </span>
-                                ))}
-                                <input ref={tagInputRef} id="client-tags" value={tagInput} onChange={handleTagChange} onKeyDown={handleTagKeyDown} onBlur={() => { if (tagInput.trim()) commitTag(tagInput) }} placeholder={tags.length === 0 ? 'Type a tag e.g. "high-priority"; press Enter or comma…' : ''} disabled={isSandboxFirm} className="flex-1 min-w-[120px] bg-transparent outline-none placeholder:text-[#9a9ba0] text-[#1b1b1d] text-xs disabled:cursor-not-allowed" />
-                                <CornerDownLeft className="h-3 w-3 text-primary shrink-0 self-center ml-1" />
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Row 2: Follow-up date + Lead Conversion Date (disabled when not PROSPECT) + Client Onboarding Date (disabled when PROSPECT) */}
-                    <div className="grid grid-cols-3 gap-3">
-                        <div>
-                            <label className={fieldLabel}>
-                                <span className="inline-flex items-center gap-1"><CalendarClock className="h-3 w-3" /> Follow-up date</span>
-                            </label>
-                            <DateTimePicker value={followUpDate} onChange={setFollowUpDateD} placeholder="Select date" disabled={isSandboxFirm} defaultTime="09:00" />
-                            <p className="mt-1 text-[10px] text-[#9a9ba0]">When to setup a new reminder to follow up?</p>
                         </div>
                         <div>
                             <label className={fieldLabel}>

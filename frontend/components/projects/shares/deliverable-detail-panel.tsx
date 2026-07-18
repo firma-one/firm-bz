@@ -17,9 +17,9 @@ import {
 } from '@/components/ui/select'
 import {
   CheckCircle, PenLine, Eye, ListTodo, Loader2,
-  ExternalLink, Folder, MoreVertical,
+  Folder, MoreVertical,
   Info, MessagesSquare, Settings as SettingsIcon,
-  UserPlus, ChevronDown, X,
+  UserPlus, ChevronDown, X, ScanEye, FolderOpen,
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -46,6 +46,7 @@ interface SharingOptions {
 interface SubtaskRecord {
   id: string
   documentId: string
+  externalId?: string | null
   fileName: string
   mimeType?: string | null
   docId: string | null
@@ -85,8 +86,14 @@ export interface DeliverableDetailPanelProps {
   onSubtaskStatusChange?: (totalCount: number, approvedCount: number) => void
   /** Ref the parent can call to push a new status into the panel without remounting it (e.g. after board drag). */
   externalStatusRef?: React.MutableRefObject<((s: ActivityStatus) => void) | null>
+  /** Called when "Open" is clicked on a subtask row — triggers the regrant/secure-open flow. */
+  onOpenSubtaskDocument?: (subtask: SubtaskRecord) => void
+  /** Called when "Preview" is clicked on a subtask row — opens the preview pane. */
+  onPreviewSubtaskDocument?: (subtask: SubtaskRecord) => void
   onClose?: () => void
   className?: string
+  /** Tab to open on mount — e.g. deep-linking from a comment thread should land on 'comments'. */
+  initialTab?: Tab
 }
 
 type Tab = 'details' | 'delivery' | 'comments'
@@ -111,7 +118,7 @@ const STAGE_COLOR: Record<ActivityStatus, string> = {
   to_do: 'bg-[#f3b52f] text-white',
   in_progress: 'bg-[#3b5bfd] text-white',
   in_review: 'bg-[#7c3aed] text-white',
-  approved: 'bg-primary text-white',
+  approved: 'bg-[#0d9f5f] text-white',
 }
 
 
@@ -132,6 +139,8 @@ function SubtaskRow({
   onStatusChange,
   onRemoveSubtask,
   onAssigneeChange,
+  onOpenDocument,
+  onPreviewDocument,
   disabled = false,
   deeplinkBase,
   showExtras = false,
@@ -146,6 +155,8 @@ function SubtaskRow({
   onStatusChange: (id: string, newStatus: ActivityStatus) => void
   onRemoveSubtask?: (id: string) => void
   onAssigneeChange?: (id: string, userId: string | null, name: string | null, email: string | null, avatarUrl: string | null) => void
+  onOpenDocument?: (subtask: SubtaskRecord) => void
+  onPreviewDocument?: (subtask: SubtaskRecord) => void
   disabled?: boolean
   deeplinkBase?: string
   showExtras?: boolean
@@ -232,14 +243,19 @@ function SubtaskRow({
     ? `${deeplinkBase}#doc-file:${subtask.documentId}`
     : null
 
-  // Shape a document object compatible with DocumentActionMenu
+  // Shape a document object compatible with DocumentActionMenu.
+  // Do NOT set webViewLink to the internal deeplink — DocumentPreviewPanelContent uses
+  // webViewLink as the iframe src, which would load the app page instead of the document.
+  // externalId lets getDocumentPreviewUrl build the correct Google Drive/preview URL.
   const docForMenu = {
     id: subtask.documentId,
+    projectId,
     projectDocumentId: subtask.documentId,
+    externalId: subtask.externalId ?? undefined,
     name: subtask.fileName,
     mimeType: subtask.mimeType ?? 'application/octet-stream',
-    webViewLink: fileUrl ?? '',
-    webContentLink: fileUrl ?? '',
+    webViewLink: '',
+    webContentLink: '',
   }
 
   return (
@@ -253,7 +269,7 @@ function SubtaskRow({
           <span className="flex-1 min-w-0 truncate text-xs text-[#1b1b1d]">{subtask.fileName}</span>
         )}
         {!showExtras && <span className="flex-1 min-w-0" />}
-        {/* Expand toggle — available in both medium and large */}
+        {/* Expand toggle */}
         {showExtras && (
           <button
             type="button"
@@ -265,6 +281,40 @@ function SubtaskRow({
           </button>
         )}
         <TooltipProvider delayDuration={300}>
+          {/* Preview button */}
+          {onPreviewDocument && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => onPreviewDocument(subtask)}
+                  className="shrink-0 h-7 w-7 rounded-md inline-flex items-center justify-center text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                  aria-label="Preview"
+                >
+                  <ScanEye className="h-4 w-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="text-xs">Preview</TooltipContent>
+            </Tooltip>
+          )}
+          {/* Open in Files button */}
+          {fileUrl && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <a
+                  href={fileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="shrink-0 h-7 w-7 rounded-md inline-flex items-center justify-center text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                  aria-label="Open in Files"
+                >
+                  <FolderOpen className="h-4 w-4" />
+                </a>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="text-xs">Open in Files</TooltipContent>
+            </Tooltip>
+          )}
+          {/* Stage badge */}
           <Tooltip>
             <TooltipTrigger asChild>
               <span className={cn('flex items-center justify-center h-5 w-5 rounded shrink-0', STAGE_COLOR[status])}>
@@ -283,6 +333,7 @@ function SubtaskRow({
             isEngagementLead={true}
             canManage={false}
             showShareModal={false}
+            onOpenDocument={onOpenDocument ? () => onOpenDocument(subtask) : undefined}
             onDeleteDocument={(!isDeliverableApproved && onRemoveSubtask) ? () => void handleTrash() : undefined}
           />
         </div>
@@ -306,23 +357,6 @@ function SubtaskRow({
                   </span>
                 ))}
               </>
-            )}
-            {fileUrl && (
-              <TooltipProvider delayDuration={300}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <a
-                      href={fileUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary/50 hover:text-primary transition-colors ml-1"
-                    >
-                      <ExternalLink className="h-2.5 w-2.5 shrink-0" />
-                    </a>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="text-xs">Open in Files</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
             )}
           </div>
 
@@ -524,12 +558,15 @@ export function DeliverableDetailPanel({
   onStatusChange,
   onSubtaskStatusChange,
   externalStatusRef,
+  onOpenSubtaskDocument,
+  onPreviewSubtaskDocument,
   className,
+  initialTab,
 }: DeliverableDetailPanelProps) {
   const { addToast } = useToast()
   const { paneSize } = useRightPane()
   const showExtras = paneSize !== 'small'
-  const [activeTab, setActiveTab] = useState<Tab>('details')
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab ?? 'details')
 
   const [status, setStatus] = useState<ActivityStatus>(activityStatus)
   const [deliverableDueDate, setDeliverableDueDate] = useState<string>(dueDate ?? '')
@@ -934,6 +971,8 @@ export function DeliverableDetailPanel({
                       onToggleExpand={() => setExpandedSubtaskId((prev) => prev === s.id ? null : s.id)}
                       isDeliverableApproved={isApproved}
                       members={members}
+                      onOpenDocument={onOpenSubtaskDocument}
+                      onPreviewDocument={onPreviewSubtaskDocument}
                       onStatusChange={(id, newStatus) => setSubtasks((prev) => prev.map((t) => t.id === id ? { ...t, status: newStatus } : t))}
                       onRemoveSubtask={(id) => setSubtasks((prev) => prev.filter((t) => t.id !== id))}
                       onAssigneeChange={(id, userId, name, email, avatarUrl) =>

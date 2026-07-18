@@ -625,84 +625,76 @@ export function DocumentActionMenu({
             )}
             {document.mimeType?.includes('folder') ? (
               <>
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
-                    <Share2 className="h-4 w-4 text-purple-600" />
-                    <span>Share</span>
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="w-56">
-                    {showShareModal && projectId && (
-                      isApprovedDeliverable ? (
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <DropdownMenuItem
-                                aria-disabled="true"
-                                onSelect={(e) => e.preventDefault()}
-                                className="flex items-center space-x-3 px-3 py-2 text-xs opacity-50 cursor-not-allowed"
-                              >
-                                <XCircle className="h-4 w-4" />
-                                <span>Untag as Deliverable</span>
-                              </DropdownMenuItem>
-                            </TooltipTrigger>
-                            <TooltipContent side="right" className="text-xs max-w-48">Approved deliverables cannot be untagged</TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      ) : isDeliverable ? (
-                        <DropdownMenuItem
-                          onClick={() => {
-                            if (deliverableStatus && deliverableStatus !== 'to_do') {
-                              addToast({ type: 'error', title: 'Cannot untag', message: 'Only deliverables with a To Do status can be untagged.' })
-                              return
-                            }
-                            setShowUntagConfirm(true)
-                          }}
-                          className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs text-destructive focus:text-destructive"
-                        >
-                          <XCircle className="h-4 w-4" />
-                          <span>Untag as Deliverable</span>
-                        </DropdownMenuItem>
-                      ) : isAncestorShared ? (
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <DropdownMenuItem
-                                aria-disabled="true"
-                                onSelect={(e) => e.preventDefault()}
-                                className="flex items-center space-x-3 px-3 py-2 text-xs opacity-50 cursor-not-allowed"
-                              >
-                                <Share2 className="h-4 w-4 text-purple-600" />
-                                <span>Tag as Deliverable</span>
-                              </DropdownMenuItem>
-                            </TooltipTrigger>
-                            <TooltipContent side="right" className="text-xs max-w-48">An ancestor folder is already a Deliverable</TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      ) : (
-                        <DropdownMenuItem
-                          onClick={() => onMarkAsDeliverable?.(document)}
-                          className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
-                        >
-                          <Share2 className="h-4 w-4 text-purple-600" />
-                          <span>Tag as Deliverable</span>
-                        </DropdownMenuItem>
-                      )
-                    )}
+                <DropdownMenuItem
+                  onClick={() => {
+                    const docId = (document as any).projectDocumentId || document.id
+                    if (!deeplinkBase) return
+                    navigator.clipboard.writeText(`${deeplinkBase}#doc-file:${docId}`)
+                      .then(() => addToast({ type: 'success', title: 'Link copied', message: 'Link copied to clipboard' }))
+                      .catch(() => addToast({ type: 'error', title: 'Copy failed', message: 'Could not copy link.' }))
+                  }}
+                  className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                >
+                  <Link2 className="h-4 w-4 text-gray-600" />
+                  <span>Copy link</span>
+                </DropdownMenuItem>
+                {showShareModal && projectId && (
+                  isApprovedDeliverable ? (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <DropdownMenuItem
+                            aria-disabled="true"
+                            onSelect={(e) => e.preventDefault()}
+                            className="flex items-center space-x-3 px-3 py-2 text-xs opacity-50 cursor-not-allowed"
+                          >
+                            <XCircle className="h-4 w-4" />
+                            <span>Untag as Deliverable</span>
+                          </DropdownMenuItem>
+                        </TooltipTrigger>
+                        <TooltipContent side="right" className="text-xs max-w-48">Approved deliverables cannot be untagged</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  ) : isDeliverable ? (
                     <DropdownMenuItem
                       onClick={() => {
-                        const docId = (document as any).projectDocumentId || document.id
-                        if (!deeplinkBase) return
-                        navigator.clipboard.writeText(`${deeplinkBase}#doc-file:${docId}`)
-                          .then(() => addToast({ type: 'success', title: 'Link copied', message: 'Link copied to clipboard' }))
-                          .catch(() => addToast({ type: 'error', title: 'Copy failed', message: 'Could not copy link.' }))
+                        if (deliverableStatus && deliverableStatus !== 'to_do') {
+                          addToast({ type: 'error', title: 'Cannot untag', message: 'Only deliverables with a To Do status can be untagged.' })
+                          return
+                        }
+                        setShowUntagConfirm(true)
                       }}
+                      className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs text-destructive focus:text-destructive"
+                    >
+                      <XCircle className="h-4 w-4" />
+                      <span>Untag as Deliverable</span>
+                    </DropdownMenuItem>
+                  ) : isAncestorShared ? (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <DropdownMenuItem
+                            aria-disabled="true"
+                            onSelect={(e) => e.preventDefault()}
+                            className="flex items-center space-x-3 px-3 py-2 text-xs opacity-50 cursor-not-allowed"
+                          >
+                            <Share2 className="h-4 w-4 text-purple-600" />
+                            <span>Tag as Deliverable</span>
+                          </DropdownMenuItem>
+                        </TooltipTrigger>
+                        <TooltipContent side="right" className="text-xs max-w-48">An ancestor folder is already a Deliverable</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  ) : (
+                    <DropdownMenuItem
+                      onClick={() => onMarkAsDeliverable?.(document)}
                       className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
                     >
-                      <Link2 className="h-4 w-4 text-gray-600" />
-                      <span>Copy link</span>
+                      <Share2 className="h-4 w-4 text-purple-600" />
+                      <span>Tag as Deliverable</span>
                     </DropdownMenuItem>
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
+                  )
+                )}
                 {isApprovedDeliverable && !onCopyDocument ? (
                   <TooltipProvider>
                     <Tooltip>
@@ -1018,6 +1010,20 @@ export function DocumentActionMenu({
                   </DropdownMenuItem>
                 )}
 
+                <DropdownMenuItem
+                  onClick={() => {
+                    const docId = (document as any).projectDocumentId || document.id
+                    if (!deeplinkBase) return
+                    navigator.clipboard.writeText(`${deeplinkBase}#doc-file:${docId}`)
+                      .then(() => addToast({ type: 'success', title: 'Link copied', message: 'Link copied to clipboard' }))
+                      .catch(() => addToast({ type: 'error', title: 'Copy failed', message: 'Could not copy link.' }))
+                  }}
+                  className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                >
+                  <Link2 className="h-4 w-4 text-gray-600" />
+                  <span>Copy link</span>
+                </DropdownMenuItem>
+
                 {!(document.isGuest && !document.allowDownload) &&
                  !(document.isExternalCollaborator && !document.ecAllowDownload) && (
                   <DropdownMenuItem
@@ -1028,28 +1034,6 @@ export function DocumentActionMenu({
                     <span>Download</span>
                   </DropdownMenuItem>
                 )}
-
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
-                    <Share2 className="h-4 w-4 text-purple-600" />
-                    <span>Share</span>
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="w-56">
-                    <DropdownMenuItem
-                      onClick={() => {
-                        const docId = (document as any).projectDocumentId || document.id
-                        if (!deeplinkBase) return
-                        navigator.clipboard.writeText(`${deeplinkBase}#doc-file:${docId}`)
-                          .then(() => addToast({ type: 'success', title: 'Link copied', message: 'Link copied to clipboard' }))
-                          .catch(() => addToast({ type: 'error', title: 'Copy failed', message: 'Could not copy link.' }))
-                      }}
-                      className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
-                    >
-                      <Link2 className="h-4 w-4 text-gray-600" />
-                      <span>Copy link</span>
-                    </DropdownMenuItem>
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
 
                 {/* Comments (folders only — files have Comments inside the deliverable detail pane) */}
                 {projectId && document.mimeType?.includes('folder') && (
