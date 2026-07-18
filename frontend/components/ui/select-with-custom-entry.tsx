@@ -72,7 +72,7 @@ export function SelectWithCustomEntry({
                 {options.map((label) => (
                     <DropdownMenuItem
                         key={label}
-                        className={`cursor-pointer rounded-none py-1 px-2.5 !text-[0.8125rem] text-[#45474c] outline-none focus:bg-[#f9f9fb] flex items-center justify-between ${value === label && !isCustom ? 'bg-primary/10 border-l-2 border-brand-accent text-primary font-semibold' : ''}`}
+                        className={`cursor-pointer rounded-none py-2 px-2.5 text-xs text-[#45474c] outline-none focus:bg-[#f9f9fb] flex items-center justify-between ${value === label && !isCustom ? 'bg-primary/10 border-l-2 border-brand-accent text-primary font-semibold' : ''}`}
                         onSelect={() => {
                             onChange(label)
                             setOpen(false)

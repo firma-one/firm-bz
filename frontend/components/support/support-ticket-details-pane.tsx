@@ -232,7 +232,7 @@ export function SupportTicketDetailsPane({
               </SelectTrigger>
               <SelectContent>
                 {STATUS_OPTIONS.map(s => (
-                  <SelectItem key={s} value={s} className="text-xs">{s.replace(/_/g, ' ')}</SelectItem>
+                  <SelectItem key={s} value={s}>{s.replace(/_/g, ' ')}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

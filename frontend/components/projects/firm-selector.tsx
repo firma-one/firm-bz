@@ -220,7 +220,7 @@ export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className,
                             key={org.id}
                             value={org.slug}
                             textValue={org.name}
-                            className="rounded-none cursor-pointer py-1.5 px-2.5 !text-[0.8125rem] text-[#45474c] outline-none focus:bg-[#f9f9fb] data-[state=checked]:bg-primary/10 data-[state=checked]:border-l-2 data-[state=checked]:border-brand-accent data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-[#f9f9fb] data-[highlighted]:text-[#1b1b1d] [&>span:last-child]:block [&>span:last-child]:min-w-0 [&>span:last-child]:w-full"
+                            className="rounded-none cursor-pointer py-1.5 px-2.5 text-[#45474c] outline-none focus:bg-[#f9f9fb] data-[state=checked]:bg-primary/10 data-[state=checked]:border-l-2 data-[state=checked]:border-brand-accent data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-[#f9f9fb] data-[highlighted]:text-[#1b1b1d] [&>span:last-child]:block [&>span:last-child]:min-w-0 [&>span:last-child]:w-full"
                             endAdornment={
                                 <Tooltip>
                                     <TooltipTrigger asChild>
