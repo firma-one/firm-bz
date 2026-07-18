@@ -92,6 +92,8 @@ export interface DeliverableDetailPanelProps {
   onPreviewSubtaskDocument?: (subtask: SubtaskRecord) => void
   onClose?: () => void
   className?: string
+  /** Tab to open on mount — e.g. deep-linking from a comment thread should land on 'comments'. */
+  initialTab?: Tab
 }
 
 type Tab = 'details' | 'delivery' | 'comments'
@@ -116,7 +118,7 @@ const STAGE_COLOR: Record<ActivityStatus, string> = {
   to_do: 'bg-[#f3b52f] text-white',
   in_progress: 'bg-[#3b5bfd] text-white',
   in_review: 'bg-[#7c3aed] text-white',
-  approved: 'bg-primary text-white',
+  approved: 'bg-[#0d9f5f] text-white',
 }
 
 
@@ -559,11 +561,12 @@ export function DeliverableDetailPanel({
   onOpenSubtaskDocument,
   onPreviewSubtaskDocument,
   className,
+  initialTab,
 }: DeliverableDetailPanelProps) {
   const { addToast } = useToast()
   const { paneSize } = useRightPane()
   const showExtras = paneSize !== 'small'
-  const [activeTab, setActiveTab] = useState<Tab>('details')
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab ?? 'details')
 
   const [status, setStatus] = useState<ActivityStatus>(activityStatus)
   const [deliverableDueDate, setDeliverableDueDate] = useState<string>(dueDate ?? '')

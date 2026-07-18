@@ -79,12 +79,33 @@ export async function GET(
     engagementMembers.filter((m) => EXTERNAL_ROLES.has(m.role)).map((m) => m.userId)
   )
 
+  // When searching, match either the document name/ID or the comment text itself,
+  // so a query finds threads by what was actually said, not just by file name.
+  let matchingDocIdsFromContent: string[] = []
+  if (q) {
+    const matches = await prisma.docCommentMessage.findMany({
+      where: { engagementId: projectId, content: { contains: q, mode: 'insensitive' } },
+      select: { projectDocumentId: true },
+      distinct: ['projectDocumentId'],
+      take: 200,
+    })
+    matchingDocIdsFromContent = matches.map((m) => m.projectDocumentId)
+  }
+
   const docs = await prisma.engagementDocument.findMany({
     where: {
       engagementId: projectId,
-      ...(q ? { fileName: { contains: q, mode: 'insensitive' } } : {}),
+      ...(q
+        ? {
+            OR: [
+              { fileName: { contains: q, mode: 'insensitive' } },
+              { docId: { contains: q, mode: 'insensitive' } },
+              { id: { in: matchingDocIdsFromContent } },
+            ],
+          }
+        : {}),
     },
-    select: { id: true, fileName: true },
+    select: { id: true, fileName: true, docId: true },
     take: 200,
   })
   const docIds = docs.map((d) => d.id)
@@ -121,6 +142,7 @@ export async function GET(
     .map((d) => ({
       projectDocumentId: d.id,
       documentName: d.fileName,
+      docId: d.docId ?? null,
       count: countByDocId[d.id] ?? 0,
       latest: latestByDocId[d.id] ?? null,
     }))

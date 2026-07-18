@@ -28,6 +28,7 @@ function renderMentions(content: string) {
 type DocRow = {
   projectDocumentId: string
   documentName: string
+  docId: string | null
   count: number
   latest: { createdAt: string; preview: string; authorIsExternal?: boolean } | null
 }
@@ -115,7 +116,7 @@ export function EngagementCommentsTab({
 
   const goToDeliverable = (projectDocumentId: string) => {
     if (boardUrl) {
-      window.location.href = `${boardUrl}#doc-file:${projectDocumentId}`
+      window.location.href = `${boardUrl}#doc-file:${projectDocumentId}:comments`
     }
   }
 
@@ -174,7 +175,7 @@ export function EngagementCommentsTab({
               <Input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search documents…"
+                placeholder="Search comments…"
                 className="pl-8 h-8 text-xs bg-[#f9f9fb] border-[#e5e7eb] focus:bg-white rounded"
               />
             </div>
@@ -205,6 +206,9 @@ export function EngagementCommentsTab({
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
+                        {r.docId && (
+                          <span className="shrink-0 text-[11px] font-bold font-mono text-primary tracking-wide">{r.docId}</span>
+                        )}
                         <span className="text-sm font-semibold text-[#1b1b1d] truncate">{r.documentName}</span>
                         <span className="shrink-0 inline-flex items-center rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary tabular-nums leading-none">
                           {r.count}
