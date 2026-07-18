@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import {
-  Building2, Briefcase, Layers, FileText, ArrowUpRight, ListTodo, PenLine, Eye, CheckCircle, CalendarDays, User,
+  Building2, Briefcase, Layers, FileText, ArrowUpRight, ListTodo, PenLine, Eye, CheckCircle, CalendarDays, User, AlarmClock,
 } from 'lucide-react'
 import { UserAvatarWithTooltip } from '@/components/ui/user-avatar-with-tooltip'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -69,6 +69,19 @@ function EngagementStatusBadge({ status }: { status: string }) {
     <span className={cn('inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[10px] font-semibold shrink-0', STATUS_BADGE_WIDTH, color)}>
       {label}
     </span>
+  )
+}
+
+function ReminderIndicator() {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex items-center justify-center shrink-0 text-primary">
+          <AlarmClock className="h-3.5 w-3.5" />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent variant="light" side="top">Reminder set</TooltipContent>
+    </Tooltip>
   )
 }
 
@@ -269,6 +282,7 @@ export function CalendarEventDetailModal({ event, onClose }: CalendarEventDetail
               <div className="flex items-center gap-2 mt-1 pl-6">
                 <span className="text-xs font-medium text-[#45474c] truncate flex-1 min-w-0">{event.engagementName}</span>
                 <div className="flex items-center gap-2 ml-auto shrink-0">
+                  {isEngagementLevelEvent && event.hasReminder && <ReminderIndicator />}
                   <DueDate date={event.engagementDueDate} />
                   <EngagementStatusBadge status={event.engagementStatus} />
                   {engagementUrl && <NavArrow label="Open engagement" href={engagementUrl} />}
@@ -306,6 +320,7 @@ export function CalendarEventDetailModal({ event, onClose }: CalendarEventDetail
                         <span className="text-xs font-medium text-[#45474c] truncate">{deliverableName ?? '—'}</span>
                       </span>
                       <div className="flex items-center gap-2 ml-auto shrink-0">
+                        {event.type === 'deliverable' && event.hasReminder && <ReminderIndicator />}
                         <DueDate date={deliverableDueDate} />
                         <StatusBadge status={deliverableStatus} />
                         {deliverableCtaUrl && (
@@ -349,6 +364,7 @@ export function CalendarEventDetailModal({ event, onClose }: CalendarEventDetail
                               </span>
                             </span>
                             <div className="flex items-center gap-2 ml-auto shrink-0">
+                              {isClicked && event.hasReminder && <ReminderIndicator />}
                               <Assignee name={doc.assigneeName} email={doc.assigneeEmail} avatarUrl={doc.assigneeAvatarUrl} />
                               <DueDate date={doc.dueDate} />
                               <StatusBadge status={doc.status} />

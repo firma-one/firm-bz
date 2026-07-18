@@ -5,6 +5,7 @@ import { createClient } from '@/utils/supabase/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { redirect } from 'next/navigation'
 import { parseSettingsFromDb, type ActivityStatus } from '@/lib/sharing-settings'
+import { getReminderKeysForUser } from '@/lib/actions/user-reminders'
 
 export type CalendarEngagement = {
   id: string
@@ -50,6 +51,8 @@ export type CalendarEvent = {
    * themselves (they ARE the deliverable) and for engagement-level events.
    */
   deliverableId: string | null
+  /** True when the current logged-in user has an active reminder tied to this event's entity. */
+  hasReminder: boolean
 }
 
 export type CalendarData = {
@@ -178,11 +181,16 @@ export async function getFirmCalendarData(firmSlug: string): Promise<CalendarDat
     }))
   }
 
+  const reminderKeys = await getReminderKeysForUser(user.id)
+
   const events: CalendarEvent[] = []
+  const hasEngagementReminder = (engagementId: string) => reminderKeys.has(`platform.engagements:${engagementId}`)
+  const hasDocumentReminder = (documentId: string) => reminderKeys.has(`platform.documents:${documentId}`)
 
   for (const e of engagements) {
     const engagementUrl = `/d/f/${firmSlug}/c/${e.client.slug}/e/${e.slug}`
     const engagementDueDate = e.dueDate?.toISOString() ?? null
+    const engagementHasReminder = hasEngagementReminder(e.id)
 
     if (e.kickoffDate) {
       events.push({
@@ -202,6 +210,7 @@ export async function getFirmCalendarData(firmSlug: string): Promise<CalendarDat
         assignee: null,
         documentId: null,
         deliverableId: null,
+        hasReminder: engagementHasReminder,
       })
     }
     if (e.dueDate) {
@@ -222,6 +231,7 @@ export async function getFirmCalendarData(firmSlug: string): Promise<CalendarDat
         assignee: null,
         documentId: null,
         deliverableId: null,
+        hasReminder: engagementHasReminder,
       })
     }
     if (e.followUpDate) {
@@ -242,6 +252,7 @@ export async function getFirmCalendarData(firmSlug: string): Promise<CalendarDat
         assignee: null,
         documentId: null,
         deliverableId: null,
+        hasReminder: engagementHasReminder,
       })
     }
 
@@ -272,6 +283,7 @@ export async function getFirmCalendarData(firmSlug: string): Promise<CalendarDat
         assignee: assigneeUserId ? (assigneeMap.get(assigneeUserId) ?? null) : null,
         documentId: doc.id,
         deliverableId: isDeliverableFolder ? doc.id : findAncestorDeliverableId(e.id, doc.parentId ?? null),
+        hasReminder: hasDocumentReminder(doc.id),
       })
     }
   }

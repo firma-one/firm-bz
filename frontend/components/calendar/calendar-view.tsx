@@ -84,6 +84,7 @@ export function CalendarView({ firmSlug }: CalendarViewProps) {
   const [visibleEngagementIds, setVisibleEngagementIds] = useState<Set<string>>(new Set())
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null)
   const hasLoadedOnce = useRef(false)
+  const calendarRef = useRef<FullCalendar>(null)
 
   const loadData = useCallback(async () => {
     if (hasLoadedOnce.current) setIsRefreshing(true)
@@ -162,6 +163,21 @@ export function CalendarView({ firmSlug }: CalendarViewProps) {
     if (event) setSelectedEvent(event)
   }
 
+  // "Agenda" (list-week) is meant to answer "what's due across the firm this
+  // week" at a glance, so opening it always shows every engagement and jumps
+  // back to the current week — the user can still narrow via the sidebar or
+  // navigate to other weeks afterward. Wrapped around FullCalendar's own
+  // listWeek button (via buttonText override below) rather than a fully
+  // custom button, so it keeps native active-state segmented-control styling.
+  const currentViewType = useRef<string | null>(null)
+  const handleViewDidMount = (viewType: string) => {
+    if (viewType === 'listWeek' && currentViewType.current !== 'listWeek' && data) {
+      setVisibleEngagementIds(new Set(data.engagements.map((e) => e.id)))
+      calendarRef.current?.getApi()?.today()
+    }
+    currentViewType.current = viewType
+  }
+
   if (isLoading || !data) {
     return (
       <div className="flex items-center justify-center py-24 text-[#45474c]">
@@ -183,6 +199,7 @@ export function CalendarView({ firmSlug }: CalendarViewProps) {
       <div className={cn('firm-calendar flex-1 min-w-0 bg-white border border-[#e5e7eb] rounded p-3', isRefreshing && 'firm-calendar--refreshing')}>
         <TooltipProvider delayDuration={300}>
         <FullCalendar
+          ref={calendarRef}
           plugins={[dayGridPlugin, timeGridPlugin, listPlugin]}
           initialView="dayGridMonth"
           headerToolbar={{
@@ -190,6 +207,7 @@ export function CalendarView({ firmSlug }: CalendarViewProps) {
             center: 'title',
             right: 'refreshButton dayGridMonth,timeGridWeek,timeGridDay,listWeek',
           }}
+          buttonText={{ listWeek: 'Agenda' }}
           customButtons={{
             refreshButton: {
               text: '',
@@ -203,6 +221,7 @@ export function CalendarView({ firmSlug }: CalendarViewProps) {
           eventClick={handleEventClick}
           eventDisplay="block"
           eventContent={(arg) => renderEventContent(arg, eventsById)}
+          viewDidMount={(arg) => handleViewDidMount(arg.view.type)}
         />
         </TooltipProvider>
       </div>

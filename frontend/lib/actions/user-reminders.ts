@@ -171,6 +171,21 @@ export async function getUserReminders(): Promise<ReminderWithContext[]> {
     })
 }
 
+/**
+ * Lightweight existence check for "does the current user have a reminder for entity X" —
+ * returns a Set of `${entityKey}:${entityValue}` keys for active (non-hidden) reminders.
+ * Skips resolveEntity/30-day windowing since callers only need a boolean, not display data.
+ */
+export async function getReminderKeysForUser(userId: string): Promise<Set<string>> {
+    const items = await loadItems(userId)
+    const keys = new Set<string>()
+    for (const item of items) {
+        if (!item.entityKey || !item.entityValue || item.hiddenAt) continue
+        keys.add(`${item.entityKey}:${item.entityValue}`)
+    }
+    return keys
+}
+
 /** Upsert a reminder linked to a DB date field. Called from client.ts when followUpDate changes. */
 export async function upsertFollowUpReminder(params: {
     userId: string
