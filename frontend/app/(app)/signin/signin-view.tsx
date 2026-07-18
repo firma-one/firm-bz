@@ -178,7 +178,7 @@ export function SigninView() {
                             onClick={emailVerified ? undefined : handleInitiateCheck}
                             disabled={checkLoading || !email.trim()}
                             aria-label={emailVerified ? 'Email verified' : 'Check email'}
-                            className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border-0 transition-all duration-200 disabled:pointer-events-none disabled:opacity-50 ${
+                            className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border-0 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#006e16] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 ${
                               emailVerified
                                 ? 'bg-[#d4f5d3] text-[#006e16] cursor-default'
                                 : 'bg-[#72ff70] text-[#002203] shadow-[0_1px_0_rgba(0,34,3,0.28)] hover:brightness-95 hover:-translate-y-0.5 hover:shadow-[0_10px_24px_-12px_rgba(0,34,3,0.65)] active:translate-y-0 active:scale-95'
