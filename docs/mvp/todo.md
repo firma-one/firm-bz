@@ -51,6 +51,7 @@ See [`.claude/plans/beta-feedback-fixes.md`](../../.claude/plans/beta-feedback-f
 - [ ] **Calendar Panel & Self-Reminders** — [plan](../../.claude/plans/personalization-calendar.md)
   - Dockable calendar dropdown in TopBar (Calendar icon); mini month grid with reminder dots; click future date → create self-reminder via `createManualReminder()`
   - "Show full calendar" → `/d/u/calendar` full-page view with month navigation; past dates show historical reminders; new Calendar tab in `/d/u/` layout
+  - See also: [Firm Calendar plan](../../.claude/plans/firm-calendar-engagement-deliverable-timeline.md) — separate, firm-scoped calendar of Engagement/Deliverable dates (not personal reminders); distinct feature, same "calendar" surface area
 
 ## Client Pull Features — [plan](../../.claude/plans/client-pull-features.md)
 
@@ -61,6 +62,7 @@ See [`.claude/plans/beta-feedback-fixes.md`](../../.claude/plans/beta-feedback-f
 
 - [ ] **Deliverables Timeline** — read-only timeline view grouping shared documents by month + activity status; reuses existing `dueDate` + `ActivityStatus` fields; no schema changes
   - New `timeline` tab in engagement workspace; new `/api/projects/[projectId]/timeline` route
+  - See also: [Firm Calendar plan](../../.claude/plans/firm-calendar-engagement-deliverable-timeline.md) — broader firm-scoped Outlook-style calendar view of Engagement/Deliverable dates across all clients, with per-engagement color-coded toggleable "calendars"; overlaps with this item's due-date data but is engagement/firm-scoped rather than per-engagement-tab
 
 - [ ] **Weekly Client Email Digest** — Monday morning email to external engagement members (EC + EV) summarising last week's completed docs, pending reviews, and open action items; toggled per engagement by Engagement Lead
   - Activate `email` channel on existing notification infrastructure; new Inngest cron function; new email template; `digestEnabled` flag on `Engagement.settings`

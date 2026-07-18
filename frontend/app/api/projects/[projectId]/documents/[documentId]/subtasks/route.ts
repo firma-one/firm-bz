@@ -46,9 +46,18 @@ export async function GET(
           externalId: fileInfo.externalId,
         },
       },
-      select: { id: true, externalId: true, isFolder: true, fileName: true },
+      select: { id: true, externalId: true, isFolder: true, fileName: true, dueDate: true, settings: true, docId: true },
     })
     if (!folder || !folder.isFolder) return NextResponse.json({ subtasks: [] })
+
+    const folderParsedSettings = parseSettingsFromDb(folder.settings)
+    const deliverable = {
+      documentId: folder.id,
+      fileName: folder.fileName,
+      dueDate: folder.dueDate?.toISOString() ?? null,
+      status: folderParsedSettings.activity?.status ?? null,
+      docId: folder.docId ?? null,
+    }
 
     // Walk the full descendant tree and collect non-folder file IDs.
     // When persona=ec or persona=ev, additionally filter to files that have an INHERITED
@@ -135,7 +144,7 @@ export async function GET(
 
     const subtasksRaw = children.map((c) => {
       const parsed = parseSettingsFromDb(c.settings)
-      const assigneeUserId = (parsed as any).assigneeUserId ?? null
+      const assigneeUserId = (c.settings as any)?.assigneeUserId ?? null
       const breadcrumb = buildBreadcrumb(c.parentId ?? null)
       return {
         id: c.id,
@@ -177,7 +186,7 @@ export async function GET(
       assigneeAvatarUrl: s.assigneeUserId ? (assigneeMap[s.assigneeUserId]?.avatarUrl ?? null) : null,
     }))
 
-    return NextResponse.json({ subtasks })
+    return NextResponse.json({ subtasks, deliverable })
   } catch (e) {
     console.error('GET subtasks error', e)
     return NextResponse.json({ error: 'Failed to fetch subtasks' }, { status: 500 })

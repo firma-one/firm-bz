@@ -5,7 +5,7 @@ import { markReminderDone, getUserReminders, type ReminderWithContext } from "@/
 import { useTabCount } from "../layout-context"
 import {
   Users,
-  CalendarClock,
+  AlarmClock,
   Building2,
   FileText,
   CheckCircle2,
@@ -29,14 +29,14 @@ import {
 
 const ENTITY_ICONS: Record<string, React.ElementType> = {
   'platform.clients': Users,
-  'platform.engagements': CalendarClock,
+  'platform.engagements': AlarmClock,
   'platform.firms': Building2,
   'platform.documents': FileText,
 }
 
 function entityIcon(entityKey: string): React.ElementType {
   const k = entityKey.split('.').slice(0, 2).join('.')
-  return ENTITY_ICONS[k] ?? CalendarClock
+  return ENTITY_ICONS[k] ?? AlarmClock
 }
 
 type StatusFilter = 'all' | 'overdue' | 'today' | 'upcoming' | 'no-date'

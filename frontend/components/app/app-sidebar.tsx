@@ -18,7 +18,7 @@ import {
   ArrowUpRight,
   Info,
   LifeBuoy,
-  CalendarClock,
+  AlarmClock,
   Clock,
   History,
   CornerDownRight,
@@ -27,6 +27,7 @@ import {
   Megaphone,
   Bookmark,
   Search,
+  CalendarDays,
 } from "lucide-react"
 import { WhatsNewModal } from "@/components/ui/whats-new-modal"
 import { useWhatsNew, type ReleaseMeta } from "@/lib/use-whats-new"
@@ -399,12 +400,15 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
   const isInsightsActive = searchParams.get('tab') === 'analytics'
   const isSettingsActive = searchParams.get('tab') === 'settings'
   const isDocumentSearchActive = searchParams.get('tab') === 'doc-search'
+  const isCalendarActive = searchParams.get('tab') === 'calendar'
   const isSupportActive = pathname.startsWith('/d/support')
   const isRemindersPageActive = pathname.startsWith('/d/u/reminders')
   const isClientsActive =
     Boolean(slug) &&
     !isInsightsActive &&
     !isSettingsActive &&
+    !isDocumentSearchActive &&
+    !isCalendarActive &&
     !isSupportActive &&
     !isRemindersPageActive &&
     !pathname.startsWith('/d/u/') &&
@@ -552,6 +556,11 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                           <Users className={`h-3.5 w-3.5 mr-2 shrink-0 ${isClientsActive ? 'text-primary' : 'text-[#45474c]'}`} />
                           <span>Clients</span>
                         </Link>
+                        <Link href={`${firmScopedNavBase}?tab=calendar`} className={`flex items-center transition-colors pl-2 pr-2 py-1.5 text-[0.8125rem] ${isCalendarActive ? 'bg-primary/10 border-l-2 border-brand-accent text-primary font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}>
+                          <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-1.5" />
+                          <CalendarDays className={`h-3.5 w-3.5 mr-2 shrink-0 ${isCalendarActive ? 'text-primary' : 'text-[#45474c]'}`} />
+                          <span>Calendar</span>
+                        </Link>
                         <Link href={`${firmScopedNavBase}?tab=doc-search`} className={`flex items-center transition-colors pl-2 pr-2 py-1.5 text-[0.8125rem] ${isDocumentSearchActive ? 'bg-primary/10 border-l-2 border-brand-accent text-primary font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}>
                           <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-1.5" />
                           <Search className={`h-3.5 w-3.5 mr-2 shrink-0 ${isDocumentSearchActive ? 'text-primary' : 'text-[#45474c]'}`} />
@@ -597,6 +606,14 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                           </Link>
                         </TooltipTrigger>
                         <TooltipContent side="right">Clients</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Link href={`${firmScopedNavBase}?tab=calendar`} className={navLinkClass(isCalendarActive)}>
+                            <CalendarDays className={navIconClass(isCalendarActive)} />
+                          </Link>
+                        </TooltipTrigger>
+                        <TooltipContent side="right">Calendar</TooltipContent>
                       </Tooltip>
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -766,7 +783,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                         onClick={() => setIsRemindersOpen((v) => !v)}
                         className={`d-sidebar-section w-full flex items-center px-3 ${spaceTitle} hover:opacity-80 transition-opacity`}
                       >
-                        <CalendarClock
+                        <AlarmClock
                           className="h-3 w-3 mr-1.5 shrink-0"
                           style={{ color: remindersUrgentCount > 0 ? '#C4572B' : undefined }}
                         />
@@ -834,7 +851,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                           href="/d/u/reminders"
                           className="relative flex items-center d-sidebar-nav transition-colors px-0 justify-center py-2 text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d]"
                         >
-                          <CalendarClock
+                          <AlarmClock
                             className="h-4 w-4 mx-auto"
                             style={{ color: remindersUrgentCount > 0 ? '#C4572B' : undefined }}
                           />

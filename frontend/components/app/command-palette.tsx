@@ -9,6 +9,7 @@ import {
   Bookmark,
   Briefcase,
   CalendarClock,
+  CalendarDays,
   Search,
   UserCircle,
   LifeBuoy,
@@ -81,6 +82,14 @@ function buildItems(firmSlug: string | null, canManageOrg: boolean): CommandItem
       description: "View all clients",
       icon: <Users className="h-4 w-4" />,
       href: firmBase,
+      group: "Firm",
+    })
+    items.push({
+      id: "calendar",
+      label: "Calendar",
+      description: "View firm calendar and events",
+      icon: <CalendarDays className="h-4 w-4" />,
+      href: `${firmBase}?tab=calendar`,
       group: "Firm",
     })
     items.push({

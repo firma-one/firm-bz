@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useTransition } from 'react'
 import { ClientSummary, getFirmName } from '@/lib/actions/hierarchy'
-import { UserPlus, Building2, LayoutGrid, List, Home, ChevronRight, Settings, Users, ClipboardList, UserCog, LayoutDashboard, Lock, Printer, Search } from 'lucide-react'
+import { UserPlus, Building2, LayoutGrid, List, Home, ChevronRight, Settings, Users, ClipboardList, UserCog, LayoutDashboard, Lock, Printer, Search, CalendarDays } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ClientList } from './client-list'
 import { AddClientModal } from './add-client-modal'
@@ -15,6 +15,7 @@ import { EngagementAuditPane } from './engagement-audit-pane'
 import { ErrorBoundary } from '@/components/error-boundary'
 import { FirmBusinessInsights } from '@/components/dashboard/firm-business-insights'
 import { FirmActionCenter } from '@/components/dashboard/firm-action-center'
+import { CalendarView } from '@/components/calendar/calendar-view'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
 interface FirmClientsViewProps {
@@ -48,11 +49,13 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                 ? 'audit'
                 : tabParam === 'doc-search'
                     ? 'doc-search'
-                    : tabParam === 'members' && canViewOrgAudit
-                        ? 'members'
-                        : tabParam === 'analytics' && canViewOrgAudit
-                            ? 'analytics'
-                            : 'clients'
+                    : tabParam === 'calendar'
+                        ? 'calendar'
+                        : tabParam === 'members' && canViewOrgAudit
+                            ? 'members'
+                            : tabParam === 'analytics' && canViewOrgAudit
+                                ? 'analytics'
+                                : 'clients'
 
     // Clear pending state once searchParams catches up
     useEffect(() => {
@@ -192,6 +195,15 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                                     </span>
                                 )}
                                 {pendingTab === 'clients' && <span className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden"><span className="absolute inset-y-0 w-1/2 bg-brand-accent animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full" /></span>}
+                            </TabsTrigger>
+                            <TabsTrigger
+                                value="calendar"
+                                data-demo-tour="firm-calendar-tab"
+                                className="relative h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
+                            >
+                                <CalendarDays className="w-4 h-4 mr-2" />
+                                Calendar
+                                {pendingTab === 'calendar' && <span className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden"><span className="absolute inset-y-0 w-1/2 bg-brand-accent animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full" /></span>}
                             </TabsTrigger>
                             <TabsTrigger
                                 value="doc-search"
@@ -358,6 +370,14 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                             </div>
                         </TabsContent>
                     )}
+
+                    <TabsContent value="calendar" className="m-0 h-full">
+                        <div className="py-2 h-full">
+                            <ErrorBoundary context="FirmCalendarTab">
+                                <CalendarView firmSlug={orgSlug} />
+                            </ErrorBoundary>
+                        </div>
+                    </TabsContent>
 
                     {canViewOrgAudit && (
                         <TabsContent value="audit" className="m-0 h-full">

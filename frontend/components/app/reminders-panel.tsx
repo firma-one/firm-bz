@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import { usePathname } from "next/navigation"
-import { ArrowUpRight, BellOff, Building2, CalendarClock, CheckCircle2, ChevronRight, Clock, Eye, EyeOff, FileText, SquareX, Undo2, Users } from "lucide-react"
+import { AlarmClock, ArrowUpRight, BellOff, Building2, CheckCircle2, ChevronRight, Clock, Eye, EyeOff, FileText, SquareX, Undo2, Users } from "lucide-react"
 import Link from "next/link"
 import {
     getUserReminders,
@@ -15,14 +15,14 @@ import { Tip } from "@/components/ui/tip"
 
 const ENTITY_KEY_ICON: Record<string, React.ElementType> = {
     'platform.clients': Users,
-    'platform.engagements': CalendarClock,
+    'platform.engagements': AlarmClock,
     'platform.firms': Building2,
     'platform.documents': FileText,
 }
 
 function getEntityIcon(entityKey: string): React.ElementType {
     const tableKey = entityKey.split('.').slice(0, 2).join('.')
-    return ENTITY_KEY_ICON[tableKey] ?? CalendarClock
+    return ENTITY_KEY_ICON[tableKey] ?? AlarmClock
 }
 
 // All accents are hues of the Reminders signature color #C4572B
@@ -255,7 +255,7 @@ export function RemindersPanel({ onCountChange }: Props) {
                 className="p-2 hover:bg-orange-50 rounded-xl transition-colors relative"
                 style={{ color: '#C4572B' }}
             >
-                <CalendarClock className={`h-5 w-5${hasNewReminders ? ' animate-pulse' : ''}`} />
+                <AlarmClock className={`h-5 w-5${hasNewReminders ? ' animate-pulse' : ''}`} />
                 {reminders.length > 0 ? (
                     <span className="absolute top-0.5 right-0.5 min-w-[14px] h-3.5 px-1 text-white text-[9px] font-bold rounded-full border border-white flex items-center justify-center leading-none" style={{ background: '#C4572B' }}>
                         {reminders.length}
