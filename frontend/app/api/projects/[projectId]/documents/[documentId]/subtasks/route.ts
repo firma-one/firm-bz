@@ -111,6 +111,7 @@ export async function GET(
       where: { id: { in: descendantIds.map((r) => r.id) } },
       select: {
         id: true,
+        externalId: true,
         fileName: true,
         docId: true,
         dueDate: true,
@@ -149,6 +150,7 @@ export async function GET(
       return {
         id: c.id,
         documentId: c.id,
+        externalId: c.externalId ?? null,
         fileName: c.fileName,
         mimeType: c.mimeType ?? null,
         docId: c.docId ?? null,

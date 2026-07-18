@@ -262,7 +262,7 @@ function AppLayoutContent({ children, isSystemAdmin }: { children: React.ReactNo
                                         animate={{ opacity: 1, y: 0 }}
                                         exit={{ opacity: 0, y: -6 }}
                                         transition={{ duration: 0.15, ease: 'easeInOut' }}
-                                        className="h-full"
+                                        className="flex-1 min-h-0 flex flex-col"
                                     >
                                         {rightPaneContent}
                                     </motion.div>

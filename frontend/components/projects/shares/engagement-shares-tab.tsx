@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { DocumentPreviewPanelContent } from '@/components/files/document-edit-sheet'
 import { FilePreviewSheet } from '@/components/files/file-preview-sheet'
 import { useRightPane } from '@/lib/right-pane-context'
 import {
@@ -1867,6 +1866,26 @@ export function EngagementSharesTab({
           roleSlug={roleSlug}
           orgSlug={orgSlug}
           deeplinkBase={deeplinkBase}
+          onOpenSubtaskDocument={(subtask) => {
+            void handleSecureOpen({
+              documentId: subtask.documentId,
+              externalId: subtask.externalId ?? subtask.documentId,
+              fileName: subtask.fileName,
+              mimeType: subtask.mimeType ?? undefined,
+              projectId,
+            }, subtask.documentId)
+          }}
+          onPreviewSubtaskDocument={(subtask) => {
+            rightPane.setTitle(subtask.fileName)
+            rightPane.setHeaderSubtitle('')
+            rightPane.setHeaderIcon(<ScanEye className="h-4 w-4" />)
+            rightPane.setContent(
+              <DocumentBlobPreviewPane
+                document={{ id: subtask.documentId, name: subtask.fileName }}
+                projectId={projectId}
+              />
+            )
+          }}
           onStatusChange={(newStatus) => {
             setShares((prev) =>
               prev.map((s) =>
@@ -1890,7 +1909,7 @@ export function EngagementSharesTab({
         />
       )
     },
-    [rightPane, projectId, canManage, isExternalViewer, orgSlug, roleSlug, restrictToSharedOnly]
+    [rightPane, projectId, canManage, isExternalViewer, orgSlug, roleSlug, restrictToSharedOnly, handleSecureOpen]
   )
 
   // Capture the hash at mount so re-renders don't lose it before shares load
@@ -2355,7 +2374,7 @@ export function EngagementSharesTab({
                           </div>
                         </div>
                         {/* Swimlane body: gray container sized to its contents, not the tallest column */}
-                        <DroppableLane id={lane.status} className="flex flex-col mt-2 rounded bg-[#f9f9fb] p-3 gap-2.5">
+                        <DroppableLane id={lane.status} className="flex flex-col mt-2 rounded bg-[#fbfbfc] p-3 gap-2.5">
                           {(isOver) => (
                             <>
                               <AnimatePresence mode="popLayout">
