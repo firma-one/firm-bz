@@ -99,24 +99,40 @@ function DueDate({ date }: { date: string | null }) {
   )
 }
 
+function AssigneeIcon() {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex items-center justify-center shrink-0">
+          <User className="h-3 w-3 shrink-0 text-[#c1c4cb]" />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent variant="light" side="top">Assignee</TooltipContent>
+    </Tooltip>
+  )
+}
+
 function Assignee({ name, email, avatarUrl }: { name: string | null; email: string | null; avatarUrl: string | null }) {
   const hasAssignee = !!(name || email)
   if (!hasAssignee) {
     return (
       <span className="inline-flex items-center gap-1 text-xs shrink-0">
-        <User className="h-3 w-3 shrink-0 text-[#c1c4cb]" />
+        <AssigneeIcon />
         <span className="italic text-[#c1c4cb]">Unassigned</span>
       </span>
     )
   }
   return (
-    <UserAvatarWithTooltip
-      displayName={name ?? email ?? ''}
-      email={email ?? undefined}
-      photoLink={avatarUrl ?? undefined}
-      avatarSize="sm"
-      showRole={false}
-    />
+    <span className="inline-flex items-center gap-1 shrink-0">
+      <AssigneeIcon />
+      <UserAvatarWithTooltip
+        displayName={name ?? email ?? ''}
+        email={email ?? undefined}
+        photoLink={avatarUrl ?? undefined}
+        avatarSize="sm"
+        showRole={false}
+      />
+    </span>
   )
 }
 
