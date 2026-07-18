@@ -10,9 +10,8 @@ import {
 } from "@/components/ui/dialog"
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden"
 import { Button } from "@/components/ui/button"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { SquarePlus, Info, Activity, AlignLeft, Banknote, CalendarCheck, CalendarClock, FileText, Lock, Tag, X, CornerDownLeft } from "lucide-react"
+import { SquarePlus, Activity, AlignLeft, Banknote, CalendarCheck, CalendarClock, FileText, Lock } from "lucide-react"
 import { SelectWithCustomEntry } from '@/components/ui/select-with-custom-entry'
 import { OptionalFieldsSection } from "@/components/ui/optional-fields-toggle"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
@@ -196,7 +195,7 @@ export function AddEngagementModal({ firmSlug, clientSlug, firmSandboxOnly = fal
                     <VisuallyHidden><DialogTitle>New Engagement</DialogTitle></VisuallyHidden>
 
                     {/* Header */}
-                    <div className="px-5 py-4 border-b border-[#e5e7eb] bg-white flex items-start gap-3">
+                    <div className="px-5 py-4 border-b border-[#e5e7eb] bg-white flex items-start gap-3 sticky top-0 z-10">
                         <div className="mt-0.5 h-7 w-7 rounded bg-primary/10 flex items-center justify-center shrink-0">
                             <SquarePlus className="h-3.5 w-3.5 text-primary" />
                         </div>
@@ -266,31 +265,29 @@ export function AddEngagementModal({ firmSlug, clientSlug, firmSandboxOnly = fal
                                         </Select>
                                     </div>
                                 </div>
+
+                                {/* Description — optional, but visible by default */}
+                                <div>
+                                    <label htmlFor="eng-description" className={fieldLabel}>
+                                        <span className="inline-flex items-center gap-1"><AlignLeft className="h-3 w-3" /> Description</span>
+                                    </label>
+                                    <textarea
+                                        id="eng-description"
+                                        value={description}
+                                        onChange={(e) => setDescription(e.target.value)}
+                                        placeholder="Brief engagement description"
+                                        rows={2}
+                                        disabled={isDisabled}
+                                        className="flex w-full rounded border border-[#e5e7eb] bg-white px-3 py-2 text-xs font-normal text-[#1b1b1d] placeholder:text-[#9a9ba0] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                                    />
+                                </div>
                             </div>
 
                             <OptionalFieldsSection open={showOptional} onToggle={() => setShowOptional((v) => !v)}>
                             <div className="grid grid-cols-3 gap-3 items-stretch">
 
-                                {/* DETAILS (cont.) — Description */}
-                                <div className="col-span-2 space-y-3">
-                                    <div>
-                                        <label htmlFor="eng-description" className={fieldLabel}>
-                                            <span className="inline-flex items-center gap-1"><AlignLeft className="h-3 w-3" /> Description</span>
-                                        </label>
-                                        <textarea
-                                            id="eng-description"
-                                            value={description}
-                                            onChange={(e) => setDescription(e.target.value)}
-                                            placeholder="Brief engagement description"
-                                            rows={2}
-                                            disabled={isDisabled}
-                                            className="flex w-full rounded border border-[#e5e7eb] bg-white px-3 py-2 text-xs font-normal text-[#1b1b1d] placeholder:text-[#9a9ba0] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
-                                        />
-                                    </div>
-                                </div>
-
-                                {/* COMMERCIAL — col-span-1, row-span-2 */}
-                                <div className="row-span-2 space-y-3">
+                                {/* COMMERCIAL — col-span-1 */}
+                                <div className="space-y-3">
                                     <p className={fieldLabel}>Commercial</p>
 
                                     {/* Contract type */}
@@ -331,65 +328,9 @@ export function AddEngagementModal({ firmSlug, clientSlug, firmSandboxOnly = fal
                                             <p className="mt-1 text-[10px] text-[#9a9ba0]">{contractValueHint}</p>
                                         )}
                                     </div>
-
-                                    {/* Tags */}
-                                    <div>
-                                        <div className="flex items-center gap-1.5 mb-1">
-                                            <label htmlFor="eng-tags" className={fieldLabel + ' mb-0'}>
-                                                <span className="inline-flex items-center gap-1"><Tag className="h-3 w-3" /> Tags</span>
-                                            </label>
-                                            <TooltipProvider delayDuration={100}>
-                                                <Tooltip>
-                                                    <TooltipTrigger asChild>
-                                                        <Info className="h-3 w-3 text-[#9a9ba0] cursor-help" />
-                                                    </TooltipTrigger>
-                                                    <TooltipContent variant="light" side="right">
-                                                        <div className="text-xs space-y-1">
-                                                            <div className="font-semibold">Suggested tags:</div>
-                                                            <div><span className="font-medium">Priority:</span> high-priority, urgent, rush</div>
-                                                            <div><span className="font-medium">Client:</span> new-client, key-account, vip, pro-bono</div>
-                                                            <div><span className="font-medium">Work type:</span> tax, audit, compliance, m&a, litigation, advisory</div>
-                                                            <div><span className="font-medium">Billing:</span> billable, non-billable, recurring, one-time</div>
-                                                        </div>
-                                                    </TooltipContent>
-                                                </Tooltip>
-                                            </TooltipProvider>
-                                        </div>
-                                        <div
-                                            className={`flex flex-wrap gap-1.5 min-h-[36px] w-full rounded border px-3 py-2 text-xs transition-colors cursor-text
-                                                ${isDisabled
-                                                    ? 'border-[#e5e7eb] bg-[#f9f9fb] opacity-50 cursor-not-allowed'
-                                                    : 'border-[#e5e7eb] bg-white focus-within:ring-1 focus-within:ring-primary focus-within:border-primary'
-                                                }`}
-                                            onClick={() => tagInputRef.current?.focus()}
-                                        >
-                                            {tags.map((tag) => (
-                                                <span key={tag} className="inline-flex items-center gap-1 rounded bg-[#f3f4f6] border border-[#e5e7eb] px-2 py-0.5 text-[11px] font-medium text-[#45474c]">
-                                                    {tag}
-                                                    {!isDisabled && (
-                                                        <button type="button" onClick={(e) => { e.stopPropagation(); removeTag(tag) }} className="text-[#9a9ba0] hover:text-[#1b1b1d] transition-colors" aria-label={`Remove ${tag}`}>
-                                                            <X className="h-3 w-3" />
-                                                        </button>
-                                                    )}
-                                                </span>
-                                            ))}
-                                            <input
-                                                ref={tagInputRef}
-                                                id="eng-tags"
-                                                value={tagInput}
-                                                onChange={handleTagChange}
-                                                onKeyDown={handleTagKeyDown}
-                                                onBlur={() => { if (tagInput.trim()) commitTag(tagInput) }}
-                                                placeholder={tags.length === 0 ? 'Type a tag, press Enter or comma…' : ''}
-                                                disabled={isDisabled}
-                                                className="flex-1 min-w-[80px] bg-transparent outline-none placeholder:text-[#9a9ba0] text-[#1b1b1d] text-xs disabled:cursor-not-allowed"
-                                            />
-                                            <CornerDownLeft className="h-3 w-3 text-primary shrink-0 self-center ml-1" />
-                                        </div>
-                                    </div>
                                 </div>
 
-                                {/* TRACKING — col-span-2, row 2: dates + internal memo */}
+                                {/* TRACKING — col-span-2: dates + internal memo */}
                                 <div className="col-span-2 space-y-3">
                                     <p className={fieldLabel}>Tracking</p>
 
@@ -434,7 +375,7 @@ export function AddEngagementModal({ firmSlug, clientSlug, firmSandboxOnly = fal
                         </div>
 
                         {/* Footer */}
-                        <div className="px-5 py-3 border-t border-[#e5e7eb] flex items-center justify-end gap-3">
+                        <div className="px-5 py-3 border-t border-[#e5e7eb] bg-white flex items-center justify-end gap-3 sticky bottom-0 z-10">
                             <Button type="button" variant="outline" className="rounded w-32 text-[10px] font-headline font-bold tracking-widest uppercase" onClick={() => setOpen(false)} disabled={isLoading}>
                                 Cancel
                             </Button>
