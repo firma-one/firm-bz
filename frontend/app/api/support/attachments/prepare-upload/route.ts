@@ -3,8 +3,7 @@ import { createServerClient } from '@supabase/ssr'
 import { ConnectorType } from '@prisma/client'
 import { randomBytes } from 'crypto'
 import { prisma } from '@/lib/prisma'
-import { googleDriveConnector } from '@/lib/google-drive-connector'
-import { getStorageAdapter } from '@/lib/connectors/registry'
+import { getStorageAdapter, getContentAdapter } from '@/lib/connectors/registry'
 import { METADATA_FOLDER_NAME } from '@/lib/connectors/types'
 
 const ASSETS_FOLDER = 'assets'
@@ -107,26 +106,25 @@ export async function POST(request: NextRequest) {
     const ext = fileName.includes('.') ? fileName.split('.').pop() : ''
     const storedName = `${randomBytes(6).toString('hex')}${ext ? '.' + ext : ''}`
 
-    // Get resumable upload URL from Google Drive
-    const accessToken = await googleDriveConnector.getAccessToken(connector.id)
-    if (!accessToken) {
-      console.error('Failed to get Google Drive access token for connector:', connector.id)
+    // Get resumable upload URL via the content adapter
+    const contentAdapter = await getContentAdapter(connector.id)
+    if (!contentAdapter) {
+      console.error('No content adapter available for connector:', connector.id)
       return NextResponse.json(
-        { error: 'Failed to get Google Drive access token' },
+        { error: 'Failed to generate upload URL' },
         { status: 500 }
       )
     }
 
     let uploadUrl: string
     try {
-      uploadUrl = await googleDriveConnector.getResumableUploadUrl(
-        accessToken,
-        {
-          name: storedName,
-          mimeType,
-          parents: [ticketFolderId],
-        }
+      const session = await contentAdapter.createUploadSession(
+        connector.id,
+        ticketFolderId,
+        storedName,
+        mimeType
       )
+      uploadUrl = session.uploadUrl
     } catch (urlError) {
       console.error('Failed to get resumable upload URL:', urlError)
       throw urlError

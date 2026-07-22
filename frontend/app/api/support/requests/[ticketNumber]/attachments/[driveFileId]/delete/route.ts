@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { prisma } from '@/lib/prisma'
-import { googleDriveConnector } from '@/lib/google-drive-connector'
+import { getPermissionAdapter } from '@/lib/connectors/registry'
 
 export async function DELETE(
   request: NextRequest,
@@ -56,16 +56,11 @@ export async function DELETE(
       )
     }
 
-    // Delete from Google Drive
-    const accessToken = await googleDriveConnector.getAccessToken(firm.connectorId)
-    if (accessToken) {
-      await fetch(`https://www.googleapis.com/drive/v3/files/${params.driveFileId}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      }).catch((err) => {
-        console.warn(`Failed to delete file from Google Drive: ${err.message}`)
+    // Delete from Google Drive (permanent — support attachments don't use trash)
+    const permissionAdapter = await getPermissionAdapter(firm.connectorId)
+    if (permissionAdapter) {
+      await permissionAdapter.deleteFile(firm.connectorId, params.driveFileId, { permanent: true }).catch((err) => {
+        console.warn(`Failed to delete file from Google Drive: ${err instanceof Error ? err.message : String(err)}`)
       })
     }
 

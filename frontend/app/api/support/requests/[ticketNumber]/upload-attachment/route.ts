@@ -3,8 +3,7 @@ import { createServerClient } from '@supabase/ssr'
 import { ConnectorType } from '@prisma/client'
 import { randomBytes } from 'crypto'
 import { prisma } from '@/lib/prisma'
-import { googleDriveConnector } from '@/lib/google-drive-connector'
-import { getStorageAdapter } from '@/lib/connectors/registry'
+import { getStorageAdapter, getContentAdapter } from '@/lib/connectors/registry'
 import { METADATA_FOLDER_NAME } from '@/lib/connectors/types'
 
 const SUPPORT_FOLDER = 'support'
@@ -115,73 +114,30 @@ export async function POST(
     const ext = file.name.includes('.') ? file.name.split('.').pop() : ''
     const storedName = `${randomBytes(6).toString('hex')}${ext ? '.' + ext : ''}`
 
-    // Upload file to Google Drive
-    const accessToken = await googleDriveConnector.getAccessToken(connector.id)
-    if (!accessToken) {
-      console.error('Failed to get Google Drive access token for connector:', connector.id)
+    // Upload file (metadata + content in one call)
+    const contentAdapter = await getContentAdapter(connector.id)
+    if (!contentAdapter) {
+      console.error('No content adapter available for connector:', connector.id)
       return NextResponse.json(
-        { error: 'Failed to get Google Drive access token' },
+        { error: 'Failed to upload attachment' },
         { status: 500 }
       )
     }
 
-    const response = await fetch('https://www.googleapis.com/drive/v3/files', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        name: storedName,
-        mimeType: file.type || 'application/octet-stream',
-        parents: [ticketFolderId],
-      }),
-    })
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.error('Failed to create file in Google Drive:', {
-        status: response.status,
-        statusText: response.statusText,
-        body: errorText,
-      })
-      return NextResponse.json(
-        { error: 'Failed to create file in Google Drive' },
-        { status: 500 }
+    let driveFileId: string
+    try {
+      const created = await contentAdapter.createFile(
+        connector.id,
+        ticketFolderId,
+        storedName,
+        buffer,
+        file.type || 'application/octet-stream'
       )
-    }
-
-    const googleResponse = await response.json() as { id: string }
-    if (!googleResponse.id) {
-      console.error('Google Drive response missing file id:', googleResponse)
+      driveFileId = created.id
+    } catch (error) {
+      console.error('Failed to upload file to Google Drive:', error)
       return NextResponse.json(
-        { error: 'Google Drive response invalid' },
-        { status: 500 }
-      )
-    }
-    const driveFileId = googleResponse.id
-
-    // Upload file content
-    const uploadResponse = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${driveFileId}?uploadType=media`, {
-      method: 'PATCH',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': file.type || 'application/octet-stream',
-        'Content-Length': buffer.length.toString(),
-      },
-      body: buffer,
-    })
-
-    if (!uploadResponse.ok) {
-      const errorText = await uploadResponse.text()
-      console.error('Failed to upload file content to Google Drive:', {
-        fileId: driveFileId,
-        status: uploadResponse.status,
-        statusText: uploadResponse.statusText,
-        body: errorText,
-      })
-      return NextResponse.json(
-        { error: 'Failed to upload file content' },
+        { error: 'Failed to upload file to Google Drive' },
         { status: 500 }
       )
     }

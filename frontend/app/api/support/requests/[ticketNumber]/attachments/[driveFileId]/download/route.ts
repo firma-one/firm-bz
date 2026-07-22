@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { prisma } from '@/lib/prisma'
-import { googleDriveConnector } from '@/lib/google-drive-connector'
+import { getContentAdapter } from '@/lib/connectors/registry'
 
 export async function GET(
   request: NextRequest,
@@ -53,9 +53,14 @@ export async function GET(
     }
 
     // Stream file from Google Drive
-    const { stream, mimeType, size, name } = await googleDriveConnector.downloadFile(
+    const contentAdapter = await getContentAdapter(firm.connectorId)
+    if (!contentAdapter) {
+      return NextResponse.json({ error: 'No content adapter available for connector' }, { status: 400 })
+    }
+    const { stream, mimeType, size, fileName: name } = await contentAdapter.getRenderableContent(
       firm.connectorId,
-      params.driveFileId
+      params.driveFileId,
+      'native'
     )
 
     const finalName = attachment?.originalName || name
@@ -71,7 +76,8 @@ export async function GET(
       headers.set('Content-Length', size)
     }
 
-    return new NextResponse(stream, { status: 200, headers })
+    const body = Buffer.isBuffer(stream) ? new Uint8Array(stream) : stream
+    return new NextResponse(body, { status: 200, headers })
   } catch (error) {
     console.error('Failed to download support attachment:', error)
     return NextResponse.json(
