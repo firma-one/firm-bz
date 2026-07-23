@@ -19,7 +19,7 @@ import {
 import { Copy, Download, FileIcon, Paperclip, CheckCircle2, X, Trash2, Clock, AlertCircle, Lightbulb, HelpCircle } from "lucide-react"
 import { TicketType } from '@prisma/client'
 import { useToast } from "@/components/ui/toast"
-import { uploadSupportAttachment, type AttachmentMeta } from '@/lib/support-attachment-upload'
+import { uploadSupportAttachment, type AttachmentMeta, MAX_SUPPORT_ATTACHMENT_BYTES } from '@/lib/support-attachment-upload'
 import { supabase } from '@/lib/supabase'
 import { formatDistanceToNow } from 'date-fns'
 import {
@@ -85,7 +85,7 @@ export function ViewSupportRequestModal({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { addToast } = useToast()
 
-  const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50 MB
+  const MAX_FILE_SIZE = MAX_SUPPORT_ATTACHMENT_BYTES
   const allAttachments = [
     ...localAttachments,
     ...newAttachments.filter(a => a.status === 'done' && a.meta).map(a => a.meta!),
@@ -104,7 +104,7 @@ export function ViewSupportRequestModal({
         if (f.size > MAX_FILE_SIZE) {
           addToast({
             title: 'File too large',
-            message: `${f.name} exceeds the 50 MB limit`,
+            message: `${f.name} exceeds the ${MAX_FILE_SIZE / 1024 / 1024} MB limit`,
             type: 'error',
             duration: 4000,
           })

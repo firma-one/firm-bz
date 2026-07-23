@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { randomBytes, randomUUID } from 'crypto'
+import { prisma } from '@/lib/prisma'
+import { canAccessSupportTicket } from '@/lib/support-ticket-auth'
 
 /**
  * Support ticket attachments are stored as DB blobs (base64 data URL in the ticket's
@@ -44,6 +46,29 @@ export async function POST(
     } = await supabase.auth.getUser(token)
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const ticket = await (prisma as any).customerRequest.findUnique({
+      where: { ticketNumber: params.ticketNumber },
+      select: { userId: true, firmId: true },
+    })
+    if (!ticket) {
+      return NextResponse.json({ error: 'Ticket not found' }, { status: 404 })
+    }
+    if (!(await canAccessSupportTicket(user.id, ticket))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    // Reject clearly-oversized requests before buffering the body — formData() has to read
+    // the whole multipart payload to parse it, so this Content-Length check is the only
+    // point we can cheaply short-circuit an oversized upload before that happens.
+    const contentLength = Number(request.headers.get('content-length') ?? '0')
+    if (contentLength > MAX_BLOB_ATTACHMENT_BYTES * 2) {
+      // *2 for multipart boundary/header overhead; the exact file.size check below is authoritative.
+      return NextResponse.json(
+        { error: `File too large (max ${MAX_BLOB_ATTACHMENT_BYTES / 1024 / 1024}MB)` },
+        { status: 413 }
+      )
     }
 
     // Parse form data

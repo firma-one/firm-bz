@@ -15,7 +15,7 @@ import {
 } from 'lucide-react'
 import { TicketType } from '@prisma/client'
 import { useToast } from '@/components/ui/toast'
-import { uploadSupportAttachment, type AttachmentMeta } from '@/lib/support-attachment-upload'
+import { uploadSupportAttachment, type AttachmentMeta, MAX_SUPPORT_ATTACHMENT_BYTES } from '@/lib/support-attachment-upload'
 import { supabase } from '@/lib/supabase'
 import { formatDistanceToNow } from 'date-fns'
 import { FIRMA_COLOR } from '@/config/brand'
@@ -77,7 +77,7 @@ export function SupportTicketDetailsPane({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { addToast } = useToast()
 
-  const MAX_FILE_SIZE = 50 * 1024 * 1024
+  const MAX_FILE_SIZE = MAX_SUPPORT_ATTACHMENT_BYTES
   const allAttachments = [
     ...localAttachments,
     ...newAttachments.filter(a => a.status === 'done' && a.meta).map(a => a.meta!),
@@ -93,7 +93,7 @@ export function SupportTicketDetailsPane({
     const items: PendingAttachment[] = files
       .filter(f => {
         if (f.size > MAX_FILE_SIZE) {
-          addToast({ title: 'File too large', message: `${f.name} exceeds 50 MB`, type: 'error', duration: 4000 })
+          addToast({ title: 'File too large', message: `${f.name} exceeds ${MAX_FILE_SIZE / 1024 / 1024} MB`, type: 'error', duration: 4000 })
           return false
         }
         return true

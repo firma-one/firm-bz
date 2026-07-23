@@ -1,3 +1,8 @@
+/** Must match MAX_BLOB_ATTACHMENT_BYTES in upload-attachment/route.ts — attachments are
+ *  stored as base64 blobs in the ticket's JSONB column, so the client-side cap should match
+ *  the server's, not exceed it (a mismatch just means users select files that fail server-side). */
+export const MAX_SUPPORT_ATTACHMENT_BYTES = 8 * 1024 * 1024
+
 export type AttachmentMeta = {
   /** Stable identifier for this attachment — the canonical key for delete/lookup. */
   attachmentId: string

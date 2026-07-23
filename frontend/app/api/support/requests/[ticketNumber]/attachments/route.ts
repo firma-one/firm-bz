@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { prisma } from '@/lib/prisma'
+import { canAccessSupportTicket } from '@/lib/support-ticket-auth'
 
 export async function PATCH(
   request: NextRequest,
@@ -45,11 +46,15 @@ export async function PATCH(
     // Find the ticket
     const ticket = await (prisma as any).customerRequest.findUnique({
       where: { ticketNumber: params.ticketNumber },
-      select: { id: true, attachments: true },
+      select: { id: true, attachments: true, userId: true, firmId: true },
     })
 
     if (!ticket) {
       return NextResponse.json({ error: 'Ticket not found' }, { status: 404 })
+    }
+
+    if (!(await canAccessSupportTicket(user.id, ticket))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     // Merge new attachments with existing (supports retries)
@@ -103,10 +108,14 @@ export async function DELETE(
 
     const ticket = await (prisma as any).customerRequest.findUnique({
       where: { ticketNumber: params.ticketNumber },
-      select: { id: true, attachments: true },
+      select: { id: true, attachments: true, userId: true, firmId: true },
     })
     if (!ticket) {
       return NextResponse.json({ error: 'Ticket not found' }, { status: 404 })
+    }
+
+    if (!(await canAccessSupportTicket(user.id, ticket))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     const existingAttachments: any[] = Array.isArray(ticket.attachments) ? ticket.attachments : []

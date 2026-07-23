@@ -14,7 +14,7 @@ import { AlertCircle, Lightbulb, HelpCircle, Paperclip, FileIcon, CheckCircle2, 
 import { TicketType } from '@prisma/client'
 import { submitErrorTicket } from '@/app/actions/submit-ticket'
 import { useToast } from "@/components/ui/toast"
-import { uploadSupportAttachment, type AttachmentMeta } from '@/lib/support-attachment-upload'
+import { uploadSupportAttachment, type AttachmentMeta, MAX_SUPPORT_ATTACHMENT_BYTES } from '@/lib/support-attachment-upload'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { FIRMA_COLOR } from '@/config/brand'
@@ -79,7 +79,7 @@ export function CreateSupportRequestModal({ firmSlug, trigger }: CreateSupportRe
   const router = useRouter()
   const { addToast } = useToast()
 
-  const MAX_FILE_SIZE = 50 * 1024 * 1024
+  const MAX_FILE_SIZE = MAX_SUPPORT_ATTACHMENT_BYTES
 
   const updateAttachment = (id: string, updates: Partial<PendingAttachment>) => {
     setAttachments(prev => prev.map(a => a.id === id ? { ...a, ...updates } : a))
@@ -90,7 +90,7 @@ export function CreateSupportRequestModal({ firmSlug, trigger }: CreateSupportRe
       .filter(f => {
         if (attachments.some(a => a.file.name === f.name && a.file.size === f.size)) return false
         if (f.size > MAX_FILE_SIZE) {
-          addToast({ title: 'File too large', message: `${f.name} exceeds the 50 MB limit`, type: 'error', duration: 4000 })
+          addToast({ title: 'File too large', message: `${f.name} exceeds the ${MAX_FILE_SIZE / 1024 / 1024} MB limit`, type: 'error', duration: 4000 })
           return false
         }
         return true
