@@ -121,7 +121,7 @@ export function SupportTicketDetailsPane({
       for (let i = 0; i < pending.length; i += 3) {
         await Promise.all(pending.slice(i, i + 3).map(async a => {
           updateAttachment(a.id, { status: 'uploading' })
-          const res = await uploadSupportAttachment(token, firmSlug, ticket.ticketNumber, a.file, pct => updateAttachment(a.id, { progress: pct }))
+          const res = await uploadSupportAttachment(token, ticket.ticketNumber, a.file, pct => updateAttachment(a.id, { progress: pct }))
           if (res.success && res.meta) { updateAttachment(a.id, { status: 'done', meta: res.meta }); uploaded.push(res.meta) }
           else updateAttachment(a.id, { status: 'error', error: res.error })
         }))
@@ -147,22 +147,22 @@ export function SupportTicketDetailsPane({
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session?.access_token) { setError('No active session'); return }
-      const res = await fetch(`/api/support/requests/${ticket.ticketNumber}/attachments/${attachment.driveFileId}/delete`, {
+      const res = await fetch(`/api/support/requests/${ticket.ticketNumber}/attachments`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${session.access_token}` },
+        headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attachmentId: attachment.attachmentId }),
       })
       if (!res.ok) { setError('Failed to delete attachment'); return }
-      setLocalAttachments(prev => prev.filter(a => a.driveFileId !== attachment.driveFileId))
+      setLocalAttachments(prev => prev.filter(a => a.attachmentId !== attachment.attachmentId))
     } catch (err: any) {
       setError(err.message || 'Delete failed')
     }
   }
 
-  const handleDownload = async (attachment: AttachmentMeta) => {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session?.access_token) return
+  const handleDownload = (attachment: AttachmentMeta) => {
+    // Attachment data is already local (DB blob) — no route call needed.
     const a = window.document.createElement('a')
-    a.href = `/api/support/requests/${ticket.ticketNumber}/attachments/${attachment.driveFileId}/download?token=${session.access_token}&filename=${encodeURIComponent(attachment.originalName)}`
+    a.href = attachment.blobData
     a.download = attachment.originalName
     window.document.body.appendChild(a)
     a.click()

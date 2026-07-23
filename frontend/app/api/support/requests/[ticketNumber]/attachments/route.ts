@@ -71,3 +71,58 @@ export async function PATCH(
     )
   }
 }
+
+/** Removes a single attachment from a ticket's attachments list by attachmentId. */
+export async function DELETE(
+  request: NextRequest,
+  context: { params: Promise<{ ticketNumber: string }> }
+) {
+  const params = await context.params
+  try {
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader?.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const token = authHeader.slice(7)
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321',
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
+      { cookies: { getAll: () => [], setAll: () => {} } }
+    )
+
+    const { data: { user } } = await supabase.auth.getUser(token)
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const { attachmentId } = await request.json()
+    if (!attachmentId) {
+      return NextResponse.json({ error: 'attachmentId is required' }, { status: 400 })
+    }
+
+    const ticket = await (prisma as any).customerRequest.findUnique({
+      where: { ticketNumber: params.ticketNumber },
+      select: { id: true, attachments: true },
+    })
+    if (!ticket) {
+      return NextResponse.json({ error: 'Ticket not found' }, { status: 404 })
+    }
+
+    const existingAttachments: any[] = Array.isArray(ticket.attachments) ? ticket.attachments : []
+    const remaining = existingAttachments.filter(a => a.attachmentId !== attachmentId)
+
+    await (prisma as any).customerRequest.update({
+      where: { ticketNumber: params.ticketNumber },
+      data: { attachments: remaining },
+    })
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('Failed to remove ticket attachment:', error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to remove attachment' },
+      { status: 500 }
+    )
+  }
+}

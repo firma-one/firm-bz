@@ -1,14 +1,17 @@
 export type AttachmentMeta = {
+  /** Stable identifier for this attachment — the canonical key for delete/lookup. */
+  attachmentId: string
   originalName: string
   storedName: string
-  driveFileId: string
   mimeType: string
   size: number
+  /** Base64 data URL — support ticket attachments are stored as DB blobs, mirroring
+   *  Brand.logoData, not in Google Drive (see upload-attachment/route.ts for why). */
+  blobData: string
 }
 
 export async function uploadSupportAttachment(
   bearerToken: string,
-  firmSlug: string,
   ticketNumber: string,
   file: File,
   onProgress?: (pct: number) => void
@@ -93,7 +96,6 @@ export async function uploadSupportAttachment(
       // Prepare form data
       const formData = new FormData()
       formData.append('file', file)
-      formData.append('firmSlug', firmSlug)
 
       // Send to backend endpoint
       xhr.open('POST', `/api/support/requests/${ticketNumber}/upload-attachment`)

@@ -5,7 +5,9 @@ import { useRouter } from 'next/navigation'
 import {
   Dialog,
   DialogContent,
+  DialogTitle,
 } from "@/components/ui/dialog"
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { AlertCircle, Lightbulb, HelpCircle, Paperclip, FileIcon, CheckCircle2, X, LifeBuoy, Loader2 } from "lucide-react"
@@ -135,7 +137,7 @@ export function CreateSupportRequestModal({ firmSlug, trigger }: CreateSupportRe
       await Promise.all(
         batch.map(async (a) => {
           updateAttachment(a.id, { status: 'uploading' })
-          const result = await uploadSupportAttachment(token, firmSlug, ticketNumber, a.file, (pct) => updateAttachment(a.id, { progress: pct }))
+          const result = await uploadSupportAttachment(token, ticketNumber, a.file, (pct) => updateAttachment(a.id, { progress: pct }))
           if (result.success && result.meta) {
             updateAttachment(a.id, { status: 'done', meta: result.meta })
             uploadedMeta.push(result.meta)
@@ -171,17 +173,27 @@ export function CreateSupportRequestModal({ firmSlug, trigger }: CreateSupportRe
         return
       }
 
+      let attachmentFailureCount = 0
       if (attachments.length > 0) {
         const { data: { session } } = await supabase.auth.getSession()
         if (session?.access_token) {
           const uploadedMeta = await uploadAttachments(result.ticketNumber, session)
+          attachmentFailureCount = attachments.length - uploadedMeta.length
           if (uploadedMeta.length > 0) {
-            await fetch(`/api/support/requests/${result.ticketNumber}/attachments`, {
+            const patchRes = await fetch(`/api/support/requests/${result.ticketNumber}/attachments`, {
               method: 'PATCH',
               headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
               body: JSON.stringify({ attachments: uploadedMeta }),
             })
+            if (!patchRes.ok) {
+              // Files uploaded to Drive but the ticket's attachments list failed to save —
+              // still a failure from the user's point of view.
+              attachmentFailureCount = attachments.length
+            }
           }
+        } else {
+          // No valid session at submit time — uploads never ran at all.
+          attachmentFailureCount = attachments.length
         }
       }
 
@@ -191,12 +203,21 @@ export function CreateSupportRequestModal({ firmSlug, trigger }: CreateSupportRe
       setAttachments([])
       setError(null)
 
-      addToast({
-        title: 'Request submitted',
-        message: "Thank you for reaching out. We've received your request and will review it shortly.",
-        type: 'success',
-        duration: 5000,
-      })
+      if (attachmentFailureCount > 0) {
+        addToast({
+          title: 'Request submitted, but attachments failed',
+          message: `Your request was received, but ${attachmentFailureCount} attachment${attachmentFailureCount > 1 ? 's' : ''} failed to upload. You can add ${attachmentFailureCount > 1 ? 'them' : 'it'} from the ticket details.`,
+          type: 'error',
+          duration: 8000,
+        })
+      } else {
+        addToast({
+          title: 'Request submitted',
+          message: "Thank you for reaching out. We've received your request and will review it shortly.",
+          type: 'success',
+          duration: 5000,
+        })
+      }
       window.dispatchEvent(new CustomEvent('support-requests-updated'))
       router.refresh()
     } catch (err: any) {
@@ -234,6 +255,9 @@ export function CreateSupportRequestModal({ firmSlug, trigger }: CreateSupportRe
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-[500px] p-0 border-[#e5e7eb] !rounded overflow-hidden max-h-[90vh] flex flex-col gap-0">
+          <VisuallyHidden>
+            <DialogTitle>New Support Request</DialogTitle>
+          </VisuallyHidden>
 
           {/* Modal header */}
           <div className="border-b border-[#e5e7eb] px-6 py-5 shrink-0">

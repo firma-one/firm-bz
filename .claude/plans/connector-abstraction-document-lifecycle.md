@@ -10,6 +10,7 @@ Reordered so the three phases flagged **Low** regression risk (1b, 2, 5) run fir
 |---|---|---|---|---|---|
 | 1 | **0** | Abstract document-lifecycle Drive coupling (preview, support attachments, sharing regrant) behind existing adapter interfaces — no OneDrive code yet | **✅ Done (code) — manual QA pending** | **Medium** — refactors live Google Drive code paths; risk is behavior drift, not new failure modes (see per-step risk below) | Google Drive users (100% of current base) hit broken preview, broken attachment upload/download, or broken sharing — this is the only phase that touches paths already in production use |
 | 2 | **1a** | External Azure/Microsoft Entra app registration & OAuth config — manual portal work, not code | **✅ Done (2026-07-22)** — app registered, secret + local Supabase Azure provider wired; Phase 1b code not yet written so end-to-end OAuth is untested | **N/A** — no app code touched; risk is entirely in getting the Azure config right | Blocks all OneDrive OAuth connection attempts until fixed; zero impact on existing Google Drive users (isolated new infrastructure) |
+| 2b | **1a-signin** | "Sign in with Microsoft" — smallest possible slice that exercises Phase 1a's Azure app registration + Supabase Azure provider end-to-end via a real browser OAuth round-trip, with zero Graph/connector code. Serves as the foundation smoke test before investing in Phase 1b/2. | Not started | **Low** — one new button + one new function mirroring `signInWithGoogle`; touches the shared sign-in page but adds a new code path rather than modifying the existing Google one | Users clicking "Continue with Microsoft" see an error; zero impact on Google/OTP sign-in, which is a separate code path |
 | 3 | **1b** | Microsoft Graph OAuth code (connect flow, token storage/refresh) — consumes Phase 1a's credentials | Not started | **Low** — additive only; new routes, new env vars, no existing code path modified | None to existing users; failure only blocks new OneDrive connections from working |
 | 3 (parallel) | **2** | Real adapter implementations — fill `onedrive-connector.ts`/`onedrive-adapter.ts` stubs, implement `IConnectorPermissionAdapter`/`IConnectorMigrationAdapter`/`IConnectorContentAdapter` (from Phase 0) against Microsoft Graph | Not started | **Low** — new implementation behind existing interfaces; Google Drive adapters untouched | None to existing (Google) users; OneDrive users see broken folder/file/permission operations until fixed |
 | 4 | **5** | UI — enable OneDrive tab, connector icon, connect flow, file picker | Not started | **Low** — new components + a config flip (`enabled: false → true`); no shared UI components modified | OneDrive users only; worst case is a broken connect flow, not a regression for existing Google Drive users |
@@ -18,6 +19,7 @@ Reordered so the three phases flagged **Low** regression risk (1b, 2, 5) run fir
 
 **Dependency notes:**
 - Phase 1a has zero dependency on anything — it's Azure Portal work only, can start immediately.
+- Phase 1a-signin depends only on Phase 1a's completed Azure config (done) and the `[auth.external.azure]` Supabase block (done). It has no dependency on Phase 1b/2/5 — deliberately the next thing to build so Phase 1a's foundation is verified working before further investment.
 - Phase 1b depends on Phase 1a's credentials (`MICROSOFT_CLIENT_ID`/`MICROSOFT_CLIENT_SECRET`/`MICROSOFT_TENANT_ID`) to actually run/test, though the route code itself can be scaffolded in parallel.
 - Phase 2 depends on Phase 0's interfaces (done) but not on live Microsoft credentials until integration testing — can be scaffolded in parallel with 1a/1b.
 - Phase 5 (UI) trails Phase 1b — the "Connect" button needs a working OAuth flow to wire into, though icons/tab scaffolding can start earlier.
@@ -154,6 +156,47 @@ Each phase gets its own detailed plan (like Phase 0's) once the prior phase land
 - `frontend/.env` — actual local credentials added (git-ignored)
 - `frontend/supabase/config.toml` — new `[auth.external.azure]` block added
 - This plan file
+
+### Phase 1a-signin — "Sign in with Microsoft" (foundation smoke test)
+
+**Why this comes before Phase 1b/2:** Phase 1a's Azure app registration and Supabase `[auth.external.azure]` config are configured but never exercised by a real browser OAuth round-trip. This phase is the smallest possible slice that proves the foundation actually works — one button, one function, reusing 100% of Supabase's existing OAuth machinery — before investing in Phase 1b's Graph token-storage/refresh code or Phase 2's adapter implementations.
+
+**Pattern to mirror:** `signInWithGoogle` in `frontend/lib/auth-context.tsx:90-115` and the "Continue with Google" button in `frontend/app/(app)/signin/signin-view.tsx:287-315`. Google's flow is gated behind email verification first (not a standalone one-click button) — decide whether Microsoft follows the same UX gate or is offered as an independent option; simplest is to mirror Google exactly for consistency.
+
+**Code changes:**
+1. **`frontend/lib/auth-context.tsx`** — add `signInWithMicrosoft(email?: string, next?: string): Promise<void>` alongside `signInWithGoogle`, following the identical `baseUrl`/`callbackUrl` localhost-vs-prod logic, but:
+   ```typescript
+   const { error } = await supabase.auth.signInWithOAuth({
+     provider: 'azure',
+     options: {
+       redirectTo: callbackUrl,
+       scopes: 'email profile openid',  // NOT Files.ReadWrite.All / Sites.ReadWrite.All — see Phase 1a step 5
+       queryParams: email ? { login_hint: email } : undefined,
+     },
+   })
+   ```
+   Add `signInWithMicrosoft` to the `AuthContextType` interface and the context `value` object.
+2. **`frontend/app/(app)/signin/use-sign-in-flow.ts`** — extend `handleEmailSubmit`'s `method` union from `'google' | 'otp'` to `'google' | 'microsoft' | 'otp'` (or add a parallel `handleMicrosoftSubmit`, matching however `handleEmailSubmit` is structured); add a `microsoftLoading` state mirroring `googleLoading`.
+3. **`frontend/app/(app)/signin/signin-view.tsx`** — add a second outlined button below/beside "Continue with Google" using the same `OUTLINE_SECONDARY` class, a Microsoft logo SVG (4-color squares, not Google's colored "G"), and `{microsoftLoading ? 'Signing in…' : 'Continue with Microsoft'}`.
+4. **`/auth/callback` route** — check whether it's Google-specific or provider-agnostic (Supabase's callback handler is typically generic across providers via `exchangeCodeForSession`); if provider-agnostic, no change needed here.
+5. **Production Supabase redirect URI** — Phase 1a's Azure app registration still needs a production Supabase Auth callback URI added (e.g. `https://<project>.supabase.co/auth/v1/callback`) before this works outside local dev — noted as still-needed in Phase 1a's actual-results section above.
+
+**Verification:**
+- Local: click "Continue with Microsoft" on `/signin`, confirm the Microsoft consent screen shows only `email`/`profile`/`openid` scopes (not the broad Graph file/site scopes), complete sign-in with a personal Microsoft account, confirm redirect to `/auth/callback` and a working session — same end state as Google sign-in.
+- Confirm a new Supabase `auth.users` row is created with `email` populated correctly (this was the specific risk flagged in Phase 1a step 5 — Supabase requires email and doesn't request it by default).
+- Test with both a personal Microsoft account and a work/school account, matching the multitenant app registration.
+- Confirm existing Google/OTP sign-in still works unmodified (regression check).
+
+**Status: ✅ Done (2026-07-23, code + local manual test).**
+
+- Implemented exactly as scoped: `signInWithMicrosoft` in `auth-context.tsx`, `microsoft` branch (explicit `else if`, avoiding the OTP-fallthrough risk flagged in the pre-implementation regression review) in `use-sign-in-flow.ts`, sibling button in `signin-view.tsx`. `tsc --noEmit` clean across the whole project — zero type errors, confirming the `AuthContextType`/`method` union changes have no ripple elsewhere.
+- **Local manual test passed**, using `deepak@firmaone.com` (a Global Administrator on the "Default Directory" tenant from Phase 1a). Consent screen showed exactly two permission groups — "View your basic profile" and "Maintain access to data you have given it access to" (the `offline_access` refresh-token permission, explicitly described as granting no additional access) — confirming `Files.ReadWrite.All`/`Sites.ReadWrite.All` are correctly excluded from the sign-in scope request. Completed OAuth round-trip, redirected through `/auth/callback`, landed in a working authenticated session.
+- **One retry needed**: first attempt hit `error=invalid_request&error_code=bad_oauth_state&error_description=OAuth+state+has+expired` — caused by pausing on the consent screen too long (reviewing/discussing it) before clicking Accept, not a bug. Supabase's OAuth `state` token has a short TTL; a prompt retry succeeded immediately. **Note for future testing**: don't linger on the Microsoft consent screen mid-flow.
+- **Admin-consent checkbox confirmed tenant/role-gated, not shown to most real users**: researched and confirmed via Microsoft Learn — "Consent on behalf of your organization" only renders for users holding Privileged Role Administrator (or higher, e.g. Global Administrator) in a work/school tenant; it never appears for non-admin work/school users or personal Microsoft accounts (personal accounts hold no tenant role at all). It appeared in testing only because the test account is the tenant's Global Admin — expected, not a design issue.
+- **Not yet tested**: work/school account sign-in (only personal-tenant-admin account tested so far), and the production Supabase redirect URI is still not registered in Azure (still open, noted above) — production sign-in won't work until that's added.
+- **Not yet verified**: whether the new Supabase `auth.users` row has `email` populated correctly — recommend checking Supabase Studio (`http://127.0.0.1:54323`) before considering this fully closed.
+
+**Regression risk:** Low — new function/button additions; the only shared-surface edit is `signin-view.tsx`'s JSX (adding a sibling button, not modifying Google's), and `use-sign-in-flow.ts`'s `method` type widening (existing `'google'`/`'otp'` branches untouched).
 
 ### Phase 1b — Microsoft Graph OAuth code
 - New env vars: `MICROSOFT_CLIENT_ID` / `MICROSOFT_CLIENT_SECRET` (+ tenant config)

@@ -62,10 +62,14 @@ const VIEW_AS_SLUG_SET = new Set<string>(RBAC_PERSONAS.map((p) => p.slug))
 /**
  * Radix Select throws if `value` does not match a SelectItem. Firm roles from the API use
  * ORG_MEMBER / FIRM_ADMIN — only the latter overlaps RBAC persona slugs after lowercasing.
+ *
+ * Deliberately does NOT fall back to `user.app_metadata.active_persona` — that field is
+ * global (tied to whichever firm was last switched to via switchFirm) and can be stale
+ * when viewing a firm other than the JWT's active_firm_id. `role` here must be the
+ * firm-scoped role for the firm currently being viewed (from getFirmRole(slug)).
  */
 function resolveViewAsSelectSlug(
   viewAsOverride: string | null | undefined,
-  activePersona: unknown,
   role: string | null,
 ): string {
   const coerce = (raw: unknown): string | null => {
@@ -78,7 +82,6 @@ function resolveViewAsSelectSlug(
   }
   return (
     coerce(viewAsOverride) ??
-    coerce(activePersona) ??
     coerce(role?.toLowerCase()) ??
     RBAC_PERSONAS[0]?.slug ??
     'firm_member'
@@ -394,7 +397,9 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
   const canEditOrg = effective ? effective.canEdit : (orgPermissions?.canEdit ?? false)
   const canViewOrg = effective ? effective.canView : (orgPermissions?.canView ?? true)
 
-  const canShowViewAsDropdown = canUseViewAs
+  // "Viewing As" only makes sense in the context of a single firm — hide on /d/f (no firm
+  // selected) and require firm_admin on the specific firm being viewed, not any-firm-admin.
+  const canShowViewAsDropdown = Boolean(slug) && canUseViewAs && role === 'FIRM_ADMIN'
 
   // Active state helpers
   const isInsightsActive = searchParams.get('tab') === 'analytics'
@@ -1042,17 +1047,9 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                       </h3>
                       <div className="ml-1 space-y-0.5">
                         <Select
-                          value={resolveViewAsSelectSlug(
-                            viewAsPersonaSlug,
-                            (user?.app_metadata as any)?.active_persona,
-                            role,
-                          )}
+                          value={resolveViewAsSelectSlug(viewAsPersonaSlug, role)}
                           onValueChange={(newSlug) => {
-                            const naturalSlug = resolveViewAsSelectSlug(
-                              null,
-                              (user?.app_metadata as any)?.active_persona,
-                              role,
-                            )
+                            const naturalSlug = resolveViewAsSelectSlug(null, role)
                             setViewAsPersonaSlug(newSlug === naturalSlug ? null : newSlug)
                             window.location.reload()
                           }}

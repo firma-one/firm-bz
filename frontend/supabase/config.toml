@@ -288,7 +288,10 @@ redirect_uri = "http://localhost:54321/auth/v1/callback"
 # App registration is multitenant + personal accounts (see connector-abstraction-document-lifecycle.md
 # Phase 1a) — use the `common` endpoint, not a single-tenant URL, so both work/school and personal
 # Microsoft accounts can sign in.
-url = "https://login.microsoftonline.com/common/v2.0"
+# NOTE: GoTrue appends its own "/oauth2/v2.0/{authorize,token}" suffix onto this url — do NOT
+# include a trailing "/v2.0" here, or the final URL doubles up to ".../v2.0/oauth2/v2.0/authorize"
+# (404). Just the tenant segment goes here.
+url = "https://login.microsoftonline.com/common"
 
 [auth.external.apple]
 enabled = false

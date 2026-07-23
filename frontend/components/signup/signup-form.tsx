@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { isValidEmail, isGoogleEmail, isPotentiallyGoogleWorkspace, generateDefaultOrgName } from '@/lib/email-utils'
+import { isValidEmail, getApplicableOAuthProviders, generateDefaultOrgName } from '@/lib/email-utils'
 import { AuthService } from '@/lib/auth-service'
 import { supabase } from '@/lib/supabase'
 import { ArrowLeft, ArrowRight, Check } from 'lucide-react'
@@ -294,6 +294,32 @@ export function SignupForm({
             category: 'User',
             label: 'Signup Success',
             method: 'google'
+        })
+    }
+
+    // Step 2a: Microsoft OAuth
+    const handleMicrosoftSignIn = async () => {
+        setLoading(true)
+        setError('')
+
+        const result = await AuthService.signInWithMicrosoft({
+            email,
+            firstName,
+            lastName
+        }, searchParams.get('next'))
+
+        if (!result.success) {
+            setError(result.error || 'Failed to sign in with Microsoft')
+            setLoading(false)
+            return
+        }
+
+        // Redirect will happen automatically
+        sendEvent({
+            action: ANALYTICS_EVENTS.SIGN_UP,
+            category: 'User',
+            label: 'Signup Success',
+            method: 'microsoft'
         })
     }
 
@@ -735,20 +761,27 @@ export function SignupForm({
             )}
 
             {/* Step 2: Auth Method Selection */}
-            {step === 'auth-method' && (
+            {step === 'auth-method' && (() => {
+                const applicableProviders = getApplicableOAuthProviders(email)
+                const hasOAuthOption = applicableProviders.length > 0
+                return (
                 <div className="space-y-6">
-                    <div className={isSplitLight ? 'text-left' : 'text-center'}>
-                        <h2
-                            className={`mb-2 text-xl font-bold tracking-tight ${H} ${
-                                isSplitLight ? 'text-[#1b1b1d]' : 'text-white'
-                            }`}
-                        >
-                            Choose authentication method
-                        </h2>
-                        <p className={`text-sm ${isSplitLight ? 'text-[#45474c]' : 'text-slate-400'}`}>
-                            How would you like to sign in?
-                        </p>
-                    </div>
+                    {/* "Choose" only makes sense when an OAuth option is actually shown below —
+                        otherwise email OTP is the only path and there's nothing to choose between. */}
+                    {hasOAuthOption && (
+                        <div className={isSplitLight ? 'text-left' : 'text-center'}>
+                            <h2
+                                className={`mb-2 text-xl font-bold tracking-tight ${H} ${
+                                    isSplitLight ? 'text-[#1b1b1d]' : 'text-white'
+                                }`}
+                            >
+                                Choose authentication method
+                            </h2>
+                            <p className={`text-sm ${isSplitLight ? 'text-[#45474c]' : 'text-slate-400'}`}>
+                                How would you like to sign in?
+                            </p>
+                        </div>
+                    )}
 
                     {/* Error shown once by the global error block above */}
 
@@ -858,8 +891,8 @@ export function SignupForm({
                         )}
                     </div>
 
-                    {/* Divider - Show only if Google option is visible */}
-                    {(isGoogleEmail(email) || isPotentiallyGoogleWorkspace(email)) && (
+                    {/* Divider - Show only if an OAuth option is visible */}
+                    {hasOAuthOption && (
                         <div className="relative">
                             <div className="absolute inset-0 flex items-center">
                                 <div
@@ -875,7 +908,7 @@ export function SignupForm({
                     )}
 
                     {/* Google OAuth - Show for Google emails or potential workspace emails */}
-                    {(isGoogleEmail(email) || isPotentiallyGoogleWorkspace(email)) && (
+                    {applicableProviders.includes('google') && (
                         <Button
                             onClick={handleGoogleSignIn}
                             disabled={loading}
@@ -899,8 +932,35 @@ export function SignupForm({
                             Continue with Google
                         </Button>
                     )}
+
+                    {/* Microsoft OAuth - Show for personal Microsoft emails or potential Entra ID work/school emails */}
+                    {applicableProviders.includes('microsoft') && (
+                        <Button
+                            onClick={handleMicrosoftSignIn}
+                            disabled={loading}
+                            variant="outline"
+                            className={
+                                isSplitLight
+                                    ? `w-full rounded border border-[#c6c6cc]/10 bg-[#f6f3f4] py-4 text-xs font-bold uppercase tracking-wider text-[#1b1b1d] hover:bg-[#f0edee] ${H}`
+                                    : `w-full rounded-md border border-white/15 bg-[#141c2a]/60 py-5 text-[15px] text-slate-200 hover:bg-[#141c2a] hover:text-white ${H}`
+                            }
+                        >
+                            {loading ? (
+                                <LoadingSpinner size="sm" />
+                            ) : (
+                                <svg className="mr-2 h-5 w-5" viewBox="0 0 23 23" aria-hidden>
+                                    <rect x="1" y="1" width="10" height="10" fill="#F25022" />
+                                    <rect x="12" y="1" width="10" height="10" fill="#7FBA00" />
+                                    <rect x="1" y="12" width="10" height="10" fill="#00A4EF" />
+                                    <rect x="12" y="12" width="10" height="10" fill="#FFB900" />
+                                </svg>
+                            )}
+                            Continue with Microsoft
+                        </Button>
+                    )}
                 </div>
-            )}
+                )
+            })()}
 
             {/* Step 3: OTP Verification */}
             {step === 'otp-verify' && (
