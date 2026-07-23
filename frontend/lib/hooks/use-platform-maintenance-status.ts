@@ -11,7 +11,7 @@ export type PlatformMaintenanceStatus = {
   message: string | null
 }
 
-export function usePlatformMaintenanceStatus(pollIntervalMs = 30_000): PlatformMaintenanceStatus | null {
+export function usePlatformMaintenanceStatus(pollIntervalMs = 60_000): PlatformMaintenanceStatus | null {
   const [status, setStatus] = useState<PlatformMaintenanceStatus | null>(null)
 
   useEffect(() => {

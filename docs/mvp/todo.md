@@ -109,6 +109,12 @@ AI layer using Gemma 4 (HuggingFace Transformers, same runtime as release notes 
 
 ## Infrastructure / Maintenance
 
+- [ ] **IMP: Batch `index-file` calls in `processUploads` (multi-file picker upload)** — `frontend/components/projects/hooks/use-engagement-upload.ts`
+  - `processUploads` (plain multi-file picker, not folder upload) still POSTs `/api/projects/[projectId]/index-file` once **per file**, sequentially inside its upload loop — unlike `handleBatchResolution` and `processFolderUpload`, which already send one batched POST (`files: [...]`) for the whole set
+  - For N individually-selected files (e.g. 100), that's N sequential round-trips (each doing a docId upsert + Inngest enqueue) before the post-upload `fetchFiles()`, instead of 1
+  - Fix: collect `{ externalId, fileName }` per successful upload in the loop (same pattern as the other two paths) and fire one batched `index-file` POST after the loop, instead of relying on each `uploadFile()` call's individual `docIdRequestSettled` promise
+  - Discovered 2026-07-23 while fixing the docId-not-showing-instantly bug; not a regression from that fix, a pre-existing inefficiency in this one path
+
 - [ ] **Bug: Signup OTP → redirects to `/signin` instead of `/d/signup-success`** — [plan](../../.claude/plans/signup-session-issue.md) — deferred past beta
   - Race condition: middleware reads auth cookie before browser has committed it after `verifyOTP()`
   - Fix: gate `window.location.href` on `onAuthStateChange SIGNED_IN` event instead of `getSession()`
