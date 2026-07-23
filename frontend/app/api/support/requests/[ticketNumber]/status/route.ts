@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { prisma } from '@/lib/prisma'
+import { canAccessSupportTicket } from '@/lib/support-ticket-auth'
 
 export async function PATCH(
   request: NextRequest,
@@ -43,6 +44,17 @@ export async function PATCH(
         { error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` },
         { status: 400 }
       )
+    }
+
+    const existing = await (prisma as any).customerRequest.findUnique({
+      where: { ticketNumber: params.ticketNumber },
+      select: { userId: true, firmId: true },
+    })
+    if (!existing) {
+      return NextResponse.json({ error: 'Ticket not found' }, { status: 404 })
+    }
+    if (!(await canAccessSupportTicket(user.id, existing))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     const ticket = await (prisma as any).customerRequest.update({

@@ -81,7 +81,14 @@ export default async function EngagementBoardPage({ params }: PageProps) {
     projectRole === 'eng_ext_collaborator' || projectRole === 'eng_viewer'
       ? getAccessibleFileCountForPersona(project.id, projectRole)
       : (basePrisma as any).engagementDocument.count({ where: { engagementId: project.id, isFolder: false } }),
-    (basePrisma as any).engagementDocument.count({ where: { engagementId: project.id, sharingUsers: { some: { sharingPermissionStatus: { in: ['GRANTED', 'PENDING'] } } } } }),
+    (basePrisma as any).$queryRawUnsafe(
+      `SELECT COUNT(DISTINCT ed.id)::int AS count FROM platform.engagement_documents ed
+       LEFT JOIN platform.engagement_document_sharing_users su
+         ON su."projectDocumentId" = ed.id AND su."sharingPermissionStatus" IN ('GRANTED', 'PENDING')
+       WHERE ed."engagementId" = $1::uuid AND ed."isFolder" = true
+         AND ((ed.settings->'share'->>'createdAt') IS NOT NULL OR su.id IS NOT NULL)`,
+      project.id
+    ).then((r: any[]) => r[0]?.count ?? 0),
     (basePrisma as any).docCommentMessage.groupBy({ by: ['projectDocumentId'], where: { engagementId: project.id } }).then((r: any[]) => r.length),
     (basePrisma as any).engagementMember.count({ where: { engagementId: project.id } }),
     (basePrisma as any).engagementInvitation.count({ where: { engagementId: project.id, status: { not: 'JOINED' } } }),

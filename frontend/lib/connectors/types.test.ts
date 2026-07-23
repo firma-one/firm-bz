@@ -106,12 +106,18 @@ describe('connector types', () => {
       trashFile: async () => {},
       listFiles: async () => [],
       getFileMetadata: async () => null,
+      grantFilePermission: async () => null,
+      listFilePermissions: async () => [],
+      deleteFile: async () => {},
     }
     expect(typeof adapter.grantFolderPermission).toBe('function')
     expect(typeof adapter.revokePermission).toBe('function')
     expect(typeof adapter.getEngagementFolderIds).toBe('function')
     expect(typeof adapter.trashFile).toBe('function')
     expect(typeof adapter.getFileMetadata).toBe('function')
+    expect(typeof adapter.grantFilePermission).toBe('function')
+    expect(typeof adapter.listFilePermissions).toBe('function')
+    expect(typeof adapter.deleteFile).toBe('function')
   })
 
   it('IConnectorPermissionAdapter.grantFolderPermission returns string permissionId or null', async () => {
@@ -123,8 +129,11 @@ describe('connector types', () => {
       trashFile: async () => {},
       listFiles: async () => [],
       getFileMetadata: async () => null,
+      grantFilePermission: async () => null,
+      listFilePermissions: async () => [],
+      deleteFile: async () => {},
     }
-    const permId = await adapter.grantFolderPermission('conn', 'folder', 'user@example.com', 'reader')
+    const permId = await adapter.grantFolderPermission('conn', 'folder', 'user@example.com', 'viewer')
     expect(permId).toBe('perm-xyz')
   })
 

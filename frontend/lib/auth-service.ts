@@ -107,6 +107,49 @@ export class AuthService {
     }
 
     /**
+     * Sign in with Microsoft OAuth (with onboarding context).
+     * Identity-only scopes — must NOT include Graph file/site scopes, which are requested
+     * separately by the OneDrive/SharePoint connector's own OAuth flow (see
+     * .claude/plans/connector-abstraction-document-lifecycle.md Phase 1a step 5).
+     */
+    static async signInWithMicrosoft(
+        onboardingData: OnboardingData,
+        next?: string | null
+    ): Promise<{ success: boolean; error?: string }> {
+        try {
+            // Store onboarding data in localStorage for callback
+            localStorage.setItem('onboarding_data', JSON.stringify(onboardingData))
+            // Flag checked on /signup after OAuth returns to show SignupSuccess
+            sessionStorage.setItem('signup_success', '1')
+
+            const callbackNext = next ?? '/d/signup-success'
+            const redirectTo = `${getOAuthRedirectOrigin()}/auth/callback?next=${encodeURIComponent(callbackNext)}`
+
+            const { error } = await supabase.auth.signInWithOAuth({
+                provider: 'azure',
+                options: {
+                    redirectTo,
+                    scopes: 'email profile openid',
+                    queryParams: {
+                        login_hint: onboardingData.email // Pre-fill email
+                    }
+                }
+            })
+
+            if (error) {
+                return { success: false, error: error.message }
+            }
+
+            return { success: true }
+        } catch (error) {
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Failed to initiate Microsoft sign-in'
+            }
+        }
+    }
+
+    /**
      * Get onboarding data from localStorage
      */
     static getOnboardingData(): OnboardingData | null {

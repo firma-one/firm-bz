@@ -81,7 +81,7 @@ const tools = [
 ]
 
 export default function SystemIndex() {
-    const maintenanceStatus = usePlatformMaintenanceStatus(20_000)
+    const maintenanceStatus = usePlatformMaintenanceStatus(60_000)
     const isMaintenanceActive = maintenanceStatus?.active ?? false
     const isMaintenanceGrace = (maintenanceStatus?.pendingGrace ?? false) && !isMaintenanceActive
     const isMaintenanceOn = isMaintenanceActive || isMaintenanceGrace

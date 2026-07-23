@@ -23,7 +23,7 @@ const LIME_CTA =
 const OUTLINE_SECONDARY =
   'w-full rounded-md border border-[#c6c6cc]/80 bg-white text-[15px] font-medium text-[#45474c] transition-all hover:border-[#9ea0a8] hover:bg-[#f6f3f4] hover:text-[#1b1b1d] active:scale-[0.98]'
 
-export function SigninView() {
+export function SigninView({ microsoftSignInEnabled = false }: { microsoftSignInEnabled?: boolean } = {}) {
   const otpInputRef = useRef<OTPInputHandle>(null)
   const emailTurnstileRef = useRef<TurnstileInstance>(undefined)
   const otpTurnstileRef = useRef<TurnstileInstance>(undefined)
@@ -38,6 +38,7 @@ export function SigninView() {
     loading,
     checkLoading,
     googleLoading,
+    microsoftLoading,
     error,
     setError,
     noAccountMessage,
@@ -311,6 +312,24 @@ export function SigninView() {
                           />
                         </svg>
                         {googleLoading ? 'Signing in…' : 'Continue with Google'}
+                      </Button>
+                    )}
+
+                    {microsoftSignInEnabled && !noAccountMessage && emailVerified && (
+                      <Button
+                        type="button"
+                        onClick={() => handleEmailSubmit('microsoft')}
+                        disabled={!emailVerified || loading || microsoftLoading}
+                        variant="outline"
+                        className={`${OUTLINE_SECONDARY} h-12 rounded-md`}
+                      >
+                        <svg className="mr-2.5 h-5 w-5 shrink-0" viewBox="0 0 23 23" aria-hidden>
+                          <rect x="1" y="1" width="10" height="10" fill="#F25022" />
+                          <rect x="12" y="1" width="10" height="10" fill="#7FBA00" />
+                          <rect x="1" y="12" width="10" height="10" fill="#00A4EF" />
+                          <rect x="12" y="12" width="10" height="10" fill="#FFB900" />
+                        </svg>
+                        {microsoftLoading ? 'Signing in…' : 'Continue with Microsoft'}
                       </Button>
                     )}
 

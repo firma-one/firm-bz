@@ -1,13 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
-import { ConnectorType } from '@prisma/client'
-import { randomBytes } from 'crypto'
+import { randomBytes, randomUUID } from 'crypto'
 import { prisma } from '@/lib/prisma'
-import { googleDriveConnector } from '@/lib/google-drive-connector'
-import { getStorageAdapter } from '@/lib/connectors/registry'
-import { METADATA_FOLDER_NAME } from '@/lib/connectors/types'
+import { canAccessSupportTicket } from '@/lib/support-ticket-auth'
 
-const SUPPORT_FOLDER = 'support'
+/**
+ * Support ticket attachments are stored as DB blobs (base64 data URL in the ticket's
+ * `attachments` JSONB column), mirroring Brand.logoData — not in Google Drive. Support
+ * tickets are firm-level (no client/engagement selection in the request form), so there is
+ * no reliable client connector to route them through; a single storage path avoids a
+ * permanent Drive-vs-blob branch across every attachment code path for what is internal
+ * operational data, not a client deliverable.
+ */
+const MAX_BLOB_ATTACHMENT_BYTES = 8 * 1024 * 1024 // 8MB
 
 export async function POST(
   request: NextRequest,
@@ -43,163 +48,61 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const ticket = await (prisma as any).customerRequest.findUnique({
+      where: { ticketNumber: params.ticketNumber },
+      select: { userId: true, firmId: true },
+    })
+    if (!ticket) {
+      return NextResponse.json({ error: 'Ticket not found' }, { status: 404 })
+    }
+    if (!(await canAccessSupportTicket(user.id, ticket))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    // Reject clearly-oversized requests before buffering the body — formData() has to read
+    // the whole multipart payload to parse it, so this Content-Length check is the only
+    // point we can cheaply short-circuit an oversized upload before that happens.
+    const contentLength = Number(request.headers.get('content-length') ?? '0')
+    if (contentLength > MAX_BLOB_ATTACHMENT_BYTES * 2) {
+      // *2 for multipart boundary/header overhead; the exact file.size check below is authoritative.
+      return NextResponse.json(
+        { error: `File too large (max ${MAX_BLOB_ATTACHMENT_BYTES / 1024 / 1024}MB)` },
+        { status: 413 }
+      )
+    }
+
     // Parse form data
     const formData = await request.formData()
     const file = formData.get('file') as File
-    const firmSlug = formData.get('firmSlug') as string
 
-    if (!file || !firmSlug) {
+    if (!file) {
+      return NextResponse.json({ error: 'Missing file' }, { status: 400 })
+    }
+
+    if (file.size > MAX_BLOB_ATTACHMENT_BYTES) {
       return NextResponse.json(
-        { error: 'Missing file or firmSlug' },
+        { error: `File too large (max ${MAX_BLOB_ATTACHMENT_BYTES / 1024 / 1024}MB)` },
         { status: 400 }
       )
     }
 
-    // Convert file to buffer
     const buffer = Buffer.from(await file.arrayBuffer())
+    const mimeType = file.type || 'application/octet-stream'
 
-    // Find firm and connector
-    const firm = await prisma.firm.findUnique({
-      where: { slug: firmSlug },
-      select: {
-        id: true,
-        settings: true,
-        firmFolderId: true,
-        connectorId: true,
-      },
-    })
-
-    if (!firm) {
-      return NextResponse.json({ error: 'Firm not found' }, { status: 404 })
-    }
-
-    if (!firm.connectorId) {
-      return NextResponse.json(
-        { error: 'Firm has no Google Drive connector configured' },
-        { status: 400 }
-      )
-    }
-
-    const connector = await prisma.connector.findUnique({
-      where: { id: firm.connectorId },
-      select: { id: true, type: true, status: true },
-    })
-
-    if (!connector || connector.type !== ConnectorType.GOOGLE_DRIVE || connector.status !== 'ACTIVE') {
-      return NextResponse.json(
-        { error: 'Firm Google Drive connector is not active' },
-        { status: 400 }
-      )
-    }
-
-    // Resolve firm folder ID
-    const settings = (firm.settings as Record<string, unknown>) ?? {}
-    const orgSettings =
-      (settings.organizations as Record<string, Record<string, unknown>> | undefined)?.[firm.id] ?? {}
-    const firmFolderId =
-      (firm.firmFolderId as string | null) ??
-      (orgSettings.orgFolderId as string | undefined) ??
-      (settings.orgFolderId as string | undefined)
-
-    if (!firmFolderId) {
-      return NextResponse.json({ error: 'Firm folder not configured' }, { status: 400 })
-    }
-
-    // Build folder hierarchy: assets → support → <ticketNumber>
-    const adapter = await getStorageAdapter(connector.id)
-    const assetsId = await adapter.findOrCreateFolder(connector.id, firmFolderId, 'assets')
-    const supportId = await adapter.findOrCreateFolder(connector.id, assetsId, SUPPORT_FOLDER)
-    const ticketFolderId = await adapter.findOrCreateFolder(connector.id, supportId, params.ticketNumber)
-
-    // Generate randomized filename
+    // Our own stable attachment id + a randomized stored filename (independent of any storage backend)
     const ext = file.name.includes('.') ? file.name.split('.').pop() : ''
     const storedName = `${randomBytes(6).toString('hex')}${ext ? '.' + ext : ''}`
-
-    // Upload file to Google Drive
-    const accessToken = await googleDriveConnector.getAccessToken(connector.id)
-    if (!accessToken) {
-      console.error('Failed to get Google Drive access token for connector:', connector.id)
-      return NextResponse.json(
-        { error: 'Failed to get Google Drive access token' },
-        { status: 500 }
-      )
-    }
-
-    const response = await fetch('https://www.googleapis.com/drive/v3/files', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        name: storedName,
-        mimeType: file.type || 'application/octet-stream',
-        parents: [ticketFolderId],
-      }),
-    })
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.error('Failed to create file in Google Drive:', {
-        status: response.status,
-        statusText: response.statusText,
-        body: errorText,
-      })
-      return NextResponse.json(
-        { error: 'Failed to create file in Google Drive' },
-        { status: 500 }
-      )
-    }
-
-    const googleResponse = await response.json() as { id: string }
-    if (!googleResponse.id) {
-      console.error('Google Drive response missing file id:', googleResponse)
-      return NextResponse.json(
-        { error: 'Google Drive response invalid' },
-        { status: 500 }
-      )
-    }
-    const driveFileId = googleResponse.id
-
-    // Upload file content
-    const uploadResponse = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${driveFileId}?uploadType=media`, {
-      method: 'PATCH',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': file.type || 'application/octet-stream',
-        'Content-Length': buffer.length.toString(),
-      },
-      body: buffer,
-    })
-
-    if (!uploadResponse.ok) {
-      const errorText = await uploadResponse.text()
-      console.error('Failed to upload file content to Google Drive:', {
-        fileId: driveFileId,
-        status: uploadResponse.status,
-        statusText: uploadResponse.statusText,
-        body: errorText,
-      })
-      return NextResponse.json(
-        { error: 'Failed to upload file content' },
-        { status: 500 }
-      )
-    }
-
-    console.log('Successfully uploaded file to Google Drive:', {
-      ticketNumber: params.ticketNumber,
-      fileName: file.name,
-      driveFileId,
-      size: file.size,
-    })
+    const attachmentId = randomUUID()
+    const blobData = `data:${mimeType};base64,${buffer.toString('base64')}`
 
     return NextResponse.json({
       success: true,
       meta: {
+        attachmentId,
         originalName: file.name,
         storedName,
-        driveFileId,
-        mimeType: file.type || 'application/octet-stream',
+        blobData,
+        mimeType,
         size: file.size,
       },
     })

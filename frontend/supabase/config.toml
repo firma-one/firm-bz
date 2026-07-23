@@ -276,6 +276,23 @@ url = ""
 # If enabled, the nonce check will be skipped. Required for local sign in with Google auth.
 skip_nonce_check = true
 
+[auth.external.azure]
+enabled = true
+client_id = "env(MICROSOFT_CLIENT_ID)"
+# DO NOT commit your OAuth provider secret to git. Use environment variable substitution instead:
+secret = "env(MICROSOFT_CLIENT_SECRET)"
+# Overrides the default auth redirectUrl.
+# NOTE: must be "localhost", not "127.0.0.1" — Azure Entra ID's Web redirect URI validation only
+# accepts https:// or the literal hostname "localhost", and rejects bare loopback IPs.
+redirect_uri = "http://localhost:54321/auth/v1/callback"
+# App registration is multitenant + personal accounts (see connector-abstraction-document-lifecycle.md
+# Phase 1a) — use the `common` endpoint, not a single-tenant URL, so both work/school and personal
+# Microsoft accounts can sign in.
+# NOTE: GoTrue appends its own "/oauth2/v2.0/{authorize,token}" suffix onto this url — do NOT
+# include a trailing "/v2.0" here, or the final URL doubles up to ".../v2.0/oauth2/v2.0/authorize"
+# (404). Just the tenant segment goes here.
+url = "https://login.microsoftonline.com/common"
+
 [auth.external.apple]
 enabled = false
 client_id = ""

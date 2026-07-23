@@ -86,7 +86,7 @@ export function useEngagementUpload({
         onProgress?: (p: number) => void,
         parentFolderId?: string,
         triggerIndexing = true
-    ): Promise<{ success: boolean, error?: string, finalFile?: { name: string, id: string } }> => {
+    ): Promise<{ success: boolean, error?: string, finalFile?: { name: string, id: string }, docIdRequestSettled?: Promise<void> }> => {
         // Use ref to avoid stale closure during batch processing
         const token = sessionRef.current?.access_token
         if (!token) return { success: false, error: 'No access token' }
@@ -156,9 +156,25 @@ export function useEngagementUpload({
                             const data = JSON.parse(xhr.responseText)
                             const finalFile = { name: data.name, id: data.id }
 
-                            // Trigger background indexing
+                            // POST /index-file does TWO separate things server-side, and only the
+                            // FIRST is fast:
+                            //   1. ensureDocIdEarly() — synchronous DB upsert + atomic counter
+                            //      increment, assigns `docId` before this POST's response returns.
+                            //   2. IndexingInterceptor.index{Single,Batch} — just enqueues an
+                            //      Inngest event and returns immediately; it does NOT wait for the
+                            //      Inngest job (Drive metadata fetch, PDF/Office text extraction,
+                            //      embeddings) to actually run. That job can take seconds and must
+                            //      stay fully async — never block the UI on it.
+                            // So awaiting this fetch's response only waits on (1)+enqueue, which is
+                            // cheap regardless of file count. `docIdRequestSettled` name is chosen
+                            // deliberately over something like "indexingDone" — the Inngest indexing
+                            // job is NOT done when this resolves, only the docId assignment is.
+                            // Callers await this before their post-upload fetchFiles() so the Files
+                            // list shows the real docId immediately instead of "—" until a manual
+                            // refresh (see conversation/PR notes on the docId race fix).
+                            let docIdRequestSettled: Promise<void> | undefined
                             if (triggerIndexing) {
-                                fetch(`/api/projects/${projectId}/index-file`, {
+                                docIdRequestSettled = fetch(`/api/projects/${projectId}/index-file`, {
                                     method: 'POST',
                                     headers: {
                                         'Authorization': `Bearer ${token}`,
@@ -168,7 +184,7 @@ export function useEngagementUpload({
                                         externalId: finalFile.id,
                                         fileName: finalFile.name
                                     })
-                                }).catch(e => logger.error('Failed to trigger indexing', e))
+                                }).then(() => undefined).catch(e => logger.error('Failed to trigger indexing', e))
                             }
 
                             // For EC/EV uploads: call index-file-intake to set PENDING lock and notify ELs
@@ -183,7 +199,7 @@ export function useEngagementUpload({
                                 }).catch(e => logger.error('Failed to trigger intake indexing', e))
                             }
 
-                            resolve({ success: true, finalFile })
+                            resolve({ success: true, finalFile, docIdRequestSettled })
                         } catch (e) {
                             logger.warn('Failed to parse upload response', { error: e })
                             resolve({ success: true })
@@ -285,9 +301,13 @@ export function useEngagementUpload({
             }
         }
 
-        // Trigger batch indexing
+        // One batch POST for all files (not one per file) — server assigns every file's docId
+        // synchronously (ensureDocIdEarly, fanned out via Promise.all) and enqueues one Inngest
+        // batch-indexing event, then returns. Awaiting this response does NOT wait for the
+        // Inngest job (embeddings/summaries) to run — see docIdRequestSettled comment in
+        // uploadFile above for the full explanation of why that split matters.
         if (successfullyUploaded.length > 0) {
-            fetch(`/api/projects/${projectId}/index-file`, {
+            await fetch(`/api/projects/${projectId}/index-file`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${sessionRef.current?.access_token}`,
@@ -302,7 +322,8 @@ export function useEngagementUpload({
         // Reset selections
         setOverwriteSelections(new Set())
 
-        // Refresh
+        // Refresh — safe to call now: every file above either has its docId already
+        // (awaited above) or failed upload entirely (never got a docId to wait for).
         const currentFolderId = currentFolderIdRef.current
         if (currentFolderId) fetchFiles(currentFolderId, true)
         setIsUploading(false)
@@ -375,6 +396,10 @@ export function useEngagementUpload({
                 const isRetryableError = (err?: string) =>
                     err && (err.includes('Network interruption') || err.includes('timed out'))
                 const maxAttemptsPerFile = 2
+                // Collected per-file below, then awaited once before fetchFiles() so the Files
+                // list's refetch sees every uploaded file's docId. NOT a wait for full search
+                // indexing (embeddings/summaries) — see docIdRequestSettled comment in uploadFile.
+                const pendingDocIdRequests: Promise<void>[] = []
 
                 for (const file of safeUploads) {
                     const queueId = fileToQueueId.get(file)!
@@ -401,9 +426,11 @@ export function useEngagementUpload({
                     } else {
                         updateQueueItem(queueId, { status: 'completed', progress: 100 })
                         completedCount++
+                        if (result.docIdRequestSettled) pendingDocIdRequests.push(result.docIdRequestSettled)
                     }
                 }
 
+                await Promise.all(pendingDocIdRequests)
                 const currentFolderId = currentFolderIdRef.current
                 if (currentFolderId) fetchFiles(currentFolderId, true)
             }
@@ -542,10 +569,14 @@ export function useEngagementUpload({
             }
         }
 
-        // Trigger batch indexing for all successfully uploaded files
+        // One batch POST regardless of file count (e.g. a 100-file folder upload is still a
+        // single request here) — server assigns every file's docId synchronously and enqueues
+        // one Inngest batch-indexing event, then returns; this does NOT wait for the Inngest
+        // job itself. See docIdRequestSettled comment in uploadFile above for why that split
+        // is what keeps this scalable to large folder uploads.
         if (successfullyUploaded.length > 0) {
             logger.debug(`Triggering batch indexing for ${successfullyUploaded.length} files...`)
-            fetch(`/api/projects/${projectId}/index-file`, {
+            await fetch(`/api/projects/${projectId}/index-file`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -556,6 +587,8 @@ export function useEngagementUpload({
                 })
             }).catch(e => logger.error('Failed to trigger batch indexing', e))
         }
+        // Safe to refetch now — every uploaded file's docId was assigned as part of the
+        // batch POST above (awaited), independent of file count.
         const latestFolderId = currentFolderIdRef.current
         if (latestFolderId) fetchFiles(latestFolderId, true)
         setIsUploading(false)

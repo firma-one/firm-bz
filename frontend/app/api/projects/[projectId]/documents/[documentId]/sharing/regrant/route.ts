@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { GoogleDriveConnector } from '@/lib/google-drive-connector'
+import { getPermissionAdapter, getContentAdapter } from '@/lib/connectors/registry'
 import { createClient } from '@/utils/supabase/server'
 import { getFileInfo } from '@/lib/file-utils'
 import { DocumentSharingPermissionStatus } from '@prisma/client'
@@ -114,11 +114,15 @@ export async function POST(
             return NextResponse.json({ error: 'No active Google Drive connection found' }, { status: 500 })
         }
 
-        const drive = GoogleDriveConnector.getInstance()
+        const permissionAdapter = await getPermissionAdapter(connectorId)
+        const contentAdapter = await getContentAdapter(connectorId)
+        if (!permissionAdapter || !contentAdapter) {
+            return NextResponse.json({ error: 'No active Google Drive connection found' }, { status: 500 })
+        }
 
         if (sharingUser.connectorPermissionId) {
             try {
-                await drive.revokePermission(connectorId, fileInfo.externalId, sharingUser.connectorPermissionId)
+                await permissionAdapter.revokePermission(connectorId, fileInfo.externalId, sharingUser.connectorPermissionId)
             } catch (e) {
                 console.warn('revokePermission failed (stale permissionId?), continuing:', e)
             }
@@ -130,12 +134,12 @@ export async function POST(
 
         const versionLocked = isDocumentFinalized(document.settings)
 
-        let role: 'writer' | 'reader' = projectMember.role === 'eng_viewer' ? 'reader' : 'writer'
+        let role: 'editor' | 'viewer' = projectMember.role === 'eng_viewer' ? 'viewer' : 'editor'
         if (engagementStatus && isEngagementMemberReadOnlyWhenCompleted(engagementStatus, projectMember.role)) {
-            role = 'reader'
+            role = 'viewer'
         }
         if (versionLocked) {
-            role = 'reader'
+            role = 'viewer'
         }
 
         // Parse sharing settings
@@ -148,7 +152,6 @@ export async function POST(
 
         const fileName = document.fileName || 'a document'
         const message = `POCKETT SECURE ACCESS\n\nYou have requested to open "${fileName}". For your security, Google Drive requires a one-time email verification. Please click the "Open" button below to receive your one-time passcode and access the document.`
-        const options = { rm: 'minimal', ui: '2', sendNotificationEmail: 'true' }
 
         let targetFileId = fileInfo.externalId
 
@@ -156,7 +159,8 @@ export async function POST(
         if (sharePdfOnly) {
             try {
                 // 1. Export to PDF
-                const pdfBytes = await drive.exportFileToPdf(connectorId, fileInfo.externalId)
+                const exported = await contentAdapter.getRenderableContent(connectorId, fileInfo.externalId, 'pdf')
+                const pdfBytes = exported.stream as Buffer
 
                 // 2. Apply watermark if needed
                 let finalPdfBytes = pdfBytes
@@ -170,17 +174,21 @@ export async function POST(
                 }
 
                 // 3. Upload or overwrite PDF file
-                let pdfDriveId = guestOptions.sharedPdfDriveId
+                let pdfDriveId: string | undefined = guestOptions.sharedPdfDriveId ?? undefined
                 const pdfFileName = `${fileName}.pdf`
 
                 if (pdfDriveId) {
                     // Overwrite existing PDF
-                    await drive.overwriteFileContent(connectorId, pdfDriveId, finalPdfBytes, 'application/pdf')
+                    await contentAdapter.overwriteFileContent(connectorId, pdfDriveId, finalPdfBytes, 'application/pdf')
                 } else {
                     // Upload new PDF next to the original file (same parent folder)
-                    const originalMeta = await drive.getFileMetadata(connectorId, fileInfo.externalId)
-                    const parentFolderId = originalMeta?.parents?.[0] ?? undefined
-                    pdfDriveId = await drive.uploadNewFile(connectorId, pdfFileName, finalPdfBytes, 'application/pdf', parentFolderId)
+                    const originalMeta = await permissionAdapter.getFileMetadata(connectorId, fileInfo.externalId)
+                    const parentFolderId = originalMeta?.parents?.[0]
+                    if (!parentFolderId) {
+                        throw new Error('Could not resolve parent folder for original file')
+                    }
+                    const created = await contentAdapter.createFile(connectorId, parentFolderId, pdfFileName, finalPdfBytes, 'application/pdf')
+                    pdfDriveId = created.id
 
                     // Update document settings with the PDF Drive ID
                     const updatedSettings = buildSettingsForDb(document.settings as Record<string, unknown>, {
@@ -202,14 +210,12 @@ export async function POST(
                 }
 
                 // 4. Always block Drive's native download — Firma controls download via its own action menu
-                await drive.patchFileProperties(connectorId, pdfDriveId, {
-                    copyRequiresWriterPermission: true
-                })
+                await contentAdapter.setCopyRestricted(connectorId, pdfDriveId, true)
 
                 // 5. Revoke old permission on PDF if exists
                 if (sharingUser.connectorPermissionId) {
                     try {
-                        await drive.revokePermission(connectorId, pdfDriveId, sharingUser.connectorPermissionId)
+                        await permissionAdapter.revokePermission(connectorId, pdfDriveId, sharingUser.connectorPermissionId)
                     } catch (e) {
                         // Ignore revoke errors on PDF (may not exist yet)
                     }
@@ -228,9 +234,7 @@ export async function POST(
             // Branch B: Viewer + sharePdfOnly = false -> always block Drive's native download
             if (isViewer) {
                 try {
-                    await drive.patchFileProperties(connectorId, fileInfo.externalId, {
-                        copyRequiresWriterPermission: true
-                    })
+                    await contentAdapter.setCopyRestricted(connectorId, fileInfo.externalId, true)
                 } catch (e) {
                     console.error('Failed to set copyRequiresWriterPermission:', e)
                 }
@@ -240,24 +244,21 @@ export async function POST(
         // EC persona: always block Drive's native download regardless of allowDownload setting
         if (!isViewer && isExternalEngagementRole(projectMember.role)) {
             try {
-                await drive.patchFileProperties(connectorId, fileInfo.externalId, {
-                    copyRequiresWriterPermission: true
-                })
+                await contentAdapter.setCopyRestricted(connectorId, fileInfo.externalId, true)
             } catch (e) {
                 console.error('Failed to set copyRequiresWriterPermission for EC:', e)
             }
         }
 
-        let permissionId = await drive.grantFilePermission(connectorId, targetFileId, email, role, message, options)
+        let permissionId = await permissionAdapter.grantFilePermission(connectorId, targetFileId, email, role, { message })
 
         if (!permissionId) {
             // Grant failed — most common cause: user already has a Drive permission on this file
             // (duplicate grant). Check listFilePermissions and reuse the existing one if found.
             try {
-                const existingPerms = await drive.listFilePermissions(connectorId, targetFileId)
+                const existingPerms = await permissionAdapter.listFilePermissions(connectorId, targetFileId)
                 const existingPerm = existingPerms.find(
-                    (p: { emailAddress?: string | null; deleted?: boolean }) =>
-                        p.emailAddress?.toLowerCase() === email.toLowerCase() && !p.deleted
+                    (p) => p.email?.toLowerCase() === email.toLowerCase()
                 )
                 if (existingPerm?.id) {
                     permissionId = existingPerm.id
