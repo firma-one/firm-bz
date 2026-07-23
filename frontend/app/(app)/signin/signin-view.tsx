@@ -23,7 +23,7 @@ const LIME_CTA =
 const OUTLINE_SECONDARY =
   'w-full rounded-md border border-[#c6c6cc]/80 bg-white text-[15px] font-medium text-[#45474c] transition-all hover:border-[#9ea0a8] hover:bg-[#f6f3f4] hover:text-[#1b1b1d] active:scale-[0.98]'
 
-export function SigninView() {
+export function SigninView({ microsoftSignInEnabled = false }: { microsoftSignInEnabled?: boolean } = {}) {
   const otpInputRef = useRef<OTPInputHandle>(null)
   const emailTurnstileRef = useRef<TurnstileInstance>(undefined)
   const otpTurnstileRef = useRef<TurnstileInstance>(undefined)
@@ -315,7 +315,7 @@ export function SigninView() {
                       </Button>
                     )}
 
-                    {!noAccountMessage && emailVerified && (
+                    {microsoftSignInEnabled && !noAccountMessage && emailVerified && (
                       <Button
                         type="button"
                         onClick={() => handleEmailSubmit('microsoft')}

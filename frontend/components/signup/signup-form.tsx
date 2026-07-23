@@ -98,12 +98,16 @@ export interface SignupFormProps {
     onStepChange?: (step: SignupStepKey) => void
     /** 0–3 progress index for the right-column indicator (four segments: email → names → auth → OTP). */
     onProgressIndexChange?: (index: number) => void
+    /** Hidden until Microsoft publisher verification is resolved — see
+     *  .claude/plans/connector-abstraction-document-lifecycle.md Phase 1a-signin. */
+    microsoftSignInEnabled?: boolean
 }
 
 export function SignupForm({
     layout = 'stacked-dark',
     onStepChange,
     onProgressIndexChange,
+    microsoftSignInEnabled = false,
 }: SignupFormProps) {
     const searchParams = useSearchParams()
     const firstNameInputRef = useRef<HTMLInputElement>(null)
@@ -762,7 +766,9 @@ export function SignupForm({
 
             {/* Step 2: Auth Method Selection */}
             {step === 'auth-method' && (() => {
-                const applicableProviders = getApplicableOAuthProviders(email)
+                const applicableProviders = getApplicableOAuthProviders(email).filter(
+                    p => p !== 'microsoft' || microsoftSignInEnabled
+                )
                 const hasOAuthOption = applicableProviders.length > 0
                 return (
                 <div className="space-y-6">
