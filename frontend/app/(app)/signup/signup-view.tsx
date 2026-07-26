@@ -18,7 +18,7 @@ const B = '[font-family:var(--font-kinetic-body),system-ui,sans-serif]'
 const KINETIC_HERO_LEAD =
   'Stop sending raw Drive links. Deliver a white-glove client experience on top of the storage you already trust — non-custodial, with revoke-on-close discipline for your IP.'
 
-export function SignupView() {
+export function SignupView({ microsoftSignInEnabled = false }: { microsoftSignInEnabled?: boolean } = {}) {
   const [step, setStep] = useState<SignupStepKey>('info')
   const [progressIndex, setProgressIndex] = useState(0)
   const [oauthSuccess, setOauthSuccess] = useState(false)
@@ -151,6 +151,7 @@ export function SignupView() {
                         layout="split-light"
                         onStepChange={setStep}
                         onProgressIndexChange={setProgressIndex}
+                        microsoftSignInEnabled={microsoftSignInEnabled}
                       />
                     </Suspense>
                   </div>

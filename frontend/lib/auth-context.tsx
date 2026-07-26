@@ -16,6 +16,7 @@ interface AuthContextType {
   session: Session | null
   loading: boolean
   signInWithGoogle: (email?: string, next?: string) => Promise<void>
+  signInWithMicrosoft: (email?: string, next?: string) => Promise<void>
   signOut: () => Promise<void>
 }
 
@@ -114,6 +115,36 @@ export function AuthProvider({ children, initialSession }: { children: ReactNode
     }
   }
 
+  const signInWithMicrosoft = async (email?: string, next?: string) => {
+    // Localhost must use http:// — https:// + next dev ⇒ ERR_SSL_PROTOCOL_ERROR
+    const baseUrl =
+      typeof window !== 'undefined' &&
+      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+        ? getOAuthRedirectOrigin()
+        : config.appUrl
+    const callbackUrl = next
+      ? `${baseUrl}/auth/callback?next=${encodeURIComponent(next)}`
+      : `${baseUrl}/auth/callback`
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'azure',
+      options: {
+        redirectTo: callbackUrl,
+        // Identity-only scopes — must NOT include Files.ReadWrite.All / Sites.ReadWrite.All,
+        // which are requested separately by the OneDrive/SharePoint connector's own OAuth flow.
+        scopes: 'email profile openid',
+        queryParams: email ? {
+          login_hint: email // Pre-fill email if provided
+        } : undefined
+      }
+    })
+
+    if (error) {
+      console.error('Error signing in with Microsoft:', error)
+      throw error
+    }
+  }
+
   const signOut = async () => {
     const { error } = await supabase.auth.signOut()
 
@@ -131,6 +162,7 @@ export function AuthProvider({ children, initialSession }: { children: ReactNode
     session,
     loading,
     signInWithGoogle,
+    signInWithMicrosoft,
     signOut
   }
 

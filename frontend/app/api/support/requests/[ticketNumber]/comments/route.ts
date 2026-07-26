@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
+import { canAccessSupportTicket } from '@/lib/support-ticket-auth'
 
 export async function POST(
   request: NextRequest,
@@ -21,10 +22,14 @@ export async function POST(
 
     const ticket = await (prisma as any).customerRequest.findUnique({
       where: { ticketNumber: params.ticketNumber },
-      select: { id: true, comments: true },
+      select: { id: true, comments: true, userId: true, firmId: true },
     })
     if (!ticket) {
       return NextResponse.json({ error: 'Ticket not found' }, { status: 404 })
+    }
+
+    if (!(await canAccessSupportTicket(user.id, ticket))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     const newComment = {

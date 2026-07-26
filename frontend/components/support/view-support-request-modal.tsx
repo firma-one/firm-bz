@@ -19,7 +19,7 @@ import {
 import { Copy, Download, FileIcon, Paperclip, CheckCircle2, X, Trash2, Clock, AlertCircle, Lightbulb, HelpCircle } from "lucide-react"
 import { TicketType } from '@prisma/client'
 import { useToast } from "@/components/ui/toast"
-import { uploadSupportAttachment, type AttachmentMeta } from '@/lib/support-attachment-upload'
+import { uploadSupportAttachment, type AttachmentMeta, MAX_SUPPORT_ATTACHMENT_BYTES } from '@/lib/support-attachment-upload'
 import { supabase } from '@/lib/supabase'
 import { formatDistanceToNow } from 'date-fns'
 import {
@@ -85,7 +85,7 @@ export function ViewSupportRequestModal({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { addToast } = useToast()
 
-  const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50 MB
+  const MAX_FILE_SIZE = MAX_SUPPORT_ATTACHMENT_BYTES
   const allAttachments = [
     ...localAttachments,
     ...newAttachments.filter(a => a.status === 'done' && a.meta).map(a => a.meta!),
@@ -104,7 +104,7 @@ export function ViewSupportRequestModal({
         if (f.size > MAX_FILE_SIZE) {
           addToast({
             title: 'File too large',
-            message: `${f.name} exceeds the 50 MB limit`,
+            message: `${f.name} exceeds the ${MAX_FILE_SIZE / 1024 / 1024} MB limit`,
             type: 'error',
             duration: 4000,
           })
@@ -163,7 +163,6 @@ export function ViewSupportRequestModal({
           updateAttachment(a.id, { status: 'uploading' })
           const result = await uploadSupportAttachment(
             token,
-            firmSlug,
             ticket.ticketNumber,
             a.file,
             (pct) => updateAttachment(a.id, { progress: pct })
@@ -236,10 +235,6 @@ export function ViewSupportRequestModal({
 
   const isImage = (mimeType?: string) => mimeType?.startsWith('image/') ?? false
 
-  const getGoogleDriveViewUrl = (driveFileId: string) => {
-    return `https://drive.google.com/file/d/${driveFileId}/view`
-  }
-
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
     addToast({
@@ -260,12 +255,14 @@ export function ViewSupportRequestModal({
       }
 
       const response = await fetch(
-        `/api/support/requests/${ticket.ticketNumber}/attachments/${attachment.driveFileId}/delete`,
+        `/api/support/requests/${ticket.ticketNumber}/attachments`,
         {
           method: 'DELETE',
           headers: {
             Authorization: `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
           },
+          body: JSON.stringify({ attachmentId: attachment.attachmentId }),
         }
       )
 
@@ -275,8 +272,8 @@ export function ViewSupportRequestModal({
       }
 
       // Remove row immediately from UI (file may live in either source)
-      setLocalAttachments(prev => prev.filter(a => a.driveFileId !== attachment.driveFileId))
-      setNewAttachments(prev => prev.filter(a => a.meta?.driveFileId !== attachment.driveFileId))
+      setLocalAttachments(prev => prev.filter(a => a.attachmentId !== attachment.attachmentId))
+      setNewAttachments(prev => prev.filter(a => a.meta?.attachmentId !== attachment.attachmentId))
 
       setDeletionConfirmation({
         attachmentName: attachment.originalName,
@@ -290,29 +287,14 @@ export function ViewSupportRequestModal({
     }
   }
 
-  const handleDownloadAttachment = async (attachment: AttachmentMeta) => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-
-      if (!session?.access_token) {
-        addToast({ title: 'Error', message: 'No active session', type: 'error', duration: 3000 })
-        return
-      }
-
-      const downloadUrl =
-        `/api/support/requests/${ticket.ticketNumber}/attachments/${attachment.driveFileId}/download` +
-        `?token=${session.access_token}&filename=${encodeURIComponent(attachment.originalName)}`
-
-      const a = window.document.createElement('a')
-      a.href = downloadUrl
-      a.download = attachment.originalName
-      window.document.body.appendChild(a)
-      a.click()
-      window.document.body.removeChild(a)
-    } catch (error) {
-      console.error('Download error:', error)
-      addToast({ title: 'Error', message: 'Failed to download file', type: 'error', duration: 3000 })
-    }
+  const handleDownloadAttachment = (attachment: AttachmentMeta) => {
+    // Attachment data is already local (DB blob) — no route call needed.
+    const a = window.document.createElement('a')
+    a.href = attachment.blobData
+    a.download = attachment.originalName
+    window.document.body.appendChild(a)
+    a.click()
+    window.document.body.removeChild(a)
   }
 
   const handleStatusChange = async (newStatus: string) => {
@@ -538,7 +520,7 @@ export function ViewSupportRequestModal({
                     {isImage(a.mimeType) && (
                       <div className="border border-slate-200 rounded overflow-hidden max-h-48">
                         <img
-                          src={getGoogleDriveViewUrl(a.driveFileId)}
+                          src={a.blobData}
                           alt={a.originalName}
                           className="w-full max-h-48 object-cover"
                           loading="lazy"

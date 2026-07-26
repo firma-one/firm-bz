@@ -5,7 +5,7 @@ import { ignoreParser } from './ignore-parser'
 import { needsReEncryption, decrypt } from './encryption'
 import { createGoogleDriveAdapter, FIRMA_MANAGED_APP_PROPS, FIRMA_MANAGED_EXCLUDE_QUERY } from '@/lib/connectors/adapters/google-drive-adapter'
 import * as pockettStructure from '@/lib/connectors/pockett-structure.service'
-import { type IConnectorStorageAdapter } from '@/lib/connectors/types'
+import { type IConnectorStorageAdapter, ConnectorContentError } from '@/lib/connectors/types'
 import { getGoogleDriveOAuthServerCredentials } from '@/lib/config'
 import { SUGGESTED_WORKSPACE_FOLDER_NAME } from './suggested-workspace-folder-name'
 import { generateWorkspaceFolderName } from '@/lib/generate-unique-workspace-folder-name'
@@ -139,6 +139,15 @@ export interface GoogleDriveFile {
   driveId?: string | null
   /** Storage consumed by the file (in bytes, as a string). Present for native Google files (Docs, Sheets, Slides) that have no `size` field. */
   quotaBytesUsed?: string
+}
+
+function bufferToReadableStream(buffer: Buffer): ReadableStream {
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue(new Uint8Array(buffer))
+      controller.close()
+    },
+  })
 }
 
 export class GoogleDriveConnector {
@@ -2622,6 +2631,31 @@ export class GoogleDriveConnector {
   }
 
   /**
+   * Permanently delete a file, bypassing trash. Irreversible.
+   */
+  async permanentlyDeleteFile(connectorId: string, fileId: string): Promise<boolean> {
+    try {
+      const accessToken = await this.getAccessToken(connectorId)
+      if (!accessToken) throw new Error('Could not get access token')
+
+      const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?supportsAllDrives=true`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${accessToken}` },
+      })
+
+      if (!res.ok && res.status !== 404) {
+        const body = await res.text().catch(() => '')
+        logger.error(`Failed to permanently delete file ${fileId} via connector ${connectorId}: HTTP ${res.status}: ${body}`, new Error(`HTTP ${res.status}`))
+        return false
+      }
+      return true
+    } catch (error) {
+      logger.error(`Failed to permanently delete file ${fileId} via connector ${connectorId}`, error as Error)
+      return false
+    }
+  }
+
+  /**
    * Move a file or folder to a new parent (Drive API: addParents + removeParents).
    */
   async moveFile(connectorId: string, fileId: string, newParentId: string): Promise<{ id: string } | null> {
@@ -4064,6 +4098,163 @@ export class GoogleDriveConnector {
       logger.error('Failed to export file to PDF', error as Error, 'GoogleDrive', { fileId })
       throw error
     }
+  }
+
+  /**
+   * Resolve the best representation of a file for inline browser preview: raw bytes for
+   * types the browser renders natively (PDF, images), PDF-converted bytes otherwise.
+   * Also resolves Drive shortcuts and .gdoc/.gsheet/.gslides stub files transparently —
+   * these are Drive-only indirection concepts with no equivalent in other providers.
+   * Moved here from the preview route unchanged; behavior must remain identical.
+   */
+  async getPreviewableContent(connectorId: string, fileId: string): Promise<{
+    stream: ReadableStream
+    mimeType: string
+    fileName: string
+  }> {
+    const accessToken = await this.getAccessToken(connectorId)
+    if (!accessToken) {
+      throw new GoogleDriveAuthError('Could not get access token')
+    }
+
+    let resolvedExternalId = fileId
+
+    // 1. Fetch file metadata — include exportLinks and shortcutDetails.
+    //    supportsAllDrives=true is required for files stored in Shared Drives.
+    const metaRes = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${resolvedExternalId}?fields=mimeType,name,size,exportLinks,shortcutDetails&supportsAllDrives=true`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    )
+
+    if (!metaRes.ok) {
+      const errText = await metaRes.text()
+      const status = metaRes.status
+      logger.error(`Preview metadata fetch failed for ${resolvedExternalId}: ${status}`, undefined, 'GoogleDrive', { externalId: resolvedExternalId, status })
+      if (status === 404) {
+        throw new ConnectorContentError('not_found', 'File not found in Google Drive')
+      }
+      if (status === 403) {
+        throw new ConnectorContentError('forbidden', 'Access denied to Google Drive file')
+      }
+      throw new Error(`Failed to fetch document metadata from Google Drive: ${errText}`)
+    }
+
+    let metadata = await metaRes.json()
+
+    // Resolve shortcuts — .gdoc/.gsheet/.gslides stubs are Drive shortcuts pointing
+    // to the real file. Fetch the target file's metadata to get the actual mimeType.
+    if (metadata.mimeType === 'application/vnd.google-apps.shortcut' && metadata.shortcutDetails?.targetId) {
+      const targetId = metadata.shortcutDetails.targetId
+      const targetRes = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${targetId}?fields=mimeType,name,exportLinks&supportsAllDrives=true`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      )
+      if (targetRes.ok) {
+        resolvedExternalId = targetId
+        metadata = await targetRes.json()
+      } else {
+        logger.warn(`Preview: could not resolve shortcut target ${targetId}`, 'GoogleDrive')
+        throw new ConnectorContentError('unsupported', 'Could not resolve shortcut target', 'application/vnd.google-apps.shortcut')
+      }
+    }
+
+    let mimeType: string = metadata.mimeType ?? ''
+
+    // .gdoc / .gsheet / .gslides stubs uploaded to Drive have mimeType=application/octet-stream
+    // but are tiny JSON files containing the real Google Doc/Sheet/Slides ID.
+    // Detect them by size (≤ 1 KB) and parse the stub to get the real file ID.
+    if (mimeType === 'application/octet-stream') {
+      const stubSizeStr = metadata.size ?? metadata.fileSize
+      const stubSize = stubSizeStr ? parseInt(String(stubSizeStr), 10) : NaN
+      if (isNaN(stubSize) || stubSize <= 1024) {
+        try {
+          const stubRes = await fetch(
+            `https://www.googleapis.com/drive/v3/files/${resolvedExternalId}?alt=media&supportsAllDrives=true`,
+            { headers: { Authorization: `Bearer ${accessToken}` } }
+          )
+          if (stubRes.ok) {
+            const stubText = await stubRes.text()
+            const stubJson = JSON.parse(stubText)
+            const realDocId: string | undefined = stubJson.doc_id ?? stubJson.sheet_id ?? stubJson.presentation_id
+            if (realDocId) {
+              const realRes = await fetch(
+                `https://www.googleapis.com/drive/v3/files/${realDocId}?fields=mimeType,name,exportLinks&supportsAllDrives=true`,
+                { headers: { Authorization: `Bearer ${accessToken}` } }
+              )
+              if (realRes.ok) {
+                resolvedExternalId = realDocId
+                const realMeta = await realRes.json()
+                mimeType = realMeta.mimeType ?? mimeType
+                if (realMeta.exportLinks) metadata.exportLinks = realMeta.exportLinks
+                logger.info(`Preview: resolved .gdoc stub ${fileId} → ${realDocId} (${mimeType})`, 'GoogleDrive')
+              }
+            }
+          }
+        } catch (e) {
+          logger.warn(`Preview: failed to parse .gdoc stub ${resolvedExternalId}: ${e}`, 'GoogleDrive')
+        }
+      }
+    }
+
+    const finalName: string = metadata.name ?? fileId
+
+    // exportLinks are populated for Google Workspace files and for uploaded Office files
+    // that Google has processed/converted (DOCX, PPTX, XLSX etc.).
+    const pdfExportUrl: string | undefined = metadata.exportLinks?.['application/pdf']
+    const isGoogleWorkspaceMime = mimeType.startsWith('application/vnd.google-apps.')
+
+    // Priority:
+    //   a) exportLinks['application/pdf'] exists  →  fetch & stream as PDF  (covers
+    //      all Workspace files AND uploaded Office files in one path)
+    //   b) Native Google Workspace file  →  exportFileToPdf (handles auth correctly)
+    //   c) Already a PDF  →  stream raw bytes
+    //   d) Image  →  stream raw bytes (browsers render natively)
+    //   e) Office mimetype without an export link yet  →  exportFileToPdf
+    //   f) Anything else  →  unsupported
+
+    if (pdfExportUrl && !isGoogleWorkspaceMime) {
+      const contentRes = await fetch(pdfExportUrl, { headers: { Authorization: `Bearer ${accessToken}` } })
+      if (!contentRes.ok || !contentRes.body) {
+        throw new Error(`Failed to fetch document content from Google Drive: ${contentRes.status}`)
+      }
+      return { stream: contentRes.body as unknown as ReadableStream, mimeType: 'application/pdf', fileName: finalName }
+    }
+
+    if (isGoogleWorkspaceMime) {
+      const pdfBytes = await this.exportFileToPdf(connectorId, resolvedExternalId)
+      return { stream: bufferToReadableStream(pdfBytes), mimeType: 'application/pdf', fileName: finalName }
+    }
+
+    if (mimeType === 'application/pdf' || mimeType.startsWith('image/')) {
+      const downloadUrl = `https://www.googleapis.com/drive/v3/files/${resolvedExternalId}?alt=media&supportsAllDrives=true`
+      const contentRes = await fetch(downloadUrl, { headers: { Authorization: `Bearer ${accessToken}` } })
+      if (!contentRes.ok || !contentRes.body) {
+        throw new Error(`Failed to fetch document content from Google Drive: ${contentRes.status}`)
+      }
+      return { stream: contentRes.body as unknown as ReadableStream, mimeType, fileName: finalName }
+    }
+
+    const OFFICE_MIMES = [
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      'application/vnd.ms-powerpoint',
+      'application/vnd.google-apps.document',
+      'application/vnd.google-apps.spreadsheet',
+      'application/vnd.google-apps.presentation',
+    ]
+    if (OFFICE_MIMES.includes(mimeType)) {
+      try {
+        const pdfBytes = await this.exportFileToPdf(connectorId, resolvedExternalId)
+        return { stream: bufferToReadableStream(pdfBytes), mimeType: 'application/pdf', fileName: finalName }
+      } catch {
+        logger.warn(`Preview: exportFileToPdf failed for ${mimeType} ${resolvedExternalId}`, 'GoogleDrive')
+      }
+    }
+
+    throw new ConnectorContentError('unsupported', `Cannot preview mime type ${mimeType}`, mimeType)
   }
 
   /**

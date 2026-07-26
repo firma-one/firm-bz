@@ -256,16 +256,23 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
         (fileId: string, file: DriveFile) => {
             if (!rightPane.hasRightPane) return
             setActivePreviewDocId(fileId)
+            // rightPane.set* calls must stay out of the setPreviewKey updater — that updater
+            // can run during React's render phase, and calling another component's setState
+            // (RightPaneProvider) from there triggers "Cannot update a component while
+            // rendering a different component". Compute nextKey with the functional form for
+            // correctness under StrictMode/concurrent re-invocation, then fire the rightPane
+            // updates as ordinary calls in the event-handler body, which is always safe.
+            let nextKey = 0
             setPreviewKey(k => {
-                const nextKey = k + 1
-                rightPane.setTitle(file.name || 'Preview')
-                rightPane.setHeaderActions(null)
-                rightPane.setHeaderIcon(null)
-                rightPane.setHeaderSubtitle('')
-                rightPane.setPaneSize('medium')
-                rightPane.setContent(<DocumentBlobPreviewPane key={nextKey} document={file} projectId={projectId} />)
+                nextKey = k + 1
                 return nextKey
             })
+            rightPane.setTitle(file.name || 'Preview')
+            rightPane.setHeaderActions(null)
+            rightPane.setHeaderIcon(null)
+            rightPane.setHeaderSubtitle('')
+            rightPane.setPaneSize('medium')
+            rightPane.setContent(<DocumentBlobPreviewPane key={nextKey} document={file} projectId={projectId} />)
         },
         [rightPane, projectId]
     )

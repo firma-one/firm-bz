@@ -22,6 +22,13 @@ const mockGDrive = {
   trashFile: vi.fn().mockResolvedValue(undefined),
   listFiles: vi.fn().mockResolvedValue([{ id: 'f1', name: 'Doc.docx', mimeType: 'application/vnd.google-apps.document' }]),
   getFileMetadata: vi.fn().mockResolvedValue({ id: 'f1', name: 'Doc.docx', parents: ['parent-1'], driveId: null }),
+  grantFilePermission: vi.fn().mockResolvedValue('file-perm-id-1'),
+  listFilePermissions: vi.fn().mockResolvedValue([
+    { id: 'p1', role: 'writer', type: 'user', emailAddress: 'alice@firm.com', deleted: false },
+    { id: 'p2', role: 'reader', type: 'user', emailAddress: 'bob@firm.com', deleted: false },
+    { id: 'p3', role: 'writer', type: 'user', emailAddress: 'gone@firm.com', deleted: true },
+  ]),
+  permanentlyDeleteFile: vi.fn().mockResolvedValue(true),
 }
 
 describe('createGoogleDrivePermissionAdapter', () => {
@@ -36,9 +43,9 @@ describe('createGoogleDrivePermissionAdapter', () => {
     expect(typeof adapter.getFileMetadata).toBe('function')
   })
 
-  it('grantFolderPermission delegates to GDrive and returns permission id', async () => {
+  it('grantFolderPermission delegates to GDrive, mapping generic role to Drive role', async () => {
     const adapter = createGoogleDrivePermissionAdapter()
-    const permId = await adapter.grantFolderPermission('conn-1', 'folder-1', 'alice@firm.com', 'writer')
+    const permId = await adapter.grantFolderPermission('conn-1', 'folder-1', 'alice@firm.com', 'editor')
     expect(permId).toBe('perm-id-1')
     expect(mockGDrive.grantFolderPermission).toHaveBeenCalledWith('conn-1', 'folder-1', 'alice@firm.com', 'writer')
   })
@@ -119,5 +126,40 @@ describe('createGoogleDrivePermissionAdapter', () => {
     const adapter = createGoogleDrivePermissionAdapter()
     const meta = await adapter.getFileMetadata('conn-1', 'missing')
     expect(meta).toBeNull()
+  })
+
+  it('grantFilePermission delegates to GDrive, mapping generic role and notify option', async () => {
+    const adapter = createGoogleDrivePermissionAdapter()
+    const permId = await adapter.grantFilePermission('conn-1', 'file-1', 'alice@firm.com', 'viewer', { notify: false })
+    expect(permId).toBe('file-perm-id-1')
+    expect(mockGDrive.grantFilePermission).toHaveBeenCalledWith(
+      'conn-1', 'file-1', 'alice@firm.com', 'reader', undefined, { rm: 'minimal', ui: '2', sendNotificationEmail: 'false' }
+    )
+  })
+
+  it('grantFilePermission defaults to sendNotificationEmail:true and passes the message through', async () => {
+    const adapter = createGoogleDrivePermissionAdapter()
+    await adapter.grantFilePermission('conn-1', 'file-1', 'alice@firm.com', 'editor', { message: 'Please verify' })
+    expect(mockGDrive.grantFilePermission).toHaveBeenCalledWith(
+      'conn-1', 'file-1', 'alice@firm.com', 'writer', 'Please verify', { rm: 'minimal', ui: '2', sendNotificationEmail: 'true' }
+    )
+  })
+
+  it('listFilePermissions maps Drive roles to generic roles and filters out deleted permissions', async () => {
+    const adapter = createGoogleDrivePermissionAdapter()
+    const perms = await adapter.listFilePermissions('conn-1', 'file-1')
+    expect(perms).toEqual([
+      { id: 'p1', email: 'alice@firm.com', role: 'editor' },
+      { id: 'p2', email: 'bob@firm.com', role: 'viewer' },
+    ])
+  })
+
+  it('deleteFile trashes by default and permanently deletes when permanent:true', async () => {
+    const adapter = createGoogleDrivePermissionAdapter()
+    await adapter.deleteFile('conn-1', 'file-1')
+    expect(mockGDrive.trashFile).toHaveBeenCalledWith('conn-1', 'file-1')
+
+    await adapter.deleteFile('conn-1', 'file-2', { permanent: true })
+    expect(mockGDrive.permanentlyDeleteFile).toHaveBeenCalledWith('conn-1', 'file-2')
   })
 })

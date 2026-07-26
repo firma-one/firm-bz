@@ -1032,7 +1032,7 @@ export const grantPermissionsForNewMember = inngest.createFunction(
             return { message: "Folder access only (no per-document shares)", folderGrant, docShares: 0 };
         }
 
-        const role: "writer" | "reader" = personaSlug === "eng_viewer" ? "reader" : "writer";
+        const role: "editor" | "viewer" = personaSlug === "eng_viewer" ? "viewer" : "editor";
 
         const grantResults = await step.run("grant-permissions", async () => {
             const adapter = await getPermissionAdapter(connectorId)

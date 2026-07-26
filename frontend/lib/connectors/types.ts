@@ -108,15 +108,21 @@ export interface EngagementFolderIds {
 }
 
 /**
+ * Provider-agnostic sharing role. Maps to each provider's native role vocabulary
+ * inside its adapter implementation (e.g. Google Drive: viewer→reader, editor→writer).
+ */
+export type ConnectorRole = 'viewer' | 'editor' | 'commenter'
+
+/**
  * Permission operations for connectors that support per-file sharing.
  * Google Drive implements all methods; providers that lack native sharing may return no-ops.
  */
 export interface IConnectorPermissionAdapter {
-  /** Grant access to a folder/file for an email address. Returns the permission ID or null. */
-  grantFolderPermission(connectionId: string, folderId: string, email: string, role: 'reader' | 'writer' | 'commenter'): Promise<string | null>
+  /** Grant access to a folder for an email address. Returns the permission ID or null. */
+  grantFolderPermission(connectionId: string, folderId: string, email: string, role: ConnectorRole): Promise<string | null>
   /** Revoke a permission by its permission ID. */
   revokePermission(connectionId: string, fileId: string, permissionId: string): Promise<boolean>
-  /** Downgrade an existing user permission on a folder to reader. Returns true if the permission was changed. */
+  /** Downgrade an existing user permission on a folder to viewer. Returns true if the permission was changed. */
   downgradeFolderUserPermissionToReader(connectionId: string, folderId: string, email: string): Promise<boolean>
   /** Get the engagement folder structure (general, confidential, staging) for a project. */
   getEngagementFolderIds(connectionId: string, engagementSlug: string, opts: { projectName?: string; clientSlug?: string; clientName?: string; projectFolderId?: string }): Promise<EngagementFolderIds>
@@ -126,6 +132,68 @@ export interface IConnectorPermissionAdapter {
   listFiles(connectionId: string, folderId: string, pageSize?: number): Promise<Array<{ id: string; name: string; mimeType?: string }>>
   /** Get metadata for a single file/folder. Returns null if not found. */
   getFileMetadata(connectionId: string, fileId: string): Promise<ConnectorFileMetadata | null>
+  /** Grant access to a single file (not its folder) for an email address. Returns the permission ID or null. */
+  grantFilePermission(connectionId: string, fileId: string, email: string, role: ConnectorRole, opts?: { notify?: boolean; message?: string }): Promise<string | null>
+  /** List permissions currently set on a single file. */
+  listFilePermissions(connectionId: string, fileId: string): Promise<Array<{ id: string; email: string | null; role: ConnectorRole }>>
+  /** Delete a file. permanent:true bypasses trash (irreversible); omitted/false trashes it (same as trashFile). */
+  deleteFile(connectionId: string, fileId: string, opts?: { permanent?: boolean }): Promise<void>
+}
+
+/**
+ * Thrown by IConnectorContentAdapter methods for known failure modes so callers can map
+ * them to specific HTTP responses without inspecting provider-specific error shapes.
+ * - not_found: the file doesn't exist or was deleted
+ * - forbidden: the connected account lacks access to the file
+ * - unsupported: the file's type/state cannot be rendered (e.g. no export path available)
+ */
+export class ConnectorContentError extends Error {
+  constructor(
+    public readonly code: 'not_found' | 'forbidden' | 'unsupported',
+    message: string,
+    public readonly mimeType?: string
+  ) {
+    super(message)
+    this.name = 'ConnectorContentError'
+  }
+}
+
+/**
+ * File-content lifecycle operations: create/overwrite bytes, resumable uploads, and
+ * rendering a file as native bytes or a PDF export. Separate from IConnectorStorageAdapter
+ * (which is folder-structure-oriented) and IConnectorPermissionAdapter (sharing-oriented).
+ * Provider-specific format-conversion quirks (e.g. Google Docs export, Drive shortcut/stub
+ * resolution) are hidden inside each adapter's implementation, not exposed on this interface.
+ */
+export interface IConnectorContentAdapter {
+  /** Create a new file with binary content in a folder. Returns the created file's id. */
+  createFile(connectionId: string, folderId: string, fileName: string, content: Buffer, mimeType: string): Promise<{ id: string }>
+  /** Overwrite an existing file's content in place. */
+  overwriteFileContent(connectionId: string, fileId: string, content: Buffer, mimeType: string): Promise<void>
+  /** Begin a resumable/chunked upload session for large files. Returns an upload URL to PUT bytes to. */
+  createUploadSession(connectionId: string, folderId: string, fileName: string, mimeType: string, opts?: { fileId?: string }): Promise<{ uploadUrl: string }>
+  /**
+   * Get renderable content for a file: either its native bytes (with provider export-format
+   * conversion applied where applicable, e.g. Google Docs -> docx) or a PDF export.
+   * Resolves provider-specific indirection (e.g. Drive shortcuts, .gdoc/.gsheet stubs)
+   * internally — callers never see those details. Throws ConnectorContentError for
+   * not_found/forbidden/unsupported so callers can map to specific HTTP responses.
+   */
+  getRenderableContent(connectionId: string, fileId: string, format: 'native' | 'pdf'): Promise<{ stream: ReadableStream | Buffer; mimeType: string; fileName: string; size?: string }>
+  /**
+   * Get the best available representation of a file for inline browser preview: raw bytes
+   * for types the browser can render natively (PDF, images), PDF-converted bytes otherwise
+   * (Office/Workspace docs). Distinct from getRenderableContent(format) — this method decides
+   * the format itself rather than the caller dictating it, since "best for inline viewing" is
+   * a different question than "give me exactly this format." Throws ConnectorContentError with
+   * code 'unsupported' (plus mimeType) when no inline-viewable representation exists.
+   */
+  getPreviewableContent(connectionId: string, fileId: string): Promise<{ stream: ReadableStream | Buffer; mimeType: string; fileName: string }>
+  /**
+   * Toggle copy/download restriction on a file, if the provider supports it.
+   * Resolves silently as a no-op for providers without an equivalent concept.
+   */
+  setCopyRestricted(connectionId: string, fileId: string, restricted: boolean): Promise<void>
 }
 
 /**

@@ -17,7 +17,7 @@ function formatWindow(from: string | null, to: string | null): string | null {
 }
 
 export default function PlatformMaintenancePage() {
-  const status = usePlatformMaintenanceStatus(30_000)
+  const status = usePlatformMaintenanceStatus(60_000)
   const [countdown, setCountdown] = useState<string | null>(null)
 
   useEffect(() => {

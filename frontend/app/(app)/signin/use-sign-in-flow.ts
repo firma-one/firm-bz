@@ -23,13 +23,14 @@ function getStoredEmail(): string {
 
 export function useSignInFlow() {
   const router = useRouter()
-  const { signInWithGoogle } = useAuth()
+  const { signInWithGoogle, signInWithMicrosoft } = useAuth()
   const [step, setStep] = useState<SignInStep>('email')
   const [email, setEmail] = useState('')
   const [otpCode, setOtpCode] = useState('')
   const [loading, setLoading] = useState(false)
   const [checkLoading, setCheckLoading] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
+  const [microsoftLoading, setMicrosoftLoading] = useState(false)
   const [error, setError] = useState('')
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
   const [showTurnstile, setShowTurnstile] = useState(false)
@@ -167,7 +168,7 @@ export function useSignInFlow() {
   }, [email])
 
   const handleEmailSubmit = useCallback(
-    async (method: 'google' | 'otp') => {
+    async (method: 'google' | 'microsoft' | 'otp') => {
       if (!email.trim()) {
         setError('Please enter your email')
         return
@@ -191,6 +192,22 @@ export function useSignInFlow() {
           label: 'Login Success',
           method: 'google',
         })
+      } else if (method === 'microsoft') {
+        setMicrosoftLoading(true)
+        try {
+          const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
+          const nextParam = params?.get('redirect') || params?.get('next') || undefined
+          await signInWithMicrosoft(email.trim(), nextParam)
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Failed to sign in with Microsoft')
+          setMicrosoftLoading(false)
+        }
+        sendEvent({
+          action: ANALYTICS_EVENTS.LOGIN,
+          category: 'User',
+          label: 'Login Success',
+          method: 'microsoft',
+        })
       } else {
         if (!turnstileToken) {
           setTurnstileAction('send')
@@ -201,7 +218,7 @@ export function useSignInFlow() {
         await sendOTPWithToken(turnstileToken)
       }
     },
-    [email, signInWithGoogle, turnstileToken, sendOTPWithToken],
+    [email, signInWithGoogle, signInWithMicrosoft, turnstileToken, sendOTPWithToken],
   )
 
   const handleVerifyOTP = useCallback(
@@ -274,6 +291,7 @@ export function useSignInFlow() {
     loading,
     checkLoading,
     googleLoading,
+    microsoftLoading,
     error,
     setError,
     noAccountMessage,

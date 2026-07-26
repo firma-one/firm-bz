@@ -7,9 +7,10 @@
 
 import { ConnectorType } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import type { IConnectorStorageAdapter, IConnectorPermissionAdapter, IConnectorMigrationAdapter } from './types'
+import type { IConnectorStorageAdapter, IConnectorPermissionAdapter, IConnectorMigrationAdapter, IConnectorContentAdapter } from './types'
 import { createGoogleDriveAdapter } from './adapters/google-drive-adapter'
 import { createGoogleDrivePermissionAdapter } from './adapters/google-drive-permission-adapter'
+import { createGoogleDriveContentAdapter } from './adapters/google-drive-content-adapter'
 import { createOneDriveAdapter } from './adapters/onedrive-adapter'
 import { GoogleDriveConnector } from '@/lib/google-drive-connector'
 import { getOneDriveConnectorInstance } from './onedrive-connector'
@@ -196,6 +197,21 @@ export async function getPermissionAdapter(connectionId: string): Promise<IConne
   if (!connector) throw new Error('Connection not found')
   if (connector.type === ConnectorType.GOOGLE_DRIVE) {
     return createGoogleDrivePermissionAdapter()
+  }
+  return null
+}
+
+/**
+ * Get the content adapter for a connection (by connector id).
+ * Covers file-content lifecycle: create/overwrite bytes, resumable uploads, and rendering
+ * a file as native bytes or a PDF export. Returns null when the connector type has no
+ * content adapter (e.g. OneDrive — not yet implemented). Callers must skip gracefully.
+ */
+export async function getContentAdapter(connectionId: string): Promise<IConnectorContentAdapter | null> {
+  const connector = await prisma.connector.findUnique({ where: { id: connectionId } })
+  if (!connector) throw new Error('Connection not found')
+  if (connector.type === ConnectorType.GOOGLE_DRIVE) {
+    return createGoogleDriveContentAdapter()
   }
   return null
 }

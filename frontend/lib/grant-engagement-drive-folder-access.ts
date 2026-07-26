@@ -1,5 +1,6 @@
 import type { EngagementRole } from '@prisma/client'
 import { getPermissionAdapter } from '@/lib/connectors/registry'
+import type { ConnectorRole } from '@/lib/connectors/types'
 import { logger } from '@/lib/logger'
 
 type GrantParams = {
@@ -41,7 +42,7 @@ export async function grantEngagementDriveFolderAccess(params: GrantParams): Pro
     projectFolderId: projectFolderId ?? undefined,
   })
 
-  const grant = async (folderId: string | null | undefined, r: 'writer' | 'reader' | 'commenter') => {
+  const grant = async (folderId: string | null | undefined, r: ConnectorRole) => {
     if (!folderId) return
     try {
       await adapter.grantFolderPermission(connectorId, folderId, email, r)
@@ -53,10 +54,10 @@ export async function grantEngagementDriveFolderAccess(params: GrantParams): Pro
     }
   }
 
-  await grant(folderIds.generalFolderId, 'writer')
+  await grant(folderIds.generalFolderId, 'editor')
 
   if (role === 'eng_admin') {
-    await grant(folderIds.confidentialFolderId, 'writer')
-    await grant(folderIds.stagingFolderId, 'writer')
+    await grant(folderIds.confidentialFolderId, 'editor')
+    await grant(folderIds.stagingFolderId, 'editor')
   }
 }

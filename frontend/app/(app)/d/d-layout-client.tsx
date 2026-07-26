@@ -153,7 +153,7 @@ function AppLayoutContent({ children, isSystemAdmin }: { children: React.ReactNo
         return () => window.removeEventListener('firma:migration-started', handler)
     }, [refreshMaintenanceStatus])
 
-    const platformStatus = usePlatformMaintenanceStatus(20_000)
+    const platformStatus = usePlatformMaintenanceStatus(60_000)
     const [graceCountdown, setGraceCountdown] = useState<string | null>(null)
 
     useEffect(() => {

@@ -47,6 +47,71 @@ export function isPotentiallyGoogleWorkspace(email: string): boolean {
 }
 
 /**
+ * Check if an email is a personal Microsoft account (Outlook/Hotmail/Live/MSN)
+ * Note: Cannot reliably detect custom domain Microsoft Entra ID accounts
+ * without making an API call
+ */
+export function isMicrosoftEmail(email: string): boolean {
+    const domain = email.split('@')[1]?.toLowerCase()
+
+    if (!domain) return false
+
+    // Common personal Microsoft domains
+    const microsoftDomains = ['outlook.com', 'hotmail.com', 'live.com', 'msn.com']
+
+    return microsoftDomains.includes(domain)
+}
+
+/**
+ * Check if email is likely a Microsoft Entra ID (Azure AD) work/school account
+ * This is a best-effort check and may not be 100% accurate
+ */
+export function isPotentiallyMicrosoftEntra(email: string): boolean {
+    const domain = email.split('@')[1]?.toLowerCase()
+
+    if (!domain) return false
+
+    // If it's a known personal Microsoft domain, it's not Entra ID
+    if (isMicrosoftEmail(email)) return false
+
+    // Common non-Microsoft domains that are unlikely to be Entra ID
+    const commonNonMicrosoftDomains = [
+        'gmail.com', 'googlemail.com',
+        'yahoo.com', 'yahoo.co.in', 'yahoo.co.uk',
+        'icloud.com', 'me.com', 'mac.com',
+        'aol.com', 'protonmail.com', 'proton.me',
+        'zoho.com', 'yandex.com', 'mail.com'
+    ]
+
+    if (commonNonMicrosoftDomains.includes(domain)) return false
+
+    // For custom domains, we can't be sure without an API call
+    // Return true to show both options (Microsoft OAuth + OTP)
+    return true
+}
+
+export type OAuthProvider = 'google' | 'microsoft'
+
+/**
+ * Which OAuth provider button(s) to offer for a given email during signup.
+ * Known consumer domains resolve to exactly one provider; an unrecognized custom domain
+ * could belong to either Google Workspace or Microsoft Entra ID, so both are offered —
+ * we can't disambiguate without an API call, and offering neither would be worse.
+ */
+export function getApplicableOAuthProviders(email: string): OAuthProvider[] {
+    const providers: OAuthProvider[] = []
+
+    if (isGoogleEmail(email) || isPotentiallyGoogleWorkspace(email)) {
+        providers.push('google')
+    }
+    if (isMicrosoftEmail(email) || isPotentiallyMicrosoftEntra(email)) {
+        providers.push('microsoft')
+    }
+
+    return providers
+}
+
+/**
  * Validate email format
  */
 export function isValidEmail(email: string): boolean {
