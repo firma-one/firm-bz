@@ -30,19 +30,27 @@ function makeSteps(firmSlug: string, clientSlug: string | null, engSlug: string 
       placement: "bottom" as const,
       route: `${firm}?tab=analytics`,
     },
-    // 3 – Firm Settings tab
+    // 2b – Firm Calendar tab
     {
-      target: '[data-demo-tour="firm-settings-tab"]',
-      title: "Firm Settings",
-      content: <p className="text-xs leading-relaxed text-[#45474c]">Configure your firm — name, logo, branding, domain, storage, and app-level settings are all here.</p>,
+      target: '[data-demo-tour="firm-calendar-tab"]',
+      title: "Calendar",
+      content: <p className="text-xs leading-relaxed text-[#45474c]">See deadlines and events across every client and engagement in your firm in one calendar — switch between Month, Week, Day, and Agenda views.</p>,
       placement: "bottom" as const,
-      route: `${firm}?tab=settings`,
+      route: `${firm}?tab=calendar`,
+    },
+    // 2c – Firm Doc Search tab
+    {
+      target: '[data-demo-tour="firm-doc-search-tab"]',
+      title: "Doc Search",
+      content: <p className="text-xs leading-relaxed text-[#45474c]">Search every document across your firm by filename or topic — powered by AI semantic search, with filters for file type, client, and engagement.</p>,
+      placement: "bottom" as const,
+      route: `${firm}?tab=doc-search`,
     },
     // 4 – Firm Members tab
     {
       target: '[data-demo-tour="firm-members-tab"]',
       title: "Firm Members",
-      content: <p className="text-xs leading-relaxed text-[#45474c]">Invite firm administrators who manage the firm. Per-engagement access and roles are set separately in each engagement's Members tab.</p>,
+      content: <p className="text-xs leading-relaxed text-[#45474c]">As the firm owner, you're an administrator by default. Invite more administrators here if you'd like help managing the firm. Per-engagement access and roles are set separately in each engagement's Members tab.</p>,
       placement: "bottom" as const,
       route: `${firm}?tab=members`,
     },
@@ -54,7 +62,15 @@ function makeSteps(firmSlug: string, clientSlug: string | null, engSlug: string 
       placement: "bottom" as const,
       route: `${firm}?tab=audit`,
     },
-    // 6 – Add Client button
+    // 6 – Firm Settings tab
+    {
+      target: '[data-demo-tour="firm-settings-tab"]',
+      title: "Firm Settings",
+      content: <p className="text-xs leading-relaxed text-[#45474c]">Configure your firm — name, logo, branding, domain, storage, and app-level settings are all here.</p>,
+      placement: "bottom" as const,
+      route: `${firm}?tab=settings`,
+    },
+    // 7 – Add Client button
     {
       target: '[data-demo-tour="firm-add-client-btn"]',
       title: "Add a Client",
