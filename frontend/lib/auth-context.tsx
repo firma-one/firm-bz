@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react'
 import { User, Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
-import { config, getOAuthRedirectOrigin } from './config'
+import { getOAuthRedirectOrigin } from './config'
 import { logger } from './logger'
 import { buildUserSettingsPlus } from './actions/user-settings'
 import { clearCheckoutHintSessionKeys } from './marketing/checkout-hint-session'
@@ -89,12 +89,13 @@ export function AuthProvider({ children, initialSession }: { children: ReactNode
   }, [])
 
   const signInWithGoogle = async (email?: string, next?: string) => {
-    // Localhost must use http:// — https:// + next dev ⇒ ERR_SSL_PROTOCOL_ERROR
-    const baseUrl =
-      typeof window !== 'undefined' &&
-      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-        ? getOAuthRedirectOrigin()
-        : config.appUrl
+    // Must match the host that just set the PKCE code_verifier cookie (Supabase's SDK scopes
+    // that cookie to window.location's actual host, no `domain` attribute) — using a fixed
+    // config.appUrl here breaks sign-in from any host other than that one (e.g. client
+    // subdomains like app.firma.bz), since the callback lands on a host that never received
+    // the cookie: `AuthPKCECodeVerifierMissingError`. getOAuthRedirectOrigin() already handles
+    // this correctly (current origin, with an http:// carve-out for localhost's no-TLS dev server).
+    const baseUrl = getOAuthRedirectOrigin()
     const callbackUrl = next
       ? `${baseUrl}/auth/callback?next=${encodeURIComponent(next)}`
       : `${baseUrl}/auth/callback`
@@ -116,12 +117,9 @@ export function AuthProvider({ children, initialSession }: { children: ReactNode
   }
 
   const signInWithMicrosoft = async (email?: string, next?: string) => {
-    // Localhost must use http:// — https:// + next dev ⇒ ERR_SSL_PROTOCOL_ERROR
-    const baseUrl =
-      typeof window !== 'undefined' &&
-      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-        ? getOAuthRedirectOrigin()
-        : config.appUrl
+    // See signInWithGoogle above — must use the current origin, not a fixed config.appUrl,
+    // for the same PKCE-cookie-host-matching reason.
+    const baseUrl = getOAuthRedirectOrigin()
     const callbackUrl = next
       ? `${baseUrl}/auth/callback?next=${encodeURIComponent(next)}`
       : `${baseUrl}/auth/callback`
