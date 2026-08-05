@@ -94,6 +94,8 @@ interface EngagementFileListProps {
     clientSlug?: string
     /** Client-level connector ID — when set but connectorRootFolderId is null, offer "Set up Drive folder". */
     clientConnectorId?: string | null
+    /** Client-level connector type (GOOGLE_DRIVE/ONEDRIVE) — switches the "New file" menu between Google Workspace and Office file types. */
+    clientConnectorType?: string | null
     /** Workspace root location — when SHARED, folder provisioning requires the Migrate wizard. */
     workspaceRootLocation?: string | null
     /** Connector account email — passed to DocumentActionMenu for Google Drive authuser param. */
@@ -109,7 +111,37 @@ type SortConfig = {
     foldersFirst: boolean
 }
 
-type CreateItemType = 'folder' | 'doc' | 'sheet' | 'slide' | 'form' | 'drawing' | 'map' | 'site' | 'script'
+type CreateItemType = 'folder' | 'doc' | 'sheet' | 'slide' | 'form' | 'drawing' | 'map' | 'site' | 'script' | 'word' | 'excel' | 'powerpoint'
+
+const CREATE_ITEM_DIALOG_TITLES: Record<CreateItemType, string> = {
+    folder: 'New Folder',
+    doc: 'New Google Doc',
+    sheet: 'New Google Sheet',
+    slide: 'New Google Slide',
+    form: 'New Google Form',
+    drawing: 'New Google Drawing',
+    map: 'New Google Map',
+    site: 'New Google Site',
+    script: 'New Google Script',
+    word: 'New Word Document',
+    excel: 'New Excel Workbook',
+    powerpoint: 'New PowerPoint Presentation',
+}
+function createItemDialogTitle(type: CreateItemType): string {
+    return CREATE_ITEM_DIALOG_TITLES[type] ?? 'New File'
+}
+
+const CREATE_ITEM_EXTENSIONS: Record<string, string> = {
+    doc: '.gdoc',
+    sheet: '.gsheet',
+    slide: '.gslide',
+    form: '.gform',
+    drawing: '.gdraw',
+    script: '.gs',
+    word: '.docx',
+    excel: '.xlsx',
+    powerpoint: '.pptx',
+}
 
 type ConflictItem = {
     file: File
@@ -119,7 +151,8 @@ type ConflictItem = {
 
 const VIEW_AS_SHARED_ONLY_PERSONAS = ['eng_ext_collaborator', 'eng_viewer']
 
-export function EngagementFileList({ projectId, connectorRootFolderId, clientConnectorId, workspaceRootLocation, rootFolderName = 'Engagement Files', orgName, clientName, projectName, canEdit = false, canManage = false, isFirmAdmin = false, restrictToSharedOnly = false, firmId, orgSlug, firmSandboxOnly = false, navSlot, clientSlug, connectorAccountEmail, onFileCountChange }: EngagementFileListProps) {
+export function EngagementFileList({ projectId, connectorRootFolderId, clientConnectorId, clientConnectorType, workspaceRootLocation, rootFolderName = 'Engagement Files', orgName, clientName, projectName, canEdit = false, canManage = false, isFirmAdmin = false, restrictToSharedOnly = false, firmId, orgSlug, firmSandboxOnly = false, navSlot, clientSlug, connectorAccountEmail, onFileCountChange }: EngagementFileListProps) {
+    const isOneDriveClient = clientConnectorType === 'ONEDRIVE'
     const { session } = useAuth()
     const sessionRef = useRef(session)
     const onFileCountChangeRef = useRef(onFileCountChange)
@@ -991,6 +1024,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
         renameModalOpen, setRenameModalOpen,
         renameTarget, setRenameTarget,
         renameNewName, setRenameNewName,
+        renameExtension,
         renameSubmitting, setRenameSubmitting,
         trashConfirmTarget, setTrashConfirmTarget,
         trashConfirming,
@@ -1299,16 +1333,11 @@ const handleRefresh = async () => {
                 case 'map': mimeType = 'application/vnd.google-apps.map'; break;
                 case 'site': mimeType = 'application/vnd.google-apps.site'; break;
                 case 'script': mimeType = 'application/vnd.google-apps.script'; break;
+                case 'word': mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'; break;
+                case 'excel': mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'; break;
+                case 'powerpoint': mimeType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation'; break;
             }
 
-            const CREATE_ITEM_EXTENSIONS: Record<string, string> = {
-                doc: '.gdoc',
-                sheet: '.gsheet',
-                slide: '.gslide',
-                form: '.gform',
-                drawing: '.gdraw',
-                script: '.gs'
-            }
             const ext = CREATE_ITEM_EXTENSIONS[createItemType]
             const trimmed = newItemName.trim()
             const finalName = ext
@@ -1512,7 +1541,11 @@ const handleRefresh = async () => {
             setCurrentFolderIsDeliverable(
                 !!file.isDeliverable || currentFolderIsDeliverable
             )
-            window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#doc-file:${file.projectDocumentId ?? file.id}`)
+            const newHash = `doc-file:${file.projectDocumentId ?? file.id}`
+            // Mark as already-handled so the deeplink-resolution effect doesn't treat this
+            // in-app navigation as an incoming deeplink and overwrite the breadcrumb we just pushed.
+            lastHandledDeeplinkHashRef.current = newHash
+            window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#${newHash}`)
         }
     }
 
@@ -1825,12 +1858,12 @@ const handleRefresh = async () => {
                                     >
                                         <span className="flex items-center gap-2">
                                             <Laptop className="h-3.5 w-3.5 text-slate-500" />
-                                            From your computer
+                                            Upload from your computer
                                         </span>
-                                        <ChevronDown className={cn("h-3.5 w-3.5 text-slate-400 transition-transform", fromComputerExpanded && "rotate-180")} />
+                                        <ChevronDown className={cn("h-3.5 w-3.5 text-slate-400 transition-transform duration-200", fromComputerExpanded && "rotate-180")} />
                                     </div>
-                                    {fromComputerExpanded && (
-                                        <>
+                                    <div className={cn("grid transition-[grid-template-rows] duration-200 ease-out", fromComputerExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]")}>
+                                        <div className="overflow-hidden">
                                             <DropdownMenuItem
                                                 onClick={() => fileInputRef.current?.click()}
                                                 className="text-xs py-1.5 pl-8"
@@ -1845,14 +1878,18 @@ const handleRefresh = async () => {
                                                 <FolderUp className="mr-2 h-3.5 w-3.5 text-slate-500" />
                                                 Upload folder
                                             </DropdownMenuItem>
-                                        </>
-                                    )}
+                                        </div>
+                                    </div>
 
-                                    {isFirmAdmin ? (
+                                    {isFirmAdmin && !isOneDriveClient ? (
                                         <>
                                         <DropdownMenuSeparator />
 
-                                        {/* Import from Google Drive (expandable) — firm admins only */}
+                                        {/* Import from Google Drive (expandable) — firm admins only.
+                                            OneDrive has no equivalent import flow wired up yet (would need the
+                                            Microsoft OneDrive File Picker SDK + a dedicated import route/dialog,
+                                            mirroring google-drive-import-dialog.tsx) — hidden for OneDrive clients
+                                            rather than shown broken. See plan doc TODO. */}
                                         <div
                                             role="button"
                                             tabIndex={0}
@@ -1901,9 +1938,26 @@ const handleRefresh = async () => {
                                             <SquarePlus className="h-3.5 w-3.5 text-slate-500" />
                                             New file
                                         </span>
-                                        <ChevronDown className={cn("h-3.5 w-3.5 text-slate-400 transition-transform", newFileExpanded && "rotate-180")} />
+                                        <ChevronDown className={cn("h-3.5 w-3.5 text-slate-400 transition-transform duration-200", newFileExpanded && "rotate-180")} />
                                     </div>
-                                    {newFileExpanded && (
+                                    <div className={cn("grid transition-[grid-template-rows] duration-200 ease-out", newFileExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]")}>
+                                        <div className="overflow-hidden">
+                                        {isOneDriveClient ? (
+                                            <>
+                                                <DropdownMenuItem onClick={() => openCreateDialog('word')} className="text-xs py-1.5 pl-8">
+                                                    <FileText className="mr-2 h-3.5 w-3.5 text-blue-600" />
+                                                    Word Document
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => openCreateDialog('excel')} className="text-xs py-1.5 pl-8">
+                                                    <FileSpreadsheet className="mr-2 h-3.5 w-3.5 text-green-600" />
+                                                    Excel Workbook
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => openCreateDialog('powerpoint')} className="text-xs py-1.5 pl-8">
+                                                    <Presentation className="mr-2 h-3.5 w-3.5 text-orange-600" />
+                                                    PowerPoint Presentation
+                                                </DropdownMenuItem>
+                                            </>
+                                        ) : (
                                         <>
                                             <DropdownMenuItem onClick={() => openCreateDialog('doc')} className="text-xs py-1.5 pl-8">
                                                 <FileText className="mr-2 h-3.5 w-3.5 text-blue-500" />
@@ -1943,7 +1997,9 @@ const handleRefresh = async () => {
                                                 </DropdownMenuSubContent>
                                             </DropdownMenuSub>
                                         </>
-                                    )}
+                                        )}
+                                        </div>
+                                    </div>
 
                                 {isSandboxFirm && (
                                     <div className="px-3 py-2 border-t border-[#e5e7eb] bg-[#f9f9fb]">
@@ -2855,22 +2911,27 @@ const handleRefresh = async () => {
                     </DialogContent>
                 </Dialog>
 
-                {/* Rename file/folder in Google Drive */}
+                {/* Rename file/folder */}
                 <Dialog open={renameModalOpen} onOpenChange={(open) => { setRenameModalOpen(open); if (!open) setRenameTarget(null) }}>
                     <DialogContent className="max-w-md gap-4 p-5 border-slate-200">
                         <DialogHeader>
                             <DialogTitle className="text-slate-900">Rename</DialogTitle>
                             <DialogDescription className="text-slate-600">
-                                Enter a new name for {renameTarget?.name ?? 'this item'} in Google Drive.
+                                Enter a new name for {renameTarget?.name ?? 'this item'}.
                             </DialogDescription>
                         </DialogHeader>
-                        <Input
-                            value={renameNewName}
-                            onChange={(e) => setRenameNewName(e.target.value)}
-                            placeholder="New name"
-                            className="border-slate-200"
-                            onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleConfirmRename())}
-                        />
+                        <div className="flex items-center gap-1">
+                            <Input
+                                value={renameNewName}
+                                onChange={(e) => setRenameNewName(e.target.value)}
+                                placeholder="New name"
+                                className="border-slate-200"
+                                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleConfirmRename())}
+                            />
+                            {renameExtension && (
+                                <span className="shrink-0 text-slate-500 text-sm">{renameExtension}</span>
+                            )}
+                        </div>
                         <div className="flex justify-end gap-3">
                             <Button variant="outline" className="border-slate-200 text-slate-700 hover:bg-slate-50" onClick={() => setRenameModalOpen(false)}>Cancel</Button>
                             <Button
@@ -2943,16 +3004,16 @@ const handleRefresh = async () => {
                 <Dialog open={isCreateItemOpen} onOpenChange={(open) => { if (!loading) setIsCreateItemOpen(open) }}>
                     <DialogContent className="sm:max-w-[440px] border-[#e5e7eb] p-0 gap-0 rounded">
                         <VisuallyHidden><DialogTitle>
-                            {createItemType === 'folder' ? 'New Folder' : createItemType === 'doc' ? 'New Google Doc' : createItemType === 'sheet' ? 'New Google Sheet' : createItemType === 'slide' ? 'New Google Slide' : createItemType === 'form' ? 'New Google Form' : createItemType === 'drawing' ? 'New Google Drawing' : createItemType === 'map' ? 'New Google Map' : createItemType === 'site' ? 'New Google Site' : 'New Google Script'}
+                            {createItemDialogTitle(createItemType)}
                         </DialogTitle></VisuallyHidden>
                         {/* Header */}
                         <div className="px-5 py-4 border-b border-[#e5e7eb] bg-white flex items-start gap-3">
                             <div className="mt-0.5 h-7 w-7 rounded bg-primary/10 flex items-center justify-center shrink-0">
-                                {createItemType === 'folder' ? <Folder className="h-3.5 w-3.5 text-primary" /> : createItemType === 'sheet' ? <FileSpreadsheet className="h-3.5 w-3.5 text-primary" /> : createItemType === 'slide' ? <Presentation className="h-3.5 w-3.5 text-primary" /> : createItemType === 'form' ? <ListChecks className="h-3.5 w-3.5 text-primary" /> : createItemType === 'drawing' ? <PenTool className="h-3.5 w-3.5 text-primary" /> : createItemType === 'map' ? <MapIcon className="h-3.5 w-3.5 text-primary" /> : createItemType === 'script' ? <FileCode className="h-3.5 w-3.5 text-primary" /> : <FileText className="h-3.5 w-3.5 text-primary" />}
+                                {createItemType === 'folder' ? <Folder className="h-3.5 w-3.5 text-primary" /> : createItemType === 'sheet' || createItemType === 'excel' ? <FileSpreadsheet className="h-3.5 w-3.5 text-primary" /> : createItemType === 'slide' || createItemType === 'powerpoint' ? <Presentation className="h-3.5 w-3.5 text-primary" /> : createItemType === 'form' ? <ListChecks className="h-3.5 w-3.5 text-primary" /> : createItemType === 'drawing' ? <PenTool className="h-3.5 w-3.5 text-primary" /> : createItemType === 'map' ? <MapIcon className="h-3.5 w-3.5 text-primary" /> : createItemType === 'script' ? <FileCode className="h-3.5 w-3.5 text-primary" /> : <FileText className="h-3.5 w-3.5 text-primary" />}
                             </div>
                             <div>
                                 <p className="text-sm font-semibold text-[#1b1b1d] leading-tight">
-                                    {createItemType === 'folder' ? 'New Folder' : createItemType === 'doc' ? 'New Google Doc' : createItemType === 'sheet' ? 'New Google Sheet' : createItemType === 'slide' ? 'New Google Slide' : createItemType === 'form' ? 'New Google Form' : createItemType === 'drawing' ? 'New Google Drawing' : createItemType === 'map' ? 'New Google Map' : createItemType === 'site' ? 'New Google Site' : 'New Google Script'}
+                                    {createItemDialogTitle(createItemType)}
                                 </p>
                                 <p className="text-xs text-[#45474c] mt-0.5">Enter a name to create this {createItemType === 'folder' ? 'folder' : 'file'} in the current location.</p>
                             </div>
@@ -2962,14 +3023,19 @@ const handleRefresh = async () => {
                             <label className="font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] block mb-1">
                                 {createItemType === 'folder' ? 'Folder Name' : 'Document Name'}
                             </label>
-                            <Input
-                                autoFocus
-                                placeholder={createItemType === 'folder' ? 'e.g. Q4 Deliverables' : 'e.g. Meeting Notes'}
-                                value={newItemName}
-                                onChange={(e) => setNewItemName(e.target.value)}
-                                onKeyDown={(e) => { if (e.key === 'Enter') handleCreateItem() }}
-                                className="border-[#e5e7eb] text-[#1b1b1d] text-xs font-normal placeholder:text-[#9a9ba0] rounded focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
-                            />
+                            <div className="flex items-center gap-1">
+                                <Input
+                                    autoFocus
+                                    placeholder={createItemType === 'folder' ? 'e.g. Q4 Deliverables' : 'e.g. Meeting Notes'}
+                                    value={newItemName}
+                                    onChange={(e) => setNewItemName(e.target.value)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') handleCreateItem() }}
+                                    className="border-[#e5e7eb] text-[#1b1b1d] text-xs font-normal placeholder:text-[#9a9ba0] rounded focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                                />
+                                {CREATE_ITEM_EXTENSIONS[createItemType] && (
+                                    <span className="shrink-0 text-[#45474c] text-xs">{CREATE_ITEM_EXTENSIONS[createItemType]}</span>
+                                )}
+                            </div>
                         </div>
                         {/* Footer */}
                         <div className="px-5 py-3 border-t border-[#e5e7eb] bg-white flex items-center justify-end gap-3">

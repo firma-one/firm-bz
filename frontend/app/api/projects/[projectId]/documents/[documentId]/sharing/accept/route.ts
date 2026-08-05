@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { getFileInfo } from '@/lib/file-utils'
-import { googleDriveConnector } from '@/lib/google-drive-connector'
+import { getPermissionAdapter } from '@/lib/connectors/registry'
 import { requireEngagementMember, externalMemberCanAccessDocument } from '@/lib/engagement-access'
 import { isDocumentFinalized } from '@/lib/sharing-settings'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
@@ -66,29 +66,31 @@ export async function PATCH(
       connectorId = org?.connectorId ?? null
     }
     if (!connectorId)
-      return NextResponse.json({ error: 'No active Google Drive connection' }, { status: 500 })
+      return NextResponse.json({ error: 'No active storage connection' }, { status: 500 })
 
-    // Downgrade elevated Drive permissions to reader (same as finalize route)
+    const permissionAdapter = await getPermissionAdapter(connectorId)
+    if (!permissionAdapter)
+      return NextResponse.json({ error: 'Connector type not supported' }, { status: 500 })
+
+    // Downgrade elevated permissions to viewer (same as finalize route)
     const downgraded: Array<{ permissionId: string; previousRole: string }> = []
-    const perms = await googleDriveConnector.listFilePermissions(connectorId, fileInfo.externalId)
-    const elevRoles = new Set(['writer', 'fileOrganizer', 'organizer', 'commenter'])
+    const perms = await permissionAdapter.listFilePermissions(connectorId, fileInfo.externalId)
+    const elevRoles = new Set(['editor', 'commenter'])
 
     for (const p of perms) {
-      if (!p.id || p.deleted) continue
-      if (p.type !== 'user' || !p.emailAddress) continue
-      if (p.role === 'owner') continue
+      if (!p.id || !p.email) continue
       if (!elevRoles.has(p.role)) continue
 
-      const ok = await googleDriveConnector.patchFilePermissionRole(
+      const ok = await permissionAdapter.patchFilePermissionRole(
         connectorId,
         fileInfo.externalId,
         p.id,
-        'reader'
+        'viewer'
       )
       if (ok) downgraded.push({ permissionId: p.id, previousRole: p.role })
     }
 
-    await googleDriveConnector.setFileContentReadOnly(connectorId, fileInfo.externalId, true)
+    await permissionAdapter.setFileContentReadOnly(connectorId, fileInfo.externalId, true)
 
     const now = new Date().toISOString()
     const prevSettings = (existing.settings as Record<string, unknown>) || {}

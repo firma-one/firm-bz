@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { ConnectorType } from '@prisma/client'
+import { readFile } from 'fs/promises'
+import path from 'path'
 import { prisma } from '@/lib/prisma'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { assignDocId } from '@/lib/doc-id'
@@ -13,6 +16,46 @@ import { resolveEngagementConnector } from '@/lib/connectors/resolve-client-conn
 import { IndexingInterceptor } from '@/lib/services/indexing-interceptor'
 import { getLock, isDocumentPrivate, buildSettingsForDb } from '@/lib/sharing-settings'
 import { assertWithinDocumentCap } from '@/lib/billing/effective-billing-caps'
+import { getPermissionAdapter, getStorageAdapter, getContentAdapter } from '@/lib/connectors/registry'
+import { OneDriveConnector } from '@/lib/connectors/onedrive-connector'
+import { createOneDriveAdapter } from '@/lib/connectors/adapters/onedrive-adapter'
+import { listOneDriveFiles } from '@/lib/connectors/adapters/onedrive-list-files'
+import {
+    moveOneDriveFile,
+    renameOneDriveFile,
+    copyOneDriveFile,
+    recursiveCopyOneDrive,
+    ensureOneDriveFolderPath,
+} from '@/lib/connectors/adapters/onedrive-file-ops'
+
+const oneDriveConnector = OneDriveConnector.getInstance()
+
+/** True when the resolved connector is a OneDrive/SharePoint connection. */
+function isOneDrive(connector: { type?: ConnectorType | string } | null | undefined): boolean {
+    return connector?.type === ConnectorType.ONEDRIVE
+}
+
+// Graph has no "create blank native Office file" API (unlike Drive's files.create with a
+// Google-native mimeType, which synthesizes the doc server-side) — OOXML files are real binary
+// zip containers, so creating one means PUTting actual bytes. These are minimal, valid blank
+// .docx/.xlsx/.pptx templates checked into the repo; see lib/connectors/templates/.
+const ONEDRIVE_BLANK_TEMPLATES: Record<string, { file: string; ext: string; mimeType: string }> = {
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': {
+        file: 'blank.docx',
+        ext: '.docx',
+        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    },
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': {
+        file: 'blank.xlsx',
+        ext: '.xlsx',
+        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    },
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation': {
+        file: 'blank.pptx',
+        ext: '.pptx',
+        mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    },
+}
 // GET: List linked files for a connector
 export async function GET(request: NextRequest) {
     try {
@@ -149,7 +192,7 @@ export async function POST(request: NextRequest) {
                 firmId?: string | null
             }
 
-            let connector: { id: string; accessToken: string } | null = null
+            let connector: { id: string; accessToken: string; type?: ConnectorType | string } | null = null
             let engagementContext: EngagementContext | null = null
 
             // When projectId is provided, use the project's org connector and build context from project membership (eng_admin / eng_member see files)
@@ -168,12 +211,15 @@ export async function POST(request: NextRequest) {
                 if (engagement) {
                     connector = engagement.client.connector ?? null
                     if (connector) {
-                        const folderIds = await googleDriveConnector.getProjectFolderIds(connector.id, engagement.slug, {
-                            projectName: engagement.name,
-                            clientSlug: engagement.client.slug,
-                            clientName: engagement.client.name,
-                            projectFolderId: engagement.connectorRootFolderId
-                        })
+                        const permissionAdapter = await getPermissionAdapter(connector.id)
+                        const folderIds = permissionAdapter
+                            ? await permissionAdapter.getEngagementFolderIds(connector.id, engagement.slug, {
+                                projectName: engagement.name,
+                                clientSlug: engagement.client.slug,
+                                clientName: engagement.client.name,
+                                projectFolderId: engagement.connectorRootFolderId ?? undefined
+                            })
+                            : { generalFolderId: null, confidentialFolderId: null, stagingFolderId: null }
                         const userMember = engagement.members[0]
                         engagementContext = {
                             projectId: engagement.id,
@@ -211,12 +257,11 @@ export async function POST(request: NextRequest) {
                     ...projectMemberships.map((m: any) => m.engagement.firmId)
                 ]))
 
-                // Find firms with active GOOGLE_DRIVE connectors
+                // Find firms with any active storage connector (Google Drive or OneDrive)
                 const orgsWithConnectors = await prisma.firm.findMany({
                     where: {
                         id: { in: allOrgIds },
                         connector: {
-                            type: 'GOOGLE_DRIVE',
                             status: 'ACTIVE'
                         }
                     },
@@ -255,7 +300,10 @@ export async function POST(request: NextRequest) {
                     }
                 })
                 if (engagement) {
-                    const folderIds = await googleDriveConnector.getProjectFolderIds(connector.id, engagement.slug)
+                    const permissionAdapter = await getPermissionAdapter(connector.id)
+                    const folderIds = permissionAdapter
+                        ? await permissionAdapter.getEngagementFolderIds(connector.id, engagement.slug, {})
+                        : { generalFolderId: null, confidentialFolderId: null, stagingFolderId: null }
                     const userMember = engagement.members[0]
                     engagementContext = {
                         projectId: engagement.id,
@@ -268,9 +316,14 @@ export async function POST(request: NextRequest) {
                     }
                 } else {
                     try {
-                        const fileMetadata = await googleDriveConnector.getFileMetadata(connector.id, folderId)
-                        if (fileMetadata?.parents?.length) {
-                            const parentFolderId = fileMetadata.parents[0]
+                        const parentFolderId = isOneDrive(connector)
+                            ? await createOneDriveAdapter(async (id) => {
+                                const t = await oneDriveConnector.getAccessToken(id)
+                                if (!t) throw new Error('Could not get access token')
+                                return t
+                            }).getFileParent(connector.id, folderId)
+                            : (await googleDriveConnector.getFileMetadata(connector.id, folderId))?.parents?.[0]
+                        if (parentFolderId) {
                             const parentProject = await prisma.engagement.findFirst({
                                 where: { connectorRootFolderId: parentFolderId },
                                 include: {
@@ -281,7 +334,10 @@ export async function POST(request: NextRequest) {
                                 }
                             })
                             if (parentProject) {
-                                const folderIds = await googleDriveConnector.getProjectFolderIds(connector.id, parentProject.slug)
+                                const permissionAdapter = await getPermissionAdapter(connector.id)
+                                const folderIds = permissionAdapter
+                                    ? await permissionAdapter.getEngagementFolderIds(connector.id, parentProject.slug, {})
+                                    : { generalFolderId: null, confidentialFolderId: null, stagingFolderId: null }
                                 const userMember = parentProject.members[0]
                                 engagementContext = {
                                     projectId: parentProject.id,
@@ -459,14 +515,19 @@ export async function POST(request: NextRequest) {
                     }
                 }
             } else {
-                // Internal personas: Drive-based listing — completely unchanged.
-                files = await googleDriveConnector.listFiles(
-                    connector.id,
-                    folderId,
-                    listLimit,
-                    userEmail,
-                    engagementContext
-                )
+                // Internal personas: provider-based listing. OneDrive's listOneDriveFiles mirrors
+                // Google's listFiles shape/behavior (folder-tree/role visibility filter) — see
+                // that file's header for the two documented gaps (no activity badges, no
+                // explicit-Graph-permission secondary check).
+                files = isOneDrive(connector)
+                    ? await listOneDriveFiles(connector.id, folderId, listLimit, engagementContext)
+                    : await googleDriveConnector.listFiles(
+                        connector.id,
+                        folderId,
+                        listLimit,
+                        userEmail,
+                        engagementContext
+                    )
 
                 // Attach internal projectDocument UUIDs for UI deeplinks (never expose Drive id in URL).
                 // Also surface PENDING intake shadow rows not yet in the Drive listing.
@@ -605,20 +666,14 @@ export async function POST(request: NextRequest) {
             }
             if (!connector) return NextResponse.json({ error: 'No active storage connector found' }, { status: 404 })
 
-            const { googleDriveConnector } = await import('@/lib/google-drive-connector')
-
-            // Get decrypted access token (handles refresh if needed)
-            const accessToken = await googleDriveConnector.getAccessToken(connector.id)
-            if (!accessToken) {
-                return NextResponse.json({ error: 'Failed to get access token' }, { status: 500 })
-            }
-
+            const onOneDriveCreate = isOneDrive(connector)
+            const isGoogleFolderCreate = !onOneDriveCreate
             const mimeTypeStr = typeof mimeType === 'string' ? mimeType : 'application/vnd.google-apps.folder'
-            // Sandbox: block native Google file creation (Doc/Sheet/etc.); allow plain folders only (incl. folder-upload structure).
-            if (
-                isSandbox &&
-                mimeTypeStr !== 'application/vnd.google-apps.folder'
-            ) {
+            const oneDriveTemplate = onOneDriveCreate ? ONEDRIVE_BLANK_TEMPLATES[mimeTypeStr] : undefined
+            const isPlainFolderCreate = mimeTypeStr === 'application/vnd.google-apps.folder'
+            // Sandbox: block native file creation (Google Doc/Sheet/etc., or OneDrive Word/Excel/PPT);
+            // allow plain folders only (incl. folder-upload structure).
+            if (isSandbox && !isPlainFolderCreate) {
                 return NextResponse.json(
                     { error: 'This operation is not permitted in a Sandbox.' },
                     { status: 403 }
@@ -643,11 +698,30 @@ export async function POST(request: NextRequest) {
             }
             await assertWithinDocumentCap(orgId, 1)
 
-            const newFile = await googleDriveConnector.createDriveFile(accessToken, {
-                name,
-                mimeType: mimeTypeStr,
-                parents: [folderId]
-            })
+            // Google can create native Workspace files (Docs/Sheets/etc.) via arbitrary mimeType;
+            // OneDrive has no server-side "create blank native file" equivalent, so blank
+            // Word/Excel/PowerPoint files are created by uploading bundled template bytes
+            // (see ONEDRIVE_BLANK_TEMPLATES). Anything else on OneDrive is a plain folder.
+            let newFileId: string
+            if (isGoogleFolderCreate) {
+                const accessToken = await googleDriveConnector.getAccessToken(connector.id)
+                if (!accessToken) {
+                    return NextResponse.json({ error: 'Failed to get access token' }, { status: 500 })
+                }
+                newFileId = (await googleDriveConnector.createDriveFile(accessToken, { name, mimeType: mimeTypeStr, parents: [folderId] })).id
+            } else if (oneDriveTemplate) {
+                const contentAdapter = await getContentAdapter(connector.id)
+                if (!contentAdapter) {
+                    return NextResponse.json({ error: 'Connector type not supported' }, { status: 500 })
+                }
+                const templateBytes = await readFile(path.join(process.cwd(), 'lib/connectors/templates', oneDriveTemplate.file))
+                const finalName = name.toLowerCase().endsWith(oneDriveTemplate.ext) ? name : `${name}${oneDriveTemplate.ext}`
+                newFileId = (await contentAdapter.createFile(connector.id, folderId, finalName, templateBytes, oneDriveTemplate.mimeType)).id
+            } else {
+                const adapter = await getStorageAdapter(connector.id)
+                newFileId = await adapter.createFolder(connector.id, folderId, name)
+            }
+            const newFile = { id: newFileId }
 
             // Note: Files and folders inherit permissions from parent project folder automatically
             // No need to restrict them - they will inherit whatever permissions the project folder has
@@ -793,8 +867,8 @@ export async function POST(request: NextRequest) {
             if (!engagement) return NextResponse.json({ error: 'Engagement not found' }, { status: 404 })
             if (!connector) return NextResponse.json({ error: 'No active storage connector found' }, { status: 404 })
 
-            const { googleDriveConnector } = await import('@/lib/google-drive-connector')
-            const meta = await googleDriveConnector.getFileMetadata(connector.id, fileId)
+            const permissionAdapter = await getPermissionAdapter(connector.id)
+            const meta = await permissionAdapter?.getFileMetadata(connector.id, fileId)
             if (!meta?.name) return NextResponse.json({ error: 'File not found' }, { status: 404 })
             const parentId = meta.parents?.[0]
             if (!parentId) return NextResponse.json({ error: 'File has no parent folder' }, { status: 400 })
@@ -806,7 +880,9 @@ export async function POST(request: NextRequest) {
             const newName = lastDot > 0 ? `${base.slice(0, lastDot)}_${randomSuffix}${base.slice(lastDot)}` : `${base}_${randomSuffix}`
 
             await assertWithinDocumentCap(engagement.firmId, 1)
-            const result = await googleDriveConnector.copyFile(connector.id, fileId, parentId, newName)
+            const result = isOneDrive(connector)
+                ? await copyOneDriveFile(connector.id, fileId, parentId, newName)
+                : await googleDriveConnector.copyFile(connector.id, fileId, parentId, newName)
             if (!result) return NextResponse.json({ error: 'Failed to duplicate file' }, { status: 500 })
 
             // Index the duplicated file
@@ -837,10 +913,13 @@ export async function POST(request: NextRequest) {
             if (!engagement) return NextResponse.json({ error: 'Engagement not found' }, { status: 404 })
             if (!connector) return NextResponse.json({ error: 'No active storage connector found' }, { status: 404 })
 
-            const { googleDriveConnector } = await import('@/lib/google-drive-connector')
+            const onOneDrive = isOneDrive(connector)
+            const permissionAdapter = await getPermissionAdapter(connector.id)
             if (action === 'copy') {
                 const keepBoth = body.keepBoth !== false
-                const meta = await googleDriveConnector.getFileMetadata(connector.id, fileId)
+                const meta = onOneDrive
+                    ? await permissionAdapter?.getFileMetadata(connector.id, fileId)
+                    : await googleDriveConnector.getFileMetadata(connector.id, fileId)
                 const sourceName = meta?.name ?? 'copy'
                 let copyName: string | undefined
                 if (keepBoth) {
@@ -849,10 +928,16 @@ export async function POST(request: NextRequest) {
                     const lastDot = sourceName.lastIndexOf('.')
                     copyName = lastDot > 0 ? `${sourceName.slice(0, lastDot)}_${suffix}${sourceName.slice(lastDot)}` : `${sourceName}_${suffix}`
                 } else {
-                    const existing = await googleDriveConnector.listFiles(connector.id, destinationFolderId, 500)
+                    const existing = onOneDrive
+                        ? await listOneDriveFiles(connector.id, destinationFolderId, 500)
+                        : await googleDriveConnector.listFiles(connector.id, destinationFolderId, 500)
                     const sameName = existing.find((f: { name: string }) => f.name === sourceName)
                     if (sameName) {
-                        await googleDriveConnector.trashFile(connector.id, sameName.id)
+                        if (onOneDrive) {
+                            await permissionAdapter?.deleteFile(connector.id, sameName.id, { permanent: false })
+                        } else {
+                            await googleDriveConnector.trashFile(connector.id, sameName.id)
+                        }
                         await safeInngestSend('file.delete.requested', {
                             organizationId: engagement.firmId,
                             externalId: sameName.id
@@ -861,7 +946,9 @@ export async function POST(request: NextRequest) {
                     copyName = sourceName
                 }
                 await assertWithinDocumentCap(engagement.firmId, 1)
-                const result = await googleDriveConnector.copyFile(connector.id, fileId, destinationFolderId, copyName)
+                const result = onOneDrive
+                    ? await copyOneDriveFile(connector.id, fileId, destinationFolderId, copyName)
+                    : await googleDriveConnector.copyFile(connector.id, fileId, destinationFolderId, copyName)
                 if (!result) return NextResponse.json({ error: 'Failed to copy file' }, { status: 500 })
 
                 // Index the copied file
@@ -876,11 +963,15 @@ export async function POST(request: NextRequest) {
 
                 return NextResponse.json({ success: true, id: result.id })
             }
-            const result = await googleDriveConnector.moveFile(connector.id, fileId, destinationFolderId)
+            const result = onOneDrive
+                ? await moveOneDriveFile(connector.id, fileId, destinationFolderId)
+                : await googleDriveConnector.moveFile(connector.id, fileId, destinationFolderId)
             if (!result) return NextResponse.json({ error: 'Failed to move file' }, { status: 500 })
 
             // Update index for moved file (parentId may have changed)
-            const meta = await googleDriveConnector.getFileMetadata(connector.id, fileId)
+            const meta = onOneDrive
+                ? await permissionAdapter?.getFileMetadata(connector.id, fileId)
+                : await googleDriveConnector.getFileMetadata(connector.id, fileId)
             if (meta?.name) {
                 await safeInngestSend('file.index.requested', {
                     organizationId: engagement.firmId,
@@ -921,12 +1012,19 @@ export async function POST(request: NextRequest) {
 
             if (!connector) return NextResponse.json({ error: 'No active storage connector found' }, { status: 404 })
 
-            const { googleDriveConnector } = await import('@/lib/google-drive-connector')
-            const folderIds = await googleDriveConnector.getProjectFolderIds(connector.id, engagement.slug, {
-                projectName: engagement.name,
-                clientSlug: engagement.client.slug,
-                clientName: engagement.client.name
-            })
+            const onOneDriveTree = isOneDrive(connector)
+            const treePermissionAdapter = await getPermissionAdapter(connector.id)
+            const folderIds = onOneDriveTree
+                ? await treePermissionAdapter?.getEngagementFolderIds(connector.id, engagement.slug, {
+                    projectName: engagement.name,
+                    clientSlug: engagement.client.slug,
+                    clientName: engagement.client.name
+                }) ?? { generalFolderId: null, confidentialFolderId: null, stagingFolderId: null }
+                : await googleDriveConnector.getProjectFolderIds(connector.id, engagement.slug, {
+                    projectName: engagement.name,
+                    clientSlug: engagement.client.slug,
+                    clientName: engagement.client.name
+                })
             const generalFolderId = folderIds.generalFolderId
             const confidentialFolderId = folderIds.confidentialFolderId
             const stagingFolderId = folderIds.stagingFolderId
@@ -936,7 +1034,10 @@ export async function POST(request: NextRequest) {
             if (!destRootId) return NextResponse.json({ error: `Target folder (${targetRoot}) not configured` }, { status: 400 })
 
             // Build path from file's parent up to source root so we can replicate under target root
-            const fileMeta = await googleDriveConnector.getFileMetadata(connector.id, fileId)
+            const getMeta = (id: string) => onOneDriveTree
+                ? treePermissionAdapter?.getFileMetadata(connector.id, id) ?? Promise.resolve(null)
+                : googleDriveConnector.getFileMetadata(connector.id, id)
+            const fileMeta = await getMeta(fileId)
             let destFolderId = destRootId
             if (fileMeta?.parents?.length) {
                 const pathNames: string[] = []
@@ -949,7 +1050,7 @@ export async function POST(request: NextRequest) {
                         foundSourceRoot = true
                         break
                     }
-                    const meta = await googleDriveConnector.getFileMetadata(connector.id, currentId)
+                    const meta = await getMeta(currentId)
                     if (!meta?.name) break
                     pathNames.unshift(meta.name)
                     if (!meta.parents?.length) break
@@ -957,12 +1058,16 @@ export async function POST(request: NextRequest) {
                     depth++
                 }
                 if (foundSourceRoot && pathNames.length > 0) {
-                    const resolved = await googleDriveConnector.ensureFolderPath(connector.id, destRootId, pathNames)
+                    const resolved = onOneDriveTree
+                        ? await ensureOneDriveFolderPath(connector.id, destRootId, pathNames)
+                        : await googleDriveConnector.ensureFolderPath(connector.id, destRootId, pathNames)
                     if (resolved) destFolderId = resolved
                 }
             }
 
-            const result = await googleDriveConnector.moveFile(connector.id, fileId, destFolderId)
+            const result = onOneDriveTree
+                ? await moveOneDriveFile(connector.id, fileId, destFolderId)
+                : await googleDriveConnector.moveFile(connector.id, fileId, destFolderId)
             if (!result) return NextResponse.json({ error: 'Failed to move' }, { status: 500 })
 
             // Index the moved item
@@ -1014,26 +1119,42 @@ export async function POST(request: NextRequest) {
 
             if (!connector) return NextResponse.json({ error: 'No active storage connector found' }, { status: 404 })
 
-            const { googleDriveConnector } = await import('@/lib/google-drive-connector')
-            const targetFolderIds = await googleDriveConnector.getProjectFolderIds(connector.id, targetProject.slug, {
-                projectName: targetProject.name,
-                clientSlug: targetProject.client.slug,
-                clientName: targetProject.client.name,
-            })
+            const onOneDriveCross = isOneDrive(connector)
+            const crossPermissionAdapter = await getPermissionAdapter(connector.id)
+            const targetFolderIds = onOneDriveCross
+                ? await crossPermissionAdapter?.getEngagementFolderIds(connector.id, targetProject.slug, {
+                    projectName: targetProject.name,
+                    clientSlug: targetProject.client.slug,
+                    clientName: targetProject.client.name,
+                }) ?? { generalFolderId: null, confidentialFolderId: null, stagingFolderId: null }
+                : await googleDriveConnector.getProjectFolderIds(connector.id, targetProject.slug, {
+                    projectName: targetProject.name,
+                    clientSlug: targetProject.client.slug,
+                    clientName: targetProject.client.name,
+                })
             const destFolderId = targetFolderIds.generalFolderId
             if (!destFolderId) return NextResponse.json({ error: 'Target engagement has no General folder' }, { status: 400 })
 
-            const fileMeta = await googleDriveConnector.getFileMetadata(connector.id, fileId)
+            const fileMeta = onOneDriveCross
+                ? await crossPermissionAdapter?.getFileMetadata(connector.id, fileId)
+                : await googleDriveConnector.getFileMetadata(connector.id, fileId)
             const fileName = fileMeta?.name ?? fileId
 
             if (action === 'cross-engagement-copy') {
                 const isFolder = fileMeta?.mimeType === 'application/vnd.google-apps.folder'
 
                 if (isFolder) {
-                    const accessToken = await googleDriveConnector.getAccessToken(connector.id)
-                    if (!accessToken) return NextResponse.json({ error: 'Could not obtain Drive access token' }, { status: 500 })
-
-                    const copiedItems = await googleDriveConnector.recursiveCopy(fileId, destFolderId, accessToken)
+                    // recursiveCopyOneDrive returns only the copied root (Graph's copy is natively
+                    // recursive server-side, unlike Drive's, but doesn't enumerate the full copied
+                    // tree in its response) — nested items aren't individually indexed for OneDrive.
+                    // Documented gap, see plan doc's OPEN gaps list.
+                    const copiedItems = onOneDriveCross
+                        ? await recursiveCopyOneDrive(connector.id, fileId, destFolderId)
+                        : await (async () => {
+                            const accessToken = await googleDriveConnector.getAccessToken(connector.id)
+                            if (!accessToken) throw new Error('Could not obtain Drive access token')
+                            return googleDriveConnector.recursiveCopy(fileId, destFolderId, accessToken)
+                        })().catch(() => [])
                     if (!copiedItems.length) return NextResponse.json({ error: 'Failed to copy folder' }, { status: 500 })
 
                     await IndexingInterceptor.indexBatch(request, {
@@ -1047,7 +1168,9 @@ export async function POST(request: NextRequest) {
                 }
 
                 await assertWithinDocumentCap(targetProject.client.firmId, 1)
-                const result = await googleDriveConnector.copyFile(connector.id, fileId, destFolderId, fileName)
+                const result = onOneDriveCross
+                    ? await copyOneDriveFile(connector.id, fileId, destFolderId, fileName)
+                    : await googleDriveConnector.copyFile(connector.id, fileId, destFolderId, fileName)
                 if (!result) return NextResponse.json({ error: 'Failed to copy file' }, { status: 500 })
 
                 await safeInngestSend('file.index.requested', {
@@ -1062,8 +1185,10 @@ export async function POST(request: NextRequest) {
                 return NextResponse.json({ success: true, id: result.id })
             }
 
-            // Move: update Drive + re-stamp the engagement_document record
-            const result = await googleDriveConnector.moveFile(connector.id, fileId, destFolderId)
+            // Move: update storage + re-stamp the engagement_document record
+            const result = onOneDriveCross
+                ? await moveOneDriveFile(connector.id, fileId, destFolderId)
+                : await googleDriveConnector.moveFile(connector.id, fileId, destFolderId)
             if (!result) return NextResponse.json({ error: 'Failed to move file' }, { status: 500 })
 
             // Re-stamp engagement on the DB record
@@ -1108,8 +1233,9 @@ export async function POST(request: NextRequest) {
             if (!engagement) return NextResponse.json({ error: 'Engagement not found' }, { status: 404 })
             if (!connector) return NextResponse.json({ error: 'No active storage connector found' }, { status: 404 })
 
-            const { googleDriveConnector } = await import('@/lib/google-drive-connector')
-            const result = await googleDriveConnector.renameFile(connector.id, fileId, newName.trim())
+            const result = isOneDrive(connector)
+                ? await renameOneDriveFile(connector.id, fileId, newName.trim())
+                : await googleDriveConnector.renameFile(connector.id, fileId, newName.trim())
             if (!result) return NextResponse.json({ error: 'Failed to rename file' }, { status: 500 })
 
             // Update vector index with new name

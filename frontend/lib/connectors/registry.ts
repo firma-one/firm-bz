@@ -12,8 +12,10 @@ import { createGoogleDriveAdapter } from './adapters/google-drive-adapter'
 import { createGoogleDrivePermissionAdapter } from './adapters/google-drive-permission-adapter'
 import { createGoogleDriveContentAdapter } from './adapters/google-drive-content-adapter'
 import { createOneDriveAdapter } from './adapters/onedrive-adapter'
+import { createOneDrivePermissionAdapter } from './adapters/onedrive-permission-adapter'
+import { createOneDriveContentAdapter } from './adapters/onedrive-content-adapter'
 import { GoogleDriveConnector } from '@/lib/google-drive-connector'
-import { getOneDriveConnectorInstance } from './onedrive-connector'
+import { getOneDriveConnectorInstance, OneDriveConnector } from './onedrive-connector'
 
 /** Unified connection DTO for API/UI (any provider). */
 export interface ConnectorConnection {
@@ -198,6 +200,9 @@ export async function getPermissionAdapter(connectionId: string): Promise<IConne
   if (connector.type === ConnectorType.GOOGLE_DRIVE) {
     return createGoogleDrivePermissionAdapter()
   }
+  if (connector.type === ConnectorType.ONEDRIVE) {
+    return createOneDrivePermissionAdapter()
+  }
   return null
 }
 
@@ -212,6 +217,9 @@ export async function getContentAdapter(connectionId: string): Promise<IConnecto
   if (!connector) throw new Error('Connection not found')
   if (connector.type === ConnectorType.GOOGLE_DRIVE) {
     return createGoogleDriveContentAdapter()
+  }
+  if (connector.type === ConnectorType.ONEDRIVE) {
+    return createOneDriveContentAdapter()
   }
   return null
 }
@@ -239,7 +247,114 @@ export async function getMigrationAdapter(connectionId: string): Promise<IConnec
       persistWorkspaceRootLocation: (id, rootFolderId) => g.persistWorkspaceRootLocation(id, rootFolderId),
     }
   }
+  if (connector.type === ConnectorType.ONEDRIVE) {
+    return createOneDriveMigrationAdapter()
+  }
   throw new Error(`No migration adapter for connector type: ${connector.type}`)
+}
+
+/**
+ * Inline-constructed OneDrive migration adapter, following the same pattern as Google's above
+ * (no separate file). Graph supports server-side move (PATCH with new parentReference), so
+ * this is fully implementable — see .claude/plans/connector-microsoft-impl.md Phase 2.
+ */
+function createOneDriveMigrationAdapter(): IConnectorMigrationAdapter {
+  const GRAPH_API = 'https://graph.microsoft.com/v1.0'
+  const oneDrive = OneDriveConnector.getInstance()
+
+  async function auth(connectionId: string): Promise<string> {
+    const token = await oneDrive.getAccessToken(connectionId)
+    if (!token) throw new Error('Could not get OneDrive access token')
+    return token
+  }
+
+  async function driveBase(connectionId: string): Promise<string> {
+    const connector = await prisma.connector.findUnique({ where: { id: connectionId } })
+    if (connector?.workspaceRootLocation === 'SHARED' && connector.workspaceRootSharedStorageId) {
+      return `${GRAPH_API}/sites/${connector.workspaceRootSharedStorageId}/drive`
+    }
+    return `${GRAPH_API}/me/drive`
+  }
+
+  return {
+    async listTopLevelChildren(connectionId, parentFolderId) {
+      const [token, base] = await Promise.all([auth(connectionId), driveBase(connectionId)])
+      const res = await fetch(`${base}/items/${parentFolderId}/children?$select=id`, { headers: { Authorization: `Bearer ${token}` } })
+      if (!res.ok) return []
+      const data = await res.json()
+      return (data.value || []).map((f: { id: string }) => f.id)
+    },
+
+    async listTopLevelChildrenWithNames(connectionId, parentFolderId) {
+      const [token, base] = await Promise.all([auth(connectionId), driveBase(connectionId)])
+      const res = await fetch(`${base}/items/${parentFolderId}/children?$select=id,name`, { headers: { Authorization: `Bearer ${token}` } })
+      if (!res.ok) return []
+      const data = await res.json()
+      return (data.value || []).map((f: { id: string; name: string }) => ({ id: f.id, name: f.name }))
+    },
+
+    async getFolderBreadcrumb(connectionId, folderId) {
+      const [token, base] = await Promise.all([auth(connectionId), driveBase(connectionId)])
+      const maxDepth = 10
+      const segments: string[] = []
+      let currentId: string | null = folderId
+      for (let i = 0; i < maxDepth && currentId; i++) {
+        const res: Response = await fetch(`${base}/items/${currentId}?$select=name,parentReference`, { headers: { Authorization: `Bearer ${token}` } })
+        if (!res.ok) break
+        const data = await res.json()
+        segments.unshift(data.name)
+        currentId = data.parentReference?.id && data.parentReference.id !== currentId ? data.parentReference.id : null
+      }
+      return segments
+    },
+
+    async moveBatch(connectionId, fileIds, _oldParentFolderId, newParentFolderId) {
+      const [token, base] = await Promise.all([auth(connectionId), driveBase(connectionId)])
+      const failures: { id: string; error: string }[] = []
+      for (const id of fileIds) {
+        try {
+          const res = await fetch(`${base}/items/${id}`, {
+            method: 'PATCH',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ parentReference: { id: newParentFolderId } }),
+          })
+          if (!res.ok) {
+            const err = await res.text()
+            failures.push({ id, error: `${res.status}: ${err.slice(0, 280)}` })
+          }
+        } catch (e) {
+          failures.push({ id, error: e instanceof Error ? e.message : String(e) })
+        }
+      }
+      return { failures }
+    },
+
+    async persistWorkspaceRootLocation(connectionId, rootFolderId) {
+      const [token, base] = await Promise.all([auth(connectionId), driveBase(connectionId)])
+      const res = await fetch(`${base}/items/${rootFolderId}?$select=parentReference`, { headers: { Authorization: `Bearer ${token}` } })
+      if (!res.ok) return
+      const data = await res.json()
+      const siteId: string | undefined = data.parentReference?.siteId
+      if (siteId) {
+        await prisma.connector.update({
+          where: { id: connectionId },
+          data: {
+            workspaceRootLocation: 'SHARED',
+            workspaceRootSharedStorageId: siteId,
+          },
+        })
+      } else {
+        await prisma.connector.update({
+          where: { id: connectionId },
+          data: {
+            workspaceRootLocation: 'PERSONAL',
+            workspaceRootSharedStorageId: null,
+            workspaceRootSharedStorageName: null,
+          },
+        })
+      }
+    },
+  }
 }
 
 /** Connector display metadata for UI (label, icon key, enabled state). */

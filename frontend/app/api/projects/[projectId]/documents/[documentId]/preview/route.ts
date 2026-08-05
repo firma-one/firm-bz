@@ -73,7 +73,7 @@ export async function GET(
             return NextResponse.json({ error: 'No active storage connector found' }, { status: 404 })
         }
         const connector = await prisma.connector.findFirst({
-            where: { id: connectorId, type: 'GOOGLE_DRIVE', status: 'ACTIVE' }
+            where: { id: connectorId, status: 'ACTIVE' }
         })
         if (!connector) {
             return NextResponse.json({ error: 'No active storage connector found' }, { status: 404 })
@@ -94,13 +94,13 @@ export async function GET(
             if (err instanceof ConnectorContentError) {
                 if (err.code === 'not_found') {
                     return NextResponse.json({
-                        error: 'File not found in Google Drive',
+                        error: 'File not found in storage',
                         details: 'The file may have been deleted or the linked account no longer has access.',
                     }, { status: 404 })
                 }
                 if (err.code === 'forbidden') {
                     return NextResponse.json({
-                        error: 'Access denied to Google Drive file',
+                        error: 'Access denied to storage file',
                         details: 'The account linked to Pockett does not have permission to view this file.',
                     }, { status: 403 })
                 }
@@ -109,7 +109,7 @@ export async function GET(
             logger.error(`Preview content fetch failed for ${fileInfo.externalId}: ${err}`, undefined, 'PreviewProxy', {
                 projectId, documentId: documentIdParam
             })
-            return NextResponse.json({ error: 'Failed to fetch document content from Google Drive' }, { status: 502 })
+            return NextResponse.json({ error: 'Failed to fetch document content from storage' }, { status: 502 })
         }
 
         const headers = new Headers()

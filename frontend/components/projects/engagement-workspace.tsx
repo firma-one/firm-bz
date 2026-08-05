@@ -69,6 +69,8 @@ interface EngagementWorkspaceProps {
     enableBetaFeatures?: boolean
     /** Client-level connector ID — used to offer "Set up Drive folder" when connector exists but engagement folder not yet provisioned. */
     clientConnectorId?: string | null
+    /** Client-level connector type (GOOGLE_DRIVE/ONEDRIVE) — used to switch the "New file" menu between Google Workspace and Office file types. */
+    clientConnectorType?: string | null
     /** Workspace root location — passed to EngagementFileList for Shared Drive empty state. */
     workspaceRootLocation?: string | null
     /** Connector account email — passed to EngagementFileList for Google Drive authuser param. */
@@ -117,6 +119,7 @@ export function EngagementWorkspace({
     firmSandboxOnly = false,
     enableBetaFeatures = false,
     clientConnectorId,
+    clientConnectorType,
     workspaceRootLocation,
     connectorAccountEmail,
     fileCount,
@@ -493,6 +496,7 @@ export function EngagementWorkspace({
                                         projectId={projectId}
                                         connectorRootFolderId={connectorRootFolderId}
                                         clientConnectorId={clientConnectorId}
+                                        clientConnectorType={clientConnectorType}
                                         workspaceRootLocation={workspaceRootLocation}
                                         rootFolderName={projectName}
                                         orgName={orgName}

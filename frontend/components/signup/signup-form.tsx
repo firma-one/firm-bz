@@ -913,6 +913,17 @@ export function SignupForm({
                         </div>
                     )}
 
+                    {/* "Continue with" label - Show only if an OAuth option is visible */}
+                    {hasOAuthOption && (
+                        <p className={
+                            isSplitLight
+                                ? `text-center text-[10px] font-bold uppercase tracking-[0.2em] text-[#76777d] ${H}`
+                                : `text-center text-xs uppercase tracking-wider text-slate-500 ${H}`
+                        }>
+                            Continue with
+                        </p>
+                    )}
+
                     {/* Google OAuth - Show for Google emails or potential workspace emails */}
                     {applicableProviders.includes('google') && (
                         <Button
@@ -935,7 +946,7 @@ export function SignupForm({
                                     <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
                                 </svg>
                             )}
-                            Continue with Google
+                            Google
                         </Button>
                     )}
 
@@ -961,7 +972,7 @@ export function SignupForm({
                                     <rect x="12" y="12" width="10" height="10" fill="#FFB900" />
                                 </svg>
                             )}
-                            Continue with Microsoft
+                            Microsoft
                         </Button>
                     )}
                 </div>

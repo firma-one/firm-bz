@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { getFileInfo } from '@/lib/file-utils'
-import { googleDriveConnector } from '@/lib/google-drive-connector'
+import { getPermissionAdapter } from '@/lib/connectors/registry'
+import type { ConnectorRole } from '@/lib/connectors/types'
 import { requireEngagementMember, isEngagementLeadRole } from '@/lib/engagement-access'
 import { getLock } from '@/lib/sharing-settings'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
@@ -58,22 +59,34 @@ export async function PATCH(
       connectorId = org?.connectorId ?? null
     }
     if (!connectorId) {
-      return NextResponse.json({ error: 'No active Google Drive connection' }, { status: 500 })
+      return NextResponse.json({ error: 'No active storage connection' }, { status: 500 })
     }
 
-    for (const row of (lockData.downgraded ?? [])) {
-      const role = row.previousRole as 'reader' | 'writer' | 'commenter' | 'fileOrganizer' | 'organizer'
-      if (['writer', 'reader', 'commenter', 'fileOrganizer', 'organizer'].includes(row.previousRole)) {
-        await googleDriveConnector.patchFilePermissionRole(
-          connectorId,
-          fileInfo.externalId,
-          row.permissionId,
-          role
-        )
+    const permissionAdapter = await getPermissionAdapter(connectorId)
+    if (permissionAdapter) {
+      // previousRole may be stored as either Google-native strings (writer/reader/...) from
+      // older locks, or the provider-agnostic ConnectorRole vocabulary (editor/viewer/commenter)
+      // from locks created after the registry migration — normalize both.
+      const toConnectorRole = (r: string): ConnectorRole | null => {
+        if (r === 'writer' || r === 'fileOrganizer' || r === 'organizer' || r === 'editor') return 'editor'
+        if (r === 'commenter') return 'commenter'
+        if (r === 'reader' || r === 'viewer') return 'viewer'
+        return null
       }
-    }
+      for (const row of (lockData.downgraded ?? [])) {
+        const role = toConnectorRole(row.previousRole)
+        if (role) {
+          await permissionAdapter.patchFilePermissionRole(
+            connectorId,
+            fileInfo.externalId,
+            row.permissionId,
+            role
+          )
+        }
+      }
 
-    await googleDriveConnector.setFileContentReadOnly(connectorId, fileInfo.externalId, false)
+      await permissionAdapter.setFileContentReadOnly(connectorId, fileInfo.externalId, false)
+    }
 
     const prevSettings = (existing.settings as Record<string, unknown>) || {}
     const share = (prevSettings.share as Record<string, unknown> | undefined) || {}

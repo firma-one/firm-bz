@@ -46,6 +46,7 @@ export function useEngagementFileOps({
     const [renameModalOpen, setRenameModalOpen] = useState(false)
     const [renameTarget, setRenameTarget] = useState<DriveFile | null>(null)
     const [renameNewName, setRenameNewName] = useState('')
+    const [renameExtension, setRenameExtension] = useState('')
     const [renameSubmitting, setRenameSubmitting] = useState(false)
 
     // Trash state
@@ -334,8 +335,22 @@ export function useEngagementFileOps({
     }, [projectId, currentFolderIdRef, fetchFiles, addToast, startProcessing, stopProcessing])
 
     const openRenameModal = useCallback((doc: DriveFile) => {
+        const isFolder = doc.mimeType === 'application/vnd.google-apps.folder'
+        const fullName = doc.name ?? ''
         setRenameTarget(doc)
-        setRenameNewName(doc.name ?? '')
+        if (isFolder) {
+            setRenameNewName(fullName)
+            setRenameExtension('')
+        } else {
+            const lastDot = fullName.lastIndexOf('.')
+            if (lastDot > 0) {
+                setRenameNewName(fullName.slice(0, lastDot))
+                setRenameExtension(fullName.slice(lastDot))
+            } else {
+                setRenameNewName(fullName)
+                setRenameExtension('')
+            }
+        }
         setRenameModalOpen(true)
     }, [])
 
@@ -343,7 +358,7 @@ export function useEngagementFileOps({
         if (!renameTarget || !renameNewName.trim() || !sessionRef.current?.access_token) return
         const fileId = renameTarget.id
         const previousName = renameTarget.name ?? ''
-        const newName = renameNewName.trim()
+        const newName = `${renameNewName.trim()}${renameExtension}`
 
         // Optimistic update: show new name on screen immediately
         setFiles(prev => prev.map(f => f.id === fileId ? { ...f, name: newName } : f))
@@ -377,7 +392,7 @@ export function useEngagementFileOps({
             .finally(() => {
                 stopProcessing(fileId)
             })
-    }, [renameTarget, renameNewName, projectId, addToast, startProcessing, stopProcessing, setFiles])
+    }, [renameTarget, renameNewName, renameExtension, projectId, addToast, startProcessing, stopProcessing, setFiles])
 
     const handlePrivacy = useCallback(async (file: DriveFile, makePrivate: boolean) => {
         const docId = file.projectDocumentId ?? file.id
@@ -636,6 +651,8 @@ export function useEngagementFileOps({
         setRenameTarget,
         renameNewName,
         setRenameNewName,
+        renameExtension,
+        setRenameExtension,
         renameSubmitting,
         setRenameSubmitting,
         // Trash state

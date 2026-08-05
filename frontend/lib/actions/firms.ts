@@ -400,7 +400,7 @@ export async function getFirmReminderConfig(firmId: string): Promise<FirmReminde
 
 export async function updateFirm(
     firmSlug: string,
-    data: { name?: string; branding?: FirmBranding; currency?: FirmCurrency; enableBetaFeatures?: boolean; internalMemo?: string | null; industry?: string | null; companySizeBracket?: string | null; companyWebsite?: string | null; linkedInUrl?: string | null; billingAddress?: string | null; notes?: string | null; allowDomainAccess?: boolean; allowedEmailDomain?: string | null; reminderEmailConfig?: FirmReminderEmailConfig; externalSections?: { engagementHealth: boolean; fileOrganization: boolean; documentActivity: boolean } }
+    data: { name?: string; branding?: FirmBranding; currency?: FirmCurrency; betaFeatures?: Record<string, boolean>; internalMemo?: string | null; industry?: string | null; companySizeBracket?: string | null; companyWebsite?: string | null; linkedInUrl?: string | null; billingAddress?: string | null; notes?: string | null; allowDomainAccess?: boolean; allowedEmailDomain?: string | null; reminderEmailConfig?: FirmReminderEmailConfig; externalSections?: { engagementHealth: boolean; fileOrganization: boolean; documentActivity: boolean } }
 ): Promise<void> {
     const supabase = await createClient()
     const { data: { user }, error } = await supabase.auth.getUser()
@@ -415,7 +415,7 @@ export async function updateFirm(
     let payload: any = {}
     if (data.name !== undefined) payload.name = data.name
 
-    if (data.branding !== undefined || data.currency !== undefined || data.enableBetaFeatures !== undefined || data.reminderEmailConfig !== undefined || data.internalMemo !== undefined || data.industry !== undefined || data.companySizeBracket !== undefined || data.companyWebsite !== undefined || data.linkedInUrl !== undefined || data.billingAddress !== undefined || data.notes !== undefined || data.externalSections !== undefined) {
+    if (data.branding !== undefined || data.currency !== undefined || data.betaFeatures !== undefined || data.reminderEmailConfig !== undefined || data.internalMemo !== undefined || data.industry !== undefined || data.companySizeBracket !== undefined || data.companyWebsite !== undefined || data.linkedInUrl !== undefined || data.billingAddress !== undefined || data.notes !== undefined || data.externalSections !== undefined) {
         const current = (firm.settings as Record<string, unknown>) || {}
         if (data.branding !== undefined) {
             const existing = (current.branding as Record<string, unknown>) ?? {}
@@ -440,8 +440,8 @@ export async function updateFirm(
             }
             payload.settings = { ...(payload.settings ?? current), currency }
         }
-        if (data.enableBetaFeatures !== undefined) {
-            payload.settings = { ...(payload.settings ?? current), enableBetaFeatures: data.enableBetaFeatures }
+        if (data.betaFeatures !== undefined) {
+            payload.settings = { ...(payload.settings ?? current), betaFeatures: data.betaFeatures }
         }
         if (data.internalMemo !== undefined) {
             payload.settings = { ...(payload.settings ?? current), internalMemo: data.internalMemo }
@@ -477,7 +477,7 @@ export async function updateFirm(
 
     await FirmService.updateFirm(firm.id, user.id, payload)
 
-    if (data.enableBetaFeatures !== undefined) {
+    if (data.betaFeatures !== undefined) {
         const { invalidateUserSettingsPlus } = await import('@/lib/actions/user-settings')
         await invalidateUserSettingsPlus(user.id)
     }
@@ -524,6 +524,7 @@ export async function deleteFirm(firmSlug: string): Promise<void> {
 
 export interface FirmConnectorRecord {
     id: string
+    type: string
     name: string
     email: string
     status: string
@@ -564,6 +565,7 @@ export async function getFirmConnectors(firmId: string): Promise<FirmConnectorRe
         const workspaceRootLocation = (settings.workspaceRootLocation as string | undefined) ?? null
         return {
             id: c.id,
+            type: c.type,
             name: c.name ?? '',
             email,
             status: c.status,

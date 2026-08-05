@@ -8,8 +8,7 @@ import { safeInngestSend } from '@/lib/inngest/client'
 import { resolveProjectContext } from '@/lib/resolve-project-context'
 import { canManageProject } from '@/lib/permission-helpers'
 import { resolveEngagementConnector } from '@/lib/connectors/resolve-client-connector'
-import { GoogleDriveConnector } from '@/lib/google-drive-connector'
-import { getPermissionAdapter } from '@/lib/connectors/registry'
+import { getPermissionAdapter, getContentAdapter } from '@/lib/connectors/registry'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { assertFirmSubscriptionAccess } from '@/lib/billing/subscription-gate'
 import { SubscriptionRevokedError } from '@/lib/errors/api-error'
@@ -514,17 +513,18 @@ export async function PUT(
         })
       }
 
-      // Enforce allowDownload on Drive files whenever guest sharing is active.
-      // patchFileProperties is Google Drive-specific — resolve a Drive connector only.
+      // Enforce allowDownload on storage files whenever guest sharing is active. Uses
+      // setCopyRestricted (IConnectorContentAdapter) so this works for any connector type —
+      // it's a documented no-op for providers without an equivalent concept (currently OneDrive;
+      // see onedrive-content-adapter.ts).
       if (guest) {
         let resolvedConnectorId: string | null = null
         if (updated.connectorId) {
-          // Verify the document's own connector is an active Google Drive connector before using it
           const docConnector = await prisma.connector.findUnique({
             where: { id: updated.connectorId },
-            select: { id: true, type: true, status: true },
+            select: { id: true, status: true },
           })
-          if (docConnector?.type === 'GOOGLE_DRIVE' && docConnector.status === 'ACTIVE') {
+          if (docConnector?.status === 'ACTIVE') {
             resolvedConnectorId = docConnector.id
           }
         }
@@ -533,44 +533,40 @@ export async function PUT(
             where: { id: fileInfo.organizationId },
             include: { connector: true, connectors: true },
           })
-          const active = [...(org?.connectors ?? []), ...(org?.connector ? [org.connector] : [])].find(c => c.status === 'ACTIVE' && c.type === 'GOOGLE_DRIVE')
+          const active = [...(org?.connectors ?? []), ...(org?.connector ? [org.connector] : [])].find(c => c.status === 'ACTIVE')
           if (active) resolvedConnectorId = active.id
         }
 
         if (resolvedConnectorId) {
-          const drive = GoogleDriveConnector.getInstance()
+          const contentAdapter = await getContentAdapter(resolvedConnectorId)
           const sharePdfOnly = guestOptions.sharePdfOnly ?? false
 
-          // Always block Drive's native download — Firma controls download via its own action menu
-          if (sharePdfOnly) {
-            const sharedPdfDriveId = guestOptions.sharedPdfDriveId
-            if (sharedPdfDriveId) {
+          // Always block native download — Firma controls download via its own action menu
+          if (contentAdapter) {
+            if (sharePdfOnly) {
+              const sharedPdfDriveId = guestOptions.sharedPdfDriveId
+              if (sharedPdfDriveId) {
+                try {
+                  await contentAdapter.setCopyRestricted(resolvedConnectorId, sharedPdfDriveId, true)
+                } catch (e) {
+                  console.error('Failed to set copy-restriction on shared PDF:', e)
+                }
+              }
+            } else {
               try {
-                await drive.patchFileProperties(resolvedConnectorId, sharedPdfDriveId, {
-                  copyRequiresWriterPermission: true
-                })
+                await contentAdapter.setCopyRestricted(resolvedConnectorId, fileInfo.externalId, true)
               } catch (e) {
-                console.error('Failed to patch PDF file properties:', e)
+                console.error('Failed to set copy-restriction on file:', e)
               }
             }
-          } else {
-            try {
-              await drive.patchFileProperties(resolvedConnectorId, fileInfo.externalId, {
-                copyRequiresWriterPermission: true
-              })
-            } catch (e) {
-              console.error('Failed to patch file properties:', e)
-            }
-          }
 
-          // Always lock Drive download for EC persona too (download only via Firma action menu)
-          if (externalCollaborator && !sharePdfOnly) {
-            try {
-              await drive.patchFileProperties(resolvedConnectorId, fileInfo.externalId, {
-                copyRequiresWriterPermission: true
-              })
-            } catch (e) {
-              console.error('Failed to patch EC file properties:', e)
+            // Always lock download for EC persona too (download only via Firma action menu)
+            if (externalCollaborator && !sharePdfOnly) {
+              try {
+                await contentAdapter.setCopyRestricted(resolvedConnectorId, fileInfo.externalId, true)
+              } catch (e) {
+                console.error('Failed to set copy-restriction for EC:', e)
+              }
             }
           }
         }

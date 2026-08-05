@@ -3,9 +3,10 @@
 import { prisma } from '@/lib/prisma'
 import { createClient as createSupabaseClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
-import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { logger } from '@/lib/logger'
 import { resolveClientConnector } from '@/lib/connectors/resolve-client-connector'
+import { ensureAppFolderStructure } from '@/lib/connectors/pockett-structure.service'
+import { getStorageAdapter } from '@/lib/connectors/registry'
 import type { ClientStatus } from '@prisma/client'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { upsertFollowUpReminder } from '@/lib/actions/user-reminders'
@@ -174,20 +175,21 @@ export async function createClient(organizationSlug: string, data: CreateClientD
         .meta({ name: newClient.name, slug: newClient.slug })
         .fireAndForget()
 
-    // 5. Create Drive folder structure if connected
+    // 5. Create storage folder structure if connected (Google Drive or OneDrive)
     try {
         const { connectorId } = await resolveClientConnector(newClient.id)
         if (connectorId) {
-            await googleDriveConnector.ensureAppFolderStructure(
+            const adapter = await getStorageAdapter(connectorId)
+            await ensureAppFolderStructure(
                 connectorId,
                 newClient.name,
                 newClient.slug,
-                await googleDriveConnector.createGoogleDriveAdapter(connectorId),
+                adapter,
                 firm.id
             )
         }
     } catch (e) {
-        logger.error("Failed to create Google Drive folder for client", e as Error)
+        logger.error("Failed to create storage connector folder for client", e as Error)
     }
 
     // Upsert follow-up reminder if followUpDate was set
@@ -625,12 +627,13 @@ export async function shareConnectorWithClient({
 
     await prisma.client.update({ where: { id: clientId }, data: { connectorId } })
 
-    // Provision the client folder and all existing engagement folders in Drive.
-    // Fire-and-forget — a failure here is non-fatal; folders will be created on first upload.
+    // Provision the client folder and all existing engagement folders. ensureAppFolderStructure
+    // is provider-agnostic (built against IConnectorStorageAdapter); getStorageAdapter resolves
+    // the right adapter for whatever connector type this is. Fire-and-forget — a failure here
+    // is non-fatal; folders will be created on first upload.
     try {
-        const { googleDriveConnector } = await import('@/lib/google-drive-connector')
-        const adapter = await googleDriveConnector.createGoogleDriveAdapter(connectorId)
-        await googleDriveConnector.ensureAppFolderStructure(connectorId, client.name, client.slug, adapter, client.firmId)
+        const adapter = await getStorageAdapter(connectorId)
+        await ensureAppFolderStructure(connectorId, client.name, client.slug, adapter, client.firmId)
 
         const engagements = await prisma.engagement.findMany({
             where: { clientId, isDeleted: false, connectorRootFolderId: null },
@@ -638,7 +641,7 @@ export async function shareConnectorWithClient({
         })
         for (const eng of engagements) {
             try {
-                const engResult = await googleDriveConnector.ensureAppFolderStructure(
+                const engResult = await ensureAppFolderStructure(
                     connectorId, client.name, client.slug, adapter, client.firmId,
                     { projectName: eng.name, projectSlug: eng.slug }
                 )

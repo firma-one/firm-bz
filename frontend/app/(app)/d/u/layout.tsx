@@ -35,7 +35,7 @@ export default function UserLayout({ children }: { children: ReactNode }) {
       const data = await res.json()
       const org = data.organization || data.firm || data
       const settings = (org?.settings as Record<string, unknown>) || {}
-      setBetaFeaturesEnabled(settings.enableBetaFeatures === true)
+      setBetaFeaturesEnabled((settings.betaFeatures as Record<string, boolean> | undefined)?.dossier === true)
     }
     void loadBetaFlag()
   }, [])

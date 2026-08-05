@@ -79,6 +79,8 @@ export interface FirmSettingsFormProps {
     orgId?: string | null
     initialName: string
     firmSandboxOnly?: boolean
+    /** Server-gated via Firm.settings.betaFeatures.microsoftStorageConnector, fails closed if omitted. */
+    microsoftConnectorEnabled?: boolean
     initialSection?: Section
     onSaved?: () => void
 }
@@ -90,6 +92,7 @@ export function FirmSettingsForm({
     orgId: orgIdProp,
     initialName,
     firmSandboxOnly = false,
+    microsoftConnectorEnabled = false,
     initialSection,
     onSaved,
 }: FirmSettingsFormProps) {
@@ -114,7 +117,8 @@ export function FirmSettingsForm({
     const [currencyCode, setCurrencyCode] = useState('')
     const [currencyIsCustom, setCurrencyIsCustom] = useState(false)
     const [currencyCustom, setCurrencyCustom] = useState('')
-    const [enableBetaFeatures, setEnableBetaFeatures] = useState(false)
+    const [betaDossier, setBetaDossier] = useState(false)
+    const [betaMicrosoftStorageConnector, setBetaMicrosoftStorageConnector] = useState(false)
     const [immediateOnCreate, setImmediateOnCreate] = useState(true)
     const [recurringEnabled, setRecurringEnabled] = useState(true)
     const [recurringFrequencyDays, setRecurringFrequencyDays] = useState(1)
@@ -199,7 +203,9 @@ export function FirmSettingsForm({
                     setLinkedInUrl((settings.linkedInUrl as string) ?? '')
                     setBillingAddress((settings.billingAddress as string) ?? '')
                     setNotes((settings.notes as string) ?? '')
-                    setEnableBetaFeatures(settings.enableBetaFeatures === true)
+                    const bf = (settings.betaFeatures as Record<string, boolean>) ?? {}
+                    setBetaDossier(bf.dossier === true)
+                    setBetaMicrosoftStorageConnector(bf.microsoftStorageConnector === true)
                     const rc = (settings.reminderEmailConfig as Record<string, any>) ?? {}
                     setImmediateOnCreate(rc.immediateOnCreate ?? true)
                     setRecurringEnabled(rc.recurring?.enabled ?? true)
@@ -354,7 +360,7 @@ export function FirmSettingsForm({
                     : currencyCode
                         ? { symbol: WORLD_CURRENCIES.find((c) => c.code === currencyCode)?.symbol ?? null, code: currencyCode }
                         : { symbol: null, code: null },
-                enableBetaFeatures,
+                betaFeatures: { dossier: betaDossier, microsoftStorageConnector: betaMicrosoftStorageConnector },
                 internalMemo: internalMemo.trim() || null,
                 industry: industry.trim() || null,
                 companySizeBracket: companySizeBracket || null,
@@ -818,19 +824,25 @@ export function FirmSettingsForm({
                                         </div>
 
                                         {/* Beta features */}
-                                        <div className="bg-white rounded border border-[#e5e7eb] p-4">
-                                            <div className="flex items-center justify-between gap-4">
-                                                <div className="flex items-start gap-2.5">
-                                                    <FlaskConical className="h-4 w-4 text-[#45474c] mt-0.5 shrink-0" />
-                                                    <div>
-                                                        <div className="flex items-center gap-2">
-                                                            <span className={fieldLabel}>Beta features</span>
-                                                            <span className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 leading-none">Beta</span>
+                                        <div className="bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
+                                            <div className="flex items-center gap-2">
+                                                <FlaskConical className="h-4 w-4 text-[#45474c] shrink-0" />
+                                                <span className={fieldLabel}>Beta features</span>
+                                                <span className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 leading-none">Beta</span>
+                                            </div>
+                                            <div className="flex flex-col gap-2.5">
+                                                {([
+                                                    { label: 'Dossier', description: 'Enables Engagement > Dossier. Internal personas only.', value: betaDossier, set: setBetaDossier },
+                                                    { label: 'Microsoft Storage Connector', description: 'Enables the Microsoft OneDrive/SharePoint document storage connector for this firm.', value: betaMicrosoftStorageConnector, set: setBetaMicrosoftStorageConnector },
+                                                ]).map(({ label, description, value, set }) => (
+                                                    <div key={label} className="flex items-center justify-between gap-4">
+                                                        <div>
+                                                            <span className="text-xs text-[#1b1b1d]">{label}</span>
+                                                            <p className="text-xs text-[#9a9ba0] mt-0.5">{description}</p>
                                                         </div>
-                                                        <p className="text-xs text-[#45474c] mt-0.5">Enables <strong>Engagement &gt; Dossier</strong>. Internal personas only.</p>
+                                                        <Switch checked={value} onCheckedChange={(v) => { set(v); setAppDirty(true) }} disabled={isSandboxFirm || !loaded} aria-label={label} />
                                                     </div>
-                                                </div>
-                                                <Switch checked={enableBetaFeatures} onCheckedChange={(v) => { setEnableBetaFeatures(v); setAppDirty(true) }} disabled={isSandboxFirm || !loaded} aria-label="Enable beta features" />
+                                                ))}
                                             </div>
                                         </div>
 
@@ -859,7 +871,7 @@ export function FirmSettingsForm({
                     <div className="overflow-hidden min-h-0">
                         <div className="p-5 border-t border-[#e5e7eb] bg-white">
                             {orgId
-                                ? <FirmDriveSection firmId={orgId} orgSlug={orgSlug} isSandboxFirm={isSandboxFirm} onConnectorsLoaded={setStorageConnectorCount} />
+                                ? <FirmDriveSection firmId={orgId} orgSlug={orgSlug} isSandboxFirm={isSandboxFirm} onConnectorsLoaded={setStorageConnectorCount} microsoftConnectorEnabled={microsoftConnectorEnabled} />
                                 : <div className="text-xs text-[#9a9ba0]">Loading…</div>
                             }
                         </div>

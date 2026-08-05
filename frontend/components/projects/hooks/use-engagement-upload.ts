@@ -7,6 +7,64 @@ import { DriveFile } from '@/lib/types'
 const JUNK_FILE_NAMES = new Set(['.ds_store', 'desktop.ini', 'thumbs.db', '.trash', '.spotlight-v100', '.fseventsd'])
 const isJunkFile = (name: string) => JUNK_FILE_NAMES.has(name.toLowerCase())
 
+// Microsoft Graph upload-session limits (learn.microsoft.com/graph/api/driveitem-createuploadsession):
+// each PUT must carry a Content-Range header (even a single PUT covering the whole file) and is
+// capped at 60 MiB; chunk sizes should be a multiple of 320 KiB. No Authorization header on the
+// PUT — the session URL itself is pre-authorized, same as Google's resumable session URL.
+const ONEDRIVE_CHUNK_SIZE = 60 * 1024 * 1024 - (60 * 1024 * 1024 % (320 * 1024)) // largest 320 KiB multiple <= 60 MiB
+
+/**
+ * Upload a file to a Microsoft Graph upload session in Content-Range-addressed chunks.
+ * Returns the same shape uploadFile's Google-Drive XHR path returns, via onUploadResponse
+ * for the final chunk's response body (a driveItem with {id, name} — same shape as
+ * Google's response, so the shared indexing/intake side effects can be reused as-is).
+ */
+async function uploadFileToOneDriveSession(
+    uploadUrl: string,
+    file: File,
+    onProgress: ((p: number) => void) | undefined,
+    onUploadResponse: (rawResponseText: string) => { success: true; finalFile?: { name: string; id: string }; docIdRequestSettled?: Promise<void> }
+): Promise<{ success: boolean; error?: string; finalFile?: { name: string; id: string }; docIdRequestSettled?: Promise<void> }> {
+    const totalSize = file.size
+    let offset = 0
+
+    try {
+        do {
+            const chunkEnd = Math.min(offset + ONEDRIVE_CHUNK_SIZE, totalSize)
+            const chunk = file.slice(offset, chunkEnd)
+            const isFinalChunk = chunkEnd >= totalSize
+
+            const res = await fetch(uploadUrl, {
+                method: 'PUT',
+                headers: {
+                    'Content-Length': String(chunkEnd - offset),
+                    'Content-Range': `bytes ${offset}-${chunkEnd - 1}/${totalSize}`,
+                },
+                body: chunk,
+            })
+
+            if (!res.ok && res.status !== 202) {
+                const text = await res.text().catch(() => '')
+                logger.error('OneDrive chunk upload error', new Error(`Status: ${res.status}, Response: ${text}`))
+                return { success: false, error: `Upload failed: ${res.status}` }
+            }
+
+            offset = chunkEnd
+            onProgress?.((offset / Math.max(totalSize, 1)) * 100)
+
+            if (isFinalChunk) {
+                const text = await res.text().catch(() => '')
+                return onUploadResponse(text)
+            }
+            // 202 Accepted (intermediate chunk) — loop continues to the next chunk.
+        } while (offset < totalSize)
+        return { success: false, error: 'Upload did not complete' }
+    } catch (e) {
+        logger.error('Network Error during OneDrive upload', e instanceof Error ? e : new Error(String(e)))
+        return { success: false, error: 'Network interruption. Please check connection.' }
+    }
+}
+
 type Session = {
     access_token?: string
     user?: { id?: string; email?: string }
@@ -133,10 +191,76 @@ export function useEngagementUpload({
                 return { success: false, error: errMsg }
             }
 
-            const { uploadUrl } = await res.json()
+            const { uploadUrl, provider } = await res.json()
             logger.debug('Got Resumable Upload URL:', uploadUrl)
 
-            // 3. Direct Upload to Google Drive (XHR for progress)
+            // Shared "upload finished" handling — same for both providers, since Google's
+            // resumable-upload response and Graph's final-chunk response both return the
+            // created/updated item's {id, name} directly in the response body.
+            const onUploadResponse = (rawResponseText: string): { success: true; finalFile?: { name: string; id: string }; docIdRequestSettled?: Promise<void> } => {
+                try {
+                    const data = JSON.parse(rawResponseText)
+                    const finalFile = { name: data.name, id: data.id }
+
+                    // POST /index-file does TWO separate things server-side, and only the
+                    // FIRST is fast:
+                    //   1. ensureDocIdEarly() — synchronous DB upsert + atomic counter
+                    //      increment, assigns `docId` before this POST's response returns.
+                    //   2. IndexingInterceptor.index{Single,Batch} — just enqueues an
+                    //      Inngest event and returns immediately; it does NOT wait for the
+                    //      Inngest job (Drive metadata fetch, PDF/Office text extraction,
+                    //      embeddings) to actually run. That job can take seconds and must
+                    //      stay fully async — never block the UI on it.
+                    // So awaiting this fetch's response only waits on (1)+enqueue, which is
+                    // cheap regardless of file count. `docIdRequestSettled` name is chosen
+                    // deliberately over something like "indexingDone" — the Inngest indexing
+                    // job is NOT done when this resolves, only the docId assignment is.
+                    // Callers await this before their post-upload fetchFiles() so the Files
+                    // list shows the real docId immediately instead of "—" until a manual
+                    // refresh (see conversation/PR notes on the docId race fix).
+                    let docIdRequestSettled: Promise<void> | undefined
+                    if (triggerIndexing) {
+                        docIdRequestSettled = fetch(`/api/projects/${projectId}/index-file`, {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${token}`,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                externalId: finalFile.id,
+                                fileName: finalFile.name
+                            })
+                        }).then(() => undefined).catch(e => logger.error('Failed to trigger indexing', e))
+                    }
+
+                    // For EC/EV uploads: call index-file-intake to set PENDING lock and notify ELs
+                    if (isExternalPersona && projectId) {
+                        fetch(`/api/projects/${projectId}/documents/${finalFile.id}/index-file-intake`, {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${token}`,
+                                'Content-Type': 'application/json',
+                            },
+                            credentials: 'include',
+                        }).catch(e => logger.error('Failed to trigger intake indexing', e))
+                    }
+
+                    return { success: true, finalFile, docIdRequestSettled }
+                } catch (e) {
+                    logger.warn('Failed to parse upload response', { error: e })
+                    return { success: true }
+                }
+            }
+
+            if (provider === 'onedrive') {
+                // 3a. Direct upload to Microsoft Graph — chunked PUTs with Content-Range,
+                // required by Graph's upload-session protocol (unlike Google's single-body PUT;
+                // see MS Learn "Upload large files with an upload session"). Each chunk is capped
+                // at 60 MiB (Graph's hard per-request limit) and sized as a multiple of 320 KiB.
+                return await uploadFileToOneDriveSession(uploadUrl, file, onProgress, onUploadResponse)
+            }
+
+            // 3b. Direct Upload to Google Drive (XHR for progress) — single whole-body PUT.
             return new Promise((resolve) => {
                 const xhr = new XMLHttpRequest()
                 xhr.open('PUT', uploadUrl, true)
@@ -152,58 +276,7 @@ export function useEngagementUpload({
 
                 xhr.onload = () => {
                     if (xhr.status === 200 || xhr.status === 201) {
-                        try {
-                            const data = JSON.parse(xhr.responseText)
-                            const finalFile = { name: data.name, id: data.id }
-
-                            // POST /index-file does TWO separate things server-side, and only the
-                            // FIRST is fast:
-                            //   1. ensureDocIdEarly() — synchronous DB upsert + atomic counter
-                            //      increment, assigns `docId` before this POST's response returns.
-                            //   2. IndexingInterceptor.index{Single,Batch} — just enqueues an
-                            //      Inngest event and returns immediately; it does NOT wait for the
-                            //      Inngest job (Drive metadata fetch, PDF/Office text extraction,
-                            //      embeddings) to actually run. That job can take seconds and must
-                            //      stay fully async — never block the UI on it.
-                            // So awaiting this fetch's response only waits on (1)+enqueue, which is
-                            // cheap regardless of file count. `docIdRequestSettled` name is chosen
-                            // deliberately over something like "indexingDone" — the Inngest indexing
-                            // job is NOT done when this resolves, only the docId assignment is.
-                            // Callers await this before their post-upload fetchFiles() so the Files
-                            // list shows the real docId immediately instead of "—" until a manual
-                            // refresh (see conversation/PR notes on the docId race fix).
-                            let docIdRequestSettled: Promise<void> | undefined
-                            if (triggerIndexing) {
-                                docIdRequestSettled = fetch(`/api/projects/${projectId}/index-file`, {
-                                    method: 'POST',
-                                    headers: {
-                                        'Authorization': `Bearer ${token}`,
-                                        'Content-Type': 'application/json'
-                                    },
-                                    body: JSON.stringify({
-                                        externalId: finalFile.id,
-                                        fileName: finalFile.name
-                                    })
-                                }).then(() => undefined).catch(e => logger.error('Failed to trigger indexing', e))
-                            }
-
-                            // For EC/EV uploads: call index-file-intake to set PENDING lock and notify ELs
-                            if (isExternalPersona && projectId) {
-                                fetch(`/api/projects/${projectId}/documents/${finalFile.id}/index-file-intake`, {
-                                    method: 'POST',
-                                    headers: {
-                                        'Authorization': `Bearer ${token}`,
-                                        'Content-Type': 'application/json',
-                                    },
-                                    credentials: 'include',
-                                }).catch(e => logger.error('Failed to trigger intake indexing', e))
-                            }
-
-                            resolve({ success: true, finalFile, docIdRequestSettled })
-                        } catch (e) {
-                            logger.warn('Failed to parse upload response', { error: e })
-                            resolve({ success: true })
-                        }
+                        resolve(onUploadResponse(xhr.responseText))
                     } else {
                         logger.error('Drive Upload Error', new Error(`Status: ${xhr.status}, Response: ${xhr.responseText}`))
                         resolve({ success: false, error: `Upload failed: ${xhr.status}` })

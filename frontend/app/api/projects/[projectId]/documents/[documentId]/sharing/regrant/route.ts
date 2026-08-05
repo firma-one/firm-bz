@@ -105,19 +105,19 @@ export async function POST(
                 where: { id: fileInfo.organizationId },
                 include: { connector: true },
             })
-            if (org?.connector?.type === 'GOOGLE_DRIVE' && org.connector.status === 'ACTIVE') {
+            if (org?.connector?.status === 'ACTIVE') {
                 connectorId = org.connector.id
             }
         }
 
         if (!connectorId) {
-            return NextResponse.json({ error: 'No active Google Drive connection found' }, { status: 500 })
+            return NextResponse.json({ error: 'No active storage connection found' }, { status: 500 })
         }
 
         const permissionAdapter = await getPermissionAdapter(connectorId)
         const contentAdapter = await getContentAdapter(connectorId)
         if (!permissionAdapter || !contentAdapter) {
-            return NextResponse.json({ error: 'No active Google Drive connection found' }, { status: 500 })
+            return NextResponse.json({ error: 'No active storage connection found' }, { status: 500 })
         }
 
         if (sharingUser.connectorPermissionId) {
