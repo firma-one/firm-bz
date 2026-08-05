@@ -53,6 +53,14 @@ enum DocumentStatus {
   @@schema("platform")
 }
 
+/** FILE: connector-backed item (Drive/OneDrive). LINK: external URL with no connector-backed content. */
+enum EngagementDocumentType {
+  FILE
+  LINK
+
+  @@schema("platform")
+}
+
 enum InvitationStatus {
   PENDING
   ACCEPTED
@@ -642,6 +650,8 @@ model EngagementDocument {
   content        String?
   embedding      Unsupported("vector")?
   metadata       Json                        @default("{}")
+  documentType   EngagementDocumentType      @default(FILE)
+  externalUrl    String?
   sandboxOnly    Boolean                     @default(false)
   dueDate        DateTime?                   @db.Timestamptz(6)
   settings       Json                        @default("{}")

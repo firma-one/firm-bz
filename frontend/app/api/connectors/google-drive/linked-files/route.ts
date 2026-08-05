@@ -35,6 +35,9 @@ function isOneDrive(connector: { type?: ConnectorType | string } | null | undefi
     return connector?.type === ConnectorType.ONEDRIVE
 }
 
+/** Sentinel mimeType for connector-agnostic "link" documents — see DocumentIcon/DocumentActionMenu. */
+const LINK_MIME_TYPE = 'application/vnd.pockett.link'
+
 // Graph has no "create blank native Office file" API (unlike Drive's files.create with a
 // Google-native mimeType, which synthesizes the doc server-side) — OOXML files are real binary
 // zip containers, so creating one means PUTting actual bytes. These are minimal, valid blank
@@ -639,6 +642,57 @@ export async function POST(request: NextRequest) {
                             })
                         }
                     }
+
+                    // Merge in LINK documents — these have no connector-backed item, so they never
+                    // appear in the live Drive/Graph listing and must always be surfaced from the DB.
+                    const linkRows = await (prisma.engagementDocument as any).findMany({
+                        where: {
+                            engagementId: bodyEngagementId,
+                            parentId: folderId,
+                            documentType: 'LINK',
+                        },
+                        select: { id: true, externalId: true, fileName: true, mimeType: true, externalUrl: true, metadata: true, status: true, docId: true, createdBy: true },
+                    })
+                    // Links have no connector-side owner metadata — fall back to the creating user.
+                    const linkCreatorIds: string[] = Array.from(new Set(linkRows.map((r: any) => r.createdBy).filter(Boolean)))
+                    const linkCreatorById = new Map<string, { email: string; displayName: string }>()
+                    if (linkCreatorIds.length > 0) {
+                        const { createAdminClient } = await import('@/utils/supabase/admin')
+                        const admin = createAdminClient()
+                        await Promise.all(linkCreatorIds.map(async (uid: string) => {
+                            const { data: { user: u } } = await admin.auth.admin.getUserById(uid)
+                            if (u?.email) {
+                                const meta = (u.user_metadata ?? {}) as Record<string, unknown>
+                                const displayName = (typeof meta.full_name === 'string' && meta.full_name.trim())
+                                    || (typeof meta.name === 'string' && meta.name.trim())
+                                    || u.email.split('@')[0]
+                                linkCreatorById.set(uid, { email: u.email, displayName })
+                            }
+                        }))
+                    }
+                    for (const row of linkRows) {
+                        if (!driveIdSet.has(row.externalId)) {
+                            const creator = row.createdBy ? (linkCreatorById.get(row.createdBy) ?? null) : null
+                            files.push({
+                                id: row.externalId,
+                                name: row.fileName,
+                                mimeType: row.mimeType ?? LINK_MIME_TYPE,
+                                documentType: 'LINK',
+                                externalUrl: row.externalUrl,
+                                size: null,
+                                modifiedTime: (row.metadata as any)?.modifiedTime ?? null,
+                                webViewLink: null,
+                                isFolder: false,
+                                connectorId: connector.id,
+                                projectDocumentId: row.id,
+                                indexingStatus: row.status ?? undefined,
+                                docId: row.docId ?? null,
+                                owners: creator ? [{ displayName: creator.displayName, emailAddress: creator.email }] : null,
+                                actorEmail: creator?.email ?? null,
+                                ownerRole: creator ? (elRoleByEmail.get(creator.email) ?? null) : null,
+                            })
+                        }
+                    }
                 }
             }
 
@@ -1225,6 +1279,20 @@ export async function POST(request: NextRequest) {
             }
             const renameDenied = await blockIfEngagementFileMutationForbidden(user.id, bodyEngagementId)
             if (renameDenied) return renameDenied
+
+            // Links have no connector-backed item — rename the DB row directly, no connector call.
+            const linkRow = await prisma.engagementDocument.findFirst({
+                where: { engagementId: bodyEngagementId, externalId: fileId, documentType: 'LINK' },
+                select: { id: true },
+            })
+            if (linkRow) {
+                const updated = await prisma.engagementDocument.update({
+                    where: { id: linkRow.id },
+                    data: { fileName: newName.trim(), updatedBy: user.id },
+                    select: { externalId: true, fileName: true },
+                })
+                return NextResponse.json({ success: true, id: updated.externalId, name: updated.fileName })
+            }
 
             const [engagement, connector] = await Promise.all([
                 prisma.engagement.findFirst({ where: { id: bodyEngagementId, isDeleted: false }, select: { id: true, clientId: true, firmId: true } }),

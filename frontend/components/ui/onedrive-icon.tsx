@@ -6,18 +6,21 @@ interface OneDriveIconProps {
   className?: string
 }
 
-/** Simple inline OneDrive cloud mark — matches the placeholder mark already used in firm-drive-section.tsx. */
+/** Official Microsoft OneDrive product mark, same asset served from Microsoft's Fabric/M365 brand-icons CDN. */
+export const ONEDRIVE_PRODUCT_MARK_SRC =
+  "https://res.cdn.office.net/files/fabric-cdn-prod_20230815.002/assets/brand-icons/product/svg/onedrive_48x1.svg" as const
+
+/** Official Microsoft OneDrive product mark (SVG, from Microsoft's own CDN). */
 export function OneDriveIcon({ size = 20, className = "" }: OneDriveIconProps) {
   return (
-    <svg
-      viewBox="0 0 24 24"
+    <img
+      src={ONEDRIVE_PRODUCT_MARK_SRC}
+      alt=""
       width={size}
       height={size}
-      xmlns="http://www.w3.org/2000/svg"
-      className={cn("shrink-0", className)}
+      decoding="async"
+      className={cn("object-contain shrink-0", className)}
       aria-hidden
-    >
-      <path d="M9.25 7.25A6.25 6.25 0 0 1 21.5 10a4.5 4.5 0 0 1-.5 8.996H5a4 4 0 0 1-.68-7.938A6.25 6.25 0 0 1 9.25 7.25Z" fill="#0078D4" />
-    </svg>
+    />
   )
 }

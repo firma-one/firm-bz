@@ -156,26 +156,37 @@ export function useEngagementFileOps({
         setTrashConfirming(true)
         startProcessing(doc.id)
         try {
-            const res = await fetch('/api/drive-action', {
-                method: 'POST',
-                credentials: 'include',
-                headers: {
-                    Authorization: `Bearer ${sessionRef.current.access_token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    action: 'trash',
-                    fileId: doc.id,
-                    connectorId: doc.connectorId,
-                    projectId,
-                    fileName: doc.name
+            const isLink = doc.documentType === 'LINK'
+            const res = isLink
+                ? await fetch(`/api/projects/${projectId}/documents/${doc.projectDocumentId ?? doc.id}`, {
+                    method: 'DELETE',
+                    credentials: 'include',
+                    headers: { Authorization: `Bearer ${sessionRef.current.access_token}` },
                 })
-            })
+                : await fetch('/api/drive-action', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: {
+                        Authorization: `Bearer ${sessionRef.current.access_token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        action: 'trash',
+                        fileId: doc.id,
+                        connectorId: doc.connectorId,
+                        projectId,
+                        fileName: doc.name
+                    })
+                })
             if (!res.ok) {
                 const err = await res.json()
-                throw new Error(err.error || 'Failed to move to bin')
+                throw new Error(err.error || (isLink ? 'Failed to delete link' : 'Failed to move to bin'))
             }
-            addToast({ type: 'success', title: 'Moved to Bin', message: `${doc.name} moved to Google Drive Bin` })
+            addToast(
+                isLink
+                    ? { type: 'success', title: 'Deleted', message: `${doc.name} was deleted` }
+                    : { type: 'success', title: 'Moved to Bin', message: `${doc.name} moved to Google Drive Bin` }
+            )
             setTrashConfirmTarget(null)
             const currentFolderId = currentFolderIdRef.current
             if (currentFolderId) fetchFiles(currentFolderId, true)
@@ -335,10 +346,10 @@ export function useEngagementFileOps({
     }, [projectId, currentFolderIdRef, fetchFiles, addToast, startProcessing, stopProcessing])
 
     const openRenameModal = useCallback((doc: DriveFile) => {
-        const isFolder = doc.mimeType === 'application/vnd.google-apps.folder'
+        const hasNoExtension = doc.mimeType === 'application/vnd.google-apps.folder' || doc.documentType === 'LINK'
         const fullName = doc.name ?? ''
         setRenameTarget(doc)
-        if (isFolder) {
+        if (hasNoExtension) {
             setRenameNewName(fullName)
             setRenameExtension('')
         } else {

@@ -30,6 +30,9 @@ export async function POST(
 
         const fileInfo = await getFileInfo(projectId, documentIdParam)
         if (!fileInfo) return NextResponse.json({ error: 'File not found' }, { status: 404 })
+        if (fileInfo.documentType === 'LINK') {
+            return NextResponse.json({ error: 'This document is a link and does not support secure access grants' }, { status: 400 })
+        }
 
         const projectMember = await requireEngagementMember(projectId, user.id)
         if (!projectMember) {

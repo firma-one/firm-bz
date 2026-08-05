@@ -403,6 +403,7 @@ export function DocumentActionMenu({
   }, [projectId, isExternalViewer, documentIdForProjectApis, addToast, onShareSaved])
 
   const getDisplayType = (doc: any) => {
+    if (doc.documentType === 'LINK') return "External URL"
     if (doc.mimeType?.includes('folder')) return "Folder"
     if (doc.mimeType?.includes('document')) return "Document"
     if (doc.mimeType?.includes('spreadsheet')) return "Spreadsheet"
@@ -813,7 +814,7 @@ export function DocumentActionMenu({
                           {isApprovedDeliverable ? (
                             <div className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground opacity-50 cursor-not-allowed select-none">
                               <Trash2 className="h-4 w-4" />
-                              <span>Move to Bin</span>
+                              <span>{document.documentType === 'LINK' ? 'Delete' : 'Move to Bin'}</span>
                             </div>
                           ) : (
                             <DropdownMenuItem
@@ -821,14 +822,16 @@ export function DocumentActionMenu({
                               className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
                             >
                               <Trash2 className="h-4 w-4" />
-                              <span>Move to Bin</span>
+                              <span>{document.documentType === 'LINK' ? 'Delete' : 'Move to Bin'}</span>
                             </DropdownMenuItem>
                           )}
                         </TooltipTrigger>
                         <TooltipContent side="left" className="max-w-[200px]">
                           {isApprovedDeliverable
                             ? <p>Approved deliverables cannot be deleted</p>
-                            : <p>Items in Bin are permanently deleted after 30 days (Google Drive).</p>
+                            : document.documentType === 'LINK'
+                              ? <p>This link will be permanently deleted.</p>
+                              : <p>Items in Bin are permanently deleted after 30 days (Google Drive).</p>
                           }
                         </TooltipContent>
                       </Tooltip>
@@ -861,6 +864,7 @@ export function DocumentActionMenu({
               </>
             ) : (
               <>
+                {document.documentType !== 'LINK' && (
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
                     <Info className="h-4 w-4 text-gray-600" />
@@ -958,6 +962,7 @@ export function DocumentActionMenu({
                       <Clock className="h-4 w-4 text-gray-600" />
                       <span>Activity Stream</span>
                     </DropdownMenuItem>
+                    {document.documentType !== 'LINK' && (
                     <DropdownMenuItem
                       onClick={() => {
                         onOpenVersionPane?.(document.id)
@@ -974,8 +979,10 @@ export function DocumentActionMenu({
                       <Clock className="h-4 w-4 text-gray-600" />
                       <span>Version History</span>
                     </DropdownMenuItem>
+                    )}
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
+                )}
 
                 <DropdownMenuSeparator />
 
@@ -996,6 +1003,10 @@ export function DocumentActionMenu({
                 ) : (
                   <DropdownMenuItem
                     onClick={() => {
+                      if (document.documentType === 'LINK' && document.externalUrl) {
+                        window.open(document.externalUrl, '_blank', 'noopener,noreferrer')
+                        return
+                      }
                       if (onOpenDocument) {
                         onOpenDocument(document)
                       } else if (rightPane.hasRightPane) {
@@ -1024,7 +1035,8 @@ export function DocumentActionMenu({
                   <span>Copy link</span>
                 </DropdownMenuItem>
 
-                {!(document.isGuest && !document.allowDownload) &&
+                {document.documentType !== 'LINK' &&
+                 !(document.isGuest && !document.allowDownload) &&
                  !(document.isExternalCollaborator && !document.ecAllowDownload) && (
                   <DropdownMenuItem
                     onClick={() => { handleDownload(document); onDownloadDocument?.(document) }}
@@ -1102,7 +1114,7 @@ export function DocumentActionMenu({
                           </DropdownMenuItem>
                         )
                       )}
-                      {onDuplicateDocument && (
+                      {onDuplicateDocument && document.documentType !== 'LINK' && (
                         isApprovedDeliverable ? (
                           <div className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground opacity-40 cursor-not-allowed select-none">
                             <Copy className="h-4 w-4" /><span>Duplicate</span>
@@ -1117,7 +1129,7 @@ export function DocumentActionMenu({
                           </DropdownMenuItem>
                         )
                       )}
-                      {onCopyDocument && (
+                      {onCopyDocument && document.documentType !== 'LINK' && (
                         <DropdownMenuItem
                           onSelect={() => onCopyDocument(document)}
                           className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
@@ -1126,7 +1138,7 @@ export function DocumentActionMenu({
                           <span>Copy</span>
                         </DropdownMenuItem>
                       )}
-                      {onMoveDocument && (
+                      {onMoveDocument && document.documentType !== 'LINK' && (
                         isApprovedDeliverable ? (
                           <div className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground opacity-40 cursor-not-allowed select-none">
                             <Move className="h-4 w-4" /><span>Move</span>
@@ -1141,8 +1153,8 @@ export function DocumentActionMenu({
                           </DropdownMenuItem>
                         )
                       )}
-                      {onCrossEngagementCopy && <DropdownMenuSeparator />}
-                      {onCrossEngagementCopy && (
+                      {onCrossEngagementCopy && document.documentType !== 'LINK' && <DropdownMenuSeparator />}
+                      {onCrossEngagementCopy && document.documentType !== 'LINK' && (
                         <DropdownMenuItem
                           onSelect={() => onCrossEngagementCopy(document)}
                           className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
@@ -1302,7 +1314,7 @@ export function DocumentActionMenu({
                     <span>Set Due Date</span>
                   </DropdownMenuItem>
                 )}
-                {!mime.includes('folder') && isExternalViewer && projectId && (() => {
+                {!mime.includes('folder') && document.documentType !== 'LINK' && isExternalViewer && projectId && (() => {
                   const doc = document as { lock?: { type?: string } | null }
                   const isAlreadyLocked = doc.lock?.type === 'finalize'
                   if (isAlreadyLocked) return (
@@ -1332,7 +1344,7 @@ export function DocumentActionMenu({
                           {isApprovedDeliverable ? (
                             <div className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground opacity-50 cursor-not-allowed select-none">
                               <Trash2 className="h-4 w-4" />
-                              <span>Move to Bin</span>
+                              <span>{document.documentType === 'LINK' ? 'Delete' : 'Move to Bin'}</span>
                             </div>
                           ) : (
                             <DropdownMenuItem
@@ -1340,21 +1352,23 @@ export function DocumentActionMenu({
                               className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
                             >
                               <Trash2 className="h-4 w-4" />
-                              <span>Move to Bin</span>
+                              <span>{document.documentType === 'LINK' ? 'Delete' : 'Move to Bin'}</span>
                             </DropdownMenuItem>
                           )}
                         </TooltipTrigger>
                         <TooltipContent side="left" className="max-w-[200px]">
                           {isApprovedDeliverable
                             ? <p>Approved deliverables cannot be deleted</p>
-                            : <p>Items in Bin are permanently deleted after 30 days (Google Drive).</p>
+                            : document.documentType === 'LINK'
+                              ? <p>This link will be permanently deleted.</p>
+                              : <p>Items in Bin are permanently deleted after 30 days (Google Drive).</p>
                           }
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
                   </>
                 )}
-                {!isExternalUser && (
+                {!isExternalUser && document.documentType !== 'LINK' && (
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuSub>

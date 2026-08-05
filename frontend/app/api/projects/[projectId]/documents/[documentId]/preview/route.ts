@@ -58,6 +58,9 @@ export async function GET(
         if (!fileInfo) {
             return NextResponse.json({ error: 'Document not found' }, { status: 404 })
         }
+        if (fileInfo.documentType === 'LINK') {
+            return NextResponse.json({ error: 'This document is a link and cannot be previewed' }, { status: 400 })
+        }
         const engagementClientId = await prisma.engagement.findUnique({ where: { id: projectId }, select: { clientId: true } }).then((e) => e?.clientId ?? undefined)
 
         // 2. Permission check — engagement membership is the access gate for preview.

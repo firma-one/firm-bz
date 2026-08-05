@@ -256,6 +256,10 @@ export interface DriveFile {
   deliverableStatus?: 'to_do' | 'in_progress' | 'in_review' | 'approved' | null
   /** Jira-style short ID (e.g. "VDK-43") assigned to this document. */
   docId?: string | null
+  /** 'LINK' for a non-connector-backed external URL row created via "New Link"; absent/'FILE' otherwise. */
+  documentType?: 'FILE' | 'LINK'
+  /** Present when documentType === 'LINK' — the external URL to open. */
+  externalUrl?: string | null
 }
 
 export interface DriveRevision {

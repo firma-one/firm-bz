@@ -24,8 +24,19 @@ const oneDriveConnector = OneDriveConnector.getInstance()
  * the app registration. GET /me requires User.Read in that token regardless of admin-consent
  * status in the portal; omitting it here caused Authorization_RequestDenied on the callback's
  * /me call even with Sites.Selected fully consented (confirmed via live testing 2026-08-05).
+ *
+ * Files.ReadWrite (not .All): the workspace root folder is created directly under the user's
+ * Personal OneDrive root (`/me/drive/root`), not nested under the special AppFolder — so
+ * Files.ReadWrite.AppFolder isn't viable without restructuring folder creation, but
+ * Files.ReadWrite.All is over-broad (grants every OneDrive/SharePoint site the user can access,
+ * not just their own Personal drive) and actively undermines Sites.Selected's per-site
+ * restriction for the Shared path, since Graph honors the broadest scope present in the token
+ * regardless of Sites.Selected also being present (confirmed 2026-08-06, matches Google's own
+ * least-privilege `drive.file` scope choice — see app/api/connectors/google-drive/route.ts).
+ * Files.ReadWrite covers the signed-in user's own Personal OneDrive only; Sites.Selected
+ * continues to gate the Shared/SharePoint path via explicit per-site grants.
  */
-const CONNECT_SCOPES = ['openid', 'profile', 'email', 'User.Read', 'Files.ReadWrite.All', 'Sites.Selected', 'offline_access']
+const CONNECT_SCOPES = ['openid', 'profile', 'email', 'User.Read', 'Files.ReadWrite', 'Sites.Selected', 'offline_access']
 
 export async function POST(request: NextRequest) {
   try {

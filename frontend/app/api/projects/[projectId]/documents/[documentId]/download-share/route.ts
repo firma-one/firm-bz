@@ -35,6 +35,9 @@ export async function GET(
     // Resolve the document — accepts either DB UUID or Drive externalId
     const fileInfo = await getFileInfo(projectId, documentId)
     if (!fileInfo) return NextResponse.json({ error: 'File not found' }, { status: 404 })
+    if (fileInfo.documentType === 'LINK') {
+      return NextResponse.json({ error: 'This document is a link and has no downloadable content' }, { status: 400 })
+    }
 
     const document = await prisma.engagementDocument.findUnique({
       where: {

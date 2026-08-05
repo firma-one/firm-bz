@@ -873,9 +873,9 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                   <div className="flex flex-col min-w-0 flex-1 gap-1.5">
                     <div>
                       <span className="text-[0.8125rem] font-semibold text-[#1b1b1d] leading-snug">
-                        {oneDriveLoading ? 'Connecting…' : 'Microsoft OneDrive / SharePoint'}
+                        {oneDriveLoading ? 'Connecting…' : 'Connect new account'}
                       </span>
-                      <span className="text-xs text-[#45474c] block">Connect your OneDrive or a SharePoint site</span>
+                      <span className="text-xs text-[#45474c] block">Sign in with Microsoft OneDrive / SharePoint</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <input

@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom'
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { CoffeeIcon, type CoffeeIconHandle } from "@/components/ui/coffee-icon"
-import { SquarePlus, Upload, FolderUp, X, Folder, File as FileIcon, ArrowUp, ArrowDown, ChevronRight, Search, List as ListIcon, LayoutGrid, Filter, ChevronDown, User, FileText, FileSpreadsheet, Presentation, ListChecks, PenTool, Map as MapIcon, LayoutTemplate, FileCode, AlertCircle, ShieldCheck, Maximize2, Minimize2, CheckCircle2, XCircle, Trash2, Layout, Code, Laptop, RefreshCw, Info, Share2, Layers, Building2, Users, Briefcase, Lock, FolderLock, Inbox, Sparkles, Link2, MessagesSquare, CircleChevronLeft, Download, MoreVertical, Clock } from 'lucide-react'
+import { SquarePlus, Upload, FolderUp, X, Folder, File as FileIcon, ArrowUp, ArrowDown, ChevronRight, Search, List as ListIcon, LayoutGrid, Filter, ChevronDown, User, FileText, FileSpreadsheet, Presentation, ListChecks, PenTool, Map as MapIcon, LayoutTemplate, FileCode, AlertCircle, ShieldCheck, Maximize2, Minimize2, CheckCircle2, XCircle, Trash2, Layout, Code, Laptop, RefreshCw, Info, Share2, Layers, Building2, Users, Briefcase, Lock, FolderLock, Inbox, Sparkles, Link2, ExternalLink, MessagesSquare, CircleChevronLeft, Download, MoreVertical, Clock } from 'lucide-react'
 import Fuse from 'fuse.js'
 import { config } from "@/lib/config"
 import { DocumentIcon } from '@/components/ui/document-icon'
@@ -111,7 +111,7 @@ type SortConfig = {
     foldersFirst: boolean
 }
 
-type CreateItemType = 'folder' | 'doc' | 'sheet' | 'slide' | 'form' | 'drawing' | 'map' | 'site' | 'script' | 'word' | 'excel' | 'powerpoint'
+type CreateItemType = 'folder' | 'doc' | 'sheet' | 'slide' | 'form' | 'drawing' | 'map' | 'site' | 'script' | 'word' | 'excel' | 'powerpoint' | 'link'
 
 const CREATE_ITEM_DIALOG_TITLES: Record<CreateItemType, string> = {
     folder: 'New Folder',
@@ -126,6 +126,7 @@ const CREATE_ITEM_DIALOG_TITLES: Record<CreateItemType, string> = {
     word: 'New Word Document',
     excel: 'New Excel Workbook',
     powerpoint: 'New PowerPoint Presentation',
+    link: 'New Link',
 }
 function createItemDialogTitle(type: CreateItemType): string {
     return CREATE_ITEM_DIALOG_TITLES[type] ?? 'New File'
@@ -146,6 +147,21 @@ const CREATE_ITEM_EXTENSIONS: Record<string, string> = {
 type ConflictItem = {
     file: File
     existingId: string
+}
+
+/** Requires the user to type an explicit http(s):// scheme — no auto-prepending. */
+function isValidWebUrl(raw: string): boolean {
+    const trimmed = raw.trim()
+    if (!trimmed) return false
+    if (!/^https?:\/\//i.test(trimmed)) return false
+    try {
+        const parsed = new URL(trimmed)
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false
+        // Require a real host with at least one dot (rejects "https://a", "https://localhost" typos-as-hostnames)
+        return parsed.hostname.includes('.')
+    } catch {
+        return false
+    }
 }
 
 
@@ -484,6 +500,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
     const [isCreateItemOpen, setIsCreateItemOpen] = useState(false)
     const [createItemType, setCreateItemType] = useState<CreateItemType>('folder')
     const [newItemName, setNewItemName] = useState('')
+    const [newItemUrl, setNewItemUrl] = useState('')
     const isCreatingRef = useRef(false)
     const fileInputRef = useRef<HTMLInputElement>(null)
     const folderInputRef = useRef<HTMLInputElement>(null)
@@ -636,20 +653,38 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
             } else {
                 // 3. Fallback: use Drive parent relationship directly
                 const parentId = file.parents && file.parents.length > 0 ? file.parents[0] : null
-                if (parentId) {
-                    const type =
-                        parentId === generalFolderId
-                            ? 'general'
-                            : parentId === confidentialFolderId
-                                ? 'confidential'
-                                : parentId === stagingFolderId
-                                    ? 'staging'
-                                    : null
+                const type =
+                    parentId === generalFolderId
+                        ? 'general'
+                        : parentId === confidentialFolderId
+                            ? 'confidential'
+                            : parentId === stagingFolderId
+                                ? 'staging'
+                                : null
 
-                    if (type) {
-                        setCurrentFolderType(type as any)
-                        setBreadcrumbs([{ id: parentId, name: type, clickable: true, isEngagementRoot: true }])
-                        setCurrentFolderId(parentId)
+                if (parentId && type) {
+                    setCurrentFolderType(type as any)
+                    setBreadcrumbs([{ id: parentId, name: type, clickable: true, isEngagementRoot: true }])
+                    setCurrentFolderId(parentId)
+                } else {
+                    // 4. Last resort: neither resolve-path nor the parent relationship gave us a
+                    // location (e.g. a stale/broken deeplink). Land on the engagement's default root
+                    // rather than leaving breadcrumbs empty — the caller may have skipped the normal
+                    // default-breadcrumb init because a deeplink hash was present (see mount effect).
+                    const fallbackRootId = generalFolderId ?? confidentialFolderId ?? stagingFolderId
+                    const fallbackType: 'general' | 'confidential' | 'staging' | null =
+                        fallbackRootId === generalFolderId ? 'general'
+                            : fallbackRootId === confidentialFolderId ? 'confidential'
+                                : fallbackRootId === stagingFolderId ? 'staging'
+                                    : null
+                    if (fallbackRootId && fallbackType) {
+                        setCurrentFolderType(fallbackType)
+                        setBreadcrumbs([{ id: fallbackRootId, name: fallbackType, clickable: true, isEngagementRoot: true }])
+                        setCurrentFolderId(fallbackRootId)
+                    } else {
+                        logger.warn('navigateToItem: no fallback root available — breadcrumbs left empty', {
+                            fileId: file.id, generalFolderId, confidentialFolderId, stagingFolderId,
+                        })
                     }
                 }
             }
@@ -1310,6 +1345,7 @@ const handleRefresh = async () => {
         }
         setCreateItemType(type)
         setNewItemName('')
+        setNewItemUrl('')
         setIsCreateItemOpen(true)
     }
 
@@ -1377,6 +1413,53 @@ const handleRefresh = async () => {
             logger.error(err)
             isCreatingRef.current = false
             addToast({ type: 'error', title: 'Could not create file', message: err.message })
+            setLoading(false)
+        }
+    }
+
+    const handleCreateLink = async () => {
+        if (!newItemName.trim() || !isValidWebUrl(newItemUrl) || !session?.access_token) return
+        if (isCreatingRef.current) return
+        if (isSandboxFirm) {
+            showSandboxPickerToast()
+            return
+        }
+        isCreatingRef.current = true
+        setLoading(true)
+        try {
+            const res = await fetch(`/api/projects/${projectId}/documents/create-link`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${session.access_token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    folderId: currentFolderId || 'root',
+                    name: newItemName.trim(),
+                    url: newItemUrl.trim(),
+                })
+            })
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({}))
+                const msg = body?.error || 'Create link failed'
+                addToast({ type: 'error', title: 'Could not create link', message: msg })
+                setIsCreateItemOpen(false)
+                setNewItemName('')
+                setNewItemUrl('')
+                setLoading(false)
+                isCreatingRef.current = false
+                return
+            }
+
+            setIsCreateItemOpen(false)
+            setNewItemName('')
+            setNewItemUrl('')
+            isCreatingRef.current = false
+            if (currentFolderId) fetchFiles(currentFolderId)
+        } catch (err: any) {
+            logger.error(err)
+            isCreatingRef.current = false
+            addToast({ type: 'error', title: 'Could not create link', message: err.message })
             setLoading(false)
         }
     }
@@ -1936,7 +2019,7 @@ const handleRefresh = async () => {
                                     >
                                         <span className="flex items-center gap-2">
                                             <SquarePlus className="h-3.5 w-3.5 text-slate-500" />
-                                            New file
+                                            New Document
                                         </span>
                                         <ChevronDown className={cn("h-3.5 w-3.5 text-slate-400 transition-transform duration-200", newFileExpanded && "rotate-180")} />
                                     </div>
@@ -1998,6 +2081,10 @@ const handleRefresh = async () => {
                                             </DropdownMenuSub>
                                         </>
                                         )}
+                                        <DropdownMenuItem onClick={() => openCreateDialog('link')} className="text-xs py-1.5 pl-8">
+                                            <ExternalLink className="mr-2 h-3.5 w-3.5 text-purple-600" />
+                                            External Link
+                                        </DropdownMenuItem>
                                         </div>
                                     </div>
 
@@ -3009,40 +3096,85 @@ const handleRefresh = async () => {
                         {/* Header */}
                         <div className="px-5 py-4 border-b border-[#e5e7eb] bg-white flex items-start gap-3">
                             <div className="mt-0.5 h-7 w-7 rounded bg-primary/10 flex items-center justify-center shrink-0">
-                                {createItemType === 'folder' ? <Folder className="h-3.5 w-3.5 text-primary" /> : createItemType === 'sheet' || createItemType === 'excel' ? <FileSpreadsheet className="h-3.5 w-3.5 text-primary" /> : createItemType === 'slide' || createItemType === 'powerpoint' ? <Presentation className="h-3.5 w-3.5 text-primary" /> : createItemType === 'form' ? <ListChecks className="h-3.5 w-3.5 text-primary" /> : createItemType === 'drawing' ? <PenTool className="h-3.5 w-3.5 text-primary" /> : createItemType === 'map' ? <MapIcon className="h-3.5 w-3.5 text-primary" /> : createItemType === 'script' ? <FileCode className="h-3.5 w-3.5 text-primary" /> : <FileText className="h-3.5 w-3.5 text-primary" />}
+                                {createItemType === 'folder' ? <Folder className="h-3.5 w-3.5 text-primary" /> : createItemType === 'link' ? <ExternalLink className="h-3.5 w-3.5 text-purple-600" /> : createItemType === 'sheet' || createItemType === 'excel' ? <FileSpreadsheet className="h-3.5 w-3.5 text-primary" /> : createItemType === 'slide' || createItemType === 'powerpoint' ? <Presentation className="h-3.5 w-3.5 text-primary" /> : createItemType === 'form' ? <ListChecks className="h-3.5 w-3.5 text-primary" /> : createItemType === 'drawing' ? <PenTool className="h-3.5 w-3.5 text-primary" /> : createItemType === 'map' ? <MapIcon className="h-3.5 w-3.5 text-primary" /> : createItemType === 'script' ? <FileCode className="h-3.5 w-3.5 text-primary" /> : <FileText className="h-3.5 w-3.5 text-primary" />}
                             </div>
                             <div>
                                 <p className="text-sm font-semibold text-[#1b1b1d] leading-tight">
                                     {createItemDialogTitle(createItemType)}
                                 </p>
-                                <p className="text-xs text-[#45474c] mt-0.5">Enter a name to create this {createItemType === 'folder' ? 'folder' : 'file'} in the current location.</p>
+                                <p className="text-xs text-[#45474c] mt-0.5">
+                                    {createItemType === 'link'
+                                        ? 'Paste a link and give it a name. It will appear in this folder — clicking Open will launch it in a new tab.'
+                                        : `Enter a name to create this ${createItemType === 'folder' ? 'folder' : 'file'} in the current location.`}
+                                </p>
                             </div>
                         </div>
                         {/* Body */}
-                        <div className="px-5 py-4 bg-[#f9f9fb]">
-                            <label className="font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] block mb-1">
-                                {createItemType === 'folder' ? 'Folder Name' : 'Document Name'}
-                            </label>
-                            <div className="flex items-center gap-1">
-                                <Input
-                                    autoFocus
-                                    placeholder={createItemType === 'folder' ? 'e.g. Q4 Deliverables' : 'e.g. Meeting Notes'}
-                                    value={newItemName}
-                                    onChange={(e) => setNewItemName(e.target.value)}
-                                    onKeyDown={(e) => { if (e.key === 'Enter') handleCreateItem() }}
-                                    className="border-[#e5e7eb] text-[#1b1b1d] text-xs font-normal placeholder:text-[#9a9ba0] rounded focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
-                                />
-                                {CREATE_ITEM_EXTENSIONS[createItemType] && (
-                                    <span className="shrink-0 text-[#45474c] text-xs">{CREATE_ITEM_EXTENSIONS[createItemType]}</span>
-                                )}
+                        <div className="px-5 py-4 bg-[#f9f9fb] space-y-3">
+                            <div>
+                                <label className="font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] block mb-1">
+                                    {createItemType === 'folder' ? 'Folder Name' : createItemType === 'link' ? 'Link Name' : 'Document Name'}
+                                </label>
+                                <div className="flex items-center gap-1">
+                                    <Input
+                                        autoFocus
+                                        placeholder={createItemType === 'folder' ? 'e.g. Q4 Deliverables' : createItemType === 'link' ? 'e.g. Client Onboarding Notion' : 'e.g. Meeting Notes'}
+                                        value={newItemName}
+                                        onChange={(e) => setNewItemName(e.target.value)}
+                                        onKeyDown={(e) => { if (e.key === 'Enter' && createItemType !== 'link') handleCreateItem() }}
+                                        className="border-[#e5e7eb] text-[#1b1b1d] text-xs font-normal placeholder:text-[#9a9ba0] rounded focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                                    />
+                                    {CREATE_ITEM_EXTENSIONS[createItemType] && (
+                                        <span className="shrink-0 text-[#45474c] text-xs">{CREATE_ITEM_EXTENSIONS[createItemType]}</span>
+                                    )}
+                                </div>
                             </div>
+                            {createItemType === 'link' && (
+                                <div>
+                                    <label className="font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] mb-1 flex items-center gap-1">
+                                        URL
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <button type="button" className="inline-flex text-slate-400 hover:text-slate-600" aria-label="URL format help">
+                                                    <Info className="h-3 w-3" />
+                                                </button>
+                                            </TooltipTrigger>
+                                            <TooltipContent variant="light">
+                                                Must include the scheme, e.g. https://example.com
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    </label>
+                                    <Input
+                                        type="url"
+                                        placeholder="https://..."
+                                        value={newItemUrl}
+                                        onChange={(e) => setNewItemUrl(e.target.value)}
+                                        onKeyDown={(e) => { if (e.key === 'Enter' && isValidWebUrl(newItemUrl)) handleCreateLink() }}
+                                        className={cn(
+                                            "text-[#1b1b1d] text-xs font-normal placeholder:text-[#9a9ba0] rounded focus:outline-none focus:ring-1 focus:border-primary",
+                                            newItemUrl.trim() && !isValidWebUrl(newItemUrl)
+                                                ? "border-red-300 focus:ring-red-300"
+                                                : "border-[#e5e7eb] focus:ring-primary"
+                                        )}
+                                    />
+                                    {newItemUrl.trim() && !isValidWebUrl(newItemUrl) && (
+                                        <p className="text-[11px] text-red-600 mt-1">Enter a valid web address, including https://, e.g. https://example.com</p>
+                                    )}
+                                </div>
+                            )}
                         </div>
                         {/* Footer */}
                         <div className="px-5 py-3 border-t border-[#e5e7eb] bg-white flex items-center justify-end gap-3">
                             <Button type="button" variant="outline" className="rounded w-24 text-[10px] font-headline font-bold tracking-widest uppercase" onClick={() => setIsCreateItemOpen(false)} disabled={loading}>Cancel</Button>
-                            <Button type="button" variant="greenCta" className="min-w-[7rem] text-[10px] font-headline font-bold tracking-widest uppercase" onClick={handleCreateItem} disabled={!newItemName.trim() || loading}>
-                                {loading ? <><LoadingSpinner size="sm" className="h-4 w-4 mr-1.5" />Creating…</> : 'Create'}
-                            </Button>
+                            {createItemType === 'link' ? (
+                                <Button type="button" variant="greenCta" className="min-w-[7rem] text-[10px] font-headline font-bold tracking-widest uppercase" onClick={handleCreateLink} disabled={!newItemName.trim() || !isValidWebUrl(newItemUrl) || loading}>
+                                    {loading ? <><LoadingSpinner size="sm" className="h-4 w-4 mr-1.5" />Creating…</> : 'Create'}
+                                </Button>
+                            ) : (
+                                <Button type="button" variant="greenCta" className="min-w-[7rem] text-[10px] font-headline font-bold tracking-widest uppercase" onClick={handleCreateItem} disabled={!newItemName.trim() || loading}>
+                                    {loading ? <><LoadingSpinner size="sm" className="h-4 w-4 mr-1.5" />Creating…</> : 'Create'}
+                                </Button>
+                            )}
                         </div>
                     </DialogContent>
                 </Dialog>
