@@ -3,6 +3,7 @@ import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { OneDriveConnector } from '@/lib/connectors/onedrive-connector'
 import { createOneDriveAdapter } from '@/lib/connectors/adapters/onedrive-adapter'
 import { ensureAppFolderStructure, setupFirmFolder } from '@/lib/connectors/pockett-structure.service'
+import { generateWorkspaceFolderName } from '@/lib/generate-unique-workspace-folder-name'
 import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
 
@@ -29,7 +30,7 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url)
   const connectionId = searchParams.get('connectionId')
-  const q = searchParams.get('q')?.trim() || '*'
+  const q = searchParams.get('q')?.trim() || ''
   if (!connectionId) return NextResponse.json({ error: 'connectionId is required' }, { status: 400 })
 
   // No feature-flag gate — this reads/writes an already-connected connector; the flag only
@@ -42,29 +43,66 @@ export async function GET(request: NextRequest) {
   const token = await oneDriveConnector.getAccessToken(connectionId)
   if (!token) return NextResponse.json({ error: 'Could not obtain access token' }, { status: 500 })
 
+  // Graph's /sites?search= endpoint is a keyword-search index, but empirically (confirmed
+  // 2026-08-06 against a real tenant) a literal `*` query does return the tenant's full site
+  // list rather than zero results — despite this not being documented "list all sites"
+  // behavior. Use `*` as the default when the user hasn't typed a query yet.
+  //
+  // No $select here: `webTemplate` is not a selectable property on microsoft.graph.site via
+  // this endpoint (confirmed 2026-08-06 — Graph returns 400 BadRequest "Could not find a
+  // property named 'webTemplate' on type 'microsoft.graph.site'"), so system-site filtering
+  // below is name-pattern-only, not webTemplate-based.
+  const graphUrl = `https://graph.microsoft.com/v1.0/sites?search=${encodeURIComponent(q || '*')}`
+
+  // Microsoft 365 auto-provisions several system/default sites per tenant (the root
+  // Communication Site, a generic "Pages"/"Designer" site, Viva Engage community sites, the
+  // tenant's "All Company" hub, etc.) that clutter a "pick your SharePoint site" picker meant
+  // for sites the org actually created for work. There's no reliable API flag for this, so we
+  // filter heuristically on known name patterns — best-effort, not guaranteed to catch every
+  // tenant's defaults, but removes the common ones seen in testing (2026-08-06).
+  const SYSTEM_NAME_PATTERNS = [
+    /^communication site$/i,
+    /^pages$/i,
+    /^designer$/i,
+    /^all company$/i,
+    /^viva engage/i,
+    /^group for /i,
+    /do not delete/i,
+  ]
+  const isSystemSite = (name: string) => SYSTEM_NAME_PATTERNS.some(re => re.test(name))
+
   try {
-    const res = await fetch(`https://graph.microsoft.com/v1.0/sites?search=${encodeURIComponent(q)}`, {
+    const res = await fetch(graphUrl, {
       headers: { Authorization: `Bearer ${token}` },
     })
-    if (!res.ok) throw new Error(`Graph sites search returned ${res.status}`)
+    if (!res.ok) {
+      const err = await res.text()
+      logger.error(`Graph sites request failed: ${res.status} - ${err}`, new Error(`HTTP ${res.status}`))
+      return NextResponse.json({ error: 'Failed to list SharePoint sites', detail: err }, { status: 502 })
+    }
     const data = await res.json()
-    const sites = (data.value || []).map((s: { id: string; name?: string; displayName?: string; webUrl?: string }) => ({
-      id: s.id,
-      name: s.displayName || s.name || s.webUrl || s.id,
-      webUrl: s.webUrl,
-    }))
+    const sites = (data.value || [])
+      .map((s: { id: string; name?: string; displayName?: string; webUrl?: string }) => ({
+        id: s.id,
+        name: s.displayName || s.name || s.webUrl || s.id,
+        webUrl: s.webUrl,
+      }))
+      .filter((s: { name: string }) => !isSystemSite(s.name))
     return NextResponse.json({ sites })
   } catch (e) {
     logger.error('Failed to list SharePoint sites', e instanceof Error ? e : new Error(String(e)))
-    return NextResponse.json({ sites: [] })
+    return NextResponse.json({ error: 'Failed to list SharePoint sites' }, { status: 502 })
   }
 }
 
 /**
- * POST { connectionId, siteId, siteName } — select a SharePoint site: grants the app
- * Sites.Selected access to that specific site (required before any drive call succeeds,
- * since the app only has Sites.Selected, not Sites.ReadWrite.All — see Phase 3 in the plan),
- * then persists the site's drive as the connector's shared workspace root.
+ * POST { connectionId, siteId, siteName } — select a SharePoint site: resolves the site's
+ * drive directly using Sites.Read.All + Files.ReadWrite.All (both already granted for
+ * ongoing OneDrive access) and persists it as the connector's shared workspace root. No
+ * Sites.Selected/permissions-grant step — confirmed 2026-08-06 that Files.ReadWrite.All
+ * already authorizes read/write against /sites/{id}/drive directly, so the old
+ * POST /sites/{id}/permissions bootstrap (which itself required Sites.FullControl.All,
+ * unreachable for non-admin end users) is unnecessary. See connector-microsoft-impl.md.
  */
 export async function POST(request: NextRequest) {
   // No feature-flag gate — this reads/writes an already-connected connector; the flag only
@@ -87,30 +125,6 @@ export async function POST(request: NextRequest) {
   if (!token) return NextResponse.json({ error: 'Could not obtain access token' }, { status: 500 })
 
   try {
-    // Grant this app Sites.Selected access to the chosen site before any drive call.
-    const grantRes = await fetch(`https://graph.microsoft.com/v1.0/sites/${encodeURIComponent(siteId)}/permissions`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        roles: ['write'],
-        grantedToIdentities: [
-          {
-            application: {
-              id: process.env.MICROSOFT_CLIENT_ID,
-              displayName: 'Firma Connect',
-            },
-          },
-        ],
-      }),
-    })
-    if (!grantRes.ok) {
-      const err = await grantRes.text()
-      logger.error(`Failed to grant Sites.Selected permission for site ${siteId}: ${grantRes.status} - ${err}`, new Error(`HTTP ${grantRes.status}`))
-      return NextResponse.json({ error: 'Failed to grant site permission' }, { status: 502 })
-    }
-    const grantData = await grantRes.json()
-    const sitePermissionId: string | undefined = grantData.id
-
     // Resolve the site's default drive id — that's what workspaceRootSharedStorageId stores
     // (mirrors Google Drive's shared-drive-id semantics).
     const driveRes = await fetch(`https://graph.microsoft.com/v1.0/sites/${encodeURIComponent(siteId)}/drive?$select=id`, {
@@ -134,12 +148,35 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to resolve site drive root' }, { status: 502 })
     }
     const driveRootData = await driveRootRes.json()
-    const rootFolderId: string = driveRootData.id
+    const driveRootId: string = driveRootData.id
+
+    // Persist the site as this connector's shared location FIRST — resolveDriveBase (used by
+    // createOneDriveAdapter below) reads workspaceRootLocation/workspaceRootSharedStorageId
+    // from the DB, so the adapter needs this write to have already landed before it can target
+    // the newly-chosen site's drive rather than wherever the connector pointed before.
+    await prisma.connector.update({
+      where: { id: connectionId },
+      data: {
+        workspaceRootLocation: 'SHARED',
+        workspaceRootSharedStorageId: siteId,
+        workspaceRootSharedStorageName: siteName ?? null,
+      },
+    })
+
+    // Auto-create _firma/<workspace folder> inside the site's drive root — same two-level
+    // nesting as Personal OneDrive's createPersonalFolder (idempotent _firma parent, then a
+    // uniquely-named workspace folder inside it), except fully automatic here: no user-facing
+    // copy/paste/guide step, since Files.ReadWrite.All already authorizes this write directly
+    // (confirmed 2026-08-06 spike). Keeps the app's content isolated under _firma rather than
+    // using the whole site drive as the root.
+    const adapter = createOneDriveAdapter(async () => token)
+    const firmaFolderId = await adapter.findOrCreateFolder(connectionId, driveRootId, '_firma')
+    const workspaceFolderName = generateWorkspaceFolderName()
+    const rootFolderId = await adapter.findOrCreateFolder(connectionId, firmaFolderId, workspaceFolderName)
 
     const prevSettings = (connector.settings as Record<string, unknown>) || {}
     const newSettings: Record<string, unknown> = {
       ...prevSettings,
-      sitePermissionId,
       rootFolderId,
       parentFolderId: rootFolderId,
     }
@@ -150,22 +187,18 @@ export async function POST(request: NextRequest) {
     delete newSettings.projectFolderIds
     delete newSettings.projectFolderSettings
     delete newSettings.organizations
+    // sitePermissionId was written by the old Sites.Selected grant flow — no longer produced,
+    // but harmless to leave on already-migrated connectors; not deleted here retroactively.
 
     await prisma.connector.update({
       where: { id: connectionId },
-      data: {
-        workspaceRootLocation: 'SHARED',
-        workspaceRootSharedStorageId: siteId,
-        workspaceRootSharedStorageName: siteName ?? null,
-        settings: newSettings,
-      },
+      data: { settings: newSettings },
     })
 
     // Provision firm/client/engagement folder hierarchy in the newly selected site — same
     // logic as the Personal (update-root-folder) path, see that route for the pattern this
     // mirrors.
     try {
-      const adapter = createOneDriveAdapter(async () => token)
       let org = await prisma.firm.findFirst({ where: { connectorId: connectionId } })
       if (!org) {
         const linkedClient = await prisma.client.findFirst({ where: { connectorId: connectionId }, select: { firmId: true } })

@@ -725,3 +725,22 @@
     display: none !important;
   }
 }
+
+@property --border-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes spin-border-angle {
+  to {
+    --border-angle: 360deg;
+  }
+}
+
+/* Rotating conic-gradient border ring — animates the gradient's own angle rather than
+   spinning a square layer, so it traces a rectangle's border cleanly instead of a
+   sliding strip. Apply `background: conic-gradient(from var(--border-angle), ...)` inline. */
+.animate-border-spin {
+  animation: spin-border-angle 2.5s linear infinite;
+}

@@ -5,9 +5,17 @@
  * and `?format=pdf` on the content endpoint handles Office-to-PDF conversion natively — see
  * .claude/plans/connector-microsoft-impl.md Phase 2.
  *
- * setCopyRestricted is a no-op — Graph has no per-file copy-restriction equivalent to Drive's
- * copyRequiresWriterPermission (documented capability gap, not a bug; interface explicitly
- * allows a silent no-op for providers without an equivalent concept).
+ * setCopyRestricted is INTENTIONALLY a no-op here — for OneDrive, download-blocking is NOT a
+ * per-item file property the way Drive's copyRequiresWriterPermission is. It's enforced instead
+ * at grant time via IConnectorPermissionAdapter.grantFilePermission's `opts.preventDownload`
+ * (see onedrive-permission-adapter.ts's grantDownloadBlockedLink, item 12 in
+ * .claude/plans/connector-microsoft-impl.md, 2026-08-06) — a `createLink` sharing link with
+ * `type: 'blocksDownload'` scoped to the recipient, using Graph's BETA endpoint since v1.0 has
+ * no per-user-scoped link creation. That mechanism replaces the normal `/invite` grant entirely
+ * for OneDrive EC/EV/Viewer roles rather than layering on top of it (SharePoint takes the
+ * least-restrictive of all grants a user holds on an item, so a restrictive link alongside an
+ * existing invite grant would do nothing). This file-level setCopyRestricted call stays a no-op
+ * because there's nothing to set here — the actual enforcement already happened on the grant.
  */
 
 import { OneDriveConnector } from '@/lib/connectors/onedrive-connector'
@@ -134,8 +142,8 @@ export function createOneDriveContentAdapter(): IConnectorContentAdapter {
     },
 
     async setCopyRestricted(_connectionId, _fileId, _restricted) {
-      // No-op — Graph has no equivalent to Drive's copyRequiresWriterPermission. See file header.
-      return
+      // No-op by design — see file header. Actual download-blocking for OneDrive happens at
+      // grant time (grantFilePermission's preventDownload), not as a file-level toggle.
     },
   }
 }

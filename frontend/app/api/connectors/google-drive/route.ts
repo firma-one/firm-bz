@@ -54,8 +54,14 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: msg }, { status: 500 })
       }
 
-      // Google Drive OAuth scopes
+      // Google Drive OAuth scopes. `openid` added 2026-08-06 solely to get an id_token back
+      // with the `hd` (hosted domain) claim — lets us detect personal Gmail vs. Google
+      // Workspace accounts to skip the My Drive/Shared Drive choice for personal accounts
+      // (mirrors the OneDrive `tid`-claim fix, see .claude/plans/connector-microsoft-impl.md
+      // item 9/10, 2026-08-06). Does not change Drive access scope — drive.file/drive.appdata
+      // are unaffected.
       const scopes = [
+        'openid',
         'https://www.googleapis.com/auth/drive.file',
         'https://www.googleapis.com/auth/drive.appdata',
         'https://www.googleapis.com/auth/userinfo.email',
@@ -778,6 +784,7 @@ export async function GET(request: NextRequest) {
               id: connector.id,
               name: connector.name,
               email: (connector.settings as any)?.accountEmail || null,
+              isPersonalAccount: (connector.settings as any)?.isPersonalAccount ?? null,
               externalAccountId: connector.externalAccountId,
               rootFolderId,
               rootFolderName,

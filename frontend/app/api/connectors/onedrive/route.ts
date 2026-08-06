@@ -11,32 +11,43 @@ import { prisma } from '@/lib/prisma'
 const oneDriveConnector = OneDriveConnector.getInstance()
 
 /**
- * Scopes requested at connect time. Always includes Sites.Selected — Microsoft doesn't have a
- * separate "personal vs shared account" concept the way Google Workspace does (there's one
- * signed-in Microsoft account either way); SharePoint site access is a later, separate choice
- * made via the "Choose folder" wizard (mirrors GoogleDriveWorkspaceRoot's My Drive vs Shared
- * Drive picker, which likewise only appears after the initial OAuth connects), not an upfront
- * fork in the OAuth scope. See Phase 3 scope decision in the plan for why Sites.Selected
- * (not Sites.ReadWrite.All) was chosen.
+ * Scopes requested at connect time. Microsoft doesn't have a separate "personal vs shared
+ * account" concept the way Google Workspace does (there's one signed-in Microsoft account
+ * either way); SharePoint site access is a later, separate choice made via the "Choose folder"
+ * wizard (mirrors GoogleDriveWorkspaceRoot's My Drive vs Shared Drive picker, which likewise
+ * only appears after the initial OAuth connects), not an upfront fork in the OAuth scope.
  *
  * MUST include User.Read explicitly — Microsoft Graph authorizes each call against the scopes
  * actually present in the issued token (`scp` claim), not against what's merely consented on
  * the app registration. GET /me requires User.Read in that token regardless of admin-consent
- * status in the portal; omitting it here caused Authorization_RequestDenied on the callback's
- * /me call even with Sites.Selected fully consented (confirmed via live testing 2026-08-05).
+ * status in the portal (confirmed via live testing 2026-08-05).
  *
- * Files.ReadWrite (not .All): the workspace root folder is created directly under the user's
- * Personal OneDrive root (`/me/drive/root`), not nested under the special AppFolder — so
- * Files.ReadWrite.AppFolder isn't viable without restructuring folder creation, but
- * Files.ReadWrite.All is over-broad (grants every OneDrive/SharePoint site the user can access,
- * not just their own Personal drive) and actively undermines Sites.Selected's per-site
- * restriction for the Shared path, since Graph honors the broadest scope present in the token
- * regardless of Sites.Selected also being present (confirmed 2026-08-06, matches Google's own
- * least-privilege `drive.file` scope choice — see app/api/connectors/google-drive/route.ts).
- * Files.ReadWrite covers the signed-in user's own Personal OneDrive only; Sites.Selected
- * continues to gate the Shared/SharePoint path via explicit per-site grants.
+ * Sites.Selected was the original design (Phase 3 of the plan) but is architecturally
+ * incompatible with a non-admin end user connecting their own SharePoint: granting the app
+ * Sites.Selected access to a chosen site requires calling POST /sites/{id}/permissions, which
+ * itself needs Sites.FullControl.All on the calling token — a tenant-admin-only permission a
+ * regular business user (e.g. a CMO connecting their own firm's SharePoint) cannot self-consent
+ * to. Confirmed via live testing 2026-08-06. Dropped in favor of:
+ *
+ * - Sites.Read.All — discover/search SharePoint sites for the site picker
+ *   (GET /api/connectors/onedrive/sites) and resolve a chosen site's drive.
+ * - Files.ReadWrite.All — read/write directly into that site's drive (and the user's own
+ *   Personal OneDrive) with no separate per-site grant step. Confirmed via live testing
+ *   2026-08-06 that Sites.Read.All (resolve) + Files.ReadWrite.All (write) together are
+ *   sufficient against /sites/{id}/drive — no Sites.Selected/FullControl bootstrap needed.
+ *   This is broader than the original least-privilege design intent (it's scoped to
+ *   everything the *signed-in user* can already access, not tenant-wide), but it's the only
+ *   path that lets an ordinary non-admin user complete the connector flow without asking
+ *   their org's IT/SharePoint admin to intervene first. Like Sites.Read.All, it requires
+ *   tenant-admin consent once per customer tenant (not per-user) under Microsoft's default
+ *   consent policy — see connector-microsoft-impl.md for the full tradeoff writeup.
+ *
+ * Existing connections must reconnect to pick up any scope change here (see prompt=consent
+ * below) — Azure AD tokens only carry the scopes that were actually consented to at the time
+ * of that specific OAuth grant; admin-consenting the app registration doesn't retroactively
+ * upgrade already-issued tokens.
  */
-const CONNECT_SCOPES = ['openid', 'profile', 'email', 'User.Read', 'Files.ReadWrite', 'Sites.Selected', 'offline_access']
+const CONNECT_SCOPES = ['openid', 'profile', 'email', 'User.Read', 'Files.ReadWrite.All', 'Sites.Read.All', 'offline_access']
 
 export async function POST(request: NextRequest) {
   try {
@@ -324,6 +335,7 @@ export async function GET(request: NextRequest) {
               id: connector.id,
               name: connector.name,
               email: (connector.settings as Record<string, unknown> | null)?.accountEmail ?? null,
+              isPersonalAccount: (connector.settings as Record<string, unknown> | null)?.isPersonalAccount ?? null,
               externalAccountId: connector.externalAccountId,
               rootFolderId,
               rootFolderName,

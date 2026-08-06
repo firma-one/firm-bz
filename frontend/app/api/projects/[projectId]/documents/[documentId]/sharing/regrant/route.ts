@@ -157,6 +157,12 @@ export async function POST(
         const message = `POCKETT SECURE ACCESS\n\nYou have requested to open "${fileName}". For your security, Google Drive requires a one-time email verification. Please click the "Open" button below to receive your one-time passcode and access the document.`
 
         let targetFileId = fileInfo.externalId
+        // Tracks whether setCopyRestricted(true) was requested on the eventual target file, so
+        // the OneDrive grant below can use its download-blocked link path instead of a normal
+        // /invite grant — see IConnectorPermissionAdapter.grantFilePermission's preventDownload
+        // doc-comment and item 12 in .claude/plans/connector-microsoft-impl.md for why OneDrive
+        // needs this threaded into the grant call itself rather than a separate file-level toggle.
+        let copyRestricted = false
 
         // Branch A: Viewer + sharePdfOnly = true
         if (sharePdfOnly) {
@@ -214,6 +220,7 @@ export async function POST(
 
                 // 4. Always block Drive's native download — Firma controls download via its own action menu
                 await contentAdapter.setCopyRestricted(connectorId, pdfDriveId, true)
+                copyRestricted = true
 
                 // 5. Revoke old permission on PDF if exists
                 if (sharingUser.connectorPermissionId) {
@@ -238,6 +245,7 @@ export async function POST(
             if (isViewer) {
                 try {
                     await contentAdapter.setCopyRestricted(connectorId, fileInfo.externalId, true)
+                    copyRestricted = true
                 } catch (e) {
                     console.error('Failed to set copyRequiresWriterPermission:', e)
                 }
@@ -248,12 +256,13 @@ export async function POST(
         if (!isViewer && isExternalEngagementRole(projectMember.role)) {
             try {
                 await contentAdapter.setCopyRestricted(connectorId, fileInfo.externalId, true)
+                copyRestricted = true
             } catch (e) {
                 console.error('Failed to set copyRequiresWriterPermission for EC:', e)
             }
         }
 
-        let permissionId = await permissionAdapter.grantFilePermission(connectorId, targetFileId, email, role, { message })
+        let permissionId = await permissionAdapter.grantFilePermission(connectorId, targetFileId, email, role, { message, preventDownload: copyRestricted })
 
         if (!permissionId) {
             // Grant failed — most common cause: user already has a Drive permission on this file

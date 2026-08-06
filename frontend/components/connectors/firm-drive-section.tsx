@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -37,7 +38,6 @@ import { GoogleDriveProductMark } from '@/components/ui/google-drive-icon'
 import { OneDriveIcon } from '@/components/ui/onedrive-icon'
 import { SharePointIcon } from '@/components/ui/sharepoint-icon'
 import { SwitchAccountModal, type FirmAdmin } from '@/components/connectors/switch-account-modal'
-import { ConnectionTestModal } from '@/components/ui/connection-test-modal'
 import { useAuth } from '@/lib/auth-context'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/components/ui/toast'
@@ -53,6 +53,7 @@ type DriveRoot = {
   rootFolderName: string | null
   workspaceRootLocation: string | null
   workspaceRootSharedStorageName: string | null
+  isPersonalAccount?: boolean | null
 } | null
 
 type FirmDriveSectionProps = {
@@ -89,11 +90,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
   // Remove confirm
   const [removeTarget, setRemoveTarget] = useState<FirmConnectorRecord | null>(null)
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [testResult, setTestResult] = useState<any>(null)
   const [testingId, setTestingId] = useState<string | null>(null)
-  const [isTestModalOpen, setIsTestModalOpen] = useState(false)
-  const [testModalName, setTestModalName] = useState('')
 
   // Switch account
   const [switchTarget, setSwitchTarget] = useState<FirmConnectorRecord | null>(null)
@@ -154,6 +151,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
             rootFolderName: data.connector.rootFolderName ?? null,
             workspaceRootLocation: data.connector.workspaceRootLocation ?? null,
             workspaceRootSharedStorageName: data.connector.workspaceRootSharedStorageName ?? null,
+            isPersonalAccount: data.connector.isPersonalAccount ?? null,
           },
         }))
       }
@@ -171,7 +169,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
 
   useEffect(() => {
     for (const c of connectors) {
-      if (c.status === 'ACTIVE' && !statusMap[c.id]) {
+      if (c.type !== 'ONEDRIVE' && !statusMap[c.id]) {
         void loadStatus(c.id)
       }
     }
@@ -265,6 +263,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
             rootFolderName: data.connector.rootFolderName ?? null,
             workspaceRootLocation: data.connector.workspaceRootLocation ?? null,
             workspaceRootSharedStorageName: data.connector.workspaceRootSharedStorageName ?? null,
+            isPersonalAccount: data.connector.isPersonalAccount ?? null,
           },
         }))
       }
@@ -275,7 +274,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
 
   useEffect(() => {
     for (const c of connectors) {
-      if (c.type === 'ONEDRIVE' && c.status === 'ACTIVE' && !oneDriveStatusMap[c.id]) {
+      if (c.type === 'ONEDRIVE' && !oneDriveStatusMap[c.id]) {
         void loadOneDriveStatus(c.id)
       }
     }
@@ -408,8 +407,6 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
 
   const handleTestConnection = async (connector: FirmConnectorRecord) => {
     setTestingId(connector.id)
-    setTestResult(null)
-    setTestModalName(connector.name || 'Google Drive')
     try {
       const res = await fetch('/api/connectors/google-drive', {
         method: 'POST',
@@ -417,8 +414,28 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
         body: JSON.stringify({ action: 'test', connectionId: connector.id }),
       })
       if (!res.ok) throw new Error('Test failed')
-      setTestResult(await res.json())
-      setIsTestModalOpen(true)
+      addToast({ type: 'success', title: 'Connection verified', message: `${connector.name || 'Google Drive'} is working.` })
+    } catch {
+      addToast({ type: 'error', title: 'Test failed', message: 'Could not verify connection.' })
+    } finally {
+      setTestingId(null)
+    }
+  }
+
+  const handleOneDriveTestConnection = async (connector: FirmConnectorRecord) => {
+    setTestingId(connector.id)
+    try {
+      const res = await fetch('/api/connectors/onedrive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'test', connectionId: connector.id }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok && data.success) {
+        addToast({ type: 'success', title: 'Connection verified', message: `${connector.name || 'OneDrive'} is working.` })
+      } else {
+        addToast({ type: 'error', title: 'Test failed', message: 'Could not verify connection.' })
+      }
     } catch {
       addToast({ type: 'error', title: 'Test failed', message: 'Could not verify connection.' })
     } finally {
@@ -445,8 +462,13 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
 
   const handleSwitchAccount = (selectedEmail: string) => {
     setSwitchModalOpen(false)
-    if (switchTarget) void startOAuthFlow(switchTarget.id)
-    void selectedEmail
+    if (switchTarget) {
+      if (switchTarget.type === 'ONEDRIVE') {
+        void startOneDriveOAuthFlow(switchTarget.id, switchTarget.name || undefined, selectedEmail)
+      } else {
+        void startOAuthFlow(switchTarget.id)
+      }
+    }
   }
 
   const handleAttachClient = async (connectorId: string, clientId: string) => {
@@ -548,18 +570,34 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                               }}
                               className="rounded border border-primary bg-white px-2 py-0.5 text-[0.8125rem] font-bold text-[#1b1b1d] focus:outline-none focus:ring-1 focus:ring-primary w-44"
                             />
+                            <button type="button" onClick={() => void handleSaveName(connector.id)}
+                              disabled={savingName || !editNameValue.trim()}
+                              className="text-emerald-600 hover:text-emerald-700 transition-colors disabled:opacity-40 disabled:pointer-events-none">
+                              {savingName ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                            </button>
                             <button type="button" onClick={() => setEditingId(null)}
                               className="text-[#9a9ba0] hover:text-[#45474c] transition-colors">
                               <XSquare className="w-4 h-4" />
                             </button>
                           </div>
                         ) : (
-                          <p className="text-[0.8125rem] font-bold text-[#1b1b1d] truncate leading-snug">
-                            {connector.name || connector.email || 'Google account'}
-                          </p>
+                          <div className="group/name flex items-center gap-1.5">
+                            <p className="text-[0.8125rem] font-bold text-[#1b1b1d] truncate leading-snug">
+                              {connector.name || connector.email || 'Google account'}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => { setEditNameValue(connector.name || ''); setEditingId(connector.id) }}
+                              disabled={isSandboxFirm}
+                              aria-label="Rename connection"
+                              className="shrink-0 text-[#9a9ba0] transition-colors hover:text-[#45474c] disabled:opacity-0 disabled:pointer-events-none"
+                            >
+                              <Pencil className="w-3 h-3" />
+                            </button>
+                          </div>
                         )}
                         <div className="flex items-center gap-1.5 mt-0.5">
-                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isActive ? 'bg-emerald-500' : 'bg-[#9a9ba0]'}`} />
+                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isActive ? 'bg-emerald-500' : 'bg-rose-500'}`} />
                           <p className={`text-xs ${isActive ? 'text-[#45474c]' : 'text-[#9a9ba0]'}`}>
                             {isActive ? (connector.email || 'Connected') : 'Disconnected — reconnect to restore access'}
                           </p>
@@ -573,7 +611,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Button type="button" variant="outline" size="sm"
-                                className="h-8 px-3 text-xs border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] rounded"
+                                className="h-8 w-[6.5rem] justify-center px-3 text-xs border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] rounded"
                                 onClick={() => void handleTestConnection(connector)}
                                 disabled={isTesting || isSandboxFirm}>
                                 {isTesting
@@ -589,17 +627,17 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                             <TooltipTrigger asChild>
                               <span tabIndex={isPersonalDrive ? 0 : undefined} className={isPersonalDrive ? 'cursor-not-allowed' : undefined}>
                                 <Button type="button" variant="outline" size="sm"
-                                  className="h-8 px-3 text-xs border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] rounded"
+                                  className="h-8 w-[6.5rem] justify-center px-3 text-xs border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] rounded"
                                   onClick={() => void handleOpenSwitchModal(connector)}
                                   disabled={loading || isPersonalDrive || isSandboxFirm}>
-                                  <SwitchCamera className="w-3.5 h-3.5 mr-1.5" />Switch
+                                  <SwitchCamera className="w-3.5 h-3.5 mr-1.5" />Transfer
                                 </Button>
                               </span>
                             </TooltipTrigger>
                             <TooltipContent side="bottom" className="max-w-xs">
                               {isPersonalDrive
-                                ? <>Switching accounts on a personal Drive connection requires re-setting up your workspace. Use a Shared Drive to enable account switching.</>
-                                : "Switch to a different firm administrator's Google account."}
+                                ? <>Transferring ownership on a personal Drive connection requires re-setting up your workspace. Use a Shared Drive to enable this.</>
+                                : "Transfer this connection to a different firm administrator's Google account."}
                             </TooltipContent>
                           </Tooltip>
 
@@ -607,7 +645,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                             <TooltipTrigger asChild>
                               <span tabIndex={connector.attachedClients.length > 0 ? 0 : undefined} className={connector.attachedClients.length > 0 ? 'cursor-not-allowed' : undefined}>
                                 <Button type="button" variant="outline" size="sm"
-                                  className="h-8 px-3 text-xs border-[#e5e7eb] bg-white text-rose-600 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 rounded"
+                                  className="h-8 w-[6.5rem] justify-center px-3 text-xs border-[#e5e7eb] bg-white text-rose-600 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 rounded"
                                   onClick={() => setDisconnectTarget(connector)}
                                   disabled={isSandboxFirm || connector.attachedClients.length > 0}>
                                   <Unplug className="w-3.5 h-3.5 mr-1.5" />Disconnect
@@ -623,27 +661,6 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                         </>
                       ) : (
                         <>
-                          {isEditing ? (
-                            <Button type="button" variant="outline" size="sm"
-                              className="h-8 px-3 text-xs border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] rounded"
-                              onClick={() => void handleSaveName(connector.id)}
-                              disabled={savingName}>
-                              {savingName ? <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Check className="w-3.5 h-3.5 mr-1.5" />}
-                              Save
-                            </Button>
-                          ) : (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button type="button" variant="outline" size="sm"
-                                  className="h-8 px-3 text-xs border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] rounded"
-                                  onClick={() => { setEditNameValue(connector.name || ''); setEditingId(connector.id) }}
-                                  disabled={isSandboxFirm}>
-                                  <Pencil className="w-3.5 h-3.5 mr-1.5" />Edit
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent side="bottom" className="max-w-xs">Rename this connection.</TooltipContent>
-                            </Tooltip>
-                          )}
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Button type="button" size="sm"
@@ -671,8 +688,8 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                     </div>
                   </div>
 
-                  {/* Workspace root — only when active and status loaded */}
-                  {isActive && driveRoot !== null && (
+                  {/* Workspace root — shown once status is loaded regardless of connection state; GoogleDriveWorkspaceRoot masks/disables itself internally when there's no live accessToken */}
+                  {driveRoot !== null && (
                     <div className="relative z-10 pl-12 pr-4 py-3 border-t border-[#e5e7eb]">
                       <GoogleDriveWorkspaceRoot
                         connectionId={connector.id}
@@ -682,7 +699,9 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                         rootFolderName={driveRoot?.rootFolderName}
                         workspaceRootLocation={(driveRoot?.workspaceRootLocation as 'PERSONAL' | 'SHARED' | null) ?? null}
                         workspaceRootSharedStorageName={driveRoot?.workspaceRootSharedStorageName ?? null}
+                        isPersonalAccount={driveRoot?.isPersonalAccount ?? null}
                         migrationLocked={false}
+                        connectorActive={isActive}
                         onUpdated={() => void loadStatus(connector.id)}
                         onMigrationStarted={() => {}}
                         firmSlug={orgSlug}
@@ -692,12 +711,12 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                     </div>
                   )}
 
-                  {/* Client attachment management */}
+                  {/* Client attachment management — always visible; attach/detach actions disable themselves internally (via rootFolderId/isSandboxFirm) when there's nothing to attach into */}
                   <ConnectorClientAttachSection
                     connector={connector}
                     allClients={allClients}
                     rootFolderId={driveRoot?.rootFolderId}
-                    isSandboxFirm={isSandboxFirm}
+                    isSandboxFirm={isSandboxFirm || !isActive}
                     attachingClientId={attachingClientId}
                     detachingClientId={detachingClientId}
                     onAttach={handleAttachClient}
@@ -712,23 +731,64 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
         {/* OneDrive/SharePoint connector cards */}
         {oneDriveConnectors.length > 0 && (
           <div className="space-y-3">
-            {oneDriveConnectors.map((connector) => {
+            {oneDriveConnectors.map((connector, oneDriveIndex) => {
               const isActive = connector.status === 'ACTIVE'
               const oneDriveRoot = oneDriveStatusMap[connector.id] ?? null
               const isShared = oneDriveRoot?.workspaceRootLocation === 'SHARED'
+              const isEditing = editingId === connector.id
               return (
                 <div key={connector.id} className="relative rounded border border-[#e5e7eb] bg-white overflow-hidden">
+                  {/* Watermark number — continues the sequence started by the Google Drive list above */}
+                  <span className="pointer-events-none select-none absolute -left-1 -bottom-6 text-[8rem] font-black leading-none text-[#e8eaed]/50 z-0 tracking-tighter">
+                    {googleConnectors.length + oneDriveIndex + 1}
+                  </span>
                   <div className="relative z-10 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 py-3">
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="h-9 w-9 shrink-0 bg-white border border-[#e5e7eb] rounded flex items-center justify-center p-1.5">
                         {isShared ? <SharePointIcon size={20} /> : <OneDriveIcon size={20} />}
                       </div>
                       <div className="min-w-0">
-                        <p className="text-[0.8125rem] font-bold text-[#1b1b1d] truncate leading-snug">
-                          {connector.name || connector.email || (isShared ? 'SharePoint site' : 'OneDrive account')}
-                        </p>
+                        {isEditing ? (
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              autoFocus
+                              type="text"
+                              value={editNameValue}
+                              onChange={e => setEditNameValue(e.target.value)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') void handleSaveName(connector.id)
+                                if (e.key === 'Escape') setEditingId(null)
+                              }}
+                              className="rounded border border-primary bg-white px-2 py-0.5 text-[0.8125rem] font-bold text-[#1b1b1d] focus:outline-none focus:ring-1 focus:ring-primary w-44"
+                            />
+                            <button type="button" onClick={() => void handleSaveName(connector.id)}
+                              disabled={savingName || !editNameValue.trim()}
+                              className="text-emerald-600 hover:text-emerald-700 transition-colors disabled:opacity-40 disabled:pointer-events-none">
+                              {savingName ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                            </button>
+                            <button type="button" onClick={() => setEditingId(null)}
+                              className="text-[#9a9ba0] hover:text-[#45474c] transition-colors">
+                              <XSquare className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="group/name flex items-center gap-1.5">
+                            <p className="text-[0.8125rem] font-bold text-[#1b1b1d] truncate leading-snug">
+                              {connector.name || connector.email || (isShared ? 'SharePoint site' : 'OneDrive account')}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => { setEditNameValue(connector.name || ''); setEditingId(connector.id) }}
+                              disabled={isSandboxFirm}
+                              aria-label="Rename connection"
+                              className="shrink-0 text-[#9a9ba0] transition-colors hover:text-[#45474c] disabled:opacity-0 disabled:pointer-events-none"
+                            >
+                              <Pencil className="w-3 h-3" />
+                            </button>
+                          </div>
+                        )}
                         <div className="flex items-center gap-1.5 mt-0.5">
-                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isActive ? 'bg-emerald-500' : 'bg-[#9a9ba0]'}`} />
+                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isActive ? 'bg-emerald-500' : 'bg-rose-500'}`} />
                           <p className={`text-xs ${isActive ? 'text-[#45474c]' : 'text-[#9a9ba0]'}`}>
                             {isActive ? (connector.email || 'Connected') : 'Disconnected — reconnect to restore access'}
                           </p>
@@ -737,17 +797,52 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       {isActive ? (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button type="button" variant="outline" size="sm"
-                              className="h-8 px-3 text-xs border-[#e5e7eb] bg-white text-rose-600 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 rounded"
-                              onClick={() => setOneDriveDisconnectTarget(connector)}
-                              disabled={isSandboxFirm}>
-                              <Unplug className="w-3.5 h-3.5 mr-1.5" />Disconnect
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent side="bottom" className="max-w-xs">Revoke the live session. Reconnect the same account later.</TooltipContent>
-                        </Tooltip>
+                        <>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button type="button" variant="outline" size="sm"
+                                className="h-8 w-[6.5rem] justify-center px-3 text-xs border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] rounded"
+                                onClick={() => void handleOneDriveTestConnection(connector)}
+                                disabled={testingId === connector.id || isSandboxFirm}>
+                                {testingId === connector.id
+                                  ? <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                                  : <Zap className="w-3.5 h-3.5 mr-1.5" />}
+                                Test
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom" className="max-w-xs">Verify that Microsoft accepts the stored tokens for this account.</TooltipContent>
+                          </Tooltip>
+
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span tabIndex={!isShared ? 0 : undefined} className={!isShared ? 'cursor-not-allowed' : undefined}>
+                                <Button type="button" variant="outline" size="sm"
+                                  className="h-8 w-[6.5rem] justify-center px-3 text-xs border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] rounded"
+                                  onClick={() => void handleOpenSwitchModal(connector)}
+                                  disabled={oneDriveLoading || !isShared || isSandboxFirm}>
+                                  <SwitchCamera className="w-3.5 h-3.5 mr-1.5" />Transfer
+                                </Button>
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom" className="max-w-xs">
+                              {!isShared
+                                ? <>Transferring ownership on a personal OneDrive connection requires re-setting up your workspace. Use a SharePoint site to enable this.</>
+                                : "Transfer this connection to a different firm administrator's Microsoft account."}
+                            </TooltipContent>
+                          </Tooltip>
+
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button type="button" variant="outline" size="sm"
+                                className="h-8 w-[6.5rem] justify-center px-3 text-xs border-[#e5e7eb] bg-white text-rose-600 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 rounded"
+                                onClick={() => setOneDriveDisconnectTarget(connector)}
+                                disabled={isSandboxFirm}>
+                                <Unplug className="w-3.5 h-3.5 mr-1.5" />Disconnect
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom" className="max-w-xs">Revoke the live session. Reconnect the same account later.</TooltipContent>
+                          </Tooltip>
+                        </>
                       ) : (
                         <>
                           <Tooltip>
@@ -777,8 +872,8 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                     </div>
                   </div>
 
-                  {/* Workspace root — same Choose folder/Migrate wizard shape as Google's */}
-                  {isActive && oneDriveRoot !== null && (
+                  {/* Workspace root — shown once status is loaded regardless of connection state; OneDriveWorkspaceRoot masks/disables itself internally when disconnected */}
+                  {oneDriveRoot !== null && (
                     <div className="relative z-10 pl-12 pr-4 py-3 border-t border-[#e5e7eb]">
                       <OneDriveWorkspaceRoot
                         connectionId={connector.id}
@@ -787,6 +882,8 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                         rootFolderName={oneDriveRoot?.rootFolderName}
                         workspaceRootLocation={(oneDriveRoot?.workspaceRootLocation as 'PERSONAL' | 'SHARED' | null) ?? null}
                         workspaceRootSharedStorageName={oneDriveRoot?.workspaceRootSharedStorageName ?? null}
+                        isPersonalAccount={oneDriveRoot?.isPersonalAccount ?? null}
+                        connectorActive={isActive}
                         onUpdated={() => void loadOneDriveStatus(connector.id)}
                         firmId={firmId}
                         sectionLabel="Folder"
@@ -794,12 +891,12 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                     </div>
                   )}
 
-                  {/* Client attachment management */}
+                  {/* Client attachment management — always visible; attach/detach actions disable themselves internally (via rootFolderId/isSandboxFirm) when there's nothing to attach into */}
                   <ConnectorClientAttachSection
                     connector={connector}
                     allClients={allClients}
                     rootFolderId={oneDriveRoot?.rootFolderId}
-                    isSandboxFirm={isSandboxFirm}
+                    isSandboxFirm={isSandboxFirm || !isActive}
                     attachingClientId={attachingClientId}
                     detachingClientId={detachingClientId}
                     onAttach={handleAttachClient}
@@ -818,7 +915,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
             onClick={() => setAddNewOpen(o => !o)}
             className="flex w-full items-center gap-2 mb-2 group"
           >
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#45474c] flex-1 text-left">
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#45474c] text-left">
               {connectors.length === 0 ? 'Connect storage account' : 'Add new connection'}
             </p>
             <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded border border-[#e5e7eb] bg-white text-[#45474c] group-hover:border-[#1b1b1d] transition-colors">
@@ -828,7 +925,16 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
               }
             </span>
           </button>
-          {addNewOpen && <div className="flex flex-col gap-0.5 border border-[#e5e7eb] rounded p-1">
+          <AnimatePresence initial={false}>
+          {addNewOpen && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            className="overflow-hidden"
+          >
+          <div className="flex flex-col gap-0.5 border border-[#e5e7eb] rounded p-1">
             <div className="flex items-start gap-2.5 px-2.5 py-2.5 rounded hover:bg-slate-50 transition-colors">
               <div className="h-8 w-8 shrink-0 bg-white border border-[#e5e7eb] rounded flex items-center justify-center p-1.5 mt-0.5">
                 {loading ? <RefreshCw className="w-3.5 h-3.5 text-[#45474c] animate-spin" /> : <GoogleDriveProductMark width={18} height={18} />}
@@ -904,7 +1010,10 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                 </div>
               </>
             )}
-          </div>}
+          </div>
+          </motion.div>
+          )}
+          </AnimatePresence>
         </div>
 
         {/* OneDrive disconnect confirmation */}
@@ -943,15 +1052,9 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
           onClose={() => setSwitchModalOpen(false)}
           admins={firmAdmins}
           currentUserId={user?.id}
-          loading={loading}
+          loading={switchTarget?.type === 'ONEDRIVE' ? oneDriveLoading : loading}
           onConfirm={handleSwitchAccount}
-        />
-
-        <ConnectionTestModal
-          isOpen={isTestModalOpen}
-          onClose={() => setIsTestModalOpen(false)}
-          result={testResult}
-          connectionName={testModalName}
+          provider={switchTarget?.type === 'ONEDRIVE' ? 'Microsoft' : 'Google'}
         />
 
         {/* Disconnect confirmation */}

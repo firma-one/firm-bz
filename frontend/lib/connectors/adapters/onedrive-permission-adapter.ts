@@ -7,14 +7,34 @@
  * - Graph has no native comment-only role; ConnectorRole 'commenter' maps to 'read'.
  * - Graph's DELETE always goes to the drive/site recycle bin — there is no true hard-delete
  *   via this endpoint, so deleteFile's `permanent` flag has no distinct effect for OneDrive.
+ *
+ * grantFilePermission's `opts.preventDownload` (item 12, .claude/plans/connector-microsoft-impl.md,
+ * 2026-08-06): uses Graph's BETA `createLink` endpoint with `type: 'blocksDownload'` — the only
+ * Graph mechanism that blocks a specific user's download of a file. Layering a restrictive link
+ * on top of a normal `/invite` grant does NOT work (SharePoint/OneDrive takes the least-restrictive
+ * of all grants a user holds), so this replaces the invite grant entirely for that call. Two real,
+ * accepted risks: (1) Microsoft's own beta-endpoint policy states "not supported in production";
+ * (2) whether download is actually blocked depends on the tenant's SharePoint/OneDrive license and
+ * file type (e.g. plain text/video are excluded even when the API call succeeds) — the response is
+ * checked for `preventsDownload: true` and a loud warning is logged (falling back to a normal view
+ * link, so access itself still works) whenever that can't be confirmed, rather than silently
+ * claiming protection that may not be in effect for a given tenant/file.
  */
 
 import { OneDriveConnector } from '@/lib/connectors/onedrive-connector'
 import { resolveOneDriveDriveBase } from './onedrive-adapter'
 import { prisma } from '@/lib/prisma'
+import { logger } from '@/lib/logger'
 import type { IConnectorPermissionAdapter, EngagementFolderIds, ConnectorRole, ConnectorFileMetadata } from '../types'
 
 const oneDrive = OneDriveConnector.getInstance()
+const GRAPH_BETA = 'https://graph.microsoft.com/beta'
+
+/** Swaps a resolved v1.0 drive base URL for its beta equivalent — only createLink's
+ * blocksDownload path needs beta; every other call in this file stays on v1.0. */
+function toBetaBase(v1Base: string): string {
+  return v1Base.replace('https://graph.microsoft.com/v1.0', GRAPH_BETA)
+}
 
 /** Maps the provider-agnostic role vocabulary to Graph's native permission roles. */
 function toGraphRole(role: ConnectorRole): 'write' | 'read' {
@@ -94,7 +114,15 @@ export function createOneDrivePermissionAdapter(): IConnectorPermissionAdapter {
     async trashFile(connectionId, fileId) {
       const [token, base] = await Promise.all([auth(connectionId), resolveOneDriveDriveBase(connectionId)])
       // Graph DELETE moves the item to the drive's recycle bin — no explicit "trashed" flag to set.
-      await fetch(`${base}/items/${fileId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
+      const res = await fetch(`${base}/items/${fileId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
+      // 404 means the item is already gone — treat as success (idempotent). Any other non-2xx is a real failure.
+      if (!res.ok && res.status !== 404) {
+        const body = await res.text().catch(() => '')
+        if (res.status === 423) {
+          throw new Error('This item is locked — it (or a file inside it) is currently open/checked out elsewhere. Close it and try again.')
+        }
+        throw new Error(`OneDrive trash failed (${res.status}): ${body}`)
+      }
     },
 
     async listFiles(connectionId, folderId, pageSize) {
@@ -142,9 +170,18 @@ export function createOneDrivePermissionAdapter(): IConnectorPermissionAdapter {
       const res = await fetch(`${base}/items/${fileId}/permissions`, { headers: { Authorization: `Bearer ${token}` } })
       if (!res.ok) return []
       const data = await res.json()
-      return (data.value || []).map((p: { id: string; roles?: string[]; grantedToV2?: { user?: { email?: string } } }) => ({
+      return (data.value || []).map((p: {
+        id: string
+        roles?: string[]
+        // Direct /invite grants populate grantedToV2 (singular); link-type grants (e.g. our
+        // createLink(blocksDownload) path — see file header) populate grantedToIdentitiesV2
+        // (plural) instead — check both so download-blocked link permissions are still
+        // matchable by email (e.g. regrant's duplicate-grant fallback lookup).
+        grantedToV2?: { user?: { email?: string } }
+        grantedToIdentitiesV2?: Array<{ user?: { email?: string } }>
+      }) => ({
         id: p.id,
-        email: p.grantedToV2?.user?.email ?? null,
+        email: p.grantedToV2?.user?.email ?? p.grantedToIdentitiesV2?.[0]?.user?.email ?? null,
         role: fromGraphRole(p.roles),
       }))
     },
@@ -324,9 +361,14 @@ async function grantItemPermission(
   itemId: string,
   email: string,
   role: ConnectorRole,
-  opts?: { notify?: boolean; message?: string }
+  opts?: { notify?: boolean; message?: string; preventDownload?: boolean }
 ): Promise<string | null> {
   const [token, base] = await Promise.all([auth(connectionId), resolveOneDriveDriveBase(connectionId)])
+
+  if (opts?.preventDownload) {
+    return grantDownloadBlockedLink(connectionId, itemId, email, token, toBetaBase(base))
+  }
+
   const res = await fetch(`${base}/items/${itemId}/invite`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -341,4 +383,62 @@ async function grantItemPermission(
   if (!res.ok) return null
   const data = await res.json()
   return data.value?.[0]?.id ?? null
+}
+
+/**
+ * Grants access via a `blocksDownload` sharing link scoped to one user (Graph beta) instead
+ * of a normal `/invite` permission — see file header for why this can't be layered on top of
+ * an invite grant instead. Falls back to a normal (non-download-blocked) `view` link, with a
+ * loud warning, if the beta call fails outright or the response doesn't confirm
+ * `preventsDownload: true` (tenant license / file-type gaps can silently not honor it).
+ */
+async function grantDownloadBlockedLink(
+  connectionId: string,
+  itemId: string,
+  email: string,
+  token: string,
+  betaBase: string
+): Promise<string | null> {
+  const createLink = async (type: 'blocksDownload' | 'view') => fetch(`${betaBase}/items/${itemId}/createLink`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      type,
+      scope: 'users',
+      recipients: [{ email }],
+      sendNotification: true,
+    }),
+  })
+
+  try {
+    const res = await createLink('blocksDownload')
+    if (res.ok) {
+      const data = await res.json()
+      const preventsDownload = data.link?.preventsDownload === true
+      if (!preventsDownload) {
+        logger.warn(
+          '[onedrive-permission-adapter] createLink(blocksDownload) succeeded but response did not confirm preventsDownload — this tenant/file may not actually be download-blocked. Granting access anyway (unblocked).',
+          { connectionId, itemId, email }
+        )
+      }
+      return data.id ?? null
+    }
+    const body = await res.text().catch(() => '')
+    logger.warn(
+      '[onedrive-permission-adapter] createLink(blocksDownload) failed (beta endpoint — may be unsupported for this tenant/file type) — falling back to a normal view link with download unblocked.',
+      { connectionId, itemId, email, status: res.status, body }
+    )
+  } catch (e) {
+    logger.warn(
+      '[onedrive-permission-adapter] createLink(blocksDownload) threw — falling back to a normal view link with download unblocked.',
+      { connectionId, itemId, email, error: e instanceof Error ? e.message : String(e) }
+    )
+  }
+
+  // Fallback: grant access via a normal view-only link so the user isn't locked out entirely,
+  // even though download-blocking couldn't be confirmed.
+  const fallbackRes = await createLink('view')
+  if (!fallbackRes.ok) return null
+  const fallbackData = await fallbackRes.json()
+  return fallbackData.id ?? null
 }

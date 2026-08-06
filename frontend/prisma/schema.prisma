@@ -160,6 +160,12 @@ model Connector {
   type              ConnectorType   @default(GOOGLE_DRIVE)
   userId            String          @db.Uuid
   externalAccountId String
+  /** Immutable identity anchor generated once at creation (lib/slug-utils.ts generateConnectorSlug).
+   * Distinguishes independent connectors created for the same externalAccountId — the dedup key
+   * used to be (type, userId, externalAccountId) alone, which silently merged "Add new connection"
+   * into an existing connector whenever the same account was reconnected. Unrelated to `name`
+   * (which stays freely editable). See .claude/plans/connector-microsoft-impl.md (2026-08-06). */
+  slug              String          @unique
   name              String    @default("Default Connection")
   avatarUrl         String?
   accessToken       String
@@ -181,7 +187,7 @@ model Connector {
   firm    Firm?    @relation("FirmConnectors", fields: [firmId], references: [id], onDelete: SetNull)
   clients Client[] @relation("ClientConnector")
 
-  @@unique([type, userId, externalAccountId])
+  @@index([type, userId, externalAccountId])
   @@index([firmId])
   @@map("connectors")
   @@schema("platform")

@@ -140,7 +140,9 @@ export class SearchService {
             let summary: string | null = null
 
             if (meta) {
-                isFolder = onOneDrive ? !meta.mimeType : meta.mimeType === 'application/vnd.google-apps.folder'
+                // OneDrive adapter mirrors Google's folder-mimeType sentinel (see
+                // onedrive-permission-adapter.ts getFileMetadata) so both providers use the same check.
+                isFolder = meta.mimeType === 'application/vnd.google-apps.folder'
                 driveMetadata = onOneDrive
                     ? { mimeType: meta.mimeType }
                     : {

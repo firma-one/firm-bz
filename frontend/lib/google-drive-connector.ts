@@ -737,8 +737,10 @@ export class GoogleDriveConnector {
           decrypted.refreshTokenDecrypted ?? '',
           connector.tokenExpiresAt ?? new Date(),
           connector.avatarUrl ?? undefined,
-          undefined,
-          (connector.settings as { accountEmail?: string } | null)?.accountEmail
+          undefined,                           // rootFolderId
+          (connector.settings as { accountEmail?: string } | null)?.accountEmail,
+          undefined,                           // clientId
+          connectionId,                        // targetConnectorId — update this same connector, don't create a new one
         )
       }
     )
@@ -1693,6 +1695,21 @@ export class GoogleDriveConnector {
     return (data.files || []).map((f: any) => ({ ...f, connectorId: connectionId }))
   }
 
+  /**
+   * Create or update a Connector row for a Google Drive connection.
+   *
+   * `targetConnectorId` (threaded from the OAuth state's `replaceConnectorId` — see
+   * app/api/connectors/google-drive/callback/route.ts) decides the mode:
+   *   - set    → update that exact row by id ("Reconnect": refresh tokens/settings in place).
+   *   - unset  → always create a brand-new row with a fresh `slug` ("Add new connection").
+   *
+   * This used to dedupe by (type, userId, externalAccountId) via findFirst, which silently
+   * merged "Add new connection" into an existing connector whenever the same Google account
+   * was reconnected — even when the user explicitly wanted a second, independent connector.
+   * See .claude/plans/connector-microsoft-impl.md (2026-08-06) for the incident this fixes
+   * (caught on the OneDrive side; applies identically here). Mirrors
+   * OneDriveConnector.storeConnection's equivalent fix.
+   */
   async storeConnection(
     organizationId: string | undefined,
     userId: string,
@@ -1707,6 +1724,10 @@ export class GoogleDriveConnector {
     accountEmail?: string,
     /** Client to link after upsert. Sets Client.connectorId = connector.id. */
     clientId?: string,
+    targetConnectorId?: string,
+    /** True for personal Gmail accounts (no `hd` claim on the OAuth id_token) — see
+     * app/api/connectors/google-drive/callback/route.ts's isPersonalGoogleAccount(). */
+    isPersonalAccount?: boolean,
   ): Promise<Connector> {
 
     // Pass plaintext tokens - Prisma extension handles encryption automatically
@@ -1734,6 +1755,10 @@ export class GoogleDriveConnector {
         next.accountEmail = trimmedEmail
         touched = true
       }
+      if (isPersonalAccount !== undefined) {
+        next.isPersonalAccount = isPersonalAccount
+        touched = true
+      }
       return touched ? next : undefined
     }
 
@@ -1742,17 +1767,10 @@ export class GoogleDriveConnector {
       updateData.refreshToken = refreshToken // Plaintext - Prisma extension encrypts
     }
 
-    // Dedup by (type, userId, externalAccountId) — allows one user to hold connectors for
-    // multiple distinct Google accounts (different externalAccountId = different Drive).
-    const existingConnector = await prisma.connector.findFirst({
-      where: {
-        type: ConnectorType.GOOGLE_DRIVE,
-        userId,
-        externalAccountId,
-      }
-    })
+    if (targetConnectorId) {
+      const existingConnector = await prisma.connector.findUnique({ where: { id: targetConnectorId } })
+      if (!existingConnector) throw new Error(`Connector ${targetConnectorId} not found`)
 
-    if (existingConnector) {
       const mergedSettings = mergeConnectorSettings(
         (existingConnector.settings as Record<string, unknown>) || undefined
       )
@@ -1779,6 +1797,7 @@ export class GoogleDriveConnector {
       return updated
     }
 
+    const { generateConnectorSlug } = await import('@/lib/slug-utils')
     const initialSettings = mergeConnectorSettings(undefined) ?? {}
 
     // Create new connector
@@ -1787,6 +1806,7 @@ export class GoogleDriveConnector {
         type: ConnectorType.GOOGLE_DRIVE,
         userId,
         externalAccountId,
+        slug: generateConnectorSlug(),
         name,
         avatarUrl,
         accessToken, // Plaintext - Prisma extension encrypts

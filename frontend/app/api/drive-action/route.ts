@@ -124,13 +124,15 @@ export async function POST(request: NextRequest) {
                     return NextResponse.json({ error: 'No active storage connector found' }, { status: 400 })
                 }
 
+                let lastTrashError: string | null = null
                 const tryTrash = async (id: string): Promise<boolean> => {
                     const adapter = await getPermissionAdapter(id)
                     if (!adapter) return false
                     try {
                         await adapter.trashFile(id, fileId)
                         return true
-                    } catch {
+                    } catch (err) {
+                        lastTrashError = err instanceof Error ? err.message : String(err)
                         return false
                     }
                 }
@@ -156,8 +158,13 @@ export async function POST(request: NextRequest) {
                 }
 
                 if (!success || !successOrgId) {
-                    logger.error(`[trash] Failed to trash fileId=${fileId} after trying all connectors (success=${success}, orgId=${successOrgId})`)
-                    return NextResponse.json({ error: 'Failed to trash file. The file may not exist in the connected storage account, or the connected account may not have permission to delete it.' }, { status: 500 })
+                    logger.error(`[trash] Failed to trash fileId=${fileId} after trying all connectors (success=${success}, orgId=${successOrgId}, lastError=${lastTrashError})`)
+                    // Surface the real upstream error (e.g. "locked/checked out" 423 from SharePoint)
+                    // when we have one, instead of a generic message that hides the actual cause.
+                    const message = lastTrashError
+                        ? `Failed to delete: ${lastTrashError}`
+                        : 'Failed to trash file. The file may not exist in the connected storage account, or the connected account may not have permission to delete it.'
+                    return NextResponse.json({ error: message }, { status: 500 })
                 }
 
                 // Get metadata using the successful connector to determine if it's a folder or file

@@ -55,8 +55,19 @@ export class OneDriveConnector implements IConnectorInstance {
   }
 
   /**
-   * Upsert a Connector row for a OneDrive/SharePoint connection. Dedupes on
-   * (type, userId, externalAccountId) — mirrors GoogleDriveConnector.storeConnection.
+   * Create or update a Connector row for a OneDrive/SharePoint connection.
+   *
+   * `targetConnectorId` (threaded from the OAuth state's `replaceConnectorId` — see
+   * app/api/connectors/onedrive/callback/route.ts) decides the mode:
+   *   - set    → update that exact row by id ("Reconnect": refresh tokens/settings in place).
+   *   - unset  → always create a brand-new row with a fresh `slug` ("Add new connection").
+   *
+   * This used to dedupe by (type, userId, externalAccountId) via findFirst, which silently
+   * merged "Add new connection" into an existing connector whenever the same Microsoft account
+   * was reconnected — even when the user explicitly wanted a second, independent connector
+   * (e.g. Personal-mode connector for Client A + a separate Shared-site connector for Client B,
+   * both backed by the same account). See .claude/plans/connector-microsoft-impl.md (2026-08-06)
+   * for the incident this fixes. Mirrors GoogleDriveConnector.storeConnection's equivalent fix.
    */
   async storeConnection(
     organizationId: string | undefined,
@@ -71,6 +82,8 @@ export class OneDriveConnector implements IConnectorInstance {
     mode: 'personal' | 'shared' = 'personal',
     sharedStorageId?: string,
     sharedStorageName?: string,
+    isPersonalAccount?: boolean,
+    targetConnectorId?: string,
   ): Promise<Connector> {
     const trimmedEmail = accountEmail?.trim()
     const workspaceRootLocation = mode === 'shared' ? WorkspaceRootLocation.SHARED : WorkspaceRootLocation.PERSONAL
@@ -97,14 +110,17 @@ export class OneDriveConnector implements IConnectorInstance {
         next.accountEmail = trimmedEmail
         touched = true
       }
+      if (isPersonalAccount !== undefined) {
+        next.isPersonalAccount = isPersonalAccount
+        touched = true
+      }
       return touched ? next : undefined
     }
 
-    const existingConnector = await prisma.connector.findFirst({
-      where: { type: ConnectorType.ONEDRIVE, userId, externalAccountId },
-    })
+    if (targetConnectorId) {
+      const existingConnector = await prisma.connector.findUnique({ where: { id: targetConnectorId } })
+      if (!existingConnector) throw new Error(`Connector ${targetConnectorId} not found`)
 
-    if (existingConnector) {
       const mergedSettings = mergeSettings((existingConnector.settings as Record<string, unknown>) || undefined)
       const updatePayload: Record<string, unknown> = { ...updateData }
       if (mergedSettings) updatePayload.settings = mergedSettings
@@ -119,12 +135,14 @@ export class OneDriveConnector implements IConnectorInstance {
       return updated
     }
 
+    const { generateConnectorSlug } = await import('@/lib/slug-utils')
     const initialSettings = mergeSettings(undefined) ?? {}
     const newConnector = await prisma.connector.create({
       data: {
         type: ConnectorType.ONEDRIVE,
         userId,
         externalAccountId,
+        slug: generateConnectorSlug(),
         name,
         accessToken,
         refreshToken: refreshToken || '',

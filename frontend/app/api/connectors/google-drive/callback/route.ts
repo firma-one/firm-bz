@@ -45,6 +45,25 @@ function appPathWithError(appPath: string, errorCode: string): string {
 }
 
 /**
+ * Decodes the `hd` (hosted domain) claim from an unverified id_token JWT — present for Google
+ * Workspace/Cloud org accounts, absent for personal @gmail.com accounts. Safe to use unverified
+ * here since it only chooses a UX default (skip the My Drive/Shared Drive picker), not an
+ * authorization decision — the actual token exchange is already trusted. Mirrors OneDrive's
+ * `tid`-claim detection (app/api/connectors/onedrive/callback/route.ts), see
+ * .claude/plans/connector-microsoft-impl.md item 9/10, 2026-08-06.
+ */
+function isPersonalGoogleAccount(idToken: string | undefined): boolean {
+  if (!idToken) return false
+  try {
+    const payload = idToken.split('.')[1]
+    const json = JSON.parse(Buffer.from(payload, 'base64url').toString('utf-8'))
+    return !json.hd // hd present (any value) => Workspace/Cloud org account; absent => personal
+  } catch {
+    return false // fail closed — undecodable token shows the My Drive/Shared Drive picker as before
+  }
+}
+
+/**
  * OAuth popup completion page: postMessage to opener using this document's origin.
  * Matches the parent window when both run on the same deployment (avoids NEXT_PUBLIC_APP_URL drift).
  * Requires window.opener — do not open the auth popup with noopener/noreferrer.
@@ -165,6 +184,7 @@ export async function GET(request: NextRequest) {
     }
 
     const tokens = await tokenResponse.json()
+    const isPersonalAccount = isPersonalGoogleAccount(tokens.id_token)
 
     // Get user info
     let userResponse: Response
@@ -372,6 +392,8 @@ export async function GET(request: NextRequest) {
         rootFolderId ?? undefined, // Use existing if reconnecting with picker; otherwise set below
         userInfo.email,
         clientId,        // Links Client.connectorId after upsert
+        replaceConnectorId,
+        isPersonalAccount,
       )
 
       const auditBuilder = audit(AUDIT_EVENT.STORAGE_CONNECTOR_ATTACHED)

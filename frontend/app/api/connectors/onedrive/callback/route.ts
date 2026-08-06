@@ -8,6 +8,25 @@ import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 
 const oneDriveConnector = OneDriveConnector.getInstance()
 
+// Fixed, well-known tenant ID Microsoft issues for ALL personal Microsoft accounts (MSA) — any
+// other `tid` means a work/school (Entra ID) tenant account. Lets us skip the Personal/Shared
+// workspace-root choice for accounts that can never have a SharePoint site anyway. See
+// .claude/plans/connector-microsoft-impl.md (2026-08-06) for the full rationale.
+const MSA_TENANT_ID = '9188040d-6c67-4c5b-b112-36a304b66dad'
+
+/** Decodes the `tid` claim from an unverified id_token JWT — safe here since we only use it to
+ * choose a UX default, not for authorization (the actual token exchange is already trusted). */
+function isPersonalMicrosoftAccount(idToken: string | undefined): boolean {
+  if (!idToken) return false
+  try {
+    const payload = idToken.split('.')[1]
+    const json = JSON.parse(Buffer.from(payload, 'base64url').toString('utf-8'))
+    return json.tid === MSA_TENANT_ID
+  } catch {
+    return false // fail closed — undecodable token shows the Personal/Shared picker as before
+  }
+}
+
 function parseStateFlow(state: string | null): { flow?: string; nonce?: string; openerOrigin?: string; organizationId?: string } {
   if (!state) return {}
   try {
@@ -156,6 +175,7 @@ export async function GET(request: NextRequest) {
     }
 
     const tokens = await tokenResponse.json()
+    const isPersonalAccount = isPersonalMicrosoftAccount(tokens.id_token)
 
     let userResponse: Response
     try {
@@ -297,7 +317,11 @@ export async function GET(request: NextRequest) {
         tokenExpiresAt,
         userEmail,
         clientId,
-        'personal'
+        'personal',
+        undefined,
+        undefined,
+        isPersonalAccount,
+        replaceConnectorId
       )
 
       // No auto-folder-creation here — unlike Google, OAuth alone never creates a workspace

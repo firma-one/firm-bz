@@ -54,12 +54,6 @@ export function GoogleDriveMock({ folderName, onStageChange }: GoogleDriveMockPr
     const [playing, setPlaying] = useState(false)
     const [started, setStarted] = useState(false)
 
-    // 3-second delay before auto-start
-    useEffect(() => {
-        const timer = setTimeout(() => { setStarted(true); setPlaying(true) }, 3000)
-        return () => clearTimeout(timer)
-    }, [])
-
     useEffect(() => {
         onStageChange?.(stage, CALLOUTS[stage], STAGE_TO_STEP[stage])
     }, [stage]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -76,7 +70,11 @@ export function GoogleDriveMock({ folderName, onStageChange }: GoogleDriveMockPr
     }, [stage, playing])
 
     const replay = () => { setStage("shared-drives"); setStarted(true); setPlaying(true) }
-    const togglePlay = () => stage === "done" ? replay() : setPlaying(p => !p)
+    const togglePlay = () => {
+        if (stage === "done") { replay(); return }
+        if (!started) { setStarted(true); setPlaying(true); return }
+        setPlaying(p => !p)
+    }
 
     const stageIdx = SEQUENCE.indexOf(stage)
     const progress = Math.min(100, ((stageIdx + (playing && stage !== "done" ? 0.5 : 1)) / SEQUENCE.length) * 100)
@@ -239,14 +237,20 @@ export function GoogleDriveMock({ folderName, onStageChange }: GoogleDriveMockPr
                 >
                     <RotateCcw className="h-3 w-3" />
                 </button>
-                {/* Play / Pause */}
+                {/* Play / Pause / Replay */}
                 <button
                     type="button"
                     onClick={togglePlay}
-                    title={playing ? "Pause" : "Play"}
-                    className="flex items-center justify-center rounded p-0.5 text-white transition-colors hover:text-white/80"
+                    title={stage === "done" ? "Replay" : playing ? "Pause" : "Play"}
+                    className="flex items-center justify-center gap-1 rounded p-0.5 text-white transition-colors hover:text-white/80"
                 >
-                    {playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+                    {stage === "done" ? (
+                        <><RotateCcw className="h-3.5 w-3.5" /><span className="text-[10px] font-medium">Replay</span></>
+                    ) : playing ? (
+                        <Pause className="h-3.5 w-3.5" />
+                    ) : (
+                        <Play className="h-3.5 w-3.5" />
+                    )}
                 </button>
                 {/* Progress bar */}
                 <div className="flex-1 h-1 rounded-full bg-white/25 overflow-hidden">

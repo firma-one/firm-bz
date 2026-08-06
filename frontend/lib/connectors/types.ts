@@ -132,8 +132,23 @@ export interface IConnectorPermissionAdapter {
   listFiles(connectionId: string, folderId: string, pageSize?: number): Promise<Array<{ id: string; name: string; mimeType?: string }>>
   /** Get metadata for a single file/folder. Returns null if not found. */
   getFileMetadata(connectionId: string, fileId: string): Promise<ConnectorFileMetadata | null>
-  /** Grant access to a single file (not its folder) for an email address. Returns the permission ID or null. */
-  grantFilePermission(connectionId: string, fileId: string, email: string, role: ConnectorRole, opts?: { notify?: boolean; message?: string }): Promise<string | null>
+  /**
+   * Grant access to a single file (not its folder) for an email address. Returns the
+   * permission ID or null.
+   * `opts.preventDownload`: when true, block the recipient from downloading/copying the file
+   * through the provider's own native UI (Firma's app-level download path is unaffected — it
+   * goes through the connector's own service token, not the recipient's grant). Google Drive
+   * honors this via a companion `setCopyRestricted` call on the file itself (provider-wide,
+   * independent of grant type). OneDrive has no such per-item property — Graph's direct-user
+   * `/invite` permission (this method's default mechanism) has no download-block option, and
+   * layering a restrictive sharing link on top of an existing invite grant does NOT work
+   * (SharePoint/OneDrive takes the least-restrictive of all grants a user holds on an item —
+   * confirmed via Microsoft's own docs, see .claude/plans/connector-microsoft-impl.md item 12).
+   * The OneDrive adapter therefore grants via `createLink({scope:'users', preventsDownload:true})`
+   * instead of `/invite` whenever `preventDownload` is true, so this is the ONLY grant path that
+   * enforces it for OneDrive — a companion `setCopyRestricted` call does nothing there.
+   */
+  grantFilePermission(connectionId: string, fileId: string, email: string, role: ConnectorRole, opts?: { notify?: boolean; message?: string; preventDownload?: boolean }): Promise<string | null>
   /** List permissions currently set on a single file. */
   listFilePermissions(connectionId: string, fileId: string): Promise<Array<{ id: string; email: string | null; role: ConnectorRole }>>
   /** Delete a file. permanent:true bypasses trash (irreversible); omitted/false trashes it (same as trashFile). */

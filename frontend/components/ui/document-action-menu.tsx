@@ -19,7 +19,6 @@ import {
   MoreHorizontal,
   Download,
   ExternalLink,
-  Share2,
   Bookmark,
   Edit3,
   Copy,
@@ -47,6 +46,7 @@ import {
   Building2,
   Loader2,
   PackageMinus,
+  Package,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -679,7 +679,7 @@ export function DocumentActionMenu({
                             onSelect={(e) => e.preventDefault()}
                             className="flex items-center space-x-3 px-3 py-2 text-xs opacity-50 cursor-not-allowed"
                           >
-                            <Share2 className="h-4 w-4 text-purple-600" />
+                            <Package className="h-4 w-4 text-purple-600" />
                             <span>Tag as Deliverable</span>
                           </DropdownMenuItem>
                         </TooltipTrigger>
@@ -687,13 +687,20 @@ export function DocumentActionMenu({
                       </Tooltip>
                     </TooltipProvider>
                   ) : (
-                    <DropdownMenuItem
-                      onClick={() => onMarkAsDeliverable?.(document)}
-                      className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
-                    >
-                      <Share2 className="h-4 w-4 text-purple-600" />
-                      <span>Tag as Deliverable</span>
-                    </DropdownMenuItem>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <DropdownMenuItem
+                            onClick={() => onMarkAsDeliverable?.(document)}
+                            className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                          >
+                            <Package className="h-4 w-4 text-purple-600" />
+                            <span>Tag as Deliverable</span>
+                          </DropdownMenuItem>
+                        </TooltipTrigger>
+                        <TooltipContent side="right" className="text-xs max-w-48">Deliverables will be shared externally</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   )
                 )}
                 {isApprovedDeliverable && !onCopyDocument ? (

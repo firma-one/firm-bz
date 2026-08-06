@@ -1,7 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
-import { Button } from "@/components/ui/button"
+import { useState, useCallback, useEffect, useRef } from "react"
 import { cn } from "@/lib/utils"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import {
@@ -13,17 +12,51 @@ import {
 } from "@/components/ui/dialog"
 import { OneDriveIcon } from "@/components/ui/onedrive-icon"
 import { SharePointIcon } from "@/components/ui/sharepoint-icon"
+import { MicrosoftIcon } from "@/components/ui/microsoft-icon"
 import { useToast } from "@/components/ui/toast"
 import { generateWorkspaceFolderName } from "@/lib/generate-unique-workspace-folder-name"
 import {
   ArrowRightLeft,
-  ArrowUpRight,
   FolderOpen,
   RefreshCw,
   Warehouse,
 } from "lucide-react"
 
 type OneDriveSite = { id: string; name: string; webUrl?: string }
+
+/** Numbered progress dots — completed steps gray-filled, active step dark-filled, pending steps outlined. Mirrors GoogleDriveWorkspaceRoot's StepProgress. */
+function StepProgress({ current, total, onStepClick }: { current: number; total: number; onStepClick?: (step: number) => void }) {
+  return (
+    <div className="flex w-full items-center" aria-label={`Step ${current} of ${total}`}>
+      {Array.from({ length: total }, (_, i) => i + 1).map((step, i) => {
+        const clickable = step < current && !!onStepClick
+        const dotClassName = cn(
+          "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors",
+          step < current
+            ? "bg-[#9a9ba0] text-white"
+            : step === current
+              ? "bg-[#1b1b1d] text-white"
+              : "border border-[#e5e7eb] bg-white text-[#9a9ba0]",
+          clickable && "cursor-pointer hover:bg-[#1b1b1d]",
+        )
+        return (
+          <div key={step} className={cn("flex items-center", i > 0 && "flex-1")}>
+            {i > 0 && (
+              <div className={cn("h-0.5 flex-1", step <= current ? "bg-[#1b1b1d]" : "bg-[#e5e7eb]")} />
+            )}
+            {clickable ? (
+              <button type="button" onClick={() => onStepClick(step)} className={dotClassName} aria-label={`Back to step ${step}`}>
+                {step}
+              </button>
+            ) : (
+              <span className={dotClassName}>{step}</span>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
 
 type OneDriveWorkspaceRootProps = {
   connectionId: string
@@ -36,6 +69,18 @@ type OneDriveWorkspaceRootProps = {
   onUpdated: () => void | Promise<void>
   firmId?: string | null
   sectionLabel?: string
+  /** True for personal Microsoft accounts (MSA) — detected via the OAuth id_token's `tid` claim
+   * at connect time (see app/api/connectors/onedrive/callback/route.ts). A personal account can
+   * never have a SharePoint site, so (1) the workspace folder auto-creates on render with no
+   * user click/decision, and (2) the "Migrate" button is hidden entirely once it exists — the
+   * root stays wherever it was auto-created in OneDrive, permanently, for these accounts. */
+  isPersonalAccount?: boolean | null
+  /** False when the underlying connector (Microsoft OAuth session) is disconnected/revoked — as
+   * opposed to `accessToken`, which is the user's own FirmaOne session token and stays truthy
+   * regardless of this specific connector's state. When false, folder actions are disabled and
+   * a reconnect hint is shown instead, but the last-known folder info still renders. Defaults
+   * to true so existing callers that don't pass it keep today's behavior. */
+  connectorActive?: boolean
 }
 
 /**
@@ -57,6 +102,8 @@ export function OneDriveWorkspaceRoot({
   onUpdated,
   firmId,
   sectionLabel,
+  isPersonalAccount = null,
+  connectorActive = true,
 }: OneDriveWorkspaceRootProps) {
   const { addToast } = useToast()
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -66,6 +113,12 @@ export function OneDriveWorkspaceRoot({
   const [sites, setSites] = useState<OneDriveSite[]>([])
   const [sitesLoading, setSitesLoading] = useState(false)
   const [selectingSiteId, setSelectingSiteId] = useState<string | null>(null)
+
+  // Sites load once (via loadSites()) when the Shared flow starts; the search box below then
+  // filters that already-fetched list client-side rather than re-hitting Graph per keystroke.
+  const filteredSites = siteQuery.trim()
+    ? sites.filter(s => s.name.toLowerCase().includes(siteQuery.trim().toLowerCase()))
+    : sites
 
   const displayName = rootFolderName?.trim() || "Workspace folder"
   const breadcrumbRootLabel =
@@ -92,25 +145,39 @@ export function OneDriveWorkspaceRoot({
     resetFlow()
   }, [resetFlow])
 
-  const loadSites = useCallback(async (q?: string) => {
+  const loadSites = useCallback(async () => {
     if (!accessToken) return
     setSitesLoading(true)
     try {
       const params = new URLSearchParams({ connectionId })
-      if (q) params.set('q', q)
       const res = await fetch(`/api/connectors/onedrive/sites?${params}`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       })
-      if (res.ok) setSites((await res.json()).sites ?? [])
-    } catch { /* ignore */ } finally {
+      const data = await res.json().catch(() => ({}))
+      if (res.ok) {
+        setSites(data.sites ?? [])
+      } else {
+        setSites([])
+        addToast({
+          title: 'Could not load sites',
+          message: data.error === 'Failed to list SharePoint sites'
+            ? 'Reconnect this account to grant SharePoint site access, then try again.'
+            : (data.error || 'Try again.'),
+          type: 'error',
+        })
+      }
+    } catch {
+      setSites([])
+      addToast({ title: 'Could not load sites', message: 'Try again.', type: 'error' })
+    } finally {
       setSitesLoading(false)
     }
-  }, [accessToken, connectionId])
+  }, [accessToken, connectionId, addToast])
 
-  // Personal (OneDrive) auto-creates immediately on click — no intermediate review/confirm step,
-  // per explicit instruction to not prompt a folder choice for Personal (unlike Google, which
-  // requires the user to manually create+select the folder). Shared (SharePoint) still needs
-  // the site picker, since that's an unavoidable choice.
+  // Personal (OneDrive) auto-creates immediately, no intermediate review/confirm step (unlike
+  // Google, which requires the user to manually create+select the folder). For personal MSA
+  // accounts this now fires automatically via the effect below; this function is only reached
+  // manually via the dialog's Personal button for work/school accounts on the Migrate path.
   const startPersonalFlow = () => {
     setLocation("Personal")
     void createPersonalFolder()
@@ -166,6 +233,20 @@ export function OneDriveWorkspaceRoot({
     }
   }
 
+  // Auto-complete Step 2 for personal Microsoft accounts — no folder yet and no decision to
+  // make (a personal MSA can never have a SharePoint site), so create the workspace folder the
+  // moment this renders rather than making the user click "Choose folder" for a foregone
+  // conclusion. Ref-guarded so this only ever fires once per connection, even across re-renders
+  // (e.g. accessToken resolving async) — createPersonalFolder itself also no-ops while saving.
+  const autoPersonalRunRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!isPersonalAccount || rootFolderId || !accessToken) return
+    if (autoPersonalRunRef.current === connectionId) return
+    autoPersonalRunRef.current = connectionId
+    void createPersonalFolder()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPersonalAccount, rootFolderId, accessToken, connectionId])
+
   const selectSite = async (site: OneDriveSite) => {
     if (!accessToken) return
     setSelectingSiteId(site.id)
@@ -189,6 +270,11 @@ export function OneDriveWorkspaceRoot({
     }
   }
 
+  // Personal auto-creates with no visible steps; Shared is a 2-step flow (Location, then pick a
+  // site). Total is always 2 so the bar doesn't jump/reflow once a location is chosen.
+  const totalSteps = 2
+  const currentStep = location === null ? 1 : 2
+
   const dialogTitle = rootFolderId ? "Migrate workspace folder" : "Set up workspace folder"
   const dialogSubtitle =
     location === null
@@ -197,7 +283,7 @@ export function OneDriveWorkspaceRoot({
         : "Choose where to create your workspace folder."
       : location === "Personal"
         ? "We'll create a uniquely named folder in your OneDrive."
-        : "Pick the SharePoint site whose files should sync with this workspace."
+        : "Pick a SharePoint site — we'll create a dedicated workspace folder inside it."
 
   return (
     <div>
@@ -226,34 +312,52 @@ export function OneDriveWorkspaceRoot({
                   ) : null}
                 </div>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      className={cn(
-                        "inline-flex items-center gap-1.5 rounded h-8 px-4 text-[10px] font-headline font-bold tracking-widest uppercase text-white bg-primary hover:bg-primary hover:brightness-105 shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all",
-                        (!accessToken || migrationLocked) && "opacity-40 cursor-not-allowed",
-                      )}
-                      onClick={() => {
-                        if (migrationLocked) return
-                        resetFlow()
-                        setDialogOpen(true)
-                      }}
-                      disabled={!accessToken || migrationLocked}
-                      aria-label="Migrate workspace folder"
-                    >
-                      <ArrowRightLeft className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                      Migrate
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" align="end" className="max-w-sm text-left leading-snug">
-                    Change where this connector's workspace root lives — Personal OneDrive folder, or a SharePoint site.
-                  </TooltipContent>
-                </Tooltip>
-              </div>
+              {isPersonalAccount === true ? null : (
+                // Migrate is hidden entirely for personal Microsoft accounts — a personal MSA
+                // can never have a SharePoint site to migrate to, and the workspace folder was
+                // already auto-created with no user decision involved, so there's nothing
+                // meaningful to offer here (see item 9 in the plan doc's OPEN gaps note).
+                <div className="flex items-center gap-2 shrink-0">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        className={cn(
+                          "inline-flex items-center gap-1.5 rounded h-8 px-4 text-[10px] font-headline font-bold tracking-widest uppercase text-white bg-primary hover:bg-primary hover:brightness-105 shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all",
+                          (!accessToken || !connectorActive || migrationLocked) && "opacity-40 cursor-not-allowed",
+                        )}
+                        onClick={() => {
+                          if (!connectorActive || migrationLocked) return
+                          resetFlow()
+                          setDialogOpen(true)
+                        }}
+                        disabled={!accessToken || !connectorActive || migrationLocked}
+                        aria-label="Migrate workspace folder"
+                      >
+                        <ArrowRightLeft className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                        Migrate
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" align="end" className="max-w-sm text-left leading-snug">
+                      Change where this connector's workspace root lives — Personal OneDrive folder, or a SharePoint site.
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+              )}
             </div>
           </TooltipProvider>
+        ) : isPersonalAccount === true ? (
+          // A personal Microsoft account can never have a SharePoint site, so there's no real
+          // choice to present — the workspace folder is created automatically (see the
+          // autoPersonalRunRef effect above) as soon as this renders, no button/click needed.
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="shrink-0 flex h-9 w-9 items-center justify-center rounded border border-[#e5e7eb] bg-[#f9f9fb]" aria-hidden>
+              <RefreshCw className="h-4.5 w-4.5 text-[#45474c] animate-spin" strokeWidth={1.75} />
+            </div>
+            <p className="min-w-0 flex-1 text-[0.8125rem] text-[#45474c]">
+              Setting up your workspace folder in OneDrive…
+            </p>
+          </div>
         ) : (
           <TooltipProvider delayDuration={300}>
             <div className="flex items-center gap-3 min-w-0">
@@ -267,37 +371,48 @@ export function OneDriveWorkspaceRoot({
                 type="button"
                 className={cn(
                   "inline-flex items-center gap-1.5 rounded h-8 px-4 text-[10px] font-headline font-bold tracking-widest uppercase text-white bg-primary hover:bg-primary hover:brightness-105 shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all shrink-0",
-                  (!accessToken || migrationLocked) && "opacity-40 cursor-not-allowed",
+                  (!accessToken || !connectorActive || migrationLocked) && "opacity-40 cursor-not-allowed",
                 )}
                 onClick={() => {
-                  if (migrationLocked) return
+                  if (!connectorActive || migrationLocked) return
                   resetFlow()
                   setDialogOpen(true)
                 }}
-                disabled={!accessToken || migrationLocked}
-                aria-label="Choose workspace folder"
+                disabled={!accessToken || !connectorActive || migrationLocked}
+                aria-label="Choose storage location"
               >
-                <ArrowRightLeft className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                Choose folder
+                <FolderOpen className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                Choose Location
               </button>
             </div>
           </TooltipProvider>
         )}
         {!accessToken ? (
           <p className="text-xs text-amber-800 mt-3">Sign in to migrate your workspace folder.</p>
+        ) : !connectorActive ? (
+          <p className="text-xs text-amber-800 mt-3">Reconnect this account to manage the workspace folder.</p>
         ) : null}
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={(open) => { if (open) setDialogOpen(true); else closeDialog() }}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto rounded">
           <DialogHeader>
-            <DialogTitle className="text-[0.9375rem] font-bold text-[#1b1b1d]">{dialogTitle}</DialogTitle>
+            <DialogTitle className="flex items-center gap-2 text-[0.9375rem] font-bold text-[#1b1b1d]">
+              <MicrosoftIcon size={18} />
+              {dialogTitle}
+            </DialogTitle>
             <DialogDescription className="text-left text-xs text-[#45474c]">{dialogSubtitle}</DialogDescription>
           </DialogHeader>
 
+          <StepProgress
+            current={currentStep}
+            total={totalSteps}
+            onStepClick={(step) => { if (step === 1) resetFlow() }}
+          />
+
           {!location ? (
             <div className="space-y-4 py-1">
-              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#45474c]">Step 1 · Location</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#45474c]">Location</p>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <button
                   type="button"
@@ -336,45 +451,45 @@ export function OneDriveWorkspaceRoot({
             </div>
           ) : (
             <div className="space-y-3 py-1">
-              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#45474c]">Shared (SharePoint) · Step 2 of 2</p>
+              <div className="flex items-center gap-1.5">
+                <SharePointIcon size={14} className="shrink-0" />
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#45474c]">Shared (SharePoint) · Pick a site</p>
+              </div>
               <input
                 type="text"
                 value={siteQuery}
                 onChange={(e) => setSiteQuery(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') void loadSites(siteQuery) }}
                 placeholder="Search sites…"
                 className="w-full rounded border border-[#e5e7eb] bg-white px-2.5 py-1.5 text-xs text-[#1b1b1d] placeholder:text-[#9a9ba0] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
               />
-              <div className="max-h-64 overflow-y-auto flex flex-col gap-1">
+              <div className="max-h-64 overflow-y-auto rounded border border-[#e5e7eb] divide-y divide-[#e5e7eb]">
                 {sitesLoading ? (
-                  <p className="text-xs text-[#9a9ba0] px-1 py-2">Loading sites…</p>
-                ) : sites.length === 0 ? (
-                  <p className="text-xs text-[#9a9ba0] px-1 py-2">No sites found.</p>
+                  <p className="text-xs text-[#9a9ba0] px-3 py-3">Loading sites…</p>
+                ) : filteredSites.length === 0 ? (
+                  <p className="text-xs text-[#9a9ba0] px-3 py-3">
+                    {sites.length === 0 ? "No sites found." : "No sites match your search."}
+                  </p>
                 ) : (
-                  sites.map((site) => (
+                  filteredSites.map((site) => (
                     <button
                       key={site.id}
                       type="button"
                       onClick={() => void selectSite(site)}
                       disabled={selectingSiteId === site.id}
-                      className="flex items-center justify-between gap-2 rounded px-2.5 py-2 text-left hover:bg-slate-50 transition-colors disabled:opacity-50"
+                      className="group flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left hover:bg-[#f9f9fb] transition-colors disabled:opacity-50"
                     >
                       <span className="text-sm text-[#1b1b1d] truncate">{site.name}</span>
-                      {site.webUrl && (
-                        <a href={site.webUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}
-                          className="text-[#9a9ba0] hover:text-primary shrink-0">
-                          <ArrowUpRight className="h-3.5 w-3.5" />
-                        </a>
+                      {selectingSiteId === site.id ? (
+                        <RefreshCw className="w-3.5 h-3.5 text-[#9a9ba0] animate-spin shrink-0" />
+                      ) : (
+                        <span className="shrink-0 inline-flex items-center gap-1.5 rounded border border-[#e5e7eb] bg-white px-2.5 py-1 text-[10px] font-headline font-bold tracking-widest uppercase text-[#45474c] opacity-0 transition-opacity group-hover:opacity-100">
+                          <SharePointIcon size={12} className="shrink-0" />
+                          Select Site
+                        </span>
                       )}
-                      {selectingSiteId === site.id && <RefreshCw className="w-3.5 h-3.5 text-[#9a9ba0] animate-spin shrink-0" />}
                     </button>
                   ))
                 )}
-              </div>
-              <div className="flex items-center justify-between pt-1">
-                <Button variant="ghost" size="sm" className="h-8 px-3 text-xs text-[#45474c] rounded" onClick={resetFlow}>
-                  Change location
-                </Button>
               </div>
             </div>
           )}

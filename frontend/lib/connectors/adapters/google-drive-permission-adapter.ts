@@ -41,7 +41,10 @@ export function createGoogleDrivePermissionAdapter(): IConnectorPermissionAdapte
       }
     },
 
-    trashFile: async (id, fileId) => { await g.trashFile(id, fileId) },
+    trashFile: async (id, fileId) => {
+      const ok = await g.trashFile(id, fileId)
+      if (!ok) throw new Error(`Failed to trash Google Drive file ${fileId}`)
+    },
 
     listFiles: (id, folderId, pageSize) =>
       g.listFiles(id, folderId, pageSize),
@@ -67,7 +70,8 @@ export function createGoogleDrivePermissionAdapter(): IConnectorPermissionAdapte
       if (opts?.permanent) {
         await g.permanentlyDeleteFile(id, fileId)
       } else {
-        await g.trashFile(id, fileId)
+        const ok = await g.trashFile(id, fileId)
+        if (!ok) throw new Error(`Failed to trash Google Drive file ${fileId}`)
       }
     },
 
