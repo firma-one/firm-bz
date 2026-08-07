@@ -531,6 +531,11 @@ export interface FirmConnectorRecord {
     workspaceRootLocation: string | null
     rootFolderId: string | null
     attachedClients: { id: string; name: string }[]
+    /** Count of EngagementDocument rows tracked against this connector (isFolder: false).
+     * Removing the connector orphans these — nulls their connectorId rather than deleting them
+     * or the underlying provider file, but Firma loses its own tracking link to them. Surfaced
+     * as a fatal-style warning before removal (see FirmDriveSection's Remove confirm dialogs). */
+    documentCount: number
 }
 
 export async function getFirmConnectors(firmId: string): Promise<FirmConnectorRecord[]> {
@@ -545,17 +550,30 @@ export async function getFirmConnectors(firmId: string): Promise<FirmConnectorRe
     if (connectors.length === 0) return []
 
     const connectorIds = connectors.map(c => c.id)
-    const clients = await prisma.client.findMany({
-        where: { firmId, connectorId: { in: connectorIds }, deletedAt: null },
-        select: { id: true, name: true, connectorId: true },
-        orderBy: { name: 'asc' },
-    })
+    const [clients, documentCounts] = await Promise.all([
+        prisma.client.findMany({
+            where: { firmId, connectorId: { in: connectorIds }, deletedAt: null },
+            select: { id: true, name: true, connectorId: true },
+            orderBy: { name: 'asc' },
+        }),
+        prisma.engagementDocument.groupBy({
+            by: ['connectorId'],
+            where: { connectorId: { in: connectorIds }, isFolder: false },
+            _count: { _all: true },
+        }),
+    ])
 
     const clientsByConnector: Record<string, { id: string; name: string }[]> = {}
     for (const c of clients) {
         if (!c.connectorId) continue
         if (!clientsByConnector[c.connectorId]) clientsByConnector[c.connectorId] = []
         clientsByConnector[c.connectorId].push({ id: c.id, name: c.name })
+    }
+
+    const documentCountByConnector: Record<string, number> = {}
+    for (const row of documentCounts) {
+        if (!row.connectorId) continue
+        documentCountByConnector[row.connectorId] = row._count._all
     }
 
     return connectors.map(c => {
@@ -572,6 +590,7 @@ export async function getFirmConnectors(firmId: string): Promise<FirmConnectorRe
             workspaceRootLocation,
             rootFolderId,
             attachedClients: clientsByConnector[c.id] ?? [],
+            documentCount: documentCountByConnector[c.id] ?? 0,
         }
     })
 }

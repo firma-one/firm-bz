@@ -137,8 +137,8 @@ export async function POST(request: NextRequest) {
     }
     const driveData = await driveRes.json()
 
-    // Resolve the drive's root item id — that's the actual folder id findOrCreateFolder etc.
-    // operate against (siteId/driveData.id identify the *drive*, not a folder within it).
+    // Resolve the drive's root item id — driveRootId is the actual folder id findOrCreateFolder
+    // etc. operate against (siteId/driveData.id identify the *drive*, not a folder within it).
     const driveRootRes = await fetch(`https://graph.microsoft.com/v1.0/sites/${encodeURIComponent(siteId)}/drive/root?$select=id`, {
       headers: { Authorization: `Bearer ${token}` },
     })
@@ -154,6 +154,8 @@ export async function POST(request: NextRequest) {
     // createOneDriveAdapter below) reads workspaceRootLocation/workspaceRootSharedStorageId
     // from the DB, so the adapter needs this write to have already landed before it can target
     // the newly-chosen site's drive rather than wherever the connector pointed before.
+    // workspaceRootSharedStorageWebUrl is filled in below, once the exact workspace folder
+    // (rootFolderId) exists and its own webUrl can be resolved.
     await prisma.connector.update({
       where: { id: connectionId },
       data: {
@@ -173,6 +175,29 @@ export async function POST(request: NextRequest) {
     const firmaFolderId = await adapter.findOrCreateFolder(connectionId, driveRootId, '_firma')
     const workspaceFolderName = generateWorkspaceFolderName()
     const rootFolderId = await adapter.findOrCreateFolder(connectionId, firmaFolderId, workspaceFolderName)
+
+    // Resolve the exact workspace folder's own webUrl — the Open button should land here, not on
+    // the document library home. Graph computes this server-side (correct encoding/locale/library
+    // name), so it's fetched rather than path-constructed. Best-effort: a failure just leaves Open
+    // unavailable for this connector, doesn't block setup.
+    let workspaceFolderWebUrl: string | null = null
+    try {
+      const folderRes = await fetch(`https://graph.microsoft.com/v1.0/sites/${encodeURIComponent(siteId)}/drive/items/${encodeURIComponent(rootFolderId)}?$select=webUrl`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (folderRes.ok) {
+        const folderData = await folderRes.json()
+        workspaceFolderWebUrl = folderData.webUrl ?? null
+      } else {
+        logger.warn(`Failed to resolve webUrl for workspace folder ${rootFolderId}: ${folderRes.status}`)
+      }
+    } catch (e) {
+      logger.warn(`Error resolving webUrl for workspace folder ${rootFolderId}: ${e instanceof Error ? e.message : String(e)}`)
+    }
+    await prisma.connector.update({
+      where: { id: connectionId },
+      data: { workspaceRootSharedStorageWebUrl: workspaceFolderWebUrl },
+    })
 
     const prevSettings = (connector.settings as Record<string, unknown>) || {}
     const newSettings: Record<string, unknown> = {

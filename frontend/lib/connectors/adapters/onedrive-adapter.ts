@@ -11,6 +11,7 @@
 import { prisma } from '@/lib/prisma'
 import { WorkspaceRootLocation, type Connector } from '@prisma/client'
 import type { IConnectorStorageAdapter } from '../types'
+import { logger } from '@/lib/logger'
 
 const GRAPH_API = 'https://graph.microsoft.com/v1.0'
 
@@ -137,7 +138,13 @@ export function createOneDriveAdapter(getAccessToken: GetAccessToken): IConnecto
     async getFolderName(connectionId, folderId) {
       const [token, base] = await Promise.all([auth(connectionId), resolveDriveBase(connectionId)])
       const res = await graphFetch(token, `${base}/items/${folderId}?$select=name`)
-      if (!res.ok) return null
+      if (!res.ok) {
+        const body = await res.text().catch(() => '<unreadable>')
+        logger.warn('[onedrive-adapter] getFolderName: Graph call failed', {
+          connectionId, folderId, base, status: res.status, statusText: res.statusText, body,
+        })
+        return null
+      }
       const data = await res.json()
       return data.name ?? null
     },

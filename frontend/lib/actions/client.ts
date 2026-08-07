@@ -11,6 +11,7 @@ import type { ClientStatus } from '@prisma/client'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { upsertFollowUpReminder } from '@/lib/actions/user-reminders'
 import { assertWithinClientCap, assertWithinClientContactCap } from '@/lib/billing/effective-billing-caps'
+import { ClientLinkedFolderFailedError } from '@/lib/actions/client-errors'
 
 export type LwCrmClientStatus = 'PROSPECT' | 'ACTIVE' | 'ON_HOLD' | 'PAST'
 
@@ -627,10 +628,27 @@ export async function shareConnectorWithClient({
 
     await prisma.client.update({ where: { id: clientId }, data: { connectorId } })
 
+    const firm = await prisma.firm.findUnique({ where: { id: client.firmId }, select: { slug: true } })
+    audit(AUDIT_EVENT.STORAGE_CONNECTOR_ATTACHED)
+        .scope(AUDIT_SCOPE.CLIENT)
+        .firm(client.firmId)
+        .client(clientId)
+        .actor(user.id)
+        .meta({ connectorId })
+        .fireAndForget()
+
     // Provision the client folder and all existing engagement folders. ensureAppFolderStructure
     // is provider-agnostic (built against IConnectorStorageAdapter); getStorageAdapter resolves
-    // the right adapter for whatever connector type this is. Fire-and-forget — a failure here
-    // is non-fatal; folders will be created on first upload.
+    // the right adapter for whatever connector type this is.
+    //
+    // The client link above (Client.connectorId) is a valid, independent action and is not rolled
+    // back if this fails — but a provisioning failure here must NOT be swallowed. It used to be
+    // caught and only logger.warn'd, with the misleading comment "will retry on first upload"
+    // (nothing actually retries automatically) — so the UI showed a plain success toast while the
+    // client was silently left with no working Drive folder. Confirmed live 2026-08-07: this
+    // masked a real bug (see .claude/plans/connector-microsoft-impl.md) where the failure never
+    // surfaced anywhere the user could see it. Now re-thrown so the caller's catch block fires and
+    // can show a real error, with a support ticket auto-filed with the failure details.
     try {
         const adapter = await getStorageAdapter(connectorId)
         await ensureAppFolderStructure(connectorId, client.name, client.slug, adapter, client.firmId)
@@ -652,13 +670,21 @@ export async function shareConnectorWithClient({
                     })
                 }
             } catch (engErr) {
-                const { logger } = await import('@/lib/logger')
                 logger.error('[shareConnectorWithClient] Failed to provision engagement folder', engErr as Error, `engagementId:${eng.id}`)
             }
         }
     } catch (err) {
-        const { logger } = await import('@/lib/logger')
-        logger.warn('[shareConnectorWithClient] Failed to provision Drive folder — will retry on first upload', err as Error)
+        const { reportActionFailure } = await import('@/lib/actions/report-action-failure')
+        const { ticketNumber } = await reportActionFailure({
+            action: 'shareConnectorWithClient: provision Drive folder',
+            error: err,
+            context: { clientId, connectorId, firmId: client.firmId },
+            firmSlug: firm?.slug,
+            clientSlug: client.slug,
+        })
+        const message = err instanceof Error ? err.message : String(err)
+        const ticketSuffix = ticketNumber ? ` Support ticket #${ticketNumber} filed automatically.` : ''
+        throw new ClientLinkedFolderFailedError(`Client linked, but the Drive folder could not be set up: ${message}.${ticketSuffix}`)
     }
 
     revalidatePath(`/d/f`)

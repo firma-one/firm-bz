@@ -413,10 +413,12 @@ export async function POST(request: NextRequest) {
             org = await prisma.firm.findUnique({ where: { id: hintFirmId } })
           }
           if (org) {
-            // Always run setupFirmFolder when workspace root changes — stale firmFolderId
-            // from a previous workspace must be replaced with the new workspace's folder.
-            const firm = await prisma.firm.findUnique({ where: { id: org.id }, select: { firmFolderId: true } })
-            if (!firm?.firmFolderId || workspaceChanged) {
+            // Always run setupFirmFolder when workspace root changes, or when THIS connector's
+            // own orgFolderId was never set — checking firm.firmFolderId here was wrong: it's a
+            // single column shared across every connector a firm has (a firm can have both a
+            // Google and a OneDrive connector), so it could be non-null from a *different*
+            // connector's setup and cause this connector's own setupFirmFolder to be skipped.
+            if (!prevSettings.orgFolderId || workspaceChanged) {
               await setupFirmFolder(connectionId, newRootId, driveAdapter, org.id)
             }
             // Provision client folder + engagements

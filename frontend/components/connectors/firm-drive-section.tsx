@@ -1,5 +1,6 @@
 'use client'
 
+import type React from 'react'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
@@ -53,6 +54,7 @@ type DriveRoot = {
   rootFolderName: string | null
   workspaceRootLocation: string | null
   workspaceRootSharedStorageName: string | null
+  workspaceRootSharedStorageWebUrl?: string | null
   isPersonalAccount?: boolean | null
 } | null
 
@@ -263,6 +265,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
             rootFolderName: data.connector.rootFolderName ?? null,
             workspaceRootLocation: data.connector.workspaceRootLocation ?? null,
             workspaceRootSharedStorageName: data.connector.workspaceRootSharedStorageName ?? null,
+            workspaceRootSharedStorageWebUrl: data.connector.workspaceRootSharedStorageWebUrl ?? null,
             isPersonalAccount: data.connector.isPersonalAccount ?? null,
           },
         }))
@@ -473,9 +476,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
 
   const handleAttachClient = async (connectorId: string, clientId: string) => {
     setAttachingClientId(clientId)
-    try {
-      const { shareConnectorWithClient } = await import('@/lib/actions/client')
-      await shareConnectorWithClient({ clientId, connectorId })
+    const linkClientLocally = () => {
       setAllClients(prev => prev.map(c => c.id === clientId ? { ...c, connectorId } : c))
       setConnectors(prev => prev.map(c => {
         if (c.id === connectorId) {
@@ -486,9 +487,25 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
         }
         return c
       }))
+    }
+    try {
+      const { shareConnectorWithClient } = await import('@/lib/actions/client')
+      await shareConnectorWithClient({ clientId, connectorId })
+      linkClientLocally()
       addToast({ type: 'success', title: 'Attached', message: 'Client linked to this connector.' })
     } catch (e) {
-      addToast({ type: 'error', title: 'Attach failed', message: e instanceof Error ? e.message : 'Could not link client.' })
+      const { ClientLinkedFolderFailedError } = await import('@/lib/actions/client-errors')
+      if (e instanceof ClientLinkedFolderFailedError) {
+        // The client link (Client.connectorId) succeeded before Drive folder provisioning threw
+        // — reflect that in local state too, or the UI would show the client as unattached when
+        // it's actually attached with a broken folder, a second misleading state on top of the
+        // one this whole fix exists to close (see .claude/plans/connector-microsoft-impl.md,
+        // 2026-08-07).
+        linkClientLocally()
+        addToast({ type: 'warning', title: 'Attached with a problem', message: e.message })
+      } else {
+        addToast({ type: 'error', title: 'Attach failed', message: e instanceof Error ? e.message : 'Could not link client.' })
+      }
     } finally {
       setAttachingClientId(null)
     }
@@ -515,15 +532,37 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
 
   if (isLoadingData) {
     return (
-      <div className="space-y-3">
-        <div className="flex items-center gap-3">
-          <Skeleton className="h-9 w-9 rounded shrink-0" />
-          <div className="space-y-1.5 flex-1">
-            <Skeleton className="h-3.5 w-32" />
-            <Skeleton className="h-3 w-48" />
+      <div className="space-y-3" aria-label="Loading connectors" role="status">
+        {[0, 1, 2].map(i => (
+          <div key={i} className="rounded border border-[#e5e7eb] bg-[#fdfdfe] overflow-hidden">
+            {/* Account row */}
+            <div className="flex items-center justify-between gap-3 px-4 py-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <Skeleton className="h-9 w-9 rounded shrink-0" />
+                <div className="space-y-1.5">
+                  <Skeleton className="h-3.5 w-40" />
+                  <Skeleton className="h-3 w-32" />
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Skeleton className="h-8 w-[6.5rem] rounded" />
+                <Skeleton className="h-8 w-[6.5rem] rounded" />
+                <Skeleton className="h-8 w-[6.5rem] rounded" />
+              </div>
+            </div>
+            {/* Location row */}
+            <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-[#e5e7eb]">
+              <div className="flex items-center gap-3 min-w-0">
+                <Skeleton className="h-9 w-9 rounded shrink-0" />
+                <div className="space-y-1.5">
+                  <Skeleton className="h-3.5 w-24" />
+                  <Skeleton className="h-3 w-56" />
+                </div>
+              </div>
+              <Skeleton className="h-8 w-[6.5rem] rounded shrink-0" />
+            </div>
           </div>
-        </div>
-        <Skeleton className="h-16 w-full rounded" />
+        ))}
       </div>
     )
   }
@@ -545,7 +584,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
               const isPersonalDrive = driveRoot?.workspaceRootLocation === 'PERSONAL'
 
               return (
-                <div key={connector.id} className="relative rounded border border-[#e5e7eb] bg-white overflow-hidden">
+                <div key={connector.id} className="relative rounded border border-[#e5e7eb] bg-[#fdfdfe] overflow-hidden">
                   {/* Watermark number */}
                   <span className="pointer-events-none select-none absolute -left-1 -bottom-6 text-[8rem] font-black leading-none text-[#e8eaed]/50 z-0 tracking-tighter">
                     {connectorIndex + 1}
@@ -706,7 +745,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                         onMigrationStarted={() => {}}
                         firmSlug={orgSlug}
                         firmId={firmId}
-                        sectionLabel="Folder"
+                        sectionLabel="Location"
                       />
                     </div>
                   )}
@@ -737,7 +776,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
               const isShared = oneDriveRoot?.workspaceRootLocation === 'SHARED'
               const isEditing = editingId === connector.id
               return (
-                <div key={connector.id} className="relative rounded border border-[#e5e7eb] bg-white overflow-hidden">
+                <div key={connector.id} className="relative rounded border border-[#e5e7eb] bg-[#fdfdfe] overflow-hidden">
                   {/* Watermark number — continues the sequence started by the Google Drive list above */}
                   <span className="pointer-events-none select-none absolute -left-1 -bottom-6 text-[8rem] font-black leading-none text-[#e8eaed]/50 z-0 tracking-tighter">
                     {googleConnectors.length + oneDriveIndex + 1}
@@ -882,11 +921,12 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                         rootFolderName={oneDriveRoot?.rootFolderName}
                         workspaceRootLocation={(oneDriveRoot?.workspaceRootLocation as 'PERSONAL' | 'SHARED' | null) ?? null}
                         workspaceRootSharedStorageName={oneDriveRoot?.workspaceRootSharedStorageName ?? null}
+                        workspaceRootSharedStorageWebUrl={oneDriveRoot?.workspaceRootSharedStorageWebUrl ?? null}
                         isPersonalAccount={oneDriveRoot?.isPersonalAccount ?? null}
                         connectorActive={isActive}
                         onUpdated={() => void loadOneDriveStatus(connector.id)}
                         firmId={firmId}
-                        sectionLabel="Folder"
+                        sectionLabel="Location"
                       />
                     </div>
                   )}
@@ -1040,6 +1080,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
           title="Remove connector"
           subtitle="This action cannot be undone."
           description="Permanently delete this OneDrive/SharePoint connection. This cannot be undone."
+          extra={removeTargetWarnings(oneDriveRemoveTarget)}
           confirmLabel="Remove"
           confirmVariant="red"
           onCancel={() => setOneDriveRemoveTarget(null)}
@@ -1081,16 +1122,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
           title="Remove connector"
           subtitle="This action cannot be undone."
           description="Permanently delete this Google Drive connection. This cannot be undone."
-          extra={removeTarget && removeTarget.attachedClients.length > 0 ? (
-            <div className="flex gap-2.5 rounded border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
-              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
-              <span>
-                This connector is attached to{' '}
-                <span className="font-semibold">{removeTarget.attachedClients.map(c => c.name).join(', ')}</span>.
-                Removing it will detach all of these clients — they will need a new connector set up.
-              </span>
-            </div>
-          ) : undefined}
+          extra={removeTargetWarnings(removeTarget)}
           confirmLabel="Remove"
           confirmVariant="red"
           onCancel={() => setRemoveTarget(null)}
@@ -1110,6 +1142,42 @@ type ConnectorClientAttachSectionProps = {
   detachingClientId: string | null
   onAttach: (connectorId: string, clientId: string) => void | Promise<void>
   onDetach: (connectorId: string, clientId: string) => void | Promise<void>
+}
+
+/**
+ * Warnings shown in the "Remove connector" confirm dialog, shared by both Google Drive and
+ * OneDrive/SharePoint — fatal-style (red) warning when the connector has tracked documents
+ * that will be orphaned (removeConnector nulls their connectorId, not deletes them, but Firma
+ * loses its tracking link — the underlying provider files are untouched), plus the existing
+ * amber warning when clients are still attached.
+ */
+function removeTargetWarnings(target: FirmConnectorRecord | null): React.ReactNode {
+  if (!target) return undefined
+  return (
+    <>
+      {target.documentCount > 0 && (
+        <div className="flex gap-2.5 rounded border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-800">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-500" />
+          <span>
+            <span className="font-semibold">{target.documentCount} file{target.documentCount === 1 ? '' : 's'}</span>{' '}
+            {target.documentCount === 1 ? 'is' : 'are'} tracked against this connector. Removing it will not delete
+            those files from {target.type === 'ONEDRIVE' ? 'OneDrive/SharePoint' : 'Google Drive'}, but Firma will
+            lose its tracking link to them — search, sharing, and activity for these files will stop working.
+          </span>
+        </div>
+      )}
+      {target.attachedClients.length > 0 && (
+        <div className="flex gap-2.5 rounded border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
+          <span>
+            This connector is attached to{' '}
+            <span className="font-semibold">{target.attachedClients.map(c => c.name).join(', ')}</span>.
+            Removing it will detach all of these clients — they will need a new connector set up.
+          </span>
+        </div>
+      )}
+    </>
+  )
 }
 
 /**

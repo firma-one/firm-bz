@@ -439,12 +439,17 @@ export async function GET(request: NextRequest) {
             const driveAdapter = createGoogleDriveAdapter(async () => tokens.access_token)
             // For Shared Drive workspaces, drive.file scope cannot create folders inside a
             // Shared Drive the app didn't originally create. Skip setupFirmFolder; rely on
-            // firm.firmFolderId already being set from the original Migrate wizard setup.
+            // this connector's own settings.orgFolderId already being set from the original
+            // Migrate wizard setup.
             if (!isSharedDriveWorkspace) {
-              const firm = await prisma.firm.findUnique({ where: { id: organization.id }, select: { firmFolderId: true } })
               const prevOrgFolderId = (existingConnectorForCheck?.settings as any)?.orgFolderId as string | undefined
               const workspaceChanged = !!prevOrgFolderId && prevOrgFolderId !== resolvedWorkspaceRootId
-              if (!firm?.firmFolderId || workspaceChanged) {
+              // Check THIS connector's own orgFolderId, not firm.firmFolderId — that's a single
+              // column shared across every connector a firm has (a firm can have both Google and
+              // OneDrive connectors), so it can be non-null from a *different* connector's setup
+              // and wrongly skip this connector's own setupFirmFolder. See
+              // .claude/plans/connector-microsoft-impl.md (2026-08-07).
+              if (!prevOrgFolderId || workspaceChanged) {
                 await setupFirmFolder(connector.id, resolvedWorkspaceRootId, driveAdapter, organization.id)
               }
             }

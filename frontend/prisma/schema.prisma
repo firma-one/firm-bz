@@ -180,6 +180,15 @@ model Connector {
   workspaceRootSharedStorageId   String?
   /** Cached shared storage display name for UI. */
   workspaceRootSharedStorageName String?
+  /** Cached webUrl (Graph `driveItem.webUrl`) of the exact _firma/<workspace> folder within a
+   * SharePoint site, captured at site-selection time right after the folder is created/resolved.
+   * Powers the "Open" link for SHARED/SharePoint connectors, landing directly on the workspace
+   * folder — unlike OneDrive Personal's constructible onedrive.live.com/?id= pattern, SharePoint
+   * has no reliable client-side URL construction (the AllItems.aspx `id=` query param needs the
+   * server-relative path, which risks drift if the library is renamed/localized), so the
+   * Graph-computed webUrl is fetched and persisted instead. Null for PERSONAL connectors and for
+   * SHARED connectors created before this field existed. */
+  workspaceRootSharedStorageWebUrl String?
   /** Firm owner (new model). Legacy firm.connectorId flow may still be present during migration. */
   firmId            String?         @db.Uuid
 

@@ -169,4 +169,35 @@ describe('OneDriveConnector.storeConnection — create vs update (targetConnecto
 
     expect(mockClientUpdate).not.toHaveBeenCalled()
   })
+
+  it('does NOT overwrite workspaceRootLocation/workspaceRootSharedStorageId/Name on reconnect (regression, 2026-08-07)', async () => {
+    // The OAuth callback always calls storeConnection with mode defaulted to 'personal' — it has
+    // no way to know a connector's real Shared/SharePoint state at reconnect time. Before this
+    // fix, the update path blindly wrote workspaceRootLocation from `mode`, silently resetting an
+    // already-SharePoint-configured connector back to PERSONAL on every reconnect and orphaning
+    // its stored rootFolderId (which still pointed at the SharePoint drive) — confirmed via a
+    // live 404 "itemNotFound" resolving against /me/drive instead of /sites/{id}/drive.
+    mockConnectorFindUnique.mockResolvedValue(makeExistingConnector({
+      settings: { rootFolderId: 'sharepoint-folder-id' },
+    }))
+
+    await callStoreConnection({ targetConnectorId: 'existing-conn-1' })
+
+    expect(mockConnectorUpdate).toHaveBeenCalledOnce()
+    const updateCall = mockConnectorUpdate.mock.calls[0][0]
+    expect(updateCall.data).not.toHaveProperty('workspaceRootLocation')
+    expect(updateCall.data).not.toHaveProperty('workspaceRootSharedStorageId')
+    expect(updateCall.data).not.toHaveProperty('workspaceRootSharedStorageName')
+  })
+
+  it('DOES set workspaceRootLocation/workspaceRootSharedStorageId/Name on create (brand-new connector has no prior state to preserve)', async () => {
+    mockConnectorCreate.mockResolvedValue({ id: 'new-conn', settings: {} })
+
+    await callStoreConnection()
+
+    const createCall = mockConnectorCreate.mock.calls[0][0]
+    expect(createCall.data).toHaveProperty('workspaceRootLocation')
+    expect(createCall.data).toHaveProperty('workspaceRootSharedStorageId')
+    expect(createCall.data).toHaveProperty('workspaceRootSharedStorageName')
+  })
 })

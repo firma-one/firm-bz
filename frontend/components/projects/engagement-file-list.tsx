@@ -1119,7 +1119,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
         orgSandbox,
     })
 
-    const handleMarkAsDeliverable = useCallback(async (doc: any) => {
+    const handleMarkAsDeliverable = useCallback(async (doc: any, dueDate?: string) => {
         const token = sessionRef.current?.access_token
         if (!token || !projectId) return
         const documentId = doc.projectDocumentId || doc.id
@@ -1127,7 +1127,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
             const res = await fetch(`/api/projects/${projectId}/documents/${encodeURIComponent(documentId)}/sharing`, {
                 method: 'PUT',
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ markAsDeliverable: true }),
+                body: JSON.stringify({ markAsDeliverable: true, dueDate: dueDate ?? null }),
             })
             if (!res.ok) {
                 const err = await res.json().catch(() => ({}))

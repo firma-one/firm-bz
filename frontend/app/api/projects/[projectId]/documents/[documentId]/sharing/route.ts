@@ -181,9 +181,11 @@ export async function PUT(
         activity: { status: 'to_do', updatedAt: now },
         actorId: user.id,
       })
+      const dueDate = typeof body.dueDate === 'string' && body.dueDate ? new Date(body.dueDate) : null
+
       await prisma.engagementDocument.update({
         where: { id: doc.id },
-        data: { settings, updatedAt: new Date(), updatedBy: user.id },
+        data: { settings, dueDate, updatedAt: new Date(), updatedBy: user.id },
       })
 
       // Insert GRANTED rows for EL (eng_admin) and EM (eng_member) on the folder

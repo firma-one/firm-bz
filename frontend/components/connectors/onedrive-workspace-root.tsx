@@ -13,13 +13,15 @@ import {
 import { OneDriveIcon } from "@/components/ui/onedrive-icon"
 import { SharePointIcon } from "@/components/ui/sharepoint-icon"
 import { MicrosoftIcon } from "@/components/ui/microsoft-icon"
+import { Skeleton } from "@/components/ui/skeleton"
 import { useToast } from "@/components/ui/toast"
 import { generateWorkspaceFolderName } from "@/lib/generate-unique-workspace-folder-name"
 import {
   ArrowRightLeft,
+  ArrowUpRight,
   FolderOpen,
+  HardDrive,
   RefreshCw,
-  Warehouse,
 } from "lucide-react"
 
 type OneDriveSite = { id: string; name: string; webUrl?: string }
@@ -65,6 +67,11 @@ type OneDriveWorkspaceRootProps = {
   rootFolderName?: string | null
   workspaceRootLocation?: "PERSONAL" | "SHARED" | null
   workspaceRootSharedStorageName?: string | null
+  /** SharePoint site's Graph `webUrl`, captured at site-selection time — the only supported way
+   * to get a browser-openable link for a SharePoint site (no reliable client-side construction
+   * from the composite site id, unlike Personal OneDrive's onedrive.live.com/?id= pattern). Null
+   * for Personal connectors and for Shared connectors selected before this field existed. */
+  workspaceRootSharedStorageWebUrl?: string | null
   migrationLocked?: boolean
   onUpdated: () => void | Promise<void>
   firmId?: string | null
@@ -98,6 +105,7 @@ export function OneDriveWorkspaceRoot({
   rootFolderName,
   workspaceRootLocation = null,
   workspaceRootSharedStorageName = null,
+  workspaceRootSharedStorageWebUrl = null,
   migrationLocked = false,
   onUpdated,
   firmId,
@@ -121,6 +129,16 @@ export function OneDriveWorkspaceRoot({
     : sites
 
   const displayName = rootFolderName?.trim() || "Workspace folder"
+  // Personal OneDrive folders open reliably via this constructible URL pattern. SharePoint has no
+  // equivalent — the site's webUrl (captured at site-selection time, see onedrive/sites/route.ts)
+  // is used instead, linking to the site's document library home rather than the exact folder
+  // (Graph's driveItem.webUrl would need a live API fetch to link the exact folder; the site-level
+  // link is good enough for "open where my files live" and needs no extra request here).
+  const driveUrl = rootFolderId && workspaceRootLocation === "PERSONAL"
+    ? `https://onedrive.live.com/?id=${encodeURIComponent(rootFolderId)}`
+    : workspaceRootLocation === "SHARED" && workspaceRootSharedStorageWebUrl
+      ? workspaceRootSharedStorageWebUrl
+      : null
   const breadcrumbRootLabel =
     workspaceRootLocation === "PERSONAL"
       ? "OneDrive"
@@ -292,7 +310,7 @@ export function OneDriveWorkspaceRoot({
           <TooltipProvider delayDuration={300}>
             <div className="flex items-center gap-3 min-w-0">
               <div className="shrink-0 flex h-9 w-9 items-center justify-center rounded border border-[#e5e7eb] bg-[#f9f9fb]" aria-hidden>
-                <Warehouse className="h-4.5 w-4.5 text-[#45474c]" strokeWidth={2} />
+                <HardDrive className="h-4.5 w-4.5 text-[#45474c]" strokeWidth={2} />
               </div>
               <div className="min-w-0 flex-1">
                 {sectionLabel && (
@@ -312,18 +330,37 @@ export function OneDriveWorkspaceRoot({
                   ) : null}
                 </div>
               </div>
-              {isPersonalAccount === true ? null : (
-                // Migrate is hidden entirely for personal Microsoft accounts — a personal MSA
-                // can never have a SharePoint site to migrate to, and the workspace folder was
-                // already auto-created with no user decision involved, so there's nothing
-                // meaningful to offer here (see item 9 in the plan doc's OPEN gaps note).
-                <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-2 shrink-0">
+                {driveUrl ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <a
+                        href={driveUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex h-8 w-[6.5rem] items-center justify-center gap-1.5 rounded text-xs font-medium text-[#45474c] bg-white border border-[#e5e7eb] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] transition-colors"
+                        aria-label={workspaceRootLocation === "SHARED" ? "Open SharePoint site" : "Open in OneDrive"}
+                      >
+                        Open
+                        <ArrowUpRight className="h-3.5 w-3.5" aria-hidden />
+                      </a>
+                    </TooltipTrigger>
+                    <TooltipContent side="top">
+                      {workspaceRootLocation === "SHARED" ? "Open SharePoint site" : "Open in OneDrive"}
+                    </TooltipContent>
+                  </Tooltip>
+                ) : null}
+                {isPersonalAccount === true ? null : (
+                  // Migrate is hidden entirely for personal Microsoft accounts — a personal MSA
+                  // can never have a SharePoint site to migrate to, and the workspace folder was
+                  // already auto-created with no user decision involved, so there's nothing
+                  // meaningful to offer here (see item 9 in the plan doc's OPEN gaps note).
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <button
                         type="button"
                         className={cn(
-                          "inline-flex items-center gap-1.5 rounded h-8 px-4 text-[10px] font-headline font-bold tracking-widest uppercase text-white bg-primary hover:bg-primary hover:brightness-105 shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all",
+                          "inline-flex h-8 w-[6.5rem] items-center justify-center gap-1.5 rounded text-xs font-medium text-[#45474c] bg-white border border-[#e5e7eb] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] transition-colors",
                           (!accessToken || !connectorActive || migrationLocked) && "opacity-40 cursor-not-allowed",
                         )}
                         onClick={() => {
@@ -342,8 +379,8 @@ export function OneDriveWorkspaceRoot({
                       Change where this connector's workspace root lives — Personal OneDrive folder, or a SharePoint site.
                     </TooltipContent>
                   </Tooltip>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </TooltipProvider>
         ) : isPersonalAccount === true ? (
@@ -464,7 +501,14 @@ export function OneDriveWorkspaceRoot({
               />
               <div className="max-h-64 overflow-y-auto rounded border border-[#e5e7eb] divide-y divide-[#e5e7eb]">
                 {sitesLoading ? (
-                  <p className="text-xs text-[#9a9ba0] px-3 py-3">Loading sites…</p>
+                  <div className="divide-y divide-[#e5e7eb]" aria-label="Loading SharePoint sites" role="status">
+                    {[0, 1, 2, 3].map((i) => (
+                      <div key={i} className="flex items-center justify-between gap-2 px-3 py-2.5">
+                        <Skeleton className="h-3.5 w-40" />
+                        <Skeleton className="h-3 w-3 rounded-full shrink-0" />
+                      </div>
+                    ))}
+                  </div>
                 ) : filteredSites.length === 0 ? (
                   <p className="text-xs text-[#9a9ba0] px-3 py-3">
                     {sites.length === 0 ? "No sites found." : "No sites match your search."}

@@ -653,19 +653,21 @@ export async function ensureAppFolderStructure(
   const settings = (connector.settings as any) || {}
   const orgSettings = settings.organizations?.[org.id] || {}
   let rootFolderId = settings.rootFolderId as string | undefined
-  let orgFolderId = (org as any).firmFolderId || orgSettings.orgFolderId
+  // orgFolderId must come from THIS connector's own settings — firm.firmFolderId is a single
+  // column shared across every connector a firm has (Google + OneDrive can coexist on one firm),
+  // so it gets silently overwritten by whichever connector last called setupFirmFolder and is
+  // not safe to trust here. Confirmed live 2026-08-07: a firm with both a Google and a OneDrive
+  // connector had firm.firmFolderId left pointing at a OneDrive item id, which the Google
+  // connector then 404'd against when this used to fall back to it. See
+  // .claude/plans/connector-microsoft-impl.md.
+  let orgFolderId = orgSettings.orgFolderId as string | undefined
   let clientFolderId = orgSettings.clientFolderIds?.[clientSlug]
   const projectName = projectInfo?.projectName
   const projectSlug = projectInfo?.projectSlug
   let projectFolderId = projectSlug ? orgSettings.projectFolderIds?.[projectSlug] : undefined
 
   if (!rootFolderId || !orgFolderId) {
-    if ((org as any)?.firmFolderId) {
-      orgFolderId = (org as any).firmFolderId
-      logger.info('Recovered orgFolderId from database fallback', { orgFolderId, organizationId: org.id })
-    } else {
-      throw new Error('Organization folder not configured; complete Drive setup first.')
-    }
+    throw new Error('Organization folder not configured; complete Drive setup first.')
   }
 
   const projectFolderSettings = orgSettings.projectFolderSettings || {}

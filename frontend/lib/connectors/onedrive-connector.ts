@@ -89,14 +89,22 @@ export class OneDriveConnector implements IConnectorInstance {
     const workspaceRootLocation = mode === 'shared' ? WorkspaceRootLocation.SHARED : WorkspaceRootLocation.PERSONAL
 
     // Pass plaintext tokens — Prisma extension handles encryption automatically.
+    // NOTE: workspaceRootLocation/workspaceRootSharedStorageId/Name are deliberately NOT set
+    // here — this updateData is shared by both the reconnect (targetConnectorId set) and
+    // create paths below, and the OAuth callback always calls storeConnection with mode
+    // defaulted to 'personal' (it never knows the connector's real Shared/SharePoint state at
+    // reconnect time — that's set later via onedrive/sites/route.ts's site-selection flow).
+    // Blindly writing workspaceRootLocation here on every reconnect silently clobbered an
+    // already-configured Shared/SharePoint connector back to Personal, breaking its stored
+    // rootFolderId (which still pointed at the SharePoint drive) — confirmed via a live 404
+    // ("itemNotFound" resolving against /me/drive instead of /sites/{id}/drive) 2026-08-07.
+    // The create path below sets these fields explicitly since a brand-new connector has no
+    // prior state to preserve.
     const updateData: Record<string, unknown> = {
       name,
       accessToken,
       tokenExpiresAt,
       status: ConnectorStatus.ACTIVE,
-      workspaceRootLocation,
-      workspaceRootSharedStorageId: mode === 'shared' ? (sharedStorageId ?? null) : null,
-      workspaceRootSharedStorageName: mode === 'shared' ? (sharedStorageName ?? null) : null,
       updatedAt: new Date(),
     }
     if (refreshToken) {

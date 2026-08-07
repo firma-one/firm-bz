@@ -194,8 +194,12 @@ export async function POST(request: NextRequest) {
             org = await prisma.firm.findUnique({ where: { id: hintFirmId } })
           }
           if (org) {
-            const firm = await prisma.firm.findUnique({ where: { id: org.id }, select: { firmFolderId: true } })
-            if (!firm?.firmFolderId || workspaceChanged) {
+            // Check THIS connector's own orgFolderId, not firm.firmFolderId — that's a single
+            // column shared across every connector a firm has (a firm can have both Google and
+            // OneDrive connectors), so it can be non-null from a *different* connector's setup
+            // and wrongly skip this connector's own setupFirmFolder. See google-drive/route.ts's
+            // equivalent fix and .claude/plans/connector-microsoft-impl.md (2026-08-07).
+            if (!prevSettings.orgFolderId || workspaceChanged) {
               await setupFirmFolder(rootConnId, newRootId, adapter, org.id)
             }
             const linkedClient = await prisma.client.findFirst({
@@ -323,7 +327,18 @@ export async function GET(request: NextRequest) {
             return t
           })
           rootFolderName = await adapter.getFolderName(connector.id, rootFolderId)
-        } catch {
+          if (rootFolderName === null) {
+            logger.warn('[onedrive status] getFolderName returned null (folder not found or Graph call failed) — workspace name will be blank in the UI', {
+              connectorId: connector.id,
+              rootFolderId,
+              workspaceRootLocation: connector.workspaceRootLocation,
+            })
+          }
+        } catch (e) {
+          logger.error('[onedrive status] getFolderName threw', e instanceof Error ? e : new Error(String(e)), 'onedrive-status', {
+            connectorId: connector.id,
+            rootFolderId,
+          })
           rootFolderName = null
         }
       }
@@ -341,6 +356,7 @@ export async function GET(request: NextRequest) {
               rootFolderName,
               workspaceRootLocation: connector.workspaceRootLocation,
               workspaceRootSharedStorageName: connector.workspaceRootSharedStorageName,
+              workspaceRootSharedStorageWebUrl: connector.workspaceRootSharedStorageWebUrl,
             }
           : null,
       })

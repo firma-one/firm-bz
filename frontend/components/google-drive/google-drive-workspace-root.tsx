@@ -24,9 +24,9 @@ import {
   CheckCircle2,
   Copy,
   FolderOpen,
+  HardDrive,
   Play,
   RefreshCw,
-  Warehouse,
 } from "lucide-react"
 
 type GoogleDriveWorkspaceRootProps = {
@@ -443,7 +443,7 @@ export function GoogleDriveWorkspaceRoot({
             <div className="flex items-center gap-3 min-w-0">
               {/* Icon */}
               <div className="shrink-0 flex h-9 w-9 items-center justify-center rounded border border-[#e5e7eb] bg-[#f9f9fb]" aria-hidden>
-                <Warehouse className="h-4.5 w-4.5 text-[#45474c]" strokeWidth={2} />
+                <HardDrive className="h-4.5 w-4.5 text-[#45474c]" strokeWidth={2} />
               </div>
 
               {/* Label line + folder name + badge */}
