@@ -106,16 +106,18 @@ export function DocumentBlobPreviewPane({ document, projectId }: DocumentBlobPre
 
       {/* iframe area */}
       <div className="flex-1 min-h-0 relative bg-[#f3f4f6]">
-        {/* Initial load spinner — only shown before first load */}
-        {!initialLoaded && (
+        {/* Loading spinner — shown during the initial load and during every
+            zoom re-render (pendingZoom !== null) so the user always sees
+            progress while the iframe reloads, instead of a blank screen. */}
+        {(!initialLoaded || pendingZoom !== null) && (
           <div className="absolute inset-0 flex items-center justify-center bg-[#f3f4f6] z-10">
             <LoadingSpinner size="md" />
           </div>
         )}
 
-        {/* The iframe reloads when zoom changes (key prop).
-            It starts transparent and fades in on load, so the previous render
-            remains visible underneath during the reload — eliminating the blank flash. */}
+        {/* The iframe reloads when zoom changes (key prop). It is hidden
+            (opacity 0) during a zoom reload while the spinner overlay above
+            covers the area, then fades in on load — eliminating the blank flash. */}
         <iframe
           key={previewUrl}
           src={previewUrl}
