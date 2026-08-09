@@ -54,7 +54,6 @@ import {
     DropdownMenuSubContent
 } from "@/components/ui/dropdown-menu"
 import useDrivePicker from 'react-google-drive-picker'
-import { GoogleDriveImportDialog } from './google-drive-import-dialog'
 import { SANDBOX_OPERATION_MESSAGE } from '@/components/ui/sandbox-info-banner'
 import { useViewAs } from '@/lib/view-as-context'
 import { useRightPane } from '@/lib/right-pane-context'
@@ -466,7 +465,6 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
     const [files, setFiles] = useState<DriveFile[]>([])
     const [loading, setLoading] = useState(true) // Initial load
     const [error, setError] = useState<string | null>(null)
-    const [pickerToken, setPickerToken] = useState<string | null>(null)
 
     // (deeplink handler effect is declared below, after navigateToItem is defined)
 
@@ -507,8 +505,6 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
 
     // Picker State
     const [openPicker] = useDrivePicker();
-    const [isImportDialogOpen, setIsImportDialogOpen] = useState(false)
-    const [importedFiles, setImportedFiles] = useState<any[]>([])
     const [importLoading, setImportLoading] = useState(false)
 
     // UX State
@@ -1464,6 +1460,17 @@ const handleRefresh = async () => {
         }
     }
 
+    // NOTE: Google Picker renders whichever Google account is the browser's active/default
+    // session, regardless of which OAuth token is passed to it (setOAuthToken only controls API
+    // access, not Picker's UI chrome) — this is a known, unresolved Google Picker platform gap
+    // (see google-api-javascript-client#323, issuetracker.google.com/336965835) with no supported
+    // fix. An interactive per-account re-auth (google.accounts.oauth2.initTokenClient with
+    // login_hint) was tried and reverted: it requests drive.file — a sensitive scope — through a
+    // fresh client-side consent flow that Google's verification doesn't recognize as already
+    // approved (verification is tied to the specific request flow, not just the scope+app), so it
+    // hit Google's unverified-app warning + 100-user cap for every user, which doesn't scale to
+    // production. The token actually used for Drive API calls remains correctly scoped to the
+    // connector's account below — only Picker's own displayed file list is affected.
     const handleGoogleDrivePicker = async () => {
         if (!sessionRef.current?.access_token) return
 
@@ -1477,13 +1484,20 @@ const handleRefresh = async () => {
 
             const data = await res.json()
             const googleAccessToken = data.accessToken
-            setPickerToken(googleAccessToken) // Store for import action
 
             if (!googleAccessToken) throw new Error('No Google Access Token returned')
 
-            // Two tabs: "My Drive" (root + LIST) and "Shared Drives" (LIST); user can traverse and multi-select in both
+            // Scoped to start inside the engagement folder currently being browsed (falling back
+            // to the connector root if that isn't known yet) so the user doesn't have to
+            // re-traverse from Drive's root every time. Only the tab matching this connector's
+            // actual workspace location is shown — a PERSONAL (My Drive) connector has no
+            // corresponding Shared Drive location to browse, and vice versa, so the other tab
+            // would just be a dead end.
             const win = typeof window !== 'undefined' ? window : null
             const pickerApi = win && (win as unknown as { google?: { picker?: unknown } }).google?.picker
+            const engagementFolderId = currentFolderId || connectorRootFolderId || null
+            const showMyDriveTab = workspaceRootLocation !== 'SHARED'
+            const showSharedDrivesTab = workspaceRootLocation !== 'PERSONAL'
             const customViews = pickerApi
                 ? (() => {
                     const g = (win as unknown as {
@@ -1502,19 +1516,30 @@ const handleRefresh = async () => {
                         setLabel?: (l: string) => ViewLike
                         setEnableDrives?: (v: boolean) => ViewLike
                     }
-                    const myDriveView = new g.DocsView(g.ViewId.DOCS) as ViewLike
-                    myDriveView.setParent!('root')
-                    myDriveView.setIncludeFolders(true)
-                    myDriveView.setMode(g.DocsViewMode.LIST)
-                    if (myDriveView.setLabel) myDriveView.setLabel('My Drive')
+                    const views: ViewLike[] = []
 
-                    const sharedDrivesView = new g.DocsView(g.ViewId.DOCS) as ViewLike
-                    sharedDrivesView.setIncludeFolders(true)
-                    sharedDrivesView.setMode(g.DocsViewMode.LIST)
-                    if (sharedDrivesView.setEnableDrives) sharedDrivesView.setEnableDrives(true)
-                    if (sharedDrivesView.setLabel) sharedDrivesView.setLabel('Shared Drives')
+                    if (showMyDriveTab) {
+                        const myDriveView = new g.DocsView(g.ViewId.DOCS) as ViewLike
+                        myDriveView.setParent!(engagementFolderId || 'root')
+                        myDriveView.setIncludeFolders(true)
+                        myDriveView.setMode(g.DocsViewMode.LIST)
+                        if (myDriveView.setLabel) myDriveView.setLabel('My Drive')
+                        views.push(myDriveView)
+                    }
 
-                    return [myDriveView, sharedDrivesView]
+                    if (showSharedDrivesTab) {
+                        const sharedDrivesView = new g.DocsView(g.ViewId.DOCS) as ViewLike
+                        sharedDrivesView.setIncludeFolders(true)
+                        sharedDrivesView.setMode(g.DocsViewMode.LIST)
+                        if (sharedDrivesView.setEnableDrives) sharedDrivesView.setEnableDrives(true)
+                        if (sharedDrivesView.setLabel) sharedDrivesView.setLabel('Shared Drives')
+                        // A folder's Drive ID is valid as a parent regardless of which shared drive
+                        // it lives in, so this also jumps straight to the engagement folder when known.
+                        if (engagementFolderId && sharedDrivesView.setParent) sharedDrivesView.setParent(engagementFolderId)
+                        views.push(sharedDrivesView)
+                    }
+
+                    return views
                 })()
                 : undefined
 
@@ -1534,8 +1559,7 @@ const handleRefresh = async () => {
                 setParentFolder: customViews ? undefined : 'root',
                 callbackFunction: (data: { action: string; docs?: unknown[] }) => {
                     if (data.action === 'picked') {
-                        setImportedFiles(data.docs ?? [])
-                        setIsImportDialogOpen(true)
+                        runImport((data.docs ?? []) as { id: string; name: string }[], googleAccessToken)
                     }
                 },
             })
@@ -1546,22 +1570,26 @@ const handleRefresh = async () => {
         }
     }
 
-    const handleImportConfirm = async (mode: 'copy' | 'shortcut') => {
+    // Runs immediately once Picker confirms a selection — no separate confirmation dialog, since
+    // there's no longer a copy-vs-shortcut choice to make. A toast stands in for the old modal.
+    const runImport = async (files: { id: string; name: string }[], pickerAccessToken: string) => {
+        if (files.length === 0) return
+        addToast({ type: 'info', title: 'Importing files', message: `Importing ${files.length} file${files.length !== 1 ? 's' : ''} from Google Drive…` })
         setImportLoading(true)
         try {
-            logger.debug(`[Frontend] Import Confirm. FolderId: ${currentFolderId}`)
+            logger.debug(`[Frontend] Import starting. FolderId: ${currentFolderId}`)
 
             // Pre-flight cap check before any Drive operations
-            const gateRes = await fetch(`/api/billing/document-gate?projectId=${encodeURIComponent(projectId)}&count=${importedFiles.length}`)
+            const gateRes = await fetch(`/api/billing/document-gate?projectId=${encodeURIComponent(projectId)}&count=${files.length}`)
             if (gateRes.ok) {
                 const gate = await gateRes.json() as { allowed: boolean; cap: number | null; current: number | null; available: number }
                 if (!gate.allowed) {
                     const { cap, current, available } = gate
-                    const count = importedFiles.length
+                    const count = files.length
                     const msg = count === 1
                         ? `Your plan limit of ${cap} files has been reached (${current} used). Delete any unused file or upgrade to remove the limit.`
                         : `This import contains ${count} files, but your plan has a limit of ${cap}, with only ${available} slot${available !== 1 ? 's' : ''} left. Import fewer files, within the available limit or upgrade to remove the limit.`
-                    setError(msg)
+                    addToast({ type: 'error', title: 'Import limit reached', message: msg })
                     setImportLoading(false)
                     return
                 }
@@ -1582,10 +1610,9 @@ const handleRefresh = async () => {
                 },
                 body: JSON.stringify({
                     connectionId,
-                    fileIds: importedFiles.map(f => f.id),
-                    mode,
+                    fileIds: files.map(f => f.id),
                     parentId: currentFolderId || 'root',
-                    userToken: pickerToken // Pass the user's token
+                    userToken: pickerAccessToken // Pass the user's token
                 })
             })
 
@@ -1594,12 +1621,16 @@ const handleRefresh = async () => {
                 throw new Error(d.error || 'Import failed')
             }
 
-            // Success
-            setIsImportDialogOpen(false)
+            const result = await res.json() as { count: number; skipped?: number }
+            const skipped = result.skipped ?? 0
+            const message = skipped > 0
+                ? `Imported ${result.count} file${result.count !== 1 ? 's' : ''} — skipped ${skipped} already in firma.`
+                : `Imported ${result.count} file${result.count !== 1 ? 's' : ''} from Google Drive.`
+            addToast({ type: 'success', title: 'Import complete', message })
             if (currentFolderId) fetchFiles(currentFolderId, true)
         } catch (err: any) {
             logger.error(err)
-            setError(err.message)
+            addToast({ type: 'error', title: 'Import failed', message: err.message })
         } finally {
             setImportLoading(false)
         }
@@ -3352,13 +3383,6 @@ const handleRefresh = async () => {
                 />
             </div>
 
-            <GoogleDriveImportDialog
-                open={isImportDialogOpen}
-                onOpenChange={setIsImportDialogOpen}
-                selectedFiles={importedFiles}
-                onConfirm={handleImportConfirm}
-                loading={importLoading}
-            />
         </div>
     )
 }

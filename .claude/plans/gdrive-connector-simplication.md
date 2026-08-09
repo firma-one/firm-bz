@@ -2,7 +2,7 @@
 
 **Created:** 2026-08-07
 **Source:** [docs/mvp/ux-journey-review.md](../../docs/mvp/ux-journey-review.md) — Journey 2 findings
-**Status:** Planned, not started
+**Status:** Spikes verified 2026-08-08, ready for implementation (all 4 phases)
 
 Removes the copy-paste / watch-guide / create-folder-by-hand ritual from Google Shared Drive setup, and closes the surrounding discoverability gaps. No production users exist yet, so this ships as a clean cut with no migration, backfill, or dual-read.
 
@@ -71,6 +71,17 @@ Load-bearing for Phase 2. Expectation is yes (the grant lives with Google, keyed
 
 Record both outcomes in this file before starting Phase 1.
 
+### Spike outcomes (verified 2026-08-08)
+
+- **0.1 — Picker query for `_firma`:** Matched cleanly, no `_f_workspace_*` bleed-through. → Keep `setQuery('_firma')` as designed in 1.2; no change to the existing gate logic.
+- **0.2 — Grant survives disconnect/reconnect:** Confirmed yes. → Phase 2 is fully in scope, build in full.
+
+### Correction found during pre-implementation verification (2026-08-08)
+
+Phase 1.3's instruction to delete `components/google-drive/google-drive-mock.tsx` "if nothing else imports it" does **not** apply — `frontend/app/(app)/d/onboarding/page.tsx` also imports `GoogleDriveMock`, `CALLOUTS`, and `STAGE_TO_STEP` from it, independently of `google-drive-workspace-root.tsx`. **Do not delete this file.** Only remove its import/usage from `google-drive-workspace-root.tsx`; the file and the onboarding page's usage stay untouched.
+
+All other Phase 1 file/line claims in this doc were re-verified against current code on 2026-08-08 and matched within ±4 lines (trivial drift from unrelated edits since 2026-08-07) — no other corrections needed.
+
 ---
 
 ## Phase 1 — Core Shared Drive redesign
@@ -95,12 +106,14 @@ Note: this generator is shared with My Drive and `ensureDefaultWorkspaceRoot` ([
 
 `components/google-drive/google-drive-workspace-root.tsx` — the bulk of the work.
 
+**Edit order — additions before deletions.** The file's still-live code (My Drive branch, confirm panel, `migrationLocked`/`connectorActive` gating) references state that the new code also touches; deleting first leaves the component non-compiling for the length of the edit. Land `createWorkspaceUnder`, the new `handleFolderPicked`, the create-after-confirm change to `confirmMigration`, and the new screen JSX (all specified below) first; only then delete the items in the list below; run `tsc --noEmit` clean before moving to 1.4.
+
 **Delete:**
 - `generatedFolderName` state, the copy box, `copyGeneratedFolderName`, `hasCopied`
 - `hasWatchedGuide`, the `GoogleDriveMock` guide block, the "Play Guide" button
 - `hasOpenedDrive` and every gate derived from it ([:792-795](../../frontend/components/google-drive/google-drive-workspace-root.tsx:792), [:823](../../frontend/components/google-drive/google-drive-workspace-root.tsx:823))
 - The whole `currentStep` nested-ternary ([:414-423](../../frontend/components/google-drive/google-drive-workspace-root.tsx:414))
-- `components/google-drive/google-drive-mock.tsx` if nothing else imports it (grep first)
+- ~~`components/google-drive/google-drive-mock.tsx` if nothing else imports it~~ — **do not delete**: `app/(app)/d/onboarding/page.tsx` also imports `GoogleDriveMock`/`CALLOUTS`/`STAGE_TO_STEP` independently (confirmed 2026-08-08). Only remove this file's *usage* from `google-drive-workspace-root.tsx`.
 
 **New Shared Drive screen** — one step, no gating:
 - Heading: *"Choose where Firma should work"*
@@ -131,14 +144,21 @@ Fix `totalSteps` at 2 (Location → Select), matching OneDrive's fix and its sta
 
 ---
 
-## Phase 2 — Reuse a known `_firma` (conditional on spike 0.2)
+## Phase 2 — Reuse a known `_firma` (spike 0.2 confirmed 2026-08-08 — build in full)
 
 Skip the picker entirely on repeat setups. This is where most of the real-world saving is for a firm onboarding many clients.
 
-- Persist `{ sharedDriveId, driveName, firmaFolderId }` per Google account when a Shared Drive setup completes (connector settings, or a small lookup table keyed on `externalAccountId`).
-- On a new Shared Drive setup for the same account, `files.get` each stored `firmaFolderId` to confirm it still exists and is still accessible.
-- Offer them as one-click options — *"Use `_firma` in **Marketing Shared Drive**"* — above a **Pick a different location** fallback.
+**Data model:** extend `Connector.settings` JSON rather than a new table — `settings` already holds `rootFolderId`/`parentFolderId` in this same route, and `externalAccountId` is already an indexed column on `Connector`, so no migration or extra join is needed:
+
+```
+settings.knownFirmaFolders: Array<{ sharedDriveId, driveName, firmaFolderId, lastVerifiedAt }>
+```
+
+- Persist this entry when a Shared Drive setup completes, written in `update-root-folder` (route.ts:338) right after `persistWorkspaceRootLocation` resolves the location to `SHARED`.
+- Add a `list-known-firma-folders` action in `route.ts` that queries sibling `Connector` rows sharing `externalAccountId`, dedupes by `firmaFolderId`, and calls `files.get` on each to filter to still-live ones.
+- Offer them as one-click options in `google-drive-workspace-root.tsx` — *"Use `_firma` in **Marketing Shared Drive**"* — above a **Pick a different location** fallback into the Phase 1 picker flow.
 - Stale/deleted folders: drop silently from the list, fall through to the picker.
+- Small helper for the sibling-connector query + liveness check belongs near `persistWorkspaceRootLocation` in `google-drive-connector.ts`.
 
 **Not a Drive search.** Discovery is impossible under `drive.file`; this works only because the app already holds a grant on those specific folder IDs.
 
@@ -148,24 +168,25 @@ Skip the picker entirely on repeat setups. This is where most of the real-world 
 
 Independent of Phase 1; can ship in parallel.
 
-**3.1 — Storage in onboarding (finding 2.2).** `components/onboarding/onboarding-sidebar.tsx:26-27` lists only *Initialize Workspace* and *Subscribe*. The app cannot store a document without a connector. Add *Connect storage* as a mandatory step 2, renumbering Subscribe to 3.
+**3.1 — Storage in onboarding (finding 2.2) — SKIPPED 2026-08-08.** `components/onboarding/onboarding-sidebar.tsx:26-27` lists only *Initialize Workspace* and *Subscribe*. This plan proposed adding *Connect storage* as a mandatory step 2. However, `app/(app)/d/onboarding/page.tsx:952` carries a comment — "Drive/Finalize steps removed — onboarding ends at Subscribe" — showing Drive connection was already deliberately moved OUT of onboarding into per-client Client Settings, as a later architectural decision than this plan doc. Re-adding it as a mandatory onboarding step would reverse that decision. Skipped; if storage-in-onboarding is still wanted, it needs a fresh decision, not a reinstatement of superseded behavior.
 
 **3.2 — Real connectors page (finding 2.3).** `app/(app)/d/f/[slug]/connectors/page.tsx` currently redirects to the firm page — a dead URL with no linkable address for connector setup. Either render `FirmDriveSection` there and point onboarding + empty states at it, or delete the route. Prefer the former; 3.1 needs somewhere to link.
 
 **3.3 — Attachment coverage (finding 2.4).** A firm connector attached to zero clients stores nothing, and the firm-level UI never says so. On the connector card in `components/connectors/firm-drive-section.tsx`, show *"Attached to 2 of 7 clients"* with a bulk **Attach to all clients** action. Data is already loaded (`allClients`, `attachingClientId`).
 
-**3.4 — Files empty state.** When an engagement's client has no attached connector, replace the empty file list with *"No storage connected"* and a link to 3.2.
+**3.4 — Files empty state — already implemented, verified 2026-08-08.** `components/projects/engagement-file-list.tsx:2629-2683` already covers this: when `!connectorRootFolderId`, it branches on `clientConnectorId` — attached-but-not-set-up shows "Drive folder not set up" with a Migrate/Set-up-folder action; no connector at all shows "No Google Drive connected" with a "Go to Settings" link to `?tab=settings&section=storage` (the same deep link Phase 3.2 wires up). No changes needed.
 
 ---
 
-## Phase 4 — Migration UX (finding 2.7)
+## Phase 4 — Migration UX (finding 2.7) — IMPLEMENTED 2026-08-08
 
-The confirm step warns the workspace *"will be locked for all members during migration"* ([:879](../../frontend/components/google-drive/google-drive-workspace-root.tsx:879)) with no scheduling and no member notification — an admin migrating at 2pm silently locks out the firm.
+Investigation before implementing found this finding's premise partially stale: `migrateWorkspaceRoot` (`lib/inngest/functions.ts`) already **unconditionally** notifies all firm members via email and waits a 2-minute grace period before locking — this was already true, just not surfaced as a user choice. What was actually missing was narrower: a UI choice between that fixed 2-minute grace and a longer delay.
 
-- Offer **Start now** vs **Notify members and start in 15 minutes**.
-- Post an in-app notice when the lock begins.
-
-Lowest priority here; nothing else depends on it.
+Implemented:
+- `confirmMigration` now takes a `graceMinutes: 2 | 15` param; confirm-step JSX offers **Start Now** (2 min, unchanged default) vs **Notify & start in 15 min** as two buttons instead of one.
+- `graceMinutes` threads through `migrate-and-update-root` (route.ts) → `workspace.migrate.requested` Inngest event (`lib/inngest/types.ts` — new optional field) → `migrateWorkspaceRoot`'s `step.sleep('grace-period', ...)`, which was previously hardcoded to `'2m'`. Clamped to `[2, 60]` minutes both in the API route and again in the Inngest job (defense in depth, since the value rides in on a request body).
+- `sendMaintenanceWarningToFirmMembers` gained a `graceMinutes` param (default 2) so the notification email's "Starts in: ~N minutes" text matches the actual chosen delay instead of always claiming "~2 minutes."
+- The in-app notice on lock-begin (`firma:migration-started` event dispatch) was already present in `confirmMigration` before this change — no new work needed there, matching the plan's second bullet.
 
 ---
 

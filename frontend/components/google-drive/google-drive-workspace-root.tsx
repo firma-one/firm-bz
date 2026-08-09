@@ -12,11 +12,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { GooglePickerButton } from "@/components/google-drive/google-picker-button"
-import { GoogleDriveMock } from "@/components/google-drive/google-drive-mock"
 import { GoogleDriveIcon } from "@/components/ui/google-drive-icon"
 import { GoogleSharedDriveIcon } from "@/components/ui/google-shared-drive-icon"
 import { useToast } from "@/components/ui/toast"
-import { generateWorkspaceFolderName } from "@/lib/generate-unique-workspace-folder-name"
+import { generateWorkspaceFolderName, FIRMA_PARENT_FOLDER_NAME } from "@/lib/generate-unique-workspace-folder-name"
 import {
   ArrowRightLeft,
   ArrowUpRight,
@@ -25,7 +24,6 @@ import {
   Copy,
   FolderOpen,
   HardDrive,
-  Play,
   RefreshCw,
 } from "lucide-react"
 
@@ -122,7 +120,6 @@ export function GoogleDriveWorkspaceRoot({
   const [saving, setSaving] = useState(false)
   const [previewDrive, setPreviewDrive] = useState<"My Drive" | "Shared Drive" | null>(null)
   const [hasCopied, setHasCopied] = useState(false)
-  const [hasWatchedGuide, setHasWatchedGuide] = useState(false)
   const [hasOpenedDrive, setHasOpenedDrive] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [wizardStep, setWizardStep] = useState<1 | 3>(1)
@@ -132,6 +129,8 @@ export function GoogleDriveWorkspaceRoot({
   const [estimateLoading, setEstimateLoading] = useState(false)
   const [fromBreadcrumb, setFromBreadcrumb] = useState<string[] | null>(null)
   const [toBreadcrumb, setToBreadcrumb] = useState<string[] | null>(null)
+  const [knownFirmaFolders, setKnownFirmaFolders] = useState<{ sharedDriveId: string; driveName: string | null; firmaFolderId: string }[]>([])
+  const [knownFoldersLoading, setKnownFoldersLoading] = useState(false)
 
   const displayName = rootFolderName?.trim() || "Workspace folder"
   const driveUrl = rootFolderId
@@ -151,7 +150,10 @@ export function GoogleDriveWorkspaceRoot({
           : null
 
   const isShared = previewDrive === "Shared Drive"
-  const pickerQuery = generatedFolderName ?? ""
+  // Shared Drive now picks a PARENT the app creates `_firma` inside — query for that (spike 0.1
+  // confirmed this matches cleanly with no _f_workspace_* bleed-through). My Drive's migration
+  // flow is unchanged and still searches for the pre-generated target name.
+  const pickerQuery = isShared ? FIRMA_PARENT_FOLDER_NAME : (generatedFolderName ?? "")
   const myDriveOpenUrl = connectedEmail
     ? `https://drive.google.com/drive/my-drive?authuser=${encodeURIComponent(connectedEmail)}`
     : "https://drive.google.com/drive/my-drive"
@@ -197,7 +199,6 @@ export function GoogleDriveWorkspaceRoot({
     setPreviewDrive(null)
     setPendingFolder(null)
     setHasCopied(false)
-    setHasWatchedGuide(false)
     setHasOpenedDrive(false)
     setPickerOpen(false)
     setWizardStep(1)
@@ -206,6 +207,7 @@ export function GoogleDriveWorkspaceRoot({
     setEstimateLoading(false)
     setFromBreadcrumb(null)
     setToBreadcrumb(null)
+    setKnownFirmaFolders([])
   }, [])
 
   const closeDialog = useCallback(() => {
@@ -213,43 +215,59 @@ export function GoogleDriveWorkspaceRoot({
     resetFlow()
   }, [resetFlow])
 
+  /**
+   * Creates `_firma/<random workspace folder>` under `parentId` (idempotent — findOrCreateFolder
+   * searches by name and parent, so re-running this against the same parent reuses the existing
+   * `_firma` rather than duplicating it) and sets the new folder as the workspace root.
+   * `parentId` defaults to My Drive's root; pass a picked Shared Drive folder id to nest there
+   * instead. Returns the new root folder's id/name.
+   */
+  const createWorkspaceUnder = async (parentId: string | undefined, token: string): Promise<{ folderId: string; folderName: string }> => {
+    const folderName = generateWorkspaceFolderName()
+    // Step 1: find-or-create _firma parent under parentId (idempotent)
+    const firmaRes = await fetch('/api/connectors/google-drive', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ action: 'ensure-folder', connectionId, name: FIRMA_PARENT_FOLDER_NAME, ...(parentId && { parentId }) }),
+    })
+    if (!firmaRes.ok) {
+      const err = await firmaRes.json().catch(() => ({}))
+      throw new Error((err as { error?: string }).error || `Failed to ensure ${FIRMA_PARENT_FOLDER_NAME} folder`)
+    }
+    const { folderId: firmaFolderId } = await firmaRes.json()
+    // Step 2: find-or-create workspace folder inside _firma (idempotent)
+    const createRes = await fetch('/api/connectors/google-drive', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ action: 'ensure-folder', connectionId, name: folderName, parentId: firmaFolderId }),
+    })
+    if (!createRes.ok) {
+      const err = await createRes.json().catch(() => ({}))
+      throw new Error((err as { error?: string }).error || 'Failed to ensure workspace folder')
+    }
+    const { folderId } = await createRes.json()
+    return { folderId, folderName }
+  }
+
+  /** Sets `newRootFolderId` as the workspace root and provisions the firm/client/engagement hierarchy. */
+  const setWorkspaceRoot = async (newRootFolderId: string, token: string) => {
+    const updateRes = await fetch('/api/connectors/google-drive', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ action: 'update-root-folder', connectionId, rootFolderId: newRootFolderId, ...(firmId && { firmId }) }),
+    })
+    if (!updateRes.ok) {
+      const err = await updateRes.json().catch(() => ({}))
+      throw new Error((err as { error?: string }).error || 'Failed to set workspace root')
+    }
+  }
+
   const autoCreateMyDriveFolder = async () => {
     if (!accessToken || saving) return
     setSaving(true)
     try {
-      const folderName = generateWorkspaceFolderName()
-      // Step 1: find-or-create _firma parent in My Drive root (idempotent)
-      const firmaRes = await fetch('/api/connectors/google-drive', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-        body: JSON.stringify({ action: 'ensure-folder', connectionId, name: '_firma' }),
-      })
-      if (!firmaRes.ok) {
-        const err = await firmaRes.json().catch(() => ({}))
-        throw new Error((err as { error?: string }).error || 'Failed to ensure _firma folder')
-      }
-      const { folderId: firmaFolderId } = await firmaRes.json()
-      // Step 2: find-or-create workspace folder inside _firma (idempotent)
-      const createRes = await fetch('/api/connectors/google-drive', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-        body: JSON.stringify({ action: 'ensure-folder', connectionId, name: folderName, parentId: firmaFolderId }),
-      })
-      if (!createRes.ok) {
-        const err = await createRes.json().catch(() => ({}))
-        throw new Error((err as { error?: string }).error || 'Failed to ensure workspace folder')
-      }
-      const { folderId } = await createRes.json()
-      // Step 3: set as workspace root + provision firm/client/engagement hierarchy
-      const updateRes = await fetch('/api/connectors/google-drive', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-        body: JSON.stringify({ action: 'update-root-folder', connectionId, rootFolderId: folderId, ...(firmId && { firmId }) }),
-      })
-      if (!updateRes.ok) {
-        const err = await updateRes.json().catch(() => ({}))
-        throw new Error((err as { error?: string }).error || 'Failed to set workspace root')
-      }
+      const { folderId, folderName } = await createWorkspaceUnder(undefined, accessToken)
+      await setWorkspaceRoot(folderId, accessToken)
       addToast({ title: 'Folder created', message: `"${folderName}" set as your workspace root.`, type: 'success' })
       await onUpdated()
       closeDialog()
@@ -290,38 +308,76 @@ export function GoogleDriveWorkspaceRoot({
 
   const startSharedDriveFlow = () => {
     setPreviewDrive("Shared Drive")
-    setGeneratedFolderName(generateWorkspaceFolderName())
     setWizardStep(1)
-    setHasCopied(false)
-    setHasWatchedGuide(false)
-    setHasOpenedDrive(false)
     void fetchEstimate()
+    void fetchKnownFirmaFolders()
   }
 
-  const updateRootOnly = async (newId: string) => {
+  // Reuse: on a repeat Shared Drive setup for the same Google account, offer any _firma folders
+  // already known from a prior connector's setup — skips the picker entirely.
+  const fetchKnownFirmaFolders = useCallback(async () => {
+    if (!accessToken || !connectionId) return
+    setKnownFoldersLoading(true)
+    try {
+      const res = await fetch('/api/connectors/google-drive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ action: 'list-known-firma-folders', connectionId }),
+      })
+      if (res.ok) {
+        const data = await res.json() as { knownFolders: { sharedDriveId: string; driveName: string | null; firmaFolderId: string }[] }
+        setKnownFirmaFolders(data.knownFolders ?? [])
+      }
+    } catch { /* ignore — falls through to the picker */ } finally {
+      setKnownFoldersLoading(false)
+    }
+  }, [accessToken, connectionId])
+
+  const useKnownFirmaFolder = async (folder: { sharedDriveId: string; driveName: string | null; firmaFolderId: string }) => {
     if (!accessToken) return
-    const res = await fetch("/api/connectors/google-drive", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({
-        action: "update-root-folder",
-        connectionId,
-        rootFolderId: newId,
-        ...(firmId && { firmId }),
-      }),
-    })
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}))
-      throw new Error((err as { error?: string }).error || "Request failed")
+    const oldRoot = rootFolderId?.trim() || ""
+    const parent = { id: folder.firmaFolderId, name: folder.driveName ? `${FIRMA_PARENT_FOLDER_NAME} in ${folder.driveName}` : FIRMA_PARENT_FOLDER_NAME }
+    if (oldRoot) {
+      setPendingFolder(parent)
+      setWizardStep(3)
+      void fetchBreadcrumbs(oldRoot, folder.firmaFolderId)
+      return
+    }
+    setSaving(true)
+    try {
+      // firmaFolderId is already the _firma folder itself — create the workspace folder directly
+      // inside it rather than routing through createWorkspaceUnder (which would create a second,
+      // redundant _firma nested inside this one).
+      const folderName = generateWorkspaceFolderName()
+      const createRes = await fetch('/api/connectors/google-drive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ action: 'ensure-folder', connectionId, name: folderName, parentId: folder.firmaFolderId }),
+      })
+      if (!createRes.ok) {
+        const err = await createRes.json().catch(() => ({}))
+        throw new Error((err as { error?: string }).error || 'Failed to ensure workspace folder')
+      }
+      const { folderId } = await createRes.json()
+      await setWorkspaceRoot(folderId, accessToken)
+      addToast({ title: 'Folder created', message: `"${folderName}" set as your workspace root.`, type: 'success' })
+      await onUpdated()
+      closeDialog()
+    } catch (e) {
+      addToast({ title: 'Could not create folder', message: e instanceof Error ? e.message : 'Try again.', type: 'error' })
+    } finally {
+      setSaving(false)
     }
   }
 
+  // The picked item is now a PARENT location, not a pre-named target — Picker can't discover a
+  // hand-made _firma folder under drive.file scope, so the app always creates it itself, inside
+  // whatever the user picks. First-time setup creates immediately (nothing to migrate from);
+  // migration defers creation until the user confirms (see confirmMigration below), so cancelling
+  // at the confirm step never orphans an empty _f_workspace_* folder in Drive.
   const handleFolderPicked = async (items: { id: string; name: string }[]) => {
-    const item = items[0]
-    if (!item || !accessToken) {
+    const parent = items[0]
+    if (!parent || !accessToken) {
       addToast({
         title: "Not signed in",
         message: "Sign in again, then retry.",
@@ -330,19 +386,20 @@ export function GoogleDriveWorkspaceRoot({
       return
     }
     const oldRoot = rootFolderId?.trim() || ""
-    if (oldRoot && oldRoot !== item.id) {
-      // Go to confirmation step
-      setPendingFolder(item)
+    if (oldRoot) {
+      // Migration — defer folder creation to confirmMigration, only resolve breadcrumbs now.
+      setPendingFolder(parent)
       setWizardStep(3)
-      void fetchBreadcrumbs(oldRoot, item.id)
+      void fetchBreadcrumbs(oldRoot, parent.id)
       return
     }
     setSaving(true)
     try {
-      await updateRootOnly(item.id)
+      const { folderId, folderName } = await createWorkspaceUnder(parent.id, accessToken)
+      await setWorkspaceRoot(folderId, accessToken)
       addToast({
-        title: "Workspace folder updated",
-        message: "Your workspace root points to the selected folder.",
+        title: "Folder created",
+        message: `"${folderName}" set as your workspace root.`,
         type: "success",
       })
       await onUpdated()
@@ -358,20 +415,24 @@ export function GoogleDriveWorkspaceRoot({
     }
   }
 
-  const confirmMigration = async () => {
+  const confirmMigration = async (graceMinutes: 2 | 15) => {
     if (!pendingFolder || !accessToken) return
     setSaving(true)
     try {
       const oldRoot = rootFolderId?.trim() || ""
+      // Create _firma/_f_workspace_* under the picked parent now — not before this point — so a
+      // cancelled migration (closing the dialog without confirming) never leaves a folder behind.
+      const { folderId: newRootFolderId } = await createWorkspaceUnder(pendingFolder.id, accessToken)
       const res = await fetch("/api/connectors/google-drive", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
         body: JSON.stringify({
           action: "migrate-and-update-root",
           connectionId,
-          newRootFolderId: pendingFolder.id,
+          newRootFolderId,
           migrateFromRootFolderId: oldRoot,
           estimatedMinutes: estimate?.estimatedMinutes ?? 5,
+          graceMinutes,
         }),
       })
       const data = await res.json().catch(() => ({}))
@@ -411,16 +472,14 @@ export function GoogleDriveWorkspaceRoot({
     }
   }
 
-  // Flat step sequence: Location, Copy, [Watch Guide — Shared Drive only], Open Drive, Select Folder, (Confirm — migration only)
-  const setupSteps = isShared ? 4 : 3
-  const totalSteps = setupSteps + 1 + (rootFolderId ? 1 : 0)
+  // Flat step count — fixed at 2 (Location → Select) so the bar doesn't jump/reflow once a
+  // location is chosen, matching OneDriveWorkspaceRoot's equivalent fix. +1 only when migrating
+  // an existing root (adds the Confirm step).
+  const totalSteps = 2 + (rootFolderId ? 1 : 0)
   const currentStep =
     previewDrive === null ? 1
       : wizardStep === 3 ? totalSteps
-        : !hasCopied ? 2
-          : isShared && !hasWatchedGuide ? 3
-            : !hasOpenedDrive ? (isShared ? 4 : 3)
-              : (isShared ? 5 : 4)
+        : 2
 
   const dialogTitle = rootFolderId ? "Migrate workspace folder" : "Set up workspace folder"
   const dialogSubtitle =
@@ -672,11 +731,93 @@ export function GoogleDriveWorkspaceRoot({
                 </button>
               </div>
             </div>
+          ) : wizardStep === 1 && isShared ? (
+            <div className="space-y-4 py-1">
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#45474c]">Shared Drive · Choose where Firma should work</p>
+
+              <div className="space-y-3">
+                <p className="text-xs text-[#45474c] leading-relaxed">
+                  Pick a folder in your shared drive. We&rsquo;ll create a <code className="text-[11px] font-mono">{FIRMA_PARENT_FOLDER_NAME}</code> folder inside it and keep everything there.
+                </p>
+                <p className="text-[11px] text-[#45474c] leading-relaxed">
+                  Google only lets apps see folders you explicitly select, so this step is manual. Microsoft doesn&rsquo;t have this restriction.
+                </p>
+                <p className="text-[11px] text-[#45474c] leading-relaxed">
+                  No folders in your shared drive yet? Create one in Drive — any name works — then select it.
+                </p>
+
+                {knownFoldersLoading ? (
+                  <p className="text-xs text-[#45474c]">Checking for shared drives you&rsquo;ve already set up…</p>
+                ) : knownFirmaFolders.length > 0 ? (
+                  <div className="space-y-2 rounded border border-[#e5e7eb] bg-[#f9f9fb] p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#45474c]">Reuse an existing setup</p>
+                    <div className="space-y-1.5">
+                      {knownFirmaFolders.map((folder) => (
+                        <button
+                          key={folder.firmaFolderId}
+                          type="button"
+                          disabled={saving}
+                          onClick={() => void useKnownFirmaFolder(folder)}
+                          className="flex w-full items-center gap-2 rounded border border-[#e5e7eb] bg-white px-3 py-2 text-left text-xs text-[#1b1b1d] hover:border-[#1b1b1d] hover:bg-[#f9f9fb] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <GoogleSharedDriveIcon size={14} className="shrink-0 opacity-80" aria-hidden />
+                          <span className="truncate">
+                            Use {FIRMA_PARENT_FOLDER_NAME} in <span className="font-semibold">{folder.driveName || "this shared drive"}</span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[11px] text-[#45474c]">Or pick a different location below.</p>
+                  </div>
+                ) : null}
+
+                {rootFolderId && estimateLoading && (
+                  <p className="text-xs text-[#45474c]">Estimating migration time…</p>
+                )}
+                {rootFolderId && estimate && !estimateLoading && (
+                  <p className="text-xs text-[#45474c]">
+                    ~{estimate.estimatedMinutes} min maintenance window · {estimate.itemCount} items
+                  </p>
+                )}
+
+                <div className="flex items-center gap-2 pt-1">
+                  <Button type="button" variant="outline" size="sm"
+                    className="flex-1 justify-center h-8 px-3 text-[11px] font-headline font-bold tracking-widest uppercase rounded border-[#e5e7eb] text-[#45474c] hover:bg-[#f9f9fb]"
+                    onClick={resetFlow}>
+                    <ArrowRight className="h-3.5 w-3.5 rotate-180 mr-1" />Change location
+                  </Button>
+                  <a
+                    href={driveOpenUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="relative inline-flex flex-1 items-center justify-center gap-1.5 h-8 px-3 text-[11px] font-headline font-bold tracking-widest uppercase rounded border border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] transition-colors"
+                  >
+                    <GoogleDriveIcon size={14} className="shrink-0" aria-hidden />
+                    Open Shared Drives<ArrowUpRight className="h-3.5 w-3.5" />
+                  </a>
+                  <GooglePickerButton
+                    mode="select-folder"
+                    connectionId={connectionId}
+                    driveType="Shared Drive"
+                    query={pickerQuery}
+                    onPickerOpen={() => { setSaving(true); setPickerOpen(true) }}
+                    onPickerCancel={() => { setSaving(false); setPickerOpen(false) }}
+                    onImport={(items) => { setPickerOpen(false); void handleFolderPicked(items as { id: string; name: string }[]) }}
+                  >
+                    <Button type="button" variant="greenCta"
+                      className="relative flex-1 justify-center h-8 text-[11px] font-headline font-bold tracking-widest uppercase rounded"
+                      disabled={saving}>
+                      {saving
+                        ? <><RefreshCw className="h-3.5 w-3.5 mr-1.5 shrink-0 animate-spin" />Applying…</>
+                        : <><FolderOpen className="h-3.5 w-3.5 mr-1.5 shrink-0" />Select Folder</>}
+                    </Button>
+                  </GooglePickerButton>
+                </div>
+              </div>
+            </div>
           ) : wizardStep === 1 ? (
             <div className="space-y-4 py-1">
-              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#45474c]">
-                {isShared ? "Shared Drive" : "My Drive"} · Setup
-              </p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#45474c]">My Drive · Setup</p>
 
               <div className="space-y-3">
                 {/* Generated name box */}
@@ -714,68 +855,21 @@ export function GoogleDriveWorkspaceRoot({
                   </p>
                 )}
 
-                {/* Instructions */}
-                {isShared ? (
-                  hasWatchedGuide ? (
-                    <GoogleDriveMock folderName={generatedFolderName} />
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setHasWatchedGuide(true)}
-                      disabled={!hasCopied}
-                      className={cn(
-                        "flex w-full flex-col items-center justify-center gap-2 rounded-xl border border-[#e5e7eb] bg-[#f9f9fb] py-10 text-center transition-colors",
-                        hasCopied ? "hover:border-[#1b1b1d] hover:bg-white" : "opacity-40 cursor-not-allowed",
-                      )}
-                    >
-                      <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#1b1b1d] text-white">
-                        <Play className="h-4 w-4 fill-current" />
-                      </span>
-                      <span className="text-xs font-semibold text-[#1b1b1d]">Watch the guide</span>
-                      <span className="text-[11px] text-[#45474c]">
-                        {hasCopied ? "See how to create the folder in your Shared Drive" : "Copy the folder name first"}
-                      </span>
-                    </button>
-                  )
-                ) : (
-                  <ol className="space-y-1.5 pl-4 list-decimal text-xs text-[#45474c]">
-                    <li>Copy the folder name above.</li>
-                    <li>Open My Drive and create a <span className="font-semibold text-[#1b1b1d]">New folder</span> with that name.</li>
-                    <li>Return here and click <span className="font-semibold text-[#1b1b1d]">Select Folder</span>.</li>
-                  </ol>
-                )}
+                <ol className="space-y-1.5 pl-4 list-decimal text-xs text-[#45474c]">
+                  <li>Copy the folder name above.</li>
+                  <li>Open My Drive and create a <span className="font-semibold text-[#1b1b1d]">New folder</span> with that name.</li>
+                  <li>Return here and click <span className="font-semibold text-[#1b1b1d]">Select Folder</span>.</li>
+                </ol>
 
-                {/* Progressive actions: Copy -> [Play Guide] -> Open Drive -> Select Folder */}
+                {/* Progressive actions: Copy -> Open Drive -> Select Folder */}
                 <div className="flex items-center gap-2 pt-1">
-                  {isShared ? (
-                    !hasWatchedGuide ? (
-                      <span className={cn("relative inline-flex flex-1 rounded", hasCopied && "p-[1.5px] overflow-hidden")}>
-                        {hasCopied && (
-                          <span
-                            className="animate-border-spin absolute inset-0"
-                            style={{
-                              background: "conic-gradient(from var(--border-angle), #4285F4 0%, #EA4335 12%, #FBBC05 24%, #34A853 36%, transparent 46%, transparent 100%)",
-                            }}
-                            aria-hidden
-                          />
-                        )}
-                        <Button type="button" variant="outline" size="sm"
-                          className="relative w-full justify-center h-8 px-3 text-[11px] font-headline font-bold tracking-widest uppercase rounded border-[#e5e7eb] text-[#45474c] hover:bg-[#f9f9fb]"
-                          onClick={() => setHasWatchedGuide(true)}
-                          disabled={!hasCopied}>
-                          <Play className="h-3.5 w-3.5 mr-1.5 fill-current" />Play Guide
-                        </Button>
-                      </span>
-                    ) : null
-                  ) : (
-                    <Button type="button" variant="outline" size="sm"
-                      className="flex-1 justify-center h-8 px-3 text-[11px] font-headline font-bold tracking-widest uppercase rounded border-[#e5e7eb] text-[#45474c] hover:bg-[#f9f9fb]"
-                      onClick={resetFlow}>
-                      <ArrowRight className="h-3.5 w-3.5 rotate-180 mr-1" />Change location
-                    </Button>
-                  )}
-                  <span className={cn("relative inline-flex flex-1 rounded", hasCopied && hasWatchedGuide && !hasOpenedDrive && "p-[1.5px] overflow-hidden")}>
-                    {hasCopied && hasWatchedGuide && !hasOpenedDrive && (
+                  <Button type="button" variant="outline" size="sm"
+                    className="flex-1 justify-center h-8 px-3 text-[11px] font-headline font-bold tracking-widest uppercase rounded border-[#e5e7eb] text-[#45474c] hover:bg-[#f9f9fb]"
+                    onClick={resetFlow}>
+                    <ArrowRight className="h-3.5 w-3.5 rotate-180 mr-1" />Change location
+                  </Button>
+                  <span className={cn("relative inline-flex flex-1 rounded", hasCopied && !hasOpenedDrive && "p-[1.5px] overflow-hidden")}>
+                    {hasCopied && !hasOpenedDrive && (
                       <span
                         className="animate-border-spin absolute inset-0"
                         style={{
@@ -789,14 +883,14 @@ export function GoogleDriveWorkspaceRoot({
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={() => setHasOpenedDrive(true)}
-                      aria-disabled={!hasCopied || !hasWatchedGuide}
+                      aria-disabled={!hasCopied}
                       className={cn(
                         "relative inline-flex w-full items-center justify-center gap-1.5 h-8 px-3 text-[11px] font-headline font-bold tracking-widest uppercase rounded border border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] transition-colors",
-                        (!hasCopied || !hasWatchedGuide) && "opacity-40 pointer-events-none",
+                        !hasCopied && "opacity-40 pointer-events-none",
                       )}
                     >
                       <GoogleDriveIcon size={14} className="shrink-0" aria-hidden />
-                      Open {isShared ? "Shared Drives" : "My Drive"}<ArrowUpRight className="h-3.5 w-3.5" />
+                      Open My Drive<ArrowUpRight className="h-3.5 w-3.5" />
                     </a>
                   </span>
                   <span className={cn("relative inline-flex flex-1 rounded", hasOpenedDrive && !saving && "p-[1.5px] overflow-hidden")}>
@@ -812,7 +906,7 @@ export function GoogleDriveWorkspaceRoot({
                     <GooglePickerButton
                       mode="select-folder"
                       connectionId={connectionId}
-                      driveType={isShared ? "Shared Drive" : "My Drive"}
+                      driveType="My Drive"
                       query={pickerQuery}
                       onPickerOpen={() => { setSaving(true); setPickerOpen(true) }}
                       onPickerCancel={() => { setSaving(false); setPickerOpen(false) }}
@@ -855,10 +949,12 @@ export function GoogleDriveWorkspaceRoot({
                   <div className="px-4 py-3 flex items-start gap-3">
                     <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#45474c] w-10 shrink-0 pt-0.5">To</span>
                     <div className="min-w-0">
-                      <p className="text-xs font-semibold text-[#1b1b1d] truncate">{pendingFolder.name}</p>
+                      <p className="text-xs font-semibold text-[#1b1b1d] truncate">
+                        A new {FIRMA_PARENT_FOLDER_NAME} workspace inside &ldquo;{pendingFolder.name}&rdquo;
+                      </p>
                       <p className="text-[11px] text-[#45474c] mt-0.5 truncate">
                         {toBreadcrumb
-                          ? toBreadcrumb.slice(0, -1).join(" › ") || toBreadcrumb[0]
+                          ? toBreadcrumb.join(" › ")
                           : isShared ? "Shared Drive" : "My Drive"}
                       </p>
                     </div>
@@ -876,7 +972,7 @@ export function GoogleDriveWorkspaceRoot({
                       {estimate && estimate.itemCount > 0
                         ? `${estimate.itemCount} items will be moved. `
                         : ""}
-                      The workspace will be locked for all members during migration.
+                      All members will be emailed and signed out automatically once the lock begins.
                     </p>
                   </div>
                 </div>
@@ -888,11 +984,17 @@ export function GoogleDriveWorkspaceRoot({
                     onClick={() => { setPendingFolder(null); setWizardStep(1) }}>
                     <ArrowRight className="h-3.5 w-3.5 rotate-180 mr-1" />Back
                   </Button>
+                  <Button type="button" variant="outline" size="sm"
+                    className="flex-1 h-8 text-xs font-headline font-bold tracking-widest rounded border-[#e5e7eb] text-[#45474c] hover:bg-[#f9f9fb]"
+                    disabled={saving}
+                    onClick={() => void confirmMigration(15)}>
+                    {saving ? "Starting…" : "Notify & start in 15 min"}
+                  </Button>
                   <Button type="button" variant="greenCta"
                     className="flex-1 h-8 text-xs font-headline font-bold tracking-widest uppercase rounded"
                     disabled={saving}
-                    onClick={() => void confirmMigration()}>
-                    {saving ? "Starting…" : "Start Migration"}
+                    onClick={() => void confirmMigration(2)}>
+                    {saving ? "Starting…" : "Start Now"}
                   </Button>
                 </div>
               </div>

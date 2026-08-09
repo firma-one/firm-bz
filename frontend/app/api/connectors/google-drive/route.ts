@@ -520,6 +520,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ folderId })
     }
 
+    // Lists _firma folders already known for this connector's Google account (from prior Shared
+    // Drive setups on other connectors), verified still live — powers one-click reuse instead of
+    // the picker on repeat setups (Phase 2 of the Shared Drive redesign).
+    if (action === 'list-known-firma-folders') {
+      const { connectionId } = body
+      if (!connectionId) {
+        return NextResponse.json({ error: 'Missing connectionId' }, { status: 400 })
+      }
+      const knownFolders = await googleDriveConnector.listKnownFirmaFolders(connectionId)
+      return NextResponse.json({ knownFolders })
+    }
+
     if (action === 'folder-breadcrumb') {
       const authHeader = request.headers.get('authorization')
       if (!authHeader?.startsWith('Bearer ')) {
@@ -604,10 +616,14 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
       }
 
-      const { connectionId: migConnId, newRootFolderId: migNewRoot, migrateFromRootFolderId, estimatedMinutes: bodyEstMinutes } = body
+      const { connectionId: migConnId, newRootFolderId: migNewRoot, migrateFromRootFolderId, estimatedMinutes: bodyEstMinutes, graceMinutes: bodyGraceMinutes } = body
       if (!migConnId || !migNewRoot) {
         return NextResponse.json({ error: 'Missing connectionId or newRootFolderId' }, { status: 400 })
       }
+      // "Start now" vs "Notify members and start in 15 minutes" — clamped again here (the Inngest
+      // job also clamps) since this value is only ever used for the setMigrationPending banner
+      // signal at this layer, not the actual sleep duration.
+      const graceMinutes = Math.min(Math.max(Number(bodyGraceMinutes) || 2, 2), 60)
 
       const migExisting = await (prisma as any).connector.findUnique({ where: { id: migConnId } })
       if (!migExisting || migExisting.userId !== migUser.id || migExisting.type !== 'GOOGLE_DRIVE') {
@@ -643,7 +659,7 @@ export async function POST(request: NextRequest) {
           const estimatedMinutes = typeof bodyEstMinutes === 'number' ? bodyEstMinutes : 5
           await setMigrationPending(firm.id, {
             initiatedAt: new Date().toISOString(),
-            estimatedStartMinutes: 2,
+            estimatedStartMinutes: graceMinutes,
             initiatedBy: migUser.id,
           })
           await safeInngestSend('workspace.migrate.requested', {
@@ -655,6 +671,7 @@ export async function POST(request: NextRequest) {
             initiatingUserId: migUser.id,
             estimatedMinutes,
             startedAt: new Date().toISOString(),
+            graceMinutes,
           })
         }
       }
@@ -827,7 +844,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         accessToken: accessToken, // Decrypted plaintext token
         connectionId: connector.id,
-        clientId: config.googleDrive.clientId
+        clientId: config.googleDrive.clientId,
+        email: (connector.settings as any)?.accountEmail || null,
       })
     }
 

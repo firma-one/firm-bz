@@ -180,6 +180,9 @@ export interface WorkspaceMigrateRequestedEvent {
     initiatingUserId: string
     estimatedMinutes: number
     startedAt?: string
+    /** Minutes before the lock engages — "Start now" (2, default) vs "Notify members and start
+     * in 15 minutes" (15). Clamped server-side in both the API route and the Inngest job itself. */
+    graceMinutes?: number
   }
 }
 

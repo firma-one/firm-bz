@@ -104,6 +104,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
   const [allClients, setAllClients] = useState<FirmClientRecord[]>([])
   const [attachingClientId, setAttachingClientId] = useState<string | null>(null)
   const [detachingClientId, setDetachingClientId] = useState<string | null>(null)
+  const [attachingAllConnectorId, setAttachingAllConnectorId] = useState<string | null>(null)
 
   // OneDrive/SharePoint connect flow — mirrors the Google "Connect new account" name+arrow
   // pattern exactly: OAuth completes immediately (no location picker upfront), then the
@@ -511,6 +512,23 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
     }
   }
 
+  /** Attaches every client not yet attached to any connector to this one, sequentially reusing
+   * handleAttachClient's toast/local-state logic. A firm connector attached to zero (or few)
+   * clients stores nothing for the rest — this closes that gap in one click instead of N. */
+  const handleAttachAllClients = async (connectorId: string) => {
+    const unattached = allClients.filter(c => !c.connectorId)
+    if (unattached.length === 0) return
+    setAttachingAllConnectorId(connectorId)
+    try {
+      for (const client of unattached) {
+        await handleAttachClient(connectorId, client.id)
+      }
+      addToast({ type: 'success', title: 'Attached', message: `Attached ${unattached.length} client${unattached.length === 1 ? '' : 's'} to this connector.` })
+    } finally {
+      setAttachingAllConnectorId(null)
+    }
+  }
+
   const handleDetachClient = async (connectorId: string, clientId: string) => {
     setDetachingClientId(clientId)
     try {
@@ -758,8 +776,10 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                     isSandboxFirm={isSandboxFirm || !isActive}
                     attachingClientId={attachingClientId}
                     detachingClientId={detachingClientId}
+                    attachingAllConnectorId={attachingAllConnectorId}
                     onAttach={handleAttachClient}
                     onDetach={handleDetachClient}
+                    onAttachAll={handleAttachAllClients}
                   />
                 </div>
               )
@@ -939,8 +959,10 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                     isSandboxFirm={isSandboxFirm || !isActive}
                     attachingClientId={attachingClientId}
                     detachingClientId={detachingClientId}
+                    attachingAllConnectorId={attachingAllConnectorId}
                     onAttach={handleAttachClient}
                     onDetach={handleDetachClient}
+                    onAttachAll={handleAttachAllClients}
                   />
                 </div>
               )
@@ -1140,8 +1162,10 @@ type ConnectorClientAttachSectionProps = {
   isSandboxFirm: boolean
   attachingClientId: string | null
   detachingClientId: string | null
+  attachingAllConnectorId: string | null
   onAttach: (connectorId: string, clientId: string) => void | Promise<void>
   onDetach: (connectorId: string, clientId: string) => void | Promise<void>
+  onAttachAll: (connectorId: string) => void | Promise<void>
 }
 
 /**
@@ -1193,11 +1217,16 @@ function ConnectorClientAttachSection({
   isSandboxFirm,
   attachingClientId,
   detachingClientId,
+  attachingAllConnectorId,
   onAttach,
   onDetach,
+  onAttachAll,
 }: ConnectorClientAttachSectionProps) {
   // Only show clients attached here or not yet attached to any connector
   const visibleClients = allClients.filter(c => !c.connectorId || c.connectorId === connector.id)
+  const unattachedCount = visibleClients.filter(c => c.connectorId !== connector.id).length
+  const attachingAll = attachingAllConnectorId === connector.id
+  const attachAllDisabled = isSandboxFirm || !rootFolderId || attachingAll || attachingClientId !== null
 
   return (
     <div className="relative z-10 border-t border-[#e5e7eb]">
@@ -1205,14 +1234,34 @@ function ConnectorClientAttachSection({
         <div className="h-9 w-9 shrink-0 bg-[#f9f9fb] border border-[#e5e7eb] rounded flex items-center justify-center p-1.5">
           <Users className="w-4 h-4 text-[#45474c]" strokeWidth={1.75} />
         </div>
-        <div>
+        <div className="min-w-0 flex-1">
           <p className="text-[0.8125rem] font-bold text-[#1b1b1d] leading-snug">Clients</p>
           {visibleClients.length > 0 && (
             <p className="text-xs text-[#9a9ba0] mt-0.5">
-              {connector.attachedClients.length}/{visibleClients.length} attached
+              Attached to {connector.attachedClients.length} of {visibleClients.length} client{visibleClients.length === 1 ? '' : 's'}
             </p>
           )}
         </div>
+        {unattachedCount > 0 && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 shrink-0 px-2.5 text-[11px] border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] rounded"
+                onClick={() => void onAttachAll(connector.id)}
+                disabled={attachAllDisabled}
+              >
+                {attachingAll
+                  ? <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
+                  : <Link className="w-3 h-3 mr-1" />}
+                Attach to all clients
+              </Button>
+            </TooltipTrigger>
+            {!rootFolderId && <TooltipContent side="left">Choose a workspace folder before attaching clients</TooltipContent>}
+          </Tooltip>
+        )}
       </div>
       {visibleClients.length === 0 ? (
         <p className="pl-[4.75rem] pr-4 pb-3 text-xs text-[#9a9ba0]">No clients available to attach.</p>
