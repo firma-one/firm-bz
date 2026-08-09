@@ -42,6 +42,24 @@ const nextConfig = {
       { source: '/trust-center', destination: '/resources/trust-center', permanent: true },
       { source: '/blog', destination: '/resources/blog', permanent: true },
       { source: '/blog/:path*', destination: '/resources/blog/:path*', permanent: true },
+      // Old static report export (JS-only, unindexable) -> server-rendered blog post.
+      // Redirects are evaluated before /public files, so this shadows the original .html.
+      // The slide deck itself stays reachable (and noindex) at /resources/reports/fcxo-client-delivery-deck.html.
+      {
+        source: '/resources/reports/fcxo-research-report-june-2026.html',
+        destination: '/resources/blog/guides/fractional-cmo-client-delivery-research',
+        permanent: true,
+      },
+    ]
+  },
+
+  async headers() {
+    return [
+      {
+        // Keep the slide-deck version usable on calls, but out of search indexes.
+        source: '/resources/reports/fcxo-client-delivery-deck.html',
+        headers: [{ key: 'X-Robots-Tag', value: 'noindex, nofollow' }],
+      },
     ]
   },
 
