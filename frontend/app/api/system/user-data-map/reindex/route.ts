@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
-import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { SearchService } from '@/lib/services/search-service'
 import { isSysAdminUser } from '@/lib/system/user-data-map'
 import { logger } from '@/lib/logger'
+import { getPermissionAdapter } from '@/lib/connectors/registry'
 
 export const dynamic = 'force-dynamic'
 
@@ -75,9 +75,16 @@ export async function POST(request: NextRequest) {
                 continue
             }
 
-            const settings = (connector.settings as any) || {}
-            const ps = settings.projectFolderSettings?.[engagement.slug] || {}
-            const parentFolderIds = [ps.generalFolderId, ps.confidentialFolderId, ps.stagingFolderId].filter(Boolean) as string[]
+            const permissionAdapter = await getPermissionAdapter(connector.id)
+            if (!permissionAdapter) {
+                results.push({ engagementId: engagement.id, name: engagement.name, status: 'skipped', indexedCount: 0, reason: 'Connector type not supported' })
+                continue
+            }
+            const folderIds = await permissionAdapter.getEngagementFolderIds(connector.id, engagement.slug, {
+                projectName: engagement.name,
+                projectFolderId: engagement.connectorRootFolderId ?? undefined,
+            })
+            const parentFolderIds = [folderIds.generalFolderId, folderIds.confidentialFolderId, folderIds.stagingFolderId].filter(Boolean) as string[]
             if (parentFolderIds.length === 0) {
                 results.push({ engagementId: engagement.id, name: engagement.name, status: 'skipped', indexedCount: 0, reason: 'No project folders configured' })
                 continue
@@ -86,7 +93,7 @@ export async function POST(request: NextRequest) {
             const files: { id: string; name: string }[] = []
             const scanRecursive = async (folderId: string) => {
                 if (files.length >= MAX_FILES) return
-                const listed = await googleDriveConnector.listFiles(connector.id, folderId, 1000)
+                const listed = await permissionAdapter.listFiles(connector.id, folderId, 1000)
                 for (const file of listed) {
                     if (files.length >= MAX_FILES) break
                     files.push({ id: file.id, name: file.name })

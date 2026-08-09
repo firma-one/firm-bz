@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 import { prisma } from "@/lib/prisma"
 import { googleDriveConnector } from "@/lib/google-drive-connector"
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
+import { getContentAdapter } from '@/lib/connectors/registry'
 
 // Create Supabase client
 const supabase = createClient(
@@ -127,10 +128,28 @@ export async function GET(request: NextRequest) {
 
         // 3. Start Download Stream
         try {
-            const { stream, mimeType, size, name } = await googleDriveConnector.downloadFile(connectorId, fileId, revisionId || undefined)
+            const connectorType = await prisma.connector.findUnique({ where: { id: connectorId }, select: { type: true } }).then((c) => c?.type)
+            // Version-history download (revisionId) is a Drive-specific concept — Graph has no
+            // per-revision content-fetch equivalent exposed on IConnectorContentAdapter.
+            if (revisionId && connectorType !== 'GOOGLE_DRIVE') {
+                return NextResponse.json({ error: 'Version history download is not supported for this storage provider' }, { status: 400 })
+            }
 
-            // 4. Return Streaming Response
-            // We use the ReadableStream from the fetch response
+            let stream: ReadableStream | Buffer
+            let mimeType: string | undefined
+            let size: string | undefined
+            let name: string | undefined
+            if (connectorType === 'GOOGLE_DRIVE') {
+                ({ stream, mimeType, size, name } = await googleDriveConnector.downloadFile(connectorId, fileId, revisionId || undefined))
+            } else {
+                const contentAdapter = await getContentAdapter(connectorId)
+                if (!contentAdapter) return NextResponse.json({ error: 'No content adapter available for connector' }, { status: 500 })
+                const rendered = await contentAdapter.getRenderableContent(connectorId, fileId, 'native')
+                stream = rendered.stream
+                mimeType = rendered.mimeType
+                size = rendered.size
+                name = rendered.fileName
+            }
 
             // Use the name from the connector response as it might have a new extension (e.g. .docx)
             const finalFilename = name || filename
@@ -155,7 +174,8 @@ export async function GET(request: NextRequest) {
                     .fireAndForget()
             }
 
-            return new NextResponse(stream, {
+            const body = Buffer.isBuffer(stream) ? new Uint8Array(stream) : stream
+            return new NextResponse(body, {
                 status: 200,
                 headers
             })

@@ -19,7 +19,6 @@ import {
   MoreHorizontal,
   Download,
   ExternalLink,
-  Share2,
   Bookmark,
   Edit3,
   Copy,
@@ -47,6 +46,7 @@ import {
   Building2,
   Loader2,
   PackageMinus,
+  Package,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -104,8 +104,8 @@ interface DocumentActionMenuProps {
   orgSlug?: string
   /** Called after share settings are saved (e.g. to refresh shared badges). */
   onShareSaved?: () => void
-  /** Called when user clicks "Tag as Deliverable" on a folder — caller handles API + refresh. */
-  onMarkAsDeliverable?: (doc: any) => void
+  /** Called when user confirms "Tag as Deliverable" — caller handles API + refresh. dueDate is an optional ISO string. */
+  onMarkAsDeliverable?: (doc: any, dueDate?: string) => void
   /** Called when user confirms "Untag as Deliverable" — caller handles revoke API + refresh. */
   onUntagAsDeliverable?: (doc: any) => void
   /** True when this folder is already a Deliverable (shows Untag instead of Tag). */
@@ -199,6 +199,8 @@ export function DocumentActionMenu({
 }: DocumentActionMenuProps) {
   const [showDueDatePicker, setShowDueDatePicker] = useState(false)
   const [showUntagConfirm, setShowUntagConfirm] = useState(false)
+  const [showTagDeliverableModal, setShowTagDeliverableModal] = useState(false)
+  const [tagDeliverableDueDate, setTagDeliverableDueDate] = useState<string>("")
   const [existingBookmarkId, setExistingBookmarkId] = useState<string | null>(null)
   /** Drive id or project document UUID — disables Finalize row while request in flight */
   const [finalizeLockActiveId, setFinalizeLockActiveId] = useState<string | null>(null)
@@ -403,6 +405,7 @@ export function DocumentActionMenu({
   }, [projectId, isExternalViewer, documentIdForProjectApis, addToast, onShareSaved])
 
   const getDisplayType = (doc: any) => {
+    if (doc.documentType === 'LINK') return "External URL"
     if (doc.mimeType?.includes('folder')) return "Folder"
     if (doc.mimeType?.includes('document')) return "Document"
     if (doc.mimeType?.includes('spreadsheet')) return "Spreadsheet"
@@ -678,7 +681,7 @@ export function DocumentActionMenu({
                             onSelect={(e) => e.preventDefault()}
                             className="flex items-center space-x-3 px-3 py-2 text-xs opacity-50 cursor-not-allowed"
                           >
-                            <Share2 className="h-4 w-4 text-purple-600" />
+                            <Package className="h-4 w-4 text-purple-600" />
                             <span>Tag as Deliverable</span>
                           </DropdownMenuItem>
                         </TooltipTrigger>
@@ -686,13 +689,20 @@ export function DocumentActionMenu({
                       </Tooltip>
                     </TooltipProvider>
                   ) : (
-                    <DropdownMenuItem
-                      onClick={() => onMarkAsDeliverable?.(document)}
-                      className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
-                    >
-                      <Share2 className="h-4 w-4 text-purple-600" />
-                      <span>Tag as Deliverable</span>
-                    </DropdownMenuItem>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <DropdownMenuItem
+                            onClick={() => { setTagDeliverableDueDate(""); setShowTagDeliverableModal(true) }}
+                            className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
+                          >
+                            <Package className="h-4 w-4 text-purple-600" />
+                            <span>Tag as Deliverable</span>
+                          </DropdownMenuItem>
+                        </TooltipTrigger>
+                        <TooltipContent side="right" className="text-xs max-w-48">Deliverables will be shared externally</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   )
                 )}
                 {isApprovedDeliverable && !onCopyDocument ? (
@@ -813,7 +823,7 @@ export function DocumentActionMenu({
                           {isApprovedDeliverable ? (
                             <div className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground opacity-50 cursor-not-allowed select-none">
                               <Trash2 className="h-4 w-4" />
-                              <span>Move to Bin</span>
+                              <span>{document.documentType === 'LINK' ? 'Delete' : 'Move to Bin'}</span>
                             </div>
                           ) : (
                             <DropdownMenuItem
@@ -821,14 +831,16 @@ export function DocumentActionMenu({
                               className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
                             >
                               <Trash2 className="h-4 w-4" />
-                              <span>Move to Bin</span>
+                              <span>{document.documentType === 'LINK' ? 'Delete' : 'Move to Bin'}</span>
                             </DropdownMenuItem>
                           )}
                         </TooltipTrigger>
                         <TooltipContent side="left" className="max-w-[200px]">
                           {isApprovedDeliverable
                             ? <p>Approved deliverables cannot be deleted</p>
-                            : <p>Items in Bin are permanently deleted after 30 days (Google Drive).</p>
+                            : document.documentType === 'LINK'
+                              ? <p>This link will be permanently deleted.</p>
+                              : <p>Items in Bin are permanently deleted after 30 days (Google Drive).</p>
                           }
                         </TooltipContent>
                       </Tooltip>
@@ -861,6 +873,7 @@ export function DocumentActionMenu({
               </>
             ) : (
               <>
+                {document.documentType !== 'LINK' && (
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs">
                     <Info className="h-4 w-4 text-gray-600" />
@@ -958,6 +971,7 @@ export function DocumentActionMenu({
                       <Clock className="h-4 w-4 text-gray-600" />
                       <span>Activity Stream</span>
                     </DropdownMenuItem>
+                    {document.documentType !== 'LINK' && (
                     <DropdownMenuItem
                       onClick={() => {
                         onOpenVersionPane?.(document.id)
@@ -974,8 +988,10 @@ export function DocumentActionMenu({
                       <Clock className="h-4 w-4 text-gray-600" />
                       <span>Version History</span>
                     </DropdownMenuItem>
+                    )}
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
+                )}
 
                 <DropdownMenuSeparator />
 
@@ -996,6 +1012,10 @@ export function DocumentActionMenu({
                 ) : (
                   <DropdownMenuItem
                     onClick={() => {
+                      if (document.documentType === 'LINK' && document.externalUrl) {
+                        window.open(document.externalUrl, '_blank', 'noopener,noreferrer')
+                        return
+                      }
                       if (onOpenDocument) {
                         onOpenDocument(document)
                       } else if (rightPane.hasRightPane) {
@@ -1024,7 +1044,8 @@ export function DocumentActionMenu({
                   <span>Copy link</span>
                 </DropdownMenuItem>
 
-                {!(document.isGuest && !document.allowDownload) &&
+                {document.documentType !== 'LINK' &&
+                 !(document.isGuest && !document.allowDownload) &&
                  !(document.isExternalCollaborator && !document.ecAllowDownload) && (
                   <DropdownMenuItem
                     onClick={() => { handleDownload(document); onDownloadDocument?.(document) }}
@@ -1102,7 +1123,7 @@ export function DocumentActionMenu({
                           </DropdownMenuItem>
                         )
                       )}
-                      {onDuplicateDocument && (
+                      {onDuplicateDocument && document.documentType !== 'LINK' && (
                         isApprovedDeliverable ? (
                           <div className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground opacity-40 cursor-not-allowed select-none">
                             <Copy className="h-4 w-4" /><span>Duplicate</span>
@@ -1117,7 +1138,7 @@ export function DocumentActionMenu({
                           </DropdownMenuItem>
                         )
                       )}
-                      {onCopyDocument && (
+                      {onCopyDocument && document.documentType !== 'LINK' && (
                         <DropdownMenuItem
                           onSelect={() => onCopyDocument(document)}
                           className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
@@ -1126,7 +1147,7 @@ export function DocumentActionMenu({
                           <span>Copy</span>
                         </DropdownMenuItem>
                       )}
-                      {onMoveDocument && (
+                      {onMoveDocument && document.documentType !== 'LINK' && (
                         isApprovedDeliverable ? (
                           <div className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground opacity-40 cursor-not-allowed select-none">
                             <Move className="h-4 w-4" /><span>Move</span>
@@ -1141,8 +1162,8 @@ export function DocumentActionMenu({
                           </DropdownMenuItem>
                         )
                       )}
-                      {onCrossEngagementCopy && <DropdownMenuSeparator />}
-                      {onCrossEngagementCopy && (
+                      {onCrossEngagementCopy && document.documentType !== 'LINK' && <DropdownMenuSeparator />}
+                      {onCrossEngagementCopy && document.documentType !== 'LINK' && (
                         <DropdownMenuItem
                           onSelect={() => onCrossEngagementCopy(document)}
                           className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
@@ -1302,7 +1323,7 @@ export function DocumentActionMenu({
                     <span>Set Due Date</span>
                   </DropdownMenuItem>
                 )}
-                {!mime.includes('folder') && isExternalViewer && projectId && (() => {
+                {!mime.includes('folder') && document.documentType !== 'LINK' && isExternalViewer && projectId && (() => {
                   const doc = document as { lock?: { type?: string } | null }
                   const isAlreadyLocked = doc.lock?.type === 'finalize'
                   if (isAlreadyLocked) return (
@@ -1332,7 +1353,7 @@ export function DocumentActionMenu({
                           {isApprovedDeliverable ? (
                             <div className="flex items-center space-x-3 px-3 py-2 text-xs text-muted-foreground opacity-50 cursor-not-allowed select-none">
                               <Trash2 className="h-4 w-4" />
-                              <span>Move to Bin</span>
+                              <span>{document.documentType === 'LINK' ? 'Delete' : 'Move to Bin'}</span>
                             </div>
                           ) : (
                             <DropdownMenuItem
@@ -1340,21 +1361,23 @@ export function DocumentActionMenu({
                               className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
                             >
                               <Trash2 className="h-4 w-4" />
-                              <span>Move to Bin</span>
+                              <span>{document.documentType === 'LINK' ? 'Delete' : 'Move to Bin'}</span>
                             </DropdownMenuItem>
                           )}
                         </TooltipTrigger>
                         <TooltipContent side="left" className="max-w-[200px]">
                           {isApprovedDeliverable
                             ? <p>Approved deliverables cannot be deleted</p>
-                            : <p>Items in Bin are permanently deleted after 30 days (Google Drive).</p>
+                            : document.documentType === 'LINK'
+                              ? <p>This link will be permanently deleted.</p>
+                              : <p>Items in Bin are permanently deleted after 30 days (Google Drive).</p>
                           }
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
                   </>
                 )}
-                {!isExternalUser && (
+                {!isExternalUser && document.documentType !== 'LINK' && (
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuSub>
@@ -1393,6 +1416,77 @@ export function DocumentActionMenu({
       </DropdownMenu>
 
 
+
+      {/* Tag as Deliverable modal — optional due date before confirming */}
+      {showTagDeliverableModal && mounted && typeof window !== 'undefined' && window.document?.body && createPortal(
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[999999]"
+          onClick={() => setShowTagDeliverableModal(false)}
+        >
+          <div
+            className="bg-white rounded shadow-xl max-w-md w-full mx-4 modal-content z-[1000000]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 bg-purple-100 rounded flex items-center justify-center">
+                    <Package className="h-5 w-5 text-purple-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-900">
+                      Tag as Deliverable
+                    </h3>
+                    <p className="text-xs text-gray-500">
+                      {document.name}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowTagDeliverableModal(false)}
+                  className="text-gray-400 hover:text-gray-600 p-1 rounded hover:bg-gray-100 transition-colors"
+                >
+                  <XSquare className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-4">
+              <div className="mb-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Due date (optional)
+                </label>
+                <DateTimePicker
+                  value={tagDeliverableDueDate}
+                  onChange={setTagDeliverableDueDate}
+                  placeholder="Choose date and time"
+                  className="w-full"
+                />
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-gray-200 flex justify-end space-x-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowTagDeliverableModal(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => {
+                  setShowTagDeliverableModal(false)
+                  onMarkAsDeliverable?.(document, tagDeliverableDueDate || undefined)
+                }}
+              >
+                Create
+              </Button>
+            </div>
+          </div>
+        </div>,
+        window.document.body
+      )}
 
       {/* Untag as Deliverable confirmation */}
       <ConfirmDialog

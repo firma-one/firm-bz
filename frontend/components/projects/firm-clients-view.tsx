@@ -26,9 +26,11 @@ interface FirmClientsViewProps {
     firmSandboxOnly?: boolean
     memberCount?: number
     auditCount?: number
+    /** Server-gated via Firm.settings.betaFeatures.microsoftStorageConnector, fails closed if omitted. */
+    microsoftConnectorEnabled?: boolean
 }
 
-export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = false, memberCount, auditCount }: FirmClientsViewProps) {
+export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = false, memberCount, auditCount, microsoftConnectorEnabled = false }: FirmClientsViewProps) {
     const router = useRouter()
     const pathname = usePathname()
     const searchParams = useSearchParams()
@@ -419,6 +421,7 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                                     orgId={orgId}
                                     initialName={orgName ?? ''}
                                     firmSandboxOnly={firmSandboxOnly}
+                                    microsoftConnectorEnabled={microsoftConnectorEnabled}
                                     initialSection={(searchParams.get('section') as 'main' | 'branding' | 'appsettings' | 'storage' | 'danger') || undefined}
                                     onSaved={() => {
                                         const params = new URLSearchParams(searchParams.toString())

@@ -37,6 +37,12 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: 'Connector not found or access denied' }, { status: 403 })
     }
 
+    // Activity/badge computation (driveactivity.query) is Drive-only — explicitly deferred
+    // since Phase 0's original scoping: Microsoft Graph has no 1:1 equivalent API.
+    if (connector.type !== 'GOOGLE_DRIVE') {
+        return NextResponse.json({ activities: [], unsupported: true })
+    }
+
     try {
         const activities = await googleDriveConnector.getActivity(connectorId, fileId)
         return NextResponse.json({ activities })

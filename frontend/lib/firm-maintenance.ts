@@ -330,7 +330,7 @@ export async function getAllFirmMemberUserIds(firmId: string): Promise<string[]>
   return Array.from(new Set(allIds))
 }
 
-export async function sendMaintenanceWarningToFirmMembers(firmId: string, estimatedMinutes: number): Promise<void> {
+export async function sendMaintenanceWarningToFirmMembers(firmId: string, estimatedMinutes: number, graceMinutes: number = 2): Promise<void> {
   const userIds = await getAllFirmMemberUserIds(firmId)
   for (const uid of userIds) {
     try {
@@ -342,11 +342,11 @@ export async function sendMaintenanceWarningToFirmMembers(firmId: string, estima
       }
       await sendEmail(
         email,
-        `[${BRAND_NAME}] Your workspace will enter maintenance in ~2 minutes`,
+        `[${BRAND_NAME}] Your workspace will enter maintenance in ~${graceMinutes} minute${graceMinutes === 1 ? '' : 's'}`,
         `<p>Hi,</p>
 <p>Your ${BRAND_NAME} workspace is about to enter a brief maintenance window while files are migrated to a new folder.</p>
 <ul>
-  <li><strong>Starts in:</strong> ~2 minutes</li>
+  <li><strong>Starts in:</strong> ~${graceMinutes} minute${graceMinutes === 1 ? '' : 's'}</li>
   <li><strong>Estimated duration:</strong> ~${estimatedMinutes} minute${estimatedMinutes === 1 ? '' : 's'}</li>
 </ul>
 <p>Please save any in-progress work. You will be signed out automatically when maintenance begins and can sign back in once it's complete.</p>

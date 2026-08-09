@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom'
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { CoffeeIcon, type CoffeeIconHandle } from "@/components/ui/coffee-icon"
-import { SquarePlus, Upload, FolderUp, X, Folder, File as FileIcon, ArrowUp, ArrowDown, ChevronRight, Search, List as ListIcon, LayoutGrid, Filter, ChevronDown, User, FileText, FileSpreadsheet, Presentation, ListChecks, PenTool, Map as MapIcon, LayoutTemplate, FileCode, AlertCircle, ShieldCheck, Maximize2, Minimize2, CheckCircle2, XCircle, Trash2, Layout, Code, Laptop, RefreshCw, Info, Share2, Layers, Building2, Users, Briefcase, Lock, FolderLock, Inbox, Sparkles, Link2, MessagesSquare, CircleChevronLeft, Download, MoreVertical, Clock } from 'lucide-react'
+import { SquarePlus, Upload, FolderUp, X, Folder, File as FileIcon, ArrowUp, ArrowDown, ChevronRight, Search, List as ListIcon, LayoutGrid, Filter, ChevronDown, User, FileText, FileSpreadsheet, Presentation, ListChecks, PenTool, Map as MapIcon, LayoutTemplate, FileCode, AlertCircle, ShieldCheck, Maximize2, Minimize2, CheckCircle2, XCircle, Trash2, Layout, Code, Laptop, RefreshCw, Info, Share2, Layers, Building2, Users, Briefcase, Lock, FolderLock, Inbox, Sparkles, Link2, ExternalLink, MessagesSquare, CircleChevronLeft, Download, MoreVertical, Clock } from 'lucide-react'
 import Fuse from 'fuse.js'
 import { config } from "@/lib/config"
 import { DocumentIcon } from '@/components/ui/document-icon'
@@ -54,7 +54,6 @@ import {
     DropdownMenuSubContent
 } from "@/components/ui/dropdown-menu"
 import useDrivePicker from 'react-google-drive-picker'
-import { GoogleDriveImportDialog } from './google-drive-import-dialog'
 import { SANDBOX_OPERATION_MESSAGE } from '@/components/ui/sandbox-info-banner'
 import { useViewAs } from '@/lib/view-as-context'
 import { useRightPane } from '@/lib/right-pane-context'
@@ -94,6 +93,8 @@ interface EngagementFileListProps {
     clientSlug?: string
     /** Client-level connector ID — when set but connectorRootFolderId is null, offer "Set up Drive folder". */
     clientConnectorId?: string | null
+    /** Client-level connector type (GOOGLE_DRIVE/ONEDRIVE) — switches the "New file" menu between Google Workspace and Office file types. */
+    clientConnectorType?: string | null
     /** Workspace root location — when SHARED, folder provisioning requires the Migrate wizard. */
     workspaceRootLocation?: string | null
     /** Connector account email — passed to DocumentActionMenu for Google Drive authuser param. */
@@ -109,17 +110,64 @@ type SortConfig = {
     foldersFirst: boolean
 }
 
-type CreateItemType = 'folder' | 'doc' | 'sheet' | 'slide' | 'form' | 'drawing' | 'map' | 'site' | 'script'
+type CreateItemType = 'folder' | 'doc' | 'sheet' | 'slide' | 'form' | 'drawing' | 'map' | 'site' | 'script' | 'word' | 'excel' | 'powerpoint' | 'link'
+
+const CREATE_ITEM_DIALOG_TITLES: Record<CreateItemType, string> = {
+    folder: 'New Folder',
+    doc: 'New Google Doc',
+    sheet: 'New Google Sheet',
+    slide: 'New Google Slide',
+    form: 'New Google Form',
+    drawing: 'New Google Drawing',
+    map: 'New Google Map',
+    site: 'New Google Site',
+    script: 'New Google Script',
+    word: 'New Word Document',
+    excel: 'New Excel Workbook',
+    powerpoint: 'New PowerPoint Presentation',
+    link: 'New Link',
+}
+function createItemDialogTitle(type: CreateItemType): string {
+    return CREATE_ITEM_DIALOG_TITLES[type] ?? 'New File'
+}
+
+const CREATE_ITEM_EXTENSIONS: Record<string, string> = {
+    doc: '.gdoc',
+    sheet: '.gsheet',
+    slide: '.gslide',
+    form: '.gform',
+    drawing: '.gdraw',
+    script: '.gs',
+    word: '.docx',
+    excel: '.xlsx',
+    powerpoint: '.pptx',
+}
 
 type ConflictItem = {
     file: File
     existingId: string
 }
 
+/** Requires the user to type an explicit http(s):// scheme — no auto-prepending. */
+function isValidWebUrl(raw: string): boolean {
+    const trimmed = raw.trim()
+    if (!trimmed) return false
+    if (!/^https?:\/\//i.test(trimmed)) return false
+    try {
+        const parsed = new URL(trimmed)
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false
+        // Require a real host with at least one dot (rejects "https://a", "https://localhost" typos-as-hostnames)
+        return parsed.hostname.includes('.')
+    } catch {
+        return false
+    }
+}
+
 
 const VIEW_AS_SHARED_ONLY_PERSONAS = ['eng_ext_collaborator', 'eng_viewer']
 
-export function EngagementFileList({ projectId, connectorRootFolderId, clientConnectorId, workspaceRootLocation, rootFolderName = 'Engagement Files', orgName, clientName, projectName, canEdit = false, canManage = false, isFirmAdmin = false, restrictToSharedOnly = false, firmId, orgSlug, firmSandboxOnly = false, navSlot, clientSlug, connectorAccountEmail, onFileCountChange }: EngagementFileListProps) {
+export function EngagementFileList({ projectId, connectorRootFolderId, clientConnectorId, clientConnectorType, workspaceRootLocation, rootFolderName = 'Engagement Files', orgName, clientName, projectName, canEdit = false, canManage = false, isFirmAdmin = false, restrictToSharedOnly = false, firmId, orgSlug, firmSandboxOnly = false, navSlot, clientSlug, connectorAccountEmail, onFileCountChange }: EngagementFileListProps) {
+    const isOneDriveClient = clientConnectorType === 'ONEDRIVE'
     const { session } = useAuth()
     const sessionRef = useRef(session)
     const onFileCountChangeRef = useRef(onFileCountChange)
@@ -417,7 +465,6 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
     const [files, setFiles] = useState<DriveFile[]>([])
     const [loading, setLoading] = useState(true) // Initial load
     const [error, setError] = useState<string | null>(null)
-    const [pickerToken, setPickerToken] = useState<string | null>(null)
 
     // (deeplink handler effect is declared below, after navigateToItem is defined)
 
@@ -451,14 +498,13 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
     const [isCreateItemOpen, setIsCreateItemOpen] = useState(false)
     const [createItemType, setCreateItemType] = useState<CreateItemType>('folder')
     const [newItemName, setNewItemName] = useState('')
+    const [newItemUrl, setNewItemUrl] = useState('')
     const isCreatingRef = useRef(false)
     const fileInputRef = useRef<HTMLInputElement>(null)
     const folderInputRef = useRef<HTMLInputElement>(null)
 
     // Picker State
     const [openPicker] = useDrivePicker();
-    const [isImportDialogOpen, setIsImportDialogOpen] = useState(false)
-    const [importedFiles, setImportedFiles] = useState<any[]>([])
     const [importLoading, setImportLoading] = useState(false)
 
     // UX State
@@ -603,20 +649,38 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
             } else {
                 // 3. Fallback: use Drive parent relationship directly
                 const parentId = file.parents && file.parents.length > 0 ? file.parents[0] : null
-                if (parentId) {
-                    const type =
-                        parentId === generalFolderId
-                            ? 'general'
-                            : parentId === confidentialFolderId
-                                ? 'confidential'
-                                : parentId === stagingFolderId
-                                    ? 'staging'
-                                    : null
+                const type =
+                    parentId === generalFolderId
+                        ? 'general'
+                        : parentId === confidentialFolderId
+                            ? 'confidential'
+                            : parentId === stagingFolderId
+                                ? 'staging'
+                                : null
 
-                    if (type) {
-                        setCurrentFolderType(type as any)
-                        setBreadcrumbs([{ id: parentId, name: type, clickable: true, isEngagementRoot: true }])
-                        setCurrentFolderId(parentId)
+                if (parentId && type) {
+                    setCurrentFolderType(type as any)
+                    setBreadcrumbs([{ id: parentId, name: type, clickable: true, isEngagementRoot: true }])
+                    setCurrentFolderId(parentId)
+                } else {
+                    // 4. Last resort: neither resolve-path nor the parent relationship gave us a
+                    // location (e.g. a stale/broken deeplink). Land on the engagement's default root
+                    // rather than leaving breadcrumbs empty — the caller may have skipped the normal
+                    // default-breadcrumb init because a deeplink hash was present (see mount effect).
+                    const fallbackRootId = generalFolderId ?? confidentialFolderId ?? stagingFolderId
+                    const fallbackType: 'general' | 'confidential' | 'staging' | null =
+                        fallbackRootId === generalFolderId ? 'general'
+                            : fallbackRootId === confidentialFolderId ? 'confidential'
+                                : fallbackRootId === stagingFolderId ? 'staging'
+                                    : null
+                    if (fallbackRootId && fallbackType) {
+                        setCurrentFolderType(fallbackType)
+                        setBreadcrumbs([{ id: fallbackRootId, name: fallbackType, clickable: true, isEngagementRoot: true }])
+                        setCurrentFolderId(fallbackRootId)
+                    } else {
+                        logger.warn('navigateToItem: no fallback root available — breadcrumbs left empty', {
+                            fileId: file.id, generalFolderId, confidentialFolderId, stagingFolderId,
+                        })
                     }
                 }
             }
@@ -991,6 +1055,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
         renameModalOpen, setRenameModalOpen,
         renameTarget, setRenameTarget,
         renameNewName, setRenameNewName,
+        renameExtension,
         renameSubmitting, setRenameSubmitting,
         trashConfirmTarget, setTrashConfirmTarget,
         trashConfirming,
@@ -1050,7 +1115,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
         orgSandbox,
     })
 
-    const handleMarkAsDeliverable = useCallback(async (doc: any) => {
+    const handleMarkAsDeliverable = useCallback(async (doc: any, dueDate?: string) => {
         const token = sessionRef.current?.access_token
         if (!token || !projectId) return
         const documentId = doc.projectDocumentId || doc.id
@@ -1058,7 +1123,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
             const res = await fetch(`/api/projects/${projectId}/documents/${encodeURIComponent(documentId)}/sharing`, {
                 method: 'PUT',
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ markAsDeliverable: true }),
+                body: JSON.stringify({ markAsDeliverable: true, dueDate: dueDate ?? null }),
             })
             if (!res.ok) {
                 const err = await res.json().catch(() => ({}))
@@ -1276,6 +1341,7 @@ const handleRefresh = async () => {
         }
         setCreateItemType(type)
         setNewItemName('')
+        setNewItemUrl('')
         setIsCreateItemOpen(true)
     }
 
@@ -1299,16 +1365,11 @@ const handleRefresh = async () => {
                 case 'map': mimeType = 'application/vnd.google-apps.map'; break;
                 case 'site': mimeType = 'application/vnd.google-apps.site'; break;
                 case 'script': mimeType = 'application/vnd.google-apps.script'; break;
+                case 'word': mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'; break;
+                case 'excel': mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'; break;
+                case 'powerpoint': mimeType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation'; break;
             }
 
-            const CREATE_ITEM_EXTENSIONS: Record<string, string> = {
-                doc: '.gdoc',
-                sheet: '.gsheet',
-                slide: '.gslide',
-                form: '.gform',
-                drawing: '.gdraw',
-                script: '.gs'
-            }
             const ext = CREATE_ITEM_EXTENSIONS[createItemType]
             const trimmed = newItemName.trim()
             const finalName = ext
@@ -1352,6 +1413,64 @@ const handleRefresh = async () => {
         }
     }
 
+    const handleCreateLink = async () => {
+        if (!newItemName.trim() || !isValidWebUrl(newItemUrl) || !session?.access_token) return
+        if (isCreatingRef.current) return
+        if (isSandboxFirm) {
+            showSandboxPickerToast()
+            return
+        }
+        isCreatingRef.current = true
+        setLoading(true)
+        try {
+            const res = await fetch(`/api/projects/${projectId}/documents/create-link`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${session.access_token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    folderId: currentFolderId || 'root',
+                    name: newItemName.trim(),
+                    url: newItemUrl.trim(),
+                })
+            })
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({}))
+                const msg = body?.error || 'Create link failed'
+                addToast({ type: 'error', title: 'Could not create link', message: msg })
+                setIsCreateItemOpen(false)
+                setNewItemName('')
+                setNewItemUrl('')
+                setLoading(false)
+                isCreatingRef.current = false
+                return
+            }
+
+            setIsCreateItemOpen(false)
+            setNewItemName('')
+            setNewItemUrl('')
+            isCreatingRef.current = false
+            if (currentFolderId) fetchFiles(currentFolderId)
+        } catch (err: any) {
+            logger.error(err)
+            isCreatingRef.current = false
+            addToast({ type: 'error', title: 'Could not create link', message: err.message })
+            setLoading(false)
+        }
+    }
+
+    // NOTE: Google Picker renders whichever Google account is the browser's active/default
+    // session, regardless of which OAuth token is passed to it (setOAuthToken only controls API
+    // access, not Picker's UI chrome) — this is a known, unresolved Google Picker platform gap
+    // (see google-api-javascript-client#323, issuetracker.google.com/336965835) with no supported
+    // fix. An interactive per-account re-auth (google.accounts.oauth2.initTokenClient with
+    // login_hint) was tried and reverted: it requests drive.file — a sensitive scope — through a
+    // fresh client-side consent flow that Google's verification doesn't recognize as already
+    // approved (verification is tied to the specific request flow, not just the scope+app), so it
+    // hit Google's unverified-app warning + 100-user cap for every user, which doesn't scale to
+    // production. The token actually used for Drive API calls remains correctly scoped to the
+    // connector's account below — only Picker's own displayed file list is affected.
     const handleGoogleDrivePicker = async () => {
         if (!sessionRef.current?.access_token) return
 
@@ -1365,13 +1484,20 @@ const handleRefresh = async () => {
 
             const data = await res.json()
             const googleAccessToken = data.accessToken
-            setPickerToken(googleAccessToken) // Store for import action
 
             if (!googleAccessToken) throw new Error('No Google Access Token returned')
 
-            // Two tabs: "My Drive" (root + LIST) and "Shared Drives" (LIST); user can traverse and multi-select in both
+            // Scoped to start inside the engagement folder currently being browsed (falling back
+            // to the connector root if that isn't known yet) so the user doesn't have to
+            // re-traverse from Drive's root every time. Only the tab matching this connector's
+            // actual workspace location is shown — a PERSONAL (My Drive) connector has no
+            // corresponding Shared Drive location to browse, and vice versa, so the other tab
+            // would just be a dead end.
             const win = typeof window !== 'undefined' ? window : null
             const pickerApi = win && (win as unknown as { google?: { picker?: unknown } }).google?.picker
+            const engagementFolderId = currentFolderId || connectorRootFolderId || null
+            const showMyDriveTab = workspaceRootLocation !== 'SHARED'
+            const showSharedDrivesTab = workspaceRootLocation !== 'PERSONAL'
             const customViews = pickerApi
                 ? (() => {
                     const g = (win as unknown as {
@@ -1390,19 +1516,30 @@ const handleRefresh = async () => {
                         setLabel?: (l: string) => ViewLike
                         setEnableDrives?: (v: boolean) => ViewLike
                     }
-                    const myDriveView = new g.DocsView(g.ViewId.DOCS) as ViewLike
-                    myDriveView.setParent!('root')
-                    myDriveView.setIncludeFolders(true)
-                    myDriveView.setMode(g.DocsViewMode.LIST)
-                    if (myDriveView.setLabel) myDriveView.setLabel('My Drive')
+                    const views: ViewLike[] = []
 
-                    const sharedDrivesView = new g.DocsView(g.ViewId.DOCS) as ViewLike
-                    sharedDrivesView.setIncludeFolders(true)
-                    sharedDrivesView.setMode(g.DocsViewMode.LIST)
-                    if (sharedDrivesView.setEnableDrives) sharedDrivesView.setEnableDrives(true)
-                    if (sharedDrivesView.setLabel) sharedDrivesView.setLabel('Shared Drives')
+                    if (showMyDriveTab) {
+                        const myDriveView = new g.DocsView(g.ViewId.DOCS) as ViewLike
+                        myDriveView.setParent!(engagementFolderId || 'root')
+                        myDriveView.setIncludeFolders(true)
+                        myDriveView.setMode(g.DocsViewMode.LIST)
+                        if (myDriveView.setLabel) myDriveView.setLabel('My Drive')
+                        views.push(myDriveView)
+                    }
 
-                    return [myDriveView, sharedDrivesView]
+                    if (showSharedDrivesTab) {
+                        const sharedDrivesView = new g.DocsView(g.ViewId.DOCS) as ViewLike
+                        sharedDrivesView.setIncludeFolders(true)
+                        sharedDrivesView.setMode(g.DocsViewMode.LIST)
+                        if (sharedDrivesView.setEnableDrives) sharedDrivesView.setEnableDrives(true)
+                        if (sharedDrivesView.setLabel) sharedDrivesView.setLabel('Shared Drives')
+                        // A folder's Drive ID is valid as a parent regardless of which shared drive
+                        // it lives in, so this also jumps straight to the engagement folder when known.
+                        if (engagementFolderId && sharedDrivesView.setParent) sharedDrivesView.setParent(engagementFolderId)
+                        views.push(sharedDrivesView)
+                    }
+
+                    return views
                 })()
                 : undefined
 
@@ -1422,8 +1559,7 @@ const handleRefresh = async () => {
                 setParentFolder: customViews ? undefined : 'root',
                 callbackFunction: (data: { action: string; docs?: unknown[] }) => {
                     if (data.action === 'picked') {
-                        setImportedFiles(data.docs ?? [])
-                        setIsImportDialogOpen(true)
+                        runImport((data.docs ?? []) as { id: string; name: string }[], googleAccessToken)
                     }
                 },
             })
@@ -1434,22 +1570,26 @@ const handleRefresh = async () => {
         }
     }
 
-    const handleImportConfirm = async (mode: 'copy' | 'shortcut') => {
+    // Runs immediately once Picker confirms a selection — no separate confirmation dialog, since
+    // there's no longer a copy-vs-shortcut choice to make. A toast stands in for the old modal.
+    const runImport = async (files: { id: string; name: string }[], pickerAccessToken: string) => {
+        if (files.length === 0) return
+        addToast({ type: 'info', title: 'Importing files', message: `Importing ${files.length} file${files.length !== 1 ? 's' : ''} from Google Drive…` })
         setImportLoading(true)
         try {
-            logger.debug(`[Frontend] Import Confirm. FolderId: ${currentFolderId}`)
+            logger.debug(`[Frontend] Import starting. FolderId: ${currentFolderId}`)
 
             // Pre-flight cap check before any Drive operations
-            const gateRes = await fetch(`/api/billing/document-gate?projectId=${encodeURIComponent(projectId)}&count=${importedFiles.length}`)
+            const gateRes = await fetch(`/api/billing/document-gate?projectId=${encodeURIComponent(projectId)}&count=${files.length}`)
             if (gateRes.ok) {
                 const gate = await gateRes.json() as { allowed: boolean; cap: number | null; current: number | null; available: number }
                 if (!gate.allowed) {
                     const { cap, current, available } = gate
-                    const count = importedFiles.length
+                    const count = files.length
                     const msg = count === 1
                         ? `Your plan limit of ${cap} files has been reached (${current} used). Delete any unused file or upgrade to remove the limit.`
                         : `This import contains ${count} files, but your plan has a limit of ${cap}, with only ${available} slot${available !== 1 ? 's' : ''} left. Import fewer files, within the available limit or upgrade to remove the limit.`
-                    setError(msg)
+                    addToast({ type: 'error', title: 'Import limit reached', message: msg })
                     setImportLoading(false)
                     return
                 }
@@ -1470,10 +1610,9 @@ const handleRefresh = async () => {
                 },
                 body: JSON.stringify({
                     connectionId,
-                    fileIds: importedFiles.map(f => f.id),
-                    mode,
+                    fileIds: files.map(f => f.id),
                     parentId: currentFolderId || 'root',
-                    userToken: pickerToken // Pass the user's token
+                    userToken: pickerAccessToken // Pass the user's token
                 })
             })
 
@@ -1482,12 +1621,16 @@ const handleRefresh = async () => {
                 throw new Error(d.error || 'Import failed')
             }
 
-            // Success
-            setIsImportDialogOpen(false)
+            const result = await res.json() as { count: number; skipped?: number }
+            const skipped = result.skipped ?? 0
+            const message = skipped > 0
+                ? `Imported ${result.count} file${result.count !== 1 ? 's' : ''} — skipped ${skipped} already in firma.`
+                : `Imported ${result.count} file${result.count !== 1 ? 's' : ''} from Google Drive.`
+            addToast({ type: 'success', title: 'Import complete', message })
             if (currentFolderId) fetchFiles(currentFolderId, true)
         } catch (err: any) {
             logger.error(err)
-            setError(err.message)
+            addToast({ type: 'error', title: 'Import failed', message: err.message })
         } finally {
             setImportLoading(false)
         }
@@ -1512,7 +1655,11 @@ const handleRefresh = async () => {
             setCurrentFolderIsDeliverable(
                 !!file.isDeliverable || currentFolderIsDeliverable
             )
-            window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#doc-file:${file.projectDocumentId ?? file.id}`)
+            const newHash = `doc-file:${file.projectDocumentId ?? file.id}`
+            // Mark as already-handled so the deeplink-resolution effect doesn't treat this
+            // in-app navigation as an incoming deeplink and overwrite the breadcrumb we just pushed.
+            lastHandledDeeplinkHashRef.current = newHash
+            window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#${newHash}`)
         }
     }
 
@@ -1825,12 +1972,12 @@ const handleRefresh = async () => {
                                     >
                                         <span className="flex items-center gap-2">
                                             <Laptop className="h-3.5 w-3.5 text-slate-500" />
-                                            From your computer
+                                            Upload from your computer
                                         </span>
-                                        <ChevronDown className={cn("h-3.5 w-3.5 text-slate-400 transition-transform", fromComputerExpanded && "rotate-180")} />
+                                        <ChevronDown className={cn("h-3.5 w-3.5 text-slate-400 transition-transform duration-200", fromComputerExpanded && "rotate-180")} />
                                     </div>
-                                    {fromComputerExpanded && (
-                                        <>
+                                    <div className={cn("grid transition-[grid-template-rows] duration-200 ease-out", fromComputerExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]")}>
+                                        <div className="overflow-hidden">
                                             <DropdownMenuItem
                                                 onClick={() => fileInputRef.current?.click()}
                                                 className="text-xs py-1.5 pl-8"
@@ -1845,14 +1992,18 @@ const handleRefresh = async () => {
                                                 <FolderUp className="mr-2 h-3.5 w-3.5 text-slate-500" />
                                                 Upload folder
                                             </DropdownMenuItem>
-                                        </>
-                                    )}
+                                        </div>
+                                    </div>
 
-                                    {isFirmAdmin ? (
+                                    {isFirmAdmin && !isOneDriveClient ? (
                                         <>
                                         <DropdownMenuSeparator />
 
-                                        {/* Import from Google Drive (expandable) — firm admins only */}
+                                        {/* Import from Google Drive (expandable) — firm admins only.
+                                            OneDrive has no equivalent import flow wired up yet (would need the
+                                            Microsoft OneDrive File Picker SDK + a dedicated import route/dialog,
+                                            mirroring google-drive-import-dialog.tsx) — hidden for OneDrive clients
+                                            rather than shown broken. See plan doc TODO. */}
                                         <div
                                             role="button"
                                             tabIndex={0}
@@ -1899,11 +2050,28 @@ const handleRefresh = async () => {
                                     >
                                         <span className="flex items-center gap-2">
                                             <SquarePlus className="h-3.5 w-3.5 text-slate-500" />
-                                            New file
+                                            New Document
                                         </span>
-                                        <ChevronDown className={cn("h-3.5 w-3.5 text-slate-400 transition-transform", newFileExpanded && "rotate-180")} />
+                                        <ChevronDown className={cn("h-3.5 w-3.5 text-slate-400 transition-transform duration-200", newFileExpanded && "rotate-180")} />
                                     </div>
-                                    {newFileExpanded && (
+                                    <div className={cn("grid transition-[grid-template-rows] duration-200 ease-out", newFileExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]")}>
+                                        <div className="overflow-hidden">
+                                        {isOneDriveClient ? (
+                                            <>
+                                                <DropdownMenuItem onClick={() => openCreateDialog('word')} className="text-xs py-1.5 pl-8">
+                                                    <FileText className="mr-2 h-3.5 w-3.5 text-blue-600" />
+                                                    Word Document
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => openCreateDialog('excel')} className="text-xs py-1.5 pl-8">
+                                                    <FileSpreadsheet className="mr-2 h-3.5 w-3.5 text-green-600" />
+                                                    Excel Workbook
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => openCreateDialog('powerpoint')} className="text-xs py-1.5 pl-8">
+                                                    <Presentation className="mr-2 h-3.5 w-3.5 text-orange-600" />
+                                                    PowerPoint Presentation
+                                                </DropdownMenuItem>
+                                            </>
+                                        ) : (
                                         <>
                                             <DropdownMenuItem onClick={() => openCreateDialog('doc')} className="text-xs py-1.5 pl-8">
                                                 <FileText className="mr-2 h-3.5 w-3.5 text-blue-500" />
@@ -1943,7 +2111,13 @@ const handleRefresh = async () => {
                                                 </DropdownMenuSubContent>
                                             </DropdownMenuSub>
                                         </>
-                                    )}
+                                        )}
+                                        <DropdownMenuItem onClick={() => openCreateDialog('link')} className="text-xs py-1.5 pl-8">
+                                            <ExternalLink className="mr-2 h-3.5 w-3.5 text-purple-600" />
+                                            External Link
+                                        </DropdownMenuItem>
+                                        </div>
+                                    </div>
 
                                 {isSandboxFirm && (
                                     <div className="px-3 py-2 border-t border-[#e5e7eb] bg-[#f9f9fb]">
@@ -2855,22 +3029,27 @@ const handleRefresh = async () => {
                     </DialogContent>
                 </Dialog>
 
-                {/* Rename file/folder in Google Drive */}
+                {/* Rename file/folder */}
                 <Dialog open={renameModalOpen} onOpenChange={(open) => { setRenameModalOpen(open); if (!open) setRenameTarget(null) }}>
                     <DialogContent className="max-w-md gap-4 p-5 border-slate-200">
                         <DialogHeader>
                             <DialogTitle className="text-slate-900">Rename</DialogTitle>
                             <DialogDescription className="text-slate-600">
-                                Enter a new name for {renameTarget?.name ?? 'this item'} in Google Drive.
+                                Enter a new name for {renameTarget?.name ?? 'this item'}.
                             </DialogDescription>
                         </DialogHeader>
-                        <Input
-                            value={renameNewName}
-                            onChange={(e) => setRenameNewName(e.target.value)}
-                            placeholder="New name"
-                            className="border-slate-200"
-                            onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleConfirmRename())}
-                        />
+                        <div className="flex items-center gap-1">
+                            <Input
+                                value={renameNewName}
+                                onChange={(e) => setRenameNewName(e.target.value)}
+                                placeholder="New name"
+                                className="border-slate-200"
+                                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleConfirmRename())}
+                            />
+                            {renameExtension && (
+                                <span className="shrink-0 text-slate-500 text-sm">{renameExtension}</span>
+                            )}
+                        </div>
                         <div className="flex justify-end gap-3">
                             <Button variant="outline" className="border-slate-200 text-slate-700 hover:bg-slate-50" onClick={() => setRenameModalOpen(false)}>Cancel</Button>
                             <Button
@@ -2943,40 +3122,90 @@ const handleRefresh = async () => {
                 <Dialog open={isCreateItemOpen} onOpenChange={(open) => { if (!loading) setIsCreateItemOpen(open) }}>
                     <DialogContent className="sm:max-w-[440px] border-[#e5e7eb] p-0 gap-0 rounded">
                         <VisuallyHidden><DialogTitle>
-                            {createItemType === 'folder' ? 'New Folder' : createItemType === 'doc' ? 'New Google Doc' : createItemType === 'sheet' ? 'New Google Sheet' : createItemType === 'slide' ? 'New Google Slide' : createItemType === 'form' ? 'New Google Form' : createItemType === 'drawing' ? 'New Google Drawing' : createItemType === 'map' ? 'New Google Map' : createItemType === 'site' ? 'New Google Site' : 'New Google Script'}
+                            {createItemDialogTitle(createItemType)}
                         </DialogTitle></VisuallyHidden>
                         {/* Header */}
                         <div className="px-5 py-4 border-b border-[#e5e7eb] bg-white flex items-start gap-3">
                             <div className="mt-0.5 h-7 w-7 rounded bg-primary/10 flex items-center justify-center shrink-0">
-                                {createItemType === 'folder' ? <Folder className="h-3.5 w-3.5 text-primary" /> : createItemType === 'sheet' ? <FileSpreadsheet className="h-3.5 w-3.5 text-primary" /> : createItemType === 'slide' ? <Presentation className="h-3.5 w-3.5 text-primary" /> : createItemType === 'form' ? <ListChecks className="h-3.5 w-3.5 text-primary" /> : createItemType === 'drawing' ? <PenTool className="h-3.5 w-3.5 text-primary" /> : createItemType === 'map' ? <MapIcon className="h-3.5 w-3.5 text-primary" /> : createItemType === 'script' ? <FileCode className="h-3.5 w-3.5 text-primary" /> : <FileText className="h-3.5 w-3.5 text-primary" />}
+                                {createItemType === 'folder' ? <Folder className="h-3.5 w-3.5 text-primary" /> : createItemType === 'link' ? <ExternalLink className="h-3.5 w-3.5 text-purple-600" /> : createItemType === 'sheet' || createItemType === 'excel' ? <FileSpreadsheet className="h-3.5 w-3.5 text-primary" /> : createItemType === 'slide' || createItemType === 'powerpoint' ? <Presentation className="h-3.5 w-3.5 text-primary" /> : createItemType === 'form' ? <ListChecks className="h-3.5 w-3.5 text-primary" /> : createItemType === 'drawing' ? <PenTool className="h-3.5 w-3.5 text-primary" /> : createItemType === 'map' ? <MapIcon className="h-3.5 w-3.5 text-primary" /> : createItemType === 'script' ? <FileCode className="h-3.5 w-3.5 text-primary" /> : <FileText className="h-3.5 w-3.5 text-primary" />}
                             </div>
                             <div>
                                 <p className="text-sm font-semibold text-[#1b1b1d] leading-tight">
-                                    {createItemType === 'folder' ? 'New Folder' : createItemType === 'doc' ? 'New Google Doc' : createItemType === 'sheet' ? 'New Google Sheet' : createItemType === 'slide' ? 'New Google Slide' : createItemType === 'form' ? 'New Google Form' : createItemType === 'drawing' ? 'New Google Drawing' : createItemType === 'map' ? 'New Google Map' : createItemType === 'site' ? 'New Google Site' : 'New Google Script'}
+                                    {createItemDialogTitle(createItemType)}
                                 </p>
-                                <p className="text-xs text-[#45474c] mt-0.5">Enter a name to create this {createItemType === 'folder' ? 'folder' : 'file'} in the current location.</p>
+                                <p className="text-xs text-[#45474c] mt-0.5">
+                                    {createItemType === 'link'
+                                        ? 'Paste a link and give it a name. It will appear in this folder — clicking Open will launch it in a new tab.'
+                                        : `Enter a name to create this ${createItemType === 'folder' ? 'folder' : 'file'} in the current location.`}
+                                </p>
                             </div>
                         </div>
                         {/* Body */}
-                        <div className="px-5 py-4 bg-[#f9f9fb]">
-                            <label className="font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] block mb-1">
-                                {createItemType === 'folder' ? 'Folder Name' : 'Document Name'}
-                            </label>
-                            <Input
-                                autoFocus
-                                placeholder={createItemType === 'folder' ? 'e.g. Q4 Deliverables' : 'e.g. Meeting Notes'}
-                                value={newItemName}
-                                onChange={(e) => setNewItemName(e.target.value)}
-                                onKeyDown={(e) => { if (e.key === 'Enter') handleCreateItem() }}
-                                className="border-[#e5e7eb] text-[#1b1b1d] text-xs font-normal placeholder:text-[#9a9ba0] rounded focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
-                            />
+                        <div className="px-5 py-4 bg-[#f9f9fb] space-y-3">
+                            <div>
+                                <label className="font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] block mb-1">
+                                    {createItemType === 'folder' ? 'Folder Name' : createItemType === 'link' ? 'Link Name' : 'Document Name'}
+                                </label>
+                                <div className="flex items-center gap-1">
+                                    <Input
+                                        autoFocus
+                                        placeholder={createItemType === 'folder' ? 'e.g. Q4 Deliverables' : createItemType === 'link' ? 'e.g. Client Onboarding Notion' : 'e.g. Meeting Notes'}
+                                        value={newItemName}
+                                        onChange={(e) => setNewItemName(e.target.value)}
+                                        onKeyDown={(e) => { if (e.key === 'Enter' && createItemType !== 'link') handleCreateItem() }}
+                                        className="border-[#e5e7eb] text-[#1b1b1d] text-xs font-normal placeholder:text-[#9a9ba0] rounded focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                                    />
+                                    {CREATE_ITEM_EXTENSIONS[createItemType] && (
+                                        <span className="shrink-0 text-[#45474c] text-xs">{CREATE_ITEM_EXTENSIONS[createItemType]}</span>
+                                    )}
+                                </div>
+                            </div>
+                            {createItemType === 'link' && (
+                                <div>
+                                    <label className="font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] mb-1 flex items-center gap-1">
+                                        URL
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <button type="button" className="inline-flex text-slate-400 hover:text-slate-600" aria-label="URL format help">
+                                                    <Info className="h-3 w-3" />
+                                                </button>
+                                            </TooltipTrigger>
+                                            <TooltipContent variant="light">
+                                                Must include the scheme, e.g. https://example.com
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    </label>
+                                    <Input
+                                        type="url"
+                                        placeholder="https://..."
+                                        value={newItemUrl}
+                                        onChange={(e) => setNewItemUrl(e.target.value)}
+                                        onKeyDown={(e) => { if (e.key === 'Enter' && isValidWebUrl(newItemUrl)) handleCreateLink() }}
+                                        className={cn(
+                                            "text-[#1b1b1d] text-xs font-normal placeholder:text-[#9a9ba0] rounded focus:outline-none focus:ring-1 focus:border-primary",
+                                            newItemUrl.trim() && !isValidWebUrl(newItemUrl)
+                                                ? "border-red-300 focus:ring-red-300"
+                                                : "border-[#e5e7eb] focus:ring-primary"
+                                        )}
+                                    />
+                                    {newItemUrl.trim() && !isValidWebUrl(newItemUrl) && (
+                                        <p className="text-[11px] text-red-600 mt-1">Enter a valid web address, including https://, e.g. https://example.com</p>
+                                    )}
+                                </div>
+                            )}
                         </div>
                         {/* Footer */}
                         <div className="px-5 py-3 border-t border-[#e5e7eb] bg-white flex items-center justify-end gap-3">
                             <Button type="button" variant="outline" className="rounded w-24 text-[10px] font-headline font-bold tracking-widest uppercase" onClick={() => setIsCreateItemOpen(false)} disabled={loading}>Cancel</Button>
-                            <Button type="button" variant="greenCta" className="min-w-[7rem] text-[10px] font-headline font-bold tracking-widest uppercase" onClick={handleCreateItem} disabled={!newItemName.trim() || loading}>
-                                {loading ? <><LoadingSpinner size="sm" className="h-4 w-4 mr-1.5" />Creating…</> : 'Create'}
-                            </Button>
+                            {createItemType === 'link' ? (
+                                <Button type="button" variant="greenCta" className="min-w-[7rem] text-[10px] font-headline font-bold tracking-widest uppercase" onClick={handleCreateLink} disabled={!newItemName.trim() || !isValidWebUrl(newItemUrl) || loading}>
+                                    {loading ? <><LoadingSpinner size="sm" className="h-4 w-4 mr-1.5" />Creating…</> : 'Create'}
+                                </Button>
+                            ) : (
+                                <Button type="button" variant="greenCta" className="min-w-[7rem] text-[10px] font-headline font-bold tracking-widest uppercase" onClick={handleCreateItem} disabled={!newItemName.trim() || loading}>
+                                    {loading ? <><LoadingSpinner size="sm" className="h-4 w-4 mr-1.5" />Creating…</> : 'Create'}
+                                </Button>
+                            )}
                         </div>
                     </DialogContent>
                 </Dialog>
@@ -3154,13 +3383,6 @@ const handleRefresh = async () => {
                 />
             </div>
 
-            <GoogleDriveImportDialog
-                open={isImportDialogOpen}
-                onOpenChange={setIsImportDialogOpen}
-                selectedFiles={importedFiles}
-                onConfirm={handleImportConfirm}
-                loading={importLoading}
-            />
         </div>
     )
 }

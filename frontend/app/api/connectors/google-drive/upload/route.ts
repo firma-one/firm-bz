@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { ConnectorType } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { isExternalEngagementRole } from '@/lib/engagement-access'
 import { resolveEngagementConnector } from '@/lib/connectors/resolve-client-connector'
+import { getConnectorInstance, getPermissionAdapter } from '@/lib/connectors/registry'
+import { createOneDriveContentAdapter } from '@/lib/connectors/adapters/onedrive-content-adapter'
 
 export async function POST(request: NextRequest) {
     try {
@@ -58,12 +61,18 @@ export async function POST(request: NextRequest) {
 
             // EC/EV uploads: use generalFolderId only when no specific parentId was provided
             if (isExternalEngagementRole(member.role) && !clientParentId) {
-                const folderIds = await googleDriveConnector.getProjectFolderIds(connector.id, engagement.slug, {
-                    projectName: engagement.name,
-                    clientSlug: engagement.client.slug,
-                    clientName: engagement.client.name,
-                    projectFolderId: engagement.connectorRootFolderId
-                })
+                // getEngagementFolderIds is implemented per-provider (Google delegates to its own
+                // getProjectFolderIds; OneDrive reads back what pockett-structure.service wrote
+                // during folder provisioning) — see lib/connectors/registry.ts getPermissionAdapter.
+                const permissionAdapter = await getPermissionAdapter(connector.id)
+                const folderIds = permissionAdapter
+                    ? await permissionAdapter.getEngagementFolderIds(connector.id, engagement.slug, {
+                        projectName: engagement.name,
+                        clientSlug: engagement.client.slug,
+                        clientName: engagement.client.name,
+                        projectFolderId: engagement.connectorRootFolderId ?? undefined
+                    })
+                    : { generalFolderId: null, confidentialFolderId: null, stagingFolderId: null }
                 if (!folderIds.generalFolderId) {
                     return NextResponse.json({ error: 'General folder not configured for this engagement' }, { status: 400 })
                 }
@@ -76,7 +85,28 @@ export async function POST(request: NextRequest) {
         if (!connector) return NextResponse.json({ error: 'No active storage connector found' }, { status: 404 })
         if (!resolvedParentId && !fileId) return NextResponse.json({ error: 'No parent folder specified' }, { status: 400 })
 
-        // 4. Get Resumable Upload URL
+        // 4. Get Resumable Upload URL — branch by provider; both return a pre-authorized
+        // {uploadUrl} the client PUTs the raw file body to directly (no further auth header),
+        // same resumable-upload shape for Google Drive and Microsoft Graph.
+        if (connector.type === ConnectorType.ONEDRIVE) {
+            const oneDriveInstance = getConnectorInstance(ConnectorType.ONEDRIVE)
+            const accessToken = await oneDriveInstance.getAccessToken(connector.id)
+            if (!accessToken) {
+                return NextResponse.json({ error: 'Failed to get access token' }, { status: 500 })
+            }
+            if (!resolvedParentId) {
+                return NextResponse.json({ error: 'No parent folder specified' }, { status: 400 })
+            }
+            const contentAdapter = createOneDriveContentAdapter()
+            const { uploadUrl } = await contentAdapter.createUploadSession(
+                connector.id, resolvedParentId, name, mimeType, fileId ? { fileId } : undefined
+            )
+            // provider tells the client which PUT protocol to speak: Graph requires a
+            // Content-Range header on every PUT (even a single whole-file PUT) and caps each
+            // PUT at 60 MiB, unlike Google's plain single-body PUT — see use-engagement-upload.ts.
+            return NextResponse.json({ uploadUrl, resolvedParentId: resolvedParentId ?? null, provider: 'onedrive' })
+        }
+
         const origin = request.headers.get('origin') || request.headers.get('referer') || ''
         const accessToken = await googleDriveConnector.getAccessToken(connector.id)
         if (!accessToken) {
@@ -89,7 +119,7 @@ export async function POST(request: NextRequest) {
             parents: resolvedParentId ? [resolvedParentId] : undefined
         }, fileId, origin)
 
-        return NextResponse.json({ uploadUrl, resolvedParentId: resolvedParentId ?? null })
+        return NextResponse.json({ uploadUrl, resolvedParentId: resolvedParentId ?? null, provider: 'google_drive' })
 
     } catch (e: any) {
         console.error('Upload Init Error:', e)

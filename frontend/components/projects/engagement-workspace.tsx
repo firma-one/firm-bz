@@ -69,6 +69,8 @@ interface EngagementWorkspaceProps {
     enableBetaFeatures?: boolean
     /** Client-level connector ID — used to offer "Set up Drive folder" when connector exists but engagement folder not yet provisioned. */
     clientConnectorId?: string | null
+    /** Client-level connector type (GOOGLE_DRIVE/ONEDRIVE) — used to switch the "New file" menu between Google Workspace and Office file types. */
+    clientConnectorType?: string | null
     /** Workspace root location — passed to EngagementFileList for Shared Drive empty state. */
     workspaceRootLocation?: string | null
     /** Connector account email — passed to EngagementFileList for Google Drive authuser param. */
@@ -117,6 +119,7 @@ export function EngagementWorkspace({
     firmSandboxOnly = false,
     enableBetaFeatures = false,
     clientConnectorId,
+    clientConnectorType,
     workspaceRootLocation,
     connectorAccountEmail,
     fileCount,
@@ -273,11 +276,6 @@ export function EngagementWorkspace({
                             {engagementStatus && (
                                 <span className="bg-[#f0edee] text-[#45474c] border border-[#e5e7eb] px-2 py-0.5 rounded font-mono text-[10px] tracking-tight uppercase shrink-0">
                                     {engagementStatus}
-                                </span>
-                            )}
-                            {clientStatus === 'PROSPECT' && (
-                                <span className="bg-fuchsia-50 text-fuchsia-500 border border-fuchsia-200 px-2 py-0.5 rounded font-mono text-[10px] tracking-tight uppercase shrink-0">
-                                    Prospect
                                 </span>
                             )}
                             {engagementDueDate && (() => {
@@ -493,6 +491,7 @@ export function EngagementWorkspace({
                                         projectId={projectId}
                                         connectorRootFolderId={connectorRootFolderId}
                                         clientConnectorId={clientConnectorId}
+                                        clientConnectorType={clientConnectorType}
                                         workspaceRootLocation={workspaceRootLocation}
                                         rootFolderName={projectName}
                                         orgName={orgName}

@@ -132,12 +132,66 @@ export interface IConnectorPermissionAdapter {
   listFiles(connectionId: string, folderId: string, pageSize?: number): Promise<Array<{ id: string; name: string; mimeType?: string }>>
   /** Get metadata for a single file/folder. Returns null if not found. */
   getFileMetadata(connectionId: string, fileId: string): Promise<ConnectorFileMetadata | null>
-  /** Grant access to a single file (not its folder) for an email address. Returns the permission ID or null. */
-  grantFilePermission(connectionId: string, fileId: string, email: string, role: ConnectorRole, opts?: { notify?: boolean; message?: string }): Promise<string | null>
+  /**
+   * Grant access to a single file (not its folder) for an email address. Returns the
+   * permission ID or null.
+   * `opts.preventDownload`: when true, block the recipient from downloading/copying the file
+   * through the provider's own native UI (Firma's app-level download path is unaffected — it
+   * goes through the connector's own service token, not the recipient's grant). Google Drive
+   * honors this via a companion `setCopyRestricted` call on the file itself (provider-wide,
+   * independent of grant type). OneDrive has no such per-item property — Graph's direct-user
+   * `/invite` permission (this method's default mechanism) has no download-block option, and
+   * layering a restrictive sharing link on top of an existing invite grant does NOT work
+   * (SharePoint/OneDrive takes the least-restrictive of all grants a user holds on an item —
+   * confirmed via Microsoft's own docs, see .claude/plans/connector-microsoft-impl.md item 12).
+   * The OneDrive adapter therefore grants via `createLink({scope:'users', preventsDownload:true})`
+   * instead of `/invite` whenever `preventDownload` is true, so this is the ONLY grant path that
+   * enforces it for OneDrive — a companion `setCopyRestricted` call does nothing there.
+   */
+  grantFilePermission(connectionId: string, fileId: string, email: string, role: ConnectorRole, opts?: { notify?: boolean; message?: string; preventDownload?: boolean }): Promise<string | null>
   /** List permissions currently set on a single file. */
   listFilePermissions(connectionId: string, fileId: string): Promise<Array<{ id: string; email: string | null; role: ConnectorRole }>>
   /** Delete a file. permanent:true bypasses trash (irreversible); omitted/false trashes it (same as trashFile). */
   deleteFile(connectionId: string, fileId: string, opts?: { permanent?: boolean }): Promise<void>
+  /** PATCH a permission's role (e.g. writer -> reader for version lock/unlock). Returns true on success. */
+  patchFilePermissionRole(connectionId: string, fileId: string, permissionId: string, role: ConnectorRole): Promise<boolean>
+  /**
+   * Toggle content read-only lock on a file, if the provider supports it. Resolves as a
+   * documented no-op (returns false) for providers without an equivalent concept — e.g. OneDrive:
+   * Graph has no persistent, caller-independent content-lock facet analogous to Drive's
+   * contentRestrictions (checkout/checkin is a different, user-tied editing lock, not used here).
+   */
+  setFileContentReadOnly(connectionId: string, fileId: string, readOnly: boolean): Promise<boolean>
+  /** Keyword search scoped to a connector, optionally restricted to a set of parent folders. */
+  searchFiles(connectionId: string, query: string, options?: { parentFolderIds?: string[]; limit?: number }): Promise<Array<ConnectorFileMetadata & { size?: string; modifiedTime?: string; webViewLink?: string; iconLink?: string }>>
+  /** Batch metadata fetch for multiple file ids. Skips ids that fail/404 rather than throwing. */
+  getFilesMetadata(connectionId: string, fileIds: string[]): Promise<Array<ConnectorFileMetadata & { size?: string; modifiedTime?: string; webViewLink?: string }>>
+  /**
+   * Heuristic duplicate-file detection: groups recently-sampled files by content signature
+   * (checksum, falling back to name+size) and returns groups with >1 member, sorted by
+   * potential space savings (totalSize desc). Best-effort — returns [] on failure.
+   */
+  getDuplicateFiles(connectionId: string, limit?: number): Promise<Array<{
+    signature: string
+    files: Array<ConnectorFileMetadata & { size: number; modifiedTime?: string; webViewLink?: string }>
+    count: number
+    representativeFile: ConnectorFileMetadata & { size: number; modifiedTime?: string; webViewLink?: string }
+    totalSize: number
+  }>>
+  /**
+   * Files not modified in ~180 days, best-effort sampling (stalest first). Note: staleness
+   * signal strength varies by provider — Google also considers viewedByMeTime (access, not
+   * just edits); OneDrive/Graph has no per-user last-viewed facet, so it can only filter on
+   * lastModifiedDateTime, a strictly narrower signal.
+   */
+  getStaleFiles(connectionId: string, limit?: number): Promise<Array<ConnectorFileMetadata & { size?: string; modifiedTime?: string; webViewLink?: string }>>
+  /**
+   * Set/clear a permission's expiration. Returns true on success, false if unsupported or the
+   * update failed. Documented no-op for OneDrive: Microsoft Graph's PATCH /permissions/{id}
+   * supports only the `roles` property — expirationDateTime cannot be updated in place after
+   * the permission is created (confirmed via Graph API docs, not an implementation gap).
+   */
+  updatePermissionExpiry(connectionId: string, fileId: string, permissionId: string, expirationTime: string): Promise<boolean>
 }
 
 /**

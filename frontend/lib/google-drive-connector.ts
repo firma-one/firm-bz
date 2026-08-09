@@ -8,7 +8,7 @@ import * as pockettStructure from '@/lib/connectors/pockett-structure.service'
 import { type IConnectorStorageAdapter, ConnectorContentError } from '@/lib/connectors/types'
 import { getGoogleDriveOAuthServerCredentials } from '@/lib/config'
 import { SUGGESTED_WORKSPACE_FOLDER_NAME } from './suggested-workspace-folder-name'
-import { generateWorkspaceFolderName } from '@/lib/generate-unique-workspace-folder-name'
+import { generateWorkspaceFolderName, FIRMA_PARENT_FOLDER_NAME } from '@/lib/generate-unique-workspace-folder-name'
 import { logger } from '@/lib/logger'
 
 /** Max chars of Drive API error body included in structured migrate logs. */
@@ -88,6 +88,16 @@ const DEFAULT_WORKSPACE_FOLDER_COLOR_RGB = '#a47ae2'
 type ConnectorWithDecrypted = Connector & {
   accessTokenDecrypted: string
   refreshTokenDecrypted: string | null
+}
+
+/** A `_firma` folder known to exist under a given Google account, remembered so a later Shared
+ * Drive setup for the same account can offer one-click reuse. See persistKnownFirmaFolder/
+ * listKnownFirmaFolders. */
+export interface KnownFirmaFolder {
+  sharedDriveId: string
+  driveName: string | null
+  firmaFolderId: string
+  lastVerifiedAt: string
 }
 
 export interface GoogleDriveConnection {
@@ -737,8 +747,10 @@ export class GoogleDriveConnector {
           decrypted.refreshTokenDecrypted ?? '',
           connector.tokenExpiresAt ?? new Date(),
           connector.avatarUrl ?? undefined,
-          undefined,
-          (connector.settings as { accountEmail?: string } | null)?.accountEmail
+          undefined,                           // rootFolderId
+          (connector.settings as { accountEmail?: string } | null)?.accountEmail,
+          undefined,                           // clientId
+          connectionId,                        // targetConnectorId — update this same connector, don't create a new one
         )
       }
     )
@@ -906,6 +918,14 @@ export class GoogleDriveConnector {
           workspaceRootSharedStorageName: sharedName,
         },
       })
+      // The workspace root (_f_workspace_*) is created as a direct child of _firma — its own
+      // parent is that _firma folder's id. Remember it against this account so a later setup
+      // (same Google account, different firm/client) can offer one-click reuse instead of the
+      // picker (Phase 2 of the Shared Drive redesign).
+      const firmaFolderId = meta.parents?.[0]?.trim()
+      if (firmaFolderId) {
+        await this.persistKnownFirmaFolder(connectionId, { sharedDriveId: driveId, driveName: sharedName, firmaFolderId })
+      }
     } else {
       await prisma.connector.update({
         where: { id: connectionId },
@@ -916,6 +936,66 @@ export class GoogleDriveConnector {
         },
       })
     }
+  }
+
+  /**
+   * Records a known `_firma` folder against this connector's Google account (`externalAccountId`)
+   * so a future Shared Drive setup for the SAME account can offer one-click reuse instead of the
+   * picker. Stored on `Connector.settings` rather than a new table — `externalAccountId` is
+   * already indexed, and settings already holds similar per-connector state (rootFolderId, etc.).
+   */
+  private async persistKnownFirmaFolder(
+    connectionId: string,
+    entry: { sharedDriveId: string; driveName: string | null; firmaFolderId: string },
+  ): Promise<void> {
+    const connector = await prisma.connector.findUnique({ where: { id: connectionId } })
+    if (!connector) return
+    const settings = (connector.settings as Record<string, unknown>) || {}
+    const known = Array.isArray(settings.knownFirmaFolders) ? (settings.knownFirmaFolders as KnownFirmaFolder[]) : []
+    const withoutDupe = known.filter(k => k.firmaFolderId !== entry.firmaFolderId)
+    const updated: KnownFirmaFolder[] = [
+      ...withoutDupe,
+      { sharedDriveId: entry.sharedDriveId, driveName: entry.driveName, firmaFolderId: entry.firmaFolderId, lastVerifiedAt: new Date().toISOString() },
+    ]
+    await prisma.connector.update({
+      where: { id: connectionId },
+      data: { settings: { ...settings, knownFirmaFolders: updated } },
+    })
+  }
+
+  /**
+   * Lists known `_firma` folders for OTHER connectors sharing this connector's Google account
+   * (`externalAccountId`), verifying each is still live via `files.get` and dropping any that
+   * are gone/inaccessible. Powers the "Use _firma in <drive>" one-click reuse option.
+   */
+  public async listKnownFirmaFolders(connectionId: string): Promise<KnownFirmaFolder[]> {
+    const connector = await prisma.connector.findUnique({ where: { id: connectionId } })
+    if (!connector) return []
+
+    const siblings = await prisma.connector.findMany({
+      where: { type: ConnectorType.GOOGLE_DRIVE, externalAccountId: connector.externalAccountId },
+    })
+
+    const seen = new Set<string>()
+    const candidates: KnownFirmaFolder[] = []
+    for (const sibling of siblings) {
+      const settings = (sibling.settings as Record<string, unknown>) || {}
+      const known = Array.isArray(settings.knownFirmaFolders) ? (settings.knownFirmaFolders as KnownFirmaFolder[]) : []
+      for (const entry of known) {
+        if (seen.has(entry.firmaFolderId)) continue
+        seen.add(entry.firmaFolderId)
+        candidates.push(entry)
+      }
+    }
+    if (candidates.length === 0) return []
+
+    const live: KnownFirmaFolder[] = []
+    for (const entry of candidates) {
+      const meta = await this.getFileMetadata(connectionId, entry.firmaFolderId)
+      if (meta) live.push(entry)
+      // Stale/deleted folders drop silently — the caller falls through to the picker.
+    }
+    return live
   }
 
   private async fetchSharedDriveDisplayName(connectionId: string, sharedDriveId: string): Promise<string | null> {
@@ -1693,6 +1773,21 @@ export class GoogleDriveConnector {
     return (data.files || []).map((f: any) => ({ ...f, connectorId: connectionId }))
   }
 
+  /**
+   * Create or update a Connector row for a Google Drive connection.
+   *
+   * `targetConnectorId` (threaded from the OAuth state's `replaceConnectorId` — see
+   * app/api/connectors/google-drive/callback/route.ts) decides the mode:
+   *   - set    → update that exact row by id ("Reconnect": refresh tokens/settings in place).
+   *   - unset  → always create a brand-new row with a fresh `slug` ("Add new connection").
+   *
+   * This used to dedupe by (type, userId, externalAccountId) via findFirst, which silently
+   * merged "Add new connection" into an existing connector whenever the same Google account
+   * was reconnected — even when the user explicitly wanted a second, independent connector.
+   * See .claude/plans/connector-microsoft-impl.md (2026-08-06) for the incident this fixes
+   * (caught on the OneDrive side; applies identically here). Mirrors
+   * OneDriveConnector.storeConnection's equivalent fix.
+   */
   async storeConnection(
     organizationId: string | undefined,
     userId: string,
@@ -1707,6 +1802,10 @@ export class GoogleDriveConnector {
     accountEmail?: string,
     /** Client to link after upsert. Sets Client.connectorId = connector.id. */
     clientId?: string,
+    targetConnectorId?: string,
+    /** True for personal Gmail accounts (no `hd` claim on the OAuth id_token) — see
+     * app/api/connectors/google-drive/callback/route.ts's isPersonalGoogleAccount(). */
+    isPersonalAccount?: boolean,
   ): Promise<Connector> {
 
     // Pass plaintext tokens - Prisma extension handles encryption automatically
@@ -1734,6 +1833,10 @@ export class GoogleDriveConnector {
         next.accountEmail = trimmedEmail
         touched = true
       }
+      if (isPersonalAccount !== undefined) {
+        next.isPersonalAccount = isPersonalAccount
+        touched = true
+      }
       return touched ? next : undefined
     }
 
@@ -1742,17 +1845,10 @@ export class GoogleDriveConnector {
       updateData.refreshToken = refreshToken // Plaintext - Prisma extension encrypts
     }
 
-    // Dedup by (type, userId, externalAccountId) — allows one user to hold connectors for
-    // multiple distinct Google accounts (different externalAccountId = different Drive).
-    const existingConnector = await prisma.connector.findFirst({
-      where: {
-        type: ConnectorType.GOOGLE_DRIVE,
-        userId,
-        externalAccountId,
-      }
-    })
+    if (targetConnectorId) {
+      const existingConnector = await prisma.connector.findUnique({ where: { id: targetConnectorId } })
+      if (!existingConnector) throw new Error(`Connector ${targetConnectorId} not found`)
 
-    if (existingConnector) {
       const mergedSettings = mergeConnectorSettings(
         (existingConnector.settings as Record<string, unknown>) || undefined
       )
@@ -1779,6 +1875,7 @@ export class GoogleDriveConnector {
       return updated
     }
 
+    const { generateConnectorSlug } = await import('@/lib/slug-utils')
     const initialSettings = mergeConnectorSettings(undefined) ?? {}
 
     // Create new connector
@@ -1787,6 +1884,7 @@ export class GoogleDriveConnector {
         type: ConnectorType.GOOGLE_DRIVE,
         userId,
         externalAccountId,
+        slug: generateConnectorSlug(),
         name,
         avatarUrl,
         accessToken, // Plaintext - Prisma extension encrypts

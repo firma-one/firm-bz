@@ -54,8 +54,14 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: msg }, { status: 500 })
       }
 
-      // Google Drive OAuth scopes
+      // Google Drive OAuth scopes. `openid` added 2026-08-06 solely to get an id_token back
+      // with the `hd` (hosted domain) claim — lets us detect personal Gmail vs. Google
+      // Workspace accounts to skip the My Drive/Shared Drive choice for personal accounts
+      // (mirrors the OneDrive `tid`-claim fix, see .claude/plans/connector-microsoft-impl.md
+      // item 9/10, 2026-08-06). Does not change Drive access scope — drive.file/drive.appdata
+      // are unaffected.
       const scopes = [
+        'openid',
         'https://www.googleapis.com/auth/drive.file',
         'https://www.googleapis.com/auth/drive.appdata',
         'https://www.googleapis.com/auth/userinfo.email',
@@ -407,10 +413,12 @@ export async function POST(request: NextRequest) {
             org = await prisma.firm.findUnique({ where: { id: hintFirmId } })
           }
           if (org) {
-            // Always run setupFirmFolder when workspace root changes — stale firmFolderId
-            // from a previous workspace must be replaced with the new workspace's folder.
-            const firm = await prisma.firm.findUnique({ where: { id: org.id }, select: { firmFolderId: true } })
-            if (!firm?.firmFolderId || workspaceChanged) {
+            // Always run setupFirmFolder when workspace root changes, or when THIS connector's
+            // own orgFolderId was never set — checking firm.firmFolderId here was wrong: it's a
+            // single column shared across every connector a firm has (a firm can have both a
+            // Google and a OneDrive connector), so it could be non-null from a *different*
+            // connector's setup and cause this connector's own setupFirmFolder to be skipped.
+            if (!prevSettings.orgFolderId || workspaceChanged) {
               await setupFirmFolder(connectionId, newRootId, driveAdapter, org.id)
             }
             // Provision client folder + engagements
@@ -512,6 +520,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ folderId })
     }
 
+    // Lists _firma folders already known for this connector's Google account (from prior Shared
+    // Drive setups on other connectors), verified still live — powers one-click reuse instead of
+    // the picker on repeat setups (Phase 2 of the Shared Drive redesign).
+    if (action === 'list-known-firma-folders') {
+      const { connectionId } = body
+      if (!connectionId) {
+        return NextResponse.json({ error: 'Missing connectionId' }, { status: 400 })
+      }
+      const knownFolders = await googleDriveConnector.listKnownFirmaFolders(connectionId)
+      return NextResponse.json({ knownFolders })
+    }
+
     if (action === 'folder-breadcrumb') {
       const authHeader = request.headers.get('authorization')
       if (!authHeader?.startsWith('Bearer ')) {
@@ -596,10 +616,14 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
       }
 
-      const { connectionId: migConnId, newRootFolderId: migNewRoot, migrateFromRootFolderId, estimatedMinutes: bodyEstMinutes } = body
+      const { connectionId: migConnId, newRootFolderId: migNewRoot, migrateFromRootFolderId, estimatedMinutes: bodyEstMinutes, graceMinutes: bodyGraceMinutes } = body
       if (!migConnId || !migNewRoot) {
         return NextResponse.json({ error: 'Missing connectionId or newRootFolderId' }, { status: 400 })
       }
+      // "Start now" vs "Notify members and start in 15 minutes" — clamped again here (the Inngest
+      // job also clamps) since this value is only ever used for the setMigrationPending banner
+      // signal at this layer, not the actual sleep duration.
+      const graceMinutes = Math.min(Math.max(Number(bodyGraceMinutes) || 2, 2), 60)
 
       const migExisting = await (prisma as any).connector.findUnique({ where: { id: migConnId } })
       if (!migExisting || migExisting.userId !== migUser.id || migExisting.type !== 'GOOGLE_DRIVE') {
@@ -635,7 +659,7 @@ export async function POST(request: NextRequest) {
           const estimatedMinutes = typeof bodyEstMinutes === 'number' ? bodyEstMinutes : 5
           await setMigrationPending(firm.id, {
             initiatedAt: new Date().toISOString(),
-            estimatedStartMinutes: 2,
+            estimatedStartMinutes: graceMinutes,
             initiatedBy: migUser.id,
           })
           await safeInngestSend('workspace.migrate.requested', {
@@ -647,6 +671,7 @@ export async function POST(request: NextRequest) {
             initiatingUserId: migUser.id,
             estimatedMinutes,
             startedAt: new Date().toISOString(),
+            graceMinutes,
           })
         }
       }
@@ -778,6 +803,7 @@ export async function GET(request: NextRequest) {
               id: connector.id,
               name: connector.name,
               email: (connector.settings as any)?.accountEmail || null,
+              isPersonalAccount: (connector.settings as any)?.isPersonalAccount ?? null,
               externalAccountId: connector.externalAccountId,
               rootFolderId,
               rootFolderName,
@@ -818,7 +844,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         accessToken: accessToken, // Decrypted plaintext token
         connectionId: connector.id,
-        clientId: config.googleDrive.clientId
+        clientId: config.googleDrive.clientId,
+        email: (connector.settings as any)?.accountEmail || null,
       })
     }
 

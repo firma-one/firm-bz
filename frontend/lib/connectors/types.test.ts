@@ -109,6 +109,13 @@ describe('connector types', () => {
       grantFilePermission: async () => null,
       listFilePermissions: async () => [],
       deleteFile: async () => {},
+      patchFilePermissionRole: async () => false,
+      setFileContentReadOnly: async () => false,
+      searchFiles: async () => [],
+      getFilesMetadata: async () => [],
+      getDuplicateFiles: async () => [],
+      getStaleFiles: async () => [],
+      updatePermissionExpiry: async () => false,
     }
     expect(typeof adapter.grantFolderPermission).toBe('function')
     expect(typeof adapter.revokePermission).toBe('function')
@@ -132,6 +139,13 @@ describe('connector types', () => {
       grantFilePermission: async () => null,
       listFilePermissions: async () => [],
       deleteFile: async () => {},
+      patchFilePermissionRole: async () => false,
+      setFileContentReadOnly: async () => false,
+      searchFiles: async () => [],
+      getFilesMetadata: async () => [],
+      getDuplicateFiles: async () => [],
+      getStaleFiles: async () => [],
+      updatePermissionExpiry: async () => false,
     }
     const permId = await adapter.grantFolderPermission('conn', 'folder', 'user@example.com', 'viewer')
     expect(permId).toBe('perm-xyz')

@@ -143,6 +143,10 @@ export function GooglePickerButton({
                     }
 
                     if (!driveType || driveType === 'Shared Drive') {
+                        // In 'select-folder' mode this view selects a PARENT LOCATION, not a
+                        // pre-created target — the app creates `_firma`/the workspace folder
+                        // itself inside whatever the user picks here (see
+                        // GoogleDriveWorkspaceRoot's handleFolderPicked/createWorkspaceUnder).
                         const sharedDrivesView = new g.DocsView(g.ViewId.DOCS) as ViewLike
                         sharedDrivesView.setIncludeFolders(true)
                         if (mode === 'select-folder' && sharedDrivesView.setSelectFolderEnabled) sharedDrivesView.setSelectFolderEnabled(true)

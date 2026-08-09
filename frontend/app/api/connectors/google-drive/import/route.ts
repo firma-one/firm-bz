@@ -15,9 +15,9 @@ export async function POST(request: NextRequest) {
         }
 
         const body = await request.json()
-        const { connectionId, fileIds, mode, parentId, userToken } = body // Extract userToken
+        const { connectionId, fileIds, parentId, userToken } = body // Extract userToken
 
-        if (!connectionId || !fileIds || !Array.isArray(fileIds) || !mode || !parentId) {
+        if (!connectionId || !fileIds || !Array.isArray(fileIds) || !parentId) {
             return NextResponse.json(
                 { error: 'Missing required params' },
                 { status: 400 }
@@ -46,55 +46,77 @@ export async function POST(request: NextRequest) {
 
         if (!accessToken) throw new Error('No access token available')
 
-        // Handle Import Modes
+        // Skip files that don't actually need importing: already tracked as an
+        // EngagementDocument for this engagement, or already owned by this connector's own
+        // account (e.g. re-picked after a prior import, or created by the app itself).
+        //
+        // The owner check only works for PERSONAL (My Drive) connectors — Drive's API never
+        // populates `owners` for files inside a Shared Drive (Shared Drive content is owned by
+        // the drive itself, not any individual account: see Google's "shared drive versus My
+        // Drive API differences" guide), so it's a guaranteed no-op there. Left disabled for
+        // SHARED connectors rather than silently evaluating to false on every file.
+        const connectorEmail = connector.workspaceRootLocation === 'PERSONAL'
+            ? ((connector.settings as any)?.accountEmail as string | undefined)
+            : undefined
+        const alreadyIndexedIds = folderMeta?.firmId
+            ? new Set(
+                (await prisma.engagementDocument.findMany({
+                    where: { firmId: folderMeta.firmId, externalId: { in: fileIds } },
+                    select: { externalId: true },
+                })).map(d => d.externalId)
+            )
+            : new Set<string>()
+
+        // Import: copy each picked file/folder into the engagement folder, unless
+        // it already lives there (e.g. it was created natively in Drive inside this
+        // same folder) — in that case just index it in place instead of duplicating it.
         const importedFiles = []
-        console.log(`[Import] Mode: ${mode}, ParentId: ${parentId}, Files: ${fileIds.length}, UsingUserToken: ${!!userToken}`)
+        let skippedCount = 0
+        console.log(`[Import] ParentId: ${parentId}, Files: ${fileIds.length}, UsingUserToken: ${!!userToken}`)
 
-        if (mode === 'copy') {
-            for (const fileId of fileIds) {
-                try {
-                    const results = await googleDriveConnector.recursiveCopy(fileId, parentId, accessToken)
-                    importedFiles.push(...results)
-                } catch (e) {
-                    console.error(`[Import] Exception processing ${fileId}:`, e)
+        for (const fileId of fileIds) {
+            try {
+                if (alreadyIndexedIds.has(fileId)) {
+                    skippedCount++
+                    continue
                 }
-            }
-        } else if (mode === 'shortcut') {
-            // For shortcuts, we usually want the Connector to own them? 
-            // Or the User? If User creates shortcut in Project Folder, User works.
-            // But existing code used connectorToken. Let's stick to accessToken (User preferred) 
-            // UNLESS explicit logic demands Connector.
-            // Actually, if we want the shortcut to be owned by the org, maybe connectorToken is better?
-            // But if connectorToken can't see the target file (fileId), it can't create a shortcut TO it.
-            // So UserTokens is inherently safer for the "Target".
-            const tokenToUse = userToken || connectorToken
 
-            for (const fileId of fileIds) {
-                try {
-                    const res = await fetch('https://www.googleapis.com/drive/v3/files', {
-                        method: 'POST',
-                        headers: {
-                            Authorization: `Bearer ${tokenToUse}`,
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            mimeType: 'application/vnd.google-apps.shortcut',
-                            parents: [parentId],
-                            shortcutDetails: {
-                                targetId: fileId
-                            }
-                        })
+                const metaRes = await fetch(
+                    `https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,mimeType,parents,owners(emailAddress)&supportsAllDrives=true`,
+                    { headers: { Authorization: `Bearer ${accessToken}` } }
+                )
+                if (!metaRes.ok) {
+                    console.error(`[Import] Failed to fetch metadata for ${fileId}:`, await metaRes.text())
+                    continue
+                }
+                const meta = await metaRes.json()
+
+                const ownedByConnector = connectorEmail
+                    && Array.isArray(meta.owners)
+                    && meta.owners.some((o: { emailAddress?: string }) => o.emailAddress === connectorEmail)
+
+                if (ownedByConnector && !(Array.isArray(meta.parents) && meta.parents.includes(parentId))) {
+                    // Already owned by this connector but not sitting in the destination folder —
+                    // nothing to import; the app already has real access to it elsewhere.
+                    skippedCount++
+                    continue
+                }
+
+                if (Array.isArray(meta.parents) && meta.parents.includes(parentId)) {
+                    // Already in the destination folder — index in place, no copy.
+                    importedFiles.push({
+                        id: meta.id,
+                        name: meta.name,
+                        originalId: meta.id,
+                        isFolder: meta.mimeType === 'application/vnd.google-apps.folder',
                     })
-                    if (res.ok) {
-                        const data = await res.json()
-                        importedFiles.push({ id: data.id, name: data.name, targetId: fileId })
-                    } else {
-                        const txt = await res.text()
-                        console.error('[Import] Shortcut failed', txt)
-                    }
-                } catch (e) {
-                    console.error(`[Import] Exception shortcut ${fileId}:`, e)
+                    continue
                 }
+
+                const results = await googleDriveConnector.recursiveCopy(fileId, parentId, accessToken)
+                importedFiles.push(...results)
+            } catch (e) {
+                console.error(`[Import] Exception processing ${fileId}:`, e)
             }
         }
 
@@ -122,7 +144,7 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        return NextResponse.json({ success: true, count: importedFiles.length, files: importedFiles })
+        return NextResponse.json({ success: true, count: importedFiles.length, skipped: skippedCount, files: importedFiles })
 
     } catch (error: any) {
         console.error('Import error:', error)

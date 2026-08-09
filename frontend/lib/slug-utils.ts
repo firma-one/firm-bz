@@ -92,6 +92,16 @@ export function generateProjectSlug(name: string): string {
 }
 
 /**
+ * Generate a slug for Connector — an internal identity anchor, not a URL-routing slug.
+ * Generated once at connector creation, immutable afterward, unrelated to the editable
+ * display `name`. Distinguishes independent connectors created for the same external
+ * account (e.g. same Microsoft account connected twice for two different workspace roots).
+ */
+export function generateConnectorSlug(): string {
+  return generateUniqueSlug('conn', 4, 8)
+}
+
+/**
  * Generate a URL-safe slug for a shared document (share detail URLs).
  * Longer base for readability; suffix for uniqueness within project.
  * @param documentTitle - Display name of the document/folder

@@ -109,6 +109,77 @@ export function getGoogleDriveOAuthServerCredentials(): { clientId: string; clie
 }
 
 /**
+ * Server-only: Microsoft OAuth client id/secret for OneDrive/SharePoint connector token
+ * exchange and refresh. Shares the app registration with MICROSOFT_SIGNIN_ENABLED sign-in
+ * (see .claude/plans/connector-microsoft-impl.md Phase 1a step 5) but is gated by its own
+ * MICROSOFT_CONNECTOR_ENABLED flag — independent readiness from sign-in.
+ */
+export function getMicrosoftOAuthServerCredentials(): { clientId: string; clientSecret: string } {
+  const clientId = process.env.MICROSOFT_CLIENT_ID?.trim()
+  const clientSecret = process.env.MICROSOFT_CLIENT_SECRET?.trim()
+
+  if (!clientId) {
+    throw new Error('MICROSOFT_CLIENT_ID is not configured')
+  }
+  if (!clientSecret) {
+    throw new Error('MICROSOFT_CLIENT_SECRET is not configured')
+  }
+
+  return { clientId, clientSecret }
+}
+
+// Short-TTL in-process cache for the per-firm beta flag — avoids a DB round-trip on every
+// call within the same server process (this route set can call the check several times per
+// request across nested actions). Not a source of truth across processes/deployments; a stale
+// read here only delays a flag flip being observed by up to the TTL, never security-relevant
+// (the flag only gates UI/route visibility for an already-authenticated, already-firm-scoped
+// user, not authorization itself).
+const CONNECTOR_FLAG_CACHE_TTL_MS = 60_000
+const connectorFlagCache = new Map<string, { value: boolean; expiresAt: number }>()
+const connectorFirmIdCache = new Map<string, { firmId: string | null; expiresAt: number }>()
+
+/**
+ * Whether the OneDrive/SharePoint connector is enabled for a given firm — a per-firm beta
+ * flag (`Firm.settings.betaFeatures.microsoftStorageConnector`), not a global env var. Replaces
+ * the earlier MICROSOFT_CONNECTOR_ENABLED env-var gate (removed 2026-08-05) — the connector's
+ * readiness is a per-firm rollout decision, not a deployment-wide one. Fails closed (false) if
+ * the firm can't be resolved or the flag isn't explicitly true.
+ */
+export async function isMicrosoftConnectorEnabledForFirm(firmId: string | null | undefined): Promise<boolean> {
+  if (!firmId) return false
+  const cached = connectorFlagCache.get(firmId)
+  if (cached && cached.expiresAt > Date.now()) return cached.value
+
+  const { prisma } = await import('./prisma')
+  const firm = await prisma.firm.findUnique({ where: { id: firmId }, select: { settings: true } })
+  const betaFeatures = (firm?.settings as Record<string, unknown> | null)?.betaFeatures as Record<string, boolean> | undefined
+  const value = betaFeatures?.microsoftStorageConnector === true
+
+  connectorFlagCache.set(firmId, { value, expiresAt: Date.now() + CONNECTOR_FLAG_CACHE_TTL_MS })
+  return value
+}
+
+/**
+ * Same check, resolved from a Connector id instead of a firmId directly — for routes that only
+ * have connectionId in scope (e.g. status/ensure-folder/folder-breadcrumb actions).
+ */
+export async function isMicrosoftConnectorEnabledForConnection(connectionId: string | null | undefined): Promise<boolean> {
+  if (!connectionId) return false
+
+  let firmId: string | null | undefined
+  const cachedFirmId = connectorFirmIdCache.get(connectionId)
+  if (cachedFirmId && cachedFirmId.expiresAt > Date.now()) {
+    firmId = cachedFirmId.firmId
+  } else {
+    const { prisma } = await import('./prisma')
+    const connector = await prisma.connector.findUnique({ where: { id: connectionId }, select: { firmId: true } })
+    firmId = connector?.firmId ?? null
+    connectorFirmIdCache.set(connectionId, { firmId, expiresAt: Date.now() + CONNECTOR_FLAG_CACHE_TTL_MS })
+  }
+  return isMicrosoftConnectorEnabledForFirm(firmId)
+}
+
+/**
  * Application configuration object
  */
 export const config = {
@@ -125,6 +196,12 @@ export const config = {
     developerKey: process.env.NEXT_PUBLIC_GOOGLE_DRIVE_DEVELOPER_KEY || process.env.NEXT_PUBLIC_GOOGLE_API_KEY,
     appId: process.env.NEXT_PUBLIC_GOOGLE_PROJECT_NUMBER,
     redirectUri: getRedirectUrl('/api/connectors/google-drive/callback'),
+  },
+
+  onedrive: {
+    clientId: process.env.MICROSOFT_CLIENT_ID,
+    clientSecret: process.env.MICROSOFT_CLIENT_SECRET,
+    redirectUri: getRedirectUrl('/api/connectors/onedrive/callback'),
   },
 
   // Supabase Configuration

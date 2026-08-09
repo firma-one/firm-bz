@@ -7,8 +7,9 @@ import { upsertFollowUpReminder } from '@/lib/actions/user-reminders'
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
 import { canViewProjectSettings as checkCanViewProjectSettings } from '@/lib/permission-helpers'
-import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { resolveClientConnector } from '@/lib/connectors/resolve-client-connector'
+import { getStorageAdapter, getPermissionAdapter } from '@/lib/connectors/registry'
+import { ensureAppFolderStructure } from '@/lib/connectors/pockett-structure.service'
 import { logger } from '@/lib/logger'
 import { safeInngestSend } from '@/lib/inngest/client'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
@@ -200,11 +201,12 @@ export async function createEngagement(firmSlug: string, clientSlug: string, dat
     const { connectorId } = await resolveClientConnector(client.id)
     if (connectorId) {
         try {
-            const result = await googleDriveConnector.ensureAppFolderStructure(
+            const adapter = await getStorageAdapter(connectorId)
+            const result = await ensureAppFolderStructure(
                 connectorId,
                 client.name,
                 client.slug,
-                await googleDriveConnector.createGoogleDriveAdapter(connectorId),
+                adapter,
                 firm.id,
                 {
                     projectName: newProject.name,
@@ -319,13 +321,15 @@ export async function getEngagementFolderIds(projectId: string) {
         return { generalFolderId: null, confidentialFolderId: null, stagingFolderId: null, isProjectLead: false }
     }
 
-    const folderIds = await googleDriveConnector.getProjectFolderIds(connectorId, project.slug, {
-        projectName: project.name,
-        clientSlug: project.client.slug,
-        clientName: project.client.name,
-        projectFolderId: project.connectorRootFolderId,
-        orgId: project.client.firm.id,
-    })
+    const permissionAdapter = await getPermissionAdapter(connectorId)
+    const folderIds = permissionAdapter
+        ? await permissionAdapter.getEngagementFolderIds(connectorId, project.slug, {
+            projectName: project.name,
+            clientSlug: project.client.slug,
+            clientName: project.client.name,
+            projectFolderId: project.connectorRootFolderId ?? undefined,
+        })
+        : { generalFolderId: null, confidentialFolderId: null, stagingFolderId: null }
 
     const projectMember = await prisma.engagementMember.findFirst({
         where: { engagementId: project.id, userId: user.id }
@@ -759,7 +763,8 @@ export async function deleteEngagement(projectId: string, firmSlug: string, clie
     // 2. Restrict Drive root folder to owner-only (immediate safety net)
     if (project.connectorRootFolderId && clientConnectorId) {
         try {
-            await googleDriveConnector.restrictFolderToOwnerOnly(clientConnectorId, project.connectorRootFolderId)
+            const storageAdapter = await getStorageAdapter(clientConnectorId)
+            await storageAdapter.restrictFolderToOwnerOnly?.(clientConnectorId, project.connectorRootFolderId)
         } catch (e) {
             logger.error('Error restricting Drive folders on project delete', e as Error)
         }
@@ -838,11 +843,12 @@ export async function provisionEngagementDriveFolder(engagementId: string): Prom
     const { connectorId } = await resolveClientConnector(client.id)
     if (!connectorId) throw new Error('No connector found for this client')
 
-    const result = await googleDriveConnector.ensureAppFolderStructure(
+    const adapter = await getStorageAdapter(connectorId)
+    const result = await ensureAppFolderStructure(
         connectorId,
         client.name,
         client.slug,
-        await googleDriveConnector.createGoogleDriveAdapter(connectorId),
+        adapter,
         engagement.firmId,
         { projectName: engagement.name, projectSlug: engagement.slug }
     )

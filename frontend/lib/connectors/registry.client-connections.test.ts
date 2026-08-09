@@ -35,14 +35,18 @@ vi.mock('@/lib/google-drive-connector', () => ({
   googleDriveConnector: {},
 }))
 
-vi.mock('./onedrive-connector', () => ({
-  getOneDriveConnectorInstance: () => ({
+vi.mock('./onedrive-connector', () => {
+  const instance = {
     getConnections: vi.fn(),
     disconnectConnection: vi.fn(),
     removeConnection: vi.fn(),
     getAccessToken: vi.fn().mockResolvedValue(null),
-  }),
-}))
+  }
+  return {
+    getOneDriveConnectorInstance: () => instance,
+    OneDriveConnector: { getInstance: () => instance },
+  }
+})
 
 vi.mock('./adapters/onedrive-adapter', () => ({
   createOneDriveAdapter: vi.fn(() => ({})),

@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from "@/lib/prisma"
-import { googleDriveConnector } from "@/lib/google-drive-connector"
 import { logger } from '@/lib/logger'
 import { requireProjectView } from '@/lib/api/engagement-auth'
 import { getLock } from '@/lib/sharing-settings'
 import { resolveEngagementConnectorId } from '@/lib/connectors/resolve-client-connector'
+import { getPermissionAdapter } from '@/lib/connectors/registry'
 
 export async function GET(
     request: NextRequest,
@@ -42,13 +42,16 @@ export async function GET(
         }
 
         // 3. Resolve Project Folders from Connector Settings and search scope
-        const settings = (connector.settings as any) || {}
-        const ps = settings.projectFolderSettings?.[project.slug] || {}
+        const permissionAdapter = await getPermissionAdapter(connector.id)
+        if (!permissionAdapter) {
+            return NextResponse.json({ error: 'Connector type does not support search' }, { status: 400 })
+        }
+        const folderIds = await permissionAdapter.getEngagementFolderIds(connector.id, project.slug, {})
 
         const projectRootFolderIds = [
-            ps.generalFolderId,
-            ps.confidentialFolderId,
-            ps.stagingFolderId
+            folderIds.generalFolderId,
+            folderIds.confidentialFolderId,
+            folderIds.stagingFolderId
         ].filter(Boolean) as string[]
 
         // When rootFolderId is provided (e.g. user is in General/Confidential/Staging), scope search to that tree only.
@@ -110,7 +113,7 @@ export async function GET(
         const significantTerms = searchTerms.length > 0 ? searchTerms : rawWords.slice(0, 3)
 
         const [driveFiles, vectorResultsRaw, dbNameResultsFull, dbNameResultsTerms] = await Promise.all([
-            googleDriveConnector.searchFiles(connector.id, query, {
+            permissionAdapter.searchFiles(connector.id, query, {
                 parentFolderIds: allParentFolderIds,
                 limit: 50
             }),
@@ -168,7 +171,7 @@ export async function GET(
         if (missingIndexedResults.length > 0) {
             try {
                 const missingIds = missingIndexedResults.map(r => r.externalId)
-                const indexedMeta = await googleDriveConnector.getFilesMetadata(connector.id, missingIds)
+                const indexedMeta = await permissionAdapter.getFilesMetadata(connector.id, missingIds)
 
                 const scoredIndexedFiles = indexedMeta.map(f => {
                     const iRes = missingIndexedResults.find(r => r.externalId === f.id)
@@ -180,7 +183,7 @@ export async function GET(
                         score: iRes?.score || 0,
                         updatedAt: iRes?.updatedAt,
                         metadata: {
-                            ...(f.metadata || {}),
+                            ...((f as any).metadata || {}),
                             ...(iRes?.metadata || {})
                         }
                     }
@@ -278,7 +281,7 @@ export async function GET(
         const missingParentIds = parentIds.filter((id) => !parentNames[id])
         if (missingParentIds.length > 0 && connector?.id) {
             try {
-                const driveMeta = await googleDriveConnector.getFilesMetadata(connector.id, missingParentIds)
+                const driveMeta = await permissionAdapter.getFilesMetadata(connector.id, missingParentIds)
                 driveMeta.forEach((f: any) => { if (f?.name) parentNames[f.id] = f.name })
             } catch (e) {
                 logger.warn('Drive parent names fallback failed', { error: e })

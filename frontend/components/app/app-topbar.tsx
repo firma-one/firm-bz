@@ -349,7 +349,7 @@ export function AppTopbar() {
           const org = data.organization || data.firm || data
           if (org?.name) setFirmName(org.name)
           const settings = (org?.settings as Record<string, unknown>) || {}
-          setBetaFeaturesEnabled(settings.enableBetaFeatures === true)
+          setBetaFeaturesEnabled((settings.betaFeatures as Record<string, boolean> | undefined)?.dossier === true)
           const b = (settings.branding as Record<string, string | undefined>) || {}
 
           // Read exclusively from settings.branding — no column fallbacks
