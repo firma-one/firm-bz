@@ -44,6 +44,9 @@ export async function generateMetadata({ params }: BlogPostPageProps): Promise<M
     }
   }
 
+  // Prefer a post-specific social card (1200x630) when provided; fall back to the hero image.
+  const socialImage = post.ogImage || post.image
+
   return {
     title: `${post.title} | Blog | ${BRAND_NAME}`,
     description: post.excerpt,
@@ -66,14 +69,14 @@ export async function generateMetadata({ params }: BlogPostPageProps): Promise<M
       type: 'article',
       publishedTime: post.date,
       tags: post.tags,
-      images: [post.image],
+      images: [socialImage],
       url: `${siteOrigin}${BLOG_BASE_PATH}/${category}/${slug}`,
     },
     twitter: {
       card: 'summary_large_image',
       title: post.title,
       description: post.excerpt,
-      images: [post.image],
+      images: [socialImage],
     },
     alternates: {
       canonical: `${siteOrigin}${BLOG_BASE_PATH}/${category}/${slug}`,
@@ -113,7 +116,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
 
   const structuredData = {
     '@context': 'https://schema.org',
-    '@type': 'BlogPosting',
+    '@type': 'Article',
     headline: post.title,
     description: post.excerpt,
     datePublished: post.date,
@@ -135,7 +138,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
       '@type': 'WebPage',
       '@id': `${siteOrigin}${BLOG_BASE_PATH}/${category}/${slug}`,
     },
-    image: post.image,
+    image: post.ogImage || post.image,
     keywords: post.tags.join(', '),
   }
 
