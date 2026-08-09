@@ -7,6 +7,7 @@ export interface BlogPost {
   tags: string[]
   category: string
   image: string
+  ogImage?: string
   content?: string
   readingTime?: number
   author?: string
