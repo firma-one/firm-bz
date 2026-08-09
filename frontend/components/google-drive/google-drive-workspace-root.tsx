@@ -14,6 +14,7 @@ import {
 import { GooglePickerButton } from "@/components/google-drive/google-picker-button"
 import { GoogleDriveIcon } from "@/components/ui/google-drive-icon"
 import { GoogleSharedDriveIcon } from "@/components/ui/google-shared-drive-icon"
+import { MyDriveIcon } from "@/components/ui/my-drive-icon"
 import { useToast } from "@/components/ui/toast"
 import { generateWorkspaceFolderName, FIRMA_PARENT_FOLDER_NAME } from "@/lib/generate-unique-workspace-folder-name"
 import {
@@ -24,7 +25,9 @@ import {
   Copy,
   FolderOpen,
   HardDrive,
+  Info,
   RefreshCw,
+  ShieldCheck,
 } from "lucide-react"
 
 type GoogleDriveWorkspaceRootProps = {
@@ -131,6 +134,35 @@ export function GoogleDriveWorkspaceRoot({
   const [toBreadcrumb, setToBreadcrumb] = useState<string[] | null>(null)
   const [knownFirmaFolders, setKnownFirmaFolders] = useState<{ sharedDriveId: string; driveName: string | null; firmaFolderId: string }[]>([])
   const [knownFoldersLoading, setKnownFoldersLoading] = useState(false)
+  // Gates the Shared Drive picker step behind a yes/no check — Picker can only select EXISTING
+  // folders (it has no inline "New Folder" capability, and the app can't create one either since
+  // drive.file scope grants no access to a Shared Drive until something in it is picked — see
+  // .claude/plans/gdrive-connector-simplication.md). null = not asked yet, true = has a folder
+  // ready, false = sent to Drive to create one first.
+  const [hasFolderReady, setHasFolderReady] = useState<boolean | null>(null)
+  // Tracks whether this session passed through the "No" redirect screen — hasFolderReady alone
+  // can't distinguish "picked Yes, went straight to Select Folder" from "picked No, created a
+  // folder, then continued to Select Folder", both of which leave hasFolderReady === true. Needed
+  // purely to keep the step-progress dot count accurate (4 steps via the No path, 3 via Yes).
+  const [wentThroughRedirect, setWentThroughRedirect] = useState(false)
+  // In-progress radio selection before "Continue" is pressed — kept separate from hasFolderReady
+  // so picking a tile doesn't immediately navigate/open a tab; the user must confirm.
+  const [folderReadyChoice, setFolderReadyChoice] = useState<boolean | null>(null)
+  // Location screen's own pending radio selection ("My Drive" vs "Shared Drive"), same pattern as
+  // folderReadyChoice — picking a tile no longer navigates immediately, Continue confirms it.
+  const [locationChoice, setLocationChoice] = useState<"My Drive" | "Shared Drive" | null>(null)
+  // Countdown (seconds remaining) auto-advancing Continue after the "Yes" tile is picked, saving
+  // a click for the common case. Only "Yes" auto-advances — "No" opens Google Drive in a new tab
+  // on confirm, and window.open() from a delayed setTimeout callback (rather than a direct click)
+  // can be silently blocked by the browser's popup blocker, so that path always requires an
+  // explicit manual click on Continue. null = not counting. Clicking Continue while it's running
+  // cancels back to no selection (not a "confirm early" shortcut) rather than accelerating/pausing it.
+  const AUTO_ADVANCE_SECONDS = 5
+  const [folderReadyCountdown, setFolderReadyCountdown] = useState<number | null>(null)
+  // Same auto-advance countdown pattern for the Location screen's radio tiles. Neither choice
+  // opens a popup on confirm (both just call startMyDriveFlow/startSharedDriveFlow directly), so
+  // — unlike the folder-ready gate's "No" branch — both tiles here can safely auto-advance.
+  const [locationCountdown, setLocationCountdown] = useState<number | null>(null)
 
   const displayName = rootFolderName?.trim() || "Workspace folder"
   const driveUrl = rootFolderId
@@ -150,10 +182,11 @@ export function GoogleDriveWorkspaceRoot({
           : null
 
   const isShared = previewDrive === "Shared Drive"
-  // Shared Drive now picks a PARENT the app creates `_firma` inside — query for that (spike 0.1
-  // confirmed this matches cleanly with no _f_workspace_* bleed-through). My Drive's migration
-  // flow is unchanged and still searches for the pre-generated target name.
-  const pickerQuery = isShared ? FIRMA_PARENT_FOLDER_NAME : (generatedFolderName ?? "")
+  // Shared Drive's picker opens unfiltered — pre-filling a search (e.g. for `_firma`) fuzzy-
+  // matches unrelated Drive items by substring and adds noise instead of helping, so the user
+  // browses their actual Shared Drives list directly. My Drive's migration flow is unchanged and
+  // still searches for the pre-generated target name.
+  const pickerQuery = generatedFolderName ?? ""
   const myDriveOpenUrl = connectedEmail
     ? `https://drive.google.com/drive/my-drive?authuser=${encodeURIComponent(connectedEmail)}`
     : "https://drive.google.com/drive/my-drive"
@@ -202,18 +235,72 @@ export function GoogleDriveWorkspaceRoot({
     setHasOpenedDrive(false)
     setPickerOpen(false)
     setWizardStep(1)
+    setWentThroughRedirect(false)
     setGeneratedFolderName("")
     setEstimate(null)
     setEstimateLoading(false)
     setFromBreadcrumb(null)
     setToBreadcrumb(null)
     setKnownFirmaFolders([])
+    setHasFolderReady(null)
+    setFolderReadyChoice(null)
+    setFolderReadyCountdown(null)
+    setLocationChoice(null)
+    setLocationCountdown(null)
   }, [])
+
+  // Jumps back to an earlier step in the Shared Drive flow via the clickable step-progress
+  // bubbles — the sole back-navigation mechanism for this flow (no per-screen "Back" buttons).
+  // Step 1 = Location, 2 = the yes/no gate, 3 = the "No" redirect screen (only reachable/relevant
+  // when wentThroughRedirect), Select Folder is always the last step and has no bubble to click
+  // back FROM (onStepClick only fires for step < current).
+  const goToSharedDriveStep = useCallback((step: number) => {
+    if (step === 1) {
+      resetFlow()
+      return
+    }
+    if (step === 2) {
+      setHasFolderReady(null)
+      setFolderReadyChoice(null)
+      setFolderReadyCountdown(null)
+      setHasOpenedDrive(false)
+      setWentThroughRedirect(false)
+      return
+    }
+    if (step === 3 && wentThroughRedirect) {
+      setHasFolderReady(false)
+      setHasOpenedDrive(false)
+    }
+  }, [resetFlow, wentThroughRedirect])
 
   const closeDialog = useCallback(() => {
     setDialogOpen(false)
     resetFlow()
   }, [resetFlow])
+
+  // Advances past the gate to the next screen for the given choice. Does NOT open the Drive tab
+  // itself — window.open() only fires from a genuine click (see the "Open Google Drive" button on
+  // the next screen), never from this auto-advance timer, since browsers can silently block
+  // popups triggered from a delayed setTimeout callback rather than a direct user gesture.
+  const confirmFolderReadyChoice = useCallback((choice: boolean) => {
+    setFolderReadyCountdown(null)
+    setHasFolderReady(choice)
+  }, [])
+
+  // Picking a radio tile starts a short auto-advance countdown so the common case only needs one
+  // click. Clicking Continue while it's running cancels back to no selection rather than
+  // confirming early — restarting the cycle, per the user's explicit design (not a "skip the
+  // wait" shortcut). Applies to both Yes and No — only the actual Drive tab-open is gated behind
+  // a real click, not the screen advance itself.
+  useEffect(() => {
+    if (folderReadyChoice === null || folderReadyCountdown === null) return
+    if (folderReadyCountdown <= 0) {
+      confirmFolderReadyChoice(folderReadyChoice)
+      return
+    }
+    const t = setTimeout(() => setFolderReadyCountdown(s => (s === null ? null : s - 1)), 1000)
+    return () => clearTimeout(t)
+  }, [folderReadyChoice, folderReadyCountdown, confirmFolderReadyChoice])
 
   /**
    * Creates `_firma/<random workspace folder>` under `parentId` (idempotent — findOrCreateFolder
@@ -312,6 +399,25 @@ export function GoogleDriveWorkspaceRoot({
     void fetchEstimate()
     void fetchKnownFirmaFolders()
   }
+
+  const confirmLocationChoice = useCallback((choice: "My Drive" | "Shared Drive") => {
+    setLocationCountdown(null)
+    if (choice === "My Drive") startMyDriveFlow()
+    else startSharedDriveFlow()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Same auto-advance pattern as the folder-ready gate — picking a tile starts a countdown,
+  // clicking Continue mid-countdown cancels back to no selection rather than confirming early.
+  useEffect(() => {
+    if (locationChoice === null || locationCountdown === null) return
+    if (locationCountdown <= 0) {
+      confirmLocationChoice(locationChoice)
+      return
+    }
+    const t = setTimeout(() => setLocationCountdown(s => (s === null ? null : s - 1)), 1000)
+    return () => clearTimeout(t)
+  }, [locationChoice, locationCountdown, confirmLocationChoice])
 
   // Reuse: on a repeat Shared Drive setup for the same Google account, offer any _firma folders
   // already known from a prior connector's setup — skips the picker entirely.
@@ -472,14 +578,22 @@ export function GoogleDriveWorkspaceRoot({
     }
   }
 
-  // Flat step count — fixed at 2 (Location → Select) so the bar doesn't jump/reflow once a
-  // location is chosen, matching OneDriveWorkspaceRoot's equivalent fix. +1 only when migrating
-  // an existing root (adds the Confirm step).
-  const totalSteps = 2 + (rootFolderId ? 1 : 0)
+  // Step count for Shared Drive is dynamic on the yes/no answer: Location → Gate → Select is 3
+  // steps if the user already has a folder (Yes), but the "go create one in Drive" redirect
+  // screen is a real extra step when they don't (No), since Picker can't create folders and the
+  // app has no access to create one either until something in the Shared Drive has been picked.
+  // Reflects the choice as soon as it's picked on the gate (folderReadyChoice/hasFolderReady),
+  // not only once the redirect screen has actually been passed (wentThroughRedirect) — the bubble
+  // count should update the moment "No" is selected, not after Continue is clicked.
+  const sharedDriveSteps = (wentThroughRedirect || hasFolderReady === false || folderReadyChoice === false) ? 4 : 3
+  const totalSteps = (isShared ? sharedDriveSteps : 2) + (rootFolderId ? 1 : 0)
   const currentStep =
     previewDrive === null ? 1
       : wizardStep === 3 ? totalSteps
-        : 2
+        : isShared && hasFolderReady === null ? 2
+          : isShared && hasFolderReady === false ? 3
+            : isShared ? sharedDriveSteps // hasFolderReady === true: 3 (via Yes) or 4 (via No redirect)
+              : 2
 
   const dialogTitle = rootFolderId ? "Migrate workspace folder" : "Set up workspace folder"
   const dialogSubtitle =
@@ -618,10 +732,10 @@ export function GoogleDriveWorkspaceRoot({
           <TooltipProvider delayDuration={300}>
             <div className="flex items-center gap-3 min-w-0">
               <div className="shrink-0 flex h-9 w-9 items-center justify-center rounded border border-[#e5e7eb] bg-[#f9f9fb]" aria-hidden>
-                <FolderOpen className="h-4.5 w-4.5 text-[#45474c]" strokeWidth={1.75} />
+                <HardDrive className="h-4.5 w-4.5 text-[#45474c]" strokeWidth={1.75} />
               </div>
               <p className="min-w-0 flex-1 text-[0.8125rem] text-[#45474c]">
-                No workspace folder selected yet.
+                No storage location selected.
               </p>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -639,7 +753,7 @@ export function GoogleDriveWorkspaceRoot({
                     disabled={!accessToken || !connectorActive || WORKSPACE_MIGRATE_DISABLED || migrationLocked}
                     aria-label="Choose storage location"
                   >
-                    <FolderOpen className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                    <HardDrive className="h-3.5 w-3.5 shrink-0" aria-hidden />
                     Choose Location
                   </button>
                 </TooltipTrigger>
@@ -684,14 +798,17 @@ export function GoogleDriveWorkspaceRoot({
           }}
         >
           <DialogHeader>
-            <DialogTitle className="text-[0.9375rem] font-bold text-[#1b1b1d]">{dialogTitle}</DialogTitle>
+            <DialogTitle className="flex items-center gap-2 text-[0.9375rem] font-bold text-[#1b1b1d]">
+              <GoogleDriveIcon size={18} />
+              {dialogTitle}
+            </DialogTitle>
             <DialogDescription className="text-left text-xs text-[#45474c]">{dialogSubtitle}</DialogDescription>
           </DialogHeader>
 
           <StepProgress
             current={currentStep}
             total={totalSteps}
-            onStepClick={isShared ? (step) => { if (step === 1) resetFlow() } : undefined}
+            onStepClick={isShared ? goToSharedDriveStep : (step) => { if (step === 1) resetFlow() }}
           />
 
           {!previewDrive ? (
@@ -700,52 +817,96 @@ export function GoogleDriveWorkspaceRoot({
               <p className="text-xs text-[#45474c] leading-relaxed">
                 All documents in your workspace will be stored in the location you choose below.
               </p>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-2">
                 <button
                   type="button"
-                  onClick={startMyDriveFlow}
+                  role="radio"
+                  aria-checked={locationChoice === "My Drive"}
                   disabled={saving}
-                  className="group flex flex-col items-start gap-3 rounded border border-[#e5e7eb] bg-white p-4 text-left transition-all hover:border-[#1b1b1d] hover:bg-[#f9f9fb] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
+                  onClick={() => { setLocationChoice("My Drive"); setLocationCountdown(AUTO_ADVANCE_SECONDS) }}
+                  className={cn(
+                    "group flex items-start gap-3 rounded border bg-white p-3.5 text-left transition-all active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none",
+                    locationChoice === "My Drive"
+                      ? "border-primary ring-1 ring-primary bg-primary/[0.03]"
+                      : "border-[#e5e7eb] hover:border-[#1b1b1d] hover:bg-[#f9f9fb]",
+                  )}
                 >
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded border border-[#e5e7eb] bg-[#f9f9fb]">
-                    {saving ? <RefreshCw className="h-6 w-6 text-[#45474c] animate-spin" /> : <GoogleDriveIcon size={28} />}
-                  </div>
-                  <div>
-                    <p className="text-[0.8125rem] font-semibold text-[#1b1b1d]">{saving ? 'Creating folder…' : 'My Drive'}</p>
+                  <span className={cn(
+                    "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors",
+                    locationChoice === "My Drive" ? "border-primary" : "border-[#d1d5db]",
+                  )}>
+                    {locationChoice === "My Drive" && <span className="h-2 w-2 rounded-full bg-primary" />}
+                  </span>
+                  <MyDriveIcon size={18} className="text-[#1A73E8] shrink-0 mt-px" />
+                  <span>
+                    <p className="text-[0.8125rem] font-semibold text-[#1b1b1d]">My Drive</p>
                     <p className="text-xs text-[#45474c] leading-relaxed mt-0.5">Personal storage tied to your Google account.</p>
-                  </div>
+                  </span>
                 </button>
                 <button
                   type="button"
-                  onClick={startSharedDriveFlow}
+                  role="radio"
+                  aria-checked={locationChoice === "Shared Drive"}
                   disabled={saving}
-                  className="group flex flex-col items-start gap-3 rounded border border-[#e5e7eb] bg-white p-4 text-left transition-all hover:border-[#1b1b1d] hover:bg-[#f9f9fb] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
+                  onClick={() => { setLocationChoice("Shared Drive"); setLocationCountdown(AUTO_ADVANCE_SECONDS) }}
+                  className={cn(
+                    "group flex items-start gap-3 rounded border bg-white p-3.5 text-left transition-all active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none",
+                    locationChoice === "Shared Drive"
+                      ? "border-primary ring-1 ring-primary bg-primary/[0.03]"
+                      : "border-[#e5e7eb] hover:border-[#1b1b1d] hover:bg-[#f9f9fb]",
+                  )}
                 >
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded border border-[#e5e7eb] bg-[#f9f9fb]">
-                    <GoogleSharedDriveIcon size={28} />
-                  </div>
-                  <div>
+                  <span className={cn(
+                    "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors",
+                    locationChoice === "Shared Drive" ? "border-primary" : "border-[#d1d5db]",
+                  )}>
+                    {locationChoice === "Shared Drive" && <span className="h-2 w-2 rounded-full bg-primary" />}
+                  </span>
+                  <GoogleSharedDriveIcon size={18} className="shrink-0 mt-px" />
+                  <span>
                     <p className="text-[0.8125rem] font-semibold text-[#1b1b1d]">Shared Drive</p>
                     <p className="text-xs text-[#45474c] leading-relaxed mt-0.5">Accessible to permitted users across your Google Workspace account.</p>
-                  </div>
+                  </span>
                 </button>
               </div>
+              <Button type="button" variant="greenCta"
+                className="relative w-full h-8 overflow-hidden text-[11px] font-headline font-bold tracking-widest uppercase rounded"
+                disabled={locationChoice === null || saving}
+                onClick={() => {
+                  // Clicking while the countdown is running cancels back to no selection — it
+                  // does not confirm early (same pattern as the folder-ready gate).
+                  if (locationCountdown !== null) {
+                    setLocationChoice(null)
+                    setLocationCountdown(null)
+                    return
+                  }
+                  if (locationChoice !== null) confirmLocationChoice(locationChoice)
+                }}>
+                {locationCountdown !== null && (
+                  <span
+                    key={locationChoice ?? 'none'}
+                    className="absolute inset-y-0 left-0 w-0 bg-white/25"
+                    style={{ animation: `firma-countdown-fill ${AUTO_ADVANCE_SECONDS}s linear forwards` }}
+                    aria-hidden
+                  />
+                )}
+                <span className="relative">
+                  {saving
+                    ? <><RefreshCw className="h-3.5 w-3.5 mr-1.5 shrink-0 animate-spin inline" />Creating folder&hellip;</>
+                    : locationCountdown !== null
+                      ? <>Continuing in {locationCountdown}s&hellip; (click to cancel)</>
+                      : <>Continue<ArrowRight className="h-3.5 w-3.5 ml-1.5 inline" /></>}
+                </span>
+              </Button>
             </div>
           ) : wizardStep === 1 && isShared ? (
             <div className="space-y-4 py-1">
-              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#45474c]">Shared Drive · Choose where Firma should work</p>
+              <div className="flex items-center gap-1.5">
+                <GoogleSharedDriveIcon size={14} className="shrink-0" />
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#45474c]">Shared Drive · Choose where Firma should work</p>
+              </div>
 
               <div className="space-y-3">
-                <p className="text-xs text-[#45474c] leading-relaxed">
-                  Pick a folder in your shared drive. We&rsquo;ll create a <code className="text-[11px] font-mono">{FIRMA_PARENT_FOLDER_NAME}</code> folder inside it and keep everything there.
-                </p>
-                <p className="text-[11px] text-[#45474c] leading-relaxed">
-                  Google only lets apps see folders you explicitly select, so this step is manual. Microsoft doesn&rsquo;t have this restriction.
-                </p>
-                <p className="text-[11px] text-[#45474c] leading-relaxed">
-                  No folders in your shared drive yet? Create one in Drive — any name works — then select it.
-                </p>
-
                 {knownFoldersLoading ? (
                   <p className="text-xs text-[#45474c]">Checking for shared drives you&rsquo;ve already set up…</p>
                 ) : knownFirmaFolders.length > 0 ? (
@@ -767,57 +928,181 @@ export function GoogleDriveWorkspaceRoot({
                         </button>
                       ))}
                     </div>
-                    <p className="text-[11px] text-[#45474c]">Or pick a different location below.</p>
+                    <p className="text-[11px] text-[#45474c]">Or answer below to pick a different location.</p>
                   </div>
                 ) : null}
 
-                {rootFolderId && estimateLoading && (
-                  <p className="text-xs text-[#45474c]">Estimating migration time…</p>
-                )}
-                {rootFolderId && estimate && !estimateLoading && (
-                  <p className="text-xs text-[#45474c]">
-                    ~{estimate.estimatedMinutes} min maintenance window · {estimate.itemCount} items
-                  </p>
-                )}
-
-                <div className="flex items-center gap-2 pt-1">
-                  <Button type="button" variant="outline" size="sm"
-                    className="flex-1 justify-center h-8 px-3 text-[11px] font-headline font-bold tracking-widest uppercase rounded border-[#e5e7eb] text-[#45474c] hover:bg-[#f9f9fb]"
-                    onClick={resetFlow}>
-                    <ArrowRight className="h-3.5 w-3.5 rotate-180 mr-1" />Change location
-                  </Button>
-                  <a
-                    href={driveOpenUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="relative inline-flex flex-1 items-center justify-center gap-1.5 h-8 px-3 text-[11px] font-headline font-bold tracking-widest uppercase rounded border border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] transition-colors"
-                  >
-                    <GoogleDriveIcon size={14} className="shrink-0" aria-hidden />
-                    Open Shared Drives<ArrowUpRight className="h-3.5 w-3.5" />
-                  </a>
-                  <GooglePickerButton
-                    mode="select-folder"
-                    connectionId={connectionId}
-                    driveType="Shared Drive"
-                    query={pickerQuery}
-                    onPickerOpen={() => { setSaving(true); setPickerOpen(true) }}
-                    onPickerCancel={() => { setSaving(false); setPickerOpen(false) }}
-                    onImport={(items) => { setPickerOpen(false); void handleFolderPicked(items as { id: string; name: string }[]) }}
-                  >
+                {hasFolderReady === null ? (
+                  // Gate before Picker opens — Picker can only select an EXISTING folder (it has
+                  // no inline "New Folder" capability, and the app can't create one on the user's
+                  // behalf either: drive.file scope grants no access inside a Shared Drive until
+                  // something in it has been picked, so there's nothing to create "into" yet).
+                  <div className="space-y-3">
+                    <p className="text-xs text-[#45474c] leading-relaxed">
+                      Do you have a folder in Google Drive that you can use as the storage location for your files?
+                    </p>
+                    <div className="grid grid-cols-1 gap-2">
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={folderReadyChoice === true}
+                        onClick={() => { setFolderReadyChoice(true); setFolderReadyCountdown(AUTO_ADVANCE_SECONDS) }}
+                        className={cn(
+                          "group flex items-start gap-3 rounded border bg-white p-3.5 text-left transition-all active:scale-[0.99]",
+                          folderReadyChoice === true
+                            ? "border-primary ring-1 ring-primary bg-primary/[0.03]"
+                            : "border-[#e5e7eb] hover:border-[#1b1b1d] hover:bg-[#f9f9fb]",
+                        )}
+                      >
+                        <span className={cn(
+                          "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors",
+                          folderReadyChoice === true ? "border-primary" : "border-[#d1d5db]",
+                        )}>
+                          {folderReadyChoice === true && <span className="h-2 w-2 rounded-full bg-primary" />}
+                        </span>
+                        <span>
+                          <p className="text-[0.8125rem] font-semibold text-[#1b1b1d]">Yes, I already have a folder I can use as Firma&rsquo;s storage location</p>
+                          <p className="text-xs text-[#45474c] leading-relaxed mt-0.5">We&rsquo;ll open the picker so you can select it.</p>
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={folderReadyChoice === false}
+                        onClick={() => { setFolderReadyChoice(false); setFolderReadyCountdown(AUTO_ADVANCE_SECONDS) }}
+                        className={cn(
+                          "group flex items-start gap-3 rounded border bg-white p-3.5 text-left transition-all active:scale-[0.99]",
+                          folderReadyChoice === false
+                            ? "border-primary ring-1 ring-primary bg-primary/[0.03]"
+                            : "border-[#e5e7eb] hover:border-[#1b1b1d] hover:bg-[#f9f9fb]",
+                        )}
+                      >
+                        <span className={cn(
+                          "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors",
+                          folderReadyChoice === false ? "border-primary" : "border-[#d1d5db]",
+                        )}>
+                          {folderReadyChoice === false && <span className="h-2 w-2 rounded-full bg-primary" />}
+                        </span>
+                        <span>
+                          <p className="text-[0.8125rem] font-semibold text-[#1b1b1d]">No, let me create a new folder in Drive now</p>
+                          <p className="text-xs text-[#45474c] leading-relaxed mt-0.5">We&rsquo;ll open Google Drive in a new tab so you can create one first.</p>
+                        </span>
+                      </button>
+                    </div>
                     <Button type="button" variant="greenCta"
-                      className="relative flex-1 justify-center h-8 text-[11px] font-headline font-bold tracking-widest uppercase rounded"
-                      disabled={saving}>
-                      {saving
-                        ? <><RefreshCw className="h-3.5 w-3.5 mr-1.5 shrink-0 animate-spin" />Applying…</>
-                        : <><FolderOpen className="h-3.5 w-3.5 mr-1.5 shrink-0" />Select Folder</>}
+                      className="relative w-full h-8 overflow-hidden text-[11px] font-headline font-bold tracking-widest uppercase rounded"
+                      disabled={folderReadyChoice === null}
+                      onClick={() => {
+                        // Clicking while the countdown is running cancels back to no selection —
+                        // it does not confirm early. Only the timer reaching 0, or clicking after
+                        // it's been cancelled and re-picked, actually advances.
+                        if (folderReadyCountdown !== null) {
+                          setFolderReadyChoice(null)
+                          setFolderReadyCountdown(null)
+                          return
+                        }
+                        if (folderReadyChoice !== null) confirmFolderReadyChoice(folderReadyChoice)
+                      }}>
+                      {folderReadyCountdown !== null && (
+                        <span
+                          key={folderReadyChoice ? 'true' : 'false'}
+                          className="absolute inset-y-0 left-0 w-0 bg-white/25"
+                          style={{ animation: `firma-countdown-fill ${AUTO_ADVANCE_SECONDS}s linear forwards` }}
+                          aria-hidden
+                        />
+                      )}
+                      <span className="relative">
+                        {folderReadyCountdown !== null
+                          ? <>Continuing in {folderReadyCountdown}s&hellip; (click to cancel)</>
+                          : <>Continue<ArrowRight className="h-3.5 w-3.5 ml-1.5 inline" /></>}
+                      </span>
                     </Button>
-                  </GooglePickerButton>
-                </div>
+                  </div>
+                ) : hasFolderReady === false ? (
+                  <div className="space-y-3">
+                    <p className="text-xs text-[#45474c] leading-relaxed flex items-start gap-1.5">
+                      <GoogleDriveIcon size={14} className="shrink-0 mt-px" aria-hidden />
+                      Create a folder in Google Drive — any name works — then come back and continue.
+                    </p>
+                    <span className={cn("relative flex w-full rounded", !hasOpenedDrive && "p-[1.5px] overflow-hidden")}>
+                      {!hasOpenedDrive && (
+                        <span
+                          className="animate-border-spin absolute inset-0"
+                          style={{
+                            background: "conic-gradient(from var(--border-angle), #4285F4 0%, #EA4335 12%, #FBBC05 24%, #34A853 36%, transparent 46%, transparent 100%)",
+                          }}
+                          aria-hidden
+                        />
+                      )}
+                      <a
+                        href={sharedDriveOpenUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => setHasOpenedDrive(true)}
+                        className="relative flex w-full items-center justify-center gap-1.5 h-8 px-3 text-[11px] font-headline font-bold tracking-widest uppercase rounded border border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] transition-colors"
+                      >
+                        <GoogleDriveIcon size={14} className="shrink-0" aria-hidden />
+                        Open Google Drive<ArrowUpRight className="h-3.5 w-3.5" />
+                      </a>
+                    </span>
+                    <Button type="button" variant="greenCta"
+                      className="w-full h-8 text-[11px] font-headline font-bold tracking-widest uppercase rounded"
+                      disabled={!hasOpenedDrive}
+                      onClick={() => { setWentThroughRedirect(true); setHasFolderReady(true) }}>
+                      I&rsquo;ve created a folder — continue<ArrowRight className="h-3.5 w-3.5 ml-1.5" />
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-xs text-[#45474c] leading-relaxed">
+                      Pick a shared drive, then a folder inside it. We&rsquo;ll create a <code className="text-[11px] font-mono">{FIRMA_PARENT_FOLDER_NAME}</code> folder there and keep everything inside it.
+                    </p>
+
+                    <div className="rounded border border-[#e5e7eb] bg-[#f9f9fb] px-3.5 py-3 flex gap-3">
+                      <ShieldCheck className="h-4 w-4 shrink-0 text-[#45474c] mt-0.5" aria-hidden />
+                      <div>
+                        <p className="text-xs font-semibold text-[#1b1b1d]">Google only lets apps see folders you explicitly select</p>
+                        <p className="text-[11px] text-[#45474c] mt-0.5 leading-relaxed">
+                          Nothing else in your Drive is visible to Firma until you choose it here — a security boundary Google enforces on every app, not a Firma limitation.
+                        </p>
+                      </div>
+                    </div>
+
+                    {rootFolderId && estimateLoading && (
+                      <p className="text-xs text-[#45474c]">Estimating migration time…</p>
+                    )}
+                    {rootFolderId && estimate && !estimateLoading && (
+                      <p className="text-xs text-[#45474c]">
+                        ~{estimate.estimatedMinutes} min maintenance window · {estimate.itemCount} items
+                      </p>
+                    )}
+
+                    <GooglePickerButton
+                      mode="select-folder"
+                      connectionId={connectionId}
+                      driveType="Shared Drive"
+                      onPickerOpen={() => { setSaving(true); setPickerOpen(true) }}
+                      onPickerCancel={() => { setSaving(false); setPickerOpen(false) }}
+                      onImport={(items) => { setPickerOpen(false); void handleFolderPicked(items as { id: string; name: string }[]) }}
+                    >
+                      <Button type="button" variant="greenCta"
+                        className="w-full justify-center h-8 text-[11px] font-headline font-bold tracking-widest uppercase rounded"
+                        disabled={saving}>
+                        {saving
+                          ? <><RefreshCw className="h-3.5 w-3.5 mr-1.5 shrink-0 animate-spin" />Applying…</>
+                          : <><FolderOpen className="h-3.5 w-3.5 mr-1.5 shrink-0" />Select Folder</>}
+                      </Button>
+                    </GooglePickerButton>
+                  </>
+                )}
               </div>
             </div>
           ) : wizardStep === 1 ? (
             <div className="space-y-4 py-1">
-              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#45474c]">My Drive · Setup</p>
+              <div className="flex items-center gap-1.5">
+                <GoogleDriveIcon size={14} className="shrink-0" />
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#45474c]">My Drive · Setup</p>
+              </div>
 
               <div className="space-y-3">
                 {/* Generated name box */}

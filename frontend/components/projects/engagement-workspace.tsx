@@ -278,11 +278,6 @@ export function EngagementWorkspace({
                                     {engagementStatus}
                                 </span>
                             )}
-                            {clientStatus === 'PROSPECT' && (
-                                <span className="bg-fuchsia-50 text-fuchsia-500 border border-fuchsia-200 px-2 py-0.5 rounded font-mono text-[10px] tracking-tight uppercase shrink-0">
-                                    Prospect
-                                </span>
-                            )}
                             {engagementDueDate && (() => {
                                 const today = new Date(); today.setHours(0, 0, 0, 0)
                                 const due = new Date(engagementDueDate); due.setHours(0, 0, 0, 0)

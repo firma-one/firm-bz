@@ -399,10 +399,10 @@ export function OneDriveWorkspaceRoot({
           <TooltipProvider delayDuration={300}>
             <div className="flex items-center gap-3 min-w-0">
               <div className="shrink-0 flex h-9 w-9 items-center justify-center rounded border border-[#e5e7eb] bg-[#f9f9fb]" aria-hidden>
-                <FolderOpen className="h-4.5 w-4.5 text-[#45474c]" strokeWidth={1.75} />
+                <HardDrive className="h-4.5 w-4.5 text-[#45474c]" strokeWidth={1.75} />
               </div>
               <p className="min-w-0 flex-1 text-[0.8125rem] text-[#45474c]">
-                No workspace folder selected yet.
+                No storage location selected.
               </p>
               <button
                 type="button"
@@ -418,7 +418,7 @@ export function OneDriveWorkspaceRoot({
                 disabled={!accessToken || !connectorActive || migrationLocked}
                 aria-label="Choose storage location"
               >
-                <FolderOpen className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                <HardDrive className="h-3.5 w-3.5 shrink-0" aria-hidden />
                 Choose Location
               </button>
             </div>
