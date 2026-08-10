@@ -40,7 +40,9 @@ import {
   SquareFunction,
 } from "lucide-react"
 import { GoogleDriveProductMark } from "@/components/ui/google-drive-icon"
+import { OneDriveIcon } from "@/components/ui/onedrive-icon"
 import { BrandMarkIcon } from "@/components/brand/BrandMarkIcon"
+import { BrandName } from "@/components/brand/BrandName"
 import { Button } from "@/components/ui/button"
 import { Header } from "@/components/layout/Header"
 import { Footer } from "@/components/layout/Footer"
@@ -284,6 +286,7 @@ export function LandingPage({
   const setActiveModal = controlled ? onActiveModalChange! : setActiveModalInternal
   const [currentSlide, setCurrentSlide] = useState(0)
   const [currentTaglineIndex, setCurrentTaglineIndex] = useState(0)
+  const [currentSubtextIndex, setCurrentSubtextIndex] = useState(0)
 
 
   const editorialStitchSlides = [
@@ -293,7 +296,7 @@ export function LandingPage({
       icon: Cable,
       colorClass: "bg-white border-black/[0.12] text-[#041627]",
       subtitle: "Connect & Select",
-      desc: "Connect your specific Google Drive folders. Import existing client documents directly into structured engagements.",
+      desc: "Connect your specific Google Drive (or OneDrive/SharePoint, in Beta) folders. Import existing client documents directly into structured engagements.",
     },
     {
       id: "setup" as const,
@@ -344,7 +347,7 @@ export function LandingPage({
       icon: Cable,
       colorClass: "bg-white border-black/[0.12] text-[#1b1b1d]",
       subtitle: "Connect & Select",
-      desc: "Connect your specific Google Drive folders. Import existing client documents directly into structured engagements.",
+      desc: "Connect your specific Google Drive (or OneDrive/SharePoint, in Beta) folders. Import existing client documents directly into structured engagements.",
     },
     {
       id: "setup" as const,
@@ -395,7 +398,7 @@ export function LandingPage({
       icon: Cable,
       colorClass: "bg-[#FFF7F2] border-[#ECC0AA]/35 text-[#7a5343]",
       subtitle: "Connect & Select",
-      desc: "Connect your specific Google Drive folders. Import existing client documents directly into structured engagements.",
+      desc: "Connect your specific Google Drive (or OneDrive/SharePoint, in Beta) folders. Import existing client documents directly into structured engagements.",
     },
     {
       id: "setup" as const,
@@ -453,8 +456,15 @@ export function LandingPage({
   }, [slides.length])
 
   useEffect(() => {
+    let tick = 0
     const timer = setInterval(() => {
-      setCurrentTaglineIndex((prev) => (prev + 1) % 2)
+      tick += 1
+      // Cadence: title, title, title, subtext, repeat — title rotates through all 3 variants, then pauses for one beat while subtext rotates.
+      if (tick % 4 === 0) {
+        setCurrentSubtextIndex((prev) => (prev + 1) % 2)
+      } else {
+        setCurrentTaglineIndex((prev) => (prev + 1) % 3)
+      }
     }, 4000)
     return () => clearInterval(timer)
   }, [])
@@ -479,7 +489,7 @@ export function LandingPage({
         <div
           className={cn(
             MARKETING_PAGE_SHELL,
-            "relative z-10 flex min-h-0 flex-1 flex-col lg:justify-center",
+            "relative z-10 flex w-full min-h-0 flex-1 flex-col lg:justify-center",
           )}
         >
           {isKinetic ? (
@@ -664,41 +674,109 @@ export function LandingPage({
                 </FadeIn>
 
                 <FadeIn delay={80}>
-                  <div className="h-auto md:h-40 lg:h-48 flex items-start md:items-center">
-                    <AnimatePresence mode="wait">
-                      {currentTaglineIndex === 0 ? (
-                        <motion.h2
-                          key="kinetic-tagline-0"
-                          className="text-5xl sm:text-6xl md:text-7xl lg:text-[4.2rem] font-bold leading-[0.92] tracking-tighter text-[#1b1b1d] [font-family:var(--font-kinetic-headline),system-ui,sans-serif]"
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -20 }}
-                          transition={{ duration: 0.6, ease: "easeInOut" }}
-                        >
-                          A premium offering demands{" "}
-                          <span className="inline-flex items-center justify-center gap-2 align-middle">
-                            <BrandMarkIcon className="h-10 w-10 md:h-12 md:w-12 shrink-0" />
-                          </span>{" "}
-                          <span className="text-[#5a78ff]">A premium client showcase</span>
-                        </motion.h2>
-                      ) : (
-                        <motion.h2
-                          key="kinetic-tagline-1"
-                          className="text-5xl sm:text-6xl md:text-7xl lg:text-[4.2rem] font-bold leading-[0.92] tracking-tighter text-[#1b1b1d] [font-family:var(--font-kinetic-headline),system-ui,sans-serif]"
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -20 }}
-                          transition={{ duration: 0.6, ease: "easeInOut" }}
-                        >
-                          Turn Your{" "}
-                          <span className="inline-flex items-center gap-2 align-bottom">
-                            <GoogleDriveProductMark className="mb-1 h-10 w-10 shrink-0 md:h-12 md:w-12" />
-                            <span className="text-[#5a78ff]">Google Drive</span>
-                          </span>{" "}
-                          Into A Professional Client Portal
-                        </motion.h2>
-                      )}
-                    </AnimatePresence>
+                  <div className="grid">
+                    {/* Invisible sizer: each variant occupies the same grid cell, so the container's natural height is the MAX of the 3 (not their sum) — reserves just enough space, no more. */}
+                    <div aria-hidden className="invisible col-start-1 row-start-1 flex flex-col gap-3">
+                      <span className="text-xs md:text-sm font-bold uppercase tracking-[0.2em] [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
+                        Friction
+                      </span>
+                      <h2 className="text-5xl sm:text-6xl md:text-7xl lg:text-[4.2rem] font-bold leading-[0.92] tracking-tighter [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
+                        Your clients shouldn&apos;t have to ask &ldquo;is this done?&rdquo;
+                      </h2>
+                    </div>
+                    <div aria-hidden className="invisible col-start-1 row-start-1 flex flex-col gap-3">
+                      <span className="text-xs md:text-sm font-bold uppercase tracking-[0.2em] [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
+                        Need
+                      </span>
+                      <h2 className="text-5xl sm:text-6xl md:text-7xl lg:text-[4.2rem] font-bold leading-[0.92] tracking-tighter [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
+                        You need one Board, where every deliverable is tracked, approved, and visible.
+                      </h2>
+                    </div>
+                    <div aria-hidden className="invisible col-start-1 row-start-1 flex flex-col gap-3">
+                      <span className="text-xs md:text-sm font-bold uppercase tracking-[0.2em] [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
+                        Solution
+                      </span>
+                      <h2 className="text-5xl sm:text-6xl md:text-7xl lg:text-[4.2rem] font-bold leading-[0.92] tracking-tighter [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
+                        <span className="inline-flex items-center gap-2 align-middle">
+                          <BrandMarkIcon className="h-10 w-10 md:h-12 md:w-12 shrink-0" />
+                          firmä
+                        </span>{" "}
+                        provides a premium client showcase, not just a shared folder.
+                      </h2>
+                    </div>
+                    <div className="col-start-1 row-start-1 flex flex-col items-start justify-start gap-3">
+                      <AnimatePresence mode="wait">
+                        {(() => {
+                          const stage = [
+                            {
+                              label: "Friction",
+                              Icon: Zap,
+                              color: "#ba1a1a",
+                              headline: (
+                                <>
+                                  Your clients shouldn&apos;t have to ask{" "}
+                                  <span className="text-[#5a78ff]">&ldquo;is this done?&rdquo;</span>
+                                </>
+                              ),
+                            },
+                            {
+                              label: "Need",
+                              Icon: Target,
+                              color: "#5a78ff",
+                              headline: (
+                                <>
+                                  You need{" "}
+                                  <span className="text-[#5a78ff]">one Board</span>, where every deliverable is tracked, approved, and visible.
+                                </>
+                              ),
+                            },
+                            {
+                              label: "Solution",
+                              Icon: Gem,
+                              color: "#006e16",
+                              headline: (
+                                <>
+                                  <span className="inline-flex items-center gap-2 align-middle">
+                                    <BrandMarkIcon className="h-10 w-10 md:h-12 md:w-12 shrink-0" />
+                                    firmä
+                                  </span>{" "}
+                                  provides{" "}
+                                  <span className="text-[#5a78ff]">a premium client showcase</span>, not just a shared folder.
+                                </>
+                              ),
+                            },
+                          ][currentTaglineIndex]
+                          return (
+                            <motion.div
+                              key={`kinetic-tagline-${currentTaglineIndex}`}
+                              className="flex flex-col gap-3"
+                              initial={{ opacity: 0, y: 16 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, y: -16 }}
+                              transition={{ duration: 0.5, ease: "easeInOut" }}
+                            >
+                              <span className="inline-flex items-center gap-2.5">
+                                <span
+                                  className="h-[2px] w-8 rounded-full"
+                                  style={{ backgroundColor: stage.color }}
+                                  aria-hidden
+                                />
+                                <stage.Icon className="h-4 w-4 shrink-0" style={{ color: stage.color }} strokeWidth={2.5} aria-hidden />
+                                <span
+                                  className="text-xs md:text-sm font-bold uppercase tracking-[0.2em] [font-family:var(--font-kinetic-headline),system-ui,sans-serif]"
+                                  style={{ color: stage.color }}
+                                >
+                                  {stage.label}
+                                </span>
+                              </span>
+                              <h2 className="text-5xl sm:text-6xl md:text-7xl lg:text-[4.2rem] font-bold leading-[0.92] tracking-tighter text-[#1b1b1d] [font-family:var(--font-kinetic-headline),system-ui,sans-serif]">
+                                {stage.headline}
+                              </h2>
+                            </motion.div>
+                          )
+                        })()}
+                      </AnimatePresence>
+                    </div>
                   </div>
                 </FadeIn>
 
@@ -713,10 +791,36 @@ export function LandingPage({
                 </FadeIn>
 
                 <FadeIn delay={200}>
-                  <p className="text-lg md:text-xl text-[#45474c] max-w-2xl leading-relaxed [font-family:var(--font-kinetic-body),system-ui,sans-serif]">
-                    Stop sending raw Drive links. Deliver work with a <span className="font-semibold text-[#1b1b1d]"> white-glove experience </span> that protects
-                    your Intellectual Property. Instantly revoke access when the engagement is completed.
-                  </p>
+                  <div className="grid max-w-2xl [&>*]:col-start-1 [&>*]:row-start-1">
+                    <p
+                      aria-hidden={currentSubtextIndex !== 0}
+                      className={cn(
+                        "text-lg md:text-xl text-[#45474c] leading-relaxed [font-family:var(--font-kinetic-body),system-ui,sans-serif] transition-all duration-500 ease-in-out",
+                        currentSubtextIndex === 0 ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-2 pointer-events-none",
+                      )}
+                    >
+                      Built on top of the{" "}
+                      <span className="inline-flex items-center gap-1.5 font-semibold text-[#1b1b1d]">
+                        <GoogleDriveProductMark className="h-4 w-4 shrink-0" />
+                        Google Drive
+                      </span>{" "}
+                      or{" "}
+                      <span className="inline-flex items-center gap-1.5 font-semibold text-[#1b1b1d]">
+                        <OneDriveIcon size={16} className="shrink-0" />
+                        OneDrive
+                      </span>{" "}
+                      you already have, not a replacement for it. Your files never leave your Drive. No migration, no lock-in.
+                    </p>
+                    <p
+                      aria-hidden={currentSubtextIndex !== 1}
+                      className={cn(
+                        "text-lg md:text-xl text-[#45474c] leading-relaxed [font-family:var(--font-kinetic-body),system-ui,sans-serif] transition-all duration-500 ease-in-out",
+                        currentSubtextIndex === 1 ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-2 pointer-events-none",
+                      )}
+                    >
+                      93% of client-facing teams struggle to coordinate reviews and approvals, buried in email threads with no single source of truth. <BrandName className="text-lg md:text-xl" /> gives every deliverable a <span className="font-semibold text-[#1b1b1d]">Board, a status, and a sign-off trail</span>, so nothing falls through the cracks.
+                    </p>
+                  </div>
                 </FadeIn>
 
                 <FadeIn delay={300}>

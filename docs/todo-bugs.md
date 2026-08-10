@@ -17,6 +17,15 @@ When a doc or engagement is deleted, its entries in the sidebar's "Recent" and "
 ### 7. Left nav links unresponsive while on the 404 page
 From the 404 page (see bug #5), clicking left-nav items like Overview or Clients does nothing — navigation appears dead until the user clicks "Go to Dashboard"/"Go Back" or reloads.
 
+### 9. No way to remove individual Recents entries [MEDIUM]
+Add the ability to remove/dismiss individual entries from Recents in the left app sidebar, the TopBar, and the dedicated /d/u/recent page.
+
+### 10. Stale Recents point to deleted clients/engagements, causing 404s [MEDIUM]
+Recents entries for clients/engagements that have since been deleted still show up in Recents (left sidebar, TopBar, and /d/u/recent). Clicking one navigates to a 404 page. Related to bug #6 (orphaned Recents/Reminders not cleaned up on deletion).
+
+### 11. Reminders are left stale when the underlying Document, Deliverable, or Engagement is deleted [MEDIUM]
+Like Recents (see bug #10), Reminders are not cleaned up when their corresponding Document, Deliverable, or Engagement is deleted — the stale reminder stays visible. Reminders should be auto-removed when the corresponding Document, Deliverable, or Engagement is deleted.
+
 ### 8. Engagement card shows both client status and engagement status badges together [DONE]
 On a client's Engagements tab, the engagement card shows two status badges side by side — the parent client's status (e.g. "Prospect") and the engagement's own status (e.g. "Active"). Showing both on the same card reads as contradictory. Repro: create a client with status Prospect, add an engagement under it with status Active — the engagement card displays both "Prospect" and "Active" badges.
 

@@ -11,6 +11,7 @@ import { resolveEngagementConnector } from '@/lib/connectors/resolve-client-conn
 import { getPermissionAdapter, getContentAdapter } from '@/lib/connectors/registry'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { assertFirmSubscriptionAccess } from '@/lib/billing/subscription-gate'
+import { assertWithinDeliverableCap } from '@/lib/billing/effective-billing-caps'
 import { SubscriptionRevokedError } from '@/lib/errors/api-error'
 import { assignDocId } from '@/lib/doc-id'
 import { DocumentSharingPermissionStatus, EngagementRole } from '@prisma/client'
@@ -167,6 +168,8 @@ export async function PUT(
         select: { name: true, firmId: true },
       })
       if (!engagement) return NextResponse.json({ error: 'Engagement not found' }, { status: 404 })
+
+      await assertWithinDeliverableCap(engagement.firmId)
 
       const now = new Date().toISOString()
 
@@ -636,6 +639,9 @@ export async function PUT(
     return NextResponse.json({ sharing: toJsonSafeSharing(updated as Record<string, unknown> | null) })
   } catch (e) {
     if (e instanceof SubscriptionRevokedError) return NextResponse.json({ error: e.message }, { status: 403 })
+    if (e instanceof Error && e.message.startsWith('Your plan allows')) {
+      return NextResponse.json({ error: e.message }, { status: 402 })
+    }
     console.error('PUT sharing error', e)
     return NextResponse.json({ error: 'Failed to save sharing' }, { status: 500 })
   }

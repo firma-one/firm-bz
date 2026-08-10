@@ -161,7 +161,7 @@ export function FAQModal({ isOpen, onClose }: FAQModalProps) {
             <p className="text-gray-600 mt-1">
               Everything you need to know about{' '}
               <BrandName className="font-medium" />
-              &apos;s features, security, and Google Drive integration.
+              &apos;s features, security, and Google Drive / OneDrive integration.
             </p>
           </div>
           <button

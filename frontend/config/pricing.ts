@@ -12,8 +12,8 @@ export interface PricingComparisonRow {
     tooltip?: string
     /** Rich layout for the comparison-table tooltip (see pricing page). */
     tooltipLayout?: PricingComparisonTooltipLayout
-    /** Optional icon key rendered inline after the feature label. */
-    featureIcon?: 'google-drive' | 'onedrive'
+    /** Optional icon key(s) rendered inline after the feature label. */
+    featureIcon?: 'google-drive' | 'onedrive' | 'sharepoint' | 'ai' | Array<'google-drive' | 'onedrive' | 'sharepoint' | 'ai'>
     /** planId -> value */
     values: Record<string, PlanValue>
 }
@@ -67,7 +67,7 @@ export function planCardUsageSummary(plan: PricingPlan): string[] {
 
 /** Free Demo card — same usage framing as the comparison table Sandbox column. */
 export function sandboxPlanUsageSummary(): string[] {
-    return ['1 firm · 1 client', '1 active engagement', '20 documents']
+    return ['1 firm · 1 client', '1 active engagement', '10 documents']
 }
 
 /**
@@ -109,7 +109,7 @@ export const PRICING_PLANS: PricingPlan[] = [
         firmsIncluded: 1,
         projectsIncluded: 10,
         description:
-            'Take off the training wheels. Full client portal on your existing Google Drive—engagements, personas, and feedback in one place.',
+            'Take off the training wheels. Full client portal on your existing Drive—engagements, personas, and feedback in one place.',
         price: '$49',
         priceBilledAnnually: 39,
         duration: '/month',
@@ -184,58 +184,22 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
                 },
             },
             {
-                feature: "Firms",
-                tooltip: "Each Standard–Business subscription covers one firm workspace (one billable Pockett firm). Another legal entity or separate firm usually means another subscription. Enterprise: multiple firms and consolidated billing—contact sales.",
+                feature: "Firm → Client → Engagement → Deliverable → Document hierarchy",
+                tooltip: "Clean structure: Firm → Client → Engagement → Deliverable → Document. Maps to folders in your Drive. Clients see a clear place for their engagement and document handoffs. Each column shows the included limit at every level.",
+                tooltipLayout: "hierarchy-sample",
                 values: {
-                    Sandbox: "1",
-                    Standard: "1",
-                    Pro: "1",
-                    Business: "3",
-                    Enterprise: "Custom",
+                    Sandbox: "1 firm\n1 client\n1 engagement\n1 deliverable\n10 documents",
+                    Standard: "1 firm\n3 clients\n10 engagements\nUnlimited deliverables\nUnlimited documents",
+                    Pro: "1 firm\n10 clients\n25 engagements\nUnlimited deliverables\nUnlimited documents",
+                    Business: "3 firms\n20 clients\n50 engagements\nUnlimited deliverables\nUnlimited documents",
+                    Enterprise: "No limits",
                 },
             },
             {
-                feature: "Clients",
-                tooltip: "Maximum number of client records per firm workspace.",
-                values: {
-                    Sandbox: "1",
-                    Standard: "3",
-                    Pro: "10",
-                    Business: "20",
-                    Enterprise: "Unlimited",
-                },
-            },
-            {
-                feature: "Engagements",
-                tooltip: "Maximum concurrent active engagements included with that subscription (per covered firm workspace). Closed or deleted engagements do not count. Enterprise includes a negotiated cap (often up to 100).",
-                values: {
-                    Sandbox: "1",
-                    Standard: "10",
-                    Pro: "25",
-                    Business: "50",
-                    Enterprise: "100",
-                },
-            },
-            {
-                feature: "Documents",
-                tooltip: "Maximum number of indexed files and folders per firm workspace. Paid plans are unlimited.",
-                values: {
-                    Sandbox: "20",
-                    Standard: "Unlimited",
-                    Pro: "Unlimited",
-                    Business: "Unlimited",
-                    Enterprise: "Unlimited",
-                },
-            },
-            {
-                feature: "Internal users",
-                tooltip: "No per-seat fee for Firm Administrator, Firm Member, Client Administrator, Engagement Lead, and Contributor (Internal).",
-                values: { Sandbox: "2", Standard: "Unlimited", Pro: "Unlimited", Business: "Unlimited", Enterprise: "Unlimited" },
-            },
-            {
-                feature: "External users",
-                tooltip: "No per-seat fee for Contributor (External) or Reviewer.",
-                values: { Sandbox: "2", Standard: "Unlimited", Pro: "Unlimited", Business: "Unlimited", Enterprise: "Unlimited" },
+                feature: "Users & Access Control",
+                tooltip: ENGAGEMENT_PERSONAS_PRICING_TOOLTIP,
+                tooltipLayout: "engagement-personas",
+                values: { Sandbox: "2 users", Standard: "Unlimited", Pro: "Unlimited", Business: "Unlimited", Enterprise: "Unlimited" },
             },
         ],
     },
@@ -249,31 +213,19 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
                 values: { Sandbox: true, Standard: true, Pro: true, Business: true, Enterprise: true },
             },
             {
-                feature: "Bring your own OneDrive",
-                tooltip: "Connect your Microsoft OneDrive or SharePoint as the storage backend for your firm portal.",
-                featureIcon: 'onedrive',
-                values: { Sandbox: "Coming soon", Standard: "Coming soon", Pro: "Coming soon", Business: "Coming soon", Enterprise: "Coming soon" },
+                feature: "Bring your own OneDrive / SharePoint",
+                tooltip: "Connect your Microsoft OneDrive or SharePoint as the storage backend for your firm portal. Available now in Beta.",
+                featureIcon: ['onedrive', 'sharepoint'],
+                values: { Sandbox: "Beta", Standard: "Beta", Pro: "Beta", Business: "Beta", Enterprise: "Beta" },
             },
             {
                 feature: "Custom branded client portal",
                 values: { Sandbox: true, Standard: true, Pro: true, Business: true, Enterprise: true },
-                tooltip: "Professional client portal with your branding instead of generic Drive links or email attachments. Works with your existing Google Drive.",
+                tooltip: "Professional client portal with your branding instead of generic Drive links or email attachments. Works with your existing Google Drive or Microsoft OneDrive/SharePoint (Beta).",
             },
             {
-                feature: "Firm → Client → Engagement hierarchy",
-                tooltip: "Clean structure: Firm → Client → Engagement. Maps to folders in your Drive. Clients see a clear place for their engagement and document handoffs.",
-                tooltipLayout: "hierarchy-sample",
-                values: { Sandbox: true, Standard: true, Pro: true, Business: true, Enterprise: true },
-            },
-            {
-                feature: "Persona-based access (4 engagement roles)",
-                tooltip: ENGAGEMENT_PERSONAS_PRICING_TOOLTIP,
-                tooltipLayout: "engagement-personas",
-                values: { Sandbox: true, Standard: true, Pro: true, Business: true, Enterprise: true },
-            },
-            {
-                feature: "Document — Never Share tags",
-                tooltip: "Tag internal files so they never reach clients — prevents accidental sharing of sensitive documents.",
+                feature: "Private documents (Never Share tags)",
+                tooltip: "Mark files as internal-only — visible to you alone, and excluded from every client-facing view by design. Full control over what your clients can ever see.",
                 values: { Sandbox: true, Standard: true, Pro: true, Business: true, Enterprise: true },
             },
             {
@@ -299,8 +251,8 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
                 values: { Sandbox: false, Standard: "30 days", Pro: "90 days", Business: "365 days", Enterprise: "Unlimited" },
             },
             {
-                feature: "Document comment thread (feedback & approvals)",
-                tooltip: "One thread per file for comments, feedback, and approvals—shared with everyone on the engagement. Replace scattered email and chat with a single place where the conversation stays with the work. Each column shows how long comment history is retained.",
+                feature: "In-app messaging (Deliverable comment thread)",
+                tooltip: "One thread per deliverable for comments and feedback—shared with everyone on the engagement. Replace scattered email and chat with a single place where the conversation stays with the work. Each column shows how long comment history is retained.",
                 values: { Sandbox: "15 days", Standard: "60 days", Pro: "90 days", Business: "365 days", Enterprise: "Unlimited" },
             },
             {
@@ -326,16 +278,43 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
         ],
     },
     {
+        name: "DELIVERY & OVERSIGHT",
+        rows: [
+            {
+                feature: "Deliverable Board",
+                tooltip: "Track every deliverable through To Do → In Progress → In Review → Approved, with guest approvals and locking on approval — no more email sign-offs or scattered threads to figure out where work stands.",
+                values: { Sandbox: true, Standard: true, Pro: true, Business: true, Enterprise: true },
+            },
+            {
+                feature: "AI-powered search",
+                tooltip: "Natural language search across your whole firm — e.g. \"find all competitor analysis docs\". Search by intent, not just exact file names.",
+                featureIcon: 'ai',
+                values: { Sandbox: true, Standard: true, Pro: true, Business: true, Enterprise: true },
+            },
+            {
+                feature: "Tracking Calendar",
+                tooltip: "Every deadline across every client, deliverable & document — one color-coded calendar, click to jump straight to the work.",
+                values: { Sandbox: false, Standard: false, Pro: true, Business: true, Enterprise: true },
+            },
+            {
+                feature: "Engagement Health Dashboard",
+                tooltip: "See every engagement's pulse at a glance — status rollups, client health scoring, and an action centre surfacing approvals & due dates in one view. Catch a stalling engagement before your client has to ask.",
+                values: {
+                    Sandbox: false,
+                    Standard: "PDF export",
+                    Pro: "+ Email notifications",
+                    Business: "+ AI Assistant",
+                    Enterprise: "Incl. all features in Business",
+                },
+            },
+        ],
+    },
+    {
         name: "ADVANCED",
         rows: [
             {
                 feature: "Engagement & Document templates",
                 tooltip: "Pre-configured engagement & document templates with folder structures. Duplicate engagements and choose templates for common use cases.",
-                values: { Sandbox: false, Standard: false, Pro: true, Business: true, Enterprise: true },
-            },
-            {
-                feature: "Advanced review & approval workflow",
-                tooltip: "Approve / Finalize / Publish workflow with guest approvals. Lock documents on approval and create version snapshots.",
                 values: { Sandbox: false, Standard: false, Pro: true, Business: true, Enterprise: true },
             },
             {

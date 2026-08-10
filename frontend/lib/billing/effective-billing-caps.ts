@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import {
     getActiveSubscriptionForGroup,
@@ -8,7 +9,7 @@ import {
     countBillableFirmsInBillingGroup,
     listBillableFirmIdsInBillingGroup,
 } from '@/lib/billing/billing-group'
-import { parseEntitledFirms, parseEntitledEngagements, parseEntitledClients, parseEntitledClientContacts, parseEntitledDocuments, parseEntitledAuditDays, parseEntitledCommentHistoryDays } from '@/lib/billing/subscription-metadata'
+import { parseEntitledFirms, parseEntitledEngagements, parseEntitledClients, parseEntitledClientContacts, parseEntitledDeliverables, parseEntitledDocuments, parseEntitledAuditDays, parseEntitledCommentHistoryDays } from '@/lib/billing/subscription-metadata'
 
 // Sandbox (demo) firms keep full audit history so seeded demo data is visible,
 // regardless of entitledAuditDays in metadata (which is 0 for the free plan).
@@ -57,6 +58,7 @@ export type AnchorCapsRow = {
     entitledEngagements: number | null
     entitledClients: number | null
     entitledClientContacts: number | null
+    entitledDeliverables: number | null
     entitledDocuments: number | null
     entitledAuditDays: number | null
     entitledCommentHistoryDays: number | null
@@ -82,6 +84,7 @@ export async function loadAnchorForCaps(firmId: string): Promise<AnchorCapsRow |
         entitledEngagements: parseEntitledEngagements(meta),
         entitledClients: parseEntitledClients(meta),
         entitledClientContacts: parseEntitledClientContacts(meta),
+        entitledDeliverables: parseEntitledDeliverables(meta),
         entitledDocuments: parseEntitledDocuments(meta),
         entitledAuditDays: parseEntitledAuditDays(meta),
         entitledCommentHistoryDays: parseEntitledCommentHistoryDays(meta),
@@ -122,6 +125,11 @@ export function effectiveClientContactCap(anchor: AnchorCapsRow): number | null 
 
 export function effectiveDocumentCap(anchor: AnchorCapsRow): number | null {
     if (anchor.entitledDocuments != null && anchor.entitledDocuments >= 0) return anchor.entitledDocuments
+    return null
+}
+
+export function effectiveDeliverableCap(anchor: AnchorCapsRow): number | null {
+    if (anchor.entitledDeliverables != null && anchor.entitledDeliverables >= 0) return anchor.entitledDeliverables
     return null
 }
 
@@ -230,6 +238,35 @@ export async function assertWithinClientContactCap(firmId: string): Promise<void
     if (count >= cap) {
         throw new Error(
             `Your plan allows ${cap} client contact${cap === 1 ? '' : 's'} across all clients. Upgrade to add more.`
+        )
+    }
+}
+
+/**
+ * Check deliverable cap before marking a folder as a Deliverable.
+ * Counts folders tagged as Deliverables (settings.share.createdAt set) across the billing group,
+ * matching the "Deliverables" definition used by the Board and shares list.
+ */
+export async function assertWithinDeliverableCap(firmId: string): Promise<void> {
+    if (!enforceBillingCaps()) return
+
+    const anchor = await loadAnchorForCaps(firmId)
+    if (!anchor) return
+    if (anchorUsesSandboxCapDefaults(anchor) && (anchor.entitledDeliverables == null || anchor.entitledDeliverables < 0)) return
+
+    const cap = effectiveDeliverableCap(anchor)
+    if (cap === null) return
+
+    const groupFirmIds = await listBillableFirmIdsInBillingGroup(anchor.groupId)
+    const result = await prisma.$queryRaw<{ count: number }[]>(
+        Prisma.sql`SELECT COUNT(*)::int AS count FROM platform.engagement_documents
+         WHERE "firmId" = ANY(${groupFirmIds}::uuid[]) AND "isFolder" = true
+           AND (settings->'share'->>'createdAt') IS NOT NULL`
+    )
+    const count = result[0]?.count ?? 0
+    if (count >= cap) {
+        throw new Error(
+            `Your plan allows ${cap} deliverable${cap === 1 ? '' : 's'}. Upgrade to add more.`
         )
     }
 }

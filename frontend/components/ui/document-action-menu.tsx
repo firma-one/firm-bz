@@ -104,7 +104,7 @@ interface DocumentActionMenuProps {
   orgSlug?: string
   /** Called after share settings are saved (e.g. to refresh shared badges). */
   onShareSaved?: () => void
-  /** Called when user confirms "Tag as Deliverable" — caller handles API + refresh. dueDate is an optional ISO string. */
+  /** Called when user confirms "Promote as Deliverable" — caller handles API + refresh. dueDate is an optional ISO string. */
   onMarkAsDeliverable?: (doc: any, dueDate?: string) => void
   /** Called when user confirms "Untag as Deliverable" — caller handles revoke API + refresh. */
   onUntagAsDeliverable?: (doc: any) => void
@@ -660,7 +660,8 @@ export function DocumentActionMenu({
                     </TooltipProvider>
                   ) : isDeliverable ? (
                     <DropdownMenuItem
-                      onClick={() => {
+                      onSelect={(e) => {
+                        e.preventDefault()
                         if (deliverableStatus && deliverableStatus !== 'to_do') {
                           addToast({ type: 'error', title: 'Cannot untag', message: 'Only deliverables with a To Do status can be untagged.' })
                           return
@@ -682,7 +683,7 @@ export function DocumentActionMenu({
                             className="flex items-center space-x-3 px-3 py-2 text-xs opacity-50 cursor-not-allowed"
                           >
                             <Package className="h-4 w-4 text-purple-600" />
-                            <span>Tag as Deliverable</span>
+                            <span>Promote as Deliverable</span>
                           </DropdownMenuItem>
                         </TooltipTrigger>
                         <TooltipContent side="right" className="text-xs max-w-48">An ancestor folder is already a Deliverable</TooltipContent>
@@ -693,11 +694,11 @@ export function DocumentActionMenu({
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <DropdownMenuItem
-                            onClick={() => { setTagDeliverableDueDate(""); setShowTagDeliverableModal(true) }}
+                            onSelect={(e) => { e.preventDefault(); setTagDeliverableDueDate(""); setShowTagDeliverableModal(true) }}
                             className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
                           >
                             <Package className="h-4 w-4 text-purple-600" />
-                            <span>Tag as Deliverable</span>
+                            <span>Promote as Deliverable</span>
                           </DropdownMenuItem>
                         </TooltipTrigger>
                         <TooltipContent side="right" className="text-xs max-w-48">Deliverables will be shared externally</TooltipContent>
@@ -1417,76 +1418,36 @@ export function DocumentActionMenu({
 
 
 
-      {/* Tag as Deliverable modal — optional due date before confirming */}
-      {showTagDeliverableModal && mounted && typeof window !== 'undefined' && window.document?.body && createPortal(
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[999999]"
-          onClick={() => setShowTagDeliverableModal(false)}
-        >
-          <div
-            className="bg-white rounded shadow-xl max-w-md w-full mx-4 modal-content z-[1000000]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-4 border-b border-gray-200">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 bg-purple-100 rounded flex items-center justify-center">
-                    <Package className="h-5 w-5 text-purple-600" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-900">
-                      Tag as Deliverable
-                    </h3>
-                    <p className="text-xs text-gray-500">
-                      {document.name}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setShowTagDeliverableModal(false)}
-                  className="text-gray-400 hover:text-gray-600 p-1 rounded hover:bg-gray-100 transition-colors"
-                >
-                  <XSquare className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
-
-            <div className="p-4">
-              <div className="mb-2">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Due date (optional)
-                </label>
-                <DateTimePicker
-                  value={tagDeliverableDueDate}
-                  onChange={setTagDeliverableDueDate}
-                  placeholder="Choose date and time"
-                  className="w-full"
-                />
-              </div>
-            </div>
-
-            <div className="p-4 border-t border-gray-200 flex justify-end space-x-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowTagDeliverableModal(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                size="sm"
-                onClick={() => {
-                  setShowTagDeliverableModal(false)
-                  onMarkAsDeliverable?.(document, tagDeliverableDueDate || undefined)
-                }}
-              >
-                Create
-              </Button>
-            </div>
+      {/* Promote as Deliverable — optional due date before confirming */}
+      <ConfirmDialog
+        open={showTagDeliverableModal}
+        onOpenChange={setShowTagDeliverableModal}
+        icon={<Package className="h-3.5 w-3.5" />}
+        iconVariant="primary"
+        title="Promote as Deliverable"
+        subtitle={document.name}
+        description="This will share the folder externally and add it to the Board."
+        extra={
+          <div>
+            <label className="block text-[11px] font-headline font-bold tracking-widest uppercase text-[#45474c] mb-2">
+              Due date (optional)
+            </label>
+            <DateTimePicker
+              value={tagDeliverableDueDate}
+              onChange={setTagDeliverableDueDate}
+              placeholder="Choose date and time"
+              className="w-full"
+            />
           </div>
-        </div>,
-        window.document.body
-      )}
+        }
+        confirmLabel="Promote"
+        confirmVariant="primary"
+        onCancel={() => setShowTagDeliverableModal(false)}
+        onConfirm={() => {
+          setShowTagDeliverableModal(false)
+          onMarkAsDeliverable?.(document, tagDeliverableDueDate || undefined)
+        }}
+      />
 
       {/* Untag as Deliverable confirmation */}
       <ConfirmDialog
