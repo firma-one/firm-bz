@@ -86,7 +86,7 @@ export default async function EngagementPage({ params }: PageProps) {
   const canEdit = capabilities['project:can_edit'] ?? false
   const canManage = canViewSettings
   const isFirmAdmin = await canManageOrganization(org.id)
-  const enableBetaFeatures = (org.settings as Record<string, unknown> | null)?.enableBetaFeatures === true
+  const enableBetaFeatures = ((org.settings as Record<string, unknown> | null)?.betaFeatures as Record<string, boolean> | undefined)?.dossier === true
 
   const defaultTab = 'analytics'
   const pathSegments = parseRest(rest, defaultTab)
@@ -153,6 +153,7 @@ export default async function EngagementPage({ params }: PageProps) {
           projectId={project.id}
           connectorRootFolderId={project.connectorRootFolderId}
           clientConnectorId={client.connectorId}
+          clientConnectorType={client.connectorType}
           workspaceRootLocation={connectorMeta?.workspaceRootLocation ?? null}
           connectorAccountEmail={connectorAccountEmail}
           orgName={orgName}

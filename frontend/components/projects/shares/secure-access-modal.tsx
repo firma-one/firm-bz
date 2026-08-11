@@ -133,7 +133,7 @@ export function SecureAccessModal({
                                 </div>
                             ) : (
                                 <p className="text-xs text-[#45474c] leading-relaxed">
-                                    Google Drive requires a one-time verification step. Please follow the link in the email to open the document securely.
+                                    Your storage provider requires a one-time verification step. Please follow the link in the email to open the document securely.
                                 </p>
                             )}
                         </>

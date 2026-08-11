@@ -11,7 +11,8 @@ import {
   FileVideo,
   FileAudio,
   FileCode,
-  File
+  File,
+  ExternalLink
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { GoogleDriveIcon } from '@/components/ui/google-drive-icon'
@@ -84,6 +85,9 @@ export function DocumentIcon({ mimeType, size = 20, className = "", name = "" }:
   }
   if (m === 'application/vnd.google-apps.document') {
     return <GoogleDocIcon size={size} className={className} />
+  }
+  if (m === 'application/vnd.pockett.link') {
+    return <ExternalLink className={cn("text-purple-600", className)} size={size} />
   }
 
   // All remaining types use Lucide icons (type-safe assignment)

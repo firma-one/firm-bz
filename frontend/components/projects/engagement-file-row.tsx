@@ -440,6 +440,29 @@ export function EngagementFileRow({
             <div className="flex items-center justify-end">
                 <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
 
+                    {!isFolder && file.documentType !== 'LINK' && (
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <button
+                                    type="button"
+                                    className={cn(
+                                        'h-7 w-7 rounded-md inline-flex items-center justify-center disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-500',
+                                        file.id === activePreviewDocId
+                                            ? 'text-slate-700 bg-slate-100'
+                                            : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
+                                    )}
+                                    aria-label="Preview"
+                                    aria-pressed={file.id === activePreviewDocId}
+                                    disabled={isIntakeRow}
+                                    onClick={() => onOpenPreviewPane(file.id)}
+                                >
+                                    <ScanEye className="h-4 w-4" />
+                                </button>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="text-xs">Preview</TooltipContent>
+                        </Tooltip>
+                    )}
+
                     <Tooltip>
                         <TooltipTrigger asChild>
                             <button
@@ -476,29 +499,6 @@ export function EngagementFileRow({
                         </TooltipTrigger>
                         <TooltipContent side="top" className="text-xs">Copy link</TooltipContent>
                     </Tooltip>
-
-                    {!isFolder && (
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <button
-                                    type="button"
-                                    className={cn(
-                                        'h-7 w-7 rounded-md inline-flex items-center justify-center disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-500',
-                                        file.id === activePreviewDocId
-                                            ? 'text-slate-700 bg-slate-100'
-                                            : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
-                                    )}
-                                    aria-label="Preview"
-                                    aria-pressed={file.id === activePreviewDocId}
-                                    disabled={isIntakeRow}
-                                    onClick={() => onOpenPreviewPane(file.id)}
-                                >
-                                    <ScanEye className="h-4 w-4" />
-                                </button>
-                            </TooltipTrigger>
-                            <TooltipContent side="top" className="text-xs">Preview</TooltipContent>
-                        </Tooltip>
-                    )}
 
                     {isIndexing && (
                         <Tooltip>

@@ -18,11 +18,13 @@ interface SwitchAccountModalProps {
   onClose: () => void
   /** All firm admins — caller should include the currently connected account so the user can see it (it will be marked as current). */
   admins: FirmAdmin[]
-  /** userId of the currently connected Google account owner — this row is disabled. */
+  /** userId of the currently connected account owner — this row is disabled. */
   currentUserId: string | undefined
   loading: boolean
-  /** Called with the selected admin's email as the login_hint for Google OAuth. */
+  /** Called with the selected admin's email as the login_hint for OAuth. */
   onConfirm: (selectedEmail: string) => void
+  /** Which OAuth provider this switch redirects to — controls title/copy/button text. Defaults to Google for existing callers. */
+  provider?: 'Google' | 'Microsoft'
 }
 
 /** Circular avatar with initials fallback */
@@ -49,6 +51,7 @@ export function SwitchAccountModal({
   currentUserId,
   loading,
   onConfirm,
+  provider = 'Google',
 }: SwitchAccountModalProps) {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
 
@@ -67,9 +70,9 @@ export function SwitchAccountModal({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-md rounded">
         <DialogHeader>
-          <DialogTitle className="text-[0.9375rem] font-bold text-[#1b1b1d]">Switch Google account</DialogTitle>
+          <DialogTitle className="text-[0.9375rem] font-bold text-[#1b1b1d]">Transfer connection ownership</DialogTitle>
           <DialogDescription className="text-xs text-[#45474c] mt-1.5">
-            Select a firm administrator to connect as. You'll be redirected to Google sign-in for the chosen account.
+            Select a firm administrator to connect as. You'll be redirected to {provider} sign-in for the chosen account.
             The current account will be disconnected.
           </DialogDescription>
         </DialogHeader>
@@ -135,7 +138,7 @@ export function SwitchAccountModal({
               ? <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />
               : <SwitchCamera className="w-3 h-3 mr-1.5" />
             }
-            Continue to Google
+            Continue to {provider}
           </Button>
         </DialogFooter>
       </DialogContent>

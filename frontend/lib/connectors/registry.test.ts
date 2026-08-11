@@ -40,14 +40,18 @@ vi.mock('@/lib/google-drive-connector', () => ({
   googleDriveConnector: {},
 }))
 
-vi.mock('./onedrive-connector', () => ({
-  getOneDriveConnectorInstance: () => ({
+vi.mock('./onedrive-connector', () => {
+  const instance = {
     getConnections: vi.fn(),
     disconnectConnection: vi.fn(),
     removeConnection: vi.fn(),
     getAccessToken: vi.fn().mockResolvedValue(null),
-  }),
-}))
+  }
+  return {
+    getOneDriveConnectorInstance: () => instance,
+    OneDriveConnector: { getInstance: () => instance },
+  }
+})
 
 vi.mock('./adapters/onedrive-adapter', () => ({
   createOneDriveAdapter: vi.fn(() => ({})),
@@ -159,10 +163,11 @@ describe('connector registry', () => {
       expect(result).toBeUndefined()
     })
 
-    // Contract test: update this when OneDrive Phase 2 ships a permission adapter
-    it('returns null for ONEDRIVE until Phase 2 is wired up', async () => {
+    it('returns a permission adapter for ONEDRIVE', async () => {
       mockFindUnique.mockResolvedValue({ id: 'conn-3', type: ConnectorType.ONEDRIVE })
-      await expect(getPermissionAdapter('conn-3')).resolves.toBeNull()
+      const adapter = await getPermissionAdapter('conn-3')
+      expect(adapter).not.toBeNull()
+      expect(typeof adapter!.trashFile).toBe('function')
     })
   })
 
@@ -198,10 +203,12 @@ describe('connector registry', () => {
       expect(result).not.toHaveProperty('moved')
     })
 
-    // Contract test: adding ONEDRIVE here when Phase 2 ships will catch missing registration
-    it('throws for ONEDRIVE until Phase 2 migration adapter is wired up', async () => {
+    it('returns adapter with all IConnectorMigrationAdapter methods for ONEDRIVE', async () => {
       mockFindUnique.mockResolvedValue({ id: 'conn-3', type: ConnectorType.ONEDRIVE })
-      await expect(getMigrationAdapter('conn-3')).rejects.toThrow('No migration adapter')
+      const adapter = await getMigrationAdapter('conn-3')
+      expect(typeof adapter.listTopLevelChildren).toBe('function')
+      expect(typeof adapter.moveBatch).toBe('function')
+      expect(typeof adapter.persistWorkspaceRootLocation).toBe('function')
     })
   })
 

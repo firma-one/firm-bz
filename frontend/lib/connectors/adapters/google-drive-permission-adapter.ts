@@ -41,7 +41,10 @@ export function createGoogleDrivePermissionAdapter(): IConnectorPermissionAdapte
       }
     },
 
-    trashFile: async (id, fileId) => { await g.trashFile(id, fileId) },
+    trashFile: async (id, fileId) => {
+      const ok = await g.trashFile(id, fileId)
+      if (!ok) throw new Error(`Failed to trash Google Drive file ${fileId}`)
+    },
 
     listFiles: (id, folderId, pageSize) =>
       g.listFiles(id, folderId, pageSize),
@@ -67,8 +70,36 @@ export function createGoogleDrivePermissionAdapter(): IConnectorPermissionAdapte
       if (opts?.permanent) {
         await g.permanentlyDeleteFile(id, fileId)
       } else {
-        await g.trashFile(id, fileId)
+        const ok = await g.trashFile(id, fileId)
+        if (!ok) throw new Error(`Failed to trash Google Drive file ${fileId}`)
       }
     },
+
+    patchFilePermissionRole: (id, fileId, permissionId, role) =>
+      g.patchFilePermissionRole(id, fileId, permissionId, toDriveRole(role)),
+
+    setFileContentReadOnly: (id, fileId, readOnly) =>
+      g.setFileContentReadOnly(id, fileId, readOnly),
+
+    searchFiles: async (id, query, options) => {
+      const files = await g.searchFiles(id, query, options)
+      return files.map((f) => ({ ...f, size: f.size != null ? String(f.size) : undefined }))
+    },
+
+    getFilesMetadata: async (id, fileIds) => {
+      const files = await g.getFilesMetadata(id, fileIds)
+      return files.map((f) => ({ ...f, size: f.size != null ? String(f.size) : undefined }))
+    },
+
+    getDuplicateFiles: (id, limit) =>
+      g.getDuplicateFiles(id, limit),
+
+    getStaleFiles: async (id, limit) => {
+      const files = await g.getStaleFiles(id, limit)
+      return files.map((f: any) => ({ ...f, size: f.size != null ? String(f.size) : undefined }))
+    },
+
+    updatePermissionExpiry: (id, fileId, permissionId, expirationTime) =>
+      g.updatePermissionExpiry(id, fileId, permissionId, expirationTime),
   }
 }

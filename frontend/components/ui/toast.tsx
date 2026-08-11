@@ -1,9 +1,9 @@
 "use client"
 
 import { useState, useCallback, useMemo, createContext, useContext, ReactNode } from 'react'
-import { AlertCircle, Info, X } from 'lucide-react'
+import { AlertCircle, AlertTriangle, Info, X } from 'lucide-react'
 
-export type ToastType = 'success' | 'error' | 'info'
+export type ToastType = 'success' | 'error' | 'info' | 'warning'
 
 export interface Toast {
   id: string
@@ -35,6 +35,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       if (prev.find(t => t.title === newToast.title)) return prev
       return [...prev, newToast]
     })
+    // Error/warning toasts stay open until manually dismissed — auto-closing a failure message
+    // before the user has read it (e.g. an "Attach failed" toast) risks the failure going
+    // unnoticed, especially when the surrounding action otherwise looks like it succeeded.
+    if (toast.type === 'error' || toast.type === 'warning') return
     const duration = toast.duration ?? 8000
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id))
@@ -104,6 +108,12 @@ const TOAST_CONFIG: Record<ToastType, {
     accentClass: 'border-l-[3px] border-l-red-500',
     iconBgClass: 'bg-red-50',
     iconColorClass: 'text-red-600',
+  },
+  warning: {
+    icon: <AlertTriangle className="h-4 w-4" />,
+    accentClass: 'border-l-[3px] border-l-amber-500',
+    iconBgClass: 'bg-amber-50',
+    iconColorClass: 'text-amber-600',
   },
   info: {
     icon: <Info className="h-4 w-4" />,

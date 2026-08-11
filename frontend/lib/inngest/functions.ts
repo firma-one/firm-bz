@@ -1086,11 +1086,17 @@ export const migrateWorkspaceRoot = inngest.createFunction(
             }
         },
     },
-    async ({ event, step }: { event: { data: { connectionId: string; newRootFolderId: string; oldRootFolderId: string; firmId: string; initiatingUserId: string; estimatedMinutes: number; organizationId?: string; startedAt?: string } }; step: any }) => {
+    async ({ event, step }: { event: { data: { connectionId: string; newRootFolderId: string; oldRootFolderId: string; firmId: string; initiatingUserId: string; estimatedMinutes: number; organizationId?: string; startedAt?: string; graceMinutes?: number } }; step: any }) => {
         const { connectionId, newRootFolderId, oldRootFolderId, firmId, initiatingUserId, estimatedMinutes } = event.data
+        // "Start now" (default) keeps the original fixed 2-minute buffer — enough time for the
+        // in-app lock notice to render before members get signed out, but not a real scheduling
+        // choice. "Notify members and start in 15 minutes" extends this so members have a
+        // meaningful window to finish what they're doing. Clamped to sane bounds server-side
+        // since this value rides in on a public-facing API request body.
+        const graceMinutes = Math.min(Math.max(Number(event.data.graceMinutes) || 2, 2), 60)
 
         await step.run('notify-members', () =>
-            sendMaintenanceWarningToFirmMembers(firmId, estimatedMinutes)
+            sendMaintenanceWarningToFirmMembers(firmId, estimatedMinutes, graceMinutes)
         )
 
         // Create the DB migration record so latestMigrationStatus is trackable from the start.
@@ -1109,7 +1115,7 @@ export const migrateWorkspaceRoot = inngest.createFunction(
             }
         })
 
-        await step.sleep('grace-period', '2m')
+        await step.sleep('grace-period', `${graceMinutes}m`)
 
         await step.run('lock-and-sign-out', async () => {
             // Guard: if cancelled during the grace sleep, migrationPending will be null — abort

@@ -3,7 +3,7 @@ import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { requireEngagementMember, isExternalEngagementRole, isEngagementLeadRole } from '@/lib/engagement-access'
 import { getFileInfo } from '@/lib/file-utils'
-import { googleDriveConnector } from '@/lib/google-drive-connector'
+import { getPermissionAdapter } from '@/lib/connectors/registry'
 import { safeInngestSend } from '@/lib/inngest/client'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { buildSettingsForDb } from '@/lib/sharing-settings'
@@ -189,11 +189,12 @@ export async function PATCH(
           await prisma.engagementDocument.delete({ where: { id: doc.id } }).catch(() => {})
           await (prisma as any).notification.deleteMany({ where: { dedupeKey: `intake-pending:${projectId}:${doc.externalId}` } })
           if (connectorId) {
-            const trashResult = await googleDriveConnector.trashFile(connectorId, doc.externalId).catch((e) => {
-              console.error('[intake] trashFile error', { connectorId, externalId: doc.externalId, error: String(e), message: e?.message, status: e?.status })
-              return false
-            })
-            if (trashResult === false) console.warn('[intake] trashFile returned false/failed', { connectorId, externalId: doc.externalId })
+            const adapter = await getPermissionAdapter(connectorId)
+            if (adapter) {
+              await adapter.trashFile(connectorId, doc.externalId).catch((e) => {
+                console.error('[intake] trashFile error', { connectorId, externalId: doc.externalId, error: String(e), message: e?.message, status: e?.status })
+              })
+            }
           }
         }))
         await clearIntakeReminders(allDocs.map((d) => d.externalId))
@@ -292,11 +293,12 @@ export async function PATCH(
       select: { connectorId: true },
     }))?.connectorId
     if (connectorId) {
-      const trashResult = await googleDriveConnector.trashFile(connectorId, fileInfo.externalId).catch((e) => {
-        console.error('[intake] trashFile error', { connectorId, externalId: fileInfo.externalId, error: String(e), message: e?.message, status: e?.status })
-        return false
-      })
-      if (trashResult === false) console.warn('[intake] trashFile returned false/failed', { connectorId, externalId: fileInfo.externalId })
+      const adapter = await getPermissionAdapter(connectorId)
+      if (adapter) {
+        await adapter.trashFile(connectorId, fileInfo.externalId).catch((e) => {
+          console.error('[intake] trashFile error', { connectorId, externalId: fileInfo.externalId, error: String(e), message: e?.message, status: e?.status })
+        })
+      }
     }
 
     audit(AUDIT_EVENT.DOCUMENT_DELETED)

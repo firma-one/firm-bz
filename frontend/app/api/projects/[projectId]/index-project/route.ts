@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { SearchService } from '@/lib/services/search-service'
 import { logger } from '@/lib/logger'
 import { requireProjectManage } from '@/lib/api/engagement-auth'
+import { getPermissionAdapter } from '@/lib/connectors/registry'
 
 export async function POST(
     request: NextRequest,
@@ -35,12 +35,18 @@ export async function POST(
         const cliId = project.clientId
 
         // 3. Resolve Project Folders
-        const settings = (connector.settings as any) || {}
-        const ps = settings.projectFolderSettings?.[project.slug] || {}
+        const permissionAdapter = await getPermissionAdapter(connector.id)
+        if (!permissionAdapter) {
+            return NextResponse.json({ error: 'Connector type does not support indexing' }, { status: 400 })
+        }
+        const folderIds = await permissionAdapter.getEngagementFolderIds(connector.id, project.slug, {
+            projectName: project.name,
+            projectFolderId: project.connectorRootFolderId ?? undefined,
+        })
         const parentFolderIds = [
-            ps.generalFolderId,
-            ps.confidentialFolderId,
-            ps.stagingFolderId
+            folderIds.generalFolderId,
+            folderIds.confidentialFolderId,
+            folderIds.stagingFolderId
         ].filter(Boolean) as string[]
 
         if (parentFolderIds.length === 0) {
@@ -53,7 +59,7 @@ export async function POST(
 
         const scanRecursive = async (folderId: string) => {
             if (allFiles.length >= MAX_FILES) return
-            const files = await googleDriveConnector.listFiles(connector.id, folderId, 1000)
+            const files = await permissionAdapter.listFiles(connector.id, folderId, 1000)
             for (const file of files) {
                 if (allFiles.length >= MAX_FILES) break
                 allFiles.push({ id: file.id, name: file.name })

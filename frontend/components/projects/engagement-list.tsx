@@ -222,11 +222,6 @@ export function ProjectList({ projects, orgSlug, clientSlug, clientStatus, viewM
                                                 <span className={`px-2 py-1 rounded-sm text-xs font-medium ${engagementStatusBadgeClass(project.status)}`}>
                                                     {engagementStatusLabel(project.status)}
                                                 </span>
-                                                {isProspect && (
-                                                    <span className="px-2 py-1 rounded-sm text-xs font-medium bg-fuchsia-50 text-fuchsia-500 ring-1 ring-fuchsia-200">
-                                                        Prospect
-                                                    </span>
-                                                )}
                                             </div>
                                         </td>
                                         <td className="px-4 py-3 text-slate-500 max-w-xs truncate">
@@ -329,11 +324,6 @@ export function ProjectList({ projects, orgSlug, clientSlug, clientStatus, viewM
                                                 <LeadAvatar key={idx} user={lead} />
                                             ))}
                                         </div>
-                                    )}
-                                    {isProspect && (
-                                        <span className="shrink-0 px-2 py-0.5 rounded-sm text-xs font-medium bg-fuchsia-50 text-fuchsia-500 ring-1 ring-fuchsia-200">
-                                            Prospect
-                                        </span>
                                     )}
                                     <span className={`shrink-0 px-2 py-0.5 rounded-sm text-xs font-medium ${engagementStatusBadgeClass(project.status)}`}>
                                         {engagementStatusLabel(project.status)}

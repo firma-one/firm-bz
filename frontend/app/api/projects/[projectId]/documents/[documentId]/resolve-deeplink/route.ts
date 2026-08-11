@@ -9,6 +9,7 @@ import { getViewAsPersonaFromCookie } from '@/lib/view-as-server'
 import { getSharedAndAncestorIdsForPersona } from '@/lib/engagement-sharing-ids'
 import { requireEngagementMember, isExternalEngagementRole } from '@/lib/engagement-access'
 import { SearchService } from '@/lib/services/search-service'
+import { getPermissionAdapter } from '@/lib/connectors/registry'
 
 function notFound() {
   return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -41,17 +42,17 @@ export async function GET(
     const canView = await canViewProject(ctx.orgId, ctx.clientId, ctx.projectId)
     if (!canView) return notFound()
 
-    // Fetch file info + engagement connector settings in parallel
+    // Fetch file info + engagement/client info (for live folder-ID lookup) in parallel
     const [fileInfo, engagement] = await Promise.all([
       getFileInfo(projectId, documentIdParam),
       prisma.engagement.findUnique({
         where: { id: projectId },
         select: {
           slug: true,
+          name: true,
+          connectorRootFolderId: true,
           client: {
-            select: {
-              connector: { select: { settings: true } }
-            }
+            select: { slug: true, name: true, connectorId: true }
           }
         },
       }),
@@ -76,12 +77,20 @@ export async function GET(
       if (!allow) return notFound()
     }
 
-    // Resolve path + extract root folder IDs in parallel
-    const settings = (engagement?.client?.connector?.settings as any) || {}
-    const engagementSlug = engagement?.slug
-    const ps = engagementSlug && settings.projectFolderSettings
-      ? settings.projectFolderSettings[engagementSlug] || {}
-      : {}
+    // Resolve root folder IDs via the same live connector lookup used elsewhere (getEngagementFolderIds
+    // in lib/actions/project.ts) — the client.connector.settings.projectFolderSettings JSON blob this
+    // used to read is not reliably populated and produced empty rootIds, breaking breadcrumb resolution.
+    const connectorId = engagement?.client?.connectorId ?? null
+    const permissionAdapter = connectorId ? await getPermissionAdapter(connectorId) : null
+    const folderIds = permissionAdapter && engagement?.slug
+      ? await permissionAdapter.getEngagementFolderIds(connectorId!, engagement.slug, {
+          projectName: engagement.name,
+          clientSlug: engagement.client?.slug,
+          clientName: engagement.client?.name,
+          projectFolderId: engagement.connectorRootFolderId ?? undefined,
+        })
+      : { generalFolderId: null, confidentialFolderId: null, stagingFolderId: null }
+    const ps = folderIds
     const rootIds = [ps.generalFolderId, ps.confidentialFolderId, ps.stagingFolderId].filter(Boolean) as string[]
 
     let path = await SearchService.resolvePathToProjectRoot(ctx.orgId, fileInfo.externalId)

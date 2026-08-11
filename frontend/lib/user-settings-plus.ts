@@ -72,7 +72,7 @@ export interface OrganizationSettings {
       secondaryColor?: string
       subtext?: string
     }
-    enableBetaFeatures?: boolean
+    betaFeatures?: Record<string, boolean>
   }
 }
 
@@ -371,7 +371,7 @@ class UserSettingsPlusCache {
           secondaryColor: firmSettings.branding?.secondaryColor,
           subtext: firmSettings.branding?.subtext
         },
-        enableBetaFeatures: firmSettings.enableBetaFeatures === true,
+        betaFeatures: (firmSettings.betaFeatures as Record<string, boolean>) ?? {},
       }
     }
     return settings

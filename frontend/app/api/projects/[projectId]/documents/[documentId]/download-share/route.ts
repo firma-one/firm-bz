@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
-import { GoogleDriveConnector } from '@/lib/google-drive-connector'
 import { parseSettingsFromDb, buildSettingsForDb } from '@/lib/sharing-settings'
 import { getFileInfo } from '@/lib/file-utils'
 import { requireEngagementMember } from '@/lib/engagement-access'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { applyDiagonalWatermark } from '@/lib/watermark-pdf'
 import { resolveEngagementConnectorId } from '@/lib/connectors/resolve-client-connector'
+import { getContentAdapter, getPermissionAdapter } from '@/lib/connectors/registry'
 
 /**
  * GET /api/projects/[projectId]/documents/[documentId]/download-share
@@ -35,6 +35,9 @@ export async function GET(
     // Resolve the document — accepts either DB UUID or Drive externalId
     const fileInfo = await getFileInfo(projectId, documentId)
     if (!fileInfo) return NextResponse.json({ error: 'File not found' }, { status: 404 })
+    if (fileInfo.documentType === 'LINK') {
+      return NextResponse.json({ error: 'This document is a link and has no downloadable content' }, { status: 400 })
+    }
 
     const document = await prisma.engagementDocument.findUnique({
       where: {
@@ -63,9 +66,13 @@ export async function GET(
     }
 
     const connectorId = await resolveEngagementConnectorId(projectId, document.connectorId)
-    if (!connectorId) return NextResponse.json({ error: 'No active Drive connector' }, { status: 500 })
+    if (!connectorId) return NextResponse.json({ error: 'No active storage connector' }, { status: 500 })
 
-    const drive = GoogleDriveConnector.getInstance()
+    const contentAdapter = await getContentAdapter(connectorId)
+    const permissionAdapter = await getPermissionAdapter(connectorId)
+    if (!contentAdapter || !permissionAdapter) {
+      return NextResponse.json({ error: 'No content adapter available for connector' }, { status: 500 })
+    }
     const guestOptions = settings.share?.guest?.options ?? {}
     const sharePdfOnly = isGuest && guestOptions.sharePdfOnly
 
@@ -75,8 +82,8 @@ export async function GET(
       let pdfDriveId = guestOptions.sharedPdfDriveId ?? null
 
       if (pdfDriveId) {
-        // Fast path: cached PDF already exists — download it from Drive
-        const { stream, mimeType, size, name } = await drive.downloadFile(connectorId, pdfDriveId)
+        // Fast path: cached PDF already exists — download it
+        const { stream, mimeType, size, fileName: name } = await contentAdapter.getRenderableContent(connectorId, pdfDriveId, 'native')
         const baseName = (document.fileName ?? name ?? 'document').replace(/\.[^.]+$/, '')
         const filename = `${baseName}.pdf`
         const encodedFilename = encodeURIComponent(filename).replace(/['()]/g, escape).replace(/\*/g, '%2A')
@@ -97,12 +104,14 @@ export async function GET(
           .actor(user.id)
           .meta({ fileId: pdfDriveId, filename, usedPdf: true, generated: false })
           .fireAndForget()
-        return new NextResponse(stream, { status: 200, headers })
+        const body = Buffer.isBuffer(stream) ? new Uint8Array(stream) : stream
+        return new NextResponse(body, { status: 200, headers })
       }
 
       // Generate path: no cached PDF yet (guest downloaded before ever clicking Open)
-      // Generate, upload to Drive (priming the cache), then stream back the bytes.
-      const rawPdfBytes = await drive.exportFileToPdf(connectorId, fileInfo.externalId)
+      // Generate, upload (priming the cache), then stream back the bytes.
+      const rendered = await contentAdapter.getRenderableContent(connectorId, fileInfo.externalId, 'pdf')
+      const rawPdfBytes = Buffer.isBuffer(rendered.stream) ? rendered.stream : Buffer.from(await new Response(rendered.stream).arrayBuffer())
       pdfBuffer = rawPdfBytes
 
       if (guestOptions.addWatermark) {
@@ -114,17 +123,20 @@ export async function GET(
       }
 
       // Upload beside the original file and store the ID for future opens
-      const originalMeta = await drive.getFileMetadata(connectorId, fileInfo.externalId)
-      const parentFolderId = originalMeta?.parents?.[0] ?? undefined
+      const originalMeta = await permissionAdapter.getFileMetadata(connectorId, fileInfo.externalId)
+      const parentFolderId = originalMeta?.parents?.[0]
+      if (!parentFolderId) return NextResponse.json({ error: 'Could not resolve parent folder for shared PDF' }, { status: 500 })
       const baseName = (document.fileName ?? 'document').replace(/\.[^.]+$/, '')
       const pdfFileName = `${baseName}.pdf`
-      pdfDriveId = await drive.uploadNewFile(connectorId, pdfFileName, pdfBuffer, 'application/pdf', parentFolderId)
+      const created = await contentAdapter.createFile(connectorId, parentFolderId, pdfFileName, pdfBuffer, 'application/pdf')
+      pdfDriveId = created.id
 
-      // Lock Drive's native download on the PDF — Firma is the only download channel
+      // Lock native download on the generated PDF — Firma is the only download channel.
+      // No-op for providers without an equivalent concept (e.g. OneDrive — see setCopyRestricted).
       try {
-        await drive.patchFileProperties(connectorId, pdfDriveId, { copyRequiresWriterPermission: true })
+        await contentAdapter.setCopyRestricted(connectorId, pdfDriveId, true)
       } catch (e) {
-        console.error('Failed to set copyRequiresWriterPermission on generated PDF:', e)
+        console.error('Failed to set copy-restriction on generated PDF:', e)
       }
 
       // Persist the new PDF Drive ID so regrant (Open) will overwrite it next time
@@ -162,7 +174,8 @@ export async function GET(
     // Original-file path (EC or Guest with sharePdfOnly=false)
     // For preview: export to PDF so the browser can render it inline (covers DOCX, Sheets, Slides etc.)
     if (isPreview) {
-      const pdfBytes = await drive.exportFileToPdf(connectorId, fileInfo.externalId)
+      const rendered = await contentAdapter.getRenderableContent(connectorId, fileInfo.externalId, 'pdf')
+      const pdfBytes = Buffer.isBuffer(rendered.stream) ? rendered.stream : Buffer.from(await new Response(rendered.stream).arrayBuffer())
       const headers = new Headers()
       headers.set('Content-Type', 'application/pdf')
       headers.set('Content-Disposition', 'inline')
@@ -177,7 +190,7 @@ export async function GET(
       return new NextResponse(new Uint8Array(pdfBytes), { status: 200, headers })
     }
 
-    const { stream, mimeType, size, name } = await drive.downloadFile(connectorId, fileInfo.externalId)
+    const { stream, mimeType, size, fileName: name } = await contentAdapter.getRenderableContent(connectorId, fileInfo.externalId, 'native')
     const filename = name || document.fileName || 'document'
     const encodedFilename = encodeURIComponent(filename).replace(/['()]/g, escape).replace(/\*/g, '%2A')
     const headers = new Headers()
@@ -194,7 +207,8 @@ export async function GET(
       .meta({ fileId: fileInfo.externalId, filename, usedPdf: false })
       .fireAndForget()
 
-    return new NextResponse(stream, { status: 200, headers })
+    const body = Buffer.isBuffer(stream) ? new Uint8Array(stream) : stream
+    return new NextResponse(body, { status: 200, headers })
   } catch (e) {
     console.error('download-share error', e)
     return NextResponse.json({ error: 'Failed to download file' }, { status: 500 })

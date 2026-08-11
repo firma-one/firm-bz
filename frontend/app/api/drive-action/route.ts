@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { prisma } from "@/lib/prisma"
-import { ConnectorType } from "@prisma/client"
-import { googleDriveConnector } from "@/lib/google-drive-connector"
 import { safeInngestSend } from '@/lib/inngest/client'
 import { logger } from '@/lib/logger'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { blockIfEngagementFileMutationForbidden } from '@/lib/engagement-access'
 import { resolveEngagementConnector } from '@/lib/connectors/resolve-client-connector'
+import { getPermissionAdapter } from '@/lib/connectors/registry'
+import type { IConnectorPermissionAdapter } from '@/lib/connectors/types'
 
 const supabase = createClient(
     (process.env.NEXT_PUBLIC_SUPABASE_URL || "http://127.0.0.1:54321"),
@@ -60,11 +60,11 @@ export async function POST(request: NextRequest) {
             ]))
             const [orgsWithConnectors, clientsWithConnectors] = await Promise.all([
                 prisma.firm.findMany({
-                    where: { id: { in: allOrgIds }, connector: { type: ConnectorType.GOOGLE_DRIVE, status: 'ACTIVE' } },
+                    where: { id: { in: allOrgIds }, connector: { status: 'ACTIVE' } },
                     include: { connector: true }
                 }),
                 prisma.client.findMany({
-                    where: { id: { in: clientMemberships.map(m => m.clientId) }, connector: { type: ConnectorType.GOOGLE_DRIVE, status: 'ACTIVE' } },
+                    where: { id: { in: clientMemberships.map(m => m.clientId) }, connector: { status: 'ACTIVE' } },
                     include: { connector: true }
                 }),
             ])
@@ -124,7 +124,20 @@ export async function POST(request: NextRequest) {
                     return NextResponse.json({ error: 'No active storage connector found' }, { status: 400 })
                 }
 
-                let success = await googleDriveConnector.trashFile(targetId, fileId)
+                let lastTrashError: string | null = null
+                const tryTrash = async (id: string): Promise<boolean> => {
+                    const adapter = await getPermissionAdapter(id)
+                    if (!adapter) return false
+                    try {
+                        await adapter.trashFile(id, fileId)
+                        return true
+                    } catch (err) {
+                        lastTrashError = err instanceof Error ? err.message : String(err)
+                        return false
+                    }
+                }
+
+                let success = await tryTrash(targetId)
                 let successOrgId = connectors.find(c => c.id === targetId)?.organizationId
 
                 // FALLBACK: If trashing fails and we have multiple connectors, try others.
@@ -134,7 +147,7 @@ export async function POST(request: NextRequest) {
                     for (const fallback of connectors) {
                         if (fallback.id === targetId) continue
 
-                        success = await googleDriveConnector.trashFile(fallback.id, fileId)
+                        success = await tryTrash(fallback.id)
                         if (success) {
                             logger.info(`[trash] Successfully trashed fileId=${fileId} using fallback connectorId=${fallback.id}`)
                             targetId = fallback.id // Re-assign so metadata fetch works below
@@ -145,12 +158,18 @@ export async function POST(request: NextRequest) {
                 }
 
                 if (!success || !successOrgId) {
-                    logger.error(`[trash] Failed to trash fileId=${fileId} after trying all connectors (success=${success}, orgId=${successOrgId})`)
-                    return NextResponse.json({ error: 'Failed to trash file. The file may not exist in the connected Google Drive account, or the connected account may not have permission to delete it.' }, { status: 500 })
+                    logger.error(`[trash] Failed to trash fileId=${fileId} after trying all connectors (success=${success}, orgId=${successOrgId}, lastError=${lastTrashError})`)
+                    // Surface the real upstream error (e.g. "locked/checked out" 423 from SharePoint)
+                    // when we have one, instead of a generic message that hides the actual cause.
+                    const message = lastTrashError
+                        ? `Failed to delete: ${lastTrashError}`
+                        : 'Failed to trash file. The file may not exist in the connected storage account, or the connected account may not have permission to delete it.'
+                    return NextResponse.json({ error: message }, { status: 500 })
                 }
 
                 // Get metadata using the successful connector to determine if it's a folder or file
-                const fileMeta = await googleDriveConnector.getFileMetadata(targetId, fileId)
+                const trashAdapter = await getPermissionAdapter(targetId)
+                const fileMeta = trashAdapter ? await trashAdapter.getFileMetadata(targetId, fileId) : null
 
                 // Trigger background reconciliation via Inngest
                 if (fileMeta?.mimeType === 'application/vnd.google-apps.folder') {
@@ -203,11 +222,9 @@ export async function POST(request: NextRequest) {
                 // Search ALL connectors and aggregate
                 const searchLimit = Math.min(limit || 50, 100)
                 const duplicatePromises = connectors.map(async c => {
-                    const groups = await googleDriveConnector.getDuplicateFiles(c.id, searchLimit)
-                    // Inject source info? Duplicate groups structure is complex [[file, file], [file, file]]
-                    // We might need to flatten or tag? 
-                    // getDuplicateFiles returns File[][].
-                    return groups
+                    const adapter = await getPermissionAdapter(c.id)
+                    if (!adapter) return []
+                    return adapter.getDuplicateFiles(c.id, searchLimit)
                 })
 
                 const duplicateResults = await Promise.all(duplicatePromises)
@@ -227,7 +244,8 @@ export async function POST(request: NextRequest) {
                 const stalePromises = connectors.map(async c => {
                     try {
                         logger.debug(`[Stale Action] Fetching stale files for connector ${c.id}...`)
-                        const files = await googleDriveConnector.getStaleFiles(c.id, staleLimit)
+                        const adapter = await getPermissionAdapter(c.id)
+                        const files = adapter ? await adapter.getStaleFiles(c.id, staleLimit) : []
                         logger.debug(`[Stale Action] Connector ${c.id} returned ${files.length} files`)
                         // Inject connector info so frontend has context
                         return files.map(f => ({
@@ -251,7 +269,8 @@ export async function POST(request: NextRequest) {
                     return NextResponse.json({ error: 'fileId and permissionId are required' }, { status: 400 })
                 }
                 const revokeConnectorId = connectorId || connectors[0].id
-                const revoked = await googleDriveConnector.revokePermission(revokeConnectorId, fileId, permissionId)
+                const revokeAdapter = await getPermissionAdapter(revokeConnectorId)
+                const revoked = revokeAdapter ? await revokeAdapter.revokePermission(revokeConnectorId, fileId, permissionId) : false
                 if (!revoked) {
                     return NextResponse.json({ error: 'Failed to revoke permission' }, { status: 500 })
                 }
@@ -263,7 +282,8 @@ export async function POST(request: NextRequest) {
                     return NextResponse.json({ error: 'fileId, permissionId and expirationTime are required' }, { status: 400 })
                 }
                 const expiryConnectorId = connectorId || connectors[0].id
-                const updated = await googleDriveConnector.updatePermissionExpiry(expiryConnectorId, fileId, permissionId, expirationTime)
+                const expiryAdapter = await getPermissionAdapter(expiryConnectorId)
+                const updated = expiryAdapter ? await expiryAdapter.updatePermissionExpiry(expiryConnectorId, fileId, permissionId, expirationTime) : false
                 if (!updated) {
                     return NextResponse.json({ error: 'Failed to update permission' }, { status: 500 })
                 }
@@ -277,9 +297,12 @@ export async function POST(request: NextRequest) {
                     break
                 }
                 const folderConnector = connectors[0]
-                const folderMetas = await Promise.allSettled(
-                    (folderIds as string[]).map(id => googleDriveConnector.getFileMetadata(folderConnector.id, id))
-                )
+                const folderNamesAdapter = await getPermissionAdapter(folderConnector.id)
+                const folderMetas = folderNamesAdapter
+                    ? await Promise.allSettled(
+                        (folderIds as string[]).map(id => (folderNamesAdapter as IConnectorPermissionAdapter).getFileMetadata(folderConnector.id, id))
+                    )
+                    : []
                 const folderNameMap: Record<string, string> = {}
                 ;(folderIds as string[]).forEach((id, i) => {
                     const r = folderMetas[i]

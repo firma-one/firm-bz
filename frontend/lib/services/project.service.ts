@@ -1,8 +1,9 @@
 import { prisma } from '@/lib/prisma'
 import { generateProjectSlug } from '@/lib/slug-utils'
-import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { logger } from '@/lib/logger'
 import { resolveClientConnector } from '@/lib/connectors/resolve-client-connector'
+import { getStorageAdapter } from '@/lib/connectors/registry'
+import { ensureAppFolderStructure } from '@/lib/connectors/pockett-structure.service'
 
 /**
  * Service for managing projects in the V2 Platform schema.
@@ -114,11 +115,12 @@ export const projectService = {
                 })
 
                 if (client) {
-                    const fs = await googleDriveConnector.ensureAppFolderStructure(
+                    const adapter = await getStorageAdapter(connectorId)
+                    const fs = await ensureAppFolderStructure(
                         connectorId,
                         client.name,
                         client.slug,
-                        await googleDriveConnector.createGoogleDriveAdapter(connectorId),
+                        adapter,
                         firmId,
                         {
                             projectName: result.name,

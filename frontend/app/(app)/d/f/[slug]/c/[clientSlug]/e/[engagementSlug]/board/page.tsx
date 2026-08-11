@@ -51,7 +51,7 @@ export default async function EngagementBoardPage({ params }: PageProps) {
   const canView = await canViewProject(org.id, client.id, project.id)
   if (!canView) notFound()
 
-  const enableBetaFeatures = (org.settings as Record<string, unknown> | null)?.enableBetaFeatures === true
+  const enableBetaFeatures = ((org.settings as Record<string, unknown> | null)?.betaFeatures as Record<string, boolean> | undefined)?.dossier === true
 
   const viewAsSlug = await getViewAsPersonaFromCookie()
   const applyViewAs = viewAsSlug && (await canAccessRbacAdmin(user.id))
@@ -105,6 +105,7 @@ export default async function EngagementBoardPage({ params }: PageProps) {
           projectId={project.id}
           connectorRootFolderId={project.connectorRootFolderId}
           clientConnectorId={client.connectorId}
+          clientConnectorType={client.connectorType}
           workspaceRootLocation={connectorMeta?.workspaceRootLocation ?? null}
           orgName={orgName}
           clientName={client.name}

@@ -6,6 +6,7 @@ import { canManageProject } from '@/lib/permission-helpers'
 import { getPermissionAdapter } from '@/lib/connectors/registry'
 import { assertFirmSubscriptionAccess } from '@/lib/billing/subscription-gate'
 import { SubscriptionRevokedError } from '@/lib/errors/api-error'
+import { safeInngestSend } from '@/lib/inngest/client'
 
 export async function DELETE(
   _request: NextRequest,
@@ -28,9 +29,25 @@ export async function DELETE(
 
     const doc = await prisma.engagementDocument.findFirst({
       where: { id: documentId, engagementId: ctx.projectId, firmId: ctx.firmId },
-      select: { id: true, externalId: true, connectorId: true },
+      select: { id: true, externalId: true, connectorId: true, documentType: true, engagementId: true },
     })
     if (!doc) return NextResponse.json({ error: 'File not found' }, { status: 404 })
+
+    // Links have no connector-backed item and no recovery bin — hard-delete the row, matching
+    // how other document types are truly removed (vs. the ARCHIVED soft-delete for connector files).
+    if (doc.documentType === 'LINK') {
+      await prisma.engagementDocumentSharingUser.deleteMany({
+        where: { projectDocumentId: doc.id },
+      })
+      await safeInngestSend('document.deleted', {
+        documentId: doc.id,
+        engagementId: doc.engagementId,
+      })
+      await prisma.engagementDocument.delete({
+        where: { id: doc.id },
+      })
+      return NextResponse.json({ success: true })
+    }
 
     // Move file to trash via the connector abstraction (provider-agnostic, recoverable for 30 days)
     if (doc.connectorId && doc.externalId) {

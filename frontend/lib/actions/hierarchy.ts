@@ -31,6 +31,7 @@ export type HierarchyClient = {
     connectorId: string | null
     connectorEmail: string | null
     connectorStatus: string | null
+    connectorType: string | null
     brandPrimaryColor: string | null
     brandLogoUrl: string | null
     createdAt: Date
@@ -113,7 +114,7 @@ export async function getFirmHierarchy(firmSlug: string): Promise<HierarchyClien
             ]
         },
         include: {
-            connector: { select: { status: true, settings: true } },
+            connector: { select: { status: true, settings: true, type: true } },
             engagements: {
                 where: { isDeleted: false, members: { some: { userId: user.id } } },
                 include: {
@@ -172,6 +173,7 @@ export async function getFirmHierarchy(firmSlug: string): Promise<HierarchyClien
         connectorId: c.connectorId ?? null,
         connectorEmail: (c.connector?.settings as { accountEmail?: string } | null)?.accountEmail ?? null,
         connectorStatus: c.connector?.status ?? null,
+        connectorType: c.connector?.type ?? null,
         brandPrimaryColor: (() => { const bid = (c.settings as Record<string, unknown>)?.brandId as string | undefined; return bid ? (brandById.get(bid)?.primaryColor ?? null) : null })(),
         brandLogoUrl: (() => { const bid = (c.settings as Record<string, unknown>)?.brandId as string | undefined; if (!bid) return null; const b = brandById.get(bid); return b?.logoData ?? b?.logoUrl ?? null })(),
         createdAt: c.createdAt,
@@ -225,6 +227,7 @@ export type ClientsWithFirmMeta = {
     clients: ClientSummary[]
     firmId: string | null
     firmSandboxOnly: boolean
+    firmBetaFeatures: Record<string, boolean>
 }
 
 /**
@@ -239,10 +242,12 @@ export async function getClients(firmSlug: string): Promise<ClientsWithFirmMeta>
 
     const firm = await prisma.firm.findUnique({
         where: { slug: firmSlug },
-        select: { id: true, sandboxOnly: true }
+        select: { id: true, sandboxOnly: true, settings: true }
     })
 
-    if (!firm) return { clients: [], firmId: null, firmSandboxOnly: false }
+    if (!firm) return { clients: [], firmId: null, firmSandboxOnly: false, firmBetaFeatures: {} }
+
+    const firmBetaFeatures = ((firm.settings as Record<string, unknown> | null)?.betaFeatures as Record<string, boolean>) ?? {}
 
     // Phase 2: member check + clients in parallel.
     const [anyMembership, rawClients] = await Promise.all([
@@ -263,7 +268,7 @@ export async function getClients(firmSlug: string): Promise<ClientsWithFirmMeta>
                 relationshipValue: true, clientSinceDate: true, linkedInUrl: true,
                 companySizeBracket: true, billingAddress: true,
                 connectorId: true, settings: true,
-                connector: { select: { status: true, settings: true } },
+                connector: { select: { status: true, settings: true, type: true } },
                 createdAt: true, updatedAt: true,
                 engagements: {
                     where: { isDeleted: false, members: { some: { userId: user.id } } },
@@ -274,7 +279,7 @@ export async function getClients(firmSlug: string): Promise<ClientsWithFirmMeta>
         }),
     ])
 
-    if (!anyMembership) return { clients: [], firmId: firm.id, firmSandboxOnly: firm.sandboxOnly ?? false }
+    if (!anyMembership) return { clients: [], firmId: firm.id, firmSandboxOnly: firm.sandboxOnly ?? false, firmBetaFeatures }
 
     // Batch-fetch brands via brandId stored in client.settings
     const clientBrandIds = rawClients
@@ -316,6 +321,7 @@ export async function getClients(firmSlug: string): Promise<ClientsWithFirmMeta>
         connectorId: c.connectorId ?? null,
         connectorEmail: (c.connector?.settings as { accountEmail?: string } | null)?.accountEmail ?? null,
         connectorStatus: c.connector?.status ?? null,
+        connectorType: c.connector?.type ?? null,
         brandPrimaryColor: brand?.primaryColor ?? null,
         brandLogoUrl: brand?.logoData ?? brand?.logoUrl ?? null,
         createdAt: c.createdAt,
@@ -324,7 +330,7 @@ export async function getClients(firmSlug: string): Promise<ClientsWithFirmMeta>
         }
     })
 
-    return { clients, firmId: firm.id, firmSandboxOnly: firm.sandboxOnly ?? false }
+    return { clients, firmId: firm.id, firmSandboxOnly: firm.sandboxOnly ?? false, firmBetaFeatures }
 }
 
 export type ClientWithFirmMeta = {
@@ -372,7 +378,7 @@ export async function getClientWithEngagements(
             ]
         },
         include: {
-            connector: { select: { status: true, settings: true } },
+            connector: { select: { status: true, settings: true, type: true } },
             engagements: {
                 where: { isDeleted: false, members: { some: { userId: user.id } } },
                 include: { members: { where: { userId: user.id } } },
@@ -424,6 +430,7 @@ export async function getClientWithEngagements(
         connectorId: (c as any).connectorId ?? null,
         connectorEmail: ((c as any).connector?.settings as { accountEmail?: string } | null)?.accountEmail ?? null,
         connectorStatus: (c as any).connector?.status ?? null,
+        connectorType: (c as any).connector?.type ?? null,
         brandPrimaryColor,
         brandLogoUrl,
         createdAt: c.createdAt,

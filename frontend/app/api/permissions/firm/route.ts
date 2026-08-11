@@ -123,7 +123,7 @@ export async function GET(request: NextRequest) {
     }
 
     const orgSettings = firmId ? settings.organizationSettings[firmId] : undefined
-    const enableBetaFeatures = orgSettings?.enableBetaFeatures === true
+    const enableBetaFeatures = orgSettings?.betaFeatures?.dossier === true
 
     const body: Record<string, unknown> = {
       canView,

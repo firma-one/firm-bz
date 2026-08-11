@@ -46,6 +46,13 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: 'Connector not found or access denied' }, { status: 403 })
         }
 
+        // Version history is a Drive-specific concept — Graph exposes item versions via a
+        // different API not yet wired into any connector interface here (same documented gap
+        // as revisionId in app/api/documents/download/route.ts).
+        if (connector.type !== 'GOOGLE_DRIVE') {
+            return NextResponse.json({ revisions: [], unsupported: true })
+        }
+
         // Fetch Revisions
         try {
             const revisions = await googleDriveConnector.getRevisions(connectorId, fileId)

@@ -4,6 +4,22 @@ import { prisma } from '@/lib/prisma'
 import { createClient } from '@/utils/supabase/server'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { resolveClientConnector } from '@/lib/connectors/resolve-client-connector'
+import { getContentAdapter, getPermissionAdapter } from '@/lib/connectors/registry'
+import { ensureOneDriveFolderPath } from '@/lib/connectors/adapters/onedrive-file-ops'
+import { renameOneDriveFile } from '@/lib/connectors/adapters/onedrive-file-ops'
+
+async function isOneDriveConnector(connectorId: string): Promise<boolean> {
+  const connector = await prisma.connector.findUnique({ where: { id: connectorId }, select: { type: true } })
+  return connector?.type === 'ONEDRIVE'
+}
+
+/** Ensure a nested folder path exists under `rootFolderId`, provider-agnostic. */
+async function ensureFolderPath(connectorId: string, rootFolderId: string, segments: string[]): Promise<string | null> {
+  if (await isOneDriveConnector(connectorId)) {
+    return ensureOneDriveFolderPath(connectorId, rootFolderId, segments)
+  }
+  return googleDriveConnector.ensureFolderPath(connectorId, rootFolderId, segments)
+}
 
 export type WikiPage = {
   id: string
@@ -71,34 +87,16 @@ async function getEngagementDriveContext(engagementId: string): Promise<{ connec
 
 /** Ensure `_wiki/` folder exists under engagement root, return its ID. */
 async function ensureWikiFolder(connectorId: string, connectorRootFolderId: string): Promise<string> {
-  const folderId = await googleDriveConnector.ensureFolderPath(connectorId, connectorRootFolderId, ['_wiki'])
-  if (!folderId) throw new Error('Failed to create _wiki folder in Drive')
+  const folderId = await ensureFolderPath(connectorId, connectorRootFolderId, ['_wiki'])
+  if (!folderId) throw new Error('Failed to create _wiki folder')
   return folderId
 }
 
 /** Ensure `_wiki/{sectionTitle}/` folder exists, return its ID. */
 async function ensureSectionFolder(connectorId: string, connectorRootFolderId: string, sectionTitle: string): Promise<string> {
-  const folderId = await googleDriveConnector.ensureFolderPath(connectorId, connectorRootFolderId, ['_wiki', sectionTitle])
-  if (!folderId) throw new Error(`Failed to create section folder "${sectionTitle}" in Drive`)
+  const folderId = await ensureFolderPath(connectorId, connectorRootFolderId, ['_wiki', sectionTitle])
+  if (!folderId) throw new Error(`Failed to create section folder "${sectionTitle}"`)
   return folderId
-}
-
-/** Build a minimal file-like object compatible with `uploadFile`. */
-function makeTextFile(name: string, content: string): { name: string; type: string; stream: () => ReadableStream; arrayBuffer: () => Promise<ArrayBuffer> } {
-  const encoded = Buffer.from(content, 'utf-8')
-  const ab = encoded.buffer.slice(encoded.byteOffset, encoded.byteOffset + encoded.byteLength) as ArrayBuffer
-  return {
-    name,
-    type: 'text/plain',
-    stream: () => {
-      const { readable, writable } = new TransformStream()
-      const writer = writable.getWriter()
-      writer.write(encoded)
-      writer.close()
-      return readable
-    },
-    arrayBuffer: async () => ab,
-  }
 }
 
 export async function getWikiPages(engagementId: string): Promise<WikiPage[]> {
@@ -130,8 +128,11 @@ export async function getWikiPageContent(id: string): Promise<string> {
   const connectorId: string | undefined = row.engagement?.firm?.connectorId
   if (!connectorId) return ''
 
-  const { stream } = await googleDriveConnector.downloadFile(connectorId, row.driveFileId)
-  return new Response(stream as ReadableStream).text()
+  const contentAdapter = await getContentAdapter(connectorId)
+  if (!contentAdapter) return ''
+  const { stream } = await contentAdapter.getRenderableContent(connectorId, row.driveFileId, 'native')
+  const body = Buffer.isBuffer(stream) ? new Uint8Array(stream) : stream
+  return new Response(body as BodyInit).text()
 }
 
 export async function createWikiPage(
@@ -167,15 +168,13 @@ export async function createWikiPage(
     const sectionFolderId = section?.driveFileId
       ?? await ensureSectionFolder(connectorId, connectorRootFolderId, section?.title ?? 'Untitled Section')
 
-    const accessToken = await googleDriveConnector.getAccessToken(connectorId)
-    if (accessToken && sectionFolderId) {
+    if (sectionFolderId) {
       const fileName = `${opts.title}.md`
-      const result = await googleDriveConnector.uploadFile(
-        accessToken,
-        makeTextFile(fileName, ''),
-        { name: fileName, parents: [sectionFolderId] },
-      )
-      driveFileId = result?.id ?? null
+      const contentAdapter = await getContentAdapter(connectorId)
+      if (contentAdapter) {
+        const result = await contentAdapter.createFile(connectorId, sectionFolderId, fileName, Buffer.from('', 'utf-8'), 'text/plain')
+        driveFileId = result?.id ?? null
+      }
     }
   }
 
@@ -214,16 +213,22 @@ export async function updateWikiPage(
   const connectorId: string | undefined = row?.engagement?.firm?.connectorId
 
   if (connectorId) {
+    const onOneDrive = await isOneDriveConnector(connectorId)
+
     // Rename Drive file/folder when title changes
     if (patch.title !== undefined && row?.driveFileId) {
       const newName = row.parentId === null ? patch.title : `${patch.title}.md`
-      await googleDriveConnector.patchFileProperties(connectorId, row.driveFileId, { name: newName }).catch(() => {})
+      if (onOneDrive) {
+        await renameOneDriveFile(connectorId, row.driveFileId, newName).catch(() => {})
+      } else {
+        await googleDriveConnector.patchFileProperties(connectorId, row.driveFileId, { name: newName }).catch(() => {})
+      }
     }
 
     // Write content to Drive
     if (patch.content !== undefined) {
-      const accessToken = await googleDriveConnector.getAccessToken(connectorId)
-      if (accessToken) {
+      const contentAdapter = await getContentAdapter(connectorId)
+      if (contentAdapter) {
         const currentTitle = patch.title ?? row?.title ?? 'content'
         const fileName = `${currentTitle}.md`
         let driveFileId: string | null = row?.driveFileId ?? null
@@ -239,23 +244,14 @@ export async function updateWikiPage(
             ?? await ensureSectionFolder(connectorId, connectorRootFolderId, section?.title ?? 'Untitled Section')
 
           if (sectionFolderId) {
-            const result = await googleDriveConnector.uploadFile(
-              accessToken,
-              makeTextFile(fileName, patch.content),
-              { name: fileName, parents: [sectionFolderId] },
-            )
+            const result = await contentAdapter.createFile(connectorId, sectionFolderId, fileName, Buffer.from(patch.content, 'utf-8'), 'text/plain')
             driveFileId = result?.id ?? null
             if (driveFileId) {
               await (prisma as any).engagementWikiPage.update({ where: { id }, data: { driveFileId } })
             }
           }
         } else if (driveFileId) {
-          await googleDriveConnector.uploadFile(
-            accessToken,
-            makeTextFile(fileName, patch.content),
-            { name: fileName },
-            driveFileId,
-          )
+          await contentAdapter.overwriteFileContent(connectorId, driveFileId, Buffer.from(patch.content, 'utf-8'), 'text/plain')
         }
       }
     }
@@ -288,13 +284,16 @@ export async function deleteWikiPage(id: string): Promise<void> {
   const connectorId: string | undefined = row.engagement?.firm?.connectorId
 
   if (connectorId) {
-    for (const child of (row.children ?? []) as Array<{ id: string; driveFileId: string | null }>) {
-      if (child.driveFileId) {
-        await googleDriveConnector.trashFile(connectorId, child.driveFileId).catch(() => {})
+    const permissionAdapter = await getPermissionAdapter(connectorId)
+    if (permissionAdapter) {
+      for (const child of (row.children ?? []) as Array<{ id: string; driveFileId: string | null }>) {
+        if (child.driveFileId) {
+          await permissionAdapter.trashFile(connectorId, child.driveFileId).catch(() => {})
+        }
       }
-    }
-    if (row.driveFileId) {
-      await googleDriveConnector.trashFile(connectorId, row.driveFileId).catch(() => {})
+      if (row.driveFileId) {
+        await permissionAdapter.trashFile(connectorId, row.driveFileId).catch(() => {})
+      }
     }
   }
 

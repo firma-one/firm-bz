@@ -5,7 +5,7 @@ import { FirmClientsView } from "@/components/projects/firm-clients-view"
 export default async function FirmPage({ params }: { params: Promise<{ slug: string }> }) {
     const { slug } = await params
 
-    const { clients, firmId, firmSandboxOnly } = await getClients(slug)
+    const { clients, firmId, firmSandboxOnly, firmBetaFeatures } = await getClients(slug)
 
     let memberCount = 0
     let auditCount = 0
@@ -18,6 +18,8 @@ export default async function FirmPage({ params }: { params: Promise<{ slug: str
         auditCount = firmAuditCount
     }
 
+    const microsoftConnectorEnabled = firmBetaFeatures.microsoftStorageConnector === true
+
     return (
         <div className="h-full flex flex-col">
             <FirmClientsView
@@ -27,6 +29,7 @@ export default async function FirmPage({ params }: { params: Promise<{ slug: str
                 firmSandboxOnly={firmSandboxOnly}
                 memberCount={memberCount}
                 auditCount={auditCount}
+                microsoftConnectorEnabled={microsoftConnectorEnabled}
             />
         </div>
     )

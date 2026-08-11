@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { requireEngagementMember, isExternalEngagementRole } from '@/lib/engagement-access'
-import { googleDriveConnector } from '@/lib/google-drive-connector'
+import { getPermissionAdapter } from '@/lib/connectors/registry'
 import { assignDocId } from '@/lib/doc-id'
 import { assertWithinDocumentCap } from '@/lib/billing/effective-billing-caps'
 import { resolveEngagementConnectorId } from '@/lib/connectors/resolve-client-connector'
@@ -71,10 +71,13 @@ export async function POST(
       })
     } else {
       // Record doesn't exist yet — fetch Drive metadata and create it now.
-      const driveMeta = await googleDriveConnector.getFileMetadata(connector.id, externalId)
+      const permissionAdapter = await getPermissionAdapter(connector.id)
+      if (!permissionAdapter) return NextResponse.json({ error: 'Connector type not supported' }, { status: 500 })
+
+      const driveMeta = await permissionAdapter.getFileMetadata(connector.id, externalId)
       if (!driveMeta) return NextResponse.json({ error: 'File not found in Drive' }, { status: 404 })
 
-      const folderIds = await googleDriveConnector.getProjectFolderIds(connector.id, project.slug, {
+      const folderIds = await permissionAdapter.getEngagementFolderIds(connector.id, project.slug, {
         projectName: project.name,
         clientSlug: project.client.slug,
         clientName: project.client.name,
@@ -92,7 +95,7 @@ export async function POST(
           parentId: (driveMeta as any).parents?.[0] ?? folderIds.generalFolderId ?? null,
           fileName,
           mimeType: driveMeta.mimeType ?? null,
-          fileSize: driveMeta.size ? BigInt(driveMeta.size) : null,
+          fileSize: (driveMeta as any).size ? BigInt((driveMeta as any).size) : null,
           isFolder: false,
           settings: pendingSettings as object,
           metadata: {

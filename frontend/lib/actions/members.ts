@@ -196,15 +196,20 @@ export async function removeMember(memberId: string) {
             }
         }
 
-        // Revoke folder-level connector access
+        // Revoke folder-level connector access — Google-only safety net (explicit per-email
+        // folder revoke); OneDrive's per-document revokePermission above already handles the
+        // main revocation path since Graph has no folder-level revoke-by-email equivalent.
         if (member.engagement.connectorRootFolderId && memberEmail) {
             try {
                 if (connectorId) {
-                    await googleDriveConnector.revokeFolderPermissionByEmail(
-                        connectorId,
-                        member.engagement.connectorRootFolderId,
-                        memberEmail
-                    )
+                    const connector = await prisma.connector.findUnique({ where: { id: connectorId }, select: { type: true } })
+                    if (connector?.type === 'GOOGLE_DRIVE') {
+                        await googleDriveConnector.revokeFolderPermissionByEmail(
+                            connectorId,
+                            member.engagement.connectorRootFolderId,
+                            memberEmail
+                        )
+                    }
                 }
             } catch (error) {
                 logger.error('Error revoking Drive folder access', error as Error)

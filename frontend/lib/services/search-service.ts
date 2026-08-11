@@ -4,6 +4,62 @@ import { generateSummary } from '../summarization'
 import { extractSnippet } from '../snippet'
 import { logger } from '../logger'
 import { assignDocId } from '../doc-id'
+import type { IConnectorContentAdapter } from '../connectors/types'
+
+const MAX_INDEXABLE_TEXT_SIZE_BYTES = 15 * 1024 * 1024
+
+/**
+ * Extract plain text from a OneDrive file's raw bytes for embeddings/summarization —
+ * OneDrive equivalent of GoogleDriveConnector.getFileText's Office/PDF-parsing branch.
+ * No native-export-format branch (Graph has no .gdoc/.gsheet equivalent); text/CSV/JSON
+ * files and Office/PDF binaries are parsed directly from getRenderableContent's bytes.
+ */
+async function extractOneDriveFileText(
+    connectorId: string,
+    externalId: string,
+    mimeType: string,
+    contentAdapter: IConnectorContentAdapter | null
+): Promise<string | null> {
+    if (!contentAdapter) return null
+    try {
+        const { stream, size } = await contentAdapter.getRenderableContent(connectorId, externalId, 'native')
+        const buf = Buffer.isBuffer(stream) ? stream : Buffer.from(await new Response(stream).arrayBuffer())
+        if (buf.byteLength > MAX_INDEXABLE_TEXT_SIZE_BYTES) return null
+        void size
+
+        if (mimeType === 'text/plain' || mimeType === 'application/json' || mimeType === 'text/markdown' || mimeType === 'text/csv') {
+            return buf.toString('utf-8')
+        }
+
+        if (mimeType === 'application/pdf') {
+            const { PDFParse } = await import('pdf-parse')
+            const parser = new PDFParse({ data: buf })
+            try {
+                const result = await parser.getText()
+                return typeof result.text === 'string' ? result.text : null
+            } finally {
+                await parser.destroy().catch(() => { /* ignore */ })
+            }
+        }
+
+        const OFFICE_MIMES = new Set([
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ])
+        if (OFFICE_MIMES.has(mimeType)) {
+            const { OfficeParser } = await import('officeparser')
+            const ast = await OfficeParser.parseOffice(buf)
+            const text = ast.toText()
+            return typeof text === 'string' ? text : null
+        }
+
+        return null
+    } catch (e) {
+        logger.error('extractOneDriveFileText failed', e as Error)
+        return null
+    }
+}
 
 export interface VectorSearchResult {
     externalId: string
@@ -52,6 +108,7 @@ export class SearchService {
 
         try {
             const { googleDriveConnector } = await import('../google-drive-connector')
+            const { getPermissionAdapter, getContentAdapter } = await import('../connectors/registry')
             let connectorId: string | null = null
             if (params.clientId) {
                 const { resolveClientConnector } = await import('../connectors/resolve-client-connector')
@@ -65,25 +122,39 @@ export class SearchService {
                 connectorId = firm?.connectorId ?? null
             }
 
+            const connectorType = connectorId
+                ? await prisma.connector.findUnique({ where: { id: connectorId }, select: { type: true } }).then((c) => c?.type)
+                : null
+            const onOneDrive = connectorType === 'ONEDRIVE'
+
             let driveMetadata: any = {}
             let driveParentId = params.parentId || null
             let isFolder = false
 
-            const meta = connectorId ? await googleDriveConnector.getFileMetadata(connectorId, params.externalId) : null
+            const permissionAdapter = connectorId && onOneDrive ? await getPermissionAdapter(connectorId) : null
+            const meta = connectorId
+                ? (onOneDrive
+                    ? await permissionAdapter?.getFileMetadata(connectorId, params.externalId) ?? null
+                    : await googleDriveConnector.getFileMetadata(connectorId, params.externalId))
+                : null
             let summary: string | null = null
 
             if (meta) {
+                // OneDrive adapter mirrors Google's folder-mimeType sentinel (see
+                // onedrive-permission-adapter.ts getFileMetadata) so both providers use the same check.
                 isFolder = meta.mimeType === 'application/vnd.google-apps.folder'
-                driveMetadata = {
-                    thumbnailLink: meta.thumbnailLink,
-                    iconLink: meta.iconLink,
-                    mimeType: meta.mimeType,
-                    size: meta.size,
-                    modifiedTime: meta.modifiedTime,
-                    webViewLink: meta.webViewLink,
-                    owners: meta.owners ?? null,
-                    lastModifyingUser: meta.lastModifyingUser ?? null,
-                }
+                driveMetadata = onOneDrive
+                    ? { mimeType: meta.mimeType }
+                    : {
+                        thumbnailLink: (meta as any).thumbnailLink,
+                        iconLink: (meta as any).iconLink,
+                        mimeType: meta.mimeType,
+                        size: (meta as any).size,
+                        modifiedTime: (meta as any).modifiedTime,
+                        webViewLink: (meta as any).webViewLink,
+                        owners: (meta as any).owners ?? null,
+                        lastModifyingUser: (meta as any).lastModifyingUser ?? null,
+                    }
                 if (!driveParentId && meta.parents && meta.parents.length > 0) {
                     driveParentId = meta.parents[0]
                 }
@@ -93,19 +164,32 @@ export class SearchService {
                 // into content-based embeddings. Google-native Sheets/Slides via export API;
                 // modern Office (docx/pptx/xlsx) and PDFs parsed in-memory (officeparser /
                 // pdf-parse). Legacy .doc/.ppt/.xls and scanned PDFs stay filename-only.
-                const isSummarizable = [
-                    'application/vnd.google-apps.document',
-                    'application/vnd.google-apps.spreadsheet',
-                    'application/vnd.google-apps.presentation',
-                    'text/plain', 'text/markdown', 'text/csv', 'application/json',
-                    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-                    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                    'application/pdf',
-                ].includes(meta.mimeType)
+                // OneDrive has no native-export-format concept (no .gdoc/.gsheet equivalent) —
+                // only the Office/PDF binary-parse path applies there.
+                const summarizableMimes = onOneDrive
+                    ? [
+                        'text/plain', 'text/markdown', 'text/csv', 'application/json',
+                        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+                        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                        'application/pdf',
+                    ]
+                    : [
+                        'application/vnd.google-apps.document',
+                        'application/vnd.google-apps.spreadsheet',
+                        'application/vnd.google-apps.presentation',
+                        'text/plain', 'text/markdown', 'text/csv', 'application/json',
+                        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+                        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                        'application/pdf',
+                    ]
+                const isSummarizable = !!meta.mimeType && summarizableMimes.includes(meta.mimeType)
 
                 if (isSummarizable && connectorId) {
-                    const text = await googleDriveConnector.getFileText(connectorId, params.externalId)
+                    const text = onOneDrive
+                        ? await extractOneDriveFileText(connectorId, params.externalId, meta.mimeType!, await getContentAdapter(connectorId))
+                        : await googleDriveConnector.getFileText(connectorId, params.externalId)
                     if (text) {
                         // SEARCH_SUMMARY_MODE=model re-enables the legacy distilbart summarizer
                         // (lib/summarization.ts, retained until snippet mode is signed off);
@@ -193,7 +277,7 @@ export class SearchService {
                 params.fileName,
                 isFolder,
                 meta?.mimeType || null,
-                meta?.size ? BigInt(meta.size) : null,
+                (meta as any)?.size ? BigInt((meta as any).size) : null,
                 null,
                 embeddingSql,
                 JSON.stringify(driveMetadata),
@@ -217,8 +301,11 @@ export class SearchService {
                 }
             }
 
-            // Sync to GDrive
-            if (connectorId) {
+            // Sync org/client/project ids to Drive's custom file properties. Google-only —
+            // Graph has no equivalent per-DriveItem key-value property store; this metadata
+            // already lives in our own DB (engagement_documents row), so it's a documented
+            // no-op for OneDrive rather than a functional gap.
+            if (connectorId && !onOneDrive) {
                 const properties: Record<string, string> = { organizationId: params.organizationId }
                 if (params.clientId) properties.clientId = params.clientId
                 if (params.projectId) properties.projectId = params.projectId

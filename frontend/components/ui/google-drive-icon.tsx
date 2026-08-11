@@ -6,9 +6,9 @@ interface GoogleDriveIconProps {
   className?: string
 }
 
-/** Same asset as Trust Architecture & Google’s branding guidelines (1× 48dp product icon). */
+/** Google's current (2026) Drive product mark, served from Google's own brand-assets CDN. */
 export const GOOGLE_DRIVE_PRODUCT_MARK_SRC =
-  "https://ssl.gstatic.com/images/branding/product/1x/drive_2020q4_48dp.png" as const
+  "https://www.gstatic.com/images/branding/productlogos/drive_2026/v2/web/192px.svg" as const
 
 type GoogleDriveProductMarkProps = Omit<React.ImgHTMLAttributes<HTMLImageElement>, "src"> & {
   className?: string
