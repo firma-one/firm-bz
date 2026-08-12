@@ -1,13 +1,16 @@
 'use client'
 
-import { Clock3, MapPinned, Play, Square } from 'lucide-react'
+import { Clock3, FastForward, MapPinned, Play, Square } from 'lucide-react'
 import { useDemoTour } from '@/lib/demo/demo-tour-context'
 
-/** Static counterpart to demo-tour-intro-modal.tsx — no "resume progress" state (nothing persisted across sessions in this static demo), same copy/visual chrome otherwise. */
+/** Static counterpart to demo-tour-intro-modal.tsx — same resume-progress behavior, backed by
+ * localStorage instead of a server-resolved firm/client/engagement slug set. */
 export function DemoTourIntroModal() {
-    const { showIntroModal, closeIntroModal, startTour } = useDemoTour()
+    const { showIntroModal, closeIntroModal, startTour, resumeTour, resumableStepIndex } = useDemoTour()
 
     if (!showIntroModal) return null
+
+    const hasProgress = resumableStepIndex !== null && resumableStepIndex > 0
 
     return (
         <div className="fixed inset-0 z-[10060] flex items-center justify-center">
@@ -28,33 +31,62 @@ export function DemoTourIntroModal() {
                 </div>
 
                 <div className="px-5 py-4 space-y-3">
-                    <p className="text-xs text-[#45474c] leading-relaxed">
-                        Take a <strong className="text-[#1b1b1d]">guided tour</strong> to discover how Firma works — from managing clients and engagements to sharing documents and using the command palette.
-                    </p>
-                    <ul className="space-y-1.5 text-xs text-[#45474c]">
-                        <li className="flex items-center gap-2"><span className="h-1 w-1 rounded-full bg-primary shrink-0" />Firm, Clients &amp; Engagements</li>
-                        <li className="flex items-center gap-2"><span className="h-1 w-1 rounded-full bg-primary shrink-0" />Calendar &amp; AI-powered Doc Search</li>
-                        <li className="flex items-center gap-2"><span className="h-1 w-1 rounded-full bg-primary shrink-0" />File uploads &amp; document actions</li>
-                        <li className="flex items-center gap-2"><span className="h-1 w-1 rounded-full bg-primary shrink-0" />Board, Comments, Audit &amp; Members</li>
-                        <li className="flex items-center gap-2"><span className="h-1 w-1 rounded-full bg-primary shrink-0" />Reminders, Bookmarks &amp; Profile</li>
-                    </ul>
+                    {hasProgress ? (
+                        <p className="text-xs text-[#45474c] leading-relaxed">
+                            You were in the middle of the tour. Would you like to <strong className="text-[#1b1b1d]">pick up where you left off</strong> or start from the beginning?
+                        </p>
+                    ) : (
+                        <>
+                            <p className="text-xs text-[#45474c] leading-relaxed">
+                                Take a <strong className="text-[#1b1b1d]">guided tour</strong> to discover how Firma works — from managing clients and engagements to sharing documents and using the command palette.
+                            </p>
+                            <ul className="space-y-1.5 text-xs text-[#45474c]">
+                                <li className="flex items-center gap-2"><span className="h-1 w-1 rounded-full bg-primary shrink-0" />Firm, Clients &amp; Engagements</li>
+                                <li className="flex items-center gap-2"><span className="h-1 w-1 rounded-full bg-primary shrink-0" />Calendar &amp; AI-powered Doc Search</li>
+                                <li className="flex items-center gap-2"><span className="h-1 w-1 rounded-full bg-primary shrink-0" />File uploads &amp; document actions</li>
+                                <li className="flex items-center gap-2"><span className="h-1 w-1 rounded-full bg-primary shrink-0" />Board, Comments, Audit &amp; Members</li>
+                                <li className="flex items-center gap-2"><span className="h-1 w-1 rounded-full bg-primary shrink-0" />Reminders, Bookmarks &amp; Profile</li>
+                            </ul>
+                        </>
+                    )}
                 </div>
 
                 <div className="px-5 pb-5 flex items-center gap-2">
-                    <button
-                        type="button"
-                        onClick={startTour}
-                        className="group flex-1 h-9 rounded bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:brightness-105 transition-all flex items-center justify-center gap-1.5"
-                    >
-                        Start Tour <Play className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-0.5" />
-                    </button>
-                    <button
-                        type="button"
-                        onClick={closeIntroModal}
-                        className="flex-1 h-9 rounded border border-[#e5e7eb] text-[10px] font-headline font-bold tracking-widest uppercase text-[#45474c] hover:bg-[#f3f4f6] transition-colors flex items-center justify-center gap-1.5"
-                    >
-                        <Square className="h-3.5 w-3.5" /> Skip
-                    </button>
+                    {hasProgress ? (
+                        <>
+                            <button
+                                type="button"
+                                onClick={resumeTour}
+                                className="group flex-1 h-9 rounded bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:brightness-105 transition-all flex items-center justify-center gap-1.5"
+                            >
+                                Resume Tour <FastForward className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-0.5" />
+                            </button>
+                            <button
+                                type="button"
+                                onClick={startTour}
+                                className="flex-1 h-9 rounded border border-[#e5e7eb] text-[10px] font-headline font-bold tracking-widest uppercase text-[#45474c] hover:bg-[#f3f4f6] transition-colors"
+                            >
+                                Start over
+                            </button>
+                        </>
+                    ) : (
+                        <>
+                            <button
+                                type="button"
+                                onClick={startTour}
+                                className="group flex-1 h-9 rounded bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:brightness-105 transition-all flex items-center justify-center gap-1.5"
+                            >
+                                Start Tour <Play className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-0.5" />
+                            </button>
+                            <button
+                                type="button"
+                                onClick={closeIntroModal}
+                                className="flex-1 h-9 rounded border border-[#e5e7eb] text-[10px] font-headline font-bold tracking-widest uppercase text-[#45474c] hover:bg-[#f3f4f6] transition-colors flex items-center justify-center gap-1.5"
+                            >
+                                <Square className="h-3.5 w-3.5" /> Skip
+                            </button>
+                        </>
+                    )}
                 </div>
             </div>
         </div>

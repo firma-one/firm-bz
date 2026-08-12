@@ -76,6 +76,7 @@ export function DemoFirmDashboard({ firm }: DemoFirmDashboardProps) {
                             </TabsTrigger>
                             <TabsTrigger
                                 value="clients"
+                                data-demo-tour="firm-clients-tab"
                                 className="relative h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                             >
                                 <Users className="w-4 h-4 mr-2" />

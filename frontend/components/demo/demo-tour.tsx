@@ -87,6 +87,14 @@ const STEPS: TourStep[] = [
         skipScroll: true,
     },
     {
+        target: '[data-demo-tour="firm-clients-tab"]',
+        title: 'Clients',
+        content: <p className="text-xs leading-relaxed text-[#45474c]">Every client workspace for your firm lives here — each with its own branding, contacts, and engagements.</p>,
+        route: `${firm}?tab=clients`,
+        placement: 'bottom',
+        skipScroll: true,
+    },
+    {
         target: '[data-demo-tour="firm-add-client-btn"]',
         title: 'Add a Client',
         content: <p className="text-xs leading-relaxed text-[#45474c]">Create a new client workspace. Each client can have its own branding, contacts, and multiple engagements.</p>,
@@ -94,14 +102,24 @@ const STEPS: TourStep[] = [
         placement: 'bottom',
         skipScroll: true,
     },
-    ...(firstClient ? [{
-        target: '[data-demo-tour="engagement-add-btn"]',
-        title: 'Add an Engagement',
-        content: <p className="text-xs leading-relaxed text-[#45474c]">Engagements are client-billable projects — e.g. SEO retainers, paid media campaigns, content sprints, brand audits, or social strategy. Run them as a <strong className="text-[#1b1b1d]">Retainer</strong>, <strong className="text-[#1b1b1d]">T&amp;M</strong>, or <strong className="text-[#1b1b1d]">Fixed Price</strong> engagement. Each has its own files, shares, and team.</p>,
-        route: client,
-        placement: 'bottom' as const,
-        skipScroll: true,
-    }] : []),
+    ...(firstClient ? [
+        {
+            target: '[data-demo-tour="client-engagements-tab"]',
+            title: 'Engagements',
+            content: <p className="text-xs leading-relaxed text-[#45474c]">Every engagement for this client lives here — each one is its own client-billable project with its own files, shares, and team.</p>,
+            route: client,
+            placement: 'bottom' as const,
+            skipScroll: true,
+        },
+        {
+            target: '[data-demo-tour="engagement-add-btn"]',
+            title: 'Add an Engagement',
+            content: <p className="text-xs leading-relaxed text-[#45474c]">Engagements are client-billable projects — e.g. SEO retainers, paid media campaigns, content sprints, brand audits, or social strategy. Run them as a <strong className="text-[#1b1b1d]">Retainer</strong>, <strong className="text-[#1b1b1d]">T&amp;M</strong>, or <strong className="text-[#1b1b1d]">Fixed Price</strong> engagement. Each has its own files, shares, and team.</p>,
+            route: client,
+            placement: 'bottom' as const,
+            skipScroll: true,
+        },
+    ] : []),
     ...(firstEngagement ? [
         {
             target: '[data-demo-tour="engagement-header"]',
@@ -248,7 +266,7 @@ export function DemoTour() {
     const router = useRouter()
     const pathname = usePathname()
     const searchParams = useSearchParams()
-    const { run, stepIndex, setStepIndex, setRun, endTour } = useDemoTour()
+    const { run, stepIndex, setStepIndex, setRun, endTour, saveProgress } = useDemoTour()
     const pathnameRef = useRef(pathname)
     const searchParamsRef = useRef(searchParams)
     const retryCountRef = useRef(0)
@@ -316,6 +334,8 @@ export function DemoTour() {
             clearRetry()
             const { action } = data as any
             if (action === 'close' || action === 'skip') {
+                saveProgress(index)
+                setStepIndex(index)
                 endTour(false)
                 return
             }
@@ -324,6 +344,7 @@ export function DemoTour() {
                 endTour(true)
                 return
             }
+            saveProgress(nextIndex)
             void navigateForStep(nextIndex)
             return
         }
@@ -346,11 +367,15 @@ export function DemoTour() {
                 placement: s.placement,
                 disableBeacon: s.disableBeacon,
                 skipScroll: s.skipScroll,
+                // The tour must never abort from an accidental click-outside or Escape press — only the
+                // tooltip's own close (X) button should end it. disableOverlayClose is a legacy v2 prop with
+                // no effect in v3; overlayClickAction/dismissKeyAction are the real per-step gates.
+                overlayClickAction: false as const,
+                dismissKeyAction: false as const,
                 ...(s.disableFlip ? { floatingOptions: { flipOptions: false } } : {}),
             }))}
             continuous
             scrollToFirstStep
-            disableOverlayClose
             onEvent={handleJoyrideEvent}
             locale={{ last: 'Next →', next: 'Next →', back: '← Back', skip: 'Skip tour', close: 'Close' }}
             options={{
