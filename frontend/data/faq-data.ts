@@ -17,6 +17,12 @@ export const FAQ_DATA: FAQItem[] = [
     category: "Security"
   },
   {
+    question: `Does ${BRAND_NAME} work with Microsoft OneDrive or SharePoint?`,
+    answer: `Yes — OneDrive and SharePoint are supported today in Beta, alongside our fully supported Google Drive integration. Connect either as the storage backend for your firm portal using the same OAuth-based, Non-Custodial design: your files stay in your Microsoft account, and ${BRAND_NAME} adds the client portal, permissions, and engagement structure on top.`,
+    displayAnswer: `Yes — <strong>OneDrive and SharePoint are supported today in Beta</strong>, alongside our fully supported Google Drive integration. Connect either as the storage backend for your firm portal using the same OAuth-based, Non-Custodial design: your files stay in your Microsoft account, and ${brandNameInlineHtml()} adds the client portal, permissions, and engagement structure on top.`,
+    category: "Security"
+  },
+  {
     question: `What exactly does ${BRAND_NAME} do for consultants and marketing teams?`,
     answer: `${BRAND_NAME} turns your messy Google Drive folders into a secure, branded Client Portal. Marketing agencies, fractional executives, and advisory firms use it to package campaign and strategy deliverables professionally, track who accesses your Intellectual Property, and—most importantly—instantly revoke access ('Wrap') when an engagement ends to prevent 'Zombie Links'.`,
     displayAnswer: `${brandNameInlineHtml()} turns your messy Google Drive folders into a secure, branded <strong>Client Portal</strong>. Marketing agencies, fractional executives, and advisory firms use it to package campaign and strategy deliverables professionally, track who accesses your <strong>Intellectual Property</strong>, and—most importantly—instantly revoke access (<strong>'Wrap'</strong>) when an engagement ends to prevent <strong>'Zombie Links'</strong>.`,
@@ -117,13 +123,13 @@ export const FAQ_DATA: FAQItem[] = [
   },
   {
     question: `What does "bring your own Storage Drive" mean?`,
-    answer: `Your files stay in your own storage — Google Drive today, with OneDrive coming soon. ${BRAND_NAME} adds the client portal, engagement structure, and permissions on top without storing a second copy of your documents. There's no bulk migration: you keep working from your existing Drive with a professional delivery layer.`,
-    displayAnswer: `Your files stay in your own storage — <strong>Google Drive</strong> today, with <strong>OneDrive coming soon</strong>. ${brandNameInlineHtml()} adds the client portal, engagement structure, and permissions on top without storing a second copy of your documents. <strong>No bulk migration</strong>: you keep working from your existing Drive with a professional delivery layer.`,
+    answer: `Your files stay in your own storage — Google Drive, or Microsoft OneDrive/SharePoint (Beta). ${BRAND_NAME} adds the client portal, engagement structure, and permissions on top without storing a second copy of your documents. There's no bulk migration: you keep working from your existing Drive with a professional delivery layer.`,
+    displayAnswer: `Your files stay in your own storage — <strong>Google Drive</strong>, or <strong>Microsoft OneDrive/SharePoint (Beta)</strong>. ${brandNameInlineHtml()} adds the client portal, engagement structure, and permissions on top without storing a second copy of your documents. <strong>No bulk migration</strong>: you keep working from your existing Drive with a professional delivery layer.`,
     category: "Billing",
   },
   {
     question: "What's included in the free plan?",
-    answer: "The free plan includes a Demo firm (with sample data for exploration) and 1 real firm for production use — no credit card required. Limits apply: 1 active engagement, 1 client, and 20 documents. Paid plans remove those limits and unlock additional features such as templates, advanced review workflows, custom DNS, and SSO.",
+    answer: "The free plan includes a Demo firm (with sample data for exploration) and 1 real firm for production use — no credit card required. Limits apply: 1 active engagement, 1 client, and 10 documents. Paid plans remove those limits and unlock additional features such as templates, advanced review workflows, custom DNS, and SSO.",
     category: "Billing",
   },
   {

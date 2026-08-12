@@ -1,0 +1,172 @@
+{
+  "firmName": "Beacon Growth Partners",
+  "clients": [
+    {
+      "clientName": "Acme Robotics",
+      "status": "ACTIVE",
+      "clientSinceDate": "2024-03-15",
+      "followUpDate": "today+4",
+      "industry": "Technology",
+      "engagements": [
+        {
+          "name": "Q2 - Go-To-Market Positioning",
+          "contractType": "Fixed Price",
+          "dueDate": "today+45",
+          "rateOrValue": "12500",
+          "structure": {
+            "Drafts": { "name": "Drafts", "files": [
+              { "name": "Market Research Draft Notes.md", "type": "md" },
+              { "name": "Positioning Statement Draft.docx", "type": "docx" }
+            ]},
+            "Internal Only": { "name": "Internal Only", "files": [
+              { "name": "Market Expansion Financial Model.xlsx", "type": "xlsx" },
+              { "name": "Internal Pricing Sensitivity.xlsx", "type": "xlsx" }
+            ]},
+            "01__Market_&_Competitive_Intelligence_Report": { "name": "01__Market_&_Competitive_Intelligence_Report", "files": [
+              { "name": "Discovery Workshop Notes.md", "type": "md" },
+              { "name": "Competitive Landscape Analysis.pdf", "type": "pdf" },
+              { "name": "TAM SAM SOM Model.xlsx", "type": "xlsx" },
+              { "name": "Customer Interview Summary.docx", "type": "docx" }
+            ]},
+            "02__GTM_Strategy_&_Messaging_Playbook": { "name": "02__GTM_Strategy_&_Messaging_Playbook", "files": [
+              { "name": "GTM Strategy Deck.pptx", "type": "pptx" },
+              { "name": "Messaging Framework.docx", "type": "docx" },
+              { "name": "Channel Mix Plan.xlsx", "type": "xlsx" }
+            ]},
+            "03__Regulatory_&_Legal_Sign-Off_Pack": { "name": "03__Regulatory_&_Legal_Sign-Off_Pack", "files": [
+              { "name": "Claims Substantiation Review.pdf", "type": "pdf" },
+              { "name": "Legal Sign-Off Memo.docx", "type": "docx" },
+              { "name": "Compliance Checklist.xlsx", "type": "xlsx" }
+            ]},
+            "04__Launch_Readiness_Kit": { "name": "04__Launch_Readiness_Kit", "files": [
+              { "name": "Launch Runbook.pdf", "type": "pdf" },
+              { "name": "Sales Enablement One-Pager.pdf", "type": "pdf" },
+              { "name": "FAQ & Objection Handling.docx", "type": "docx" },
+              { "name": "Launch Day Checklist.xlsx", "type": "xlsx" }
+            ]}
+          }
+        },
+        {
+          "name": "Q4 - Brand Refresh & Visual Identity",
+          "contractType": "Fixed Price",
+          "dueDate": "today+60",
+          "rateOrValue": "22000",
+          "structure": {
+            "Drafts": { "name": "Drafts", "files": [
+              { "name": "Creative Brief Draft.md", "type": "md" },
+              { "name": "Logo Concept Sketches.pdf", "type": "pdf" }
+            ]},
+            "Internal Only": { "name": "Internal Only", "files": [
+              { "name": "Brand Budget & Approval.xlsx", "type": "xlsx" },
+              { "name": "Vendor Quotes Comparison.xlsx", "type": "xlsx" }
+            ]},
+            "01__Brand_&_Competitive_Audit_Report": { "name": "01__Brand_&_Competitive_Audit_Report", "files": [
+              { "name": "Current Brand Audit.pdf", "type": "pdf" },
+              { "name": "Competitor Visual Benchmarking.pptx", "type": "pptx" },
+              { "name": "Brand Perception Survey Results.xlsx", "type": "xlsx" }
+            ]},
+            "02__Visual_Direction_&_Moodboard": { "name": "02__Visual_Direction_&_Moodboard", "files": [
+              { "name": "Visual Direction Deck.pptx", "type": "pptx" },
+              { "name": "Moodboard Concepts.pdf", "type": "pdf" },
+              { "name": "Client Feedback Summary.docx", "type": "docx" }
+            ]},
+            "03__Brand_Guidelines_&_Asset_Delivery": { "name": "03__Brand_Guidelines_&_Asset_Delivery", "files": [
+              { "name": "Logo Suite.pdf", "type": "pdf" },
+              { "name": "Brand Guidelines.pdf", "type": "pdf" },
+              { "name": "Color & Typography System.docx", "type": "docx" },
+              { "name": "Icon & Illustration Library.pdf", "type": "pdf" }
+            ]},
+            "04__Rollout_&_Channel_Application_Kit": { "name": "04__Rollout_&_Channel_Application_Kit", "files": [
+              { "name": "Channel Rollout Checklist.pdf", "type": "pdf" },
+              { "name": "Social Templates Pack.pdf", "type": "pdf" },
+              { "name": "Email Signature & Letterhead Kit.docx", "type": "docx" }
+            ]}
+          }
+        }
+      ]
+    },
+    {
+      "clientName": "Horizon FinTech",
+      "status": "ACTIVE",
+      "clientSinceDate": "2024-06-01",
+      "followUpDate": "today+7",
+      "industry": "Financial Technology",
+      "engagements": [
+        {
+          "name": "Q3 - Growth Marketing Retainer",
+          "contractType": "Retainer",
+          "dueDate": "today+21",
+          "rateOrValue": "16500",
+          "structure": {
+            "Drafts": { "name": "Drafts", "files": [
+              { "name": "Weekly Growth Notes.md", "type": "md" },
+              { "name": "Campaign Brief Draft.docx", "type": "docx" }
+            ]},
+            "Internal Only": { "name": "Internal Only", "files": [
+              { "name": "Channel ROI Model.xlsx", "type": "xlsx" },
+              { "name": "Internal Retainer Scope Notes.docx", "type": "docx" }
+            ]},
+            "01__Onboarding_&_Channel_Audit_Report": { "name": "01__Onboarding_&_Channel_Audit_Report", "files": [
+              { "name": "Kickoff Deck.pptx", "type": "pptx" },
+              { "name": "Channel Performance Audit.xlsx", "type": "xlsx" },
+              { "name": "Analytics Tracking Plan.docx", "type": "docx" }
+            ]},
+            "02__Paid_Media_Strategy_&_Performance": { "name": "02__Paid_Media_Strategy_&_Performance", "files": [
+              { "name": "Paid Media Strategy.pdf", "type": "pdf" },
+              { "name": "Campaign Performance Report.xlsx", "type": "xlsx" },
+              { "name": "Ad Creative Test Results.pptx", "type": "pptx" },
+              { "name": "Budget Allocation Model.xlsx", "type": "xlsx" }
+            ]},
+            "03__Lifecycle_&_Segmentation_Playbook": { "name": "03__Lifecycle_&_Segmentation_Playbook", "files": [
+              { "name": "Email Lifecycle Flows.pdf", "type": "pdf" },
+              { "name": "Segmentation Plan.docx", "type": "docx" },
+              { "name": "Onboarding Drip Sequence.docx", "type": "docx" }
+            ]},
+            "04__Monthly_Growth_Performance_Report": { "name": "04__Monthly_Growth_Performance_Report", "files": [
+              { "name": "Monthly Growth Report.xlsx", "type": "xlsx" },
+              { "name": "Executive Summary Deck.pptx", "type": "pptx" },
+              { "name": "Cohort Retention Analysis.xlsx", "type": "xlsx" }
+            ]}
+          }
+        },
+        {
+          "name": "Q2 - Product Launch Campaign",
+          "contractType": "Fixed Price",
+          "dueDate": "today+14",
+          "rateOrValue": "28000",
+          "structure": {
+            "Drafts": { "name": "Drafts", "files": [
+              { "name": "Launch Checklist Draft.md", "type": "md" },
+              { "name": "Teaser Copy Draft.docx", "type": "docx" }
+            ]},
+            "Internal Only": { "name": "Internal Only", "files": [
+              { "name": "Launch Budget Approval.xlsx", "type": "xlsx" },
+              { "name": "Vendor Contracts Summary.xlsx", "type": "xlsx" }
+            ]},
+            "01__GTM_Plan_&_Launch_Readiness_Kit": { "name": "01__GTM_Plan_&_Launch_Readiness_Kit", "files": [
+              { "name": "GTM Plan.pdf", "type": "pdf" },
+              { "name": "Launch Timeline & RACI.xlsx", "type": "xlsx" },
+              { "name": "Risk & Contingency Plan.docx", "type": "docx" }
+            ]},
+            "02__Creative_&_Landing_Page_Assets": { "name": "02__Creative_&_Landing_Page_Assets", "files": [
+              { "name": "Social Ad Creatives.pdf", "type": "pdf" },
+              { "name": "Landing Page Copy.docx", "type": "docx" },
+              { "name": "Landing Page Wireframes.pdf", "type": "pdf" },
+              { "name": "Video Storyboard.pptx", "type": "pptx" }
+            ]},
+            "03__PR_&_Media_Outreach_Pack": { "name": "03__PR_&_Media_Outreach_Pack", "files": [
+              { "name": "Press Release Draft.docx", "type": "docx" },
+              { "name": "Media List.xlsx", "type": "xlsx" },
+              { "name": "Influencer Outreach Tracker.xlsx", "type": "xlsx" }
+            ]},
+            "04__Post-Launch_Retrospective_Report": { "name": "04__Post-Launch_Retrospective_Report", "files": [
+              { "name": "Launch Retrospective.pdf", "type": "pdf" },
+              { "name": "Performance vs. Targets.xlsx", "type": "xlsx" },
+              { "name": "Lessons Learned Deck.pptx", "type": "pptx" }
+            ]}
+          }
+        }
+      ]
+    }
+  ]
+}

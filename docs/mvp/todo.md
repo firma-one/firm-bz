@@ -98,6 +98,12 @@ AI layer using Gemma 4 (HuggingFace Transformers, same runtime as release notes 
 
 - [ ] **Email Document Link** — ActionMenu › Share › Email Link sends the document deeplink to a recipient
 
+- [ ] **Automatic Welcome Email on Signup** — send a personal welcome email automatically on any new user signup
+  - cc: `deepak@firmaone.com`
+  - Subject: "Welcome to firmä"
+  - Body: personal note from Deepak asking how they heard about firmä and whether it's a good fit, offering a walkthrough call ([Calendly link](https://calendly.com/firmaone/firma-connect)) or async help
+  - Needs `[name]` interpolation from signup data
+
 ## Bookmarks & Topbar Quick Links
 
 - [ ] **Bookmark Pages & Documents** — users can bookmark any app page (e.g. a specific engagement, client, or section) or document for quick access
@@ -124,6 +130,12 @@ AI layer using Gemma 4 (HuggingFace Transformers, same runtime as release notes 
   - `Firm.sandboxOnly` maps to DB column `isAnchor`; the two names are used interchangeably across 165+ references
   - `isAnchorFirm()` utility added to `lib/billing/effective-billing-caps.ts`; all new code should use it
   - Migrate existing reads in batches: billing/server layer first, then UI components
+
+- [ ] **Remove per-user sandbox demo firm from onboarding** — [plan](../../.claude/plans/sandbox-firm-removal.md)
+  - Now superseded by the static, unauthenticated `/demo` route as the product-preview surface
+  - Sandbox-firm creation is currently load-bearing for onboarding itself (no other "create your first firm" path exists) and for billing-anchor lookups (`firm-creation-gate.ts`, `effective-billing-caps.ts`) — full phased refactor required, not a quick deletion
+  - Phase A: new real-firm onboarding step + billing anchor re-plumb (backward compatible, zero migration required for existing sandbox firms). Phase B: delete `create-sandbox` route + `seedSandboxClientsInDb`. Phase C: pricing page Sandbox column/copy removal + optional dead-code cleanup
+  - Existing `SandboxInfoBanner` call sites and other `sandboxOnly` UI branches stay untouched — they simply stop triggering for new users
 
 - [ ] **Unit Tests** — critical business logic coverage
   - Invite flow: token verification, email match, permission fallback (engagementMember DB check)

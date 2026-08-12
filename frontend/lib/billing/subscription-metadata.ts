@@ -77,6 +77,14 @@ export function parseEntitledDocuments(meta: JsonRecord): number | null {
     return parsed
 }
 
+/** Returns null when unlimited (-1) or not configured. */
+export function parseEntitledDeliverables(meta: JsonRecord): number | null {
+    const raw = meta['entitledDeliverables']
+    const parsed = parseIntLike(raw)
+    if (parsed == null || parsed < 0) return null
+    return parsed
+}
+
 /**
  * Returns null when unlimited (-1) or not configured.
  * 0 = no history (purge all on every insert), N = keep last N days.
