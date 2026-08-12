@@ -10,8 +10,11 @@ import { DemoTourButton } from '@/components/demo/demo-tour-button'
 const SEEN_KEY = 'fm_demo_tour_seen'
 
 /** Static counterpart to DemoTourShell in d-layout-client.tsx — auto-opens the intro modal ~800ms
- * after first visit (per browser tab, via sessionStorage — no cross-session persistence needed for
- * a public demo), and renders the tour overlay + both modals + the floating restart FAB. */
+ * after first visit per browser tab (sessionStorage gate), and renders the tour overlay + both
+ * modals + the floating restart FAB. Mid-tour progress itself is tracked separately via
+ * localStorage (see demo-tour-context.tsx), so the intro modal correctly offers "Resume Tour"
+ * whenever a visitor reopens the demo — in a new tab or after closing mid-tour — with unfinished
+ * progress saved, matching the real app's resume behavior. */
 export function DemoTourShell() {
     const { openIntroModal } = useDemoTour()
     const hasTriggered = useRef(false)

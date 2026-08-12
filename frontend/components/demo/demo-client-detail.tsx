@@ -66,7 +66,7 @@ export function DemoClientDetail({ client }: DemoClientDetailProps) {
             <div className="bg-white border border-[#e5e7eb] rounded mb-6 shrink-0 flex items-center h-14 overflow-hidden">
                 <div className="flex-1 min-w-0 h-full pr-4">
                     <div className="h-full p-0 bg-transparent rounded-none inline-flex justify-start gap-0 border-0">
-                        <div className="relative h-full px-4 rounded-none font-medium text-sm border-b-2 border-brand-accent text-[#1b1b1d] font-bold bg-transparent inline-flex items-center">
+                        <div data-demo-tour="client-engagements-tab" className="relative h-full px-4 rounded-none font-medium text-sm border-b-2 border-brand-accent text-[#1b1b1d] font-bold bg-transparent inline-flex items-center">
                             <Briefcase className="w-4 h-4 mr-2" />
                             Engagements
                             {client.engagements.length > 0 && (
