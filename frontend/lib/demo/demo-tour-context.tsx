@@ -7,6 +7,8 @@ interface DemoTourContextValue {
     stepIndex: number
     showIntroModal: boolean
     showOutroModal: boolean
+    /** True once the visitor has finished the tour at least once — drives the topbar Sign Up CTA after the outro modal is dismissed. */
+    hasCompletedTour: boolean
     openIntroModal: () => void
     closeIntroModal: () => void
     startTour: () => void
@@ -25,6 +27,7 @@ export function DemoTourProvider({ children }: { children: ReactNode }) {
     const [stepIndex, setStepIndex] = useState(0)
     const [showIntroModal, setShowIntroModal] = useState(false)
     const [showOutroModal, setShowOutroModal] = useState(false)
+    const [hasCompletedTour, setHasCompletedTour] = useState(false)
 
     const openIntroModal = () => setShowIntroModal(true)
     const closeIntroModal = () => setShowIntroModal(false)
@@ -44,11 +47,12 @@ export function DemoTourProvider({ children }: { children: ReactNode }) {
     const endTour = (completed?: boolean) => {
         setRun(false)
         setShowOutroModal(!!completed)
+        if (completed) setHasCompletedTour(true)
     }
 
     return (
         <DemoTourContext.Provider
-            value={{ run, stepIndex, showIntroModal, showOutroModal, openIntroModal, closeIntroModal, startTour, restartTour, endTour, setStepIndex, setRun }}
+            value={{ run, stepIndex, showIntroModal, showOutroModal, hasCompletedTour, openIntroModal, closeIntroModal, startTour, restartTour, endTour, setStepIndex, setRun }}
         >
             {children}
         </DemoTourContext.Provider>

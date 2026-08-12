@@ -9,6 +9,7 @@ import { DemoRemindersButton, DemoRecentsButton, DemoBookmarksButton } from '@/c
 import { DemoTourProvider } from '@/lib/demo/demo-tour-context'
 import { DemoTourShell } from '@/components/demo/demo-tour-shell'
 import { DemoTourTopbarButton } from '@/components/demo/demo-tour-topbar-button'
+import { DemoTourSignupButton } from '@/components/demo/demo-tour-signup-button'
 
 const TOP_BAR_HEIGHT = 64
 
@@ -44,11 +45,14 @@ export default function DemoLayout({ children }: { children: React.ReactNode }) 
                                 <span className="flex-1 text-left">Search is disabled in this demo</span>
                             </div>
                         </div>
-                        <div className="w-64 shrink-0 flex items-center justify-end gap-1 pr-4">
-                            <DemoTourTopbarButton />
-                            <DemoRemindersButton />
-                            <DemoRecentsButton />
-                            <DemoBookmarksButton />
+                        <div className="shrink-0 flex items-center justify-end gap-2 pr-4">
+                            <DemoTourSignupButton />
+                            <div className="flex items-center gap-1">
+                                <DemoTourTopbarButton />
+                                <DemoRemindersButton />
+                                <DemoRecentsButton />
+                                <DemoBookmarksButton />
+                            </div>
                         </div>
                     </div>
                 </header>

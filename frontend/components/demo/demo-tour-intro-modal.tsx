@@ -33,6 +33,7 @@ export function DemoTourIntroModal() {
                     </p>
                     <ul className="space-y-1.5 text-xs text-[#45474c]">
                         <li className="flex items-center gap-2"><span className="h-1 w-1 rounded-full bg-primary shrink-0" />Firm, Clients &amp; Engagements</li>
+                        <li className="flex items-center gap-2"><span className="h-1 w-1 rounded-full bg-primary shrink-0" />Calendar &amp; AI-powered Doc Search</li>
                         <li className="flex items-center gap-2"><span className="h-1 w-1 rounded-full bg-primary shrink-0" />File uploads &amp; document actions</li>
                         <li className="flex items-center gap-2"><span className="h-1 w-1 rounded-full bg-primary shrink-0" />Board, Comments, Audit &amp; Members</li>
                         <li className="flex items-center gap-2"><span className="h-1 w-1 rounded-full bg-primary shrink-0" />Reminders, Bookmarks &amp; Profile</li>

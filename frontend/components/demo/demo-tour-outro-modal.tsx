@@ -1,6 +1,7 @@
 'use client'
 
-import { CheckCircle2, MapPinned, Play } from 'lucide-react'
+import Link from 'next/link'
+import { MapPinned, Play, UserPlus } from 'lucide-react'
 import { useDemoTour } from '@/lib/demo/demo-tour-context'
 
 /** Static counterpart to demo-tour-outro-modal.tsx — same copy/visual chrome, "firm switcher" bullet
@@ -43,21 +44,31 @@ export function DemoTourOutroModal() {
                     </ul>
                 </div>
 
-                <div className="px-5 pb-5 flex items-center gap-2">
-                    <button
-                        type="button"
-                        onClick={close}
-                        className="flex-1 h-9 rounded bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:brightness-105 transition-all flex items-center justify-center gap-1.5"
+                <div className="px-5 pb-5 flex flex-col gap-2">
+                    <Link
+                        href="/signup"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="h-9 rounded bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:brightness-105 transition-all flex items-center justify-center gap-1.5"
                     >
-                        <CheckCircle2 className="h-3.5 w-3.5" /> Done
-                    </button>
-                    <button
-                        type="button"
-                        onClick={restartTour}
-                        className="flex-1 h-9 rounded border border-[#e5e7eb] text-[10px] font-headline font-bold tracking-widest uppercase text-[#45474c] hover:bg-[#f3f4f6] transition-colors flex items-center justify-center gap-1.5"
-                    >
-                        <Play className="h-3.5 w-3.5" /> Replay
-                    </button>
+                        <UserPlus className="h-3.5 w-3.5" /> Sign Up
+                    </Link>
+                    <div className="flex items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={restartTour}
+                            className="flex-1 h-9 rounded border border-[#e5e7eb] text-[10px] font-headline font-bold tracking-widest uppercase text-[#45474c] hover:bg-[#f3f4f6] transition-colors flex items-center justify-center gap-1.5"
+                        >
+                            <Play className="h-3.5 w-3.5" /> Replay
+                        </button>
+                        <button
+                            type="button"
+                            onClick={close}
+                            className="flex-1 h-9 rounded border border-[#e5e7eb] text-[10px] font-headline font-bold tracking-widest uppercase text-[#45474c] hover:bg-[#f3f4f6] transition-colors flex items-center justify-center gap-1.5"
+                        >
+                            Done
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
