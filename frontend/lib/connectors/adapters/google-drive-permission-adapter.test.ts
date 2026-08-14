@@ -47,7 +47,13 @@ describe('createGoogleDrivePermissionAdapter', () => {
     const adapter = createGoogleDrivePermissionAdapter()
     const permId = await adapter.grantFolderPermission('conn-1', 'folder-1', 'alice@firm.com', 'editor')
     expect(permId).toBe('perm-id-1')
-    expect(mockGDrive.grantFolderPermission).toHaveBeenCalledWith('conn-1', 'folder-1', 'alice@firm.com', 'writer')
+    expect(mockGDrive.grantFolderPermission).toHaveBeenCalledWith('conn-1', 'folder-1', 'alice@firm.com', 'writer', undefined)
+  })
+
+  it('grantFolderPermission forwards notify:false to suppress GDrive sharing email', async () => {
+    const adapter = createGoogleDrivePermissionAdapter()
+    await adapter.grantFolderPermission('conn-1', 'folder-1', 'alice@firm.com', 'editor', { notify: false })
+    expect(mockGDrive.grantFolderPermission).toHaveBeenCalledWith('conn-1', 'folder-1', 'alice@firm.com', 'writer', { notify: false })
   })
 
   it('revokePermission delegates to GDrive', async () => {

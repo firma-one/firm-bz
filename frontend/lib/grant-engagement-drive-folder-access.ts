@@ -45,7 +45,9 @@ export async function grantEngagementDriveFolderAccess(params: GrantParams): Pro
   const grant = async (folderId: string | null | undefined, r: ConnectorRole) => {
     if (!folderId) return
     try {
-      await adapter.grantFolderPermission(connectorId, folderId, email, r)
+      // Suppress the provider's own sharing-notification email — invitees are already
+      // notified by Firma's invite/added-to-engagement emails.
+      await adapter.grantFolderPermission(connectorId, folderId, email, r, { notify: false })
     } catch (e) {
       logger.warn('grantFolderPermission skipped or failed', {
         folderId,

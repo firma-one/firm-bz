@@ -71,6 +71,13 @@ See [`.claude/plans/beta-feedback-fixes.md`](../../.claude/plans/beta-feedback-f
 
 - [ ] **Contact Follow-Up Date** — [plan](../../.claude/plans/contact-follow-up-date.md) — Client Settings › Contacts: add a "Follow Up" date field per contact; auto-creates a reminder assigned to all Firm Admins on save
 
+- [ ] **Engagement Invite: Immediate Join for Existing Users** — [plan](../../.claude/plans/engagement-invite-immediate-join-existing-user.md)
+  - Skip the "Accept Invitation" email/click flow when the invitee already has an account — create `EngagementMember`/`ClientMember`/`FirmMember` rows synchronously inside `inviteMember()` so the engagement appears in their dashboard on next sign-in without any click-through
+  - Fork in `inviteMember()` on `findAuthUserIdByEmail()`: unregistered users → today's flow unchanged; registered users → new `provisionAndNotifyExistingUser()` runs the join transaction and sends a new "Go to Engagement →" email (no accept-invite link, no 7-day expiry)
+  - Extract the membership transaction currently inline in `acceptInvitation()` (invitations.ts:506–614) into a shared `joinEngagementForUser()` helper so both paths run identical logic (JWT `active_firm_id`, Drive folder grant, `project.member.added` Inngest event, cache invalidation)
+  - Invitation record still created but written straight to `JOINED` — no PENDING state ever shown; keeps resend/remove/audit assumptions intact
+  - No schema changes; ~½–1 day effort; low regression risk (only Scenario 1 touch is a pure lift-and-shift refactor)
+
 ## Overview & Metrics
 
 - [ ] **Engagement Overview: Revision Rounds & Approval Cycle Time** — [plan](../../.claude/plans/global-search-share-status-overview-metrics.md)
@@ -103,6 +110,13 @@ AI layer using Gemma 4 (HuggingFace Transformers, same runtime as release notes 
   - Subject: "Welcome to firmä"
   - Body: personal note from Deepak asking how they heard about firmä and whether it's a good fit, offering a walkthrough call ([Calendly link](https://calendly.com/firmaone/firma-connect)) or async help
   - Needs `[name]` interpolation from signup data
+
+## Marketing / Landing
+
+- [ ] **Landing Page: "Enterprise-grade everything" security section** — [plan](../../.claude/plans/landing-security-section.md)
+  - New dark-themed section on the marketing landing page with 4 trust pillars: Least-Privilege Access, Encryption Everywhere, Tenant Isolation, Secure Checkout
+  - Two-column desktop layout (heading left, 4 pillar cards right); responsive 2×2 on tablet, stacked on mobile
+  - Uses existing lucide-react icons (`KeyRound`, `Zap`, `Database`, `CreditCard`) on circular dark badges
 
 ## Bookmarks & Topbar Quick Links
 

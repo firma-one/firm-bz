@@ -118,8 +118,8 @@ export type ConnectorRole = 'viewer' | 'editor' | 'commenter'
  * Google Drive implements all methods; providers that lack native sharing may return no-ops.
  */
 export interface IConnectorPermissionAdapter {
-  /** Grant access to a folder for an email address. Returns the permission ID or null. */
-  grantFolderPermission(connectionId: string, folderId: string, email: string, role: ConnectorRole): Promise<string | null>
+  /** Grant access to a folder for an email address. Returns the permission ID or null. `opts.notify`: false suppresses the provider's own sharing-notification email (defaults to true, matching prior behavior). */
+  grantFolderPermission(connectionId: string, folderId: string, email: string, role: ConnectorRole, opts?: { notify?: boolean }): Promise<string | null>
   /** Revoke a permission by its permission ID. */
   revokePermission(connectionId: string, fileId: string, permissionId: string): Promise<boolean>
   /** Downgrade an existing user permission on a folder to viewer. Returns true if the permission was changed. */

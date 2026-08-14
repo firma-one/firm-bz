@@ -7,12 +7,12 @@ import { sendEmail } from '@/lib/email'
 import { logger } from '@/lib/logger'
 import { BRAND_NAME } from '@/config/brand'
 import { renderInviteEmail } from '@/lib/email-templates/invite'
-import { safeInngestSend } from '@/lib/inngest/client'
-import { grantEngagementDriveFolderAccess } from '@/lib/grant-engagement-drive-folder-access'
 import { invalidateUserSettingsPlus } from '@/lib/actions/user-settings'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { mergeLeanAppMetadata } from '@/lib/auth/supabase-jwt-metadata'
 import { maybeProvisionInviteeAccount } from '@/lib/actions/account-provisioning'
+import { findAuthUserIdByEmail } from '@/lib/actions/auth-user-lookup'
+import { joinEngagementForUser, provisionAndNotifyExistingUser } from '@/lib/actions/engagement-membership'
 import { InvitationStatus } from '@prisma/client'
 
 /**
@@ -28,7 +28,8 @@ export async function inviteMember(projectId: string, email: string, personaId: 
         where: { id: projectId, isDeleted: false },
         select: { slug: true, name: true, client: { select: { slug: true, name: true, firm: { select: { id: true, slug: true, name: true, sandboxOnly: true } } } } },
     })
-    if (projectOrg?.client?.firm?.sandboxOnly) {
+    if (!projectOrg) throw new Error("Engagement not found")
+    if (projectOrg.client?.firm?.sandboxOnly) {
         throw new Error('Inviting members is restricted for Sandbox Organizations. Upgrade to invite teammates.')
     }
     const invReminderCtx = {
@@ -39,6 +40,9 @@ export async function inviteMember(projectId: string, email: string, personaId: 
     }
 
     const normalizedEmail = email.trim().toLowerCase()
+
+    // Detect up front whether this email already belongs to a registered user.
+    const existingAuthUserId = await findAuthUserIdByEmail(normalizedEmail)
 
     // 1. Check if invitation exists (V2)
     const existing = await prisma.engagementInvitation.findUnique({
@@ -67,6 +71,14 @@ export async function inviteMember(projectId: string, email: string, personaId: 
                 updatedAt: new Date()
             }
         })
+
+        if (existingAuthUserId) {
+            const inviteWithRelations = await prisma.engagementInvitation.findUniqueOrThrow({
+                where: { id: existing.id },
+                include: { persona: true, engagement: { include: { client: { include: { firm: true } } } } }
+            })
+            return await provisionAndNotifyExistingUser(existingAuthUserId, normalizedEmail, inviteWithRelations, projectOrg)
+        }
 
         await maybeProvisionInviteeAccount(normalizedEmail)
 
@@ -114,6 +126,14 @@ export async function inviteMember(projectId: string, email: string, personaId: 
             createdBy: user.id,
         }
     })
+
+    if (existingAuthUserId) {
+        const inviteWithRelations = await prisma.engagementInvitation.findUniqueOrThrow({
+            where: { id: invite.id },
+            include: { persona: true, engagement: { include: { client: { include: { firm: true } } } } }
+        })
+        return await provisionAndNotifyExistingUser(existingAuthUserId, normalizedEmail, inviteWithRelations, projectOrg)
+    }
 
     await maybeProvisionInviteeAccount(normalizedEmail)
 
@@ -497,126 +517,9 @@ export async function acceptInvitation(token: string): Promise<{ success: true; 
         throw new Error(`This invitation is for ${invite.email}`)
     }
 
-    const firmId = invite.engagement.client.firmId
-    const clientId = invite.engagement.clientId
-    let newFirmMemberCreated = false
-    let newFirmIsDefault = false
-    let newEngagementMemberCreated = false
+    const { redirectUrl } = await joinEngagementForUser(user.id, user.email, invite)
 
-    await prisma.$transaction(async (tx) => {
-        const projectRole = invite.persona.slug as 'eng_admin' | 'eng_member' | 'eng_ext_collaborator' | 'eng_viewer'
-        const existingEngMember = await tx.engagementMember.findFirst({
-            where: { engagementId: invite.engagementId, userId: user.id }
-        })
-        if (!existingEngMember) {
-            newEngagementMemberCreated = true
-            await tx.engagementMember.create({
-                data: {
-                    engagementId: invite.engagementId,
-                    userId: user.id,
-                    role: projectRole,
-                    createdBy: user.id,
-                    updatedBy: user.id,
-                }
-            })
-        }
-
-        const existingClientMember = await tx.clientMember.findFirst({
-            where: { clientId, userId: user.id }
-        })
-        if (!existingClientMember) {
-            await tx.clientMember.create({
-                data: { clientId, userId: user.id, personaId: invite.personaId, createdBy: user.id, updatedBy: user.id }
-            })
-        }
-
-        const firmMember = await tx.firmMember.findFirst({
-            where: { firmId, userId: user.id }
-        })
-        if (!firmMember) {
-            const hasDefault = await tx.firmMember.findFirst({
-                where: { userId: user.id, isDefault: true },
-                select: { id: true }
-            })
-            newFirmIsDefault = !hasDefault
-            await tx.firmMember.create({
-                data: {
-                    firmId,
-                    userId: user.id,
-                    role: 'firm_member',
-                    isDefault: newFirmIsDefault,
-                    createdBy: user.id,
-                    updatedBy: user.id,
-                }
-            })
-            newFirmMemberCreated = true
-        }
-
-        await tx.engagementInvitation.update({
-            where: { id: invite.id },
-            data: { status: 'JOINED', joinedAt: new Date(), updatedBy: user.id }
-        })
-    })
-
-    await invalidateUserSettingsPlus(user.id)
-
-    if (invite.createdBy) {
-        await removeRemindersByEntity(invite.createdBy, 'platform.engagement_invitations.id', invite.id).catch(() => {})
-    }
-
-    if (newFirmMemberCreated && newFirmIsDefault) {
-        try {
-            const adminClient = createAdminClient()
-            await adminClient.auth.admin.updateUserById(user.id, {
-                app_metadata: mergeLeanAppMetadata(user.app_metadata as Record<string, unknown>, {
-                    active_firm_id: firmId,
-                    active_persona: 'firm_member',
-                }),
-            })
-            logger.info('JWT app_metadata updated after invitation acceptance', { userId: user.id, firmId })
-        } catch (jwtError) {
-            logger.error('Failed to update JWT app_metadata after invitation acceptance', jwtError as Error)
-        }
-    }
-
-    if (user.email && invite.engagement.connectorRootFolderId) {
-        try {
-            const firm = invite.engagement.client.firm as { connectorId?: string | null }
-            const connectorId = firm?.connectorId
-            if (connectorId) {
-                await grantEngagementDriveFolderAccess({
-                    connectorId,
-                    engagementSlug: invite.engagement.slug,
-                    email: user.email,
-                    role: invite.persona.slug as 'eng_admin' | 'eng_member' | 'eng_ext_collaborator' | 'eng_viewer',
-                    projectName: invite.engagement.name,
-                    clientSlug: invite.engagement.client.slug,
-                    clientName: invite.engagement.client.name,
-                    projectFolderId: invite.engagement.connectorRootFolderId,
-                })
-            }
-        } catch (error) {
-            logger.error('Error granting Drive folder access (V2)', error as Error)
-        }
-    }
-
-    // Only fire if we actually created a new engagement membership (idempotent re-accepts skip this)
-    if (newEngagementMemberCreated) {
-        await safeInngestSend('project.member.added', {
-            projectId: invite.engagementId,
-            organizationId: firmId,
-            memberId: invite.id,
-            userId: user.id,
-            email: user.email || '',
-            personaSlug: invite.persona.slug,
-            timestamp: new Date().toISOString()
-        })
-    }
-
-    return {
-        success: true,
-        redirectUrl: `/d/f/${invite.engagement.client.firm.slug}/c/${invite.engagement.client.slug}/e/${invite.engagement.slug}/files`
-    }
+    return { success: true, redirectUrl }
 }
 
 /**
