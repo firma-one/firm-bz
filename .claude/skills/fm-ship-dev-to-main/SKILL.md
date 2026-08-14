@@ -1,5 +1,5 @@
 ---
-name: ship-dev-to-main
+name: fm-ship-dev-to-main
 description: Commit pending changes on dev, open a PR to main, wait for checks, squash-merge, sync main back into dev, and verify the production Vercel deploy. Use when the user asks to "push and test on prod", "ship this", "cut a release", or otherwise wants the dev→main release pipeline run end-to-end.
 argument-hint: "[autonomous|confirm]"
 ---
