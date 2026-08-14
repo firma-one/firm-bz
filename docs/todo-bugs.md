@@ -36,3 +36,6 @@ On a client's Engagements tab, the engagement card shows two status badges side 
 
 ### 3. `.txt` and `.csv` file preview not supported
 Preview for `.txt` and `.csv` files is currently unsupported. It should be.
+
+### 12. Preview has no page numbers and no way to jump to a page
+The file preview does not show page numbers and offers no way to jump to a specific page. Add either a left sidebar with page thumbnails, or at minimum a "Go to [x] of [y] pages" input for direct page navigation.

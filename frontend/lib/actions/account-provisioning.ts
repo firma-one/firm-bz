@@ -2,7 +2,7 @@
 
 import { createAdminClient } from '@/utils/supabase/admin'
 import { logger } from '@/lib/logger'
-import { prisma } from '@/lib/prisma'
+import { findAuthUserIdByEmail } from '@/lib/actions/auth-user-lookup'
 
 /**
  * Pre-provisions a Supabase auth account for an invitee if one doesn't exist.
@@ -10,10 +10,8 @@ import { prisma } from '@/lib/prisma'
  * preserving the ?next= redirect through the auth flow.
  */
 export async function maybeProvisionInviteeAccount(email: string): Promise<void> {
-    const existing = await prisma.$queryRaw<Array<{ id: string }>>`
-        SELECT id::text FROM auth.users WHERE lower(email) = ${email.toLowerCase()} LIMIT 1
-    `
-    if (existing.length > 0) return
+    const existingId = await findAuthUserIdByEmail(email)
+    if (existingId) return
 
     const adminClient = createAdminClient()
     const { error } = await adminClient.auth.admin.createUser({

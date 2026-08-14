@@ -55,8 +55,8 @@ async function auth(connectionId: string): Promise<string> {
 
 export function createOneDrivePermissionAdapter(): IConnectorPermissionAdapter {
   return {
-    async grantFolderPermission(connectionId, folderId, email, role) {
-      return grantItemPermission(connectionId, folderId, email, role)
+    async grantFolderPermission(connectionId, folderId, email, role, opts) {
+      return grantItemPermission(connectionId, folderId, email, role, opts)
     },
 
     async revokePermission(connectionId, fileId, permissionId) {

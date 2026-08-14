@@ -3359,12 +3359,17 @@ export class GoogleDriveConnector {
    * @param role - The permission role: 'writer' (can_edit), 'reader' (can_view), 'commenter'
    * @returns The permission ID if successful, null otherwise
    */
-  async grantFolderPermission(connectorId: string, folderId: string, email: string, role: 'writer' | 'reader' | 'commenter' = 'writer'): Promise<string | null> {
+  async grantFolderPermission(connectorId: string, folderId: string, email: string, role: 'writer' | 'reader' | 'commenter' = 'writer', opts?: { notify?: boolean }): Promise<string | null> {
     try {
       const accessToken = await this.getAccessToken(connectorId)
       if (!accessToken) throw new Error('Could not get access token')
 
-      const res = await fetch(`https://www.googleapis.com/drive/v3/files/${folderId}/permissions?supportsAllDrives=true`, {
+      const queryParams = new URLSearchParams({
+        supportsAllDrives: 'true',
+        sendNotificationEmail: opts?.notify === false ? 'false' : 'true',
+      })
+
+      const res = await fetch(`https://www.googleapis.com/drive/v3/files/${folderId}/permissions?${queryParams}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${accessToken}`,

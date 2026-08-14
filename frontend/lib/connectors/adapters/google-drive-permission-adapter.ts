@@ -23,8 +23,8 @@ function fromDriveRole(role: string): ConnectorRole {
 export function createGoogleDrivePermissionAdapter(): IConnectorPermissionAdapter {
   const g = GoogleDriveConnector.getInstance()
   return {
-    grantFolderPermission: (id, folderId, email, role) =>
-      g.grantFolderPermission(id, folderId, email, toDriveRole(role)),
+    grantFolderPermission: (id, folderId, email, role, opts) =>
+      g.grantFolderPermission(id, folderId, email, toDriveRole(role), opts),
 
     revokePermission: (id, fileId, permId) =>
       g.revokePermission(id, fileId, permId),

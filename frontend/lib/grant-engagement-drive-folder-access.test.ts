@@ -64,7 +64,7 @@ describe('grantEngagementDriveFolderAccess', () => {
         connectorId: 'conn-1', engagementSlug: 'eng', email: 'member@firm.com', role: 'eng_member',
       })
       expect(mockGrantFolderPermission).toHaveBeenCalledTimes(1)
-      expect(mockGrantFolderPermission).toHaveBeenCalledWith('conn-1', 'gen-1', 'member@firm.com', 'writer')
+      expect(mockGrantFolderPermission).toHaveBeenCalledWith('conn-1', 'gen-1', 'member@firm.com', 'writer', { notify: false })
     })
   })
 
@@ -76,7 +76,7 @@ describe('grantEngagementDriveFolderAccess', () => {
         connectorId: 'conn-1', engagementSlug: 'eng', email: 'viewer@firm.com', role: 'eng_viewer',
       })
       expect(mockGrantFolderPermission).toHaveBeenCalledTimes(1)
-      expect(mockGrantFolderPermission).toHaveBeenCalledWith('conn-1', 'gen-1', 'viewer@firm.com', 'reader')
+      expect(mockGrantFolderPermission).toHaveBeenCalledWith('conn-1', 'gen-1', 'viewer@firm.com', 'reader', { notify: false })
     })
   })
 
@@ -88,9 +88,9 @@ describe('grantEngagementDriveFolderAccess', () => {
         connectorId: 'conn-1', engagementSlug: 'eng', email: 'admin@firm.com', role: 'eng_admin',
       })
       expect(mockGrantFolderPermission).toHaveBeenCalledTimes(3)
-      expect(mockGrantFolderPermission).toHaveBeenCalledWith('conn-1', 'gen-1', 'admin@firm.com', 'writer')
-      expect(mockGrantFolderPermission).toHaveBeenCalledWith('conn-1', 'conf-1', 'admin@firm.com', 'writer')
-      expect(mockGrantFolderPermission).toHaveBeenCalledWith('conn-1', 'stag-1', 'admin@firm.com', 'writer')
+      expect(mockGrantFolderPermission).toHaveBeenCalledWith('conn-1', 'gen-1', 'admin@firm.com', 'writer', { notify: false })
+      expect(mockGrantFolderPermission).toHaveBeenCalledWith('conn-1', 'conf-1', 'admin@firm.com', 'writer', { notify: false })
+      expect(mockGrantFolderPermission).toHaveBeenCalledWith('conn-1', 'stag-1', 'admin@firm.com', 'writer', { notify: false })
     })
 
     it('skips null folder ids gracefully', async () => {
@@ -103,7 +103,7 @@ describe('grantEngagementDriveFolderAccess', () => {
         connectorId: 'conn-1', engagementSlug: 'eng', email: 'admin@firm.com', role: 'eng_admin',
       })
       expect(mockGrantFolderPermission).toHaveBeenCalledTimes(1)
-      expect(mockGrantFolderPermission).toHaveBeenCalledWith('conn-1', 'gen-1', 'admin@firm.com', 'writer')
+      expect(mockGrantFolderPermission).toHaveBeenCalledWith('conn-1', 'gen-1', 'admin@firm.com', 'writer', { notify: false })
     })
   })
 
