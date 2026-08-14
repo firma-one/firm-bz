@@ -39,15 +39,36 @@ export function ReGrantEditorAccessButton({ projectId, documentId, isGuest }: { 
       })
 
       if (!res.ok) {
-        throw new Error(await res.text())
+        const errBody = await res.json().catch(() => ({} as { error?: string; code?: string }))
+        if (errBody.code === 'external_sharing_blocked' && errBody.error) {
+          // Tenant-level SharePoint external sharing policy blocked this recipient — confirmed
+          // live 2026-08-14 (works for internal-domain recipients, fails for external on the same
+          // tenant). Not retryable from the app; surface the specific message instead of the
+          // generic failure toast. See onedrive-permission-adapter.ts / regrant/route.ts.
+          addToast({ type: "error", title: "Sharing blocked", message: errBody.error })
+          return
+        }
+        throw new Error(errBody.error || 'Failed to authenticate editor access')
       }
 
-      setShowSuccessModal(true)
+      const data = await res.json().catch(() => ({}))
+      if (data.documentUrl) {
+        // OneDrive/SharePoint: the recipient is already here, in-browser — open the document
+        // directly rather than routing through an email. Microsoft's own invite email is
+        // unreliable for non-Microsoft recipients, and since access here never expires (only the
+        // OTP-authenticated session does, after ~24h), an emailed link would offer no durability
+        // benefit worth the detour. See onedrive-permission-adapter.ts / regrant/route.ts.
+        window.open(data.documentUrl, '_blank')
+      } else {
+        // Google Drive: unchanged — Google's own OTP is delivered via this email, so the
+        // "check your inbox" step is the actual verification mechanism, not just a notification.
+        setShowSuccessModal(true)
+      }
     } catch (err) {
       addToast({
         type: "error",
         title: "Failed to authenticate",
-        message: "There was a problem sending the edit link. Please try again.",
+        message: "There was a problem authenticating editor access. Please try again.",
       })
     } finally {
       setIsLoading(false)
@@ -62,7 +83,7 @@ export function ReGrantEditorAccessButton({ projectId, documentId, isGuest }: { 
         onClick={handleRegrant}
         disabled={isLoading}
         className="gap-2 hidden sm:flex"
-        title="Click if Google Drive is asking you to sign in"
+        title="Click if your storage provider is asking you to sign in"
       >
         {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <MailCheck className="h-4 w-4 text-green-600" />}
         Authenticate Editor Access

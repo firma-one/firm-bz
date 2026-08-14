@@ -1643,6 +1643,7 @@ export function EngagementSharesTab({
   const {
     handleSecureOpen,
     secureModalOpen,
+    secureModalMode,
     secureModalData,
     setSecureModalOpen,
     isRegrantingId,
@@ -2485,6 +2486,7 @@ export function EngagementSharesTab({
         mimeType={secureModalData.mimeType}
         externalId={secureModalData.externalId}
         firmId={secureModalData.firmId}
+        mode={secureModalMode}
         isLoading={isRegrantLoading}
         error={regrantError}
       />

@@ -13,6 +13,8 @@ import { useRightPane } from "@/lib/right-pane-context"
 import { DocumentActivityPane } from "@/components/files/document-activity-pane"
 import { DocumentHistoryPane } from "@/components/files/document-history-pane"
 import { DocumentDocCommentsPane } from "@/components/projects/document-doc-comments-pane"
+import { GoogleDriveIcon } from "@/components/ui/google-drive-icon"
+import { OneDriveIcon } from "@/components/ui/onedrive-icon"
 import {
   FileText,
   FolderOpen,
@@ -148,6 +150,9 @@ interface DocumentActionMenuProps {
   sandboxPreview?: boolean
   /** Connector account email — appended as ?authuser= to Google Drive folder URLs. */
   connectorAccountEmail?: string | null
+  /** True when the client's connector is OneDrive — picks the correct provider icon for
+   *  "Open folder in Drive UI". */
+  isOneDriveClient?: boolean
 }
 
 export function DocumentActionMenu({
@@ -196,6 +201,7 @@ export function DocumentActionMenu({
   disabled = false,
   sandboxPreview = false,
   connectorAccountEmail,
+  isOneDriveClient = false,
 }: DocumentActionMenuProps) {
   const [showDueDatePicker, setShowDueDatePicker] = useState(false)
   const [showUntagConfirm, setShowUntagConfirm] = useState(false)
@@ -859,13 +865,21 @@ export function DocumentActionMenu({
                     <DropdownMenuSubContent className="w-56">
                       <DropdownMenuItem
                         onClick={() => {
-                          const googleDriveUrl = `https://drive.google.com/drive/folders/${document.id}`
-                          if (typeof window !== 'undefined') window.open(googleDriveUrl, '_blank')
+                          // webViewLink is the provider-correct URL (Google's Drive UI link or
+                          // Graph's driveItem.webUrl for OneDrive/SharePoint), already populated
+                          // on the file listing (onedrive-list-files.ts / google-drive listing).
+                          // Falls back to the old hardcoded Google URL only if it's ever missing.
+                          const driveUrl = document.webViewLink || `https://drive.google.com/drive/folders/${document.id}`
+                          if (typeof window !== 'undefined') window.open(driveUrl, '_blank')
                         }}
                         className="flex items-center space-x-3 px-3 py-2 cursor-pointer text-xs"
                       >
-                        <ExternalLink className="h-4 w-4 text-blue-600" />
-                        <span>Open in Google Drive</span>
+                        {isOneDriveClient ? (
+                          <OneDriveIcon size={16} />
+                        ) : (
+                          <GoogleDriveIcon size={16} />
+                        )}
+                        <span>Open folder in Drive UI</span>
                       </DropdownMenuItem>
                     </DropdownMenuSubContent>
                   </DropdownMenuSub>

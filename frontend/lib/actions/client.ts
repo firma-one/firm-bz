@@ -5,7 +5,7 @@ import { createClient as createSupabaseClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { logger } from '@/lib/logger'
 import { resolveClientConnector } from '@/lib/connectors/resolve-client-connector'
-import { ensureAppFolderStructure } from '@/lib/connectors/pockett-structure.service'
+import { ensureAppFolderStructure, setupFirmFolder } from '@/lib/connectors/pockett-structure.service'
 import { getStorageAdapter } from '@/lib/connectors/registry'
 import type { ClientStatus } from '@prisma/client'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
@@ -617,7 +617,7 @@ export async function shareConnectorWithClient({
 
     const [client, connector] = await Promise.all([
         prisma.client.findUnique({ where: { id: clientId }, select: { firmId: true, name: true, slug: true } }),
-        prisma.connector.findUnique({ where: { id: connectorId }, select: { firmId: true } }),
+        prisma.connector.findUnique({ where: { id: connectorId }, select: { firmId: true, settings: true } }),
     ])
     if (!client) throw new Error('Client not found')
     if (!connector) throw new Error('Connector not found')
@@ -651,6 +651,25 @@ export async function shareConnectorWithClient({
     // can show a real error, with a support ticket auto-filed with the failure details.
     try {
         const adapter = await getStorageAdapter(connectorId)
+
+        // A connector's Firm-name subfolder (settings.organizations[firmId].orgFolderId) is only
+        // created by setupFirmFolder — normally run at connect time by the Migrate/site-selection
+        // flow (update-root-folder / sites/route.ts). Both of those flows resolve "which firm"
+        // via Firm.connectorId (legacy) or an already-attached Client.connectorId — but at the
+        // moment a connector is first auto-provisioned (OneDrive Personal's no-click auto-create,
+        // or a freshly-selected SharePoint site), NO client is attached yet, so that resolution
+        // finds nothing and setupFirmFolder is silently skipped for both location types. This is
+        // the first point afterward that reliably knows the firm (this client's own firmId) — run
+        // it here if it was never run for this connector, so ensureAppFolderStructure below has an
+        // orgFolderId to find. Confirmed live 2026-08-14 against a OneDrive Personal connector.
+        // See .claude/plans/connector-microsoft-impl.md.
+        const settings = (connector.settings as Record<string, unknown>) || {}
+        const orgSettings = (settings.organizations as Record<string, Record<string, unknown>> | undefined)?.[client.firmId]
+        const rootFolderId = settings.rootFolderId as string | undefined
+        if (!orgSettings?.orgFolderId && rootFolderId) {
+            await setupFirmFolder(connectorId, rootFolderId, adapter, client.firmId)
+        }
+
         await ensureAppFolderStructure(connectorId, client.name, client.slug, adapter, client.firmId)
 
         const engagements = await prisma.engagement.findMany({

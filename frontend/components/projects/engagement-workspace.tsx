@@ -20,6 +20,8 @@ import { EngagementCommentsTab } from './engagement-comments-tab'
 import { EngagementWikiTab } from './wiki/engagement-wiki-tab'
 import type { LwCrmEngagementStatus } from '@/lib/actions/project'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
+import { GoogleDriveIcon } from '@/components/ui/google-drive-icon'
+import { OneDriveIcon } from '@/components/ui/onedrive-icon'
 
 export interface ProjectPathSegments {
     tab: string
@@ -347,7 +349,13 @@ export function EngagementWorkspace({
                                 data-demo-tour="engagement-files-tab"
                                 className="relative h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                             >
-                                <Folder className="w-4 h-4 mr-2" />
+                                {clientConnectorType === 'ONEDRIVE' ? (
+                                    <OneDriveIcon size={16} className="mr-2" />
+                                ) : clientConnectorType === 'GOOGLE_DRIVE' ? (
+                                    <GoogleDriveIcon size={16} className="mr-2" />
+                                ) : (
+                                    <Folder className="w-4 h-4 mr-2" />
+                                )}
                                 Files
                                 {pendingTab === 'files' && <span className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden"><span className="absolute inset-y-0 w-1/2 bg-brand-accent animate-[indeterminate-progress_1.5s_infinite_linear] rounded-full" /></span>}
                             </TabsTrigger>

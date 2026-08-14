@@ -55,6 +55,7 @@ export function DocumentListCard({
     const {
         handleSecureOpen,
         secureModalOpen,
+        secureModalMode,
         secureModalData,
         setSecureModalOpen,
         isRegrantLoading,
@@ -430,6 +431,7 @@ export function DocumentListCard({
                 mimeType={secureModalData.mimeType}
                 externalId={secureModalData.externalId}
                 firmId={secureModalData.firmId}
+                mode={secureModalMode}
                 isLoading={isRegrantLoading}
                 error={regrantError}
             />

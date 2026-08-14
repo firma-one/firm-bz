@@ -46,8 +46,21 @@ const oneDriveConnector = OneDriveConnector.getInstance()
  * below) — Azure AD tokens only carry the scopes that were actually consented to at the time
  * of that specific OAuth grant; admin-consenting the app registration doesn't retroactively
  * upgrade already-issued tokens.
+ *
+ * User.Invite.All — added 2026-08-14. Regranting file access to a genuinely new EXTERNAL
+ * recipient (no prior Entra ID guest object in this tenant) fails driveItem:invite with Graph's
+ * `sharingFailed` under app-only-style auth, per Microsoft Learn's documented "New guests can't
+ * be invited using app-only access" limitation — confirmed live via A/B test (internal recipient
+ * succeeds, external fails identically otherwise) with every SharePoint-level sharing policy
+ * already at its most permissive setting. Fix: onedrive-permission-adapter.ts's
+ * preCreateGuestInvitation() calls Graph's POST /invitations (which DOES support app-only,
+ * unlike driveItem:invite for new guests) immediately before driveItem:invite, so the recipient
+ * is already an "existing guest" by the time driveItem:invite runs. That call 401s
+ * ("Insufficient privileges") without this scope in the token — admin-consenting the permission
+ * on the app registration alone does NOT add it to already-issued OR newly-reconnected tokens;
+ * it must also be requested here. See .claude/plans/connector-microsoft-impl.md.
  */
-const CONNECT_SCOPES = ['openid', 'profile', 'email', 'User.Read', 'Files.ReadWrite.All', 'Sites.Read.All', 'offline_access']
+const CONNECT_SCOPES = ['openid', 'profile', 'email', 'User.Read', 'Files.ReadWrite.All', 'Sites.Read.All', 'User.Invite.All', 'offline_access']
 
 export async function POST(request: NextRequest) {
   try {

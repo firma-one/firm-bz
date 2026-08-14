@@ -3,6 +3,7 @@
 import type React from 'react'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -975,12 +976,25 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
           <button
             type="button"
             onClick={() => setAddNewOpen(o => !o)}
-            className="flex w-full items-center gap-2 mb-2 group"
+            className={cn(
+              "inline-flex w-auto items-center gap-2 mb-2 h-8 rounded border transition-all duration-200 group",
+              addNewOpen
+                ? "justify-start border-transparent bg-transparent px-0 text-[#45474c]"
+                : "justify-center border-0 bg-primary px-4 text-white hover:brightness-105"
+            )}
           >
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#45474c] text-left">
+            <p className={cn(
+              "text-[10px] font-bold uppercase tracking-[0.2em] text-left transition-colors",
+              addNewOpen ? "text-[#45474c]" : "text-white"
+            )}>
               {connectors.length === 0 ? 'Connect storage account' : 'Add new connection'}
             </p>
-            <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded border border-[#e5e7eb] bg-white text-[#45474c] group-hover:border-[#1b1b1d] transition-colors">
+            <span className={cn(
+              "flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-all duration-200",
+              addNewOpen
+                ? "border-[#e5e7eb] bg-white text-[#45474c] group-hover:border-[#1b1b1d]"
+                : "border-transparent bg-transparent"
+            )}>
               {addNewOpen
                 ? <span className="text-[10px] font-bold leading-none">−</span>
                 : <span className="text-[10px] font-bold leading-none">+</span>

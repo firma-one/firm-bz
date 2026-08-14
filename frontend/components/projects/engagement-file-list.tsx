@@ -214,7 +214,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
             setDeeplinkResolving(true)
         }
     }, [])
-    const { handleSecureOpen, secureModalOpen, secureModalData, setSecureModalOpen, isRegrantingId, isRegrantLoading, regrantError } = useSecureOpenDocument({
+    const { handleSecureOpen, secureModalOpen, secureModalMode, secureModalData, setSecureModalOpen, isRegrantingId, isRegrantLoading, regrantError } = useSecureOpenDocument({
         projectId,
         firmId,
         logContext: 'EngagementFileList',
@@ -2797,6 +2797,7 @@ const handleRefresh = async () => {
                                     onOpenPreviewPane={(docId) => openPreviewForFile(docId, file)}
                                     onAddToast={(toast) => addToast(toast as any)}
                                     connectorAccountEmail={connectorAccountEmail}
+                                    isOneDriveClient={isOneDriveClient}
                                     bookmarkId={bookmarkIdByDocumentId.get(file.projectDocumentId ?? '')}
                                     hideBadges={rightPane.content != null && rightPane.paneSize === 'medium'}
                                 />
@@ -3378,6 +3379,7 @@ const handleRefresh = async () => {
                     mimeType={secureModalData.mimeType}
                     externalId={secureModalData.externalId}
                     firmId={secureModalData.firmId}
+                    mode={secureModalMode}
                     isLoading={isRegrantLoading}
                     error={regrantError}
                 />

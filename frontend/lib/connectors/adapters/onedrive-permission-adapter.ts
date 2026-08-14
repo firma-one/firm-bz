@@ -30,6 +30,21 @@ import type { IConnectorPermissionAdapter, EngagementFolderIds, ConnectorRole, C
 const oneDrive = OneDriveConnector.getInstance()
 const GRAPH_BETA = 'https://graph.microsoft.com/beta'
 
+/**
+ * Thrown by grantItemPermission specifically for Graph's `sharingFailed` error — in practice this
+ * has only been observed for external-domain recipients on a tenant whose SharePoint/OneDrive
+ * external sharing policy doesn't allow them (confirmed live 2026-08-14: identical /invite call
+ * succeeds for an internal-domain recipient, fails for external with this exact code). Thrown
+ * rather than the usual `return null` so callers that want to distinguish "tenant policy blocked
+ * this" from other, less-actionable grant failures can do so — see regrant/route.ts. Other Graph
+ * error codes still resolve to `null`, preserving existing fallback behavior. */
+export class GraphSharingPolicyError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'GraphSharingPolicyError'
+  }
+}
+
 /** Swaps a resolved v1.0 drive base URL for its beta equivalent — only createLink's
  * blocksDownload path needs beta; every other call in this file stays on v1.0. */
 function toBetaBase(v1Base: string): string {
@@ -263,6 +278,11 @@ export function createOneDrivePermissionAdapter(): IConnectorPermissionAdapter {
       return results.filter((f): f is NonNullable<typeof f> => f !== null)
     },
 
+    async preInviteGuest(connectionId, email, documentUrl) {
+      const token = await auth(connectionId)
+      return preCreateGuestInvitation(token, email, documentUrl)
+    },
+
     async getDuplicateFiles(connectionId, limit = 20) {
       const [token, base] = await Promise.all([auth(connectionId), resolveOneDriveDriveBase(connectionId)])
       const res = await fetch(
@@ -356,6 +376,99 @@ function mapSearchItem(item: {
   }
 }
 
+/**
+ * Pre-creates the recipient as an Entra ID guest via Graph's `/invitations` endpoint (requires
+ * the `User.Invite.All` permission) before attempting `driveItem: invite`, and returns the
+ * invitation's `inviteRedeemUrl` when available.
+ *
+ * Why pre-create at all: Microsoft Learn's driveItem:invite docs state "New guests can't be
+ * invited using app-only access. Existing guests can be invited using app-only requests."
+ * Confirmed live 2026-08-14 — driveItem:invite succeeds for an internal-tenant recipient but
+ * fails with `sharingFailed` for a genuinely new external recipient with no prior guest object in
+ * this tenant's directory, even with every SharePoint-level sharing policy (tenant and site)
+ * already at its most permissive setting. Pre-creating the guest here means driveItem:invite
+ * always targets an "existing guest" from Graph's perspective, sidestepping the app-only
+ * new-guest restriction.
+ *
+ * Why return `inviteRedeemUrl`: confirmed live 2026-08-14 that opening a bare `driveItem.webUrl`
+ * as a genuinely new external recipient lands on a blank "Enter your email" sign-in prompt before
+ * anything else — jarring, since the app already knows exactly who's being invited.
+ * `inviteRedeemUrl` is a ticket-bound redemption link tied to this specific invitation record;
+ * Microsoft's B2B redemption flow resolves identity from that ticket server-side rather than
+ * asking the user to type their email, landing them directly on the OTP/federation-consent
+ * screens instead. (Microsoft doesn't explicitly document "this skips the email box" in prose,
+ * but the redemption flow is described as ticket-driven, not user-input-driven — see
+ * https://learn.microsoft.com/en-us/entra/external-id/redemption-experience.) `inviteRedirectUrl`
+ * is set to the actual document, so redemption lands on it directly rather than a generic page.
+ *
+ * Idempotent by design — safe to call on every regrant, not just the first: Graph's /invitations
+ * endpoint does not duplicate a guest object for an email that already has one in the directory
+ * (from this call or a prior manual invite); a 409-shaped "already exists" response is treated as
+ * a non-fatal miss (falls back to no redeem URL, caller falls back to webViewLink) rather than a
+ * hard failure — Graph doesn't return the original invitation's redeem URL on a duplicate-invite
+ * rejection, so there's no redeem URL to recover in that case; the *guest itself* still exists
+ * either way, which is what matters for the driveItem:invite app-only check. See
+ * .claude/plans/connector-microsoft-impl.md.
+ */
+export async function preCreateGuestInvitation(
+  token: string,
+  email: string,
+  documentUrl?: string
+): Promise<{ inviteRedeemUrl: string | null }> {
+  try {
+    const res = await fetch('https://graph.microsoft.com/v1.0/invitations', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        invitedUserEmailAddress: email,
+        // No email round-trip needed here either — driveItem:invite's own sendInvitation:false
+        // covers the "you have access" notification once the file-level grant succeeds. We use
+        // the returned inviteRedeemUrl ourselves (opened directly, see regrant/route.ts) rather
+        // than relying on Graph to email it.
+        sendInvitationMessage: false,
+        inviteRedirectUrl: documentUrl || 'https://www.firma.bz',
+      }),
+    })
+    if (res.ok) {
+      const data = await res.json()
+      logger.warn('[onedrive-permission-adapter] preCreateGuestInvitation: invitation created', {
+        email,
+        invitedUserId: data.invitedUser?.id,
+        invitedUserType: data.invitedUserType,
+        status: data.status,
+        inviteRedeemUrl: data.inviteRedeemUrl,
+      })
+      return { inviteRedeemUrl: data.inviteRedeemUrl ?? null }
+    }
+    const bodyText = await res.text().catch(() => '<unreadable>')
+    // Two distinct "no invite needed" cases produce this same shape and are both silenced here
+    // rather than logged as a warning:
+    //   1. A guest object already exists for this email (from a prior invite) — the goal, an
+    //      existing guest, is already met.
+    //   2. The email belongs to an INTERNAL tenant member, not a guest at all — e.g. regranting
+    //      to an internal recipient (deepak@firmaone.com) always calls this function too, since
+    //      the caller (regrant/route.ts) doesn't distinguish internal vs external ahead of time.
+    //      Graph's confirmed (if undocumented) wording for this case: "The invited user already
+    //      exists in the directory as objectID: {id}. They can use that account to sign in to
+    //      shared apps and resources." — https://github.com/microsoftgraph/msgraph-beta-sdk-dotnet/issues/798.
+    //      Both cases are expected, frequent, and not actionable — the `already exists` substring
+    //      matches both. Neither has a redeem URL to return, so the caller falls back to
+    //      webViewLink; driveItem:invite (called separately, in parallel) is unaffected either way
+    //      — internal recipients were never subject to the app-only new-guest restriction this
+    //      function exists to work around in the first place.
+    if (/already exists|already invited|duplicate/i.test(bodyText)) return { inviteRedeemUrl: null }
+    logger.warn('[onedrive-permission-adapter] preCreateGuestInvitation: /invitations call failed', {
+      email, status: res.status, statusText: res.statusText, body: bodyText,
+    })
+    return { inviteRedeemUrl: null }
+  } catch (e) {
+    logger.warn('[onedrive-permission-adapter] preCreateGuestInvitation: request error', {
+      email, error: e instanceof Error ? e.message : String(e),
+    })
+    return { inviteRedeemUrl: null }
+  }
+}
+
 async function grantItemPermission(
   connectionId: string,
   itemId: string,
@@ -369,20 +482,71 @@ async function grantItemPermission(
     return grantDownloadBlockedLink(connectionId, itemId, email, token, toBetaBase(base))
   }
 
+  // NOTE: this used to also call preCreateGuestInvitation() here as a defensive safety net, in
+  // case a future caller skipped regrant/route.ts's own explicit pre-invite step. Removed
+  // 2026-08-15 — it was NOT harmless. Live logs showed each POST /invitations call minting a
+  // DIFFERENT inviteRedeemUrl ticket even when returning the SAME underlying guest object id (the
+  // guest is genuinely reused/idempotent; the ticket is not). Calling this a second time here,
+  // after regrant/route.ts had already captured and started using the first call's
+  // inviteRedeemUrl, silently invalidated that first ticket — the permission itself still landed
+  // correctly on the right guest object (grantedToUserId matched), but the previously-issued
+  // ticket the user was mid-redemption on stopped resolving to it, producing SharePoint's "You
+  // need access" page immediately after a successful sign-in. The current caller
+  // (regrant/route.ts) always pre-invites before calling grantFilePermission, so this is no
+  // longer needed there; if a future caller needs the app-only new-guest workaround without
+  // wanting inviteRedeemUrl, call preCreateGuestInvitation directly instead of relying on this
+  // function to do it implicitly. See .claude/plans/connector-microsoft-impl.md.
+
   const res = await fetch(`${base}/items/${itemId}/invite`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       recipients: [{ email }],
       roles: [toGraphRole(role)],
-      sendInvitation: opts?.notify !== false,
+      // Graph's own sendInvitation email is unreliable for recipients with no existing Microsoft
+      // account — known Graph/B2B guest-invitation delivery issue (silent non-delivery, no error
+      // surfaced), reproduced live 2026-08-11 and matching Microsoft's own Jan 2026 guidance on a
+      // closely related report (DMARC/SPF rejection of Microsoft's system sender domain):
+      // https://learn.microsoft.com/en-us/answers/questions/5721785/ — recommends sendInvitation:
+      // false and self-sending the notification instead. This does NOT weaken access control:
+      // sendInvitation only controls the notification email, never the permission grant or the
+      // requireSignIn authentication check below — the recipient's guest object and permission
+      // are created by this call regardless of whether Graph's email sends. Our own fallback email
+      // (regrant/route.ts, OneDrive-only) is now the sole notification. See
+      // .claude/plans/connector-microsoft-impl.md.
+      sendInvitation: false,
       message: opts?.message,
       requireSignIn: true,
     }),
   })
-  if (!res.ok) return null
+  if (!res.ok) {
+    const bodyText = await res.text().catch(() => '<unreadable>')
+    logger.warn('[onedrive-permission-adapter] grantItemPermission: Graph /invite call failed', {
+      connectionId, itemId, email, role, status: res.status, statusText: res.statusText, body: bodyText,
+    })
+    let errorCode: string | undefined
+    try {
+      errorCode = JSON.parse(bodyText)?.error?.code
+    } catch {
+      // bodyText wasn't JSON — errorCode stays undefined, falls through to the generic null return.
+    }
+    if (errorCode === 'sharingFailed') {
+      throw new GraphSharingPolicyError(
+        `Graph rejected sharing "${itemId}" with ${email} (sharingFailed) — likely blocked by this tenant's external sharing policy.`
+      )
+    }
+    return null
+  }
   const data = await res.json()
-  return data.value?.[0]?.id ?? null
+  const grantedPermission = data.value?.[0]
+  logger.warn('[onedrive-permission-adapter] grantItemPermission: Graph /invite succeeded', {
+    connectionId, itemId, email,
+    permissionId: grantedPermission?.id,
+    grantedToUserId: grantedPermission?.grantedToV2?.user?.id,
+    grantedToEmail: grantedPermission?.grantedToV2?.user?.email,
+    roles: grantedPermission?.roles,
+  })
+  return grantedPermission?.id ?? null
 }
 
 /**
