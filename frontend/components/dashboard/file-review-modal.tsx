@@ -142,6 +142,7 @@ export function FileReviewModal({
     const {
         handleSecureOpen,
         secureModalOpen,
+        secureModalMode,
         secureModalData,
         setSecureModalOpen,
     } = useSecureOpenDocument({ logContext: 'FileReviewModal' })
@@ -708,6 +709,7 @@ export function FileReviewModal({
                     mimeType={secureModalData.mimeType}
                     externalId={secureModalData.externalId}
                     firmId={secureModalData.firmId}
+                    mode={secureModalMode}
                 />
             </SheetContent>
         </Sheet >

@@ -167,6 +167,17 @@ export interface IConnectorPermissionAdapter {
   /** Batch metadata fetch for multiple file ids. Skips ids that fail/404 rather than throwing. */
   getFilesMetadata(connectionId: string, fileIds: string[]): Promise<Array<ConnectorFileMetadata & { size?: string; modifiedTime?: string; webViewLink?: string }>>
   /**
+   * OneDrive/SharePoint-only, optional: pre-invites `email` as an Entra ID guest (Graph
+   * POST /invitations) and returns its ticket-bound `inviteRedeemUrl`, which resolves identity
+   * server-side on redemption rather than prompting a blank "enter your email" sign-in box —
+   * confirmed live 2026-08-14 that a bare driveItem.webUrl does show that blank prompt for a
+   * genuinely new external guest, while inviteRedeemUrl is expected to skip straight to
+   * OTP/federation-consent. Not implemented by other providers (undefined when absent) — Google's
+   * guest-access flow has no equivalent friction point to fix. See
+   * .claude/plans/connector-microsoft-impl.md.
+   */
+  preInviteGuest?(connectionId: string, email: string, documentUrl?: string): Promise<{ inviteRedeemUrl: string | null }>
+  /**
    * Heuristic duplicate-file detection: groups recently-sampled files by content signature
    * (checksum, falling back to name+size) and returns groups with >1 member, sorted by
    * potential space savings (totalSize desc). Best-effort — returns [] on failure.

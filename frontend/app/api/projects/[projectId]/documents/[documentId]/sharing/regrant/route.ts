@@ -13,6 +13,9 @@ import {
 import { isDocumentFinalized, parseSettingsFromDb, buildSettingsForDb } from '@/lib/sharing-settings'
 import { applyDiagonalWatermark } from '@/lib/watermark-pdf'
 import { isDescendantOfGrantedFolder } from '@/lib/document-sharing-access'
+import { logger } from '@/lib/logger'
+import { resolveEngagementConnectorId } from '@/lib/connectors/resolve-client-connector'
+import { GraphSharingPolicyError } from '@/lib/connectors/adapters/onedrive-permission-adapter'
 
 export async function POST(
     _request: NextRequest,
@@ -102,16 +105,16 @@ export async function POST(
             })
         }
 
-        let connectorId = document.connectorId
-        if (!connectorId && fileInfo.organizationId) {
-            const org = await prisma.firm.findUnique({
-                where: { id: fileInfo.organizationId },
-                include: { connector: true },
-            })
-            if (org?.connector?.status === 'ACTIVE') {
-                connectorId = org.connector.id
-            }
-        }
+        // resolveEngagementConnectorId's priority chain is: documentConnectorId (if set) → the
+        // CLIENT's own connector → firm-level legacy connector (last resort only). The route
+        // previously fell back straight from document.connectorId to the legacy Firm.connectorId,
+        // skipping the client's actual connector entirely — for a firm with both a Google and a
+        // OneDrive connector, a document with no connectorId of its own could silently resolve to
+        // the wrong (Google) connector even though its client is OneDrive/SharePoint-attached.
+        // Confirmed live 2026-08-14: a SharePoint document's regrant granted a Google Drive
+        // permission instead, because this fallback picked the firm's legacy Google connector.
+        // See .claude/plans/connector-microsoft-impl.md.
+        const connectorId = await resolveEngagementConnectorId(projectId, document.connectorId)
 
         if (!connectorId) {
             return NextResponse.json({ error: 'No active storage connection found' }, { status: 500 })
@@ -122,6 +125,9 @@ export async function POST(
         if (!permissionAdapter || !contentAdapter) {
             return NextResponse.json({ error: 'No active storage connection found' }, { status: 500 })
         }
+
+        const connectorRecord = await prisma.connector.findUnique({ where: { id: connectorId }, select: { type: true } })
+        const isOneDriveConnector = connectorRecord?.type === 'ONEDRIVE'
 
         if (sharingUser.connectorPermissionId) {
             try {
@@ -154,7 +160,7 @@ export async function POST(
         const allowDownload = guestOptions.allowDownload ?? false
 
         const fileName = document.fileName || 'a document'
-        const message = `POCKETT SECURE ACCESS\n\nYou have requested to open "${fileName}". For your security, Google Drive requires a one-time email verification. Please click the "Open" button below to receive your one-time passcode and access the document.`
+        const message = `POCKETT SECURE ACCESS\n\nYou have requested to open "${fileName}". For your security, your storage provider requires a one-time email verification. Please click the "Open" button below to receive your one-time passcode and access the document.`
 
         let targetFileId = fileInfo.externalId
         // Tracks whether setCopyRestricted(true) was requested on the eventual target file, so
@@ -262,29 +268,118 @@ export async function POST(
             }
         }
 
-        let permissionId = await permissionAdapter.grantFilePermission(connectorId, targetFileId, email, role, { message, preventDownload: copyRestricted })
+        // Resolve the document's own webViewLink FIRST — needed both as the fallback "open" URL
+        // and as inviteRedirectUrl below, so a first-time external guest's redemption lands
+        // directly on this document rather than a generic page.
+        let documentUrl: string | undefined
+        if (isOneDriveConnector) {
+            try {
+                const filesMeta = await permissionAdapter.getFilesMetadata?.(connectorId, [targetFileId])
+                documentUrl = filesMeta?.[0]?.webViewLink
+                if (!documentUrl) {
+                    logger.warn('[regrant] Could not resolve document webViewLink', { connectorId, targetFileId })
+                }
+            } catch (metaErr) {
+                logger.error('[regrant] Failed to resolve document webViewLink', metaErr as Error, 'OneDrive', { targetFileId })
+            }
+        }
+
+        // Pre-invite the guest to capture inviteRedeemUrl BEFORE the actual permission grant —
+        // deliberately SEQUENTIAL, not parallel. Parallelizing these (tried 2026-08-15 to fix a
+        // timeout) caused a real regression: opening the returned inviteRedeemUrl signed the user
+        // in successfully but landed on SharePoint's "You need access" page — confirmed live
+        // against BOTH a brand-new external Gmail address AND a returning one from a prior test,
+        // ruling out "only races for genuinely-new identities." The two Graph calls are NOT safely
+        // independent despite both targeting the same email: driveItem:invite (called via
+        // grantFilePermission) does its own internal guest resolution/creation when it doesn't yet
+        // see a guest for that email, and running that concurrently with our own explicit
+        // preInviteGuest call risked the two resolving to different guest objects — the permission
+        // landing on one, the redemption ticket pointing at the other. Reverted to sequential;
+        // the earlier 16.6s-over-15s-timeout problem is addressed by raising the client timeout
+        // (use-secure-open-document.ts) instead of by parallelizing. inviteRedeemUrl is a
+        // ticket-bound redemption link tied to this specific invitation; when available it
+        // replaces documentUrl as the link opened for OneDrive/SharePoint, resolving identity
+        // server-side instead of showing a genuinely new external guest a blank "enter your email"
+        // sign-in prompt. Both best-effort — either failing just falls back to prior behavior. See
+        // preInviteGuest's doc comment (onedrive-permission-adapter.ts) and
+        // .claude/plans/connector-microsoft-impl.md.
+        if (isOneDriveConnector) {
+            try {
+                const { inviteRedeemUrl } = await permissionAdapter.preInviteGuest?.(connectorId, email, documentUrl) ?? { inviteRedeemUrl: null }
+                if (inviteRedeemUrl) {
+                    documentUrl = inviteRedeemUrl
+                    // Ticket's `user` query param is the guest object ID this redemption resolves
+                    // to — logged here so it can be diffed against grantItemPermission's
+                    // grantedToUserId below to confirm/rule out an identity mismatch between the
+                    // two Graph calls. See .claude/plans/connector-microsoft-impl.md.
+                    try {
+                        const ticketUserId = new URL(inviteRedeemUrl).searchParams.get('rd')
+                            ? new URLSearchParams(new URL(decodeURIComponent(new URL(inviteRedeemUrl).searchParams.get('rd')!)).search).get('user')
+                            : null
+                        logger.warn('[regrant] inviteRedeemUrl ticket details', { connectorId, targetFileId, email, ticketUserId, inviteRedeemUrl })
+                    } catch (parseErr) {
+                        logger.warn('[regrant] Could not parse ticketUserId from inviteRedeemUrl', { inviteRedeemUrl, error: parseErr instanceof Error ? parseErr.message : String(parseErr) })
+                    }
+                }
+            } catch (inviteErr) {
+                logger.warn('[regrant] preInviteGuest failed, falling back to webViewLink', {
+                    connectorId, targetFileId, email, error: inviteErr instanceof Error ? inviteErr.message : String(inviteErr),
+                })
+            }
+        }
+
+        let permissionId: string | null = null
+        try {
+            permissionId = await permissionAdapter.grantFilePermission(connectorId, targetFileId, email, role, { message, preventDownload: copyRestricted })
+        } catch (grantErr) {
+            if (grantErr instanceof GraphSharingPolicyError) {
+                // Confirmed live 2026-08-14: this specific Graph error only occurs for external
+                // (cross-tenant-domain) recipients — the identical /invite call succeeds for an
+                // internal recipient on the same tenant. Not something the app can fix or retry;
+                // surface it distinctly instead of falling back to the generic modal, which
+                // previously gave no indication that sharing had actually failed.
+                logger.warn('[regrant] Graph sharing policy blocked this grant', {
+                    connectorId, targetFileId, email, error: grantErr.message,
+                })
+                return NextResponse.json({
+                    error: `This document's storage provider (SharePoint) is configured to block sharing with external accounts like ${email}. Ask your Microsoft 365 administrator to allow external sharing for this site, or ask your engagement lead to switch you to an internal Microsoft account.`,
+                    code: 'external_sharing_blocked',
+                }, { status: 403 })
+            }
+            throw grantErr
+        }
 
         if (!permissionId) {
             // Grant failed — most common cause: user already has a Drive permission on this file
             // (duplicate grant). Check listFilePermissions and reuse the existing one if found.
             try {
                 const existingPerms = await permissionAdapter.listFilePermissions(connectorId, targetFileId)
+                logger.warn('[regrant] Grant failed — existing permissions on this item', {
+                    connectorId, targetFileId, email, existingPerms,
+                })
                 const existingPerm = existingPerms.find(
                     (p) => p.email?.toLowerCase() === email.toLowerCase()
                 )
                 if (existingPerm?.id) {
                     permissionId = existingPerm.id
                 }
-            } catch {
-                // Non-fatal: if listing fails, fall through to error handling below
+            } catch (listErr) {
+                logger.warn('[regrant] listFilePermissions also failed', {
+                    connectorId, targetFileId, error: listErr instanceof Error ? listErr.message : String(listErr),
+                })
             }
         }
 
         if (!permissionId) {
-            // Any active engagement member can proceed — the Drive grant failed (or no existing
-            // permission was found), but membership is the access authority. Return success so the
-            // modal shows. If the Drive issue is real, the user won't receive the verification email
-            // and should contact support; the root cause is visible in server logs.
+            // Any active engagement member can proceed — the Drive/Graph grant failed (or no
+            // existing permission was found), but membership is the access authority. Return
+            // success so the modal shows. The actual Graph/Drive failure reason is logged by the
+            // adapter (e.g. onedrive-permission-adapter.ts's grantItemPermission) — this line just
+            // confirms the route hit this fallback path, since it previously returned silently
+            // with no trace at all here.
+            logger.warn('[regrant] grantFilePermission returned no permissionId — falling back to membership-only access', {
+                connectorId, targetFileId, email, isOneDriveConnector,
+            })
             await prisma.engagementDocumentSharingUser.update({
                 where: { id: sharingUser.id },
                 data: { sharingPermissionStatus: DocumentSharingPermissionStatus.GRANTED, updatedBy: user.id },
@@ -301,7 +396,17 @@ export async function POST(
             },
         })
 
-        return NextResponse.json({ success: true })
+        // documentUrl was already resolved above (webViewLink, upgraded to inviteRedeemUrl when
+        // preInviteGuest succeeded) — Graph's own sendInvitation email is known to silently fail
+        // to deliver for recipients with no existing Microsoft account (unresolved Graph/B2B guest
+        // invitation delivery issue), and the permission above is granted regardless of whether it
+        // sends — sendInvitation only controls the notification email and has zero effect on the
+        // requireSignIn/OTP authorization gate. Rather than route through any email, this is a
+        // synchronous click from the recipient's own browser (both first grant and regrant) — the
+        // recipient is already present, so the frontend opens documentUrl directly in a new tab,
+        // same as Google's existing "Open in browser" pattern elsewhere in this app
+        // (document-edit-sheet.tsx). See .claude/plans/connector-microsoft-impl.md.
+        return NextResponse.json({ success: true, documentUrl })
     } catch (e) {
         console.error('POST regrant sharing error', e)
         return NextResponse.json({ error: 'Failed to authenticate editor access' }, { status: 500 })

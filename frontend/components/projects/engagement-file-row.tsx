@@ -96,6 +96,9 @@ export interface EngagementFileRowProps {
     onAddToast: (toast: { type: string; title: string; message: string }) => void
     /** Connector account email — passed to DocumentActionMenu for Google Drive authuser param. */
     connectorAccountEmail?: string | null
+    /** True when the client's connector is OneDrive — passed to DocumentActionMenu to pick the
+     *  correct provider icon/URL for "Open folder in Drive UI". */
+    isOneDriveClient?: boolean
     /** Bookmark record id if this document is bookmarked by the current user; undefined otherwise. */
     bookmarkId?: string
     /** When true, hides the dynamic badges column (shared/bookmark/intake/lock) to save horizontal space. */
@@ -167,6 +170,7 @@ export function EngagementFileRow({
     onOpenPreviewPane,
     onAddToast,
     connectorAccountEmail,
+    isOneDriveClient = false,
     bookmarkId,
     hideBadges = false,
     isInsideApprovedDeliverable = false,
@@ -549,6 +553,7 @@ export function EngagementFileRow({
                             onOpenDocument(d)
                         }}
                         connectorAccountEmail={connectorAccountEmail}
+                        isOneDriveClient={isOneDriveClient}
                     />
                 </div>
             </div>
