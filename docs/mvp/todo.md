@@ -180,3 +180,9 @@ AI layer using Gemma 4 (HuggingFace Transformers, same runtime as release notes 
 ## Future Roadmap
 
 - [ ] **Branded Link Redirect System (`/to/`)** — [PRD](../prd-linkfarm.md) — Deferred; self-hosted URL shortener at `firma.bz/to/<slug>` with click tracking, source attribution, and UTM passthrough. Revisit when content distribution volume justifies the infrastructure (see PRD for conditions).
+
+- [ ] **DocuSign-Style E-Signature ("Firma Sign")** — [plan](../../.claude/plans/docusign-alt.md) — Request signatures on engagement documents from external signers via tokenized links; captured signature burned into the PDF and routed back through the existing connector storage.
+  - Phase 1 (MVP, ~2–3 wks): single signer, visual-only stamp (not cryptographically sealed), reuses `pdf-lib` watermark pattern + existing invitation/email infra
+  - Phase 2 (~1–2 wks): multi-signer sequential/parallel routing, reminder cron
+  - Phase 3 (optional, 2–4 wks + legal review): cryptographic PDF sealing, tamper-evident audit trail, ESIGN/UETA compliance — only if legally-binding signatures (not just visual) are required
+  - Net-new: PDF viewer/annotation UI (no `react-pdf`/`pdf.js` in stack today), signer routing state machine, signature capture UI
