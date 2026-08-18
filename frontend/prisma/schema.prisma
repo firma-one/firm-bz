@@ -7,7 +7,7 @@ datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
-  schemas   = ["platform", "system"]
+  schemas   = ["platform", "system", "reddit_screener"]
 }
 
 // ----------------------------------------------------------------------
@@ -1001,4 +1001,81 @@ model PlatformConfig {
 
   @@map("platform_config")
   @@schema("platform")
+}
+
+// ----------------------------------------------------------------------
+// REDDIT SCREENER (isolated schema, dev/local only — see
+// .claude/skills/reddit-screener/SKILL.md and
+// .claude/plans/reddit-screener-skill-db-backed.md)
+// ----------------------------------------------------------------------
+
+enum RedditScreenerPostStatus {
+  drafted
+  skipped
+  posted
+
+  @@map("reddit_screener_post_status")
+  @@schema("reddit_screener")
+}
+
+enum RedditScreenerVariation {
+  A
+  B
+
+  @@map("reddit_screener_variation")
+  @@schema("reddit_screener")
+}
+
+model RedditScreenerPost {
+  id             BigInt   @id @default(autoincrement())
+  redditId       String   @unique @map("reddit_id")
+  permalink      String
+  subreddit      String
+  postTitle      String   @map("post_title")
+  postBody       String?  @map("post_body")
+  author         String?
+  createdUtc     DateTime @map("created_utc") @db.Timestamptz(6)
+  score          Int?
+  numComments    Int?     @map("num_comments")
+  upvoteRatio    Float?   @map("upvote_ratio")
+
+  relevanceScore    Int?     @map("relevance_score")
+  scoreReason       String?  @map("score_reason")
+  matchedKeywords   String[] @map("matched_keywords")
+  draftHelpOnly     String?  @map("draft_help_only")
+  draftSoftPromo    String?  @map("draft_soft_promo")
+  softPromoAdvised  Boolean  @default(true) @map("soft_promo_advised")
+
+  status            RedditScreenerPostStatus @default(drafted)
+  postedVariation   RedditScreenerVariation? @map("posted_variation")
+  postedCommentUrl  String?                  @map("posted_comment_url")
+  postedAt          DateTime?                @map("posted_at") @db.Timestamptz(6)
+
+  outcomeUpvotes Int?     @map("outcome_upvotes")
+  outcomeReplies Int?     @map("outcome_replies")
+  outcomeNotes   String?  @map("outcome_notes")
+
+  postEmbedding Unsupported("vector")? @map("post_embedding")
+
+  discoveredAt DateTime @default(now()) @map("discovered_at") @db.Timestamptz(6)
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([status])
+  @@index([createdUtc(sort: Desc)])
+  @@index([subreddit])
+  @@map("posts")
+  @@schema("reddit_screener")
+}
+
+model RedditScreenerRun {
+  id          BigInt    @id @default(autoincrement())
+  startedAt   DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
+  finishedAt  DateTime? @map("finished_at") @db.Timestamptz(6)
+  postsFound  Int?      @map("posts_found")
+  postsNew    Int?      @map("posts_new")
+  topN        Int?      @map("top_n")
+  notes       String?
+
+  @@map("runs")
+  @@schema("reddit_screener")
 }

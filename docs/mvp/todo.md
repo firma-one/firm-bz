@@ -111,6 +111,13 @@ AI layer using Gemma 4 (HuggingFace Transformers, same runtime as release notes 
   - Body: personal note from Deepak asking how they heard about firmä and whether it's a good fit, offering a walkthrough call ([Calendly link](https://calendly.com/firmaone/firma-connect)) or async help
   - Needs `[name]` interpolation from signup data
 
+## Growth / Outreach
+
+- [ ] **Reddit Prospecting Screener** — discover-and-draft daily screener that finds Reddit threads matching the client-delivery/file-sharing ICP pain, scores/dedupes them, and drafts two reply variations per top thread for manual review and posting; never posts automatically
+  - DB-backed skill design (Prisma/Postgres `reddit_screener` schema, reuses existing local embeddings, thin non-LLM scripts + Claude does drafting live when the skill runs) — [plan](../../.claude/plans/reddit-screener-skill-db-backed.md)
+  - Earlier filesystem-based design (no DB, `/watch` slash command, JSON config/history files) — [plan](../../.claude/plans/reddit-watcher-plan-v2.md)
+  - Two distinct designs exist; pick one (or merge) before implementation starts
+
 ## Marketing / Landing
 
 - [ ] **Landing Page: "Enterprise-grade everything" security section** — [plan](../../.claude/plans/landing-security-section.md)
