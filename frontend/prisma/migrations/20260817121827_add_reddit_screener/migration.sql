@@ -33,7 +33,7 @@ CREATE TABLE "reddit_screener"."posts" (
     "outcome_upvotes" INTEGER,
     "outcome_replies" INTEGER,
     "outcome_notes" TEXT,
-    "post_embedding" vector,
+    "post_embedding" vector(384),
     "discovered_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
