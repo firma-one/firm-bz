@@ -9,6 +9,7 @@ export interface SidebarFirmOption {
   isDefault: boolean
   createdAt?: string
   sandboxOnly?: boolean
+  groupSlug?: string | null
 }
 
 const SidebarFirmsContext = createContext<SidebarFirmOption[] | null>(null)

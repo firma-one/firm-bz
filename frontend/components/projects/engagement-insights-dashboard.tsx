@@ -50,6 +50,7 @@ import {
     NotebookPen,
 } from 'lucide-react'
 import { getFileTypeLabel, formatRelativeTime, formatFileSize } from '@/lib/utils'
+import { engagementPath, firmSettingsPath } from '@/lib/navigation/firm-paths'
 import { InsightCard } from '@/components/dashboard/insight-card'
 import { StatTile } from '@/components/ui/stat-tile'
 import { Button } from '@/components/ui/button'
@@ -2769,6 +2770,7 @@ function SandboxACSection({ title, icon: Icon, items }: { title: string; icon: R
 
 export interface EngagementInsightsDashboardProps {
     projectId: string
+    groupSlug?: string
     orgSlug?: string
     clientSlug?: string
     engagementSlug?: string
@@ -2781,6 +2783,7 @@ export interface EngagementInsightsDashboardProps {
 
 export function EngagementInsightsDashboard({
     projectId,
+    groupSlug = '',
     orgSlug = '',
     clientSlug = '',
     engagementSlug = '',
@@ -2802,8 +2805,8 @@ export function EngagementInsightsDashboard({
     const [summaryDraft, setSummaryDraft] = useState('')
     const [summarySaving, setSummarySaving] = useState(false)
 
-    const engagementBase = orgSlug && clientSlug && engagementSlug
-        ? `/d/f/${orgSlug}/c/${clientSlug}/e/${engagementSlug}`
+    const engagementBase = groupSlug && orgSlug && clientSlug && engagementSlug
+        ? engagementPath(groupSlug, orgSlug, clientSlug, engagementSlug)
         : ''
 
     // Shared capture helper — returns jsPDF instance with the health card rendered
@@ -3031,7 +3034,7 @@ export function EngagementInsightsDashboard({
                                         <Tooltip>
                                             <TooltipTrigger asChild>
                                                 <Link
-                                                    href={`/d/f/${orgSlug}?tab=settings&section=appsettings`}
+                                                    href={firmSettingsPath(groupSlug, orgSlug, 'appsettings')}
                                                     className="p-1.5 rounded text-violet-400 hover:text-violet-600 hover:bg-violet-50 transition-colors"
                                                     aria-label="Display, Print & Sharing settings"
                                                 >

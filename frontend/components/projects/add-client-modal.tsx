@@ -27,8 +27,10 @@ import { OptionalFieldsSection } from "@/components/ui/optional-fields-toggle"
 import { createClient, type LwCrmClientStatus } from '@/lib/actions/client'
 import { useOrgSandbox } from '@/lib/use-org-sandbox'
 import { DateTimePicker } from '@/components/ui/date-time-picker'
+import { firmTabPath } from '@/lib/navigation/firm-paths'
 
 interface AddClientModalProps {
+    groupSlug: string
     orgSlug: string
     firmId?: string
     /** Server-known flag so sandbox is enforced before client fetch completes */
@@ -41,7 +43,7 @@ const fieldLabel = 'font-mono text-[9px] font-bold uppercase tracking-widest tex
 const inputCls = 'border-[#e5e7eb] text-[#1b1b1d] text-xs font-normal placeholder:text-[#9a9ba0] rounded focus-visible:ring-1 focus-visible:ring-primary focus-visible:border-primary disabled:opacity-50 disabled:cursor-not-allowed'
 const textareaCls = 'flex w-full rounded border border-[#e5e7eb] bg-white px-3 py-2 text-xs font-normal text-[#1b1b1d] placeholder:text-[#9a9ba0] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed'
 
-export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigger, onSaved }: AddClientModalProps) {
+export function AddClientModal({ groupSlug, orgSlug, firmId, firmSandboxOnly = false, trigger, onSaved }: AddClientModalProps) {
     const [open, setOpen] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
     const [name, setName] = useState('')
@@ -191,7 +193,7 @@ export function AddClientModal({ orgSlug, firmId, firmSandboxOnly = false, trigg
             setShowOptional(false)
 
             window.dispatchEvent(new CustomEvent('firma-reminders-updated'))
-            router.push(`/d/f/${orgSlug}?tab=clients`, { scroll: false })
+            router.push(firmTabPath(groupSlug, orgSlug, 'clients'), { scroll: false })
             onSaved?.()
         } catch (error: any) {
             console.error(error)

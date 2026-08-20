@@ -10,7 +10,7 @@ import {
     requireNonSandboxFirmCreationAccess,
     resolveBillingAnchorForNewSatelliteFirm,
 } from '@/lib/billing/firm-creation-gate'
-import { ensurePolarFreePlanForSandboxFirm } from '@/lib/billing/polar-free-plan'
+import { ensureGroupFreePlan } from '@/lib/billing/polar-free-plan'
 import { mergeLeanAppMetadata } from '@/lib/auth/supabase-jwt-metadata'
 
 export async function POST(request: NextRequest) {
@@ -186,12 +186,15 @@ export async function POST(request: NextRequest) {
                     .filter(Boolean)
                     .join(' ')
                     .trim() || null
-            await ensurePolarFreePlanForSandboxFirm({
-                firmId: firm.id,
-                userEmail: user.email || '',
-                customerName,
-                userId,
-            })
+            const createdFirm = await prisma.firm.findUnique({ where: { id: firm.id }, select: { groupId: true } })
+            if (createdFirm) {
+                await ensureGroupFreePlan({
+                    groupId: createdFirm.groupId,
+                    userEmail: user.email || '',
+                    customerName,
+                    userId,
+                })
+            }
         }
 
         return NextResponse.json({

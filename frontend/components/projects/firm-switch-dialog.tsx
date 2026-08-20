@@ -11,10 +11,17 @@ import { Button } from "@/components/ui/button"
 import { Building2 } from "lucide-react"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { switchFirm } from '@/lib/actions/firms'
+import { firmPath } from '@/lib/navigation/firm-paths'
 
 interface FirmSwitchDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
+    /**
+     * Group the target firm lives in — a firm switch always targets a specific group's firm,
+     * so callers should always have this available (via FirmOption.groupSlug or their own
+     * route params). Optional only as a defensive fallback for malformed/stale data.
+     */
+    groupSlug?: string
     targetFirmSlug: string
     targetFirmName: string
     currentFirmName?: string
@@ -23,6 +30,7 @@ interface FirmSwitchDialogProps {
 export function FirmSwitchDialog({
     open,
     onOpenChange,
+    groupSlug,
     targetFirmSlug,
     targetFirmName,
     currentFirmName
@@ -53,7 +61,9 @@ export function FirmSwitchDialog({
             // switch happens, so router.push()/router.refresh() can serve that stale pre-switch
             // RSC payload for the target slug. A full page load guarantees a fresh request with
             // the refreshed session cookie and bypasses the router's prefetch cache entirely.
-            window.location.href = `/d/f/${targetFirmSlug}`
+            // Falls back to /d (resolves via resolveDefaultFirmLandingPath) on the rare chance
+            // a caller doesn't have groupSlug available — /d/f/... is no longer a valid route.
+            window.location.href = groupSlug ? firmPath(groupSlug, targetFirmSlug) : '/d'
         } catch (err: any) {
             setError(err.message || 'Failed to switch firm')
             setIsLoading(false)

@@ -8,15 +8,17 @@ import { MemberList } from './member-list'
 import { InviteMemberModal } from './invite-member-modal'
 import { logger } from '@/lib/logger'
 import { PersonaUiRole } from '@/lib/persona-ui-groups'
+import { firmSettingsPath } from '@/lib/navigation/firm-paths'
 
 interface EngagementMembersTabProps {
     projectId: string
+    groupSlug: string
     orgSlug: string
     canManage?: boolean
     clientConnectorId?: string | null
 }
 
-export function EngagementMembersTab({ projectId, orgSlug, canManage = false, clientConnectorId }: EngagementMembersTabProps) {
+export function EngagementMembersTab({ projectId, groupSlug, orgSlug, canManage = false, clientConnectorId }: EngagementMembersTabProps) {
     const [members, setMembers] = useState<any[]>([])
     const [invitations, setInvitations] = useState<any[]>([])
     const [personas, setPersonas] = useState<any[]>([])
@@ -109,7 +111,7 @@ export function EngagementMembersTab({ projectId, orgSlug, canManage = false, cl
                         </p>
                         {canManage && orgSlug && (
                             <a
-                                href={`/d/f/${orgSlug}?tab=settings&section=storage`}
+                                href={firmSettingsPath(groupSlug, orgSlug, 'storage')}
                                 className="inline-flex items-center gap-1.5 h-8 px-4 rounded bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:brightness-105 transition-all"
                             >
                                 Go to Document Storage

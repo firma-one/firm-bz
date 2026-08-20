@@ -5,11 +5,11 @@ import { ErrorBoundary } from '@/components/error-boundary'
 export default async function OrgAuditPage({
   params,
 }: {
-  params: Promise<{ slug: string }>
+  params: Promise<{ firmSlug: string }>
 }) {
-  const { slug } = await params
+  const { firmSlug } = await params
   const organization = await prisma.firm.findUnique({
-    where: { slug },
+    where: { slug: firmSlug },
     select: { id: true, name: true },
   })
   if (!organization) {

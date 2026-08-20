@@ -3,7 +3,7 @@ import { countBillableFirmsInBillingGroup } from '@/lib/billing/billing-group'
 import {
     anchorUsesSandboxCapDefaults,
     effectiveFirmGroupCapForAnchor,
-    loadAnchorForCaps,
+    loadAnchorForCapsByGroupId,
     type AnchorCapsRow,
 } from '@/lib/billing/effective-billing-caps'
 
@@ -14,7 +14,7 @@ function effectiveCustomFirmCap(anchor: AnchorCapsRow): number {
     return effectiveFirmGroupCapForAnchor(anchor)
 }
 
-export type EligibleGroup = { groupId: string; sandboxOnly: boolean }
+export type EligibleGroup = { groupId: string }
 
 /**
  * Groups where the user may add another firm (admin + under cap).
@@ -38,19 +38,10 @@ export async function getEligibleGroups(userId: string): Promise<EligibleGroup[]
             })
             if (!adminMembership) return null
 
-            // Find the sandbox firm in the group for cap checks
-            const sandboxFirm = await prisma.firm.findFirst({
-                where: { groupId, sandboxOnly: true, deletedAt: null },
-                select: { id: true, sandboxOnly: true },
-            })
-            if (!sandboxFirm) return null
-
-            const anchor = await loadAnchorForCaps(sandboxFirm.id)
-            if (!anchor) return null
-
+            const anchor = await loadAnchorForCapsByGroupId(groupId)
             const cap = effectiveCustomFirmCap(anchor)
             const used = await countBillableFirmsInBillingGroup(groupId)
-            if (used < cap) return { groupId, sandboxOnly: sandboxFirm.sandboxOnly }
+            if (used < cap) return { groupId }
             return null
         })
     )
@@ -104,15 +95,7 @@ export async function getFirmCreationGateReason(userId: string): Promise<FirmCre
             })
             if (!adminMembership) return null
 
-            const sandboxFirm = await prisma.firm.findFirst({
-                where: { groupId, sandboxOnly: true, deletedAt: null },
-                select: { id: true },
-            })
-            if (!sandboxFirm) return null
-
-            const anchor = await loadAnchorForCaps(sandboxFirm.id)
-            if (!anchor) return null
-
+            const anchor = await loadAnchorForCapsByGroupId(groupId)
             const cap = effectiveCustomFirmCap(anchor)
             const used = await countBillableFirmsInBillingGroup(groupId)
             return { cap, allowed: used < cap }

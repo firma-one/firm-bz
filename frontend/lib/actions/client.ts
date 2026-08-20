@@ -12,6 +12,7 @@ import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { upsertFollowUpReminder } from '@/lib/actions/user-reminders'
 import { assertWithinClientCap, assertWithinClientContactCap } from '@/lib/billing/effective-billing-caps'
 import { ClientLinkedFolderFailedError } from '@/lib/actions/client-errors'
+import { clientPath, firmPath } from '@/lib/navigation/firm-paths'
 
 export type LwCrmClientStatus = 'PROSPECT' | 'ACTIVE' | 'ON_HOLD' | 'PAST'
 
@@ -50,7 +51,8 @@ export async function createClient(organizationSlug: string, data: CreateClientD
     const firm = await prisma.firm.findUnique({
         where: { slug: organizationSlug },
         include: {
-            members: { where: { userId: user.id } }
+            members: { where: { userId: user.id } },
+            group: { select: { slug: true } }
         }
     })
 
@@ -203,7 +205,7 @@ export async function createClient(organizationSlug: string, data: CreateClientD
         dateValue: data.followUpDate ?? null,
         entityName: newClient.name,
         firmId: firm.id,
-        ctaUrl: `/d/f/${organizationSlug}/c/${newClient.slug}`,
+        ctaUrl: clientPath(firm.group.slug, organizationSlug, newClient.slug),
         note: data.internalMemo ?? null,
     }).catch(() => {})
     upsertFollowUpReminder({
@@ -215,11 +217,11 @@ export async function createClient(organizationSlug: string, data: CreateClientD
         dateValue: data.expectedCloseDate ?? null,
         entityName: newClient.name,
         firmId: firm.id,
-        ctaUrl: `/d/f/${organizationSlug}/c/${newClient.slug}`,
+        ctaUrl: clientPath(firm.group.slug, organizationSlug, newClient.slug),
         note: data.internalMemo ?? null,
     }).catch(() => {})
 
-    revalidatePath(`/d/f/${organizationSlug}`)
+    revalidatePath(firmPath(firm.group.slug, organizationSlug))
     return newClient
 }
 
@@ -259,7 +261,8 @@ export async function updateClient(
         where: { slug: organizationSlug },
         include: {
             members: { where: { userId: user.id } },
-            clients: { where: { slug: clientSlug }, select: { id: true, name: true } }
+            clients: { where: { slug: clientSlug }, select: { id: true, name: true } },
+            group: { select: { slug: true } }
         }
     })
     if (!firm || firm.members.length === 0) throw new Error('Unauthorized')
@@ -324,7 +327,7 @@ export async function updateClient(
         const activeStatuses = ['PROSPECT', 'ACTIVE']
         const isActive = activeStatuses.includes(latest?.status ?? '')
         const effectiveOwnerId = latest?.ownerId ?? null
-        const ctaUrl = `/d/f/${organizationSlug}/c/${latest?.slug ?? clientSlug}`
+        const ctaUrl = clientPath(firm.group.slug, organizationSlug, latest?.slug ?? clientSlug)
         const entityName = data.name ?? client.name
         if (effectiveOwnerId) {
             const memo = data.internalMemo !== undefined ? data.internalMemo : latest?.internalMemo ?? null
@@ -355,8 +358,8 @@ export async function updateClient(
         }
     }
 
-    revalidatePath(`/d/f/${organizationSlug}`)
-    revalidatePath(`/d/f/${organizationSlug}/c/${clientSlug}`)
+    revalidatePath(firmPath(firm.group.slug, organizationSlug))
+    revalidatePath(clientPath(firm.group.slug, organizationSlug, clientSlug))
 }
 
 export type ClientContactRecord = {
@@ -383,7 +386,8 @@ async function assertCanManageClient(organizationSlug: string, clientSlug: strin
         where: { slug: organizationSlug },
         include: {
             members: { where: { userId: user.id } },
-            clients: { where: { slug: clientSlug }, select: { id: true } }
+            clients: { where: { slug: clientSlug }, select: { id: true } },
+            group: { select: { slug: true } }
         }
     })
     if (!firm || firm.members.length === 0) throw new Error('Unauthorized')
@@ -394,7 +398,7 @@ async function assertCanManageClient(organizationSlug: string, clientSlug: strin
     const canManage = await canManageClient(firm.id, client.id)
     if (!canManage) throw new Error('Insufficient permissions')
 
-    return { firmId: firm.id, clientId: client.id }
+    return { firmId: firm.id, clientId: client.id, groupSlug: firm.group.slug }
 }
 
 export async function listClientContacts(organizationSlug: string, clientSlug: string): Promise<ClientContactRecord[]> {
@@ -447,7 +451,7 @@ export async function createClientContact(
     const supabase = await createSupabaseClient()
     const { data: { user }, error } = await supabase.auth.getUser()
     if (error || !user) throw new Error('Unauthorized')
-    const { firmId, clientId } = await assertCanManageClient(organizationSlug, clientSlug)
+    const { firmId, clientId, groupSlug } = await assertCanManageClient(organizationSlug, clientSlug)
     if (!data.name?.trim()) throw new Error('Name is required')
     await assertWithinClientContactCap(firmId)
 
@@ -475,7 +479,7 @@ export async function createClientContact(
         .meta({ contactId: contact.id, contactName: data.name.trim() })
         .fireAndForget()
 
-    revalidatePath(`/d/f/${organizationSlug}/c/${clientSlug}`)
+    revalidatePath(clientPath(groupSlug, organizationSlug, clientSlug))
 }
 
 export async function updateClientContact(
@@ -487,7 +491,7 @@ export async function updateClientContact(
     const supabase = await createSupabaseClient()
     const { data: { user }, error } = await supabase.auth.getUser()
     if (error || !user) throw new Error('Unauthorized')
-    const { firmId: updateFirmId, clientId: updateClientId } = await assertCanManageClient(organizationSlug, clientSlug)
+    const { firmId: updateFirmId, clientId: updateClientId, groupSlug: updateGroupSlug } = await assertCanManageClient(organizationSlug, clientSlug)
 
     await prisma.clientContact.update({
         where: { id: contactId },
@@ -511,14 +515,14 @@ export async function updateClientContact(
         .meta({ contactId, changedFields: Object.keys(data) })
         .fireAndForget()
 
-    revalidatePath(`/d/f/${organizationSlug}/c/${clientSlug}`)
+    revalidatePath(clientPath(updateGroupSlug, organizationSlug, clientSlug))
 }
 
 export async function deleteClientContact(organizationSlug: string, clientSlug: string, contactId: string): Promise<void> {
     const supabase = await createSupabaseClient()
     const { data: { user }, error } = await supabase.auth.getUser()
     if (error || !user) throw new Error('Unauthorized')
-    const { firmId: delFirmId, clientId: delClientId } = await assertCanManageClient(organizationSlug, clientSlug)
+    const { firmId: delFirmId, clientId: delClientId, groupSlug: delGroupSlug } = await assertCanManageClient(organizationSlug, clientSlug)
 
     audit(AUDIT_EVENT.CLIENT_CONTACT_DELETED)
         .scope(AUDIT_SCOPE.CLIENT)
@@ -529,21 +533,21 @@ export async function deleteClientContact(organizationSlug: string, clientSlug: 
         .fireAndForget()
 
     await prisma.clientContact.delete({ where: { id: contactId } })
-    revalidatePath(`/d/f/${organizationSlug}/c/${clientSlug}`)
+    revalidatePath(clientPath(delGroupSlug, organizationSlug, clientSlug))
 }
 
 export async function setClientContactPrimary(organizationSlug: string, clientSlug: string, contactId: string): Promise<void> {
     const supabase = await createSupabaseClient()
     const { data: { user }, error } = await supabase.auth.getUser()
     if (error || !user) throw new Error('Unauthorized')
-    const { clientId } = await assertCanManageClient(organizationSlug, clientSlug)
+    const { clientId, groupSlug } = await assertCanManageClient(organizationSlug, clientSlug)
 
     await prisma.$transaction([
         prisma.clientContact.updateMany({ where: { clientId }, data: { isPrimary: false } }),
         prisma.clientContact.update({ where: { id: contactId }, data: { isPrimary: true } }),
     ])
 
-    revalidatePath(`/d/f/${organizationSlug}/c/${clientSlug}`)
+    revalidatePath(clientPath(groupSlug, organizationSlug, clientSlug))
 }
 
 /**
@@ -558,7 +562,8 @@ export async function deleteClient(organizationSlug: string, clientSlug: string)
         where: { slug: organizationSlug },
         include: {
             members: { where: { userId: user.id } },
-            clients: { where: { slug: clientSlug }, select: { id: true } }
+            clients: { where: { slug: clientSlug }, select: { id: true } },
+            group: { select: { slug: true } }
         }
     })
 
@@ -582,7 +587,7 @@ export async function deleteClient(organizationSlug: string, clientSlug: string)
         where: { id: client.id }
     })
 
-    revalidatePath(`/d/f/${organizationSlug}`)
+    revalidatePath(firmPath(firm.group.slug, organizationSlug))
 }
 
 // ── Connector sharing actions ──────────────────────────────────────────────

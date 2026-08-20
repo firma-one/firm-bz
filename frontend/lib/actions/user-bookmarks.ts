@@ -18,6 +18,7 @@ export type BookmarkWithContext = {
   clientName?: string
   clientSlug?: string
   firmSlug?: string
+  groupSlug?: string
 }
 
 export async function getUserBookmarks(): Promise<BookmarkWithContext[]> {
@@ -42,7 +43,7 @@ export async function getUserBookmarks(): Promise<BookmarkWithContext[]> {
           id: true,
           name: true,
           slug: true,
-          client: { select: { name: true, slug: true, firm: { select: { slug: true } } } },
+          client: { select: { name: true, slug: true, firm: { select: { slug: true, group: { select: { slug: true } } } } } },
         },
       })
     : []
@@ -65,6 +66,7 @@ export async function getUserBookmarks(): Promise<BookmarkWithContext[]> {
       clientName: eng?.client?.name,
       clientSlug: eng?.client?.slug,
       firmSlug: eng?.client?.firm?.slug,
+      groupSlug: eng?.client?.firm?.group?.slug,
     }
   })
 }

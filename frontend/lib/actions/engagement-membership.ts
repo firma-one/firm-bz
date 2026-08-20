@@ -14,13 +14,14 @@ import { mergeLeanAppMetadata } from '@/lib/auth/supabase-jwt-metadata'
 import { getPermissionAdapter } from '@/lib/connectors/registry'
 import { resolveEngagementConnectorId } from '@/lib/connectors/resolve-client-connector'
 import { Prisma } from '@prisma/client'
+import { engagementPath } from '@/lib/navigation/firm-paths'
 
 type EngagementInvitationWithRelations = Prisma.EngagementInvitationGetPayload<{
     include: {
         persona: true
         engagement: {
             include: {
-                client: { include: { firm: true } }
+                client: { include: { firm: { include: { group: { select: { slug: true } } } } } }
             }
         }
     }
@@ -186,7 +187,13 @@ export async function joinEngagementForUser(
     }
 
     return {
-        redirectUrl: `/d/f/${invite.engagement.client.firm.slug}/c/${invite.engagement.client.slug}/e/${invite.engagement.slug}/files`,
+        redirectUrl: engagementPath(
+            invite.engagement.client.firm.group.slug,
+            invite.engagement.client.firm.slug,
+            invite.engagement.client.slug,
+            invite.engagement.slug,
+            { tab: 'files' }
+        ),
         newEngagementMemberCreated,
     }
 }

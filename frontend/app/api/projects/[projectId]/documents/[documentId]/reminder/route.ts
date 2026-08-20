@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { resolveProjectContext } from '@/lib/resolve-project-context'
 import { canViewProject } from '@/lib/permission-helpers'
 import { upsertFollowUpReminder } from '@/lib/actions/user-reminders'
+import { engagementDocFilePath } from '@/lib/navigation/firm-paths'
 
 /**
  * POST /api/projects/[projectId]/documents/[documentId]/reminder
@@ -45,8 +46,9 @@ export async function POST(
 
     const engDetails = await prisma.engagement.findUnique({
       where: { id: projectId },
-      select: { slug: true, client: { select: { slug: true, firm: { select: { slug: true } } } } },
+      select: { slug: true, client: { select: { slug: true, firm: { select: { slug: true, group: { select: { slug: true } } } } } } },
     })
+    const groupSlug = engDetails?.client?.firm?.group?.slug ?? ''
     const firmSlug = engDetails?.client?.firm?.slug ?? ''
     const clientSlug = engDetails?.client?.slug ?? ''
     const engSlug = engDetails?.slug ?? ''
@@ -60,8 +62,8 @@ export async function POST(
       dateValue: dateValue,
       entityName: doc.fileName ?? 'Document',
       firmId: ctx.firmId,
-      ctaUrl: firmSlug && clientSlug && engSlug
-        ? `/d/f/${firmSlug}/c/${clientSlug}/e/${engSlug}/files#doc-file:${doc.id}`
+      ctaUrl: groupSlug && firmSlug && clientSlug && engSlug
+        ? engagementDocFilePath(groupSlug, firmSlug, clientSlug, engSlug, doc.id)
         : null,
     })
 

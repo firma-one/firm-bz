@@ -9,17 +9,20 @@ import { OneDriveIcon } from '@/components/ui/onedrive-icon'
 import { SharePointIcon } from '@/components/ui/sharepoint-icon'
 import { useAuth } from '@/lib/auth-context'
 import { useRouter } from 'next/navigation'
+import { firmSettingsPath } from '@/lib/navigation/firm-paths'
 
 type ClientDriveSectionProps = {
   connectorId: string | null
   clientId: string
   firmId: string
+  groupSlug: string
   orgSlug: string
   isSandboxFirm?: boolean
 }
 
 export function ClientDriveSection({
   connectorId,
+  groupSlug,
   orgSlug,
 }: ClientDriveSectionProps) {
   const router = useRouter()
@@ -123,7 +126,7 @@ export function ClientDriveSection({
             variant="outline"
             size="sm"
             className="h-7 px-2 text-xs border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] gap-1 shrink-0 rounded"
-            onClick={() => router.push(`/d/f/${orgSlug}?tab=settings&section=storage`)}
+            onClick={() => router.push(firmSettingsPath(groupSlug, orgSlug, 'storage'))}
           >
             <ExternalLink className="w-3 h-3" />
             Manage
@@ -144,7 +147,7 @@ export function ClientDriveSection({
             variant="outline"
             size="sm"
             className="h-7 px-2 text-xs border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] gap-1 shrink-0 rounded"
-            onClick={() => router.push(`/d/f/${orgSlug}?tab=settings&section=storage`)}
+            onClick={() => router.push(firmSettingsPath(groupSlug, orgSlug, 'storage'))}
           >
             <ExternalLink className="w-3 h-3" />
             Manage

@@ -19,8 +19,10 @@ import { SandboxInfoBanner } from "@/components/ui/sandbox-info-banner"
 import { DateTimePicker } from "@/components/ui/date-time-picker"
 import { createProject, type LwCrmEngagementStatus } from '@/lib/actions/project'
 import { useOrgSandbox } from '@/lib/use-org-sandbox'
+import { clientTabPath } from '@/lib/navigation/firm-paths'
 
 interface AddEngagementModalProps {
+    groupSlug: string
     firmSlug: string
     clientSlug: string
     firmSandboxOnly?: boolean
@@ -31,7 +33,7 @@ interface AddEngagementModalProps {
 const fieldLabel = 'font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] block mb-1'
 const inputCls = 'border-[#e5e7eb] text-[#1b1b1d] text-xs font-normal placeholder:text-[#9a9ba0] rounded focus-visible:ring-1 focus-visible:ring-primary focus-visible:border-primary disabled:opacity-50 disabled:cursor-not-allowed'
 
-export function AddEngagementModal({ firmSlug, clientSlug, firmSandboxOnly = false, trigger, onSaved }: AddEngagementModalProps) {
+export function AddEngagementModal({ groupSlug, firmSlug, clientSlug, firmSandboxOnly = false, trigger, onSaved }: AddEngagementModalProps) {
     const [open, setOpen] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
     const [name, setName] = useState('')
@@ -162,7 +164,7 @@ export function AddEngagementModal({ firmSlug, clientSlug, firmSandboxOnly = fal
             setInternalMemo('')
             setError(null)
             setShowOptional(false)
-            router.push(`/d/f/${firmSlug}/c/${clientSlug}?tab=projects`, { scroll: false })
+            router.push(clientTabPath(groupSlug, firmSlug, clientSlug, 'projects'), { scroll: false })
             onSaved?.()
         } catch (error: any) {
             console.error(error)

@@ -7,9 +7,11 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { formatDistanceToNow } from 'date-fns'
 import { useBranding } from '@/lib/use-branding'
+import { clientPath } from '@/lib/navigation/firm-paths'
 
 interface ClientListProps {
     clients: ClientSummary[]
+    groupSlug: string
     orgSlug: string
     viewMode?: 'grid' | 'list'
     isRefreshing?: boolean
@@ -59,7 +61,7 @@ function getFollowUpChip(followUpDate: Date | null): { label: string; cls: strin
     }
 }
 
-export function ClientList({ clients, orgSlug, viewMode = 'grid', isRefreshing = false }: ClientListProps) {
+export function ClientList({ clients, groupSlug, orgSlug, viewMode = 'grid', isRefreshing = false }: ClientListProps) {
     const router = useRouter()
     const firmBranding = useBranding()
     const firmAccent = firmBranding?.themeColor && /^#[0-9A-Fa-f]{6}$/.test(firmBranding.themeColor) ? firmBranding.themeColor : null
@@ -101,7 +103,7 @@ export function ClientList({ clients, orgSlug, viewMode = 'grid', isRefreshing =
                         {clients.map((client) => (
                             <tr key={client.id} className="group hover:bg-[#f3f4f6] transition-colors">
                                 <td className="px-4 py-3">
-                                    <Link href={`/d/f/${orgSlug}/c/${client.slug}`} className="flex items-center gap-3">
+                                    <Link href={clientPath(groupSlug, orgSlug, client.slug)} className="flex items-center gap-3">
                                         <div className="h-8 w-8 bg-[#f3f4f6] text-[#45474c] rounded flex items-center justify-center">
                                             <Users className="h-4 w-4" />
                                         </div>
@@ -161,7 +163,7 @@ export function ClientList({ clients, orgSlug, viewMode = 'grid', isRefreshing =
                 return (
                 <Link
                     key={client.id}
-                    href={`/d/f/${orgSlug}/c/${client.slug}`}
+                    href={clientPath(groupSlug, orgSlug, client.slug)}
                     className={`group relative bg-white rounded overflow-hidden shadow-md hover:shadow-lg transition-all duration-200 flex flex-col h-48 ${client.status === 'PROSPECT' ? 'border border-dashed border-[#e5e7eb] hover:border-[#d1d5db]' : 'border border-[#e5e7eb] hover:border-[#d1d5db]'}`}
                 >
                     {/* Brand color corner cut — bottom-right triangle */}

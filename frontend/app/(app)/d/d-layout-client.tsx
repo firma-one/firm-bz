@@ -36,7 +36,7 @@ import { DemoTourButton } from '@/components/app/demo-tour-button'
 
 const TOP_BAR_HEIGHT = 64
 
-function DemoTourShell({ firmSlug }: { firmSlug: string }) {
+function DemoTourShell({ firmSlug, groupSlug }: { firmSlug: string; groupSlug: string }) {
     const { openIntroModal } = useDemoTour()
     const hasOpenedRef = useRef(false)
 
@@ -49,16 +49,16 @@ function DemoTourShell({ firmSlug }: { firmSlug: string }) {
         if (tourSeen && !savedProgress) return
         // Either: tour not yet seen (first time), OR seen + has in-progress step to resume
         hasOpenedRef.current = true
-        const timer = setTimeout(() => { void openIntroModal(firmSlug) }, 800)
+        const timer = setTimeout(() => { void openIntroModal(firmSlug, groupSlug) }, 800)
         return () => clearTimeout(timer)
-    }, [firmSlug, openIntroModal])
+    }, [firmSlug, groupSlug, openIntroModal])
 
     return (
         <>
             <DemoTour />
             <DemoTourIntroModal />
             <DemoTourOutroModal />
-            <DemoTourButton firmSlug={firmSlug} />
+            <DemoTourButton firmSlug={firmSlug} groupSlug={groupSlug} />
         </>
     )
 }
@@ -97,8 +97,9 @@ function AppLayoutContent({ children, isSystemAdmin }: { children: React.ReactNo
 
     const sidebarWidth = isCollapsed ? 64 : 256
 
-    const slugMatch = pathname?.match(/^\/d\/f\/([^/]+)/)
-    const currentSlug = slugMatch?.[1] ?? null
+    const routeMatch = pathname?.match(/^\/d\/([^/]+)\/f\/([^/]+)/)
+    const currentGroupSlug = routeMatch?.[1] ?? null
+    const currentSlug = routeMatch?.[2] ?? null
     const currentFirm = currentSlug ? (firms?.find((f) => f.slug === currentSlug) ?? null) : null
     const currentFirmId = currentFirm?.id ?? null
     const isDemoFirm = currentFirm?.sandboxOnly === true
@@ -275,7 +276,7 @@ function AppLayoutContent({ children, isSystemAdmin }: { children: React.ReactNo
 
                 <OnboardingExitGuardBanner />
                 <DebugFloatingTrigger />
-                {isDemoFirm && currentSlug && <DemoTourShell firmSlug={currentSlug} />}
+                {isDemoFirm && currentSlug && currentGroupSlug && <DemoTourShell firmSlug={currentSlug} groupSlug={currentGroupSlug} />}
                 <MigrationProgressPanel
                     status={maintenanceStatus}
                     migrationStartedAt={migrationStartedAt}
@@ -296,7 +297,7 @@ export function DLayoutClient({
     isSystemAdmin,
 }: {
     children: React.ReactNode
-    initialFirms: { id: string; name: string; slug: string; isDefault: boolean; createdAt: string; sandboxOnly?: boolean }[]
+    initialFirms: { id: string; name: string; slug: string; isDefault: boolean; createdAt: string; sandboxOnly?: boolean; groupSlug?: string | null }[]
     isSystemAdmin?: boolean
 }) {
     return (

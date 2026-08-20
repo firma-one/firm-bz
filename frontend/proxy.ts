@@ -87,20 +87,24 @@ export async function proxy(request: NextRequest) {
     }
 
     // Firm-level maintenance mode: check DB via an internal API fetch for authenticated users
-    // navigating to a firm workspace route (/d/f/<slug>/...).
+    // navigating to a firm workspace route (/d/<groupSlug>/f/<firmSlug>/...).
     // We can't import Prisma directly at the edge, so we call an internal Node.js
-    // API route (/api/firm/maintenance-by-slug) that does the DB lookup.
+    // API route (/api/firm/maintenance-by-slug) that does the DB lookup — it also returns
+    // groupSlug so we can build the /d/{groupSlug}/f/{firmSlug}/maintenance redirect without
+    // a second lookup here. Not importing lib/navigation/firm-paths.ts in this file since its
+    // shape (plain string builders) offers no benefit over a literal here, and importing app
+    // code into proxy/middleware is avoided to keep the Edge bundle minimal.
     // This check is non-blocking — a fetch failure never prevents navigation.
-    const slugMatch = pathname.match(/^\/d\/f\/([^/]+)/)
+    const slugMatch = pathname.match(/^\/d\/[^/]+\/f\/([^/]+)/)
     if (user && slugMatch && !pathname.includes('/maintenance') && !pathname.startsWith('/api/')) {
         try {
             const slug = slugMatch[1]
             const checkUrl = new URL(`/api/firm/maintenance-by-slug?slug=${encodeURIComponent(slug)}`, request.url)
             const checkRes = await fetch(checkUrl, { headers: { 'x-internal': '1' } })
             if (checkRes.ok) {
-                const { active } = await checkRes.json() as { active: boolean }
-                if (active) {
-                    return NextResponse.redirect(new URL(`/d/f/${slug}/maintenance`, request.url))
+                const { active, groupSlug } = await checkRes.json() as { active: boolean; groupSlug?: string }
+                if (active && groupSlug) {
+                    return NextResponse.redirect(new URL(`/d/${groupSlug}/f/${slug}/maintenance`, request.url))
                 }
             }
         } catch { /* non-blocking — never block navigation on maintenance check failure */ }

@@ -15,6 +15,7 @@ import { assertWithinDeliverableCap } from '@/lib/billing/effective-billing-caps
 import { SubscriptionRevokedError } from '@/lib/errors/api-error'
 import { assignDocId } from '@/lib/doc-id'
 import { DocumentSharingPermissionStatus, EngagementRole } from '@prisma/client'
+import { engagementPath } from '@/lib/navigation/firm-paths'
 
 /** ProjectDocument can contain BigInt (fileSize); JSON.stringify cannot serialize it. */
 function toJsonSafeSharing(doc: Record<string, unknown> | null): Record<string, unknown> | null {
@@ -609,8 +610,9 @@ export async function PUT(
 
           const engDetails = await prisma.engagement.findUnique({
             where: { id: projectId },
-            select: { slug: true, client: { select: { slug: true, firm: { select: { slug: true } } } } },
+            select: { slug: true, client: { select: { slug: true, firm: { select: { slug: true, group: { select: { slug: true } } } } } } },
           })
+          const groupSlug = engDetails?.client?.firm?.group?.slug ?? ''
           const firmSlug = engDetails?.client?.firm?.slug ?? ''
           const clientSlug = engDetails?.client?.slug ?? ''
           const engSlug = engDetails?.slug ?? ''
@@ -625,8 +627,8 @@ export async function PUT(
               dateValue: null,
               entityName: updated.fileName ?? 'Shared document',
               firmId: fileInfo.organizationId,
-              ctaUrl: firmSlug && clientSlug && engSlug
-                ? `/d/f/${firmSlug}/c/${clientSlug}/e/${engSlug}/files`
+              ctaUrl: groupSlug && firmSlug && clientSlug && engSlug
+                ? engagementPath(groupSlug, firmSlug, clientSlug, engSlug, { tab: 'files' })
                 : null,
             }).catch(() => {})
           }

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter, usePathname } from 'next/navigation'
+import { useRouter, usePathname, useParams } from 'next/navigation'
 import { Building2, ArrowRight, Loader2, SquarePlus, Box, Home, ChevronRight, LayoutGrid } from 'lucide-react'
 import { getDomainOnboardingOptionsForCurrentUser, joinOrganizationByDomain, type DomainOnboardingOptions, type DomainOrgOption } from '@/lib/actions/domain-onboarding'
 import { getUserFirms, getIsAdminOnAnyFirm, type FirmOption } from '@/lib/actions/firms'
@@ -11,10 +11,12 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AddFirmModal } from '@/components/projects/add-firm-modal'
 import { FirmSwitchDialog } from '@/components/projects/firm-switch-dialog'
+import { firmPath } from '@/lib/navigation/firm-paths'
 
 export default function WorkspacePickerPage() {
     const router = useRouter()
     const pathname = usePathname()
+    const { groupSlug } = useParams<{ groupSlug: string }>()
     const [firms, setFirms] = useState<FirmOption[]>([])
     const [domainOptions, setDomainOptions] = useState<DomainOnboardingOptions | null>(null)
     const [isAdminOnAnyFirm, setIsAdminOnAnyFirm] = useState(false)
@@ -25,7 +27,7 @@ export default function WorkspacePickerPage() {
     const [switchDialogOpen, setSwitchDialogOpen] = useState(false)
     const [targetOrg, setTargetOrg] = useState<{ slug: string; name: string } | null>(null)
 
-    const currentOrgSlug = pathname?.match(/^\/d\/f\/([^/]+)/)?.[1] ?? null
+    const currentOrgSlug = pathname?.match(/^\/d\/[^/]+\/f\/([^/]+)/)?.[1] ?? null
 
     useEffect(() => {
         async function load() {
@@ -58,7 +60,7 @@ export default function WorkspacePickerPage() {
             setTargetOrg({ slug: firm.slug, name: firm.name })
             setSwitchDialogOpen(true)
         } else {
-            router.push(`/d/f/${firm.slug}`)
+            router.push(firmPath(groupSlug, firm.slug))
         }
     }
 
@@ -67,7 +69,7 @@ export default function WorkspacePickerPage() {
         setJoinError(null)
         const result = await joinOrganizationByDomain(org.id)
         if (result.ok) {
-            router.push(`/d/f/${result.slug}`)
+            router.push(firmPath(groupSlug, result.slug))
         } else {
             setJoinError(result.error)
             setJoiningId(null)
@@ -251,6 +253,7 @@ export default function WorkspacePickerPage() {
                 <FirmSwitchDialog
                     open={switchDialogOpen}
                     onOpenChange={setSwitchDialogOpen}
+                    groupSlug={groupSlug}
                     targetFirmSlug={targetOrg.slug}
                     targetFirmName={targetOrg.name}
                     currentFirmName={firms.find(f => f.slug === currentOrgSlug)?.name}

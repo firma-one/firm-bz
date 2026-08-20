@@ -196,13 +196,13 @@ function injectBrandCssVars(branding: OrganizationBranding | null): SessionBrand
   return payload
 }
 
-function DemoTourTopbarButton({ firmSlug }: { firmSlug: string }) {
+function DemoTourTopbarButton({ firmSlug, groupSlug }: { firmSlug: string; groupSlug: string }) {
   const { run, restartTour } = useDemoTour()
   return (
     <Tip label={run ? "Tour in progress" : "Start guided tour"} position="bottom">
       <button
         type="button"
-        onClick={() => { if (!run) void restartTour(firmSlug) }}
+        onClick={() => { if (!run) void restartTour(firmSlug, groupSlug) }}
         disabled={run}
         className="w-10 h-10 flex items-center justify-center rounded-xl text-primary hover:bg-primary/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         aria-label="Start guided tour"
@@ -254,21 +254,22 @@ export function AppTopbar() {
 
   const parsePathContext = useCallback(() => {
     const path = pathname ?? ''
-    const orgMatch = path.match(/^\/d\/(?:o|f)\/([^/]+)/)
-    const orgSlug = orgMatch?.[1] ?? null
-    const clientMatch = path.match(/^\/d\/(?:o|f)\/[^/]+\/c\/([^/]+)/)
+    const orgMatch = path.match(/^\/d\/([^/]+)\/f\/([^/]+)/)
+    const groupSlug = orgMatch?.[1] ?? null
+    const orgSlug = orgMatch?.[2] ?? null
+    const clientMatch = path.match(/^\/d\/[^/]+\/f\/[^/]+\/c\/([^/]+)/)
     const clientSlug = clientMatch?.[1] ?? null
-    const projectMatch = path.match(/^\/d\/(?:o|f)\/[^/]+\/c\/[^/]+\/p\/([^/]+)/)
+    const projectMatch = path.match(/^\/d\/[^/]+\/f\/[^/]+\/c\/[^/]+\/p\/([^/]+)/)
     const projectSlug = projectMatch?.[1] ?? null
-    return { orgSlug, clientSlug, projectSlug }
+    return { groupSlug, orgSlug, clientSlug, projectSlug }
   }, [pathname])
 
-  // Extract firm slug from pathname — handles both /d/o/{slug} and /d/f/{slug}
+  // Extract group + firm slug from pathname — /d/{groupSlug}/f/{firmSlug}
   const getSlug = () => {
-    const match = pathname?.match(/^\/d\/(?:o|f)\/([^/]+)/)
-    return match ? match[1] : null
+    const match = pathname?.match(/^\/d\/([^/]+)\/f\/([^/]+)/)
+    return match ? { groupSlug: match[1], firmSlug: match[2] } : { groupSlug: null, firmSlug: null }
   }
-  const slug = getSlug()
+  const { groupSlug, firmSlug: slug } = getSlug()
   const isDemoFirm = slug ? (firms?.find((f) => f.slug === slug)?.sandboxOnly === true) : false
 
   const [recentItems, setRecentItems] = useState<{ type: string; name: string; href: string; visitedAt: number }[]>([])
@@ -288,7 +289,7 @@ export function AppTopbar() {
   }, [pathname, slug])
 
   // Extract client slug from pathname for client brand overlay
-  const clientSlug = pathname?.match(/^\/d\/(?:o|f)\/[^/]+\/c\/([^/]+)/)?.[1] ?? null
+  const clientSlug = pathname?.match(/^\/d\/[^/]+\/f\/[^/]+\/c\/([^/]+)/)?.[1] ?? null
 
   // Load firm branding + optional client brand overlay with caching
   useEffect(() => {
@@ -635,7 +636,7 @@ export function AppTopbar() {
 
       {/* Right: Utility actions — w-64, justify-end */}
       <div className="w-64 shrink-0 flex items-center justify-end gap-1 pr-4">
-        {isDemoFirm && slug && <DemoTourTopbarButton firmSlug={slug} />}
+        {isDemoFirm && slug && groupSlug && <DemoTourTopbarButton firmSlug={slug} groupSlug={groupSlug} />}
         <div data-demo-tour="topbar-reminders">
           <RemindersPanel />
         </div>

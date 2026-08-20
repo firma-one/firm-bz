@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { firmSettingsPath } from '@/lib/navigation/firm-paths'
 
 /**
  * Previously an unconditional redirect to the bare firm page — a dead URL with no linkable
@@ -7,7 +8,7 @@ import { redirect } from 'next/navigation'
  * ?section=storage (see components/projects/firm-clients-view.tsx's initialSection wiring). This
  * route now lands directly on that section instead of the settings page's default view.
  */
-export default async function ConnectorsRedirect({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params
-  redirect(`/d/f/${slug}?tab=settings&section=storage`)
+export default async function ConnectorsRedirect({ params }: { params: Promise<{ groupSlug: string; firmSlug: string }> }) {
+  const { groupSlug, firmSlug } = await params
+  redirect(firmSettingsPath(groupSlug, firmSlug, 'storage'))
 }

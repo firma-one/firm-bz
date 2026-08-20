@@ -3,6 +3,7 @@ import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { resolveProjectContext } from '@/lib/resolve-project-context'
 import { canViewProject } from '@/lib/permission-helpers'
+import { engagementPath, engagementDocFilePath, engagementDocCommentPath } from '@/lib/navigation/firm-paths'
 
 type DeeplinkKind = 'project' | 'document' | 'comment'
 
@@ -36,30 +37,37 @@ export async function GET(request: NextRequest) {
       client: {
         select: {
           slug: true,
-          firm: { select: { slug: true } },
+          firm: { select: { slug: true, group: { select: { slug: true } } } },
         },
       },
     },
   })
-  if (!project?.client?.firm?.slug || !project.client.slug || !project.slug) {
+  if (!project?.client?.firm?.group?.slug || !project.client.firm.slug || !project.client.slug || !project.slug) {
     return NextResponse.json({ error: 'Project not found' }, { status: 404 })
   }
 
-  const base = `/d/f/${project.client.firm.slug}/c/${project.client.slug}/e/${project.slug}`
+  const groupSlug = project.client.firm.group.slug
+  const firmSlug = project.client.firm.slug
+  const clientSlug = project.client.slug
+  const engSlug = project.slug
 
   if (kind === 'project') {
-    return NextResponse.json({ url: `${base}/files` })
+    return NextResponse.json({ url: engagementPath(groupSlug, firmSlug, clientSlug, engSlug, { tab: 'files' }) })
   }
 
   if (!documentId) return badRequest('Missing documentId')
 
   if (kind === 'document') {
-    return NextResponse.json({ url: `${base}/files#doc-file:${documentId}` })
+    return NextResponse.json({ url: engagementDocFilePath(groupSlug, firmSlug, clientSlug, engSlug, documentId) })
   }
 
   if (kind === 'comment') {
-    const hash = commentId ? `doc-comment:${documentId}:${commentId}` : `doc-comment:${documentId}`
-    return NextResponse.json({ url: `${base}/files#${hash}` })
+    if (commentId) {
+      return NextResponse.json({ url: engagementDocCommentPath(groupSlug, firmSlug, clientSlug, engSlug, documentId, commentId) })
+    }
+    return NextResponse.json({
+      url: engagementPath(groupSlug, firmSlug, clientSlug, engSlug, { tab: 'files', hash: `doc-comment:${documentId}` }),
+    })
   }
 
   return badRequest('Invalid kind')

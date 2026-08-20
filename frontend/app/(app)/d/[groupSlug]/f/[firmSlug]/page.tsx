@@ -2,10 +2,10 @@ import { getClients } from "@/lib/actions/hierarchy"
 import { basePrisma } from "@/lib/prisma"
 import { FirmClientsView } from "@/components/projects/firm-clients-view"
 
-export default async function FirmPage({ params }: { params: Promise<{ slug: string }> }) {
-    const { slug } = await params
+export default async function FirmPage({ params }: { params: Promise<{ groupSlug: string; firmSlug: string }> }) {
+    const { groupSlug, firmSlug } = await params
 
-    const { clients, firmId, firmSandboxOnly, firmBetaFeatures } = await getClients(slug)
+    const { clients, firmId, firmSandboxOnly, firmBetaFeatures } = await getClients(firmSlug)
 
     let memberCount = 0
     let auditCount = 0
@@ -24,7 +24,8 @@ export default async function FirmPage({ params }: { params: Promise<{ slug: str
         <div className="h-full flex flex-col">
             <FirmClientsView
                 clients={clients}
-                orgSlug={slug}
+                groupSlug={groupSlug}
+                orgSlug={firmSlug}
                 orgId={firmId ?? undefined}
                 firmSandboxOnly={firmSandboxOnly}
                 memberCount={memberCount}

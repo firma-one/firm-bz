@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { usePathname, useRouter } from "next/navigation"
+import { usePathname, useRouter, useParams } from "next/navigation"
 import {
   Users,
   BarChart3,
@@ -39,7 +39,12 @@ type CommandItem = {
 }
 
 function getSlugFromPath(pathname: string): string | null {
-  const m = pathname.match(/^\/d\/f\/([^/]+)/)
+  const m = pathname.match(/^\/d\/[^/]+\/f\/([^/]+)/)
+  return m?.[1] ?? null
+}
+
+function getGroupSlugFromPath(pathname: string): string | null {
+  const m = pathname.match(/^\/d\/([^/]+)\/f\/[^/]+/)
   return m?.[1] ?? null
 }
 
@@ -57,8 +62,11 @@ function getLastKnownSlug(pathname: string): string | null {
   return null
 }
 
-function buildItems(firmSlug: string | null, canManageOrg: boolean): CommandItem[] {
-  const firmBase = firmSlug ? `/d/f/${firmSlug}` : null
+// When firmSlug is resolved via the sessionStorage fallback (branding cache has no group
+// companion key), there's no last-known group to pair it with — fall back to the group-less
+// firm-scoped items being unavailable rather than a dead /d/f/ URL.
+function buildItems(firmSlug: string | null, groupSlug: string | null, canManageOrg: boolean): CommandItem[] {
+  const firmBase = firmSlug && groupSlug ? `/d/${groupSlug}/f/${firmSlug}` : null
 
   const items: CommandItem[] = []
 
@@ -182,6 +190,7 @@ export function CommandPalette({ onOpenChange }: { onOpenChange?: (open: boolean
   const [canManageOrg, setCanManageOrg] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
+  const routeParams = useParams<{ groupSlug?: string }>()
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
 
@@ -194,6 +203,11 @@ export function CommandPalette({ onOpenChange }: { onOpenChange?: (open: boolean
   useEffect(() => {
     setFirmSlug(getLastKnownSlug(pathname ?? ""))
   }, [pathname])
+
+  // groupSlug: prefer route params (reliable while inside the group-scoped firm tree), else
+  // regex-parse the current pathname. No sessionStorage fallback exists for group (see TODO
+  // on buildItems above) so firmSlug resolved via that path renders legacy /d/f/ links.
+  const groupSlug = routeParams?.groupSlug ?? getGroupSlugFromPath(pathname ?? "")
 
   // Fetch role whenever firm slug is resolved
   useEffect(() => {
@@ -224,7 +238,7 @@ export function CommandPalette({ onOpenChange }: { onOpenChange?: (open: boolean
     group: "Recent",
   }))
 
-  const allItems = [...recentCommandItems, ...buildItems(firmSlug, canManageOrg)]
+  const allItems = [...recentCommandItems, ...buildItems(firmSlug, groupSlug, canManageOrg)]
 
   const filtered = query.trim()
     ? allItems.filter(

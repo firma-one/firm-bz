@@ -10,8 +10,9 @@ const INVOKE_PATH_HEADER = 'x-invoke-path'
 
 /**
  * Server layout: loads firms for the shell; for the bare `/d` entry only, redirects to the
- * resolved workspace (`/d/f/{slug}`) or `/d/onboarding` when workspace setup is incomplete.
- * Child routes (`/d/onboarding`, `/d/billing`, `/d/f/...`) are unchanged.
+ * resolved workspace (`/d/{groupSlug}/f/{firmSlug}`) or `/d/onboarding` when workspace setup
+ * is incomplete. Child routes (`/d/onboarding`, `/d/billing`, `/d/{groupSlug}/f/...`) are
+ * unchanged.
  */
 export default async function DLayout({
     children,

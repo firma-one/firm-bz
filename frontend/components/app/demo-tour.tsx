@@ -7,8 +7,8 @@ import { useDemoTour, saveTourProgress } from "@/lib/demo-tour-context"
 
 // ─── Step definitions ────────────────────────────────────────────────────────
 
-function makeSteps(firmSlug: string, clientSlug: string | null, engSlug: string | null) {
-  const firm = `/d/f/${firmSlug}`
+function makeSteps(firmSlug: string, groupSlug: string, clientSlug: string | null, engSlug: string | null) {
+  const firm = `/d/${groupSlug}/f/${firmSlug}`
   const client = clientSlug ? `${firm}/c/${clientSlug}` : null
   const eng = engSlug && clientSlug ? `${firm}/c/${clientSlug}/e/${engSlug}` : null
 
@@ -266,7 +266,7 @@ export function DemoTour() {
   const retryCountRef = useRef(0)
 
   const steps = slugs
-    ? makeSteps(slugs.firmSlug, slugs.clientSlug, slugs.engagementSlug)
+    ? makeSteps(slugs.firmSlug, slugs.groupSlug, slugs.clientSlug, slugs.engagementSlug)
     : []
 
   const clearRetry = useCallback(() => {
@@ -334,8 +334,8 @@ export function DemoTour() {
       const { action } = data as any
       // X / skip button mid-tour — save progress so user can resume, stop cleanly
       if (action === "close" || action === "skip") {
-        if (slugs?.firmSlug) {
-          saveTourProgress(index, slugs.firmSlug)
+        if (slugs?.firmSlug && slugs?.groupSlug) {
+          saveTourProgress(index, slugs.firmSlug, slugs.groupSlug)
           setStepIndex(index) // keep context in sync
         }
         endTour(false)
@@ -344,7 +344,7 @@ export function DemoTour() {
       const nextIndex = action === "prev" ? Math.max(0, index - 1) : index + 1
       await navigateForStep(nextIndex)
       setStepIndex(nextIndex)
-      if (slugs?.firmSlug) saveTourProgress(nextIndex, slugs.firmSlug)
+      if (slugs?.firmSlug && slugs?.groupSlug) saveTourProgress(nextIndex, slugs.firmSlug, slugs.groupSlug)
       return
     }
 

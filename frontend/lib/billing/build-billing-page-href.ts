@@ -5,9 +5,11 @@ import { validateCheckoutReturnTo } from '@/lib/billing/checkout-return-path'
  */
 export function buildBillingPageHref(opts: {
     firmSlug: string | null | undefined
+    groupSlug: string | null | undefined
     pathname: string | null | undefined
 }): string {
     const slug = opts.firmSlug?.trim() || ''
+    const groupSlug = opts.groupSlug?.trim() || ''
     const path = opts.pathname?.trim() || ''
 
     const params = new URLSearchParams()
@@ -16,11 +18,13 @@ export function buildBillingPageHref(opts: {
         params.set('firmSlug', slug)
     }
 
+    const fallback = slug && groupSlug ? `/d/${groupSlug}/f/${slug}` : '/d/u/profile'
+
     let returnTo: string
     if (path.startsWith('/d') && !path.startsWith('/d/billing')) {
-        returnTo = validateCheckoutReturnTo(path) ?? (slug ? `/d/f/${slug}` : '/d/u/profile')
+        returnTo = validateCheckoutReturnTo(path) ?? fallback
     } else {
-        returnTo = slug ? `/d/f/${slug}` : '/d/u/profile'
+        returnTo = fallback
     }
 
     params.set('returnTo', validateCheckoutReturnTo(returnTo) ?? '/d/u/profile')

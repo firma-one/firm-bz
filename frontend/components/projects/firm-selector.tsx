@@ -15,6 +15,7 @@ import { AddFirmModal } from './add-firm-modal'
 import { useAuth } from '@/lib/auth-context'
 import { validateCheckoutReturnTo } from '@/lib/billing/checkout-return-path'
 import { buildBillingPageHref } from '@/lib/billing/build-billing-page-href'
+import { firmPath } from '@/lib/navigation/firm-paths'
 
 const ADD_FIRM_VALUE = '__create__'
 
@@ -24,6 +25,7 @@ export interface FirmOption {
     slug: string
     isDefault: boolean
     sandboxOnly: boolean
+    groupSlug?: string | null
 }
 
 interface FirmSelectorProps {
@@ -33,9 +35,16 @@ interface FirmSelectorProps {
     className?: string
     compact?: boolean
     isFirmAdmin?: boolean
+    /**
+     * Group the currently-active firm lives in — passed by app-sidebar.tsx, which already
+     * resolves it from route params. Used only for the internal upgrade-return-path link;
+     * onFirmChange's own navigation is handled by the caller (see app-sidebar.tsx's own
+     * groupSlug TODO for the cross-group switching caveat).
+     */
+    groupSlug?: string | null
 }
 
-export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className, compact, isFirmAdmin = false }: FirmSelectorProps) {
+export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className, compact, isFirmAdmin = false, groupSlug }: FirmSelectorProps) {
     const { user } = useAuth()
     const addFirmDisabled = !user?.id
 
@@ -70,14 +79,18 @@ export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className,
 
     const upgradeReturnPath = useMemo(() => {
         const slug = firmForBilling?.slug ?? billingContextSlug
-        return validateCheckoutReturnTo(pathname ?? null) ?? (slug ? `/d/f/${slug}` : '/d')
-    }, [pathname, firmForBilling, billingContextSlug])
+        // When this selector renders on a non-firm-scoped page (groupSlug null, e.g. /d/support,
+        // /d/u/*) there's no group to scope a firm path into — fall back to /d, which resolves
+        // to the right place via resolveDefaultFirmLandingPath rather than a dead legacy URL.
+        return validateCheckoutReturnTo(pathname ?? null) ?? (slug && groupSlug ? firmPath(groupSlug, slug) : '/d')
+    }, [pathname, firmForBilling, billingContextSlug, groupSlug])
 
     const handleValueChange = (orgSlug: string) => {
         if (orgSlug === ADD_FIRM_VALUE) {
             if (addFirmDisabled) {
                 const href = buildBillingPageHref({
                     firmSlug: firmForBilling?.slug ?? null,
+                    groupSlug: groupSlug ?? null,
                     pathname: pathname ?? null,
                 })
                 window.location.assign(href)
@@ -266,6 +279,7 @@ export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className,
                 <FirmSwitchDialog
                     open={switchDialogOpen}
                     onOpenChange={handleDialogClose}
+                    groupSlug={groupSlug ?? undefined}
                     targetFirmSlug={targetOrg.slug}
                     targetFirmName={targetOrg.name}
                     currentFirmName={currentOrg?.name}

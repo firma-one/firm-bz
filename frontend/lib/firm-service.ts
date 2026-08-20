@@ -40,6 +40,9 @@ export interface FirmWithMembers {
   createdAt: Date
   sandboxOnly: boolean
   createdBy?: string | null
+  groupId: string
+  /** Present when the query's Prisma include selected `group.slug` (e.g. getUserFirms) — undefined otherwise, not fetched lazily. */
+  groupSlug?: string
   members: {
     id: string
     userId: string
@@ -66,6 +69,8 @@ export class FirmService {
       createdAt: firm.createdAt,
       sandboxOnly: firm.sandboxOnly,
       createdBy: firm.createdBy ?? null,
+      groupId: firm.groupId,
+      groupSlug: firm.group?.slug ?? undefined,
       members: firm.members
         ? firm.members.map((m: any) => ({
             id: m.id,
@@ -172,7 +177,7 @@ export class FirmService {
   static async getUserFirms(userId: string): Promise<FirmWithMembers[]> {
     const memberships = await (prisma as any).firmMember.findMany({
       where: { userId },
-      include: { firm: { include: { members: true } } },
+      include: { firm: { include: { members: true, group: { select: { slug: true } } } } },
       orderBy: { firm: { createdAt: 'asc' } },
     })
 

@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { Building2, CreditCard, ExternalLink, HelpCircle, Loader2, Receipt, Rows3 } from 'lucide-react'
 import { getUserFirms } from '@/lib/actions/firms'
+import { firmPath } from '@/lib/navigation/firm-paths'
 import { validateCheckoutReturnTo } from '@/lib/billing/checkout-return-path'
 import { upgradeCopy } from '@/lib/billing/upgrade-copy'
 import { BillingPolarExplainInline, BillingRefundPolicyNote, PolarBillingLogo } from '@/components/billing/billing-polar-inline'
@@ -147,7 +148,7 @@ export function BillingPageClient({
         }
         return (
             validateCheckoutReturnTo(returnToParam) ??
-            (selectedFirm ? `/d/f/${selectedFirm.slug}` : '/d')
+            (selectedFirm?.groupSlug ? firmPath(selectedFirm.groupSlug, selectedFirm.slug) : '/d')
         )
     }, [
         isOnboardingSubscribe,
@@ -259,7 +260,10 @@ export function BillingPageClient({
                     items={[
                         {
                             label: selectedFirm.name,
-                            href: selectedFirm.slug ? `/d/f/${selectedFirm.slug}` : returnPath,
+                            href:
+                                selectedFirm.slug && selectedFirm.groupSlug
+                                    ? firmPath(selectedFirm.groupSlug, selectedFirm.slug)
+                                    : returnPath,
                             icon: <Building2 className="h-4 w-4" />,
                         },
                         { label: 'Billing & plans', icon: <CreditCard className="h-4 w-4" /> },

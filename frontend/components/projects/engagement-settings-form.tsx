@@ -16,9 +16,11 @@ import { SandboxInfoBanner } from '@/components/ui/sandbox-info-banner'
 import { useOrgSandbox } from '@/lib/use-org-sandbox'
 import { DateTimePicker } from '@/components/ui/date-time-picker'
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
+import { clientTabPath } from '@/lib/navigation/firm-paths'
 
 export interface EngagementSettingsFormProps {
     projectId: string
+    groupSlug: string
     orgSlug: string
     clientSlug: string
     initialName: string
@@ -45,6 +47,7 @@ const CONTRACT_TYPES = ['Fixed Price', 'Retainer', 'Time & Material', 'Case Mana
 
 export function EngagementSettingsForm({
     projectId,
+    groupSlug,
     orgSlug,
     clientSlug,
     initialName,
@@ -165,7 +168,7 @@ export function EngagementSettingsForm({
             addToast({ type: 'success', title: 'Engagement deleted', message: 'Engagement has been removed.' })
             setIsDeleteDialogOpen(false)
             onSaved?.()
-            router.push(`/d/f/${orgSlug}/c/${clientSlug}?tab=projects`)
+            router.push(clientTabPath(groupSlug, orgSlug, clientSlug, 'projects'))
         } catch (e: unknown) {
             addToast({ type: 'error', title: 'Delete failed', message: e instanceof Error ? e.message : 'Could not delete project.' })
         } finally {

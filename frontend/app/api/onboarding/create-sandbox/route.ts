@@ -6,7 +6,7 @@ import { FirmService } from '@/lib/firm-service'
 import { prisma } from '@/lib/prisma'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { invalidateUserSettingsPlus } from '@/lib/actions/user-settings'
-import { ensurePolarFreePlanForSandboxFirm } from '@/lib/billing/polar-free-plan'
+import { ensureGroupFreePlan } from '@/lib/billing/polar-free-plan'
 import { mergeLeanAppMetadata } from '@/lib/auth/supabase-jwt-metadata'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { seedSandboxClientsInDb } from '@/lib/onboarding/onboarding-helper'
@@ -21,7 +21,7 @@ import { generateGroupSlug } from '@/lib/slug-utils'
  *
  * Body: `{ sandboxFirmName? }` (legacy: `sandboxOrgName`).
  */
-type SandboxFirmRow = { id: string; slug: string; name: string; settings: unknown }
+type SandboxFirmRow = { id: string; slug: string; name: string; settings: unknown; groupId: string }
 
 /** Sandbox firm row for this user. */
 async function findOrCreateSandboxShellFirm(params: {
@@ -39,7 +39,7 @@ async function findOrCreateSandboxShellFirm(params: {
       connectorId: null,
       members: { some: { userId } },
     },
-    select: { id: true, slug: true, name: true, settings: true },
+    select: { id: true, slug: true, name: true, settings: true, groupId: true },
   })
 
   if (!firm) {
@@ -65,7 +65,7 @@ async function findOrCreateSandboxShellFirm(params: {
       allowDomainAccess: false,
       sandboxOnly: true,
     })
-    firm = { id: created.id, slug: created.slug, name: created.name, settings: created.settings }
+    firm = { id: created.id, slug: created.slug, name: created.name, settings: created.settings, groupId: group.id }
   }
 
   return firm
@@ -154,7 +154,7 @@ export async function POST(request: NextRequest) {
         .filter(Boolean)
         .join(' ')
         .trim() || null
-    await ensurePolarFreePlanForSandboxFirm({ firmId: firm.id, userEmail: user.email || '', customerName, userId: user.id })
+    await ensureGroupFreePlan({ groupId: firm.groupId, userEmail: user.email || '', customerName, userId: user.id })
     await markSandboxShellAwaitingDrive(firm)
     await syncSandboxStage1UserFacingState(user, firm)
     await seedSandboxClientsInDb(firm.id, user.id)

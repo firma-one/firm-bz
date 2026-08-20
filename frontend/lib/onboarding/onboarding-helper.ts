@@ -16,7 +16,7 @@ import {
   importDetectedOrganization,
   buildDetectedOrganizationFromSandboxDriveMeta,
 } from '@/lib/services/auto-import'
-import { ensurePolarFreePlanForSandboxFirm } from '@/lib/billing/polar-free-plan'
+import { ensureGroupFreePlan } from '@/lib/billing/polar-free-plan'
 import { mergeLeanAppMetadata } from '@/lib/auth/supabase-jwt-metadata'
 import { generateGroupSlug } from '@/lib/slug-utils'
 
@@ -102,10 +102,12 @@ async function provisionPolarFreePlanForOnboardingFirm(
   input: SandboxOnboardingInput,
   firm: { id: string }
 ): Promise<void> {
+  const firmRow = await prisma.firm.findUnique({ where: { id: firm.id }, select: { groupId: true } })
+  if (!firmRow) return
   const customerName =
     [input.firstName?.trim(), input.lastName?.trim()].filter(Boolean).join(' ').trim() || null
-  await ensurePolarFreePlanForSandboxFirm({
-    firmId: firm.id,
+  await ensureGroupFreePlan({
+    groupId: firmRow.groupId,
     userEmail: input.userEmail,
     customerName,
     userId: input.userId,
@@ -553,7 +555,7 @@ export async function runSandboxOnboarding(
  * connector org map, enqueues sample documents + indexing (`sandbox.populate.sample-files.requested`),
  * then marks firm onboarding complete.
  *
- * Polar free-plan DB + customer linking runs only in **synchronous** Stage 1 (`ensurePolarFreePlanForSandboxFirm`
+ * Polar free-plan DB + customer linking runs only in **synchronous** Stage 1 (`ensureGroupFreePlan`
  * from `create-sandbox`), not here.
  */
 export async function provisionSandboxHierarchyForFirm(input: {

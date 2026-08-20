@@ -7,12 +7,12 @@ import { Button } from '@/components/ui/button'
 export default async function SubscriptionLockedPage({
     params,
 }: {
-    params: Promise<{ slug: string }>
+    params: Promise<{ firmSlug: string }>
 }) {
-    const { slug } = await params
+    const { firmSlug } = await params
 
     const firm = await prisma.firm.findUnique({
-        where: { slug },
+        where: { slug: firmSlug },
         select: { name: true },
     })
 

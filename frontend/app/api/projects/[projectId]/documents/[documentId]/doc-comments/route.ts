@@ -7,6 +7,7 @@ import { getProjectDocumentContext } from '@/lib/file-utils'
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { requireEngagementMember, externalMemberCanAccessDocument } from '@/lib/engagement-access'
 import { loadAnchorForCaps, effectiveCommentHistoryDays } from '@/lib/billing/effective-billing-caps'
+import { engagementDocCommentPath } from '@/lib/navigation/firm-paths'
 
 async function purgeStaleDocComments(firmId: string): Promise<void> {
   try {
@@ -195,8 +196,9 @@ export async function POST(
         const { upsertFollowUpReminder } = await import('@/lib/actions/user-reminders')
         const engDetails = await prisma.engagement.findUnique({
           where: { id: projectId },
-          select: { slug: true, client: { select: { slug: true, firm: { select: { slug: true } } } } },
+          select: { slug: true, client: { select: { slug: true, firm: { select: { slug: true, group: { select: { slug: true } } } } } } },
         })
+        const groupSlug = engDetails?.client?.firm?.group?.slug ?? ''
         const firmSlug = engDetails?.client?.firm?.slug ?? ''
         const clientSlug = engDetails?.client?.slug ?? ''
         const engSlug = engDetails?.slug ?? ''
@@ -210,8 +212,8 @@ export async function POST(
           dateValue: null,
           entityName: content.slice(0, 60),
           firmId: ctx.orgId,
-          ctaUrl: firmSlug && clientSlug && engSlug
-            ? `/d/f/${firmSlug}/c/${clientSlug}/e/${engSlug}/files#doc-comment:${docCtx.id}:${message.id}`
+          ctaUrl: groupSlug && firmSlug && clientSlug && engSlug
+            ? engagementDocCommentPath(groupSlug, firmSlug, clientSlug, engSlug, docCtx.id, message.id)
             : null,
         }).catch(() => {})
       } catch {
@@ -287,8 +289,9 @@ export async function PATCH(
       const { upsertFollowUpReminder } = await import('@/lib/actions/user-reminders')
       const engDetails = await prisma.engagement.findUnique({
         where: { id: projectId },
-        select: { slug: true, client: { select: { slug: true, firm: { select: { slug: true } } } } },
+        select: { slug: true, client: { select: { slug: true, firm: { select: { slug: true, group: { select: { slug: true } } } } } } },
       })
+      const groupSlug = engDetails?.client?.firm?.group?.slug ?? ''
       const firmSlug = engDetails?.client?.firm?.slug ?? ''
       const clientSlug = engDetails?.client?.slug ?? ''
       const engSlug = engDetails?.slug ?? ''
@@ -302,8 +305,8 @@ export async function PATCH(
         dateValue: dateValue,
         entityName: message.content.slice(0, 60),
         firmId: ctx.orgId,
-        ctaUrl: firmSlug && clientSlug && engSlug
-          ? `/d/f/${firmSlug}/c/${clientSlug}/e/${engSlug}/files#doc-comment:${docCtx.id}:${message.id}`
+        ctaUrl: groupSlug && firmSlug && clientSlug && engSlug
+          ? engagementDocCommentPath(groupSlug, firmSlug, clientSlug, engSlug, docCtx.id, message.id)
           : null,
       }).catch(() => {})
     } catch {

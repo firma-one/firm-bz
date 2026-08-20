@@ -20,6 +20,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 
 interface FirmClientsViewProps {
     clients: ClientSummary[]
+    groupSlug: string
     orgSlug: string
     orgId?: string
     /** From server: show "+ New Client" in sandbox so restriction toast is discoverable */
@@ -30,7 +31,7 @@ interface FirmClientsViewProps {
     microsoftConnectorEnabled?: boolean
 }
 
-export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = false, memberCount, auditCount, microsoftConnectorEnabled = false }: FirmClientsViewProps) {
+export function FirmClientsView({ clients, groupSlug, orgSlug, orgId, firmSandboxOnly = false, memberCount, auditCount, microsoftConnectorEnabled = false }: FirmClientsViewProps) {
     const router = useRouter()
     const pathname = usePathname()
     const searchParams = useSearchParams()
@@ -315,6 +316,7 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                             {/* New Client CTA — emerald, uppercase, tracking-widest */}
                             {currentTab === 'clients' && (canCreateClient || firmSandboxOnly) && (
                             <AddClientModal
+                                groupSlug={groupSlug}
                                 orgSlug={orgSlug}
                                 firmId={orgId}
                                 firmSandboxOnly={firmSandboxOnly}
@@ -343,6 +345,7 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                             <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
                                 <ClientList
                                     clients={clients}
+                                    groupSlug={groupSlug}
                                     orgSlug={orgSlug}
                                     viewMode={viewMode}
                                     isRefreshing={isPendingRefresh}
@@ -356,6 +359,7 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                             <div className="py-1 h-full">
                                 <FirmMembersTab
                                     firmId={orgId ?? clients[0]?.firmId ?? clients[0]?.firmId ?? ''}
+                                    groupSlug={groupSlug}
                                     orgSlug={orgSlug}
                                     canManage={canViewOrgAudit}
                                 />
@@ -407,6 +411,7 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                                 </div>
                                 <FirmActionCenter
                                     firmId={orgId ?? clients[0]?.firmId ?? clients[0]?.firmId ?? ''}
+                                    groupSlug={groupSlug}
                                     firmSlug={orgSlug}
                                 />
                             </div>

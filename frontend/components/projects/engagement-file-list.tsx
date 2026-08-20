@@ -15,6 +15,7 @@ import { DocumentPreviewPanelContent } from '@/components/files/document-edit-sh
 import { DocumentBlobPreviewPane } from '@/components/files/document-blob-preview-pane'
 import { DocumentDocCommentsPane } from '@/components/projects/document-doc-comments-pane'
 import { formatFileSize } from '@/lib/utils'
+import { clientTabPath, firmSettingsPath } from '@/lib/navigation/firm-paths'
 import { DriveFile } from '@/lib/types'
 import { useAuth } from '@/lib/auth-context'
 import { cn } from '@/lib/utils'
@@ -92,6 +93,7 @@ interface EngagementFileListProps {
     restrictToSharedOnly?: boolean
     /** Optional; used for secure-open modal thumbnail. */
     firmId?: string
+    groupSlug?: string
     orgSlug?: string
     /** When true, firm is sandbox-only (restricts Add menu: no new folder / native Google types; upload + Drive import allowed). */
     firmSandboxOnly?: boolean
@@ -174,7 +176,7 @@ function isValidWebUrl(raw: string): boolean {
 
 const VIEW_AS_SHARED_ONLY_PERSONAS = ['eng_ext_collaborator', 'eng_viewer']
 
-export function EngagementFileList({ projectId, connectorRootFolderId, clientConnectorId, clientConnectorType, workspaceRootLocation, rootFolderName = 'Engagement Files', orgName, clientName, projectName, canEdit = false, canManage = false, isFirmAdmin = false, restrictToSharedOnly = false, firmId, orgSlug, firmSandboxOnly = false, navSlot, clientSlug, connectorAccountEmail, onFileCountChange }: EngagementFileListProps) {
+export function EngagementFileList({ projectId, connectorRootFolderId, clientConnectorId, clientConnectorType, workspaceRootLocation, rootFolderName = 'Engagement Files', orgName, clientName, projectName, canEdit = false, canManage = false, isFirmAdmin = false, restrictToSharedOnly = false, firmId, groupSlug, orgSlug, firmSandboxOnly = false, navSlot, clientSlug, connectorAccountEmail, onFileCountChange }: EngagementFileListProps) {
     const isOneDriveClient = clientConnectorType === 'ONEDRIVE'
     const { session } = useAuth()
     const sessionRef = useRef(session)
@@ -2645,9 +2647,9 @@ const handleRefresh = async () => {
                                     <p className="text-xs text-[#45474c] max-w-[280px] mx-auto mb-4">
                                         This workspace uses a Shared Drive. Go to <strong>Client Settings → Document Storage</strong> and use <strong>Migrate</strong> to re-select your workspace folder and create the folder structure.
                                     </p>
-                                    {orgSlug && clientSlug && (
+                                    {groupSlug && orgSlug && clientSlug && (
                                         <a
-                                            href={`/d/f/${orgSlug}/c/${clientSlug}?tab=settings`}
+                                            href={clientTabPath(groupSlug, orgSlug, clientSlug, 'settings')}
                                             className="inline-flex items-center gap-1.5 h-8 px-4 rounded bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:brightness-105 transition-all"
                                         >
                                             Go to Client Settings
@@ -2679,9 +2681,9 @@ const handleRefresh = async () => {
                             <p className="text-xs text-[#45474c] max-w-[260px] mx-auto mb-4">
                                 Connect a Google Drive account to this client to start uploading and managing engagement files.
                             </p>
-                            {orgSlug && (
+                            {groupSlug && orgSlug && (
                                 <a
-                                    href={`/d/f/${orgSlug}?tab=settings&section=storage`}
+                                    href={firmSettingsPath(groupSlug, orgSlug, 'storage')}
                                     className="inline-flex items-center gap-1.5 h-8 px-4 rounded bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:brightness-105 transition-all"
                                 >
                                     Go to Settings
@@ -2700,9 +2702,9 @@ const handleRefresh = async () => {
                                     ? 'This client is not linked to a Drive connector. Go to Firm Settings → Document Storage to link this client.'
                                     : 'This client is not linked to a Drive connector. Contact your firm administrator to set up Document Storage.'}
                             </p>
-                            {canManage && orgSlug && (
+                            {canManage && groupSlug && orgSlug && (
                                 <a
-                                    href={`/d/f/${orgSlug}?tab=settings&section=storage`}
+                                    href={firmSettingsPath(groupSlug, orgSlug, 'storage')}
                                     className="inline-flex items-center gap-1.5 h-8 px-4 rounded bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:brightness-105 transition-all"
                                 >
                                     Go to Document Storage

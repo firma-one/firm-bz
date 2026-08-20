@@ -33,8 +33,8 @@ function setBrandingInSession(slug: string, branding: OrganizationBranding | nul
 
 function parseSlugs(pathname: string | null): { firmSlug: string | null; clientSlug: string | null } {
   if (!pathname) return { firmSlug: null, clientSlug: null }
-  const firmSlug = pathname.match(/^\/d\/(?:o|f)\/([^/]+)/)?.[1] ?? null
-  const clientSlug = pathname.match(/^\/d\/(?:o|f)\/[^/]+\/c\/([^/]+)/)?.[1] ?? null
+  const firmSlug = pathname.match(/^\/d\/[^/]+\/f\/([^/]+)/)?.[1] ?? null
+  const clientSlug = pathname.match(/^\/d\/[^/]+\/f\/[^/]+\/c\/([^/]+)/)?.[1] ?? null
   return { firmSlug, clientSlug }
 }
 

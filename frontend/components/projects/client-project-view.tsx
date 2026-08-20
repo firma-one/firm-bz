@@ -15,9 +15,11 @@ import { ClientContactsTab } from './client-contacts-tab'
 import { ClientMembersTab } from './members/client-members-tab'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import Link from 'next/link'
+import { firmPath, firmTabPath } from '@/lib/navigation/firm-paths'
 
 interface ClientProjectViewProps {
     clients: HierarchyClient[]
+    groupSlug: string
     firmSlug: string
     firmName?: string
     firmId?: string
@@ -27,7 +29,7 @@ interface ClientProjectViewProps {
     memberCount?: number
 }
 
-export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSandboxOnly = false, selectedClientSlug, contactCount, memberCount }: ClientProjectViewProps) {
+export function ClientProjectView({ clients, groupSlug, firmSlug, firmName, firmId, firmSandboxOnly = false, selectedClientSlug, contactCount, memberCount }: ClientProjectViewProps) {
     const router = useRouter()
     const pathname = usePathname()
     const searchParams = useSearchParams()
@@ -131,7 +133,7 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                 <ChevronRight className="h-3.5 w-3.5 text-[#d1d5db]" />
                 <Building2 className="h-4 w-4 text-[#45474c] opacity-60" />
                 <Link
-                    href={`/d/f/${firmSlug}`}
+                    href={firmPath(groupSlug, firmSlug)}
                     className="font-mono text-[11px] text-[#45474c] opacity-60 uppercase tracking-tighter hover:opacity-100 transition-opacity"
                 >
                     {firmName || 'Firm'}
@@ -264,6 +266,7 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                                         )}
                                         {currentTab === 'projects' && (
                                             <AddEngagementModal
+                                                groupSlug={groupSlug}
                                                 firmSlug={firmSlug}
                                                 clientSlug={selectedClient.slug}
                                                 firmSandboxOnly={firmSandboxOnly}
@@ -292,6 +295,7 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                                         <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
                                             <ProjectList
                                                 projects={selectedClient.engagements}
+                                                groupSlug={groupSlug}
                                                 orgSlug={firmSlug}
                                                 clientSlug={selectedClient.slug}
                                                 clientStatus={selectedClient.status}
@@ -335,6 +339,7 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                                     <TabsContent value="settings" className="m-0 h-full">
                                         <div className="w-full py-2">
                                             <ClientSettingsForm
+                                            groupSlug={groupSlug}
                                             orgSlug={firmSlug}
                                             firmId={firmId ?? selectedClient.firmId}
                                             clientId={selectedClient.id}

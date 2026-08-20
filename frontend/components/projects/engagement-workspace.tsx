@@ -22,6 +22,7 @@ import type { LwCrmEngagementStatus } from '@/lib/actions/project'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { GoogleDriveIcon } from '@/components/ui/google-drive-icon'
 import { OneDriveIcon } from '@/components/ui/onedrive-icon'
+import { firmPath, clientPath } from '@/lib/navigation/firm-paths'
 
 export interface ProjectPathSegments {
     tab: string
@@ -30,6 +31,7 @@ export interface ProjectPathSegments {
 }
 
 interface EngagementWorkspaceProps {
+    groupSlug: string
     orgSlug: string
     clientSlug: string
     projectId: string
@@ -85,10 +87,11 @@ interface EngagementWorkspaceProps {
     wikiPageCount?: number
 }
 
-const projectBase = (orgSlug: string, clientSlug: string, projectSlug: string, useEngagement = false) =>
-    useEngagement ? `/d/f/${orgSlug}/c/${clientSlug}/e/${projectSlug}` : `/d/f/${orgSlug}/c/${clientSlug}/p/${projectSlug}`
+const projectBase = (groupSlug: string, orgSlug: string, clientSlug: string, projectSlug: string, useEngagement = false) =>
+    useEngagement ? `/d/${groupSlug}/f/${orgSlug}/c/${clientSlug}/e/${projectSlug}` : `/d/${groupSlug}/f/${orgSlug}/c/${clientSlug}/p/${projectSlug}`
 
 export function EngagementWorkspace({
+    groupSlug,
     orgSlug,
     clientSlug,
     projectId,
@@ -164,7 +167,7 @@ export function EngagementWorkspace({
     const slugFromPath = pathname?.split('/e/')[1]?.split('/')[0] ?? pathname?.split('/p/')[1]?.split('/')[0] ?? ''
     const projectSlug = engagementSlug ?? slugFromPath
     const useEngagement = Boolean(engagementSlug)
-    const base = projectBase(orgSlug, clientSlug, projectSlug, useEngagement)
+    const base = projectBase(groupSlug, orgSlug, clientSlug, projectSlug, useEngagement)
     const currentTab = pathSegments?.tab ?? 'files'
 
     // Broadcast real names so the sidebar Recents hook can replace slug-derived labels
@@ -216,7 +219,7 @@ export function EngagementWorkspace({
                 <Tooltip>
                     <TooltipTrigger asChild>
                         <Link
-                            href={`/d/f/${orgSlug}`}
+                            href={firmPath(groupSlug, orgSlug)}
                             className="flex items-center gap-1.5 hover:opacity-100"
                         >
                             <Building2 className="h-4 w-4 text-[#45474c] opacity-60" />
@@ -233,7 +236,7 @@ export function EngagementWorkspace({
                         <Tooltip>
                             <TooltipTrigger asChild>
                                 <Link
-                                    href={`/d/f/${orgSlug}/c/${clientSlug}`}
+                                    href={clientPath(groupSlug, orgSlug, clientSlug)}
                                     className="flex items-center gap-1.5 hover:opacity-100"
                                 >
                                     <Users className="h-4 w-4 text-[#45474c] opacity-60" />
@@ -460,7 +463,7 @@ export function EngagementWorkspace({
                     )}
                     {/* Grid / List toggle — only when Shares tab is active */}
                     {currentTab === 'shares' && (() => {
-                        const sharesBase = `${projectBase(orgSlug, clientSlug, projectSlug, useEngagement)}/shares`
+                        const sharesBase = `${projectBase(groupSlug, orgSlug, clientSlug, projectSlug, useEngagement)}/shares`
                         const sharesViewMode = pathSegments?.viewMode ?? 'grid'
                         return (
                             <div className="shrink-0 px-3 border-l border-[#e5e7eb] flex items-center">
@@ -510,6 +513,7 @@ export function EngagementWorkspace({
                                         isFirmAdmin={isFirmAdmin}
                                         restrictToSharedOnly={restrictToSharedOnly}
                                         firmId={firmId}
+                                        groupSlug={groupSlug}
                                         orgSlug={orgSlug}
                                         firmSandboxOnly={firmSandboxOnly}
                                         navSlot={filesNavSlot}
@@ -533,9 +537,9 @@ export function EngagementWorkspace({
                                     clientName={clientName}
                                     projectName={projectName}
                                     onOpenInFiles={handleOpenInFiles}
-                                    sharesBasePath={`${projectBase(orgSlug, clientSlug, projectSlug, useEngagement)}/shares`}
+                                    sharesBasePath={`${projectBase(groupSlug, orgSlug, clientSlug, projectSlug, useEngagement)}/shares`}
                                     pathViewMode={pathSegments?.viewMode}
-                                    deeplinkBase={typeof window !== 'undefined' ? `${window.location.origin}${projectBase(orgSlug, clientSlug, projectSlug, useEngagement)}/files` : undefined}
+                                    deeplinkBase={typeof window !== 'undefined' ? `${window.location.origin}${projectBase(groupSlug, orgSlug, clientSlug, projectSlug, useEngagement)}/files` : undefined}
                                     orgSlug={orgSlug}
                                 />
                             </ErrorBoundary>
@@ -553,9 +557,9 @@ export function EngagementWorkspace({
                                     clientName={clientName}
                                     projectName={projectName}
                                     onOpenInFiles={handleOpenInFiles}
-                                    sharesBasePath={`${projectBase(orgSlug, clientSlug, projectSlug, useEngagement)}/shares`}
+                                    sharesBasePath={`${projectBase(groupSlug, orgSlug, clientSlug, projectSlug, useEngagement)}/shares`}
                                     pathViewMode="board"
-                                    deeplinkBase={typeof window !== 'undefined' ? `${window.location.origin}${projectBase(orgSlug, clientSlug, projectSlug, useEngagement)}/files` : undefined}
+                                    deeplinkBase={typeof window !== 'undefined' ? `${window.location.origin}${projectBase(groupSlug, orgSlug, clientSlug, projectSlug, useEngagement)}/files` : undefined}
                                     orgSlug={orgSlug}
                                 />
                             </ErrorBoundary>
@@ -566,6 +570,7 @@ export function EngagementWorkspace({
                         {canViewSettings && (
                             <EngagementSettingsForm
                                 projectId={projectId}
+                                groupSlug={groupSlug}
                                 orgSlug={orgSlug}
                                 clientSlug={clientSlug}
                                 initialName={projectName ?? ''}
@@ -592,6 +597,7 @@ export function EngagementWorkspace({
                         <ErrorBoundary context="ProjectInsights">
                             <EngagementInsightsDashboard
                                 projectId={projectId}
+                                groupSlug={groupSlug}
                                 orgSlug={orgSlug}
                                 clientSlug={clientSlug}
                                 engagementSlug={engagementSlug}
@@ -611,7 +617,7 @@ export function EngagementWorkspace({
                                 <EngagementCommentsTab
                                     projectId={projectId}
                                     orgSlug={orgSlug}
-                                    boardUrl={`${projectBase(orgSlug, clientSlug, projectSlug, useEngagement)}/board`}
+                                    boardUrl={`${projectBase(groupSlug, orgSlug, clientSlug, projectSlug, useEngagement)}/board`}
                                     isSandboxFirm={firmSandboxOnly}
                                     projectName={projectName}
                                 />
@@ -621,7 +627,7 @@ export function EngagementWorkspace({
                     {canViewInternalTabs && currentTab === 'members' && (
                         <div className="py-1 h-full">
                             <ErrorBoundary context="ProjectMembers">
-                                <EngagementMembersTab projectId={projectId} orgSlug={orgSlug} canManage={canManage} clientConnectorId={clientConnectorId} />
+                                <EngagementMembersTab projectId={projectId} groupSlug={groupSlug} orgSlug={orgSlug} canManage={canManage} clientConnectorId={clientConnectorId} />
                             </ErrorBoundary>
                         </div>
                     )}

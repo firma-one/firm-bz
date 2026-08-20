@@ -21,6 +21,7 @@ import {
     setCheckoutHintDismissedSession,
 } from '@/lib/marketing/checkout-hint-session'
 import { useSidebarFirms } from '@/lib/sidebar-firms-context'
+import { firmPath } from '@/lib/navigation/firm-paths'
 import { AppShellHintStrip } from '@/components/layout/app-shell-hint-strip'
 import { cn } from '@/lib/utils'
 import { buttonVariants } from '@/components/ui/button'
@@ -99,11 +100,13 @@ export function StandardCheckoutIntentBanner() {
     const checkoutHref = useMemo(() => {
         if (!defaultFirm) return null
         const slug = defaultFirm.slug
+        const groupSlug = defaultFirm.groupSlug
         const returnTo =
-            validateCheckoutReturnTo(pathname) ?? (slug ? `/d/f/${slug}` : '/d/u/profile')
+            validateCheckoutReturnTo(pathname) ??
+            (slug && groupSlug ? firmPath(groupSlug, slug) : '/d/u/profile')
         const productId = resolveStandardProductId(intent?.interval ?? 'annual')
         if (!productId) {
-            return buildBillingPageHref({ firmSlug: slug, pathname })
+            return buildBillingPageHref({ firmSlug: slug, groupSlug, pathname })
         }
         return buildPolarCheckoutHref({
             firmId: defaultFirm.id,

@@ -57,7 +57,7 @@ export function DemoTourOutroModal() {
             type="button"
             onClick={() => {
               closeOutroModal()
-              if (slugs?.firmSlug) void restartTour(slugs.firmSlug)
+              if (slugs?.firmSlug && slugs?.groupSlug) void restartTour(slugs.firmSlug, slugs.groupSlug)
             }}
             className="flex-1 h-9 rounded border border-[#e5e7eb] text-[10px] font-headline font-bold tracking-widest uppercase text-[#45474c] hover:bg-[#f3f4f6] transition-colors flex items-center justify-center gap-1.5"
           >

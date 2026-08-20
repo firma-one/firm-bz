@@ -85,36 +85,11 @@ async function buildPayload(
     })
     const viewerIsFirmBillingAdmin = viewerMembership?.role === 'firm_admin'
 
+    // Billing anchor display fields (name/slug) come from the workspace firm itself —
+    // there's no dedicated "anchor firm" concept anymore now that sandbox firms are
+    // retired (see .claude/plans/sandbox-firm-removal.md, Step 1). The actual
+    // subscription/plan data is looked up by groupId, which is genuinely group-scoped.
     const groupId = await resolveGroupId(workspaceFirm.id)
-    const anchor = await prisma.firm.findFirst({
-        where: { groupId, sandboxOnly: true, deletedAt: null },
-        select: {
-            id: true,
-            name: true,
-            slug: true,
-            sandboxOnly: true,
-        },
-    })
-
-    if (!anchor) {
-        return {
-            viewerIsFirmBillingAdmin,
-            workspaceFirm,
-            billingAnchor: {
-                id: workspaceFirm.id,
-                name: workspaceFirm.name,
-                slug: workspaceFirm.slug,
-                subscriptionStatus: null,
-                subscriptionPlan: null,
-                pricingModel: null,
-                subscriptionCurrentPeriodEnd: null,
-                polarCustomerId: null,
-                polarSubscriptionId: null,
-                sandboxOnly: workspaceFirm.sandboxOnly,
-            },
-        }
-    }
-
     const activeSub = await getActiveSubscriptionForGroup(groupId)
     let periodEnd = activeSub?.currentPeriodEnd ?? null
     const polarSubscriptionId = activeSub?.polarSubscriptionId ?? null
@@ -136,10 +111,10 @@ async function buildPayload(
         viewerIsFirmBillingAdmin,
         workspaceFirm,
         billingAnchor: {
-            id: anchor.id,
-            name: anchor.name,
-            slug: anchor.slug,
-            sandboxOnly: anchor.sandboxOnly,
+            id: workspaceFirm.id,
+            name: workspaceFirm.name,
+            slug: workspaceFirm.slug,
+            sandboxOnly: workspaceFirm.sandboxOnly,
             subscriptionStatus: subscriptionAccessStatusLabel(activeSub),
             subscriptionPlan: activeSub?.plan ?? null,
             pricingModel: activeSub?.pricingModel ?? null,

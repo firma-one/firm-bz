@@ -14,6 +14,7 @@ import {
 import { isWorkspaceOnboardingComplete } from '@/lib/onboarding/workspace-onboarding-complete'
 import { mergeLeanAppMetadata } from '@/lib/auth/supabase-jwt-metadata'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
+import { firmPath, groupFirmListPath } from '@/lib/navigation/firm-paths'
 
 export interface FirmOption {
     id: string
@@ -26,6 +27,7 @@ export interface FirmOption {
     themeColor?: string | null
     groupId?: string | null
     groupName?: string | null
+    groupSlug?: string | null
 }
 
 export interface CreateFirmData {
@@ -54,7 +56,7 @@ export async function getUserFirms(): Promise<FirmOption[]> {
                 firm: {
                     include: {
                         members: true,
-                        group: { select: { id: true, name: true } },
+                        group: { select: { id: true, name: true, slug: true } },
                     },
                 },
             },
@@ -76,6 +78,7 @@ export async function getUserFirms(): Promise<FirmOption[]> {
                 themeColor: (branding.primaryColor as string | null | undefined) ?? null,
                 groupId: firm.groupId ?? null,
                 groupName: firm.group?.name ?? null,
+                groupSlug: firm.group?.slug ?? null,
             }
         })
     } catch (err) {
@@ -158,15 +161,19 @@ export async function getDefaultFirmWithOnboardingStatus(): Promise<{
 /**
  * Where to send the user when entering the app at `/d` (and when auth callback has no explicit `next`).
  *
+ * Groups are the top-level routing unit, firms are the second-level unit within a group
+ * (see .claude/plans/sandbox-firm-removal.md, Step 6).
+ *
  * Routing rules (in order):
  * 1. No firm memberships at all → `/d/onboarding` (new user)
- * 2. Multiple firm memberships → `/d/f/` (workspace picker)
- * 3. Single firm, non-admin → `/d/f/{slug}` (go straight in)
- * 4. Single firm, admin, onboarding incomplete → `/d/onboarding`
- * 5. Single firm, admin, onboarding complete, domain orgs available → `/d/f/` (workspace picker)
- * 6. Single firm, admin, onboarding complete, no domain orgs → `/d/f/{slug}`
+ * 2. 2+ distinct groups → `/d/` (group picker — one card per group)
+ * 3. Exactly 1 group, 2+ firms in it → `/d/{groupSlug}/f/` (firm picker, scoped to that group)
+ * 4. Exactly 1 group, exactly 1 firm, non-admin → `/d/{groupSlug}/f/{firmSlug}` (go straight in)
+ * 5. Exactly 1 group, exactly 1 firm, admin, onboarding incomplete → `/d/onboarding`
+ * 6. Exactly 1 group, exactly 1 firm, admin, onboarding complete, domain orgs available → `/d/{groupSlug}/f/`
+ * 7. Exactly 1 group, exactly 1 firm, admin, onboarding complete, no domain orgs → `/d/{groupSlug}/f/{firmSlug}`
  *
- * Returns `null` only if the resolved firm has no slug (malformed data).
+ * Returns `null` only if the resolved firm/group has no slug (malformed data).
  */
 export async function resolveDefaultFirmLandingPath(userId: string): Promise<string | null> {
     const allFirms = await FirmService.getUserFirms(userId)
@@ -175,17 +182,26 @@ export async function resolveDefaultFirmLandingPath(userId: string): Promise<str
 
     if (allFirms.length === 0) return '/d/onboarding'
 
-    // Multiple memberships → always show picker so user can choose the right workspace
-    if (allFirms.length > 1) return '/d/f/'
+    const distinctGroupSlugs = Array.from(new Set(allFirms.map((f) => f.groupSlug).filter((s): s is string => Boolean(s))))
+    if (distinctGroupSlugs.length === 0) return null
 
-    const targetFirm = allFirms[0]
+    // 2+ distinct groups → group picker. Nothing about which firm to land in is decided yet.
+    if (distinctGroupSlugs.length > 1) return '/d/'
+
+    const groupSlug = distinctGroupSlugs[0]
+    const firmsInGroup = allFirms.filter((f) => f.groupSlug === groupSlug)
+
+    // Exactly 1 group, but 2+ firms in it → firm picker, scoped to this group.
+    if (firmsInGroup.length > 1) return groupFirmListPath(groupSlug)
+
+    const targetFirm = firmsInGroup[0]
     if (!targetFirm?.slug) return null
 
     const membership = targetFirm.members.find((m) => m.userId === userId)
     const isFirmAdmin = membership?.role === 'firm_admin'
 
     if (!isFirmAdmin) {
-        return `/d/f/${targetFirm.slug}`
+        return firmPath(groupSlug, targetFirm.slug)
     }
 
     const onboardingComplete = await isWorkspaceOnboardingComplete({
@@ -206,11 +222,11 @@ export async function resolveDefaultFirmLandingPath(userId: string): Promise<str
     if (user?.email) {
         const domainOpts = await getDomainOnboardingOptions(userId, user.email)
         if ((domainOpts.orgsToJoin.length + domainOpts.orgsAlreadyIn.length) > 0) {
-            return '/d/f/'
+            return groupFirmListPath(groupSlug)
         }
     }
 
-    return `/d/f/${targetFirm.slug}`
+    return firmPath(groupSlug, targetFirm.slug)
 }
 
 /**
@@ -291,13 +307,18 @@ export async function createFirm(data: CreateFirmData): Promise<FirmOption> {
 
     revalidatePath('/d')
 
+    const group = await prisma.group.findUnique({ where: { id: billingAnchorId }, select: { name: true, slug: true } })
+
     return {
         id: firm.id,
         name: firm.name,
         slug: firm.slug,
         isDefault: true,
         createdAt: new Date().toISOString(),
-        sandboxOnly: false
+        sandboxOnly: false,
+        groupId: billingAnchorId,
+        groupName: group?.name ?? null,
+        groupSlug: group?.slug ?? null,
     }
 }
 
@@ -408,7 +429,7 @@ export async function updateFirm(
 
     const firm = await prisma.firm.findUnique({
         where: { slug: firmSlug },
-        select: { id: true, settings: true }
+        select: { id: true, settings: true, group: { select: { slug: true } } }
     })
     if (!firm) throw new Error('Firm not found')
 
@@ -492,7 +513,7 @@ export async function updateFirm(
         .meta({ changedFields: Object.keys(data) })
         .fireAndForget()
 
-    revalidatePath(`/d/f/${firmSlug}`)
+    revalidatePath(firmPath(firm.group.slug, firmSlug))
 }
 
 /**

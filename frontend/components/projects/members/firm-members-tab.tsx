@@ -24,9 +24,11 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog'
 import { logger } from '@/lib/logger'
+import { firmSettingsPath } from '@/lib/navigation/firm-paths'
 
 interface FirmMembersTabProps {
     firmId: string
+    groupSlug: string
     orgSlug: string
     canManage?: boolean
 }
@@ -36,7 +38,7 @@ function getInitials(name: string) {
 }
 
 
-export function FirmMembersTab({ firmId, orgSlug, canManage = false }: FirmMembersTabProps) {
+export function FirmMembersTab({ firmId, groupSlug, orgSlug, canManage = false }: FirmMembersTabProps) {
     const [members, setMembers] = useState<any[]>([])
     const [invitations, setInvitations] = useState<any[]>([])
     const [isLoading, setIsLoading] = useState(true)
@@ -311,7 +313,7 @@ export function FirmMembersTab({ firmId, orgSlug, canManage = false }: FirmMembe
                     <span>
                         <strong>{memberToRemove?.name}</strong>{memberToRemove?.email ? ` (${memberToRemove.email})` : ''} is the owner of this firm's Storage Drive Connector. Removing them would disconnect document storage for all clients and engagements.
                         <br /><br />
-                        To remove this member, first transfer the Storage Connector to another Firm Administrator in <a href={`/d/f/${orgSlug}?tab=settings&section=storage`} className="text-primary underline underline-offset-2">Firm Settings → Data Storage</a> — then come back and remove them.
+                        To remove this member, first transfer the Storage Connector to another Firm Administrator in <a href={firmSettingsPath(groupSlug, orgSlug, 'storage')} className="text-primary underline underline-offset-2">Firm Settings → Data Storage</a> — then come back and remove them.
                     </span>
                 }
                 extra={

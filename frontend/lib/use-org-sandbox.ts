@@ -41,11 +41,8 @@ export function useOrgSandbox(): OrgSandboxInfo | null {
   const [info, setInfo] = useState<OrgSandboxInfo | null>(null)
   const currentSlugRef = useRef<string | null>(null)
 
-  // Firm routes use /d/f/[slug]; legacy org routes used /d/o/[slug]
-  const slug =
-    pathname?.match(/^\/d\/f\/([^/]+)/)?.[1] ??
-    pathname?.match(/^\/d\/o\/([^/]+)/)?.[1] ??
-    null
+  // Firm routes use /d/[groupSlug]/f/[firmSlug]
+  const slug = pathname?.match(/^\/d\/[^/]+\/f\/([^/]+)/)?.[1] ?? null
 
   useLayoutEffect(() => {
     if (!pathname?.startsWith('/d') || !slug) return

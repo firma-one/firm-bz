@@ -3,13 +3,13 @@ import { ClientProjectView } from "@/components/projects/client-project-view"
 import { basePrisma } from "@/lib/prisma"
 
 interface PageProps {
-    params: Promise<{ slug: string; clientSlug: string }>
+    params: Promise<{ groupSlug: string; firmSlug: string; clientSlug: string }>
 }
 
 export default async function ClientProjectPage({ params }: PageProps) {
-    const { slug, clientSlug } = await params
+    const { groupSlug, firmSlug, clientSlug } = await params
 
-    const { client, firmId, firmName, firmSandboxOnly } = await getClientWithEngagements(slug, clientSlug)
+    const { client, firmId, firmName, firmSandboxOnly } = await getClientWithEngagements(firmSlug, clientSlug)
 
     let contactCount = 0
     let memberCount = 0
@@ -28,7 +28,8 @@ export default async function ClientProjectPage({ params }: PageProps) {
         <div className="h-full flex flex-col">
             <ClientProjectView
                 clients={client ? [client] : []}
-                firmSlug={slug}
+                groupSlug={groupSlug}
+                firmSlug={firmSlug}
                 firmName={firmName ?? 'Firm'}
                 firmId={firmId ?? undefined}
                 firmSandboxOnly={firmSandboxOnly}

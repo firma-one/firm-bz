@@ -8,6 +8,7 @@ import { sendEmail } from '@/lib/email'
 import { renderReminderEmail } from '@/lib/email-templates/reminder'
 import { safeInngestSend } from '@/lib/inngest/client'
 import { parseSettingsFromDb } from '@/lib/sharing-settings'
+import { engagementPath } from '@/lib/navigation/firm-paths'
 
 export async function PATCH(
   request: NextRequest,
@@ -96,13 +97,14 @@ export async function PATCH(
         // Resolve slugs so the reminder CTA deep-links to the Board card
         const eng = await prisma.engagement.findUnique({
           where: { id: projectId },
-          select: { slug: true, client: { select: { slug: true, firm: { select: { slug: true } } } } },
+          select: { slug: true, client: { select: { slug: true, firm: { select: { slug: true, group: { select: { slug: true } } } } } } },
         })
+        const groupSlug = eng?.client?.firm?.group?.slug ?? ''
         const firmSlug = eng?.client?.firm?.slug ?? ''
         const clientSlug = eng?.client?.slug ?? ''
         const engSlug = eng?.slug ?? ''
-        const boardUrl = firmSlug && clientSlug && engSlug
-          ? `/d/f/${firmSlug}/c/${clientSlug}/e/${engSlug}/board#doc-file:${doc.id}`
+        const boardUrl = groupSlug && firmSlug && clientSlug && engSlug
+          ? engagementPath(groupSlug, firmSlug, clientSlug, engSlug, { tab: 'shares', subpath: 'board', hash: `doc-file:${doc.id}` })
           : null
 
         // Schedule 24h + 1h reminders via Inngest for deliverable folders

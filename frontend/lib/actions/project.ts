@@ -13,6 +13,7 @@ import { ensureAppFolderStructure } from '@/lib/connectors/pockett-structure.ser
 import { logger } from '@/lib/logger'
 import { safeInngestSend } from '@/lib/inngest/client'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
+import { engagementPath, clientPath } from '@/lib/navigation/firm-paths'
 
 const supabaseAdmin = createSupabaseAdmin(
     (process.env.NEXT_PUBLIC_SUPABASE_URL || "http://127.0.0.1:54321"),
@@ -60,7 +61,8 @@ export async function createEngagement(firmSlug: string, clientSlug: string, dat
         include: {
             members: {
                 where: { userId: user.id }
-            }
+            },
+            group: { select: { slug: true } }
         }
     })
 
@@ -243,7 +245,7 @@ export async function createEngagement(firmSlug: string, clientSlug: string, dat
         .meta({ name: newProject.name, slug: newProject.slug })
         .fireAndForget()
 
-    const engCtaUrl = `/d/f/${firmSlug}/c/${clientSlug}/e/${newProject.slug}`
+    const engCtaUrl = engagementPath(firm.group.slug, firmSlug, clientSlug, newProject.slug)
     const engNote = data.internalMemo ?? null
     upsertFollowUpReminder({
         userId: user.id,
@@ -286,7 +288,7 @@ export async function createEngagement(firmSlug: string, clientSlug: string, dat
         }).catch(() => {})
     }
 
-    revalidatePath(`/d/f/${firmSlug}/c/${clientSlug}`)
+    revalidatePath(clientPath(firm.group.slug, firmSlug, clientSlug))
     return { id: newProject.id, slug: newProject.slug, name: newProject.name }
 }
 
@@ -393,7 +395,15 @@ export async function updateEngagement(
 
     const project = await prisma.engagement.findFirst({
         where: { id: projectId, isDeleted: false },
-        select: { firmId: true, clientId: true, dueDate: true, kickoffDate: true, status: true, settings: true }
+        select: {
+            firmId: true,
+            clientId: true,
+            dueDate: true,
+            kickoffDate: true,
+            status: true,
+            settings: true,
+            firm: { select: { group: { select: { slug: true } } } },
+        }
     })
     if (!project) throw new Error('Project not found')
 
@@ -509,7 +519,9 @@ export async function updateEngagement(
             where: { id: projectId },
             select: { name: true, slug: true, settings: true },
         })
-        const engCtaUrl = `/d/f/${firmSlug}/c/${clientSlug}/e/${engDetails?.slug ?? ''}`
+        const engCtaUrl = engDetails
+            ? engagementPath(project.firm.group.slug, firmSlug, clientSlug, engDetails.slug)
+            : clientPath(project.firm.group.slug, firmSlug, clientSlug)
         const engNote = data.internalMemo !== undefined
             ? data.internalMemo
             : ((engDetails?.settings as any)?.internalMemo ?? null)
@@ -559,7 +571,7 @@ export async function updateEngagement(
         }
     }
 
-    revalidatePath(`/d/f/${firmSlug}/c/${clientSlug}`)
+    revalidatePath(clientPath(project.firm.group.slug, firmSlug, clientSlug))
 }
 
 /**
@@ -569,7 +581,7 @@ export async function closeEngagement(projectId: string, firmSlug: string, clien
     await assertCanManageProject(projectId)
     const project = await prisma.engagement.findFirst({
         where: { id: projectId, isDeleted: false },
-        select: { id: true, firmId: true, clientId: true }
+        select: { id: true, firmId: true, clientId: true, firm: { select: { group: { select: { slug: true } } } } }
     })
     if (!project) throw new Error('Project not found')
 
@@ -668,7 +680,7 @@ export async function closeEngagement(projectId: string, firmSlug: string, clien
         timestamp: new Date().toISOString(),
     })
 
-    revalidatePath(`/d/f/${firmSlug}/c/${clientSlug}`)
+    revalidatePath(clientPath(project.firm.group.slug, firmSlug, clientSlug))
 }
 
 /**
@@ -679,7 +691,7 @@ export async function reopenEngagement(projectId: string, firmSlug: string, clie
 
     const project = await prisma.engagement.findFirst({
         where: { id: projectId, isDeleted: false },
-        select: { firmId: true, clientId: true }
+        select: { firmId: true, clientId: true, firm: { select: { group: { select: { slug: true } } } } }
     })
     if (!project) throw new Error('Project not found')
 
@@ -698,7 +710,7 @@ export async function reopenEngagement(projectId: string, firmSlug: string, clie
         .actor(user?.id)
         .fireAndForget()
 
-    revalidatePath(`/d/f/${firmSlug}/c/${clientSlug}`)
+    revalidatePath(clientPath(project.firm.group.slug, firmSlug, clientSlug))
 }
 
 /**
@@ -719,7 +731,13 @@ export async function deleteEngagement(projectId: string, firmSlug: string, clie
 
     const project = await prisma.engagement.findFirst({
         where: { id: projectId, isDeleted: false },
-        select: { id: true, firmId: true, clientId: true, connectorRootFolderId: true }
+        select: {
+            id: true,
+            firmId: true,
+            clientId: true,
+            connectorRootFolderId: true,
+            firm: { select: { group: { select: { slug: true } } } },
+        }
     })
     if (!project) throw new Error('Project not found')
 
@@ -814,7 +832,7 @@ export async function deleteEngagement(projectId: string, firmSlug: string, clie
         timestamp: new Date().toISOString(),
     })
 
-    revalidatePath(`/d/f/${firmSlug}/c/${clientSlug}`)
+    revalidatePath(clientPath(project.firm.group.slug, firmSlug, clientSlug))
 }
 
 /**

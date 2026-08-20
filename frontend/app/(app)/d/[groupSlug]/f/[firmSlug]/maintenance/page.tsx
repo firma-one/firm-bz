@@ -7,9 +7,10 @@ import { useFirmMaintenanceStatus } from '@/lib/hooks/use-firm-maintenance-statu
 import { BRAND_NAME } from '@/config/brand'
 import { Wrench, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { firmPath } from '@/lib/navigation/firm-paths'
 
 export default function MaintenancePage() {
-  const { slug } = useParams<{ slug: string }>()
+  const { groupSlug, firmSlug } = useParams<{ groupSlug: string; firmSlug: string }>()
   const router = useRouter()
   const { session } = useAuth()
   const accessToken = session?.access_token ?? null
@@ -19,7 +20,7 @@ export default function MaintenancePage() {
 
   useEffect(() => {
     if (!accessToken) return
-    fetch(`/api/firm/by-slug?slug=${slug}`, {
+    fetch(`/api/firm/by-slug?slug=${firmSlug}`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     })
       .then((r) => r.ok ? r.json() : null)
@@ -27,7 +28,7 @@ export default function MaintenancePage() {
         if (data?.id) setFirmId(data.id)
       })
       .catch(() => { /* ignore */ })
-  }, [slug, accessToken])
+  }, [firmSlug, accessToken])
 
   const { status } = useFirmMaintenanceStatus(firmId, accessToken, 20_000)
   const wasActive = useRef(false)
@@ -37,9 +38,9 @@ export default function MaintenancePage() {
       wasActive.current = true
     }
     if (wasActive.current && status?.active === false) {
-      router.push(`/d/f/${slug}/connectors`)
+      router.push(`${firmPath(groupSlug, firmSlug)}/connectors`)
     }
-  }, [status, slug, router])
+  }, [status, groupSlug, firmSlug, router])
 
   const now = new Date()
   const isExpired = status?.expiresAt ? now > new Date(status.expiresAt) : false
@@ -57,7 +58,7 @@ export default function MaintenancePage() {
         },
         body: JSON.stringify({ action: 'force-unlock', firmId }),
       })
-      router.push(`/d/f/${slug}/connectors`)
+      router.push(`${firmPath(groupSlug, firmSlug)}/connectors`)
     } catch { /* ignore */ } finally {
       setForceUnlocking(false)
     }

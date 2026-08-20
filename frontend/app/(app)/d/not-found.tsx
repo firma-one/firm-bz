@@ -7,8 +7,13 @@ import { Button } from '@/components/ui/button'
 
 export default function NotFound() {
     const pathname = usePathname()
-    const firmSlug = pathname?.match(/^\/d\/f\/([^/]+)/)?.[1]
-    const dashboardHref = firmSlug ? `/d/f/${firmSlug}` : '/d'
+    // Client component with only the (possibly-broken) pathname to go on — no Prisma access
+    // here. Parse both segments straight from the URL rather than trusting route params
+    // (this page renders precisely when the route didn't resolve).
+    const match = pathname?.match(/^\/d\/([^/]+)\/f\/([^/]+)/)
+    const groupSlug = match?.[1]
+    const firmSlug = match?.[2]
+    const dashboardHref = groupSlug && firmSlug ? `/d/${groupSlug}/f/${firmSlug}` : '/d'
 
     return (
         <div className="flex h-[80vh] flex-col items-center justify-center text-center px-4 w-full">

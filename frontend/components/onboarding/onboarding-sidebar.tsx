@@ -53,6 +53,10 @@ export function OnboardingSidebar() {
 
     const billingFirmSlug =
         firms.find((o) => o.isDefault)?.slug ?? firms[0]?.slug ?? null
+    const billingGroupSlug = useMemo(() => {
+        if (!billingFirmSlug) return null
+        return firms.find((f) => f.slug === billingFirmSlug)?.groupSlug ?? null
+    }, [firms, billingFirmSlug])
     const billingFirmId = useMemo(() => {
         if (!billingFirmSlug) return null
         return firms.find((f) => f.slug === billingFirmSlug)?.id ?? null
@@ -220,7 +224,7 @@ export function OnboardingSidebar() {
                     signOut={signOut}
                     isCollapsed={false}
                     showBillingLink
-                    billingHref={buildBillingPageHref({ firmSlug: billingFirmSlug, pathname })}
+                    billingHref={buildBillingPageHref({ firmSlug: billingFirmSlug, groupSlug: billingGroupSlug, pathname })}
                     supportHref={billingFirmSlug ? `/d/support?firmSlug=${billingFirmSlug}` : undefined}
                     {...(firms.length > 0 && billingFirmId
                         ? { planSubtitle: profilePlanSubtitle, planSubtitleLoading: billingPlanLoading }

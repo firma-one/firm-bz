@@ -12,6 +12,7 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { SelectWithCustomEntry } from "@/components/ui/select-with-custom-entry"
 import { OptionalFieldsSection } from "@/components/ui/optional-fields-toggle"
 import { createFirm, updateFirm } from '@/lib/actions/firms'
+import { firmPath } from '@/lib/navigation/firm-paths'
 
 const fieldLabel = 'font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] block mb-1'
 const inputCls = 'border-[#e5e7eb] text-[#1b1b1d] text-xs font-normal placeholder:text-[#9a9ba0] rounded focus-visible:ring-1 focus-visible:ring-primary focus-visible:border-primary disabled:opacity-50 disabled:cursor-not-allowed'
@@ -111,7 +112,7 @@ export function AddFirmModal({ trigger, open: controlledOpen, onOpenChange: cont
             })
             setOpen(false)
             resetForm()
-            router.push(`/d/f/${newFirm.slug}`)
+            router.push(newFirm.groupSlug ? firmPath(newFirm.groupSlug, newFirm.slug) : `/d/${newFirm.slug}`)
             router.refresh()
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : 'Failed to create firm')

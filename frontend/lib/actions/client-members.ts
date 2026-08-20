@@ -149,7 +149,7 @@ export async function inviteClientMember(firmId: string, clientId: string, email
         .meta({ invitedEmail: normalizedEmail, clientId })
         .fireAndForget()
 
-    revalidatePath(`/d/f/[slug]/c/[clientSlug]`)
+    revalidatePath(`/d/[groupSlug]/f/[firmSlug]/c/[clientSlug]`)
 }
 
 export async function resendClientInvitation(invitationId: string) {
@@ -194,7 +194,7 @@ export async function resendClientInvitation(invitationId: string) {
             data: { status: InvitationStatus.ERROR, updatedAt: new Date() }
         })
     }
-    revalidatePath(`/d/f/[slug]/c/[clientSlug]`)
+    revalidatePath(`/d/[groupSlug]/f/[firmSlug]/c/[clientSlug]`)
 }
 
 export async function revokeClientInvitation(invitationId: string) {
@@ -212,5 +212,5 @@ export async function revokeClientInvitation(invitationId: string) {
     if (!canManage) throw new Error('Insufficient permissions')
 
     await prisma.clientInvitation.delete({ where: { id: invitationId } })
-    revalidatePath(`/d/f/[slug]/c/[clientSlug]`)
+    revalidatePath(`/d/[groupSlug]/f/[firmSlug]/c/[clientSlug]`)
 }

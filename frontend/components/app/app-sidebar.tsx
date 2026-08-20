@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react"
 import Link from "next/link"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { usePathname, useRouter, useSearchParams, useParams } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { useSidebar } from "@/lib/sidebar-context"
 import {
@@ -107,13 +107,17 @@ function toLabel(slug: string) {
 
 const ENGAGEMENT_TABS = new Set(['files', 'shares', 'comments', 'members', 'analytics', 'sources', 'audit', 'settings', 'wiki'])
 
-function parseRecentFromPath(pathname: string, firmSlug: string): RecentItem | null {
-  const engMatch = pathname.match(/\/d\/f\/[^/]+\/c\/([^/]+)\/e\/([^/]+)(?:\/([^/]+))?/)
+// Recents are keyed/stored per-firm (storageKey below), but the href stored alongside each
+// recent item must carry whichever groupSlug was current *when that page was visited* — not
+// necessarily today's route params — so we still parse groupSlug out of the pathname here
+// rather than relying on useParams() (which only reflects the *current* route).
+function parseRecentFromPath(pathname: string, groupSlug: string, firmSlug: string): RecentItem | null {
+  const engMatch = pathname.match(/\/d\/[^/]+\/f\/[^/]+\/c\/([^/]+)\/e\/([^/]+)(?:\/([^/]+))?/)
   if (engMatch) {
     const clientSlug = engMatch[1]
     const engSlug = engMatch[2]
     const tab = engMatch[3] && ENGAGEMENT_TABS.has(engMatch[3]) ? engMatch[3] : null
-    const base = `/d/f/${firmSlug}/c/${clientSlug}/e/${engSlug}`
+    const base = `/d/${groupSlug}/f/${firmSlug}/c/${clientSlug}/e/${engSlug}`
     return {
       type: 'engagement',
       name: toLabel(engSlug),
@@ -123,20 +127,20 @@ function parseRecentFromPath(pathname: string, firmSlug: string): RecentItem | n
     }
   }
   // Client detail pages only — not firm-level sub-routes like /insights, /audit, /connectors
-  const clientMatch = pathname.match(/\/d\/f\/[^/]+\/c\/([^/]+)(?:\/|$)/)
+  const clientMatch = pathname.match(/\/d\/[^/]+\/f\/[^/]+\/c\/([^/]+)(?:\/|$)/)
   if (clientMatch) {
     return {
       type: 'client',
       name: toLabel(clientMatch[1]),
       slug: clientMatch[1],
-      href: `/d/f/${firmSlug}/c/${clientMatch[1]}`,
+      href: `/d/${groupSlug}/f/${firmSlug}/c/${clientMatch[1]}`,
       visitedAt: Date.now(),
     }
   }
   return null
 }
 
-function useRecentNavItems(firmSlug: string | null, pathname: string): RecentItem[] {
+function useRecentNavItems(groupSlug: string | null, firmSlug: string | null, pathname: string): RecentItem[] {
   const storageKey = firmSlug ? `fm_nav_recents_${firmSlug}` : null
   const [recents, setRecents] = useState<RecentItem[]>([])
 
@@ -156,8 +160,8 @@ function useRecentNavItems(firmSlug: string | null, pathname: string): RecentIte
   }, [storageKey])
 
   useEffect(() => {
-    if (!firmSlug || !storageKey) return
-    const item = parseRecentFromPath(pathname, firmSlug)
+    if (!groupSlug || !firmSlug || !storageKey) return
+    const item = parseRecentFromPath(pathname, groupSlug, firmSlug)
     if (!item) return
     setRecents((prev) => {
       const deduped = prev.filter((r) => !(r.type === item.type && r.slug === item.slug))
@@ -165,7 +169,7 @@ function useRecentNavItems(firmSlug: string | null, pathname: string): RecentIte
       try { localStorage.setItem(storageKey, JSON.stringify(updated)) } catch { /* ignore */ }
       return updated
     })
-  }, [pathname, firmSlug, storageKey])
+  }, [pathname, groupSlug, firmSlug, storageKey])
 
   // Patch stored names when a page broadcasts its real entity names
   useEffect(() => {
@@ -254,26 +258,37 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
   const [isWhatsNewOpen, setIsWhatsNewOpen] = useState(false)
   const { hasUnread, markAsRead } = useWhatsNew(releasesMetaData)
 
-  // Extract firm slug from URL
+  // Current firm/group come from route params when this sidebar is rendered inside the
+  // group-scoped firm route tree (/d/[groupSlug]/f/[firmSlug]/...). Fall back to regex-parsing
+  // the pathname for routes where useParams() won't have them (e.g. this component is mounted
+  // by the shared /d layout, so it also renders on non-firm-scoped pages like /d/support,
+  // /d/u/*, where routeParams is empty).
+  const routeParams = useParams<{ groupSlug?: string; firmSlug?: string }>()
   const getSlug = () => {
-    const match = pathname.match(/\/(?:d\/)?f\/([^\/]+)/)
+    if (routeParams?.firmSlug) return routeParams.firmSlug
+    const match = pathname.match(/\/d\/[^/]+\/f\/([^\/]+)/)
     return match ? match[1] : null
   }
   const slug = getSlug()
 
-  const baseUrl = slug ? `/d/f/${slug}` : '/d'
-  const firmScopedNavBase =
-    slug != null
-      ? `/d/f/${slug}`
-      : (() => {
-          const s =
-            selectedFirmSlug ||
-            firms.find((o) => o.isDefault)?.slug ||
-            firms[0]?.slug
-          return s ? `/d/f/${s}` : '/d'
-        })()
+  const getGroupSlug = () => {
+    if (routeParams?.groupSlug) return routeParams.groupSlug
+    const match = pathname.match(/\/d\/([^/]+)\/f\/[^\/]+/)
+    if (match) return match[1]
+    // Non-firm-scoped pages (e.g. /d/support, /d/u/*) have no groupSlug in the route at all —
+    // fall back to the current/selected firm's own groupSlug from the firms list.
+    const currentFirm = firms.find((f) => f.slug === (slug || selectedFirmSlug))
+    return currentFirm?.groupSlug ?? null
+  }
+  const groupSlug = getGroupSlug()
 
-  const recents = useRecentNavItems(slug || selectedFirmSlug || null, pathname)
+  const baseUrl = slug && groupSlug ? `/d/${groupSlug}/f/${slug}` : '/d'
+  const firmScopedNavBase =
+    slug != null && groupSlug != null
+      ? `/d/${groupSlug}/f/${slug}`
+      : '/d'
+
+  const recents = useRecentNavItems(groupSlug || null, slug || selectedFirmSlug || null, pathname)
 
   // Load reminders on mount and when event fires
   const loadReminders = useCallback(async () => {
@@ -422,6 +437,10 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
   const billingFirmSlug =
     slug || selectedFirmSlug || firms.find((o) => o.isDefault)?.slug || firms[0]?.slug || null
 
+  const billingGroupSlug = billingFirmSlug
+    ? firms.find((f) => f.slug === billingFirmSlug)?.groupSlug ?? groupSlug
+    : groupSlug
+
   const billingFirmId = useMemo(() => {
     if (!billingFirmSlug) return null
     return firms.find((f) => f.slug === billingFirmSlug)?.id ?? null
@@ -540,10 +559,14 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                         selectedFirmSlug={selectedFirmSlug}
                         onFirmChange={(firmSlug) => {
                           setSelectedFirmSlug(firmSlug)
-                          router.push(`/d/f/${firmSlug}`)
+                          // Use the target firm's own groupSlug (not necessarily the currently
+                          // active group) — a user's firm list can span multiple groups.
+                          const targetGroupSlug = firms.find((f) => f.slug === firmSlug)?.groupSlug ?? groupSlug
+                          if (targetGroupSlug) router.push(`/d/${targetGroupSlug}/f/${firmSlug}`)
                         }}
                         compact
                         isFirmAdmin={role === 'FIRM_ADMIN'}
+                        groupSlug={groupSlug}
                       />
                       </div>
                       {/* Tree sub-items: Overview + Clients + Settings */}
@@ -1110,7 +1133,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                 signOut={signOut}
                 isCollapsed={isCollapsed}
                 showBillingLink={canManageOrg}
-                billingHref={buildBillingPageHref({ firmSlug: billingFirmSlug, pathname })}
+                billingHref={buildBillingPageHref({ firmSlug: billingFirmSlug, groupSlug: billingGroupSlug, pathname })}
                 isSystemAdmin={isSystemAdmin}
                 {...(firms.length > 0 && billingFirmId
                   ? { planSubtitle: profilePlanSubtitle, planSubtitleLoading: billingPlanLoading }

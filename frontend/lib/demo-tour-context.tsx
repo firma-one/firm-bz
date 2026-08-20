@@ -8,6 +8,7 @@ interface TourState {
   seen: boolean
   stepIndex?: number
   firmSlug?: string
+  groupSlug?: string
 }
 
 function readTourState(): TourState {
@@ -28,20 +29,25 @@ function writeTourState(patch: Partial<TourState>): void {
   } catch { /* ignore */ }
 }
 
-export function saveTourProgress(stepIndex: number, firmSlug: string): void {
-  writeTourState({ stepIndex, firmSlug })
+export function saveTourProgress(stepIndex: number, firmSlug: string, groupSlug: string): void {
+  writeTourState({ stepIndex, firmSlug, groupSlug })
 }
 
-export function loadTourProgress(): { stepIndex: number; firmSlug: string } | null {
+export function loadTourProgress(): { stepIndex: number; firmSlug: string; groupSlug: string } | null {
   const state = readTourState()
-  if (typeof state.stepIndex === "number" && state.stepIndex > 0 && typeof state.firmSlug === "string") {
-    return { stepIndex: state.stepIndex, firmSlug: state.firmSlug }
+  if (
+    typeof state.stepIndex === "number" &&
+    state.stepIndex > 0 &&
+    typeof state.firmSlug === "string" &&
+    typeof state.groupSlug === "string"
+  ) {
+    return { stepIndex: state.stepIndex, firmSlug: state.firmSlug, groupSlug: state.groupSlug }
   }
   return null
 }
 
 export function clearTourProgress(): void {
-  writeTourState({ stepIndex: undefined, firmSlug: undefined })
+  writeTourState({ stepIndex: undefined, firmSlug: undefined, groupSlug: undefined })
 }
 
 export function readDemoTourSeen(): boolean {
@@ -59,6 +65,7 @@ export function clearDemoTourSeen(): void {
 
 export interface DemoTourSlugs {
   firmSlug: string
+  groupSlug: string
   clientSlug: string | null
   engagementSlug: string | null
 }
@@ -70,11 +77,11 @@ interface DemoTourContextValue {
   showIntroModal: boolean
   showOutroModal: boolean
   /** Non-null when there is a saved mid-tour position the user can resume */
-  resumableTourProgress: { stepIndex: number; firmSlug: string } | null
+  resumableTourProgress: { stepIndex: number; firmSlug: string; groupSlug: string } | null
   setRun: (v: boolean) => void
   setStepIndex: (v: number) => void
   /** Open intro modal — resolves slugs from the current demo firm */
-  openIntroModal: (firmSlug: string) => Promise<void>
+  openIntroModal: (firmSlug: string, groupSlug: string) => Promise<void>
   closeIntroModal: () => void
   closeOutroModal: () => void
   /** Called by the "Start Tour" button in the intro modal */
@@ -82,7 +89,7 @@ interface DemoTourContextValue {
   /** Resume from a previously saved step index */
   resumeTour: (stepIndex: number) => void
   /** Called by the floating restart button */
-  restartTour: (firmSlug: string) => Promise<void>
+  restartTour: (firmSlug: string, groupSlug: string) => Promise<void>
   endTour: (completed?: boolean) => void
 }
 
@@ -114,19 +121,19 @@ export function DemoTourProvider({ children }: { children: ReactNode }) {
   const [slugs, setSlugs] = useState<DemoTourSlugs | null>(null)
   const [showIntroModal, setShowIntroModal] = useState(false)
   const [showOutroModal, setShowOutroModal] = useState(false)
-  const [resumableTourProgress, setResumableTourProgress] = useState<{ stepIndex: number; firmSlug: string } | null>(() => loadTourProgress())
+  const [resumableTourProgress, setResumableTourProgress] = useState<{ stepIndex: number; firmSlug: string; groupSlug: string } | null>(() => loadTourProgress())
   const resolvingRef = useRef(false)
 
   const setStepIndex = useCallback((v: number) => {
     setStepIndexState(v)
   }, [])
 
-  const openIntroModal = useCallback(async (firmSlug: string) => {
+  const openIntroModal = useCallback(async (firmSlug: string, groupSlug: string) => {
     if (resolvingRef.current) return
     resolvingRef.current = true
     try {
       const { clientSlug, engagementSlug } = await resolveFirstClientAndEngagement(firmSlug)
-      setSlugs({ firmSlug, clientSlug, engagementSlug })
+      setSlugs({ firmSlug, groupSlug, clientSlug, engagementSlug })
       // Refresh resume state from localStorage each time the modal opens
       setResumableTourProgress(loadTourProgress())
       setShowIntroModal(true)
@@ -164,9 +171,9 @@ export function DemoTourProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const restartTour = useCallback(async (firmSlug: string) => {
+  const restartTour = useCallback(async (firmSlug: string, groupSlug: string) => {
     setRun(false)
-    await openIntroModal(firmSlug)
+    await openIntroModal(firmSlug, groupSlug)
   }, [openIntroModal])
 
   const endTour = useCallback((completed = false) => {

@@ -27,11 +27,13 @@ import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/comp
 import { ClientDriveSection } from '@/components/connectors/client-drive-section'
 import { contrastRatioAgainstWhite } from '@/lib/color-utils'
 import { FIRMA_COLOR } from '@/config/brand'
+import { clientTabPath, firmTabPath } from '@/lib/navigation/firm-paths'
 
 const MAX_LOGO_SIZE = 5 * 1024 * 1024
 const ALLOWED_LOGO_TYPES = ['image/jpeg', 'image/png', 'image/svg+xml', 'image/jpg']
 
 export interface ClientSettingsFormProps {
+    groupSlug: string
     orgSlug: string
     firmId?: string
     clientId?: string
@@ -61,6 +63,7 @@ const inputCls = 'border-[#e5e7eb] text-[#1b1b1d] text-xs font-normal placeholde
 const textareaCls = 'flex w-full rounded border border-[#e5e7eb] bg-white px-3 py-2 text-xs font-normal text-[#1b1b1d] placeholder:text-[#9a9ba0] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed'
 
 export function ClientSettingsForm({
+    groupSlug,
     orgSlug,
     firmId,
     clientId,
@@ -427,7 +430,7 @@ export function ClientSettingsForm({
             addToast({ type: 'success', title: 'Client deleted', message: 'Client has been removed.' })
             setDeleteConfirmOpen(false)
             onSaved?.()
-            router.push(`/d/f/${orgSlug}?tab=clients`)
+            router.push(firmTabPath(groupSlug, orgSlug, 'clients'))
         } catch (e: unknown) {
             addToast({ type: 'error', title: 'Delete failed', message: e instanceof Error ? e.message : 'Could not delete client.' })
         } finally {
@@ -587,7 +590,7 @@ export function ClientSettingsForm({
 
             {/* Actions bar */}
             <div className="flex items-center gap-3">
-                <Button type="button" variant="outline" className="rounded w-32 text-[10px] font-headline font-bold tracking-widest uppercase" onClick={() => router.push(`/d/f/${orgSlug}/c/${clientSlug}?tab=projects`)}>
+                <Button type="button" variant="outline" className="rounded w-32 text-[10px] font-headline font-bold tracking-widest uppercase" onClick={() => router.push(clientTabPath(groupSlug, orgSlug, clientSlug, 'projects'))}>
                     Cancel
                 </Button>
                 <Button onClick={handleSave} disabled={isSandboxFirm || saving || !detailsDirty} variant="greenCta" className="rounded w-32 text-[10px] font-headline font-bold tracking-widest uppercase text-white">
@@ -613,6 +616,7 @@ export function ClientSettingsForm({
                             connectorId={connectorId ?? null}
                             clientId={clientId ?? ''}
                             firmId={firmId ?? ''}
+                            groupSlug={groupSlug}
                             orgSlug={orgSlug}
                             isSandboxFirm={isSandboxFirm}
                         />

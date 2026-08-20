@@ -14,6 +14,7 @@ import { maybeProvisionInviteeAccount } from '@/lib/actions/account-provisioning
 import { findAuthUserIdByEmail } from '@/lib/actions/auth-user-lookup'
 import { joinEngagementForUser, provisionAndNotifyExistingUser } from '@/lib/actions/engagement-membership'
 import { InvitationStatus } from '@prisma/client'
+import { engagementPath, clientPath, firmPath } from '@/lib/navigation/firm-paths'
 
 /**
  * Invite a member to a project (V2)
@@ -26,7 +27,7 @@ export async function inviteMember(projectId: string, email: string, personaId: 
     // Sandbox restriction: disallow invites for sandbox orgs
     const projectOrg = await prisma.engagement.findFirst({
         where: { id: projectId, isDeleted: false },
-        select: { slug: true, name: true, client: { select: { slug: true, name: true, firm: { select: { id: true, slug: true, name: true, sandboxOnly: true } } } } },
+        select: { slug: true, name: true, client: { select: { slug: true, name: true, firm: { select: { id: true, slug: true, name: true, sandboxOnly: true, group: { select: { slug: true } } } } } } },
     })
     if (!projectOrg) throw new Error("Engagement not found")
     if (projectOrg.client?.firm?.sandboxOnly) {
@@ -35,7 +36,7 @@ export async function inviteMember(projectId: string, email: string, personaId: 
     const invReminderCtx = {
         firmId: projectOrg?.client?.firm?.id ?? '',
         ctaUrl: projectOrg?.client?.firm?.slug && projectOrg?.client?.slug && projectOrg?.slug
-            ? `/d/f/${projectOrg.client.firm.slug}/c/${projectOrg.client.slug}/e/${projectOrg.slug}/members`
+            ? engagementPath(projectOrg.client.firm.group.slug, projectOrg.client.firm.slug, projectOrg.client.slug, projectOrg.slug, { tab: 'members' })
             : null,
     }
 
@@ -75,7 +76,7 @@ export async function inviteMember(projectId: string, email: string, personaId: 
         if (existingAuthUserId) {
             const inviteWithRelations = await prisma.engagementInvitation.findUniqueOrThrow({
                 where: { id: existing.id },
-                include: { persona: true, engagement: { include: { client: { include: { firm: true } } } } }
+                include: { persona: true, engagement: { include: { client: { include: { firm: { include: { group: { select: { slug: true } } } } } } } } }
             })
             return await provisionAndNotifyExistingUser(existingAuthUserId, normalizedEmail, inviteWithRelations, projectOrg)
         }
@@ -130,7 +131,7 @@ export async function inviteMember(projectId: string, email: string, personaId: 
     if (existingAuthUserId) {
         const inviteWithRelations = await prisma.engagementInvitation.findUniqueOrThrow({
             where: { id: invite.id },
-            include: { persona: true, engagement: { include: { client: { include: { firm: true } } } } }
+            include: { persona: true, engagement: { include: { client: { include: { firm: { include: { group: { select: { slug: true } } } } } } } } }
         })
         return await provisionAndNotifyExistingUser(existingAuthUserId, normalizedEmail, inviteWithRelations, projectOrg)
     }
@@ -193,7 +194,7 @@ export async function resendInvitation(invitationId: string) {
     const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invite/${token}`
     const engDetails = await prisma.engagement.findFirst({
         where: { id: invite.engagementId },
-        select: { slug: true, name: true, client: { select: { slug: true, name: true, firm: { select: { id: true, slug: true, name: true } } } } },
+        select: { slug: true, name: true, client: { select: { slug: true, name: true, firm: { select: { id: true, slug: true, name: true, group: { select: { slug: true } } } } } } },
     })
     try {
         const { subject, html } = renderInviteEmail({
@@ -220,7 +221,7 @@ export async function resendInvitation(invitationId: string) {
         entityName: invite.email,
         firmId: engDetails?.client?.firm?.id ?? '',
         ctaUrl: engDetails?.client?.firm?.slug && engDetails?.client?.slug && engDetails?.slug
-            ? `/d/f/${engDetails.client.firm.slug}/c/${engDetails.client.slug}/e/${engDetails.slug}/members`
+            ? engagementPath(engDetails.client.firm.group.slug, engDetails.client.firm.slug, engDetails.client.slug, engDetails.slug, { tab: 'members' })
             : null,
     }).catch(() => {})
 
@@ -252,7 +253,7 @@ export async function verifyInvitation(token: string): Promise<VerifyInvitationR
 
     const firmInvite = await prisma.firmInvitation.findUnique({
         where: { token },
-        include: { firm: true, persona: true }
+        include: { firm: { include: { group: { select: { slug: true } } } }, persona: true }
     })
     if (firmInvite) {
         if (firmInvite.expireAt && now > firmInvite.expireAt) {
@@ -269,13 +270,13 @@ export async function verifyInvitation(token: string): Promise<VerifyInvitationR
             email: firmInvite.email,
             status: firmInvite.status,
             firm: { name: firmInvite.firm.name, slug: firmInvite.firm.slug },
-            ...(firmInvite.status === 'JOINED' && { redirectUrl: `/d/f/${firmInvite.firm.slug}` })
+            ...(firmInvite.status === 'JOINED' && { redirectUrl: firmPath(firmInvite.firm.group.slug, firmInvite.firm.slug) })
         }
     }
 
     const clientInvite = await prisma.clientInvitation.findUnique({
         where: { token },
-        include: { client: { include: { firm: true } }, persona: true }
+        include: { client: { include: { firm: { include: { group: { select: { slug: true } } } } } }, persona: true }
     })
     if (clientInvite) {
         if (clientInvite.expireAt && now > clientInvite.expireAt) {
@@ -293,7 +294,7 @@ export async function verifyInvitation(token: string): Promise<VerifyInvitationR
             status: clientInvite.status,
             client: { name: clientInvite.client.name, slug: clientInvite.client.slug },
             firm: { name: clientInvite.client.firm.name, slug: clientInvite.client.firm.slug },
-            ...(clientInvite.status === 'JOINED' && { redirectUrl: `/d/f/${clientInvite.client.firm.slug}/c/${clientInvite.client.slug}` })
+            ...(clientInvite.status === 'JOINED' && { redirectUrl: clientPath(clientInvite.client.firm.group.slug, clientInvite.client.firm.slug, clientInvite.client.slug) })
         }
     }
 
@@ -303,7 +304,7 @@ export async function verifyInvitation(token: string): Promise<VerifyInvitationR
             persona: true,
             engagement: {
                 include: {
-                    client: { include: { firm: true } }
+                    client: { include: { firm: { include: { group: { select: { slug: true } } } } } }
                 }
             }
         }
@@ -322,6 +323,7 @@ export async function verifyInvitation(token: string): Promise<VerifyInvitationR
                 data: { status: 'ACCEPTED', acceptedAt: now }
             })
         }
+        const groupSlug = engageInvite.engagement.client.firm.group.slug
         const firmSlug = engageInvite.engagement.client.firm.slug
         const clientSlug = engageInvite.engagement.client.slug
         const projectSlug = engageInvite.engagement.slug
@@ -337,7 +339,7 @@ export async function verifyInvitation(token: string): Promise<VerifyInvitationR
                 role: { displayLabel: engageInvite.persona.displayName },
                 organization: { name: engageInvite.engagement.client.firm.name }
             },
-            ...(status === 'JOINED' && { redirectUrl: `/d/f/${firmSlug}/c/${clientSlug}/e/${projectSlug}/files` })
+            ...(status === 'JOINED' && { redirectUrl: engagementPath(groupSlug, firmSlug, clientSlug, projectSlug, { tab: 'files' }) })
         }
     }
 
@@ -379,11 +381,11 @@ export async function acceptInvitation(token: string): Promise<{ success: true; 
     if (kind === 'firm') {
         const invite = await prisma.firmInvitation.findUnique({
             where: { token },
-            include: { firm: true }
+            include: { firm: { include: { group: { select: { slug: true } } } } }
         })
         if (!invite) throw new Error("Invalid invitation")
         if (invite.status === 'JOINED') {
-            return { success: true, redirectUrl: `/d/f/${invite.firm.slug}` }
+            return { success: true, redirectUrl: firmPath(invite.firm.group.slug, invite.firm.slug) }
         }
         if (invite.expireAt && new Date() > invite.expireAt) throw new Error("Invitation expired")
         if (!user.email) throw new Error("Cannot verify email: your account has no email address")
@@ -439,17 +441,17 @@ export async function acceptInvitation(token: string): Promise<{ success: true; 
                 logger.error('Failed to update JWT after firm invite accept', e as Error)
             }
         }
-        return { success: true, redirectUrl: `/d/f/${invite.firm.slug}` }
+        return { success: true, redirectUrl: firmPath(invite.firm.group.slug, invite.firm.slug) }
     }
 
     if (kind === 'client') {
         const invite = await prisma.clientInvitation.findUnique({
             where: { token },
-            include: { client: { include: { firm: true } } }
+            include: { client: { include: { firm: { include: { group: { select: { slug: true } } } } } } }
         })
         if (!invite) throw new Error("Invalid invitation")
         if (invite.status === 'JOINED') {
-            return { success: true, redirectUrl: `/d/f/${invite.client.firm.slug}/c/${invite.client.slug}` }
+            return { success: true, redirectUrl: clientPath(invite.client.firm.group.slug, invite.client.firm.slug, invite.client.slug) }
         }
         if (invite.expireAt && new Date() > invite.expireAt) throw new Error("Invitation expired")
         if (!user.email) throw new Error("Cannot verify email: your account has no email address")
@@ -485,7 +487,7 @@ export async function acceptInvitation(token: string): Promise<{ success: true; 
         if (invite.createdBy) {
             await removeRemindersByEntity(invite.createdBy, 'platform.client_invitations.id', invite.id).catch(() => {})
         }
-        return { success: true, redirectUrl: `/d/f/${invite.client.firm.slug}/c/${invite.client.slug}` }
+        return { success: true, redirectUrl: clientPath(invite.client.firm.group.slug, invite.client.firm.slug, invite.client.slug) }
     }
 
     // Engagement (project) invite — use Engagement/Firm schema
@@ -495,7 +497,7 @@ export async function acceptInvitation(token: string): Promise<{ success: true; 
             persona: true,
             engagement: {
                 include: {
-                    client: { include: { firm: true } }
+                    client: { include: { firm: { include: { group: { select: { slug: true } } } } } }
                 }
             }
         }
@@ -506,7 +508,13 @@ export async function acceptInvitation(token: string): Promise<{ success: true; 
     if (invite.status === 'JOINED') {
         return {
             success: true,
-            redirectUrl: `/d/f/${invite.engagement.client.firm.slug}/c/${invite.engagement.client.slug}/e/${invite.engagement.slug}/files`
+            redirectUrl: engagementPath(
+                invite.engagement.client.firm.group.slug,
+                invite.engagement.client.firm.slug,
+                invite.engagement.client.slug,
+                invite.engagement.slug,
+                { tab: 'files' }
+            )
         }
     }
 

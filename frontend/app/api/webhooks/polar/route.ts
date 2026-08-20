@@ -5,7 +5,7 @@ import { syncFirmSubscriptionFromPolarEvent } from '@/lib/billing/polar-webhook-
 import { refreshBillingPlanForFirmGroupUsers } from '@/lib/billing/billing-user-session-sync'
 import {
     maybeRevokeFreePolarAfterPaidSubscriptionSync,
-    resyncSandboxFreePlanAfterPaidSubscriptionEnd,
+    resyncGroupFreePlanAfterPaidSubscriptionEnd,
     createSubscriptionCancellationRemindersForAdmins,
     clearSubscriptionCancellationRemindersForAdmins,
 } from '@/lib/billing/polar-billing-lifecycle'
@@ -37,7 +37,7 @@ function buildHandler() {
             if (r) {
                 await maybeRevokeFreePolarAfterPaidSubscriptionSync(r)
                 if (r.status === 'canceled') {
-                    await resyncSandboxFreePlanAfterPaidSubscriptionEnd(r.groupId)
+                    await resyncGroupFreePlanAfterPaidSubscriptionEnd(r.groupId)
                     await refreshBillingPlanForFirmGroupUsers(r.groupId)
                 }
             }
@@ -67,7 +67,7 @@ function buildHandler() {
             } else {
                 const r = await syncFirmSubscriptionFromPolarEvent(payload, { statusOverride: 'canceled', scheduledCancelAt: null })
                 if (r?.groupId) {
-                    await resyncSandboxFreePlanAfterPaidSubscriptionEnd(r.groupId)
+                    await resyncGroupFreePlanAfterPaidSubscriptionEnd(r.groupId)
                     await refreshBillingPlanForFirmGroupUsers(r.groupId)
                 }
             }
@@ -75,7 +75,7 @@ function buildHandler() {
         onSubscriptionRevoked: async (payload) => {
             const r = await syncFirmSubscriptionFromPolarEvent(payload, { statusOverride: 'canceled', scheduledCancelAt: null })
             if (r?.groupId) {
-                await resyncSandboxFreePlanAfterPaidSubscriptionEnd(r.groupId)
+                await resyncGroupFreePlanAfterPaidSubscriptionEnd(r.groupId)
                 await refreshBillingPlanForFirmGroupUsers(r.groupId)
                 await clearSubscriptionCancellationRemindersForAdmins(r.groupId)
             }
