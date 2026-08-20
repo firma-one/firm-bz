@@ -24,6 +24,30 @@ Onboarding currently creates a per-user "sandbox" demo firm (`Firm.sandboxOnly: 
 
 ## Approach
 
+### Step 0 — Introduce `Group.slug` and a centralized firm-path URL builder, restructure routes under `/d/[groupSlug]/f/[firmSlug]/...`
+
+**Decision: the group becomes part of the URL, not just a routing/session concept.** Every `/d/f/{slug}/...` route moves to `/d/{groupSlug}/f/{firmSlug}/...`. Since there are no real production users yet, breaking all existing reminder/invitation links embedded in previously-sent emails is accepted — those get cleared via a one-off admin script (see below) rather than preserved.
+
+**Correction from earlier research:** `Group` does **not** currently have a `slug` field or column — confirmed against both `prisma/schema.prisma` and the live `platform.groups` table (columns: `id`, `name`, `settings`, `createdBy/At`, `updatedBy/At` only). A `slug` needs to be added as new schema work, not adopted from something pre-existing.
+
+- **Prisma migration** (`npx prisma migrate dev --create-only`, not applied — per CLAUDE.md): add `Group.slug String @unique`.
+  - **New-group generation**: add a `generateGroupSlug(name: string)` to `lib/slug-utils.ts`, same `base(7 chars) + '-' + random-suffix(4 chars)` shape as `generateFirmSlug`/`generateClientSlug` (via `generateUniqueSlug`) — used going forward at group-creation time (Step 2's silent auto-provisioning).
+  - **Backfill for the 6 existing groups**: derived from the **creating user's first name**, not `Group.name` — confirmed `Group.name` is application-encrypted at rest (`v1$...` ciphertext in `platform.groups.name`, via the `lib/encryption.ts`/`lib/prisma.ts` field-encryption extension), so it can't be slugified directly inside a raw-SQL migration anyway. Source instead: `auth.users.raw_user_meta_data->>'first_name'` joined via `Group.createdBy`, same field `create-sandbox/route.ts:141` already reads for the sandbox-firm-group display name. Confirmed live: 3 of the 6 existing groups have a populated `first_name`; the other 3 have `null` (real data, not hypothetical) and need a fallback (e.g. `'group'` + random suffix, matching `SANDBOX_FIRM_NAME_FALLBACK`'s spirit). Migration SQL, conceptually:
+    ```sql
+    UPDATE platform.groups g
+    SET slug = lower(regexp_replace(
+          COALESCE(NULLIF(trim(u.raw_user_meta_data->>'first_name'), ''), 'group'),
+          '[^a-z0-9]+', '-', 'g'
+        )) || '-' || substr(md5(random()::text), 1, 4)
+    FROM auth.users u
+    WHERE u.id = g."createdBy";
+    ```
+    (Exact regex/truncation to mirror `generateSlug`'s behavior precisely — implement as a data migration that calls the real TS helper via a one-off script if closer parity to `generateSlug`'s truncation/edge-case handling is wanted, rather than reimplementing its logic in raw SQL.)
+- **Route restructure**: move `app/(app)/d/f/[slug]/...` → `app/(app)/d/[groupSlug]/f/[firmSlug]/...` (Next.js file-tree rename). `/d/[groupSlug]/f/` becomes the group-scoped firm picker (replaces today's flat `/d/f/`); `/d/[groupSlug]/f/[firmSlug]/...` replaces every nested client/engagement route.
+- **Create `lib/navigation/firm-paths.ts`** with typed builder functions for the new `/d/{groupSlug}/f/{firmSlug}/...` shapes: `firmPath(groupSlug, firmSlug)`, `firmSettingsPath(groupSlug, firmSlug, section?)`, `clientPath(groupSlug, firmSlug, clientSlug)`, `engagementPath(groupSlug, firmSlug, clientSlug, engSlug, tab?)`, plus the doc-comment/doc-file hash-fragment variants used by `entity-registry.ts`. This is now load-bearing, not optional — every one of the ~52 existing inline-template-literal call sites is broken by the route rename and must be updated to call the new builder rather than hand-writing the new shape ad hoc.
+- **All ~52 call sites need updating in this pass** (unlike the earlier "adopt opportunistically" framing, which assumed the URL shape wasn't changing) — this is a mechanical, find-and-replace-driven migration since every existing `/d/f/{slug}` construction site already has the firm object in scope, and the firm object already carries `firm.groupId` (just needs the group's `slug` joined in, or `group.slug` selected alongside `group.id` wherever `firm.group` is already included — e.g. `getUserFirms()` and friends).
+- **Reminder cleanup**: write a one-off admin script (`scripts/` or `app/api/system/*`, following existing admin-script conventions) that deletes all rows in whatever reminder table stores previously-generated `/d/f/...` deep links, since those are now permanently invalid. Run manually once, post-deploy, not as part of the automated migration.
+
 ### Step 1 — Billing: make the free/paid cap check group-native
 
 - Change `loadAnchorForCaps` to accept `groupId` directly instead of `firmId`.
@@ -55,14 +79,49 @@ Onboarding currently creates a per-user "sandbox" demo firm (`Firm.sandboxOnly: 
 
 - Remove the "Sandbox" comparison-table column (`PRICING_SANDBOX_COLUMN_ID` in `config/pricing.ts` and its usages in `app/(marketing)/pricing/page.tsx`), the free-sandbox plan card, and footer CTA copy referencing "Demo firm." This reshapes the comparison table layout, not just copy — worth a quick visual check once done.
 
+### Step 6 — Group Picker at `/d/`
+
+**Why it belongs in this refactor:** once onboarding auto-provisions a firm+group silently (Step 2) and sandbox firms stop cluttering firm lists (Step 4), the "which workspace am I in" routing surface (`resolveDefaultFirmLandingPath`) is being touched anyway — this is the moment to also make it group-aware, since a user with access to firms across multiple distinct groups (via `FirmMember` invites into someone else's group) currently has no first-class way to pick "which group am I working in." This scenario doesn't exist in prod yet, but will as soon as cross-group invites happen, and the routing function is already in scope this refactor.
+
+**New routing rules** (replaces today's rule #2, which is firm-count-based; groups become the top-level unit, firms are the second-level unit within a group):
+
+1. Zero groups → `/d/onboarding` (new user, unchanged from today's rule #1).
+2. **2+ distinct groups** → land on `/d/` showing one card per group, reusing `firm-list.tsx`'s grid-mode card design (icon avatar, name, active/default indicators) — labeled by group name, e.g. "Deepak's Firm Group," "Shubham's Firm Group." Picking a card routes to `/d/{groupSlug}/f/`.
+3. **Exactly 1 group, and that group has 2+ firms** → skip the group picker (nothing to pick, only one group) and land on `/d/{groupSlug}/f/`, the firm picker scoped to that group's firms — same picker UI as today, just group-scoped in the URL now rather than the old flat `/d/f/`.
+4. **Exactly 1 group, and that group has exactly 1 firm** → skip both pickers entirely and land straight on `/d/{groupSlug}/f/{firmSlug}`, exactly as today's single-firm fast path, just with the group segment now present in the URL.
+5. Existing admin/onboarding-incomplete/domain-org sub-rules (today's rules #4-6) still apply *within* whichever firm is ultimately reached by rules 3-4 above — unchanged.
+
+Every resolved path in rules 2-4 is built via the `firm-paths.ts` helper from Step 0, using the group's newly-added `slug`.
+
+Distinct-group membership is derived from `getUserFirms()`'s existing `firm.group` fan-out, deduped by `groupId` — not `GroupMember` rows, which today only ever number 1 per user and aren't the right signal here.
+
+- **JWT / `UserSettingsPlus` / session logic does not change.** The group picker is purely a routing/selection layer sitting *above* today's firm-scoped session logic — once a firm is actually selected (via any of rules 2-4 above), `app_metadata`, `UserSettingsPlus`, and all downstream permission/session logic continue to be built exactly as today, keyed off the selected firm.
+- **`AppSidebar` needs a reduced state for a bare `/d/` landing** (rule 2 only) — today's sidebar assumes it's always rendered inside a firm-scoped layout (`d-layout-client.tsx`). A group-picker landing has no "current firm" yet, so its sidebar chrome needs its own adapted state (no firm switcher showing a specific firm, no firm-scoped nav tree) until a group/firm is actually selected — similar in spirit to how `/d/f`'s existing picker page already renders without being deep in a specific firm's context.
+- Insertion point: replace rule #2 inside `resolveDefaultFirmLandingPath` (`lib/actions/firms.ts`) with the group-aware rules 2-4 above — centralizing it there means `d/layout.tsx` and `/d/f/page.tsx`'s existing calls to this function pick up the new behavior automatically, no changes needed on their end.
+
+**Breadcrumb navigation must reflect the new hierarchy.** Today's firm-level breadcrumb (`firm-clients-view.tsx:143-148`, and the equivalent leading segment in `client-project-view.tsx`/`engagement-workspace.tsx`) starts with a static, non-clickable `Home` icon — there's currently no way to navigate "back up" from a firm to a firm list, or from a firm list to a group list. This needs to become real, conditional navigation:
+- The leading breadcrumb segment (today's static `Home` icon) becomes a clickable link back to **`/d/{groupSlug}/f/`** (the firm list, group-scoped) whenever the user's current group has **2+ firms** — so a user working inside "Acme Corp" can click back to see all firms in their group. If the group has only 1 firm, this segment stays non-interactive (nothing to go back to at that level).
+- When the user belongs to **2+ distinct groups**, breadcrumbs everywhere (firm/client/engagement level) grow one level higher: a new leading segment for the **current group name**, clickable back to **`/d/`** (the group picker) — so a user can navigate all the way back to "pick a different firm group," not just "pick a different firm within this group." If the user belongs to only 1 group, this segment is omitted entirely (nothing to pick between).
+- Net effect: breadcrumb depth is dynamic based on the signed-in user's actual group/firm counts, not a fixed shape — a single-group, single-firm user's breadcrumb looks exactly as it does today (no group segment, non-clickable firm segment); a multi-group, multi-firm user sees the full chain: `[Group name] → [Firm name] → [Client] → [Engagement]`, each segment clickable back to its respective picker.
+- This touches every breadcrumb render site across the firm/client/engagement views (`firm-clients-view.tsx`, `client-project-view.tsx`, `engagement-workspace.tsx`, and the equivalent demo-static counterparts should NOT be touched — the `/demo` route's breadcrumbs stay as they are, this is authenticated-app-only) — worth factoring into one shared `AppBreadcrumb` component during implementation rather than duplicating the conditional logic four times.
+
 ## Critical Files
 
+- `prisma/schema.prisma` (new `Group.slug`, migration `--create-only`)
+- `lib/navigation/firm-paths.ts` (new — centralized URL builder, group+firm-slug aware)
+- `app/(app)/d/f/[slug]/...` → `app/(app)/d/[groupSlug]/f/[firmSlug]/...` (full route-tree rename)
+- ~52 existing `/d/f/{slug}` call sites (components, server actions, API routes, reminder/invitation link generators) — all updated to the new builder/route shape
 - `app/(app)/d/onboarding/page.tsx` (deleted or drastically reduced)
 - `app/api/onboarding/create-sandbox/route.ts` (deleted)
 - `lib/billing/effective-billing-caps.ts`, `firm-creation-gate.ts`, `polar-free-plan.ts`, `polar-billing-lifecycle.ts`, `billing-profile.ts`
-- `lib/actions/firms.ts` (new silent auto-provision path)
+- `lib/actions/firms.ts` (silent auto-provision path + group-count routing rule)
 - `lib/onboarding/onboarding-helper.ts` (seeding removed)
+- `lib/firm-service.ts` (`getUserFirms` sandbox filter)
 - `app/(marketing)/pricing/page.tsx`, `config/pricing.ts`
+- `app/(app)/d/page.tsx`, `app/(app)/d/layout.tsx` (group-picker landing)
+- `components/projects/firm-list.tsx` (card design source for the new group-picker cards)
+- `components/app/app-sidebar.tsx` (reduced state for bare `/d/` landing)
+- New admin script to clear stale pre-migration reminder deep links
 - Wherever the app topbar lives (add `/demo` link)
 
 ## Verification
@@ -70,20 +129,11 @@ Onboarding currently creates a per-user "sandbox" demo firm (`Firm.sandboxOnly: 
 - New signup: lands directly in the app with an auto-created real firm, zero onboarding steps, can create clients/engagements immediately with no Drive connector, sees the upgrade banner once relevant caps are hit.
 - Billing: free-tier caps still apply correctly (now via `Subscription.plan`, not a firm flag); creating a firm/client/engagement still respects group caps.
 - `/demo` link reachable from the topbar in the authenticated app.
-- Existing sandbox firms no longer appear anywhere (firm switcher, `/d/f`, sidebar) for any user.
+- Existing sandbox firms no longer appear anywhere (firm switcher, `/d/{groupSlug}/f/`, sidebar) for any user.
+- Single-group, single-firm user: signs in, lands directly on `/d/{groupSlug}/f/{firmSlug}` — no picker shown at all.
+- Single-group, multi-firm user: signs in, lands on `/d/{groupSlug}/f/` (group-scoped firm picker) — no group picker shown.
+- Multi-group user (test by manually creating a second group + firm for a test account, or via a cross-group `FirmMember` invite once that exists): signs in, lands on `/d/` group-picker, sees one card per group, picking a card routes correctly into that group's `/d/{groupSlug}/f/...`; JWT/session state is correct for whichever firm is ultimately selected.
+- All ~52 migrated call sites produce correct `/d/{groupSlug}/f/{firmSlug}/...` URLs (spot-check invitation accept flow, reminder CTA links, firm switcher, sidebar nav, breadcrumbs).
+- Stale pre-migration reminders cleared via the admin script; no lingering references to the old flat `/d/f/{slug}` shape anywhere live.
 - `npx tsc --noEmit` clean.
-- Grep sweep confirms no remaining references to deleted functions/routes before each deletion.
-
----
-
-## Future Improvement (separate follow-up, not part of this refactor): Group Picker at `/d/`
-
-**Problem:** today, `resolveDefaultFirmLandingPath` only ever reasons about *firms*, never *groups* — a user who has access to firms across multiple distinct groups (e.g. via `FirmMember` invites into someone else's group) has no way to see/pick "which group am I working in" as a first-class step; they just land wherever firm-count logic sends them.
-
-**Design:**
-- If a signing-in user's accessible firms span **2+ distinct `Group`s** (derived from `getUserFirms()`'s existing `firm.group` fan-out, deduped by `groupId` — not `GroupMember` rows, which today only ever number 1 per user and aren't the right signal for this), they land on a new group-picker page at `/d/` showing one card per group, reusing the card visual design from `firm-list.tsx`'s grid mode (icon avatar, name, active/default indicators) — labeled by group name, e.g. "Deepak's Firm Group," "Shubham's Firm Group." Picking a card routes into that group's firm(s) via the existing `/d/f/` firm-picker logic (if the group has 1 firm, go straight in; if 2+, show the existing firm picker scoped to that group).
-- If the user belongs to exactly **1 distinct group** (the common case, and the only case that exists in prod today per current research), behavior is **unchanged** — they land on `/d/f` exactly as they do now. This must be a true no-op passthrough for single-group users, not a new page they click through.
-- **JWT / `UserSettingsPlus` / session logic does not change.** The group picker is purely a routing/selection layer sitting *above* today's firm-scoped session logic — once a firm is actually selected (whether via the new group picker → firm picker chain, or directly for single-group users), `app_metadata`, `UserSettingsPlus`, and all downstream permission/session logic continue to be built exactly as today, keyed off the selected firm. Nothing about how the JWT or session state is constructed should be touched.
-- **Sidebar (`AppSidebar`) needs to handle landing on `/d/`** — today's sidebar assumes it's always rendered inside a firm-scoped layout (`d-layout-client.tsx`, wrapped around a specific firm). A bare `/d/` group-picker landing has no "current firm" yet, so the sidebar chrome for that page needs its own reduced/adapted state (e.g. no firm switcher showing a specific firm, no firm-scoped nav tree) until a firm is actually selected — similar in spirit to how `/d/f`'s picker page already renders without being deep in a specific firm's context.
-- Insertion point: add the group-count branch inside `resolveDefaultFirmLandingPath` (`lib/actions/firms.ts`) as an early rule, before the existing firm-count rules — centralizing it there means `d/layout.tsx` and `/d/f/page.tsx`'s existing calls to this function pick up the new behavior with no changes needed on their end.
-- **Not included in this refactor's scope** — file as its own follow-up plan/task once the sandbox-removal work above ships, since it's an additive feature rather than part of removing the sandbox firm.
+- Grep sweep confirms no remaining references to deleted functions/routes/old URL shape before each deletion.
