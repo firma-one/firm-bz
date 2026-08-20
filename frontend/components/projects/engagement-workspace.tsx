@@ -621,7 +621,7 @@ export function EngagementWorkspace({
                     {canViewInternalTabs && currentTab === 'members' && (
                         <div className="py-1 h-full">
                             <ErrorBoundary context="ProjectMembers">
-                                <EngagementMembersTab projectId={projectId} orgSlug={orgSlug} canManage={canManage} />
+                                <EngagementMembersTab projectId={projectId} orgSlug={orgSlug} canManage={canManage} clientConnectorId={clientConnectorId} />
                             </ErrorBoundary>
                         </div>
                     )}

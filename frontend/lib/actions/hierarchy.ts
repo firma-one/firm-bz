@@ -100,8 +100,15 @@ export async function getFirmHierarchy(firmSlug: string): Promise<HierarchyClien
 
     const firmId = firm.id
 
-    // Phase 2: member check + client.findMany in parallel (both need firmId from phase 1).
-    const [anyMembership, clients] = await Promise.all([
+    // Phase 2: member check + client.findMany + firm-level connector fallback in parallel (all
+    // need firmId from phase 1). The firm-level fallback mirrors resolveEngagementConnectorId()'s
+    // client-first-then-firm-fallback chain (lib/connectors/resolve-client-connector.ts) — some
+    // firms (e.g. via onboarding auto-import) still have Firm.connectorId set without every client
+    // under them having been explicitly backfilled with its own Client.connectorId. Without this,
+    // such a client would incorrectly show "Drive not connected" even though a connector actually
+    // works for it via the firm-level fallback used elsewhere (joinEngagementForUser, removeMember).
+    // See .claude/plans/connector-microsoft-impl.md, item 19/20.
+    const [anyMembership, clients, firmFallbackConnector] = await Promise.all([
         prisma.firmMember.findFirst({
             where: { userId: user.id, firmId }
         }),
@@ -127,6 +134,10 @@ export async function getFirmHierarchy(firmSlug: string): Promise<HierarchyClien
         },
         orderBy: { name: 'asc' }
         }),
+        prisma.firm.findUnique({
+            where: { id: firmId },
+            select: { connectorId: true, connector: { select: { status: true, settings: true, type: true } } },
+        }),
     ])
 
     if (!anyMembership) {
@@ -149,7 +160,13 @@ export async function getFirmHierarchy(firmSlug: string): Promise<HierarchyClien
 
     const permissions: UserPermissions = settingsResult?.permissions || { firms: [] }
 
-    return clients.map((c: any) => ({
+    return clients.map((c: any) => {
+        // Client.connectorId is authoritative when set; otherwise fall back to the firm-level
+        // legacy connector (see the Phase-2 fetch comment above for why this fallback is real,
+        // not dead weight).
+        const effectiveConnector = c.connectorId ? c.connector : firmFallbackConnector?.connector
+
+        return {
         id: c.id,
         name: c.name,
         slug: c.slug,
@@ -170,10 +187,10 @@ export async function getFirmHierarchy(firmSlug: string): Promise<HierarchyClien
         linkedInUrl: c.linkedInUrl ?? null,
         companySizeBracket: c.companySizeBracket ?? null,
         billingAddress: c.billingAddress ?? null,
-        connectorId: c.connectorId ?? null,
-        connectorEmail: (c.connector?.settings as { accountEmail?: string } | null)?.accountEmail ?? null,
-        connectorStatus: c.connector?.status ?? null,
-        connectorType: c.connector?.type ?? null,
+        connectorId: c.connectorId ?? firmFallbackConnector?.connectorId ?? null,
+        connectorEmail: (effectiveConnector?.settings as { accountEmail?: string } | null)?.accountEmail ?? null,
+        connectorStatus: effectiveConnector?.status ?? null,
+        connectorType: effectiveConnector?.type ?? null,
         brandPrimaryColor: (() => { const bid = (c.settings as Record<string, unknown>)?.brandId as string | undefined; return bid ? (brandById.get(bid)?.primaryColor ?? null) : null })(),
         brandLogoUrl: (() => { const bid = (c.settings as Record<string, unknown>)?.brandId as string | undefined; if (!bid) return null; const b = brandById.get(bid); return b?.logoData ?? b?.logoUrl ?? null })(),
         createdAt: c.createdAt,
@@ -215,7 +232,7 @@ export async function getFirmHierarchy(firmSlug: string): Promise<HierarchyClien
                 }]
             }
         })
-    }))
+    }})
 }
 
 /** Lightweight client summary used by the firm page — engagements only carried for count. */

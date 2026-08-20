@@ -11,6 +11,8 @@ import { invalidateUserSettingsPlus } from '@/lib/actions/user-settings'
 import { removeRemindersByEntity } from '@/lib/actions/user-reminders'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { mergeLeanAppMetadata } from '@/lib/auth/supabase-jwt-metadata'
+import { getPermissionAdapter } from '@/lib/connectors/registry'
+import { resolveEngagementConnectorId } from '@/lib/connectors/resolve-client-connector'
 import { Prisma } from '@prisma/client'
 
 type EngagementInvitationWithRelations = Prisma.EngagementInvitationGetPayload<{
@@ -118,13 +120,17 @@ export async function joinEngagementForUser(
         }
     }
 
+    // Resolve via the canonical client-first-then-firm-fallback chain, not a hand-rolled
+    // firm.connectorId read — Client.connectorId is the authoritative, newer field (Firm.connectorId
+    // is a legacy fallback for clients not yet backfilled). See resolve-client-connector.ts and
+    // .claude/plans/connector-microsoft-impl.md, item 19.
+    const resolvedConnectorId = await resolveEngagementConnectorId(invite.engagementId)
+
     if (userEmail && invite.engagement.connectorRootFolderId) {
         try {
-            const firm = invite.engagement.client.firm as { connectorId?: string | null }
-            const connectorId = firm?.connectorId
-            if (connectorId) {
+            if (resolvedConnectorId) {
                 await grantEngagementDriveFolderAccess({
-                    connectorId,
+                    connectorId: resolvedConnectorId,
                     engagementSlug: invite.engagement.slug,
                     email: userEmail,
                     role: invite.persona.slug as 'eng_admin' | 'eng_member' | 'eng_ext_collaborator' | 'eng_viewer',
@@ -136,6 +142,33 @@ export async function joinEngagementForUser(
             }
         } catch (error) {
             logger.error('Error granting Drive folder access (V2)', error as Error)
+        }
+    }
+
+    // Pre-create the Entra ID guest object at join-time (not first file-open) for
+    // tenant-backed Microsoft connectors, so the OTP/consent onboarding friction is
+    // already resolved by the time the member reaches Files. Only applies when the
+    // connector's account is itself an Entra tenant member (SharePoint site drive, or
+    // a work/school /me/drive) — a true personal Microsoft consumer account (MSA) has
+    // no backing tenant, so preInviteGuest is skipped entirely for that case. See
+    // .claude/plans/connector-microsoft-impl.md, item 19, Part 2.
+    if (userEmail) {
+        try {
+            if (resolvedConnectorId) {
+                const connector = await prisma.connector.findUnique({
+                    where: { id: resolvedConnectorId },
+                    select: { type: true, settings: true },
+                })
+                const settings = connector?.settings as Record<string, unknown> | null
+                if (connector?.type === 'ONEDRIVE' && settings?.isPersonalAccount !== true) {
+                    const adapter = await getPermissionAdapter(resolvedConnectorId)
+                    if (adapter?.preInviteGuest) {
+                        await adapter.preInviteGuest(resolvedConnectorId, userEmail)
+                    }
+                }
+            }
+        } catch (error) {
+            logger.warn('[joinEngagementForUser] preInviteGuest failed', { userId, error: error instanceof Error ? error.message : String(error) })
         }
     }
 

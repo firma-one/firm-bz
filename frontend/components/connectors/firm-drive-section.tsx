@@ -36,6 +36,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { GoogleDriveWorkspaceRoot } from '@/components/google-drive/google-drive-workspace-root'
 import { OneDriveWorkspaceRoot } from '@/components/connectors/onedrive-workspace-root'
+import { AccountTypeDialog, type DeclaredAccountType } from '@/components/connectors/account-type-dialog'
 import { GoogleDriveProductMark } from '@/components/ui/google-drive-icon'
 import { OneDriveIcon } from '@/components/ui/onedrive-icon'
 import { SharePointIcon } from '@/components/ui/sharepoint-icon'
@@ -57,6 +58,14 @@ type DriveRoot = {
   workspaceRootSharedStorageName: string | null
   workspaceRootSharedStorageWebUrl?: string | null
   isPersonalAccount?: boolean | null
+  /** True when the declared account type (upfront dialog) disagreed with the detected one —
+   *  surfaced as a "reconnect and choose again" banner. See
+   *  .claude/plans/connector-microsoft-impl.md, item 20. */
+  accountTypeMismatch?: boolean
+  /** The id_token-DETECTED account type, independent of what was declared — used by the mismatch
+   *  banner to describe what the account actually looks like, since isPersonalAccount above holds
+   *  the (possibly-wrong) DECLARED value once a declaration was made. */
+  detectedIsPersonalAccount?: boolean | null
 } | null
 
 type FirmDriveSectionProps = {
@@ -81,6 +90,16 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
   const [friendlyName, setFriendlyName] = useState('')
   const [friendlyNameTouched, setFriendlyNameTouched] = useState(false)
   const [loading, setLoading] = useState(false)
+
+  // Upfront Personal/Work-School account-type dialog, shown before the OAuth redirect for both
+  // providers — see .claude/plans/connector-microsoft-impl.md, item 20. Stores which provider +
+  // connect-args (replaceConnectorId/nameOverride/loginHint) to resume with once answered.
+  const [accountTypeDialog, setAccountTypeDialog] = useState<{
+    provider: 'onedrive' | 'google'
+    replaceConnectorId?: string
+    nameOverride?: string
+    loginHint?: string
+  } | null>(null)
 
   // Per-connector editing
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -156,6 +175,8 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
             workspaceRootLocation: data.connector.workspaceRootLocation ?? null,
             workspaceRootSharedStorageName: data.connector.workspaceRootSharedStorageName ?? null,
             isPersonalAccount: data.connector.isPersonalAccount ?? null,
+            accountTypeMismatch: data.connector.accountTypeMismatch ?? false,
+            detectedIsPersonalAccount: data.connector.detectedIsPersonalAccount ?? null,
           },
         }))
       }
@@ -180,7 +201,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connectors])
 
-  const startOAuthFlow = useCallback(async (replaceConnectorId?: string, nameOverride?: string, loginHint?: string) => {
+  const startOAuthFlow = useCallback(async (replaceConnectorId?: string, nameOverride?: string, loginHint?: string, declaredAccountType?: DeclaredAccountType) => {
     if (!user?.id) return
     setLoading(true)
     // Snapshot all existing connector IDs before OAuth starts. The poll uses this to ignore
@@ -204,6 +225,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
           ...(replaceConnectorId && { replaceConnectorId }),
           ...(nameOverride && { friendlyName: nameOverride }),
           ...(loginHint && { email: loginHint }),
+          ...(declaredAccountType && { declaredAccountType }),
         }),
       })
       if (!resp.ok) throw new Error('Failed to initiate Google sign-in')
@@ -243,11 +265,16 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
 
   const handleConnect = () => {
     setFriendlyNameTouched(true)
-    if (friendlyName.trim()) void startOAuthFlow(undefined, friendlyName.trim())
+    if (friendlyName.trim()) setAccountTypeDialog({ provider: 'google', nameOverride: friendlyName.trim() })
   }
 
   const handleReconnect = (connector: FirmConnectorRecord) => {
-    void startOAuthFlow(connector.id, connector.name || undefined, connector.email || undefined)
+    setAccountTypeDialog({
+      provider: 'google',
+      replaceConnectorId: connector.id,
+      nameOverride: connector.name || undefined,
+      loginHint: connector.email || undefined,
+    })
   }
 
   const loadOneDriveStatus = useCallback(async (connectorId: string) => {
@@ -269,6 +296,8 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
             workspaceRootSharedStorageName: data.connector.workspaceRootSharedStorageName ?? null,
             workspaceRootSharedStorageWebUrl: data.connector.workspaceRootSharedStorageWebUrl ?? null,
             isPersonalAccount: data.connector.isPersonalAccount ?? null,
+            accountTypeMismatch: data.connector.accountTypeMismatch ?? false,
+            detectedIsPersonalAccount: data.connector.detectedIsPersonalAccount ?? null,
           },
         }))
       }
@@ -286,10 +315,13 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connectors])
 
-  // OAuth completes immediately on name+arrow — no location picker upfront, mirroring Google's
-  // handleConnect exactly. The backend auto-creates a default OneDrive workspace folder after
-  // connect; Personal-vs-Shared only comes up later via OneDriveWorkspaceRoot's "Choose folder".
-  const startOneDriveOAuthFlow = useCallback(async (replaceConnectorId?: string, nameOverride?: string, loginHint?: string) => {
+  // Upfront "Personal or Work/School account?" dialog is shown before this runs (see
+  // handleOneDriveConnect/handleOneDriveReconnect and the AccountTypeDialog render below) — the
+  // answer picks which Graph scopes get requested (declaredAccountType). The backend still
+  // auto-creates a default OneDrive workspace folder after connect for the personal case;
+  // Personal-vs-SharePoint for work/school accounts still comes up later via
+  // OneDriveWorkspaceRoot's "Choose folder". See .claude/plans/connector-microsoft-impl.md, item 20.
+  const startOneDriveOAuthFlow = useCallback(async (replaceConnectorId?: string, nameOverride?: string, loginHint?: string, declaredAccountType?: DeclaredAccountType) => {
     if (!user?.id) return
     setOneDriveLoading(true)
     const priorConnectorIds = connectors.filter(c => c.type === 'ONEDRIVE').map(c => c.id)
@@ -300,6 +332,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
         ...(replaceConnectorId && { replaceConnectorId }),
         ...(nameOverride && { friendlyName: nameOverride }),
         ...(loginHint && { email: loginHint }),
+        ...(declaredAccountType && { declaredAccountType }),
         headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : undefined,
       })
 
@@ -337,11 +370,27 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
 
   const handleOneDriveConnect = () => {
     setOneDriveFriendlyNameTouched(true)
-    if (oneDriveFriendlyName.trim()) void startOneDriveOAuthFlow(undefined, oneDriveFriendlyName.trim())
+    if (oneDriveFriendlyName.trim()) setAccountTypeDialog({ provider: 'onedrive', nameOverride: oneDriveFriendlyName.trim() })
   }
 
   const handleOneDriveReconnect = (connector: FirmConnectorRecord) => {
-    void startOneDriveOAuthFlow(connector.id, connector.name || undefined, connector.email || undefined)
+    setAccountTypeDialog({
+      provider: 'onedrive',
+      replaceConnectorId: connector.id,
+      nameOverride: connector.name || undefined,
+      loginHint: connector.email || undefined,
+    })
+  }
+
+  const handleAccountTypeSelected = (accountType: DeclaredAccountType) => {
+    if (!accountTypeDialog) return
+    const { provider, replaceConnectorId, nameOverride, loginHint } = accountTypeDialog
+    setAccountTypeDialog(null)
+    if (provider === 'onedrive') {
+      void startOneDriveOAuthFlow(replaceConnectorId, nameOverride, loginHint, accountType)
+    } else {
+      void startOAuthFlow(replaceConnectorId, nameOverride, loginHint, accountType)
+    }
   }
 
   const handleOneDriveDisconnect = async (connector: FirmConnectorRecord) => {
@@ -468,11 +517,16 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
   const handleSwitchAccount = (selectedEmail: string) => {
     setSwitchModalOpen(false)
     if (switchTarget) {
-      if (switchTarget.type === 'ONEDRIVE') {
-        void startOneDriveOAuthFlow(switchTarget.id, switchTarget.name || undefined, selectedEmail)
-      } else {
-        void startOAuthFlow(switchTarget.id)
-      }
+      // Route through the same upfront account-type dialog as regular reconnect, for
+      // consistency — previously this silently skipped the dialog and always requested the full
+      // (work/school) scope set for OneDrive, unlike handleOneDriveReconnect. See
+      // .claude/plans/connector-microsoft-impl.md, item 20.
+      setAccountTypeDialog({
+        provider: switchTarget.type === 'ONEDRIVE' ? 'onedrive' : 'google',
+        replaceConnectorId: switchTarget.id,
+        nameOverride: switchTarget.name || undefined,
+        loginHint: selectedEmail,
+      })
     }
   }
 
@@ -746,6 +800,31 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                     </div>
                   </div>
 
+                  {/* Account-type mismatch banner — declared answer disagreed with the id_token-detected
+                      account type. See .claude/plans/connector-microsoft-impl.md, item 20. */}
+                  {driveRoot?.accountTypeMismatch && (
+                    <div className="relative z-10 mx-4 mt-3 flex items-start gap-2.5 rounded border border-amber-200 bg-amber-50 px-3 py-2.5">
+                      <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
+                      <div className="flex-1">
+                        <p className="text-xs font-medium text-amber-900">
+                          {driveRoot?.detectedIsPersonalAccount
+                            ? 'This looks like a personal Google account, not a Work or School account.'
+                            : 'This looks like a Work or School account, not a personal account.'}
+                        </p>
+                        <p className="text-xs text-amber-700 mt-0.5">
+                          {driveRoot?.detectedIsPersonalAccount
+                            ? 'Reconnect and choose "Personal" for the correct setup.'
+                            : 'Reconnect and choose "Work or School" to unlock Shared Drive.'}
+                        </p>
+                      </div>
+                      <Button type="button" variant="outline" size="sm"
+                        className="h-7 shrink-0 px-2.5 text-[11px] border-amber-300 bg-white text-amber-800 hover:bg-amber-100 rounded"
+                        onClick={() => handleReconnect(connector)}>
+                        Reconnect
+                      </Button>
+                    </div>
+                  )}
+
                   {/* Workspace root — shown once status is loaded regardless of connection state; GoogleDriveWorkspaceRoot masks/disables itself internally when there's no live accessToken */}
                   {driveRoot !== null && (
                     <div className="relative z-10 pl-12 pr-4 py-3 border-t border-[#e5e7eb]">
@@ -931,6 +1010,34 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                       )}
                     </div>
                   </div>
+
+                  {/* Account-type mismatch banner — declared answer disagreed with the id_token-detected
+                      account type. Unlike Google, a OneDrive Personal-declared-but-Work/School-detected
+                      mismatch also means the wrong (narrower) Graph scopes were requested — SharePoint
+                      and external-guest sharing won't work until reconnected. See
+                      .claude/plans/connector-microsoft-impl.md, item 20. */}
+                  {oneDriveRoot?.accountTypeMismatch && (
+                    <div className="relative z-10 mx-4 mt-3 flex items-start gap-2.5 rounded border border-amber-200 bg-amber-50 px-3 py-2.5">
+                      <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
+                      <div className="flex-1">
+                        <p className="text-xs font-medium text-amber-900">
+                          {oneDriveRoot?.detectedIsPersonalAccount
+                            ? 'This looks like a personal Microsoft account, not work or school.'
+                            : 'This looks like a work or school Microsoft account, not personal.'}
+                        </p>
+                        <p className="text-xs text-amber-700 mt-0.5">
+                          {oneDriveRoot?.detectedIsPersonalAccount
+                            ? 'Reconnect and choose "Personal" for the correct setup.'
+                            : 'Reconnect and choose "Work or School" to unlock SharePoint and sharing with people outside your organization.'}
+                        </p>
+                      </div>
+                      <Button type="button" variant="outline" size="sm"
+                        className="h-7 shrink-0 px-2.5 text-[11px] border-amber-300 bg-white text-amber-800 hover:bg-amber-100 rounded"
+                        onClick={() => handleOneDriveReconnect(connector)}>
+                        Reconnect
+                      </Button>
+                    </div>
+                  )}
 
                   {/* Workspace root — shown once status is loaded regardless of connection state; OneDriveWorkspaceRoot masks/disables itself internally when disconnected */}
                   {oneDriveRoot !== null && (
@@ -1121,6 +1228,14 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
           confirmVariant="red"
           onCancel={() => setOneDriveRemoveTarget(null)}
           onConfirm={() => { const t = oneDriveRemoveTarget; setOneDriveRemoveTarget(null); if (t) void handleOneDriveRemove(t) }}
+        />
+
+        {/* Upfront Personal/Work-School account-type dialog, shown before the OAuth redirect */}
+        <AccountTypeDialog
+          open={!!accountTypeDialog}
+          onOpenChange={(open) => { if (!open) setAccountTypeDialog(null) }}
+          onSelect={handleAccountTypeSelected}
+          provider={accountTypeDialog?.provider ?? 'onedrive'}
         />
 
         {/* Modals */}

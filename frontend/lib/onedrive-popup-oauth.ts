@@ -47,6 +47,9 @@ export type InitiateOneDriveOAuthPopupParams = {
   replaceConnectorId?: string | null
   friendlyName?: string | null
   email?: string | null
+  /** Personal accounts skip both Sites.Read.All and User.Invite.All entirely — no admin-consent
+   *  scopes requested at all. See .claude/plans/connector-microsoft-impl.md, item 20. */
+  declaredAccountType?: 'personal' | 'work_school'
   headers?: HeadersInit
 }
 
@@ -69,6 +72,7 @@ export async function initiateOneDriveOAuthPopup(
       ...(params.replaceConnectorId && { replaceConnectorId: params.replaceConnectorId }),
       ...(params.friendlyName && { friendlyName: params.friendlyName }),
       ...(params.email && { email: params.email }),
+      ...(params.declaredAccountType && { declaredAccountType: params.declaredAccountType }),
       openerOrigin: typeof window !== 'undefined' ? window.location.origin : undefined,
     }),
   })

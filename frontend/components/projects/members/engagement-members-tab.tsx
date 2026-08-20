@@ -1,26 +1,28 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { RefreshCw } from 'lucide-react'
+import { RefreshCw, Folder } from 'lucide-react'
 import { getProjectMembers } from '@/lib/actions/members'
 import { getProjectPersonas } from '@/lib/actions/personas'
 import { MemberList } from './member-list'
 import { InviteMemberModal } from './invite-member-modal'
 import { logger } from '@/lib/logger'
+import { PersonaUiRole } from '@/lib/persona-ui-groups'
 
 interface EngagementMembersTabProps {
     projectId: string
     orgSlug: string
     canManage?: boolean
+    clientConnectorId?: string | null
 }
 
-export function EngagementMembersTab({ projectId, orgSlug, canManage = false }: EngagementMembersTabProps) {
+export function EngagementMembersTab({ projectId, orgSlug, canManage = false, clientConnectorId }: EngagementMembersTabProps) {
     const [members, setMembers] = useState<any[]>([])
     const [invitations, setInvitations] = useState<any[]>([])
     const [personas, setPersonas] = useState<any[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [isInviteModalOpen, setIsInviteModalOpen] = useState(false)
-    const [preselectedPersonaId, setPreselectedPersonaId] = useState<string | null>(null)
+    const [preselectedUiRole, setPreselectedUiRole] = useState<PersonaUiRole | null>(null)
 
     const refreshData = async () => {
         setIsLoading(true)
@@ -94,6 +96,26 @@ export function EngagementMembersTab({ projectId, orgSlug, canManage = false }: 
                             </div>
                         ))}
                     </div>
+                ) : !clientConnectorId ? (
+                    <div className="flex flex-col items-center justify-center h-64 text-center px-3">
+                        <div className="h-16 w-16 bg-slate-50 rounded-full flex items-center justify-center mb-4">
+                            <Folder className="h-8 w-8 text-slate-300" />
+                        </div>
+                        <h3 className="text-sm font-medium text-slate-900 mb-1">Drive not connected</h3>
+                        <p className="text-sm text-slate-500 max-w-[280px] mx-auto mb-3">
+                            {canManage
+                                ? 'This client is not linked to a Drive connector. Go to Firm Settings → Document Storage to link this client before inviting members.'
+                                : 'This client is not linked to a Drive connector. Contact your firm administrator to set up Document Storage.'}
+                        </p>
+                        {canManage && orgSlug && (
+                            <a
+                                href={`/d/f/${orgSlug}?tab=settings&section=storage`}
+                                className="inline-flex items-center gap-1.5 h-8 px-4 rounded bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:brightness-105 transition-all"
+                            >
+                                Go to Document Storage
+                            </a>
+                        )}
+                    </div>
                 ) : (
                     <MemberList
                         members={members}
@@ -101,8 +123,8 @@ export function EngagementMembersTab({ projectId, orgSlug, canManage = false }: 
                         personas={personas}
                         onRefresh={refreshData}
                         canManage={canManage}
-                        onInviteWithPersona={(personaId) => {
-                            setPreselectedPersonaId(personaId)
+                        onInviteWithRole={(uiRole) => {
+                            setPreselectedUiRole(uiRole)
                             setIsInviteModalOpen(true)
                         }}
                     />
@@ -115,11 +137,11 @@ export function EngagementMembersTab({ projectId, orgSlug, canManage = false }: 
                 onOpenChange={(open) => {
                     setIsInviteModalOpen(open)
                     if (!open) {
-                        setPreselectedPersonaId(null)
+                        setPreselectedUiRole(null)
                     }
                 }}
                 personas={personas}
-                preselectedPersonaId={preselectedPersonaId}
+                preselectedUiRole={preselectedUiRole}
                 onSuccess={refreshData}
             />
         </div>

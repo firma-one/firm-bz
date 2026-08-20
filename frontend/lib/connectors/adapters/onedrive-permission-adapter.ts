@@ -414,7 +414,7 @@ export async function preCreateGuestInvitation(
   token: string,
   email: string,
   documentUrl?: string
-): Promise<{ inviteRedeemUrl: string | null }> {
+): Promise<{ inviteRedeemUrl: string | null; outcome: 'confirmed' | 'already_guest_or_member' | 'failed' }> {
   try {
     const res = await fetch('https://graph.microsoft.com/v1.0/invitations', {
       method: 'POST',
@@ -431,17 +431,25 @@ export async function preCreateGuestInvitation(
     })
     if (res.ok) {
       const data = await res.json()
-      logger.warn('[onedrive-permission-adapter] preCreateGuestInvitation: invitation created', {
+      // NOTE: a 200/201 here does NOT reliably mean a brand-new guest object was just created —
+      // confirmed live 2026-08-19 (repeat backfill runs) that Graph can return success with the
+      // SAME invitedUser.id as a prior call, just a freshly re-issued invitation/ticket for the
+      // already-existing guest. There is no reliable way to distinguish "genuinely new" from
+      // "re-confirmed existing" from this response alone (would need a pre-check lookup by email,
+      // not attempted here — see connector-microsoft-impl.md item 19 Part 4 for the tradeoff).
+      // 'confirmed' therefore means "Graph confirmed this guest is provisioned," not "we just
+      // created a new one" — do not rename back to 'created' without re-adding that pre-check.
+      logger.warn('[onedrive-permission-adapter] preCreateGuestInvitation: invitation confirmed', {
         email,
         invitedUserId: data.invitedUser?.id,
         invitedUserType: data.invitedUserType,
         status: data.status,
         inviteRedeemUrl: data.inviteRedeemUrl,
       })
-      return { inviteRedeemUrl: data.inviteRedeemUrl ?? null }
+      return { inviteRedeemUrl: data.inviteRedeemUrl ?? null, outcome: 'confirmed' }
     }
     const bodyText = await res.text().catch(() => '<unreadable>')
-    // Two distinct "no invite needed" cases produce this same shape and are both silenced here
+    // Three distinct "no invite needed" cases produce this same shape and are both silenced here
     // rather than logged as a warning:
     //   1. A guest object already exists for this email (from a prior invite) — the goal, an
     //      existing guest, is already met.
@@ -451,21 +459,29 @@ export async function preCreateGuestInvitation(
     //      Graph's confirmed (if undocumented) wording for this case: "The invited user already
     //      exists in the directory as objectID: {id}. They can use that account to sign in to
     //      shared apps and resources." — https://github.com/microsoftgraph/msgraph-beta-sdk-dotnet/issues/798.
-    //      Both cases are expected, frequent, and not actionable — the `already exists` substring
-    //      matches both. Neither has a redeem URL to return, so the caller falls back to
-    //      webViewLink; driveItem:invite (called separately, in parallel) is unaffected either way
-    //      — internal recipients were never subject to the app-only new-guest restriction this
-    //      function exists to work around in the first place.
-    if (/already exists|already invited|duplicate/i.test(bodyText)) return { inviteRedeemUrl: null }
+    //   3. Same internal-member case, but a DIFFERENT wording confirmed live 2026-08-19 (item 19's
+    //      backfill script): "This user cannot be invited because the domain of the user's email
+    //      address is a verified domain of this directory." — this is Graph declining to invite
+    //      someone on the tenant's own verified domain as a *guest*, i.e. another way of saying
+    //      "they're already effectively internal here." Originally fell through to the generic
+    //      failure warning below (wrong — this is an expected, non-actionable outcome, not a real
+    //      failure) until this case was added to the match.
+    //   All three cases are expected, frequent, and not actionable. Neither has a redeem URL to
+    //      return, so the caller falls back to webViewLink; driveItem:invite (called separately,
+    //      in parallel) is unaffected either way — internal recipients were never subject to the
+    //      app-only new-guest restriction this function exists to work around in the first place.
+    if (/already exists|already invited|duplicate|verified domain of this directory/i.test(bodyText)) {
+      return { inviteRedeemUrl: null, outcome: 'already_guest_or_member' }
+    }
     logger.warn('[onedrive-permission-adapter] preCreateGuestInvitation: /invitations call failed', {
       email, status: res.status, statusText: res.statusText, body: bodyText,
     })
-    return { inviteRedeemUrl: null }
+    return { inviteRedeemUrl: null, outcome: 'failed' }
   } catch (e) {
     logger.warn('[onedrive-permission-adapter] preCreateGuestInvitation: request error', {
       email, error: e instanceof Error ? e.message : String(e),
     })
-    return { inviteRedeemUrl: null }
+    return { inviteRedeemUrl: null, outcome: 'failed' }
   }
 }
 

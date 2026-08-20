@@ -27,11 +27,19 @@ function isPersonalMicrosoftAccount(idToken: string | undefined): boolean {
   }
 }
 
-function parseStateFlow(state: string | null): { flow?: string; nonce?: string; openerOrigin?: string; organizationId?: string } {
+function parseStateFlow(state: string | null): { flow?: string; nonce?: string; openerOrigin?: string; organizationId?: string; declaredAccountType?: 'personal' | 'work_school' } {
   if (!state) return {}
   try {
     const decoded = JSON.parse(Buffer.from(state, 'base64').toString('utf-8'))
-    return { flow: decoded.flow, nonce: decoded.nonce, openerOrigin: decoded.openerOrigin, organizationId: decoded.organizationId }
+    return {
+      flow: decoded.flow,
+      nonce: decoded.nonce,
+      openerOrigin: decoded.openerOrigin,
+      organizationId: decoded.organizationId,
+      declaredAccountType: decoded.declaredAccountType === 'personal' || decoded.declaredAccountType === 'work_school'
+        ? decoded.declaredAccountType
+        : undefined,
+    }
   } catch {
     return {}
   }
@@ -87,7 +95,7 @@ export async function GET(request: NextRequest) {
     const code = searchParams.get('code')
     const state = searchParams.get('state')
     const error = searchParams.get('error')
-    const { flow: stateFlow, nonce: stateNonce, organizationId: stateOrgId } = parseStateFlow(state)
+    const { flow: stateFlow, nonce: stateNonce, organizationId: stateOrgId, declaredAccountType: earlyDeclaredAccountType } = parseStateFlow(state)
     const isPopup = stateFlow === 'popup'
 
     if (!(await isMicrosoftConnectorEnabledForFirm(stateOrgId))) {
@@ -175,7 +183,20 @@ export async function GET(request: NextRequest) {
     }
 
     const tokens = await tokenResponse.json()
-    const isPersonalAccount = isPersonalMicrosoftAccount(tokens.id_token)
+    const detectedIsPersonalAccount = isPersonalMicrosoftAccount(tokens.id_token)
+    // Declared answer (from the upfront AccountTypeDialog) is authoritative — see the identical
+    // decision/comment in google-drive/callback/route.ts. For OneDrive this ALSO already decided
+    // which scopes were requested (see onedrive/route.ts's resolveConnectScopes) — a mismatch
+    // here can't be silently corrected after the fact (can't retroactively add Sites.Read.All/
+    // User.Invite.All to an already-issued token), so accountTypeMismatch drives a "reconnect and
+    // choose again" banner rather than any attempt to patch state in place. See
+    // .claude/plans/connector-microsoft-impl.md, item 20.
+    const isPersonalAccount = earlyDeclaredAccountType
+      ? earlyDeclaredAccountType === 'personal'
+      : detectedIsPersonalAccount
+    const accountTypeMismatch = earlyDeclaredAccountType
+      ? (earlyDeclaredAccountType === 'personal') !== detectedIsPersonalAccount
+      : false
 
     let userResponse: Response
     try {
@@ -321,7 +342,9 @@ export async function GET(request: NextRequest) {
         undefined,
         undefined,
         isPersonalAccount,
-        replaceConnectorId
+        replaceConnectorId,
+        accountTypeMismatch,
+        detectedIsPersonalAccount
       )
 
       // No auto-folder-creation here — unlike Google, OAuth alone never creates a workspace

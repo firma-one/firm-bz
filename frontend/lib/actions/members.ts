@@ -145,9 +145,6 @@ export async function removeMember(memberId: string) {
                         client: {
                             select: {
                                 firmId: true,
-                                firm: {
-                                    select: { connectorId: true }
-                                }
                             }
                         }
                     }
@@ -166,7 +163,12 @@ export async function removeMember(memberId: string) {
             logger.error('Error fetching member user for removal', error as Error)
         }
 
-        const connectorId = member.engagement.client.firm.connectorId
+        // Resolve via the canonical client-first-then-firm-fallback chain, not a hand-rolled
+        // firm.connectorId read — Client.connectorId is the authoritative, newer field
+        // (Firm.connectorId is a legacy fallback for clients not yet backfilled). See
+        // resolve-client-connector.ts and .claude/plans/connector-microsoft-impl.md, item 19.
+        const { resolveEngagementConnectorId } = await import('@/lib/connectors/resolve-client-connector')
+        const connectorId = await resolveEngagementConnectorId(member.engagementId)
 
         // Revoke document-level connector permissions BEFORE deleting the member row.
         // The FK cascade will drop sharing rows (and their connectorPermissionId) when
@@ -215,6 +217,11 @@ export async function removeMember(memberId: string) {
                 logger.error('Error revoking Drive folder access', error as Error)
             }
         }
+
+        // Entra ID guest tenancy revocation (deleting the guest's directory object entirely) was
+        // considered but is deliberately OUT OF SCOPE — removal from an engagement only revokes
+        // that engagement's document/folder access (above), never touches the underlying Entra
+        // guest identity. See .claude/plans/connector-microsoft-impl.md, item 19, Part 3.
 
         // Atomic: delete engagement member + conditionally cascade to firmMember.
         // EC/EV guests get a firmMember row on accept but are not true firm members —

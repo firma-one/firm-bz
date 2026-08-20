@@ -6,35 +6,34 @@ import { VisuallyHidden } from "@radix-ui/react-visually-hidden"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Label } from "@/components/ui/label"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Persona } from '@prisma/client'
 import { inviteMember } from '@/lib/actions/invitations'
 import { SandboxInfoBanner } from '@/components/ui/sandbox-info-banner'
-import { Shield, Briefcase, Eye, CheckCircle2, UserPlus, Users } from 'lucide-react'
+import { Shield, Briefcase, Eye, CheckCircle2, UserPlus, Users, Info } from 'lucide-react'
 import { useOrgSandbox } from '@/lib/use-org-sandbox'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { PersonaUiRole, PersonaUiSubRole, SUB_ROLE_LABEL, getPersonaUiGroup, resolvePersonaSlug } from '@/lib/persona-ui-groups'
 
-type ProjectPersonaWithRole = Persona & {
-    rbacPersona: {
-        role: {
-            slug: string
-            displayName: string
-        }
-    }
-}
+type ProjectPersonaWithRole = Persona
 
 interface InviteMemberModalProps {
     projectId: string
     open: boolean
     onOpenChange: (open: boolean) => void
     personas: ProjectPersonaWithRole[]
-    preselectedPersonaId?: string | null
+    preselectedUiRole?: PersonaUiRole | null
     onSuccess: () => void
 }
 
-export function InviteMemberModal({ projectId, open, onOpenChange, personas, preselectedPersonaId, onSuccess }: InviteMemberModalProps) {
+export function InviteMemberModal({ projectId, open, onOpenChange, personas, preselectedUiRole, onSuccess }: InviteMemberModalProps) {
     const [email, setEmail] = useState('')
     const [emailError, setEmailError] = useState('')
     const [selectedPersonaId, setSelectedPersonaId] = useState('')
+    const [uiRole, setUiRole] = useState<PersonaUiRole | ''>('')
+    const [subRole, setSubRole] = useState<PersonaUiSubRole>('internal')
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [error, setError] = useState('')
     const orgSandbox = useOrgSandbox()
@@ -42,17 +41,45 @@ export function InviteMemberModal({ projectId, open, onOpenChange, personas, pre
 
     const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
 
-    // Set preselected persona when modal opens
+    const findPersonaId = (uiRoleValue: PersonaUiRole, subRoleValue?: PersonaUiSubRole) => {
+        const slug = resolvePersonaSlug(uiRoleValue, subRoleValue)
+        return personas.find(p => p.slug === slug)?.id ?? ''
+    }
+
+    const handleUiRoleChange = (value: PersonaUiRole) => {
+        setUiRole(value)
+        if (value === 'contributor') {
+            setSelectedPersonaId(findPersonaId('contributor', subRole))
+        } else {
+            setSelectedPersonaId(findPersonaId(value))
+        }
+    }
+
+    const handleSubRoleChange = (value: PersonaUiSubRole) => {
+        setSubRole(value)
+        setSelectedPersonaId(findPersonaId('contributor', value))
+    }
+
+    // Set preselected role when modal opens
     useEffect(() => {
-        if (open && preselectedPersonaId) {
-            setSelectedPersonaId(preselectedPersonaId)
+        if (open && preselectedUiRole) {
+            setUiRole(preselectedUiRole)
+            setSubRole('internal')
+            if (preselectedUiRole === 'contributor') {
+                setSelectedPersonaId(findPersonaId('contributor', 'internal'))
+            } else {
+                setSelectedPersonaId(findPersonaId(preselectedUiRole))
+            }
         } else if (!open) {
             setSelectedPersonaId('')
+            setUiRole('')
+            setSubRole('internal')
             setEmail('')
             setError('')
             setEmailError('')
         }
-    }, [open, preselectedPersonaId])
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open, preselectedUiRole, personas])
 
     // Debounced email validation
     useEffect(() => {
@@ -92,10 +119,11 @@ export function InviteMemberModal({ projectId, open, onOpenChange, personas, pre
         }
     }
 
-    const getPersonaIcon = (name: string) => {
-        if (name.includes('Owner')) return <Shield className="h-4 w-4" />
-        if (name.includes('Internal')) return <Users className="h-4 w-4" />
-        if (name.includes('Client')) return <Eye className="h-4 w-4" />
+    const getPersonaIcon = (slug: string) => {
+        const group = getPersonaUiGroup(slug)
+        if (group?.uiRole === 'owner') return <Shield className="h-4 w-4" />
+        if (group?.uiRole === 'contributor' && group.subRole === 'internal') return <Users className="h-4 w-4" />
+        if (group?.uiRole === 'reviewer') return <Eye className="h-4 w-4" />
         return <Briefcase className="h-4 w-4" />
     }
 
@@ -152,35 +180,68 @@ export function InviteMemberModal({ projectId, open, onOpenChange, personas, pre
 
                         {/* Persona Selection */}
                         <div>
-                            <label className={fieldLabel}>Role (Persona)</label>
-                            <Select value={selectedPersonaId} onValueChange={setSelectedPersonaId} required={!isSandboxFirm} disabled={isSandboxFirm}>
+                            <label className={fieldLabel}>Role</label>
+                            <Select value={uiRole} onValueChange={(v) => handleUiRoleChange(v as PersonaUiRole)} required={!isSandboxFirm} disabled={isSandboxFirm}>
                                 <SelectTrigger className={inputCls}>
-                                    <SelectValue placeholder="Select a persona" />
+                                    <SelectValue placeholder="Select a role" />
                                 </SelectTrigger>
                                 <SelectContent className="rounded border border-[#e5e7eb] bg-white shadow-md py-0.5 min-w-[var(--radix-select-trigger-width)]">
-                                    {personas.map((p) => (
-                                        <SelectItem key={p.id} value={p.id} className="cursor-pointer rounded-none px-2.5 text-[#45474c] outline-none focus:bg-[#f9f9fb] data-[state=checked]:bg-primary/10 data-[state=checked]:border-l-2 data-[state=checked]:border-brand-accent data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-[#f9f9fb]">
-                                            {p.displayName}
-                                        </SelectItem>
-                                    ))}
+                                    <SelectItem value="owner" className="cursor-pointer rounded-none px-2.5 text-[#45474c] outline-none focus:bg-[#f9f9fb] data-[state=checked]:bg-primary/10 data-[state=checked]:border-l-2 data-[state=checked]:border-brand-accent data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-[#f9f9fb]">
+                                        Owner
+                                    </SelectItem>
+                                    <SelectItem value="contributor" className="cursor-pointer rounded-none px-2.5 text-[#45474c] outline-none focus:bg-[#f9f9fb] data-[state=checked]:bg-primary/10 data-[state=checked]:border-l-2 data-[state=checked]:border-brand-accent data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-[#f9f9fb]">
+                                        Contributor
+                                    </SelectItem>
+                                    <SelectItem value="reviewer" className="cursor-pointer rounded-none px-2.5 text-[#45474c] outline-none focus:bg-[#f9f9fb] data-[state=checked]:bg-primary/10 data-[state=checked]:border-l-2 data-[state=checked]:border-brand-accent data-[state=checked]:text-primary data-[state=checked]:font-semibold data-[highlighted]:bg-[#f9f9fb]">
+                                        Reviewer
+                                    </SelectItem>
                                 </SelectContent>
                             </Select>
+
+                            {/* Access-scope sub-choice for Contributor */}
+                            {uiRole === 'contributor' && (
+                                <div className="mt-2 bg-white border border-[#e5e7eb] rounded p-3">
+                                    <RadioGroup value={subRole} onValueChange={(v) => handleSubRoleChange(v as PersonaUiSubRole)} className="gap-2">
+                                        {(['internal', 'external'] as const).map((sr) => {
+                                            const persona = personas.find(p => p.slug === resolvePersonaSlug('contributor', sr))
+                                            return (
+                                                <div key={sr} className="flex items-center gap-2 cursor-pointer" onClick={() => handleSubRoleChange(sr)}>
+                                                    <RadioGroupItem value={sr} id={`invite-sub-${sr}`} disabled={isSandboxFirm} />
+                                                    <Label htmlFor={`invite-sub-${sr}`} className="text-xs font-medium text-[#1b1b1d] cursor-pointer">
+                                                        {SUB_ROLE_LABEL[sr]}
+                                                    </Label>
+                                                    <TooltipProvider>
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild onClick={(e) => e.stopPropagation()}>
+                                                                <Info className="h-3.5 w-3.5 text-[#9a9ba0] cursor-help shrink-0" />
+                                                            </TooltipTrigger>
+                                                            <TooltipContent side="top" className="max-w-[260px]">
+                                                                {persona?.description || 'No description'}
+                                                            </TooltipContent>
+                                                        </Tooltip>
+                                                    </TooltipProvider>
+                                                </div>
+                                            )
+                                        })}
+                                    </RadioGroup>
+                                </div>
+                            )}
 
                             {/* Persona preview */}
                             {selectedPersona && (
                                 <div className="mt-2 bg-white border border-[#e5e7eb] rounded p-3 flex items-start gap-2.5">
                                     <div className="mt-0.5 shrink-0 text-[#45474c]">
-                                        {getPersonaIcon(selectedPersona.displayName)}
+                                        {getPersonaIcon(selectedPersona.slug)}
                                     </div>
                                     <div>
                                         <p className="text-xs font-semibold text-[#1b1b1d]">{selectedPersona.displayName}</p>
                                         <div className="flex gap-1.5 mt-1">
                                             <span className="inline-flex items-center rounded bg-[#f3f4f6] border border-[#e5e7eb] px-2 py-0.5 text-[10px] font-medium text-[#45474c]">
-                                                {selectedPersona.rbacPersona?.role?.slug === 'eng_admin' ? 'Manage' :
-                                                    selectedPersona.rbacPersona?.role?.slug === 'eng_member' || selectedPersona.rbacPersona?.role?.slug === 'eng_ext_collaborator' ? 'Edit' : 'View'}
+                                                {selectedPersona.slug === 'eng_admin' ? 'Manage' :
+                                                    selectedPersona.slug === 'eng_member' || selectedPersona.slug === 'eng_ext_collaborator' ? 'Edit' : 'View'}
                                             </span>
                                             <span className="inline-flex items-center rounded bg-[#f3f4f6] border border-[#e5e7eb] px-2 py-0.5 text-[10px] font-medium text-[#45474c]">
-                                                {selectedPersona.rbacPersona?.role?.slug === 'firm_member' || selectedPersona.rbacPersona?.role?.slug === 'firm_admin' ? 'Internal' : 'Guest'}
+                                                {selectedPersona.slug === 'eng_ext_collaborator' || selectedPersona.slug === 'eng_viewer' ? 'Guest' : 'Internal'}
                                             </span>
                                         </div>
                                     </div>

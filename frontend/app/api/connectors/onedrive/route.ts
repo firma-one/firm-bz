@@ -59,8 +59,25 @@ const oneDriveConnector = OneDriveConnector.getInstance()
  * ("Insufficient privileges") without this scope in the token — admin-consenting the permission
  * on the app registration alone does NOT add it to already-issued OR newly-reconnected tokens;
  * it must also be requested here. See .claude/plans/connector-microsoft-impl.md.
+ *
+ * declaredAccountType (2026-08-19) — `Sites.Read.All` and `User.Invite.All` both require
+ * tenant-admin consent, a real adoption blocker for a Firma firm-admin who isn't their own Entra
+ * tenant's admin. A genuine personal Microsoft consumer account (MSA — outlook.com/hotmail.com)
+ * has no backing Entra tenant at all, so neither scope is even meaningful for that case: no
+ * SharePoint site can ever exist, and there's no tenant directory to pre-invite a guest into.
+ * Account type was previously only DETECTABLE after the OAuth round-trip (decoding the returned
+ * id_token's `tid` claim, see callback/route.ts's isPersonalMicrosoftAccount()) — too late to
+ * have influenced which scopes were requested. The frontend now asks upfront, before the
+ * redirect, and passes the answer as `declaredAccountType: 'personal' | 'work_school'` in the
+ * initiate POST body — 'personal' drops both admin-gated scopes entirely. See
+ * .claude/plans/connector-microsoft-impl.md, item 20.
  */
-const CONNECT_SCOPES = ['openid', 'profile', 'email', 'User.Read', 'Files.ReadWrite.All', 'Sites.Read.All', 'User.Invite.All', 'offline_access']
+const CONNECT_SCOPES_WORK_SCHOOL = ['openid', 'profile', 'email', 'User.Read', 'Files.ReadWrite.All', 'Sites.Read.All', 'User.Invite.All', 'offline_access']
+const CONNECT_SCOPES_PERSONAL = ['openid', 'profile', 'email', 'User.Read', 'Files.ReadWrite.All', 'offline_access']
+
+function resolveConnectScopes(declaredAccountType: unknown): string[] {
+  return declaredAccountType === 'personal' ? CONNECT_SCOPES_PERSONAL : CONNECT_SCOPES_WORK_SCHOOL
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -81,6 +98,7 @@ export async function POST(request: NextRequest) {
 
       const flow = body.flow === 'popup' ? 'popup' : 'redirect'
       const nonce = flow === 'popup' ? randomBytes(16).toString('hex') : undefined
+      const declaredAccountType = body.declaredAccountType === 'personal' ? 'personal' : 'work_school'
       const stateObj = {
         userId,
         organizationId: body.organizationId,
@@ -92,6 +110,7 @@ export async function POST(request: NextRequest) {
         ...(body.friendlyName && { friendlyName: body.friendlyName }),
         ...(nonce && { nonce }),
         ...(flow === 'popup' && body.openerOrigin && { openerOrigin: body.openerOrigin }),
+        declaredAccountType,
       }
       const state = Buffer.from(JSON.stringify(stateObj)).toString('base64')
 
@@ -100,7 +119,7 @@ export async function POST(request: NextRequest) {
       authUrl.searchParams.set('redirect_uri', config.onedrive.redirectUri)
       authUrl.searchParams.set('response_type', 'code')
       authUrl.searchParams.set('response_mode', 'query')
-      authUrl.searchParams.set('scope', CONNECT_SCOPES.join(' '))
+      authUrl.searchParams.set('scope', resolveConnectScopes(body.declaredAccountType).join(' '))
       // Always force consent to ensure we get a refresh token and the correct scope set.
       authUrl.searchParams.set('prompt', 'consent')
       authUrl.searchParams.set('state', state)
@@ -364,6 +383,8 @@ export async function GET(request: NextRequest) {
               name: connector.name,
               email: (connector.settings as Record<string, unknown> | null)?.accountEmail ?? null,
               isPersonalAccount: (connector.settings as Record<string, unknown> | null)?.isPersonalAccount ?? null,
+              accountTypeMismatch: (connector.settings as Record<string, unknown> | null)?.accountTypeMismatch ?? false,
+              detectedIsPersonalAccount: (connector.settings as Record<string, unknown> | null)?.detectedIsPersonalAccount ?? null,
               externalAccountId: connector.externalAccountId,
               rootFolderId,
               rootFolderName,

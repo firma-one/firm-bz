@@ -136,6 +136,11 @@ AI layer using Gemma 4 (HuggingFace Transformers, same runtime as release notes 
 
 ## Infrastructure / Maintenance
 
+- [ ] **Admin Scripts: Persisted Run History** — [plan](../../.claude/plans/admin-scripts-run-history.md)
+  - `/system/admin-scripts` runs one-off scripts server-side but only shows results live in the browser tab that triggered them — no DB-backed history of past runs (status, timestamp, who ran it, summary)
+  - New `AdminScriptRun` model + write from the existing POST route; new run-history UI per script
+  - Discovered while adding the OneDrive guest pre-invite backfill script (see Connector: OneDrive Support plan, item 19 Part 4)
+
 - [ ] **IMP: Batch `index-file` calls in `processUploads` (multi-file picker upload)** — `frontend/components/projects/hooks/use-engagement-upload.ts`
   - `processUploads` (plain multi-file picker, not folder upload) still POSTs `/api/projects/[projectId]/index-file` once **per file**, sequentially inside its upload loop — unlike `handleBatchResolution` and `processFolderUpload`, which already send one batched POST (`files: [...]`) for the whole set
   - For N individually-selected files (e.g. 100), that's N sequential round-trips (each doing a docId upsert + Inngest enqueue) before the post-upload `fetchFiles()`, instead of 1

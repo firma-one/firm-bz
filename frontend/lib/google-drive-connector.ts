@@ -1806,6 +1806,14 @@ export class GoogleDriveConnector {
     /** True for personal Gmail accounts (no `hd` claim on the OAuth id_token) — see
      * app/api/connectors/google-drive/callback/route.ts's isPersonalGoogleAccount(). */
     isPersonalAccount?: boolean,
+    /** True when the upfront AccountTypeDialog's declared answer disagreed with the id_token-
+     * detected account type — surfaced as a "reconnect and choose again" banner in the UI. See
+     * .claude/plans/connector-microsoft-impl.md, item 20. */
+    accountTypeMismatch?: boolean,
+    /** The id_token-DETECTED account type (independent of what was declared) — needed so the
+     * mismatch banner can describe what the account actually looks like, not just echo back the
+     * possibly-wrong declared value. Only meaningful/set when accountTypeMismatch is true. */
+    detectedIsPersonalAccount?: boolean,
   ): Promise<Connector> {
 
     // Pass plaintext tokens - Prisma extension handles encryption automatically
@@ -1835,6 +1843,14 @@ export class GoogleDriveConnector {
       }
       if (isPersonalAccount !== undefined) {
         next.isPersonalAccount = isPersonalAccount
+        touched = true
+      }
+      if (accountTypeMismatch !== undefined) {
+        next.accountTypeMismatch = accountTypeMismatch
+        touched = true
+      }
+      if (detectedIsPersonalAccount !== undefined) {
+        next.detectedIsPersonalAccount = detectedIsPersonalAccount
         touched = true
       }
       return touched ? next : undefined
