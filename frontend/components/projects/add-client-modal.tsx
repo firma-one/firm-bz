@@ -14,7 +14,6 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { UserPlus, Linkedin, Users2, MapPin, User, Activity, Share2, CalendarCheck, Building2, Globe, FileText, Lock } from "lucide-react"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
-import { SandboxInfoBanner } from "@/components/ui/sandbox-info-banner"
 import {
     Select,
     SelectContent,
@@ -25,7 +24,6 @@ import {
 import { SelectWithCustomEntry } from "@/components/ui/select-with-custom-entry"
 import { OptionalFieldsSection } from "@/components/ui/optional-fields-toggle"
 import { createClient, type LwCrmClientStatus } from '@/lib/actions/client'
-import { useOrgSandbox } from '@/lib/use-org-sandbox'
 import { DateTimePicker } from '@/components/ui/date-time-picker'
 import { firmTabPath } from '@/lib/navigation/firm-paths'
 
@@ -33,8 +31,6 @@ interface AddClientModalProps {
     groupSlug: string
     orgSlug: string
     firmId?: string
-    /** Server-known flag so sandbox is enforced before client fetch completes */
-    firmSandboxOnly?: boolean
     trigger?: React.ReactNode
     onSaved?: () => void
 }
@@ -43,7 +39,7 @@ const fieldLabel = 'font-mono text-[9px] font-bold uppercase tracking-widest tex
 const inputCls = 'border-[#e5e7eb] text-[#1b1b1d] text-xs font-normal placeholder:text-[#9a9ba0] rounded focus-visible:ring-1 focus-visible:ring-primary focus-visible:border-primary disabled:opacity-50 disabled:cursor-not-allowed'
 const textareaCls = 'flex w-full rounded border border-[#e5e7eb] bg-white px-3 py-2 text-xs font-normal text-[#1b1b1d] placeholder:text-[#9a9ba0] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed'
 
-export function AddClientModal({ groupSlug, orgSlug, firmId, firmSandboxOnly = false, trigger, onSaved }: AddClientModalProps) {
+export function AddClientModal({ groupSlug, orgSlug, firmId, trigger, onSaved }: AddClientModalProps) {
     const [open, setOpen] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
     const [name, setName] = useState('')
@@ -94,9 +90,7 @@ export function AddClientModal({ groupSlug, orgSlug, firmId, firmSandboxOnly = f
         return () => { mounted = false }
     }, [orgSlug])
 
-    const orgSandbox = useOrgSandbox()
-    const isSandboxFirm = Boolean(firmSandboxOnly || orgSandbox?.sandboxOnly)
-    const isDisabled = isSandboxFirm || isLoading || capBlocked
+    const isDisabled = isLoading || capBlocked
 
     const commitTag = (raw: string) => {
         const value = raw.trim().toLowerCase().replace(/\s+/g, '-')
@@ -147,7 +141,7 @@ export function AddClientModal({ groupSlug, orgSlug, firmId, firmSandboxOnly = f
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
 
-        if (isSandboxFirm || capBlocked) return
+        if (capBlocked) return
 
         const finalTags = tagInput.trim()
             ? Array.from(new Set([...tags, tagInput.trim().toLowerCase().replace(/\s+/g, '-')]))
@@ -231,7 +225,6 @@ export function AddClientModal({ groupSlug, orgSlug, firmId, firmSandboxOnly = f
 
                     <form onSubmit={handleSubmit}>
                         <div className="p-5">
-                            {isSandboxFirm && <SandboxInfoBanner />}
                             {capBlocked && capMessage && (
                                 <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs px-3 py-2 rounded mb-3 flex items-center gap-2">
                                     <Lock className="h-3.5 w-3.5 shrink-0 text-rose-500" />
@@ -260,7 +253,7 @@ export function AddClientModal({ groupSlug, orgSlug, firmId, firmSandboxOnly = f
                                             <label htmlFor="new-client-name" className={fieldLabel}>
                                                 <span className="inline-flex items-center gap-1"><User className="h-3 w-3" /> Name <span className="text-red-500 normal-case tracking-normal font-sans">*</span></span>
                                             </label>
-                                            <Input id="new-client-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Acme Corp" required={!isSandboxFirm} disabled={isDisabled} className={inputCls} />
+                                            <Input id="new-client-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Acme Corp" required disabled={isDisabled} className={inputCls} />
                                         </div>
                                         <div>
                                             <label htmlFor="new-client-status" className={fieldLabel}>

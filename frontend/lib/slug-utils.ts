@@ -55,12 +55,39 @@ export function generateUniqueSlug(
 }
 
 /**
- * Generate a slug for Firm
- * Firms always get a unique suffix for global uniqueness
- * Format: base (7 chars) + '-' + suffix (4 chars) = 12 total
+ * Short, simple, unambiguous words for readable slug parts (see `generateWordSlug`).
+ * Kept plain and generic — no proper nouns, nothing that could read as a name or brand.
  */
-export function generateFirmSlug(name: string): string {
-  return generateUniqueSlug(name, 7, 4)
+const SLUG_WORDS = [
+  'amber', 'arch', 'ash', 'atlas', 'aurora', 'birch', 'blue', 'bright', 'brook', 'cedar',
+  'clover', 'coral', 'cove', 'crest', 'cyan', 'delta', 'ember', 'fern', 'field', 'flint',
+  'forge', 'gold', 'grove', 'harbor', 'haven', 'hazel', 'hill', 'indigo', 'ivory', 'ivy',
+  'jade', 'lake', 'lark', 'linen', 'maple', 'marsh', 'meadow', 'mint', 'mist', 'moss',
+  'oak', 'olive', 'onyx', 'opal', 'orbit', 'peak', 'pearl', 'pine', 'plum', 'quartz',
+  'quill', 'reed', 'ridge', 'river', 'rose', 'sage', 'sand', 'shore', 'sky', 'slate',
+  'spruce', 'stone', 'summit', 'teal', 'terra', 'thistle', 'tide', 'timber', 'trail', 'vale',
+  'violet', 'wave', 'willow', 'wren',
+]
+
+/**
+ * Generate a readable slug: one word from `SLUG_WORDS` + a random suffix for uniqueness.
+ * Used for Group/Firm slugs — more memorable/shareable in a URL than pure random characters,
+ * while still carrying no derivation from the person's or firm's actual name.
+ * @param suffixLength - Length of the random suffix (default: 4)
+ */
+export function generateWordSlug(suffixLength: number = 4): string {
+  const word = SLUG_WORDS[Math.floor(Math.random() * SLUG_WORDS.length)]
+  const suffix = Math.random().toString(36).substring(2, 2 + suffixLength)
+  return `${word}-${suffix}`
+}
+
+/**
+ * Generate a slug for Firm — a readable word + random suffix (see `generateWordSlug`), no
+ * name derivation, so the URL never leaks the firm's display name. Rename the firm any time
+ * in Settings; the slug/URL stays stable.
+ */
+export function generateFirmSlug(_name: string): string {
+  return generateWordSlug(4)
 }
 
 /**
@@ -72,12 +99,11 @@ export function generateOrganizationSlug(name: string): string {
 }
 
 /**
- * Generate a slug for Group (same approach as Firm for consistent URL length)
- * Groups are globally unique — used as the top-level URL segment (/d/[groupSlug]/f/...)
- * Format: base (7 chars) + '-' + suffix (4 chars) = 12 total
+ * Generate a slug for Group — a readable word + random suffix (see `generateWordSlug`), no
+ * name derivation, so the top-level URL segment never leaks the creating user's name.
  */
-export function generateGroupSlug(name: string): string {
-  return generateUniqueSlug(name, 7, 4)
+export function generateGroupSlug(_name: string): string {
+  return generateWordSlug(4)
 }
 
 /**

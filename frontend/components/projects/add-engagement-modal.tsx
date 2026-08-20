@@ -15,17 +15,14 @@ import { SquarePlus, Activity, AlignLeft, Banknote, CalendarCheck, CalendarClock
 import { SelectWithCustomEntry } from '@/components/ui/select-with-custom-entry'
 import { OptionalFieldsSection } from "@/components/ui/optional-fields-toggle"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
-import { SandboxInfoBanner } from "@/components/ui/sandbox-info-banner"
 import { DateTimePicker } from "@/components/ui/date-time-picker"
 import { createProject, type LwCrmEngagementStatus } from '@/lib/actions/project'
-import { useOrgSandbox } from '@/lib/use-org-sandbox'
 import { clientTabPath } from '@/lib/navigation/firm-paths'
 
 interface AddEngagementModalProps {
     groupSlug: string
     firmSlug: string
     clientSlug: string
-    firmSandboxOnly?: boolean
     trigger?: React.ReactNode
     onSaved?: () => void
 }
@@ -33,7 +30,7 @@ interface AddEngagementModalProps {
 const fieldLabel = 'font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] block mb-1'
 const inputCls = 'border-[#e5e7eb] text-[#1b1b1d] text-xs font-normal placeholder:text-[#9a9ba0] rounded focus-visible:ring-1 focus-visible:ring-primary focus-visible:border-primary disabled:opacity-50 disabled:cursor-not-allowed'
 
-export function AddEngagementModal({ groupSlug, firmSlug, clientSlug, firmSandboxOnly = false, trigger, onSaved }: AddEngagementModalProps) {
+export function AddEngagementModal({ groupSlug, firmSlug, clientSlug, trigger, onSaved }: AddEngagementModalProps) {
     const [open, setOpen] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
     const [name, setName] = useState('')
@@ -93,9 +90,7 @@ export function AddEngagementModal({ groupSlug, firmSlug, clientSlug, firmSandbo
         return () => { mounted = false }
     }, [firmSlug])
 
-    const firmSandbox = useOrgSandbox()
-    const isSandboxFirm = Boolean(firmSandboxOnly || firmSandbox?.sandboxOnly)
-    const isDisabled = isSandboxFirm || capBlocked || isLoading
+    const isDisabled = capBlocked || isLoading
 
     const wrapTrigger = (node: React.ReactNode): React.ReactNode => {
         if (!React.isValidElement(node)) return node
@@ -134,7 +129,7 @@ export function AddEngagementModal({ groupSlug, firmSlug, clientSlug, firmSandbo
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
-        if (isSandboxFirm || capBlocked) return
+        if (capBlocked) return
 
         setIsLoading(true)
         setError(null)
@@ -209,7 +204,6 @@ export function AddEngagementModal({ groupSlug, firmSlug, clientSlug, firmSandbo
 
                     <form onSubmit={handleSubmit}>
                         <div className="p-5 space-y-3 bg-[#f9f9fb]">
-                            {isSandboxFirm && <SandboxInfoBanner />}
                             {error && (
                                 <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs px-3 py-2 rounded">
                                     {error}
@@ -243,7 +237,7 @@ export function AddEngagementModal({ groupSlug, firmSlug, clientSlug, firmSandbo
                                             value={name}
                                             onChange={(e) => setName(e.target.value)}
                                             placeholder="e.g. Q1 Audit"
-                                            required={!isSandboxFirm}
+                                            required
                                             disabled={isDisabled}
                                             className={`flex h-9 w-full rounded border border-[#e5e7eb] bg-white px-3 py-2 text-xs font-normal text-[#1b1b1d] placeholder:text-[#9a9ba0] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed`}
                                         />

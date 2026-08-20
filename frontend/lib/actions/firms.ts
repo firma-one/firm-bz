@@ -11,7 +11,6 @@ import {
     requireNonSandboxFirmCreationAccess,
     resolveBillingAnchorForNewSatelliteFirm,
 } from '@/lib/billing/firm-creation-gate'
-import { isWorkspaceOnboardingComplete } from '@/lib/onboarding/workspace-onboarding-complete'
 import { mergeLeanAppMetadata } from '@/lib/auth/supabase-jwt-metadata'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { firmPath, groupFirmListPath } from '@/lib/navigation/firm-paths'
@@ -51,7 +50,7 @@ export async function getUserFirms(): Promise<FirmOption[]> {
 
     try {
         const memberships = await (prisma as any).firmMember.findMany({
-            where: { userId: user.id },
+            where: { userId: user.id, firm: { sandboxOnly: false } },
             include: {
                 firm: {
                     include: {
@@ -146,16 +145,9 @@ export async function getDefaultFirmWithOnboardingStatus(): Promise<{
     const defaultFirm = await FirmService.getDefaultFirm(user.id)
     const slug = defaultFirm?.slug ?? null
 
-    const onboardingComplete = defaultFirm
-        ? await isWorkspaceOnboardingComplete({
-              id: defaultFirm.id,
-              settings: defaultFirm.settings,
-              connectorId: defaultFirm.connectorId ?? null,
-              sandboxOnly: defaultFirm.sandboxOnly ?? false,
-          })
-        : false
-
-    return { slug, onboardingComplete }
+    // Having any firm at all is now the onboarding-complete signal — see
+    // resolveDefaultFirmLandingPath's identical reasoning above.
+    return { slug, onboardingComplete: defaultFirm !== null }
 }
 
 /**
@@ -165,13 +157,15 @@ export async function getDefaultFirmWithOnboardingStatus(): Promise<{
  * (see .claude/plans/sandbox-firm-removal.md, Step 6).
  *
  * Routing rules (in order):
- * 1. No firm memberships at all → `/d/onboarding` (new user)
+ * 1. No firm memberships at all → silently auto-provision a real Group+Firm (see
+ *    lib/onboarding/auto-provision.ts) and land directly in it — no onboarding wizard. The
+ *    provisioning runs inline here (server-side redirect); `app/(app)/d/page.tsx`'s own
+ *    inner Suspense boundary covers it, scoped to that one route only.
  * 2. 2+ distinct groups → `/d/` (group picker — one card per group)
  * 3. Exactly 1 group, 2+ firms in it → `/d/{groupSlug}/f/` (firm picker, scoped to that group)
- * 4. Exactly 1 group, exactly 1 firm, non-admin → `/d/{groupSlug}/f/{firmSlug}` (go straight in)
- * 5. Exactly 1 group, exactly 1 firm, admin, onboarding incomplete → `/d/onboarding`
- * 6. Exactly 1 group, exactly 1 firm, admin, onboarding complete, domain orgs available → `/d/{groupSlug}/f/`
- * 7. Exactly 1 group, exactly 1 firm, admin, onboarding complete, no domain orgs → `/d/{groupSlug}/f/{firmSlug}`
+ * 4. Exactly 1 group, exactly 1 firm → `/d/{groupSlug}/f/{firmSlug}` (go straight in) — having
+ *    any firm at all is treated as onboarding-complete, no per-firm Drive/settings gate
+ * 5. Admin with joinable/already-joined domain orgs → `/d/{groupSlug}/f/` instead of step 4
  *
  * Returns `null` only if the resolved firm/group has no slug (malformed data).
  */
@@ -180,7 +174,22 @@ export async function resolveDefaultFirmLandingPath(userId: string): Promise<str
 
     logger.info('[resolveDefaultFirmLandingPath]', { userId, firmCount: allFirms.length, slugs: allFirms.map(f => f.slug) })
 
-    if (allFirms.length === 0) return '/d/onboarding'
+    if (allFirms.length === 0) {
+        try {
+            const supabase = await createClient()
+            const { data: { user } } = await supabase.auth.getUser()
+            if (!user) return '/d/onboarding'
+
+            const { autoProvisionFirstFirm } = await import('@/lib/onboarding/auto-provision')
+            const { groupSlug, firmSlug } = await autoProvisionFirstFirm(user)
+            return firmPath(groupSlug, firmSlug)
+        } catch (err) {
+            // Auto-provisioning failure (e.g. DB down) shouldn't crash landing-path resolution —
+            // fall back to the old onboarding route, which will retry provisioning on next visit.
+            logger.error('[resolveDefaultFirmLandingPath] Auto-provisioning failed', err as Error, undefined, { userId })
+            return '/d/onboarding'
+        }
+    }
 
     const distinctGroupSlugs = Array.from(new Set(allFirms.map((f) => f.groupSlug).filter((s): s is string => Boolean(s))))
     if (distinctGroupSlugs.length === 0) return null
@@ -204,18 +213,9 @@ export async function resolveDefaultFirmLandingPath(userId: string): Promise<str
         return firmPath(groupSlug, targetFirm.slug)
     }
 
-    const onboardingComplete = await isWorkspaceOnboardingComplete({
-        id: targetFirm.id,
-        settings: targetFirm.settings,
-        connectorId: targetFirm.connectorId ?? null,
-        sandboxOnly: targetFirm.sandboxOnly ?? false,
-    })
-
-    if (!onboardingComplete) {
-        return '/d/onboarding'
-    }
-
-    // Admin, onboarding done — check for joinable/already-joined domain orgs
+    // Belonging to a group at all (checked at the top of this function) is now the only
+    // "onboarding complete" signal — no per-firm Drive/settings gate. A user who already has a
+    // firm never gets routed into /d/onboarding again.
     const { getDomainOnboardingOptions } = await import('@/lib/actions/domain-onboarding')
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()

@@ -82,7 +82,6 @@ interface UseEngagementUploadOptions {
     files: DriveFile[]
     viewAsPersonaSlug: string | null | undefined
     restrictToSharedOnly: boolean
-    isSandboxFirm: boolean
     fetchFiles: (folderId: string, silent?: boolean) => Promise<void>
 }
 
@@ -93,7 +92,6 @@ export function useEngagementUpload({
     files,
     viewAsPersonaSlug,
     restrictToSharedOnly,
-    isSandboxFirm,
     fetchFiles,
 }: UseEngagementUploadOptions) {
     const {

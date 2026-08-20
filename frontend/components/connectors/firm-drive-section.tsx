@@ -71,13 +71,12 @@ type DriveRoot = {
 type FirmDriveSectionProps = {
   firmId: string
   orgSlug: string
-  isSandboxFirm?: boolean
   onConnectorsLoaded?: (count: number) => void
   /** Server-gated via Firm.settings.betaFeatures.microsoftStorageConnector, fails closed if omitted. */
   microsoftConnectorEnabled?: boolean
 }
 
-export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onConnectorsLoaded, microsoftConnectorEnabled = false }: FirmDriveSectionProps) {
+export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsoftConnectorEnabled = false }: FirmDriveSectionProps) {
   const router = useRouter()
   const { addToast } = useToast()
   const { user, session } = useAuth()
@@ -700,7 +699,6 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                             <button
                               type="button"
                               onClick={() => { setEditNameValue(connector.name || ''); setEditingId(connector.id) }}
-                              disabled={isSandboxFirm}
                               aria-label="Rename connection"
                               className="shrink-0 text-[#9a9ba0] transition-colors hover:text-[#45474c] disabled:opacity-0 disabled:pointer-events-none"
                             >
@@ -725,7 +723,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                               <Button type="button" variant="outline" size="sm"
                                 className="h-8 w-[6.5rem] justify-center px-3 text-xs border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] rounded"
                                 onClick={() => void handleTestConnection(connector)}
-                                disabled={isTesting || isSandboxFirm}>
+                                disabled={isTesting}>
                                 {isTesting
                                   ? <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />
                                   : <Zap className="w-3.5 h-3.5 mr-1.5" />}
@@ -741,7 +739,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                                 <Button type="button" variant="outline" size="sm"
                                   className="h-8 w-[6.5rem] justify-center px-3 text-xs border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] rounded"
                                   onClick={() => void handleOpenSwitchModal(connector)}
-                                  disabled={loading || isPersonalDrive || isSandboxFirm}>
+                                  disabled={loading || isPersonalDrive}>
                                   <SwitchCamera className="w-3.5 h-3.5 mr-1.5" />Transfer
                                 </Button>
                               </span>
@@ -759,7 +757,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                                 <Button type="button" variant="outline" size="sm"
                                   className="h-8 w-[6.5rem] justify-center px-3 text-xs border-[#e5e7eb] bg-white text-rose-600 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 rounded"
                                   onClick={() => setDisconnectTarget(connector)}
-                                  disabled={isSandboxFirm || connector.attachedClients.length > 0}>
+                                  disabled={connector.attachedClients.length > 0}>
                                   <Unplug className="w-3.5 h-3.5 mr-1.5" />Disconnect
                                 </Button>
                               </span>
@@ -778,7 +776,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                               <Button type="button" size="sm"
                                 className="h-8 px-3 text-xs bg-primary text-white hover:bg-primary hover:brightness-105 hover:text-white rounded border-0"
                                 onClick={() => handleReconnect(connector)}
-                                disabled={isSandboxFirm || loading}>
+                                disabled={loading}>
                                 {loading ? <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Plug className="w-3.5 h-3.5 mr-1.5" />}Reconnect
                               </Button>
                             </TooltipTrigger>
@@ -788,8 +786,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                             <TooltipTrigger asChild>
                               <Button type="button" variant="outline" size="sm"
                                 className="h-8 px-3 text-xs border-[#e5e7eb] bg-white text-rose-600 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 rounded"
-                                onClick={() => setRemoveTarget(connector)}
-                                disabled={isSandboxFirm}>
+                                onClick={() => setRemoveTarget(connector)}>
                                 <Trash2 className="w-3.5 h-3.5 mr-1.5" />Remove
                               </Button>
                             </TooltipTrigger>
@@ -848,12 +845,12 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                     </div>
                   )}
 
-                  {/* Client attachment management — always visible; attach/detach actions disable themselves internally (via rootFolderId/isSandboxFirm) when there's nothing to attach into */}
+                  {/* Client attachment management — always visible; attach/detach actions disable themselves internally (via rootFolderId/active state) when there's nothing to attach into */}
                   <ConnectorClientAttachSection
                     connector={connector}
                     allClients={allClients}
                     rootFolderId={driveRoot?.rootFolderId}
-                    isSandboxFirm={isSandboxFirm || !isActive}
+                    disabled={!isActive}
                     attachingClientId={attachingClientId}
                     detachingClientId={detachingClientId}
                     attachingAllConnectorId={attachingAllConnectorId}
@@ -918,7 +915,6 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                             <button
                               type="button"
                               onClick={() => { setEditNameValue(connector.name || ''); setEditingId(connector.id) }}
-                              disabled={isSandboxFirm}
                               aria-label="Rename connection"
                               className="shrink-0 text-[#9a9ba0] transition-colors hover:text-[#45474c] disabled:opacity-0 disabled:pointer-events-none"
                             >
@@ -942,7 +938,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                               <Button type="button" variant="outline" size="sm"
                                 className="h-8 w-[6.5rem] justify-center px-3 text-xs border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] rounded"
                                 onClick={() => void handleOneDriveTestConnection(connector)}
-                                disabled={testingId === connector.id || isSandboxFirm}>
+                                disabled={testingId === connector.id}>
                                 {testingId === connector.id
                                   ? <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />
                                   : <Zap className="w-3.5 h-3.5 mr-1.5" />}
@@ -958,7 +954,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                                 <Button type="button" variant="outline" size="sm"
                                   className="h-8 w-[6.5rem] justify-center px-3 text-xs border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] rounded"
                                   onClick={() => void handleOpenSwitchModal(connector)}
-                                  disabled={oneDriveLoading || !isShared || isSandboxFirm}>
+                                  disabled={oneDriveLoading || !isShared}>
                                   <SwitchCamera className="w-3.5 h-3.5 mr-1.5" />Transfer
                                 </Button>
                               </span>
@@ -974,8 +970,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                             <TooltipTrigger asChild>
                               <Button type="button" variant="outline" size="sm"
                                 className="h-8 w-[6.5rem] justify-center px-3 text-xs border-[#e5e7eb] bg-white text-rose-600 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 rounded"
-                                onClick={() => setOneDriveDisconnectTarget(connector)}
-                                disabled={isSandboxFirm}>
+                                onClick={() => setOneDriveDisconnectTarget(connector)}>
                                 <Unplug className="w-3.5 h-3.5 mr-1.5" />Disconnect
                               </Button>
                             </TooltipTrigger>
@@ -989,7 +984,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                               <Button type="button" size="sm"
                                 className="h-8 px-3 text-xs bg-primary text-white hover:bg-primary hover:brightness-105 hover:text-white rounded border-0"
                                 onClick={() => handleOneDriveReconnect(connector)}
-                                disabled={isSandboxFirm || oneDriveLoading}>
+                                disabled={oneDriveLoading}>
                                 {oneDriveLoading ? <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Plug className="w-3.5 h-3.5 mr-1.5" />}Reconnect
                               </Button>
                             </TooltipTrigger>
@@ -999,8 +994,7 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                             <TooltipTrigger asChild>
                               <Button type="button" variant="outline" size="sm"
                                 className="h-8 px-3 text-xs border-[#e5e7eb] bg-white text-rose-600 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 rounded"
-                                onClick={() => setOneDriveRemoveTarget(connector)}
-                                disabled={isSandboxFirm}>
+                                onClick={() => setOneDriveRemoveTarget(connector)}>
                                 <Trash2 className="w-3.5 h-3.5 mr-1.5" />Remove
                               </Button>
                             </TooltipTrigger>
@@ -1059,12 +1053,12 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                     </div>
                   )}
 
-                  {/* Client attachment management — always visible; attach/detach actions disable themselves internally (via rootFolderId/isSandboxFirm) when there's nothing to attach into */}
+                  {/* Client attachment management — always visible; attach/detach actions disable themselves internally (via rootFolderId/active state) when there's nothing to attach into */}
                   <ConnectorClientAttachSection
                     connector={connector}
                     allClients={allClients}
                     rootFolderId={oneDriveRoot?.rootFolderId}
-                    isSandboxFirm={isSandboxFirm || !isActive}
+                    disabled={!isActive}
                     attachingClientId={attachingClientId}
                     detachingClientId={detachingClientId}
                     attachingAllConnectorId={attachingAllConnectorId}
@@ -1135,12 +1129,12 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                     onBlur={() => setFriendlyNameTouched(true)}
                     onKeyDown={(e) => { if (e.key === 'Enter') handleConnect() }}
                     placeholder='Connection name, e.g. "Acme Corp Drive"'
-                    disabled={loading || isSandboxFirm}
+                    disabled={loading}
                     className="flex-1 rounded border border-[#e5e7eb] bg-white px-2.5 py-1.5 text-xs text-[#1b1b1d] placeholder:text-[#9a9ba0] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary disabled:opacity-50"
                   />
                   <button
                     type="button"
-                    disabled={loading || isSandboxFirm || !friendlyName.trim()}
+                    disabled={loading || !friendlyName.trim()}
                     onClick={handleConnect}
                     className="shrink-0 h-7 w-7 rounded bg-primary text-white flex items-center justify-center hover:brightness-105 transition-all disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
                   >
@@ -1174,12 +1168,12 @@ export function FirmDriveSection({ firmId, orgSlug, isSandboxFirm = false, onCon
                         onBlur={() => setOneDriveFriendlyNameTouched(true)}
                         onKeyDown={(e) => { if (e.key === 'Enter') handleOneDriveConnect() }}
                         placeholder='Connection name, e.g. "Acme Corp OneDrive"'
-                        disabled={oneDriveLoading || isSandboxFirm}
+                        disabled={oneDriveLoading}
                         className="flex-1 rounded border border-[#e5e7eb] bg-white px-2.5 py-1.5 text-xs text-[#1b1b1d] placeholder:text-[#9a9ba0] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary disabled:opacity-50"
                       />
                       <button
                         type="button"
-                        disabled={oneDriveLoading || isSandboxFirm || !oneDriveFriendlyName.trim()}
+                        disabled={oneDriveLoading || !oneDriveFriendlyName.trim()}
                         onClick={handleOneDriveConnect}
                         className="shrink-0 h-7 w-7 rounded bg-primary text-white flex items-center justify-center hover:brightness-105 transition-all disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
                       >
@@ -1288,7 +1282,7 @@ type ConnectorClientAttachSectionProps = {
   connector: FirmConnectorRecord
   allClients: FirmClientRecord[]
   rootFolderId: string | null | undefined
-  isSandboxFirm: boolean
+  disabled: boolean
   attachingClientId: string | null
   detachingClientId: string | null
   attachingAllConnectorId: string | null
@@ -1343,7 +1337,7 @@ function ConnectorClientAttachSection({
   connector,
   allClients,
   rootFolderId,
-  isSandboxFirm,
+  disabled,
   attachingClientId,
   detachingClientId,
   attachingAllConnectorId,
@@ -1355,7 +1349,7 @@ function ConnectorClientAttachSection({
   const visibleClients = allClients.filter(c => !c.connectorId || c.connectorId === connector.id)
   const unattachedCount = visibleClients.filter(c => c.connectorId !== connector.id).length
   const attachingAll = attachingAllConnectorId === connector.id
-  const attachAllDisabled = isSandboxFirm || !rootFolderId || attachingAll || attachingClientId !== null
+  const attachAllDisabled = disabled || !rootFolderId || attachingAll || attachingClientId !== null
 
   return (
     <div className="relative z-10 border-t border-[#e5e7eb]">
@@ -1399,8 +1393,8 @@ function ConnectorClientAttachSection({
           {visibleClients.map(client => {
             const isAttachedHere = client.connectorId === connector.id
             const isWorking = attachingClientId === client.id || detachingClientId === client.id
-            const attachDisabled = isSandboxFirm || !rootFolderId
-            const rowDisabled = isWorking || (isAttachedHere ? isSandboxFirm : attachDisabled)
+            const attachDisabled = disabled || !rootFolderId
+            const rowDisabled = isWorking || (isAttachedHere ? disabled : attachDisabled)
             const tooltipText = isWorking
               ? undefined
               : isAttachedHere

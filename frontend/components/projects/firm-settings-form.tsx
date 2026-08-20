@@ -23,8 +23,6 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { supabase } from '@/lib/supabase'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { SelectWithCustomEntry } from '@/components/ui/select-with-custom-entry'
-import { SandboxInfoBanner } from '@/components/ui/sandbox-info-banner'
-import { useOrgSandbox } from '@/lib/use-org-sandbox'
 import { FirmDriveSection } from '@/components/connectors/firm-drive-section'
 
 function normaliseUrl(raw: string): string {
@@ -78,7 +76,6 @@ export interface FirmSettingsFormProps {
     orgSlug: string
     orgId?: string | null
     initialName: string
-    firmSandboxOnly?: boolean
     /** Server-gated via Firm.settings.betaFeatures.microsoftStorageConnector, fails closed if omitted. */
     microsoftConnectorEnabled?: boolean
     initialSection?: Section
@@ -91,15 +88,12 @@ export function FirmSettingsForm({
     orgSlug,
     orgId: orgIdProp,
     initialName,
-    firmSandboxOnly = false,
     microsoftConnectorEnabled = false,
     initialSection,
     onSaved,
 }: FirmSettingsFormProps) {
     const router = useRouter()
     const { addToast } = useToast()
-    const orgSandbox = useOrgSandbox()
-    const isSandboxFirm = Boolean(firmSandboxOnly || orgSandbox?.sandboxOnly)
     const [orgIdState, setOrgIdState] = useState<string | null>(null)
     const orgId = orgIdProp ?? orgIdState
     const [openSection, setOpenSection] = useState<Section>(initialSection ?? 'main')
@@ -307,7 +301,6 @@ export function FirmSettingsForm({
     }
 
     const handleSaveBrand = async () => {
-        if (isSandboxFirm) return
         setSavingBrand(true)
         try {
             let logoData: string | null = null
@@ -343,7 +336,6 @@ export function FirmSettingsForm({
     }
 
     const handleSave = async ({ skipNavigation = false }: { skipNavigation?: boolean } = {}) => {
-        if (isSandboxFirm) return
         if (!name.trim()) {
             addToast({ type: 'error', title: 'Required', message: 'Firm name is required.' })
             return
@@ -408,7 +400,6 @@ export function FirmSettingsForm({
     }
 
     const performDeleteFirm = async () => {
-        if (isSandboxFirm) return
         setDeleting(true)
         try {
             await deleteFirm(orgSlug)
@@ -431,7 +422,7 @@ export function FirmSettingsForm({
     const mainSave = (
         <div className="flex items-center gap-3 pt-2">
             <Button type="button" variant="greenCta" onClick={() => void handleSave()}
-                disabled={isSandboxFirm || saving || !loaded || !mainDirty}
+                disabled={saving || !loaded || !mainDirty}
                 className="rounded w-32 text-[10px] font-headline font-bold tracking-widest uppercase text-white">
                 {saving ? 'Saving…' : 'Save'}
             </Button>
@@ -441,7 +432,7 @@ export function FirmSettingsForm({
     const appSave = (
         <div className="flex items-center gap-3 pt-2">
             <Button type="button" variant="greenCta" onClick={() => void handleSave({ skipNavigation: true })}
-                disabled={isSandboxFirm || saving || !loaded || (!appDirty && !mainDirty)}
+                disabled={saving || !loaded || (!appDirty && !mainDirty)}
                 className="rounded w-32 text-[10px] font-headline font-bold tracking-widest uppercase text-white">
                 {saving ? 'Saving…' : 'Save'}
             </Button>
@@ -450,7 +441,6 @@ export function FirmSettingsForm({
 
     return (
         <div className="flex flex-col gap-4">
-            {isSandboxFirm && <SandboxInfoBanner />}
 
             {/* ── 1. MAIN (Details + Company + Reminders) ── */}
             <section className="border border-[#e5e7eb] rounded overflow-hidden">
@@ -476,21 +466,21 @@ export function FirmSettingsForm({
                                             <label htmlFor="org-name" className={fieldLabel}>
                                                 <span className="inline-flex items-center gap-1"><Building2 className="h-3 w-3" /> Firm name <span className="text-red-500 normal-case tracking-normal font-sans">*</span></span>
                                             </label>
-                                            <Input id="org-name" value={name} onChange={(e) => { setName(e.target.value); setMainDirty(true) }} placeholder="Firm name" disabled={isSandboxFirm} className={inputCls} />
+                                            <Input id="org-name" value={name} onChange={(e) => { setName(e.target.value); setMainDirty(true) }} placeholder="Firm name" className={inputCls} />
                                         </div>
                                         <div>
                                             <label htmlFor="org-internal-memo" className={fieldLabel}>
                                                 <span className="inline-flex items-center gap-1"><Lock className="h-3 w-3" /> Internal memo <span className="text-[#9a9ba0] normal-case tracking-normal font-sans font-normal">— internal only</span></span>
                                             </label>
-                                            <textarea id="org-internal-memo" value={internalMemo} onChange={(e) => { setInternalMemo(e.target.value); setMainDirty(true) }} placeholder="Private notes, context about this firm…" rows={2} disabled={isSandboxFirm} className={textareaCls} />
+                                            <textarea id="org-internal-memo" value={internalMemo} onChange={(e) => { setInternalMemo(e.target.value); setMainDirty(true) }} placeholder="Private notes, context about this firm…" rows={2} className={textareaCls} />
                                         </div>
                                         <div>
                                             <label htmlFor="firm-industry" className={fieldLabel}><span className="inline-flex items-center gap-1"><Building2 className="h-3 w-3" /> Industry</span></label>
-                                            <Input id="firm-industry" value={industry} onChange={(e) => { setIndustry(e.target.value); setMainDirty(true) }} placeholder="e.g. Technology" disabled={isSandboxFirm} className={inputCls} />
+                                            <Input id="firm-industry" value={industry} onChange={(e) => { setIndustry(e.target.value); setMainDirty(true) }} placeholder="e.g. Technology" className={inputCls} />
                                         </div>
                                         <div>
                                             <label htmlFor="firm-company-size" className={fieldLabel}><span className="inline-flex items-center gap-1"><Users2 className="h-3 w-3" /> Company size</span></label>
-                                            <SelectWithCustomEntry id="firm-company-size" value={companySizeBracket} onChange={(v) => { setCompanySizeBracket(v); setMainDirty(true) }} options={['<10', '11–50', '51–200', '201–1000', '1000+']} placeholder="Select size bracket…" customEntryHint="Custom…" disabled={isSandboxFirm} />
+                                            <SelectWithCustomEntry id="firm-company-size" value={companySizeBracket} onChange={(v) => { setCompanySizeBracket(v); setMainDirty(true) }} options={['<10', '11–50', '51–200', '201–1000', '1000+']} placeholder="Select size bracket…" customEntryHint="Custom…" />
                                         </div>
                                     </div>
                                 </div>
@@ -500,19 +490,19 @@ export function FirmSettingsForm({
                                     <p className={`${fieldLabel} shrink-0`}>Company</p>
                                     <div className="shrink-0">
                                         <label htmlFor="firm-company-website" className={fieldLabel}><span className="inline-flex items-center gap-1"><Globe className="h-3 w-3" /> Website</span></label>
-                                        <Input id="firm-company-website" type="text" value={companyWebsite} onChange={(e) => { setCompanyWebsite(e.target.value); setMainDirty(true) }} placeholder="https://example.com or www.example.com" disabled={isSandboxFirm} className={inputCls} />
+                                        <Input id="firm-company-website" type="text" value={companyWebsite} onChange={(e) => { setCompanyWebsite(e.target.value); setMainDirty(true) }} placeholder="https://example.com or www.example.com" className={inputCls} />
                                     </div>
                                     <div className="shrink-0">
                                         <label htmlFor="firm-linkedin" className={fieldLabel}><span className="inline-flex items-center gap-1"><Linkedin className="h-3 w-3" /> LinkedIn</span></label>
-                                        <Input id="firm-linkedin" value={linkedInUrl} onChange={(e) => { setLinkedInUrl(e.target.value); setMainDirty(true) }} placeholder="https://linkedin.com/company/…" disabled={isSandboxFirm} className={inputCls} />
+                                        <Input id="firm-linkedin" value={linkedInUrl} onChange={(e) => { setLinkedInUrl(e.target.value); setMainDirty(true) }} placeholder="https://linkedin.com/company/…" className={inputCls} />
                                     </div>
                                     <div className="flex flex-col flex-1">
                                         <label htmlFor="firm-billing-address" className={fieldLabel}><span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" /> Billing address</span></label>
-                                        <textarea id="firm-billing-address" value={billingAddress} onChange={(e) => { setBillingAddress(e.target.value); setMainDirty(true) }} placeholder={"123 Main St\nCity, State ZIP\nCountry"} disabled={isSandboxFirm} className={`${textareaCls} flex-1 resize-none`} />
+                                        <textarea id="firm-billing-address" value={billingAddress} onChange={(e) => { setBillingAddress(e.target.value); setMainDirty(true) }} placeholder={"123 Main St\nCity, State ZIP\nCountry"} className={`${textareaCls} flex-1 resize-none`} />
                                     </div>
                                     <div className="flex flex-col flex-1">
                                         <label htmlFor="firm-notes" className={fieldLabel}><span className="inline-flex items-center gap-1"><FileText className="h-3 w-3" /> Notes</span></label>
-                                        <textarea id="firm-notes" value={notes} onChange={(e) => { setNotes(e.target.value); setMainDirty(true) }} placeholder="Additional details about the firm" disabled={isSandboxFirm} className={`${textareaCls} flex-1 resize-none`} />
+                                        <textarea id="firm-notes" value={notes} onChange={(e) => { setNotes(e.target.value); setMainDirty(true) }} placeholder="Additional details about the firm" className={`${textareaCls} flex-1 resize-none`} />
                                     </div>
                                 </div>
                             </div>
@@ -542,7 +532,7 @@ export function FirmSettingsForm({
                                 <div className="bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
                                     <div className="flex items-center justify-between">
                                         <p className={fieldLabel}>Identity</p>
-                                        {(brandPrimaryColor || brandSecondaryColor) && !isSandboxFirm && (
+                                        {(brandPrimaryColor || brandSecondaryColor) && (
                                             <button type="button" onClick={() => { setBrandPrimaryColor(''); setBrandSecondaryColor(''); setBrandDirty(true) }}
                                                 className="inline-flex items-center gap-1 text-[10px] font-medium text-firma hover:text-firma/80 transition-colors">
                                                 <RotateCcw className="h-3 w-3" /> Reset colors
@@ -551,18 +541,18 @@ export function FirmSettingsForm({
                                     </div>
                                     <div>
                                         <label htmlFor="firm-brand-name" className={fieldLabel}><span className="inline-flex items-center gap-1"><User className="h-3 w-3" /> Display name <span className="text-[#9a9ba0] normal-case tracking-normal font-sans font-normal">— shown in topbar</span></span></label>
-                                        <input id="firm-brand-name" value={brandName} onChange={(e) => { setBrandName(e.target.value); setBrandDirty(true) }} placeholder={name || 'Firm name'} disabled={isSandboxFirm} className={`flex h-9 w-full rounded border bg-white px-3 py-2 ${inputCls}`} />
+                                        <input id="firm-brand-name" value={brandName} onChange={(e) => { setBrandName(e.target.value); setBrandDirty(true) }} placeholder={name || 'Firm name'} className={`flex h-9 w-full rounded border bg-white px-3 py-2 ${inputCls}`} />
                                     </div>
                                     <div>
                                         <label htmlFor="firm-brand-subtext" className={fieldLabel}><span className="inline-flex items-center gap-1"><Type className="h-3 w-3" /> Brand tagline <span className="text-[#9a9ba0] normal-case tracking-normal font-sans font-normal">— optional</span></span></label>
-                                        <input id="firm-brand-subtext" value={brandSubtext} onChange={(e) => { setBrandSubtext(e.target.value); setBrandDirty(true) }} placeholder="Optional tagline or subtext" disabled={isSandboxFirm} className={`flex h-9 w-full rounded border bg-white px-3 py-2 ${inputCls}`} />
+                                        <input id="firm-brand-subtext" value={brandSubtext} onChange={(e) => { setBrandSubtext(e.target.value); setBrandDirty(true) }} placeholder="Optional tagline or subtext" className={`flex h-9 w-full rounded border bg-white px-3 py-2 ${inputCls}`} />
                                     </div>
                                     <div className="space-y-1.5">
                                         <label htmlFor="firm-brand-primary" className={fieldLabel}><span className="inline-flex items-center gap-1"><Palette className="h-3 w-3" /> Primary color <span className="text-[#9a9ba0] normal-case tracking-normal font-sans font-normal">— optional</span></span></label>
                                         <div className="flex items-center gap-2">
-                                            <input id="firm-brand-primary" type="color" value={brandPrimaryColor || FIRMA_COLOR} onChange={(e) => { setBrandPrimaryColor(e.target.value); setBrandDirty(true) }} disabled={isSandboxFirm} className="h-9 w-10 rounded border border-[#e5e7eb] cursor-pointer bg-white disabled:cursor-not-allowed disabled:opacity-60 shrink-0" />
-                                            <input value={brandPrimaryColor} onChange={(e) => { setBrandPrimaryColor(e.target.value); setBrandDirty(true) }} placeholder={`Default (${FIRMA_COLOR})`} disabled={isSandboxFirm} className={`flex h-9 w-full rounded border bg-white px-3 py-2 font-mono ${inputCls}`} />
-                                            <button type="button" onClick={() => { setBrandPrimaryColor(''); setBrandDirty(true) }} disabled={!brandPrimaryColor || isSandboxFirm} className="shrink-0 text-[#9a9ba0] hover:text-[#45474c] disabled:opacity-30 disabled:cursor-default"><RotateCcw className="h-3.5 w-3.5" /></button>
+                                            <input id="firm-brand-primary" type="color" value={brandPrimaryColor || FIRMA_COLOR} onChange={(e) => { setBrandPrimaryColor(e.target.value); setBrandDirty(true) }} className="h-9 w-10 rounded border border-[#e5e7eb] cursor-pointer bg-white disabled:cursor-not-allowed disabled:opacity-60 shrink-0" />
+                                            <input value={brandPrimaryColor} onChange={(e) => { setBrandPrimaryColor(e.target.value); setBrandDirty(true) }} placeholder={`Default (${FIRMA_COLOR})`} className={`flex h-9 w-full rounded border bg-white px-3 py-2 font-mono ${inputCls}`} />
+                                            <button type="button" onClick={() => { setBrandPrimaryColor(''); setBrandDirty(true) }} disabled={!brandPrimaryColor} className="shrink-0 text-[#9a9ba0] hover:text-[#45474c] disabled:opacity-30 disabled:cursor-default"><RotateCcw className="h-3.5 w-3.5" /></button>
                                         </div>
                                     </div>
                                     <div className="space-y-1.5">
@@ -570,11 +560,11 @@ export function FirmSettingsForm({
                                         <p className="text-[11px] text-[#9a9ba0]">Used for nav stripe &amp; tab underlines. Leave empty to match primary.</p>
                                         <div className="flex items-center gap-2">
                                             <div className="relative h-9 w-10 shrink-0">
-                                                <input id="firm-brand-accent" type="color" value={brandSecondaryColor || '#ffffff'} onChange={(e) => { setBrandSecondaryColor(e.target.value); setBrandDirty(true) }} disabled={isSandboxFirm} className="absolute inset-0 h-full w-full opacity-0 cursor-pointer disabled:cursor-not-allowed" />
+                                                <input id="firm-brand-accent" type="color" value={brandSecondaryColor || '#ffffff'} onChange={(e) => { setBrandSecondaryColor(e.target.value); setBrandDirty(true) }} className="absolute inset-0 h-full w-full opacity-0 cursor-pointer disabled:cursor-not-allowed" />
                                                 <div className="h-9 w-10 rounded border border-[#e5e7eb] pointer-events-none" style={brandSecondaryColor ? { backgroundColor: brandSecondaryColor } : { background: 'repeating-linear-gradient(45deg, #e5e7eb 0px, #e5e7eb 2px, white 2px, white 6px)' }} />
                                             </div>
-                                            <input value={brandSecondaryColor} onChange={(e) => { setBrandSecondaryColor(e.target.value); setBrandDirty(true) }} placeholder="Match primary" disabled={isSandboxFirm} className={`flex h-9 w-full rounded border bg-white px-3 py-2 font-mono ${inputCls}`} />
-                                            <button type="button" onClick={() => { setBrandSecondaryColor(''); setBrandDirty(true) }} disabled={!brandSecondaryColor || isSandboxFirm} className="shrink-0 text-[#9a9ba0] hover:text-[#45474c] disabled:opacity-30 disabled:cursor-default"><RotateCcw className="h-3.5 w-3.5" /></button>
+                                            <input value={brandSecondaryColor} onChange={(e) => { setBrandSecondaryColor(e.target.value); setBrandDirty(true) }} placeholder="Match primary" className={`flex h-9 w-full rounded border bg-white px-3 py-2 font-mono ${inputCls}`} />
+                                            <button type="button" onClick={() => { setBrandSecondaryColor(''); setBrandDirty(true) }} disabled={!brandSecondaryColor} className="shrink-0 text-[#9a9ba0] hover:text-[#45474c] disabled:opacity-30 disabled:cursor-default"><RotateCcw className="h-3.5 w-3.5" /></button>
                                         </div>
                                     </div>
                                 </div>
@@ -586,7 +576,7 @@ export function FirmSettingsForm({
                                             const dims: Record<string, [number,number]> = { '1:1': [16,16], '4:3': [21,16], '16:9': [28,16] }
                                             const [w, h] = dims[ar]; const active = brandLogoAspectRatio === ar
                                             return (
-                                                <button key={ar} type="button" onClick={() => { setBrandLogoAspectRatio(ar); setBrandLogoScale(1); setBrandLogoX(0); setBrandLogoY(0); setBrandDirty(true) }} disabled={isSandboxFirm}
+                                                <button key={ar} type="button" onClick={() => { setBrandLogoAspectRatio(ar); setBrandLogoScale(1); setBrandLogoX(0); setBrandLogoY(0); setBrandDirty(true) }}
                                                     className={`flex flex-col items-center gap-1 px-2 py-1.5 rounded border transition-colors disabled:opacity-50 ${active ? 'border-primary bg-primary/5 text-primary' : 'border-[#e5e7eb] text-[#9a9ba0] hover:border-[#45474c] hover:text-[#45474c]'}`}>
                                                     <span className={`block rounded-sm border-2 ${active ? 'border-primary' : 'border-current'}`} style={{ width: w, height: h }} />
                                                     <span className="text-[9px] font-mono font-bold tracking-wide leading-none">{ar}</span>
@@ -597,7 +587,7 @@ export function FirmSettingsForm({
                                     <p className="text-xs text-[#9a9ba0]">JPG, PNG or SVG. Max 5 MB.</p>
                                     <input ref={brandFileInputRef} type="file" accept=".jpg,.jpeg,.png,.svg,image/jpeg,image/png,image/svg+xml" onChange={handleBrandLogoFileChange} className="sr-only" aria-hidden />
                                     {!(brandLogoPreviewUrl || brandLogoUrl) ? (
-                                        <button type="button" onClick={() => brandFileInputRef.current?.click()} disabled={isSandboxFirm}
+                                        <button type="button" onClick={() => brandFileInputRef.current?.click()}
                                             className="relative flex shrink-0 items-center justify-center rounded border-2 border-dashed border-[#e5e7eb] bg-slate-50 hover:border-primary/40 transition-colors focus:outline-none group disabled:opacity-60 disabled:cursor-not-allowed"
                                             style={{ width: brandPreviewW, height: BRAND_PREVIEW_H }}>
                                             <span className="text-5xl font-semibold text-slate-300 group-hover:opacity-30 transition-opacity">{(brandName || name).trim().charAt(0).toUpperCase() || '?'}</span>
@@ -614,14 +604,13 @@ export function FirmSettingsForm({
                                                     <img src={brandLogoPreviewUrl || brandLogoUrl || undefined} alt="Logo" className="max-w-full max-h-full object-contain pointer-events-none" style={{ width: brandPreviewW, height: BRAND_PREVIEW_H }} draggable={false} />
                                                 </div>
                                                 <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded">
-                                                    <button type="button" onClick={() => brandFileInputRef.current?.click()} disabled={isSandboxFirm} className="p-2 rounded bg-white text-[#1b1b1d] hover:bg-[#f9f9fb] shadow-sm disabled:opacity-50"><ImagePlus className="h-4 w-4" /></button>
-                                                    <button type="button" onClick={() => { setBrandLogoUrl(''); setBrandLogoFile(null); setBrandLogoPreviewUrl(null); setBrandDirty(true) }} disabled={isSandboxFirm} className="p-2 rounded bg-white text-red-600 hover:bg-red-50 shadow-sm disabled:opacity-50"><Trash2 className="h-4 w-4" /></button>
+                                                    <button type="button" onClick={() => brandFileInputRef.current?.click()} className="p-2 rounded bg-white text-[#1b1b1d] hover:bg-[#f9f9fb] shadow-sm disabled:opacity-50"><ImagePlus className="h-4 w-4" /></button>
+                                                    <button type="button" onClick={() => { setBrandLogoUrl(''); setBrandLogoFile(null); setBrandLogoPreviewUrl(null); setBrandDirty(true) }} className="p-2 rounded bg-white text-red-600 hover:bg-red-50 shadow-sm disabled:opacity-50"><Trash2 className="h-4 w-4" /></button>
                                                 </div>
                                             </div>
                                             <input type="range" min={-1} max={1} step={0.04}
                                                 value={brandLogoScale <= 1 ? (brandLogoScale - 1) / 0.5 : (brandLogoScale - 1) / 2}
-                                                onChange={(e) => { const v = Number(e.target.value); setBrandLogoScale(v <= 0 ? 1 + v * 0.5 : 1 + v * 2); setBrandDirty(true) }}
-                                                disabled={isSandboxFirm} className="w-full h-1.5 rounded appearance-none bg-[#e5e7eb] accent-primary disabled:opacity-60" style={{ maxWidth: brandPreviewW }} />
+                                                onChange={(e) => { const v = Number(e.target.value); setBrandLogoScale(v <= 0 ? 1 + v * 0.5 : 1 + v * 2); setBrandDirty(true) }} className="w-full h-1.5 rounded appearance-none bg-[#e5e7eb] accent-primary disabled:opacity-60" style={{ maxWidth: brandPreviewW }} />
                                         </div>
                                     )}
                                     <div className="mt-1">
@@ -650,7 +639,7 @@ export function FirmSettingsForm({
                                 </div>
                             </div>
                             <div className="mt-4 flex items-center gap-3">
-                                <Button onClick={() => void handleSaveBrand()} disabled={isSandboxFirm || savingBrand || !brandDirty} variant="greenCta"
+                                <Button onClick={() => void handleSaveBrand()} disabled={savingBrand || !brandDirty} variant="greenCta"
                                     className="rounded w-40 text-[10px] font-headline font-bold tracking-widest uppercase text-white">
                                     {savingBrand ? 'Saving…' : 'Save'}
                                 </Button>
@@ -688,14 +677,14 @@ export function FirmSettingsForm({
                                                 Enable access for <span className="font-semibold">{allowedEmailDomain || 'your domain'}</span>
                                                 <span className="block text-[#9a9ba0] font-normal mt-0.5">Users with this email domain can join without an invitation.</span>
                                             </Label>
-                                            <Switch id="allow-domain" checked={allowDomainAccess} onCheckedChange={(v) => { setAllowDomainAccess(v); setAppDirty(true) }} disabled={isSandboxFirm || !loaded} />
+                                            <Switch id="allow-domain" checked={allowDomainAccess} onCheckedChange={(v) => { setAllowDomainAccess(v); setAppDirty(true) }} disabled={!loaded} />
                                         </div>
                                         {allowDomainAccess && (
                                             <div>
                                                 <label htmlFor="allowed-email-domain" className={fieldLabel}>
                                                     <span className="inline-flex items-center gap-1"><Shield className="h-3 w-3" /> Email domain</span>
                                                 </label>
-                                                <Input id="allowed-email-domain" value={allowedEmailDomain} onChange={(e) => { setAllowedEmailDomain(e.target.value); setAppDirty(true) }} placeholder="e.g. acme.com" disabled={isSandboxFirm} className={`font-mono ${inputCls}`} />
+                                                <Input id="allowed-email-domain" value={allowedEmailDomain} onChange={(e) => { setAllowedEmailDomain(e.target.value); setAppDirty(true) }} placeholder="e.g. acme.com" className={`font-mono ${inputCls}`} />
                                                 {isPublicDomain && <p className="mt-1 text-[10px] text-amber-600">Public email domains (e.g. gmail.com) are not recommended for firm access.</p>}
                                             </div>
                                         )}
@@ -712,7 +701,7 @@ export function FirmSettingsForm({
                                                     <p className="text-xs text-[#45474c] mt-0.5">Send an email when a reminder is created.</p>
                                                 </div>
                                             </div>
-                                            <Switch checked={immediateOnCreate} onCheckedChange={(v) => { setImmediateOnCreate(v); setAppDirty(true) }} disabled={isSandboxFirm || !loaded} aria-label="Immediate notification on create" />
+                                            <Switch checked={immediateOnCreate} onCheckedChange={(v) => { setImmediateOnCreate(v); setAppDirty(true) }} disabled={!loaded} aria-label="Immediate notification on create" />
                                         </div>
                                         <div className="flex items-center justify-between gap-4">
                                             <div className="flex items-start gap-2.5">
@@ -722,20 +711,20 @@ export function FirmSettingsForm({
                                                     <p className="text-xs text-[#45474c] mt-0.5">Send repeat reminder emails until marked done.</p>
                                                 </div>
                                             </div>
-                                            <Switch checked={recurringEnabled} onCheckedChange={(v) => { setRecurringEnabled(v); setAppDirty(true) }} disabled={isSandboxFirm || !loaded} aria-label="Recurring reminder emails" />
+                                            <Switch checked={recurringEnabled} onCheckedChange={(v) => { setRecurringEnabled(v); setAppDirty(true) }} disabled={!loaded} aria-label="Recurring reminder emails" />
                                         </div>
                                         {recurringEnabled && (
                                             <div className="pl-6 space-y-2 border-l-2 border-[#f0f0f2] ml-2">
                                                 <div>
                                                     <label className={fieldLabel}>Frequency (every N days)</label>
-                                                    <Select value={String(recurringFrequencyDays)} onValueChange={(v) => { setRecurringFrequencyDays(Number(v)); setAppDirty(true) }} disabled={isSandboxFirm || !loaded}>
+                                                    <Select value={String(recurringFrequencyDays)} onValueChange={(v) => { setRecurringFrequencyDays(Number(v)); setAppDirty(true) }} disabled={!loaded}>
                                                         <SelectTrigger className={inputCls}><SelectValue /></SelectTrigger>
                                                         <SelectContent>{[1, 3, 7, 14].map((n) => <SelectItem key={n} value={String(n)}>{n === 1 ? 'Every day' : `Every ${n} days`}</SelectItem>)}</SelectContent>
                                                     </Select>
                                                 </div>
                                                 <div>
                                                     <label className={fieldLabel}>Start before due date</label>
-                                                    <Select value={String(startDaysBeforeDue)} onValueChange={(v) => { setStartDaysBeforeDue(Number(v)); setAppDirty(true) }} disabled={isSandboxFirm || !loaded}>
+                                                    <Select value={String(startDaysBeforeDue)} onValueChange={(v) => { setStartDaysBeforeDue(Number(v)); setAppDirty(true) }} disabled={!loaded}>
                                                         <SelectTrigger className={inputCls}><SelectValue /></SelectTrigger>
                                                         <SelectContent>{[1, 3, 7, 14, 21, 30].map((n) => <SelectItem key={n} value={String(n)}>{n} {n === 1 ? 'day' : 'days'} before</SelectItem>)}</SelectContent>
                                                     </Select>
@@ -750,7 +739,7 @@ export function FirmSettingsForm({
                                                     <p className="text-xs text-[#45474c] mt-0.5">Send an email when a user is @mentioned in a comment.</p>
                                                 </div>
                                             </div>
-                                            <Switch checked={mentionEmailOnCreate} onCheckedChange={(v) => { setMentionEmailOnCreate(v); setAppDirty(true) }} disabled={isSandboxFirm || !loaded} aria-label="Email on @mention" />
+                                            <Switch checked={mentionEmailOnCreate} onCheckedChange={(v) => { setMentionEmailOnCreate(v); setAppDirty(true) }} disabled={!loaded} aria-label="Email on @mention" />
                                         </div>
                                     </div>
 
@@ -768,7 +757,7 @@ export function FirmSettingsForm({
                                             </label>
                                             <div className="relative w-full mt-1">
                                                 <DropdownMenu open={currencyOpen} onOpenChange={setCurrencyOpen}>
-                                                    <DropdownMenuTrigger asChild disabled={isSandboxFirm}>
+                                                    <DropdownMenuTrigger asChild>
                                                         <button className="w-full h-9 flex items-center rounded border border-[#e5e7eb] bg-white px-3 pr-7 text-xs text-[#1b1b1d] disabled:cursor-not-allowed disabled:opacity-60 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary">
                                                             <span className={`flex-1 text-left truncate ${currencyCode || (currencyIsCustom && currencyCustom) ? 'text-[#1b1b1d]' : 'text-[#9a9ba0]'}`}>
                                                                 {currencyCode ? WORLD_CURRENCIES.find((c) => c.code === currencyCode)?.label ?? currencyCode : currencyIsCustom && currencyCustom ? `Other: ${currencyCustom}` : 'Select…'}
@@ -776,7 +765,7 @@ export function FirmSettingsForm({
                                                         </button>
                                                     </DropdownMenuTrigger>
                                                     <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center">
-                                                        {(currencyCode || (currencyIsCustom && currencyCustom)) && !isSandboxFirm ? (
+                                                        {(currencyCode || (currencyIsCustom && currencyCustom)) ? (
                                                             <button type="button" className="pointer-events-auto p-0.5 rounded text-[#9a9ba0] hover:text-[#1b1b1d] hover:bg-gray-100 transition-colors" onClick={(e) => { e.stopPropagation(); setCurrencyCode(''); setCurrencyIsCustom(false); setCurrencyCustom(''); setAppDirty(true) }} aria-label="Clear"><X className="h-3 w-3" /></button>
                                                         ) : (
                                                             <ChevronDown className="h-3 w-3 text-[#45474c]" />
@@ -817,7 +806,7 @@ export function FirmSettingsForm({
                                                 ]).map(({ label, value, set }) => (
                                                     <div key={label} className="flex items-center justify-between gap-4">
                                                         <span className="text-xs text-[#1b1b1d]">{label}</span>
-                                                        <Switch checked={value} onCheckedChange={(v) => { set(v); setAppDirty(true) }} disabled={isSandboxFirm || !loaded} aria-label={label} />
+                                                        <Switch checked={value} onCheckedChange={(v) => { set(v); setAppDirty(true) }} disabled={!loaded} aria-label={label} />
                                                     </div>
                                                 ))}
                                             </div>
@@ -840,7 +829,7 @@ export function FirmSettingsForm({
                                                             <span className="text-xs text-[#1b1b1d]">{label}</span>
                                                             <p className="text-xs text-[#9a9ba0] mt-0.5">{description}</p>
                                                         </div>
-                                                        <Switch checked={value} onCheckedChange={(v) => { set(v); setAppDirty(true) }} disabled={isSandboxFirm || !loaded} aria-label={label} />
+                                                        <Switch checked={value} onCheckedChange={(v) => { set(v); setAppDirty(true) }} disabled={!loaded} aria-label={label} />
                                                     </div>
                                                 ))}
                                             </div>
@@ -871,7 +860,7 @@ export function FirmSettingsForm({
                     <div className="overflow-hidden min-h-0">
                         <div className="p-5 border-t border-[#e5e7eb] bg-white">
                             {orgId
-                                ? <FirmDriveSection firmId={orgId} orgSlug={orgSlug} isSandboxFirm={isSandboxFirm} onConnectorsLoaded={setStorageConnectorCount} microsoftConnectorEnabled={microsoftConnectorEnabled} />
+                                ? <FirmDriveSection firmId={orgId} orgSlug={orgSlug} onConnectorsLoaded={setStorageConnectorCount} microsoftConnectorEnabled={microsoftConnectorEnabled} />
                                 : <div className="text-xs text-[#9a9ba0]">Loading…</div>
                             }
                         </div>
@@ -893,7 +882,7 @@ export function FirmSettingsForm({
                     <div className="overflow-hidden min-h-0">
                         <div className="p-5 border-t border-red-200 bg-red-50/40">
                             <p className="text-sm text-[#45474c] mb-4">Permanently delete this firm. All clients, projects, and members will be removed. This cannot be undone.</p>
-                            <Button type="button" onClick={() => setDeleteConfirmOpen(true)} disabled={isSandboxFirm || deleting}
+                            <Button type="button" onClick={() => setDeleteConfirmOpen(true)} disabled={deleting}
                                 className="rounded bg-red-700 text-white hover:bg-red-800 border-0 text-[10px] font-headline font-bold tracking-widest uppercase shadow-sm hover:shadow-[0_4px_12px_-2px_rgba(185,28,28,0.35)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all">
                                 {deleting ? 'Deleting…' : 'Delete firm'}
                             </Button>

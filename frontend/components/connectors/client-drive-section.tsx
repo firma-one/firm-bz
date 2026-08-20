@@ -17,7 +17,6 @@ type ClientDriveSectionProps = {
   firmId: string
   groupSlug: string
   orgSlug: string
-  isSandboxFirm?: boolean
 }
 
 export function ClientDriveSection({

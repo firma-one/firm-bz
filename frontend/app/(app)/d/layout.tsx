@@ -1,18 +1,14 @@
-import { headers } from 'next/headers'
-import { redirect } from 'next/navigation'
-import { isRedirectError } from 'next/dist/client/components/redirect-error'
-import { getUserFirms, resolveDefaultFirmLandingPath } from '@/lib/actions/firms'
+import { getUserFirms } from '@/lib/actions/firms'
 import { createClient } from '@/utils/supabase/server'
 import { isSystemAdminEmail } from '@/lib/system/admin-check'
 import { DLayoutClient } from './d-layout-client'
 
-const INVOKE_PATH_HEADER = 'x-invoke-path'
-
 /**
- * Server layout: loads firms for the shell; for the bare `/d` entry only, redirects to the
- * resolved workspace (`/d/{groupSlug}/f/{firmSlug}`) or `/d/onboarding` when workspace setup
- * is incomplete. Child routes (`/d/onboarding`, `/d/billing`, `/d/{groupSlug}/f/...`) are
- * unchanged.
+ * Server layout: loads firms for the shell (shared by EVERY route under `/d/*`, including
+ * firm-scoped pages — do not wrap this in a Suspense boundary with a full-screen fallback,
+ * that would show the bare-`/d`-landing blocker modal on every `/d/*` navigation, including
+ * refreshing an already-resolved firm URL). Landing-path resolution + its own loading UI for
+ * the bare `/d` entry specifically live in `page.tsx`, scoped to that one route only.
  */
 export default async function DLayout({
     children,
@@ -27,27 +23,6 @@ export default async function DLayout({
     } = await supabase.auth.getUser()
 
     const isSystemAdmin = isSystemAdminEmail(user?.email)
-
-    const h = await headers()
-    const rawPath = h.get(INVOKE_PATH_HEADER) ?? ''
-    const invokePath = rawPath.length > 1 && rawPath.endsWith('/') ? rawPath.slice(0, -1) : rawPath
-
-    if (invokePath === '/d') {
-        if (user?.id) {
-            try {
-                const path = await resolveDefaultFirmLandingPath(user.id)
-                if (path) redirect(path)
-            } catch (e) {
-                if (isRedirectError(e)) throw e
-                redirect('/d/onboarding')
-            }
-        }
-    }
-
-    // Signup-success is a standalone full-page experience — no app shell
-    if (invokePath === '/d/signup-success') {
-        return <>{children}</>
-    }
 
     return <DLayoutClient initialFirms={firms} isSystemAdmin={isSystemAdmin}>{children}</DLayoutClient>
 }

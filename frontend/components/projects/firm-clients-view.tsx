@@ -319,7 +319,6 @@ export function FirmClientsView({ clients, groupSlug, orgSlug, orgId, firmSandbo
                                 groupSlug={groupSlug}
                                 orgSlug={orgSlug}
                                 firmId={orgId}
-                                firmSandboxOnly={firmSandboxOnly}
                                 onSaved={() => startRefresh(() => router.refresh())}
                                 trigger={
                                     <Button
@@ -425,7 +424,6 @@ export function FirmClientsView({ clients, groupSlug, orgSlug, orgId, firmSandbo
                                     orgSlug={orgSlug}
                                     orgId={orgId}
                                     initialName={orgName ?? ''}
-                                    firmSandboxOnly={firmSandboxOnly}
                                     microsoftConnectorEnabled={microsoftConnectorEnabled}
                                     initialSection={(searchParams.get('section') as 'main' | 'branding' | 'appsettings' | 'storage' | 'danger') || undefined}
                                     onSaved={() => {

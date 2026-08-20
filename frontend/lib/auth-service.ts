@@ -75,11 +75,14 @@ export class AuthService {
         try {
             // Store onboarding data in localStorage for callback
             localStorage.setItem('onboarding_data', JSON.stringify(onboardingData))
-            // Flag checked on /signup after OAuth returns to show SignupSuccess
-            sessionStorage.setItem('signup_success', '1')
 
-            const callbackNext = next ?? '/d/signup-success'
-            const redirectTo = `${getOAuthRedirectOrigin()}/auth/callback?next=${encodeURIComponent(callbackNext)}`
+            // Only append `next` when explicitly provided (e.g. an invite link) — otherwise
+            // /auth/callback sees no `next` param and runs its own resolveDefaultFirmLandingPath
+            // resolution (auto-provisioning for new users, correct landing path for returning
+            // ones), exactly like the OTP/email sign-in path already does.
+            const redirectTo = next
+                ? `${getOAuthRedirectOrigin()}/auth/callback?next=${encodeURIComponent(next)}`
+                : `${getOAuthRedirectOrigin()}/auth/callback`
 
             const { error } = await supabase.auth.signInWithOAuth({
                 provider: 'google',
@@ -119,11 +122,14 @@ export class AuthService {
         try {
             // Store onboarding data in localStorage for callback
             localStorage.setItem('onboarding_data', JSON.stringify(onboardingData))
-            // Flag checked on /signup after OAuth returns to show SignupSuccess
-            sessionStorage.setItem('signup_success', '1')
 
-            const callbackNext = next ?? '/d/signup-success'
-            const redirectTo = `${getOAuthRedirectOrigin()}/auth/callback?next=${encodeURIComponent(callbackNext)}`
+            // Only append `next` when explicitly provided (e.g. an invite link) — otherwise
+            // /auth/callback sees no `next` param and runs its own resolveDefaultFirmLandingPath
+            // resolution (auto-provisioning for new users, correct landing path for returning
+            // ones), exactly like the OTP/email sign-in path already does.
+            const redirectTo = next
+                ? `${getOAuthRedirectOrigin()}/auth/callback?next=${encodeURIComponent(next)}`
+                : `${getOAuthRedirectOrigin()}/auth/callback`
 
             const { error } = await supabase.auth.signInWithOAuth({
                 provider: 'azure',

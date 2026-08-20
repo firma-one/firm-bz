@@ -637,6 +637,17 @@ export function AppTopbar() {
       {/* Right: Utility actions — w-64, justify-end */}
       <div className="w-64 shrink-0 flex items-center justify-end gap-1 pr-4">
         {isDemoFirm && slug && groupSlug && <DemoTourTopbarButton firmSlug={slug} groupSlug={groupSlug} />}
+        <Tip label="View product demo" position="bottom">
+          <a
+            href="/demo"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-10 h-10 flex items-center justify-center rounded-xl text-primary hover:bg-primary/10 transition-colors"
+            aria-label="View product demo"
+          >
+            <ArrowUpRight className="h-5 w-5" />
+          </a>
+        </Tip>
         <div data-demo-tour="topbar-reminders">
           <RemindersPanel />
         </div>

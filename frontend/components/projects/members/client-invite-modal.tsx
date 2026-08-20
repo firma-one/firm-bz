@@ -6,8 +6,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { inviteClientMember } from '@/lib/actions/client-members'
-import { SandboxInfoBanner } from '@/components/ui/sandbox-info-banner'
-import { useOrgSandbox } from '@/lib/use-org-sandbox'
 
 interface ClientInviteModalProps {
     firmId: string
@@ -21,13 +19,10 @@ export function ClientInviteModal({ firmId, clientId, open, onOpenChange, onSucc
     const [email, setEmail] = useState('')
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [error, setError] = useState('')
-    const orgSandbox = useOrgSandbox()
-    const isSandboxFirm = Boolean(orgSandbox?.sandboxOnly)
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         setError('')
-        if (isSandboxFirm) return
         setIsSubmitting(true)
         try {
             await inviteClientMember(firmId, clientId, email)
@@ -53,12 +48,11 @@ export function ClientInviteModal({ firmId, clientId, open, onOpenChange, onSucc
                     <DialogTitle>Invite Client Administrator</DialogTitle>
                 </DialogHeader>
                 <form onSubmit={handleSubmit} className="space-y-6 pt-4">
-                    {isSandboxFirm && <SandboxInfoBanner />}
                     <p className="text-sm text-slate-500">
                         Invite someone to join this client as a Client Administrator. They will be able to manage client settings and members.
                     </p>
                     <div className="space-y-2">
-                        <Label htmlFor="client-invite-email" className={isSandboxFirm ? 'text-slate-500' : undefined}>
+                        <Label htmlFor="client-invite-email">
                             Email Address
                         </Label>
                         <Input
@@ -67,8 +61,7 @@ export function ClientInviteModal({ firmId, clientId, open, onOpenChange, onSucc
                             placeholder="admin@example.com"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
-                            required={!isSandboxFirm}
-                            disabled={isSandboxFirm}
+                            required
                             className="disabled:cursor-not-allowed disabled:opacity-60"
                         />
                     </div>
@@ -79,7 +72,7 @@ export function ClientInviteModal({ firmId, clientId, open, onOpenChange, onSucc
                         <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
                             Cancel
                         </Button>
-                        <Button type="submit" variant="blackCta" disabled={isSandboxFirm || isSubmitting || !email.trim()}>
+                        <Button type="submit" variant="blackCta" disabled={isSubmitting || !email.trim()}>
                             {isSubmitting ? 'Sending...' : 'Send Invitation'}
                         </Button>
                     </div>

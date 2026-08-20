@@ -118,11 +118,6 @@ export function FirmList({ firms, viewMode = 'grid', activeOrgIdFromJWT }: FirmL
                                                 <span className="font-medium text-slate-900 group-hover:text-black transition-colors truncate">
                                                     {org.name}
                                                 </span>
-                                                {org.sandboxOnly && (
-                                                    <span className="px-1.5 py-0.5 bg-amber-100/50 text-amber-700 rounded text-[10px] font-medium shrink-0 border border-amber-200/50">
-                                                        Sandbox
-                                                    </span>
-                                                )}
                                                 {org.isDefault && (
                                                     <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded text-[10px] font-medium shrink-0">
                                                         Default
@@ -174,11 +169,6 @@ export function FirmList({ firms, viewMode = 'grid', activeOrgIdFromJWT }: FirmL
                             <div className="flex items-center gap-2 shrink-0">
                                 {activeOrgSlug === org.slug && (
                                     <ActiveIndicator />
-                                )}
-                                {org.sandboxOnly && (
-                                    <span className="px-2 py-1 bg-amber-100/50 text-amber-700 rounded-full text-[10px] font-medium border border-amber-200/50">
-                                        Sandbox
-                                    </span>
                                 )}
                                 {org.isDefault && (
                                     <span className="px-2 py-1 bg-slate-100 text-slate-500 rounded-full text-[10px] font-medium">

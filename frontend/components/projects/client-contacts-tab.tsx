@@ -12,8 +12,6 @@ import {
 } from '@/components/ui/dialog'
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
 import { createClientContact, deleteClientContact, listClientContacts, updateClientContact, type ClientContactRecord } from '@/lib/actions/client'
-import { SandboxInfoBanner } from '@/components/ui/sandbox-info-banner'
-import { useOrgSandbox } from '@/lib/use-org-sandbox'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { UserPlus, UserMinus, Pencil, X, Star, CornerDownLeft, RefreshCw } from 'lucide-react'
 
@@ -25,16 +23,12 @@ export function ClientContactsTab({
   orgSlug,
   clientSlug,
   canManage,
-  firmSandboxOnly = false,
 }: {
   orgSlug: string
   clientSlug: string
   canManage: boolean
-  firmSandboxOnly?: boolean
 }) {
   const { addToast } = useToast()
-  const orgSandbox = useOrgSandbox()
-  const isSandboxFirm = Boolean(firmSandboxOnly || orgSandbox?.sandboxOnly)
   const [isPending, startTransition] = useTransition()
   const [contacts, setContacts] = useState<ClientContactRecord[]>([])
   const [loading, setLoading] = useState(true)
@@ -123,7 +117,6 @@ export function ClientContactsTab({
     : tags
 
   const handleSubmit = () => {
-    if (isSandboxFirm) return
     const ft = finalTags()
     startTransition(async () => {
       try {
@@ -195,7 +188,7 @@ export function ClientContactsTab({
               <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search..." className="border-slate-200 h-8 text-xs" />
             </div>
             <Button
-              disabled={!canManage && !isSandboxFirm}
+              disabled={!canManage}
               variant="ghost"
               size="sm"
               data-demo-tour="client-add-contact-btn"
@@ -294,47 +287,44 @@ export function ClientContactsTab({
           </div>
 
           <div className="p-5 space-y-4">
-            {isSandboxFirm && <SandboxInfoBanner />}
 
             {/* Name */}
             <div>
               <label className={fieldLabel}>Name <span className="text-red-500 normal-case tracking-normal font-sans">*</span></label>
-              <Input value={draft.name} onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))} placeholder="Full name" className={inputCls} disabled={isSandboxFirm} />
+              <Input value={draft.name} onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))} placeholder="Full name" className={inputCls} />
             </div>
 
             {/* Email + Phone */}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={fieldLabel}>Email <span className="normal-case tracking-normal font-sans text-[#9a9ba0]">(optional)</span></label>
-                <Input value={draft.email} onChange={(e) => setDraft((d) => ({ ...d, email: e.target.value }))} placeholder="name@company.com" type="email" className={inputCls} disabled={isSandboxFirm} />
+                <Input value={draft.email} onChange={(e) => setDraft((d) => ({ ...d, email: e.target.value }))} placeholder="name@company.com" type="email" className={inputCls} />
               </div>
               <div>
                 <label className={fieldLabel}>Phone <span className="normal-case tracking-normal font-sans text-[#9a9ba0]">(optional)</span></label>
-                <Input value={draft.phone} onChange={(e) => setDraft((d) => ({ ...d, phone: e.target.value }))} placeholder="+1 (555) 000-0000" type="tel" className={inputCls} disabled={isSandboxFirm} />
+                <Input value={draft.phone} onChange={(e) => setDraft((d) => ({ ...d, phone: e.target.value }))} placeholder="+1 (555) 000-0000" type="tel" className={inputCls} />
               </div>
             </div>
 
             {/* Title */}
             <div>
               <label className={fieldLabel}>Job title <span className="normal-case tracking-normal font-sans text-[#9a9ba0]">(optional)</span></label>
-              <Input value={draft.title} onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))} placeholder="e.g. CFO, Legal Counsel" className={inputCls} disabled={isSandboxFirm} />
+              <Input value={draft.title} onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))} placeholder="e.g. CFO, Legal Counsel" className={inputCls} />
             </div>
 
             {/* Tags */}
             <div>
               <label className={fieldLabel}>Tags <span className="normal-case tracking-normal font-sans text-[#9a9ba0]">(optional)</span></label>
               <div
-                className={`flex flex-wrap gap-1.5 min-h-[36px] w-full rounded border px-3 py-2 text-sm transition-colors cursor-text ${isSandboxFirm ? 'border-[#e5e7eb] bg-[#f9f9fb] opacity-50 cursor-not-allowed' : 'border-[#e5e7eb] bg-white focus-within:ring-1 focus-within:ring-primary focus-within:border-primary'}`}
+                className="flex flex-wrap gap-1.5 min-h-[36px] w-full rounded border px-3 py-2 text-sm transition-colors cursor-text border-[#e5e7eb] bg-white focus-within:ring-1 focus-within:ring-primary focus-within:border-primary"
                 onClick={() => tagInputRef.current?.focus()}
               >
                 {tags.map((tag) => (
                   <span key={tag} className="inline-flex items-center gap-1 rounded bg-[#f3f4f6] border border-[#e5e7eb] px-2 py-0.5 text-[11px] font-medium text-[#45474c]">
                     {tag}
-                    {!isSandboxFirm && (
-                      <button type="button" onClick={(e) => { e.stopPropagation(); setTags((prev) => prev.filter((t) => t !== tag)); tagInputRef.current?.focus() }} className="text-[#9a9ba0] hover:text-[#1b1b1d] transition-colors" aria-label={`Remove ${tag}`}>
-                        <X className="h-3 w-3" />
-                      </button>
-                    )}
+                    <button type="button" onClick={(e) => { e.stopPropagation(); setTags((prev) => prev.filter((t) => t !== tag)); tagInputRef.current?.focus() }} className="text-[#9a9ba0] hover:text-[#1b1b1d] transition-colors" aria-label={`Remove ${tag}`}>
+                      <X className="h-3 w-3" />
+                    </button>
                   </span>
                 ))}
                 <input
@@ -344,7 +334,6 @@ export function ClientContactsTab({
                   onKeyDown={handleTagKeyDown}
                   onBlur={() => { if (tagInput.trim()) commitTag(tagInput) }}
                   placeholder={tags.length === 0 ? 'e.g. billing, primary…' : ''}
-                  disabled={isSandboxFirm}
                   className="flex-1 min-w-[120px] bg-transparent outline-none placeholder:text-[#9a9ba0] text-[#1b1b1d] text-xs disabled:cursor-not-allowed"
                 />
                 <CornerDownLeft className="h-3 w-3 text-primary shrink-0 self-center ml-1" />
@@ -359,7 +348,6 @@ export function ClientContactsTab({
                 onChange={(e) => setDraft((d) => ({ ...d, notes: e.target.value }))}
                 placeholder="Any notes about this contact"
                 rows={2}
-                disabled={isSandboxFirm}
                 className="flex w-full rounded border border-[#e5e7eb] bg-white px-3 py-2 text-sm text-[#1b1b1d] placeholder:text-[#9a9ba0] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
               />
             </div>
@@ -372,7 +360,7 @@ export function ClientContactsTab({
             </Button>
             <Button
               variant="greenCta"
-              disabled={isSandboxFirm || !canManage || isPending || !draft.name.trim()}
+              disabled={!canManage || isPending || !draft.name.trim()}
               className="rounded min-w-[8rem] text-[10px] font-headline font-bold tracking-widest uppercase text-white"
               onClick={handleSubmit}
             >

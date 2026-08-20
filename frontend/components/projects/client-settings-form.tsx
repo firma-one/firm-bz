@@ -20,8 +20,6 @@ import {
 import { AlertTriangle, ChevronDown, ImageIcon, ImagePlus, Info, Lock, Linkedin, Palette, RotateCcw, Trash2, Type, Users2, MapPin, User, Activity, Building2, Globe, FileText, Share2, CalendarCheck } from 'lucide-react'
 import { SelectWithCustomEntry } from '@/components/ui/select-with-custom-entry'
 import { DateTimePicker } from '@/components/ui/date-time-picker'
-import { SandboxInfoBanner } from '@/components/ui/sandbox-info-banner'
-import { useOrgSandbox } from '@/lib/use-org-sandbox'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip'
 import { ClientDriveSection } from '@/components/connectors/client-drive-section'
@@ -54,7 +52,6 @@ export interface ClientSettingsFormProps {
     initialLinkedInUrl?: string
     initialCompanySizeBracket?: string
     initialBillingAddress?: string
-    firmSandboxOnly?: boolean
     onSaved?: () => void
 }
 
@@ -84,14 +81,11 @@ export function ClientSettingsForm({
     initialLinkedInUrl = '',
     initialCompanySizeBracket = '',
     initialBillingAddress = '',
-    firmSandboxOnly = false,
     onSaved,
 }: ClientSettingsFormProps) {
     const router = useRouter()
     const { addToast } = useToast()
     const { user } = useAuth()
-    const orgSandbox = useOrgSandbox()
-    const isSandboxFirm = Boolean(firmSandboxOnly || orgSandbox?.sandboxOnly)
     const [detailsDirty, setDetailsDirty] = useState(false)
     const [brandDirty, setBrandDirty] = useState(false)
     const [name, setName] = useState(initialName)
@@ -310,7 +304,7 @@ export function ClientSettingsForm({
     }
 
     const handleSaveBrand = async () => {
-        if (!clientId || isSandboxFirm) return
+        if (!clientId) return
         setSavingBrand(true)
         try {
             if (!useCustomBranding) {
@@ -391,7 +385,6 @@ export function ClientSettingsForm({
     }
 
     const handleSave = async () => {
-        if (isSandboxFirm) return
         setSaving(true)
         try {
             await updateClient(orgSlug, clientSlug, {
@@ -423,7 +416,6 @@ export function ClientSettingsForm({
     }
 
     const performDeleteClient = async () => {
-        if (isSandboxFirm) return
         setDeleting(true)
         try {
             await deleteClient(orgSlug, clientSlug)
@@ -440,7 +432,6 @@ export function ClientSettingsForm({
 
     return (
         <div className="flex flex-col gap-4">
-            {isSandboxFirm && <SandboxInfoBanner />}
 
             {/* Details section */}
             <section className="border border-[#e5e7eb] rounded overflow-hidden">
@@ -465,13 +456,13 @@ export function ClientSettingsForm({
                             <label htmlFor="client-name" className={fieldLabel}>
                                 <span className="inline-flex items-center gap-1"><User className="h-3 w-3" /> Name <span className="text-red-500 normal-case tracking-normal font-sans">*</span></span>
                             </label>
-                            <Input id="client-name" value={name} onChange={(e) => setNameD(e.target.value)} placeholder="Client name" disabled={isSandboxFirm} className={inputCls} />
+                            <Input id="client-name" value={name} onChange={(e) => setNameD(e.target.value)} placeholder="Client name" className={inputCls} />
                         </div>
                         <div>
                             <label htmlFor="client-status" className={fieldLabel}>
                                 <span className="inline-flex items-center gap-1"><Activity className="h-3 w-3" /> Status <span className="text-red-500 normal-case tracking-normal font-sans">*</span></span>
                             </label>
-                            <Select value={status} onValueChange={(v) => setStatusD(v as LwCrmClientStatus)} disabled={isSandboxFirm}>
+                            <Select value={status} onValueChange={(v) => setStatusD(v as LwCrmClientStatus)}>
                                 <SelectTrigger id="client-status" className={[
                                     inputCls,
                                     status === 'ACTIVE'   ? 'bg-green-50  border-green-200  text-green-800'  : '',
@@ -502,7 +493,7 @@ export function ClientSettingsForm({
                         <label htmlFor="client-industry" className={fieldLabel}>
                             <span className="inline-flex items-center gap-1"><Building2 className="h-3 w-3" /> Industry</span>
                         </label>
-                        <Input id="client-industry" value={industry} onChange={(e) => setIndustryD(e.target.value)} placeholder="e.g. Technology" disabled={isSandboxFirm} className={inputCls} />
+                        <Input id="client-industry" value={industry} onChange={(e) => setIndustryD(e.target.value)} placeholder="e.g. Technology" className={inputCls} />
                     </div>
 
                     {/* Company size */}
@@ -510,7 +501,7 @@ export function ClientSettingsForm({
                         <label htmlFor="client-company-size" className={fieldLabel}>
                             <span className="inline-flex items-center gap-1"><Users2 className="h-3 w-3" /> Company size</span>
                         </label>
-                        <SelectWithCustomEntry id="client-company-size" value={companySizeBracket} onChange={setCompanySizeBracketD} options={['<10', '11–50', '51–200', '201–1000', '1000+']} placeholder="Select size bracket…" customEntryHint="Custom…" disabled={isSandboxFirm} />
+                        <SelectWithCustomEntry id="client-company-size" value={companySizeBracket} onChange={setCompanySizeBracketD} options={['<10', '11–50', '51–200', '201–1000', '1000+']} placeholder="Select size bracket…" customEntryHint="Custom…" />
                     </div>
 
                     {/* Website */}
@@ -518,7 +509,7 @@ export function ClientSettingsForm({
                         <label htmlFor="client-website" className={fieldLabel}>
                             <span className="inline-flex items-center gap-1"><Globe className="h-3 w-3" /> Website</span>
                         </label>
-                        <Input id="client-website" value={website} onChange={(e) => setWebsiteD(e.target.value)} placeholder="https://…" disabled={isSandboxFirm} className={inputCls} />
+                        <Input id="client-website" value={website} onChange={(e) => setWebsiteD(e.target.value)} placeholder="https://…" className={inputCls} />
                     </div>
 
                     {/* LinkedIn */}
@@ -526,7 +517,7 @@ export function ClientSettingsForm({
                         <label htmlFor="client-linkedin" className={fieldLabel}>
                             <span className="inline-flex items-center gap-1"><Linkedin className="h-3 w-3" /> LinkedIn</span>
                         </label>
-                        <Input id="client-linkedin" value={linkedInUrl} onChange={(e) => setLinkedInUrlD(e.target.value)} placeholder="https://linkedin.com/company/…" disabled={isSandboxFirm} className={inputCls} />
+                        <Input id="client-linkedin" value={linkedInUrl} onChange={(e) => setLinkedInUrlD(e.target.value)} placeholder="https://linkedin.com/company/…" className={inputCls} />
                     </div>
 
                     {/* Billing address */}
@@ -534,7 +525,7 @@ export function ClientSettingsForm({
                         <label htmlFor="client-billing-address" className={fieldLabel}>
                             <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" /> Billing address</span>
                         </label>
-                        <textarea id="client-billing-address" value={billingAddress} onChange={(e) => setBillingAddressD(e.target.value)} placeholder={"123 Main St\nCity, State ZIP\nCountry"} rows={2} disabled={isSandboxFirm} className={textareaCls} />
+                        <textarea id="client-billing-address" value={billingAddress} onChange={(e) => setBillingAddressD(e.target.value)} placeholder={"123 Main St\nCity, State ZIP\nCountry"} rows={2} className={textareaCls} />
                     </div>
 
                     {/* Notes (description) */}
@@ -542,7 +533,7 @@ export function ClientSettingsForm({
                         <label htmlFor="client-description" className={fieldLabel}>
                             <span className="inline-flex items-center gap-1"><FileText className="h-3 w-3" /> Notes</span>
                         </label>
-                        <textarea id="client-description" value={description} onChange={(e) => setDescriptionD(e.target.value)} placeholder="Additional details about the client" rows={2} disabled={isSandboxFirm} className={textareaCls} />
+                        <textarea id="client-description" value={description} onChange={(e) => setDescriptionD(e.target.value)} placeholder="Additional details about the client" rows={2} className={textareaCls} />
                     </div>
                 </div>
 
@@ -556,21 +547,21 @@ export function ClientSettingsForm({
                             <label htmlFor="client-lead-source" className={fieldLabel}>
                                 <span className="inline-flex items-center gap-1"><Share2 className="h-3 w-3" /> Lead source</span>
                             </label>
-                            <SelectWithCustomEntry id="client-lead-source" value={leadSource} onChange={setLeadSourceD} options={['Referral', 'Inbound', 'Outbound', 'Conference', 'Existing Network']} placeholder="Select source…" customEntryHint="Other…" disabled={isSandboxFirm} />
+                            <SelectWithCustomEntry id="client-lead-source" value={leadSource} onChange={setLeadSourceD} options={['Referral', 'Inbound', 'Outbound', 'Conference', 'Existing Network']} placeholder="Select source…" customEntryHint="Other…" />
                             <p className="mt-1 text-[10px] text-[#9a9ba0]">How did you acquire the lead?</p>
                         </div>
                         <div>
                             <label className={fieldLabel}>
                                 <span className="inline-flex items-center gap-1"><CalendarCheck className="h-3 w-3" /> Lead conversion date</span>
                             </label>
-                            <DateTimePicker value={expectedCloseDate} onChange={setExpectedCloseDateD} placeholder="Select date" disabled={isSandboxFirm || status !== 'PROSPECT'} defaultTime="17:00" />
+                            <DateTimePicker value={expectedCloseDate} onChange={setExpectedCloseDateD} placeholder="Select date" disabled={status !== 'PROSPECT'} defaultTime="17:00" />
                             <p className="mt-1 text-[10px] text-[#9a9ba0]">When do you expect to convert the lead?</p>
                         </div>
                         <div>
                             <label className={fieldLabel}>
                                 <span className="inline-flex items-center gap-1"><CalendarCheck className="h-3 w-3" /> Client onboarding date</span>
                             </label>
-                            <DateTimePicker value={clientSinceDate} onChange={setClientSinceDateD} placeholder="Select date" disabled={isSandboxFirm || status === 'PROSPECT'} defaultTime="00:00" />
+                            <DateTimePicker value={clientSinceDate} onChange={setClientSinceDateD} placeholder="Select date" disabled={status === 'PROSPECT'} defaultTime="00:00" />
                             <p className="mt-1 text-[10px] text-[#9a9ba0]">When did the formal business relationship start?</p>
                         </div>
                     </div>
@@ -583,7 +574,7 @@ export function ClientSettingsForm({
                                 <span className="inline-flex items-center gap-0.5 normal-case tracking-normal font-sans text-[#9a9ba0]">— internal only</span>
                             </span>
                         </label>
-                        <textarea id="client-internal-memo" value={internalMemo} onChange={(e) => setInternalMemoD(e.target.value)} placeholder="Private notes, call summaries, relationship context…" rows={2} disabled={isSandboxFirm} className={textareaCls} />
+                        <textarea id="client-internal-memo" value={internalMemo} onChange={(e) => setInternalMemoD(e.target.value)} placeholder="Private notes, call summaries, relationship context…" rows={2} className={textareaCls} />
                     </div>
                 </div>
             </div>
@@ -593,7 +584,7 @@ export function ClientSettingsForm({
                 <Button type="button" variant="outline" className="rounded w-32 text-[10px] font-headline font-bold tracking-widest uppercase" onClick={() => router.push(clientTabPath(groupSlug, orgSlug, clientSlug, 'projects'))}>
                     Cancel
                 </Button>
-                <Button onClick={handleSave} disabled={isSandboxFirm || saving || !detailsDirty} variant="greenCta" className="rounded w-32 text-[10px] font-headline font-bold tracking-widest uppercase text-white">
+                <Button onClick={handleSave} disabled={saving || !detailsDirty} variant="greenCta" className="rounded w-32 text-[10px] font-headline font-bold tracking-widest uppercase text-white">
                     {saving ? 'Saving…' : 'Save'}
                 </Button>
             </div>
@@ -618,7 +609,6 @@ export function ClientSettingsForm({
                             firmId={firmId ?? ''}
                             groupSlug={groupSlug}
                             orgSlug={orgSlug}
-                            isSandboxFirm={isSandboxFirm}
                         />
                     </div>
                     </div>
@@ -641,7 +631,6 @@ export function ClientSettingsForm({
                                 <button
                                     type="button"
                                     onClick={() => { setUseCustomBranding(false); setBrandDirty(true) }}
-                                    disabled={isSandboxFirm}
                                     className={`px-4 py-1.5 rounded-full text-[11px] font-semibold transition-all duration-150 ${
                                         !useCustomBranding
                                             ? 'bg-white text-[#1b1b1d] shadow-sm'
@@ -653,7 +642,6 @@ export function ClientSettingsForm({
                                 <button
                                     type="button"
                                     onClick={() => { setUseCustomBranding(true); setBrandDirty(true) }}
-                                    disabled={isSandboxFirm}
                                     className={`px-4 py-1.5 rounded-full text-[11px] font-semibold transition-all duration-150 ${
                                         useCustomBranding
                                             ? 'bg-white text-[#1b1b1d] shadow-sm'
@@ -671,7 +659,7 @@ export function ClientSettingsForm({
                                 {/* Reset colors */}
                                 <div className="flex items-center justify-between">
                                     <p className={fieldLabel}>Identity</p>
-                                    {(brandPrimaryColor || brandSecondaryColor) && !isSandboxFirm && (
+                                    {(brandPrimaryColor || brandSecondaryColor) && (
                                         <button type="button" onClick={() => { setBrandPrimaryColorD(''); setBrandSecondaryColorD('') }}
                                             className="inline-flex items-center gap-1 text-[10px] font-medium text-firma hover:text-firma/80 transition-colors"
                                             aria-label="Reset to Firma theme">
@@ -684,14 +672,14 @@ export function ClientSettingsForm({
                                     <label htmlFor="brand-name" className={fieldLabel}>
                                         <span className="inline-flex items-center gap-1"><User className="h-3 w-3" /> Display name <span className="text-[#9a9ba0] normal-case tracking-normal font-sans font-normal">— shown in topbar</span></span>
                                     </label>
-                                    <Input id="brand-name" value={brandName} onChange={(e) => setBrandNameD(e.target.value)} placeholder={name || 'Client name'} disabled={isSandboxFirm} className={inputCls} />
+                                    <Input id="brand-name" value={brandName} onChange={(e) => setBrandNameD(e.target.value)} placeholder={name || 'Client name'} className={inputCls} />
                                 </div>
                                 {/* Tagline */}
                                 <div>
                                     <label htmlFor="brand-subtext" className={fieldLabel}>
                                         <span className="inline-flex items-center gap-1"><Type className="h-3 w-3" /> Brand tagline <span className="text-[#9a9ba0] normal-case tracking-normal font-sans font-normal">— optional</span></span>
                                     </label>
-                                    <Input id="brand-subtext" value={brandSubtext} onChange={(e) => setBrandSubtextD(e.target.value)} placeholder="Optional tagline or subtext" disabled={isSandboxFirm} className={inputCls} />
+                                    <Input id="brand-subtext" value={brandSubtext} onChange={(e) => setBrandSubtextD(e.target.value)} placeholder="Optional tagline or subtext" className={inputCls} />
                                 </div>
                                 {/* Primary color */}
                                 <div className="space-y-1.5">
@@ -700,12 +688,11 @@ export function ClientSettingsForm({
                                     </label>
                                     <div className="flex items-center gap-2">
                                         <input id="brand-primary-color" type="color" value={brandPrimaryColor || FIRMA_COLOR}
-                                            onChange={(e) => setBrandPrimaryColorD(e.target.value)} disabled={isSandboxFirm}
+                                            onChange={(e) => setBrandPrimaryColorD(e.target.value)}
                                             className="h-9 w-10 rounded border border-[#e5e7eb] cursor-pointer bg-white disabled:cursor-not-allowed disabled:opacity-60 shrink-0" />
                                         <Input value={brandPrimaryColor} onChange={(e) => setBrandPrimaryColorD(e.target.value)}
-                                            placeholder={`Leave empty to use Firma default (${FIRMA_COLOR})`}
-                                            disabled={isSandboxFirm} className={`font-mono ${inputCls}`} />
-                                        <button type="button" onClick={() => setBrandPrimaryColorD('')} disabled={!brandPrimaryColor || isSandboxFirm}
+                                            placeholder={`Leave empty to use Firma default (${FIRMA_COLOR})`} className={`font-mono ${inputCls}`} />
+                                        <button type="button" onClick={() => setBrandPrimaryColorD('')} disabled={!brandPrimaryColor}
                                             className="shrink-0 text-[#9a9ba0] hover:text-[#45474c] transition-colors disabled:opacity-30 disabled:cursor-default" aria-label="Clear primary color">
                                             <RotateCcw className="h-3.5 w-3.5" />
                                         </button>
@@ -726,14 +713,14 @@ export function ClientSettingsForm({
                                     <div className="flex items-center gap-2">
                                         <div className="relative h-9 w-10 shrink-0">
                                             <input id="brand-accent-color" type="color" value={brandSecondaryColor || '#ffffff'}
-                                                onChange={(e) => setBrandSecondaryColorD(e.target.value)} disabled={isSandboxFirm}
+                                                onChange={(e) => setBrandSecondaryColorD(e.target.value)}
                                                 className="absolute inset-0 h-full w-full opacity-0 cursor-pointer disabled:cursor-not-allowed" />
                                             <div className="h-9 w-10 rounded border border-[#e5e7eb] pointer-events-none"
                                                 style={brandSecondaryColor ? { backgroundColor: brandSecondaryColor } : { background: 'repeating-linear-gradient(45deg, #e5e7eb 0px, #e5e7eb 2px, white 2px, white 6px)' }} />
                                         </div>
                                         <Input value={brandSecondaryColor} onChange={(e) => setBrandSecondaryColorD(e.target.value)}
-                                            placeholder="Leave empty to match primary color" disabled={isSandboxFirm} className={`font-mono ${inputCls}`} />
-                                        <button type="button" onClick={() => setBrandSecondaryColorD('')} disabled={!brandSecondaryColor || isSandboxFirm}
+                                            placeholder="Leave empty to match primary color" className={`font-mono ${inputCls}`} />
+                                        <button type="button" onClick={() => setBrandSecondaryColorD('')} disabled={!brandSecondaryColor}
                                             className="shrink-0 text-[#9a9ba0] hover:text-[#45474c] transition-colors disabled:opacity-30 disabled:cursor-default" aria-label="Clear accent color">
                                             <RotateCcw className="h-3.5 w-3.5" />
                                         </button>
@@ -756,7 +743,6 @@ export function ClientSettingsForm({
                                             return (
                                                 <button key={ar} type="button"
                                                     onClick={() => { setBrandLogoAspectRatioD(ar); setBrandLogoScale(1); setBrandLogoX(0); setBrandLogoY(0) }}
-                                                    disabled={isSandboxFirm}
                                                     className={`flex flex-col items-center gap-1 px-2 py-1.5 rounded border transition-colors disabled:opacity-50 ${active ? 'border-primary bg-primary/5 text-primary' : 'border-[#e5e7eb] text-[#9a9ba0] hover:border-[#45474c] hover:text-[#45474c]'}`}>
                                                     <span className={`block rounded-sm border-2 ${active ? 'border-primary' : 'border-current'}`} style={{ width: w, height: h }} />
                                                     <span className="text-[9px] font-mono font-bold tracking-wide leading-none">{ar}</span>
@@ -780,7 +766,6 @@ export function ClientSettingsForm({
                                         ) : !(brandLogoPreviewUrl || brandLogoUrl) ? (
                                             <button type="button"
                                                 onClick={() => brandFileInputRef.current?.click()}
-                                                disabled={isSandboxFirm}
                                                 className="relative flex shrink-0 items-center justify-center rounded border-2 border-dashed border-[#e5e7eb] bg-slate-50 hover:border-primary/40 transition-colors focus:outline-none group disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:border-[#e5e7eb]"
                                                 style={{ width: brandPreviewW, height: BRAND_PREVIEW_H }} aria-label="Upload logo">
                                                 <span className="text-5xl font-semibold text-slate-300 select-none group-hover:opacity-30 transition-opacity">
@@ -793,9 +778,9 @@ export function ClientSettingsForm({
                                             </button>
                                         ) : (
                                             <div className="flex flex-col gap-2">
-                                                <div className={`relative flex shrink-0 rounded border border-[#e5e7eb] overflow-hidden select-none group ${!isSandboxFirm ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                                                <div className="relative flex shrink-0 rounded border border-[#e5e7eb] overflow-hidden select-none group cursor-grab active:cursor-grabbing"
                                                     style={{ width: brandPreviewW, height: BRAND_PREVIEW_H, backgroundImage: 'repeating-conic-gradient(#e5e7eb 0% 25%, white 0% 50%)', backgroundSize: '12px 12px' }}
-                                                    {...(!isSandboxFirm ? { onPointerDown: onBrandPointerDown, onPointerMove: onBrandPointerMove, onPointerUp: onBrandPointerUp, onPointerLeave: onBrandPointerUp } : {})}>
+                                                    onPointerDown={onBrandPointerDown} onPointerMove={onBrandPointerMove} onPointerUp={onBrandPointerUp} onPointerLeave={onBrandPointerUp}>
                                                     <div className="absolute inset-0 flex items-center justify-center"
                                                         style={{ transform: `translate(${brandLogoX}px, ${brandLogoY}px) scale(${brandLogoScale})` }}>
                                                         <img src={brandLogoPreviewUrl || brandLogoUrl || undefined} alt="Logo preview"
@@ -805,14 +790,13 @@ export function ClientSettingsForm({
                                                     <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded">
                                                         <Tooltip>
                                                             <TooltipTrigger asChild>
-                                                                <button type="button" onClick={() => !isSandboxFirm && brandFileInputRef.current?.click()}
-                                                                    disabled={isSandboxFirm} className="p-2 rounded bg-white text-[#1b1b1d] hover:bg-[#f9f9fb] shadow-sm disabled:opacity-50"><ImagePlus className="h-4 w-4" /></button>
+                                                                <button type="button" onClick={() => brandFileInputRef.current?.click()} className="p-2 rounded bg-white text-[#1b1b1d] hover:bg-[#f9f9fb] shadow-sm disabled:opacity-50"><ImagePlus className="h-4 w-4" /></button>
                                                             </TooltipTrigger>
                                                             <TooltipContent>Replace</TooltipContent>
                                                         </Tooltip>
                                                         <Tooltip>
                                                             <TooltipTrigger asChild>
-                                                                <button type="button" onClick={() => void handleRemoveBrandLogo()} disabled={isSandboxFirm}
+                                                                <button type="button" onClick={() => void handleRemoveBrandLogo()}
                                                                     className="p-2 rounded bg-white text-red-600 hover:bg-red-50 shadow-sm disabled:opacity-50"><Trash2 className="h-4 w-4" /></button>
                                                             </TooltipTrigger>
                                                             <TooltipContent>Remove</TooltipContent>
@@ -828,12 +812,11 @@ export function ClientSettingsForm({
                                                                 setBrandLogoScale(v <= 0 ? 1 + v * 0.5 : 1 + v * 2)
                                                                 setBrandDirty(true)
                                                             }}
-                                                            disabled={isSandboxFirm}
                                                             className="w-full h-1.5 rounded appearance-none bg-[#e5e7eb] accent-primary disabled:opacity-60" />
                                                         <div className="flex items-center justify-between px-0.5">
-                                                            <button type="button" onClick={() => { setBrandLogoScale(Math.max(0.5, brandLogoScale - 0.1)); setBrandDirty(true) }} disabled={isSandboxFirm} className="text-[11px] font-mono text-[#9a9ba0] hover:text-[#1b1b1d] leading-none disabled:opacity-50">−</button>
-                                                            <button type="button" onClick={() => { setBrandLogoScale(1); setBrandLogoX(0); setBrandLogoY(0); setBrandDirty(true) }} disabled={isSandboxFirm || (brandLogoScale === 1 && brandLogoX === 0 && brandLogoY === 0)} className="text-[#9a9ba0] hover:text-[#45474c] transition-colors disabled:opacity-30 disabled:cursor-default"><RotateCcw className="h-3 w-3" /></button>
-                                                            <button type="button" onClick={() => { setBrandLogoScale(Math.min(3, brandLogoScale + 0.1)); setBrandDirty(true) }} disabled={isSandboxFirm} className="text-[11px] font-mono text-[#9a9ba0] hover:text-[#1b1b1d] leading-none disabled:opacity-50">+</button>
+                                                            <button type="button" onClick={() => { setBrandLogoScale(Math.max(0.5, brandLogoScale - 0.1)); setBrandDirty(true) }} className="text-[11px] font-mono text-[#9a9ba0] hover:text-[#1b1b1d] leading-none disabled:opacity-50">−</button>
+                                                            <button type="button" onClick={() => { setBrandLogoScale(1); setBrandLogoX(0); setBrandLogoY(0); setBrandDirty(true) }} disabled={(brandLogoScale === 1 && brandLogoX === 0 && brandLogoY === 0)} className="text-[#9a9ba0] hover:text-[#45474c] transition-colors disabled:opacity-30 disabled:cursor-default"><RotateCcw className="h-3 w-3" /></button>
+                                                            <button type="button" onClick={() => { setBrandLogoScale(Math.min(3, brandLogoScale + 0.1)); setBrandDirty(true) }} className="text-[11px] font-mono text-[#9a9ba0] hover:text-[#1b1b1d] leading-none disabled:opacity-50">+</button>
                                                         </div>
                                                     </div>
                                                 )}
@@ -880,7 +863,7 @@ export function ClientSettingsForm({
 
                         {/* Save branding */}
                         <div className="mt-4 flex items-center gap-3">
-                            <Button onClick={() => void handleSaveBrand()} disabled={isSandboxFirm || savingBrand || !brandDirty} variant="greenCta"
+                            <Button onClick={() => void handleSaveBrand()} disabled={savingBrand || !brandDirty} variant="greenCta"
                                 className="rounded w-40 text-[10px] font-headline font-bold tracking-widest uppercase text-white">
                                 {savingBrand ? 'Saving…' : 'Save'}
                             </Button>
@@ -903,7 +886,7 @@ export function ClientSettingsForm({
                     <div className="overflow-hidden min-h-0">
                     <div className="p-4 border-t border-red-200 bg-red-50/40 space-y-3">
                         <p className="text-xs text-[#45474c]">Permanently delete this client. All engagements and members will be removed. This cannot be undone.</p>
-                        <Button type="button" onClick={() => setDeleteConfirmOpen(true)} disabled={isSandboxFirm || deleting} className="rounded bg-red-700 text-white hover:bg-red-800 border-0 text-[10px] font-headline font-bold tracking-widest uppercase">
+                        <Button type="button" onClick={() => setDeleteConfirmOpen(true)} disabled={deleting} className="rounded bg-red-700 text-white hover:bg-red-800 border-0 text-[10px] font-headline font-bold tracking-widest uppercase">
                             {deleting ? 'Deleting…' : 'Delete client'}
                         </Button>
                     </div>

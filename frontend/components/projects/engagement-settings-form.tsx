@@ -12,8 +12,6 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AlertTriangle, Activity, AlignLeft, Banknote, CalendarCheck, CalendarClock, ChevronDown, FileText, Lock } from 'lucide-react'
 import { SelectWithCustomEntry } from '@/components/ui/select-with-custom-entry'
-import { SandboxInfoBanner } from '@/components/ui/sandbox-info-banner'
-import { useOrgSandbox } from '@/lib/use-org-sandbox'
 import { DateTimePicker } from '@/components/ui/date-time-picker'
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
 import { clientTabPath } from '@/lib/navigation/firm-paths'
@@ -33,7 +31,6 @@ export interface EngagementSettingsFormProps {
     initialRateOrValue?: string | null
     initialTags?: string[]
     initialInternalMemo?: string | null
-    firmSandboxOnly?: boolean
     onCancel?: () => void
     onSaved?: () => void
 }
@@ -60,14 +57,11 @@ export function EngagementSettingsForm({
     initialRateOrValue = null,
     initialTags = [],
     initialInternalMemo = null,
-    firmSandboxOnly = false,
     onCancel,
     onSaved,
 }: EngagementSettingsFormProps) {
     const router = useRouter()
     const { addToast } = useToast()
-    const orgSandbox = useOrgSandbox()
-    const isSandboxFirm = Boolean(firmSandboxOnly || orgSandbox?.sandboxOnly)
     const [name, setName] = useState(initialName)
     const [description, setDescription] = useState(initialDescription)
     const [kickoffDate, setKickoffDate] = useState<string>(initialKickoffDate ?? '')
@@ -87,7 +81,7 @@ export function EngagementSettingsForm({
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
 
     const isCompleted = status === 'COMPLETED'
-    const disabled = isCompleted || isSandboxFirm
+    const disabled = isCompleted
 
     useEffect(() => {
         setName(initialName)
@@ -136,7 +130,6 @@ export function EngagementSettingsForm({
     }
 
     const handleSaveProperties = async () => {
-        if (isSandboxFirm) return
         setSaving(true)
         try {
             await updateProject(projectId, {
@@ -161,7 +154,6 @@ export function EngagementSettingsForm({
     }
 
     const handleDeleteProject = async () => {
-        if (isSandboxFirm) return
         setDeleting(true)
         try {
             await deleteProject(projectId, orgSlug, clientSlug)
@@ -186,7 +178,6 @@ export function EngagementSettingsForm({
 
     return (
         <div className="flex flex-col gap-3">
-            {isSandboxFirm && <SandboxInfoBanner />}
 
             {isCompleted && (
                 <div className="text-xs text-[#45474c] rounded border border-[#e5e7eb] bg-[#f9f9fb] px-3 py-2">
@@ -224,7 +215,7 @@ export function EngagementSettingsForm({
                                     <Activity className="h-3 w-3" /> Status <span className="text-red-500 normal-case tracking-normal font-sans">*</span>
                                 </span>
                             </label>
-                            <Select value={status} onValueChange={(v) => setStatus(v as LwCrmEngagementStatus)} disabled={isSandboxFirm}>
+                            <Select value={status} onValueChange={(v) => setStatus(v as LwCrmEngagementStatus)}>
                                 <SelectTrigger id="engagement-status" className={inputCls}>
                                     <SelectValue placeholder="Select status" />
                                 </SelectTrigger>
@@ -350,7 +341,7 @@ export function EngagementSettingsForm({
                 )}
                 <Button
                     onClick={handleSaveProperties}
-                    disabled={saving || isSandboxFirm}
+                    disabled={saving}
                     variant="greenCta"
                     className="rounded w-32 text-[10px] font-headline font-bold tracking-widest uppercase text-white"
                 >
@@ -379,7 +370,7 @@ export function EngagementSettingsForm({
                         <Button
                             type="button"
                             onClick={() => setIsDeleteDialogOpen(true)}
-                            disabled={isSandboxFirm || deleting}
+                            disabled={deleting}
                             className="rounded bg-red-700 text-white hover:bg-red-800 border-0 text-[10px] font-headline font-bold tracking-widest uppercase"
                         >
                             {deleting ? 'Deleting…' : 'Delete engagement'}

@@ -583,7 +583,6 @@ export function EngagementWorkspace({
                                 initialRateOrValue={engagementRateOrValue}
                                 initialTags={engagementTags}
                                 initialInternalMemo={engagementInternalMemo}
-                                firmSandboxOnly={firmSandboxOnly}
                                 onCancel={() => router.push(`${base}/files`)}
                                 onSaved={() => {
                                     router.push(`${base}/files`)
@@ -602,7 +601,6 @@ export function EngagementWorkspace({
                                 clientSlug={clientSlug}
                                 engagementSlug={engagementSlug}
                                 isFirmAdmin={isFirmAdmin}
-                                isSandboxFirm={firmSandboxOnly}
                                 firmName={orgName}
                                 clientName={clientName}
                                 engagementName={projectName}
@@ -618,8 +616,6 @@ export function EngagementWorkspace({
                                     projectId={projectId}
                                     orgSlug={orgSlug}
                                     boardUrl={`${projectBase(groupSlug, orgSlug, clientSlug, projectSlug, useEngagement)}/board`}
-                                    isSandboxFirm={firmSandboxOnly}
-                                    projectName={projectName}
                                 />
                             </ErrorBoundary>
                         </div>
@@ -634,7 +630,7 @@ export function EngagementWorkspace({
                     {canManage && currentTab === 'audit' && (
                         <div className="p-4 h-full">
                             <ErrorBoundary context="ProjectAudit">
-                                <EngagementAuditPane projectId={projectId} projectName={projectName} isSandboxFirm={firmSandboxOnly} />
+                                <EngagementAuditPane projectId={projectId} projectName={projectName} />
                             </ErrorBoundary>
                         </div>
                     )}

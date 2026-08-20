@@ -23,13 +23,12 @@ interface ClientProjectViewProps {
     firmSlug: string
     firmName?: string
     firmId?: string
-    firmSandboxOnly?: boolean
     selectedClientSlug?: string
     contactCount?: number
     memberCount?: number
 }
 
-export function ClientProjectView({ clients, groupSlug, firmSlug, firmName, firmId, firmSandboxOnly = false, selectedClientSlug, contactCount, memberCount }: ClientProjectViewProps) {
+export function ClientProjectView({ clients, groupSlug, firmSlug, firmName, firmId, selectedClientSlug, contactCount, memberCount }: ClientProjectViewProps) {
     const router = useRouter()
     const pathname = usePathname()
     const searchParams = useSearchParams()
@@ -269,7 +268,6 @@ export function ClientProjectView({ clients, groupSlug, firmSlug, firmName, firm
                                                 groupSlug={groupSlug}
                                                 firmSlug={firmSlug}
                                                 clientSlug={selectedClient.slug}
-                                                firmSandboxOnly={firmSandboxOnly}
                                                 onSaved={() => startRefresh(() => router.refresh())}
                                                 trigger={
                                                     <Button
@@ -315,7 +313,6 @@ export function ClientProjectView({ clients, groupSlug, firmSlug, firmName, firm
                                             orgSlug={firmSlug}
                                             clientSlug={selectedClient.slug}
                                             canManage={canManageClient}
-                                            firmSandboxOnly={firmSandboxOnly}
                                         />
                                     </div>
                                 </TabsContent>
@@ -360,7 +357,6 @@ export function ClientProjectView({ clients, groupSlug, firmSlug, firmName, firm
                                             initialLinkedInUrl={selectedClient.linkedInUrl ?? undefined}
                                             initialCompanySizeBracket={selectedClient.companySizeBracket ?? undefined}
                                             initialBillingAddress={selectedClient.billingAddress ?? undefined}
-                                            firmSandboxOnly={firmSandboxOnly}
                                             onSaved={() => router.refresh()}
                                             />
                                         </div>

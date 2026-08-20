@@ -6,7 +6,6 @@ import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { SandboxCommentsPreview } from '@/components/projects/sandbox-board-comments-preview'
 
 function renderMentions(content: string) {
   const tokens: { type: 'mention' | 'text'; value: string }[] = []
@@ -44,14 +43,10 @@ type MentionRow = {
 export function EngagementCommentsTab({
   projectId,
   boardUrl,
-  isSandboxFirm,
-  projectName,
 }: {
   projectId: string
   orgSlug?: string
   boardUrl?: string
-  isSandboxFirm?: boolean
-  projectName?: string
 }) {
   const [activeTab, setActiveTab] = useState<'all' | 'mentions'>('all')
   const [query, setQuery] = useState('')
@@ -118,10 +113,6 @@ export function EngagementCommentsTab({
     if (boardUrl) {
       window.location.href = `${boardUrl}#doc-file:${projectDocumentId}:comments`
     }
-  }
-
-  if (isSandboxFirm) {
-    return <SandboxCommentsPreview projectName={projectName} />
   }
 
   return (

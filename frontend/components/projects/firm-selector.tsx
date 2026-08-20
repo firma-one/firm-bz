@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from 'react'
 import { usePathname } from 'next/navigation'
-import { Building2, SquarePlus, ChevronDown, ChevronUp, Info, Box } from 'lucide-react'
+import { Building2, SquarePlus, ChevronDown, ChevronUp, Info } from 'lucide-react'
 import {
     Select,
     SelectContent,
@@ -141,18 +141,6 @@ export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className,
                                 {selectedOrg?.name || 'Select Workspace...'}
                             </TooltipContent>
                         </Tooltip>
-                        {selectedOrg?.sandboxOnly && (
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <span className="shrink-0 flex items-center" aria-label="Demo firm">
-                                        <Box className="h-3.5 w-3.5 text-[#9ca3af]" />
-                                    </span>
-                                </TooltipTrigger>
-                                <TooltipContent side="top" className="text-xs">
-                                    Demo Firm — contains sample data
-                                </TooltipContent>
-                            </Tooltip>
-                        )}
                         <span className="ml-auto shrink-0 flex items-center">
                             {isSelectOpen
                                 ? <ChevronUp className="h-3 w-3 text-[#9ca3af]" />
@@ -180,18 +168,6 @@ export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className,
                                 <span className="truncate text-[10px] leading-snug text-[#45474c] font-mono">
                                     {selectedOrg ? `/${selectedOrg.slug}` : '/—'}
                                 </span>
-                                {selectedOrg?.sandboxOnly && (
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <span className="shrink-0 flex items-center" aria-label="Demo firm">
-                                                <Box className="h-3.5 w-3.5 text-[#9ca3af]" />
-                                            </span>
-                                        </TooltipTrigger>
-                                        <TooltipContent side="top" className="text-xs">
-                                            Demo Firm — contains sample data
-                                        </TooltipContent>
-                                    </Tooltip>
-                                )}
                             </div>
                         </div>
                         <span className="shrink-0 flex items-start mt-0.5">
@@ -259,16 +235,6 @@ export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className,
                                         {org.name}
                                     </TooltipContent>
                                 </Tooltip>
-                                {org.sandboxOnly && (
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <Box className="h-3.5 w-3.5 shrink-0 text-[#9ca3af]" aria-label="Demo firm" />
-                                        </TooltipTrigger>
-                                        <TooltipContent side="top" className="text-xs">
-                                            Demo Firm — contains sample data
-                                        </TooltipContent>
-                                    </Tooltip>
-                                )}
                             </div>
                         </SelectItem>
                     ))}

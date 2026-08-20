@@ -9,7 +9,7 @@ interface PageProps {
 export default async function ClientProjectPage({ params }: PageProps) {
     const { groupSlug, firmSlug, clientSlug } = await params
 
-    const { client, firmId, firmName, firmSandboxOnly } = await getClientWithEngagements(firmSlug, clientSlug)
+    const { client, firmId, firmName } = await getClientWithEngagements(firmSlug, clientSlug)
 
     let contactCount = 0
     let memberCount = 0
@@ -32,7 +32,6 @@ export default async function ClientProjectPage({ params }: PageProps) {
                 firmSlug={firmSlug}
                 firmName={firmName ?? 'Firm'}
                 firmId={firmId ?? undefined}
-                firmSandboxOnly={firmSandboxOnly}
                 selectedClientSlug={clientSlug}
                 contactCount={contactCount}
                 memberCount={memberCount}

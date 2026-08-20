@@ -2,12 +2,12 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter, usePathname, useParams } from 'next/navigation'
-import { Building2, ArrowRight, Loader2, SquarePlus, Box, Home, ChevronRight, LayoutGrid } from 'lucide-react'
+import { Building2, ArrowRight, Loader2, SquarePlus, Home, ChevronRight, LayoutGrid } from 'lucide-react'
 import { getDomainOnboardingOptionsForCurrentUser, joinOrganizationByDomain, type DomainOnboardingOptions, type DomainOrgOption } from '@/lib/actions/domain-onboarding'
 import { getUserFirms, getIsAdminOnAnyFirm, type FirmOption } from '@/lib/actions/firms'
 import { BRAND_NAME } from '@/config/brand'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AddFirmModal } from '@/components/projects/add-firm-modal'
 import { FirmSwitchDialog } from '@/components/projects/firm-switch-dialog'
@@ -140,16 +140,11 @@ export default function WorkspacePickerPage() {
                             <button
                                 key={firm.id}
                                 type="button"
-                                className={`group relative flex flex-col gap-4 p-5 rounded border bg-white shadow-md hover:shadow-lg text-left transition-all overflow-hidden h-48 ${firm.sandboxOnly ? 'border-dashed border-[#e5e7eb] hover:border-[#e5e7eb]' : 'border-[#e5e7eb] hover:border-primary/40'}`}
+                                className="group relative flex flex-col gap-4 p-5 rounded border bg-white shadow-md hover:shadow-lg text-left transition-all overflow-hidden h-48 border-[#e5e7eb] hover:border-primary/40"
                                 onClick={() => handleFirmClick(firm)}
                             >
                                 {/* Brand corner decoration */}
-                                {firm.sandboxOnly ? (
-                                    <svg className="absolute bottom-0 right-0 pointer-events-none" width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                        <polygon points="48,0 48,48 0,48" fill="#9ca3af" fillOpacity="0.18" />
-                                        <polygon points="48,22 48,48 22,48" fill="#6b7280" />
-                                    </svg>
-                                ) : (() => {
+                                {(() => {
                                     const accent = firm.themeColor ?? null
                                     const solidFill = accent ?? 'hsl(var(--primary))'
                                     const fadeFill = accent ?? 'hsl(var(--primary))'
@@ -162,34 +157,24 @@ export default function WorkspacePickerPage() {
                                 })()}
                                 <div className="flex items-start justify-between">
                                     <div
-                                        className={`h-12 w-12 rounded flex items-center justify-center flex-shrink-0 overflow-hidden ${firm.sandboxOnly ? 'bg-[#f9f9fb] border border-[#e5e7eb]' : 'border'}`}
-                                        style={!firm.sandboxOnly && firm.themeColor
+                                        className="h-12 w-12 rounded flex items-center justify-center flex-shrink-0 overflow-hidden border"
+                                        style={firm.themeColor
                                             ? { backgroundColor: `${firm.themeColor}18`, borderColor: `${firm.themeColor}33` }
-                                            : !firm.sandboxOnly ? undefined : undefined}
+                                            : undefined}
                                     >
                                         {firm.logoUrl
                                             ? <img src={firm.logoUrl} alt={firm.name} className="h-full w-full object-contain p-1" />
-                                            : <Building2 className={`h-6 w-6 ${firm.sandboxOnly ? 'text-[#45474c]' : 'text-primary'}`} style={!firm.sandboxOnly && firm.themeColor ? { color: firm.themeColor } : undefined} />
+                                            : <Building2 className="h-6 w-6 text-primary" style={firm.themeColor ? { color: firm.themeColor } : undefined} />
                                         }
                                     </div>
                                 </div>
                                 <div>
                                     <div className="flex items-center gap-1.5 mb-1">
                                         <p className="font-bold text-[#1b1b1d] text-base leading-tight">{firm.name}</p>
-                                        {firm.sandboxOnly && (
-                                            <Tooltip>
-                                                <TooltipTrigger asChild>
-                                                    <Box className="h-3.5 w-3.5 shrink-0 text-[#9ca3af]" aria-label="Demo firm" />
-                                                </TooltipTrigger>
-                                                <TooltipContent side="top" className="text-xs">
-                                                    Demo Firm — contains sample data
-                                                </TooltipContent>
-                                            </Tooltip>
-                                        )}
                                     </div>
                                     <p className="text-xs text-[#45474c]/70">You&apos;re already a member</p>
                                 </div>
-                                <span className={`inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-sm w-fit ${firm.sandboxOnly ? 'text-[#6b7280] bg-[#9ca3af]/20' : 'text-primary bg-primary/10'}`}>
+                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-sm w-fit text-primary bg-primary/10">
                                     Continue <ArrowRight className="h-2.5 w-2.5 transition-transform group-hover:translate-x-0.5" />
                                 </span>
                             </button>

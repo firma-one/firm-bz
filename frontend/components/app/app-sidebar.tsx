@@ -214,7 +214,9 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
   const initialFirms = useSidebarFirms()
   const [viewAsSelectOpen, setViewAsSelectOpen] = useState(false)
   const [role, setRole] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(!initialFirms || initialFirms.length === 0)
+  // Always start loading — role/orgPermissions (which gate canManageOrg and admin-only nav
+  // items) are always fetched fresh on mount below, even when initialFirms is already populated.
+  const [isLoading, setIsLoading] = useState(true)
 
   // Firm selector state
   const [firms, setFirms] = useState<FirmOption[]>(initialFirms as FirmOption[] || [])
@@ -335,7 +337,16 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
 
   // Fetch firms + permissions
   const fetchData = async () => {
-    const hasCachedData = firms.length > 0 && (slug ? firms.some(o => o.slug === slug) : true)
+    // Not just "do we have a firm list" — role/orgPermissions gate real nav items (Overview,
+    // Settings) and canManageOrg defaults to false while they're in flight, so treat this as
+    // still-loading until BOTH are resolved too, not just once `firms` is populated. Otherwise
+    // the sidebar renders its "real" tree immediately with stale canManageOrg=false, silently
+    // hiding admin-only nav items for a beat instead of showing the loading skeleton.
+    const hasCachedData =
+      firms.length > 0 &&
+      (slug ? firms.some(o => o.slug === slug) : true) &&
+      role !== null &&
+      orgPermissions !== null
     if (!hasCachedData) setIsLoading(true)
     try {
       const orgs = await getUserFirms()
