@@ -72,6 +72,15 @@ export function generateOrganizationSlug(name: string): string {
 }
 
 /**
+ * Generate a slug for Group (same approach as Firm for consistent URL length)
+ * Groups are globally unique — used as the top-level URL segment (/d/[groupSlug]/f/...)
+ * Format: base (7 chars) + '-' + suffix (4 chars) = 12 total
+ */
+export function generateGroupSlug(name: string): string {
+  return generateUniqueSlug(name, 7, 4)
+}
+
+/**
  * Generate a slug for Client (same approach as Firm for consistent URL length)
  * Clients are unique within a firm
  * Format: base (7 chars) + '-' + suffix (4 chars) = 12 total

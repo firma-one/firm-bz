@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { FirmRole, MembershipType } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { config } from '@/lib/config'
-import { generateFirmSlug } from '@/lib/slug-utils'
+import { generateFirmSlug, generateGroupSlug } from '@/lib/slug-utils'
 import { logger } from '@/lib/logger'
 
 /**
@@ -99,6 +99,7 @@ export async function POST(request: NextRequest) {
             const group = await tx.group.create({
                 data: {
                     name: organizationName,
+                    slug: generateGroupSlug(organizationName),
                     createdBy: userId!,
                 },
             })

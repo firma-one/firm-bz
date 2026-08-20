@@ -3,6 +3,7 @@ import { User } from '@supabase/supabase-js'
 import { logger } from './logger'
 import { assertWithinFirmGroupCap } from '@/lib/billing/effective-billing-caps'
 import { userHasMembershipInGroup } from '@/lib/billing/firm-creation-gate'
+import { generateGroupSlug } from '@/lib/slug-utils'
 
 export interface CreateFirmData {
   userId: string
@@ -152,7 +153,7 @@ export class FirmService {
     const firmName = `${firstName}'s Firm`
 
     const group = await (prisma as any).group.create({
-      data: { name: firmName, createdBy: user.id },
+      data: { name: firmName, slug: generateGroupSlug(firstName), createdBy: user.id },
     })
     await (prisma as any).groupMember.create({
       data: { groupId: group.id, userId: user.id, role: 'GROUP_ADMIN' },

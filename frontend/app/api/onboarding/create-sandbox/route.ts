@@ -10,6 +10,7 @@ import { ensurePolarFreePlanForSandboxFirm } from '@/lib/billing/polar-free-plan
 import { mergeLeanAppMetadata } from '@/lib/auth/supabase-jwt-metadata'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { seedSandboxClientsInDb } from '@/lib/onboarding/onboarding-helper'
+import { generateGroupSlug } from '@/lib/slug-utils'
 
 /**
  * POST /api/onboarding/create-sandbox
@@ -45,6 +46,7 @@ async function findOrCreateSandboxShellFirm(params: {
     const group = await (prisma as any).group.create({
       data: {
         name: groupName,
+        slug: generateGroupSlug(groupName),
         createdBy: userId,
         updatedBy: userId,
         members: {

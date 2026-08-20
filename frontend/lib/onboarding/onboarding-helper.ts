@@ -18,6 +18,7 @@ import {
 } from '@/lib/services/auto-import'
 import { ensurePolarFreePlanForSandboxFirm } from '@/lib/billing/polar-free-plan'
 import { mergeLeanAppMetadata } from '@/lib/auth/supabase-jwt-metadata'
+import { generateGroupSlug } from '@/lib/slug-utils'
 
 /** One demo contact per sandbox client (keys match `clientName` in sandbox-hierarchy.json firm tree). */
 const SANDBOX_CLIENT_PRIMARY_CONTACTS: Record<
@@ -433,7 +434,7 @@ export async function runSandboxOnboarding(
 
   // Greenfield: create firm, Drive firm folder, clients + engagements (DB projects), then sync connector + Drive.
   const group = await (prisma as any).group.create({
-    data: { name, createdBy: userId },
+    data: { name, slug: generateGroupSlug(input.firstName || name), createdBy: userId },
   })
   await (prisma as any).groupMember.create({
     data: { groupId: group.id, userId, role: 'GROUP_ADMIN' },
