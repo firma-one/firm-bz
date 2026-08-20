@@ -20,6 +20,13 @@ import {
 import { cn } from '@/lib/utils'
 import { formatFileSize } from '@/lib/utils'
 import { DriveFile } from '@/lib/types'
+import {
+    FILE_TABLE_GRID_COLS_CLASS,
+    OWNER_COL_CLASS,
+    DATE_MODIFIED_COL_CLASS,
+    DUE_DATE_COL_CLASS,
+    FILE_SIZE_COL_CLASS,
+} from '@/components/projects/engagement-file-table-grid'
 
 export interface EngagementFileRowProps {
     file: DriveFile
@@ -221,8 +228,7 @@ export function EngagementFileRow({
             onDragOver={(e) => onDragOver(e, file)}
             onDragLeave={onDragLeave}
             onDrop={(e) => onDrop(e, file)}
-            style={{ gridTemplateColumns: '24px 72px minmax(0, 1fr) minmax(124px, 10%) 10% 14% 12% 10% 8%' }}
-            className={cn(
+            className={`${FILE_TABLE_GRID_COLS_CLASS} ${cn(
                 "group grid gap-4 h-10 pl-3 pr-2 transition-all items-center cursor-default relative text-[0.8125rem]",
                 isFolder && selectedFileIdsSize === 0 && "cursor-pointer",
                 (isFolderApproved || isInsideApprovedDeliverable) && "bg-primary/5 hover:bg-primary/10",
@@ -232,7 +238,7 @@ export function EngagementFileRow({
                 !isIntakeRow && (file.id === activeCommentDocId || file.id === activeInfoDocId || file.id === activeActivityDocId || file.id === activeVersionDocId || file.id === activePreviewDocId) && "bg-[#f3f4f6]",
                 draggedItem?.id === file.id && "opacity-40 grayscale",
                 dragOverFolderId === file.id && "bg-[#e5e7eb] ring-2 ring-inset ring-[#e5e7eb] z-[1]"
-            )}
+            )}`}
             onMouseEnter={() => {
                 if (isDeeplinkHighlight) onClearHighlight()
             }}
@@ -559,7 +565,7 @@ export function EngagementFileRow({
             </div>
 
             {/* Owner Column */}
-            <div className="min-w-0">
+            <div className={`min-w-0 ${OWNER_COL_CLASS}`}>
                 {(() => {
                     const ownerName = file.owners?.[0]?.displayName
                         || file.lastModifyingUser?.displayName
@@ -598,7 +604,7 @@ export function EngagementFileRow({
             </div>
 
             {/* Date Modified Column */}
-            <div>
+            <div className={DATE_MODIFIED_COL_CLASS}>
                 {file.modifiedTime ? (
                     <RelativeDateTime
                         date={file.modifiedTime}
@@ -612,7 +618,7 @@ export function EngagementFileRow({
             </div>
 
             {/* Due Date Column */}
-            <div>
+            <div className={DUE_DATE_COL_CLASS}>
                 {!isFolder && file.dueDate ? (() => {
                     const due = new Date(file.dueDate)
                     const now = Date.now()
@@ -650,7 +656,7 @@ export function EngagementFileRow({
             </div>
 
             {/* File Size Column */}
-            <div className="text-left">
+            <div className={`text-left ${FILE_SIZE_COL_CLASS}`}>
                 {isFolder ? (
                     <span className="text-[0.8125rem] text-[#45474c]/40">—</span>
                 ) : file.size ? (

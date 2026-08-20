@@ -65,6 +65,14 @@ import { SecureAccessModal } from '@/components/projects/shares/secure-access-mo
 import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
 import { SandboxFilePreview } from '@/components/projects/sandbox-file-preview'
 import { EngagementFileRow } from '@/components/projects/engagement-file-row'
+import {
+    FILE_TABLE_GRID_COLS_CLASS,
+    FILE_TABLE_CONTAINER_CLASS,
+    OWNER_COL_CLASS,
+    DATE_MODIFIED_COL_CLASS,
+    DUE_DATE_COL_CLASS,
+    FILE_SIZE_COL_CLASS,
+} from '@/components/projects/engagement-file-table-grid'
 import { useEngagementUpload } from '@/components/projects/hooks/use-engagement-upload'
 import { useEngagementFileOps } from '@/components/projects/hooks/use-engagement-file-ops'
 import { useEngagementDragDrop } from '@/components/projects/hooks/use-engagement-drag-drop'
@@ -2392,7 +2400,7 @@ const handleRefresh = async () => {
             </div >
 
             {/* Content Area - Styled as a Card */}
-            <div className="flex-1 overflow-hidden flex flex-col relative bg-white rounded border border-[#e5e7eb]">
+            <div className={cn("flex-1 overflow-hidden flex flex-col relative bg-white rounded border border-[#e5e7eb]", FILE_TABLE_CONTAINER_CLASS)}>
                 {/* Download Progress Panel — portaled to body, stacked above upload panel */}
                 {downloadQueue.length > 0 && typeof document !== 'undefined' && document.body && createPortal(
                     <div className={cn(
@@ -2552,7 +2560,7 @@ const handleRefresh = async () => {
 
                 {/* Fixed Table Header (Compact) */}
                 <div className="sticky top-0 bg-white border-b border-[#e5e7eb] pl-3 pr-2 py-2.5 shrink-0 z-10 group">
-                    <div className="grid gap-4 items-center" style={{ gridTemplateColumns: '24px 72px minmax(0, 1fr) minmax(124px, 10%) 10% 14% 12% 10% 8%' }}>
+                    <div className={`grid gap-4 items-center ${FILE_TABLE_GRID_COLS_CLASS}`}>
                         {/* Select-all checkbox column */}
                         <div
                             className="flex-shrink-0 w-4 h-4 flex items-center justify-center cursor-pointer"
@@ -2574,10 +2582,10 @@ const handleRefresh = async () => {
                             <TableHeader label="Name" />
                         </div>
                         <div className="col-span-2 flex items-center justify-center"><TableHeader label="Quick" /></div>
-                        <div className="flex items-center"><TableHeader label="Owner" /></div>
-                        <div className="flex items-center"><TableHeader label="Date modified" /></div>
-                        <div className="flex items-center"><TableHeader label="Due date" /></div>
-                        <div className="flex items-center"><TableHeader label="File size" /></div>
+                        <div className={`items-center ${OWNER_COL_CLASS}`}><TableHeader label="Owner" /></div>
+                        <div className={`items-center ${DATE_MODIFIED_COL_CLASS}`}><TableHeader label="Date modified" /></div>
+                        <div className={`items-center ${DUE_DATE_COL_CLASS}`}><TableHeader label="Due date" /></div>
+                        <div className={`items-center ${FILE_SIZE_COL_CLASS}`}><TableHeader label="File size" /></div>
                     </div>
                 </div>
 
