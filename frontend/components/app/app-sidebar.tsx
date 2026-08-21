@@ -517,7 +517,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
   return (
     <div className={outerClass}>
       {isLoading ? (
-        <div className="flex flex-col h-full px-3 pt-6 gap-4">
+        <div className="flex flex-col h-full px-3 pt-6 gap-4 animate-in fade-in duration-200 ease-out">
           {!isCollapsed && (
             <>
               <Skeleton className="h-10 w-full rounded" />
@@ -538,7 +538,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
         </div>
       ) : (
         <>
-          <div className="flex flex-col h-full">
+          <div className="flex flex-col h-full animate-in fade-in duration-200 ease-out">
             {/* Collapse toggle */}
             <button
               type="button"

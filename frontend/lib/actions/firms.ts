@@ -182,7 +182,13 @@ export async function resolveDefaultFirmLandingPath(userId: string): Promise<str
 
             const { autoProvisionFirstFirm } = await import('@/lib/onboarding/auto-provision')
             const { groupSlug, firmSlug } = await autoProvisionFirstFirm(user)
-            return firmPath(groupSlug, firmSlug)
+            // `?landed=new` lets the destination firm page show a one-time "just landed"
+            // overlay (loading phase -> a closing welcome message) — the /d loader itself
+            // can't show this (it renders before we know a fresh auto-provision even
+            // happened, or even whether this is a first-time vs. returning landing at all),
+            // so the closing message lives on arrival instead. See resolveDefaultFirmLandingPath's
+            // other two `firmPath(...)` returns below for the `?landed=returning` counterpart.
+            return `${firmPath(groupSlug, firmSlug)}?landed=new`
         } catch (err) {
             // Auto-provisioning failure (e.g. DB down) shouldn't crash landing-path resolution —
             // fall back to the old onboarding route, which will retry provisioning on next visit.
@@ -210,7 +216,7 @@ export async function resolveDefaultFirmLandingPath(userId: string): Promise<str
     const isFirmAdmin = membership?.role === 'firm_admin'
 
     if (!isFirmAdmin) {
-        return firmPath(groupSlug, targetFirm.slug)
+        return `${firmPath(groupSlug, targetFirm.slug)}?landed=returning`
     }
 
     // Belonging to a group at all (checked at the top of this function) is now the only
@@ -226,7 +232,7 @@ export async function resolveDefaultFirmLandingPath(userId: string): Promise<str
         }
     }
 
-    return firmPath(groupSlug, targetFirm.slug)
+    return `${firmPath(groupSlug, targetFirm.slug)}?landed=returning`
 }
 
 /**
