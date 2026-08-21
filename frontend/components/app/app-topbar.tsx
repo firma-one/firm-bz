@@ -645,7 +645,7 @@ export function AppTopbar() {
             className="w-10 h-10 flex items-center justify-center rounded-xl text-primary hover:bg-primary/10 transition-colors"
             aria-label="View product demo"
           >
-            <ArrowUpRight className="h-5 w-5" />
+            <MapIcon className="h-5 w-5" />
           </a>
         </Tip>
         <div data-demo-tour="topbar-reminders">

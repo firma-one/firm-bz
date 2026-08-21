@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react"
 import Link from "next/link"
-import { usePathname, useRouter, useSearchParams, useParams } from "next/navigation"
+import { usePathname, useSearchParams, useParams } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { useSidebar } from "@/lib/sidebar-context"
 import {
@@ -33,8 +33,8 @@ import { WhatsNewModal } from "@/components/ui/whats-new-modal"
 import { useWhatsNew, type ReleaseMeta } from "@/lib/use-whats-new"
 import _releasesMetaData from "@/content/releases-meta.json"
 const releasesMetaData = _releasesMetaData as ReleaseMeta[]
-import { FirmSelector, type FirmOption } from "@/components/projects/firm-selector"
-import { getUserFirms } from "@/lib/actions/firms"
+import type { FirmOption } from "@/components/projects/firm-selector"
+import { getUserFirms, shouldShowSwitchWorkspace } from "@/lib/actions/firms"
 import { getFirmRole } from "@/lib/actions/firm"
 import { Skeleton } from "@/components/ui/skeleton"
 import { buildBillingPageHref } from "@/lib/billing/build-billing-page-href"
@@ -210,13 +210,13 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
   const { viewAsPersonaSlug, setViewAsPersonaSlug, effectivePermissions, isViewAsActive, personas } = useViewAs()
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const router = useRouter()
   const initialFirms = useSidebarFirms()
   const [viewAsSelectOpen, setViewAsSelectOpen] = useState(false)
   const [role, setRole] = useState<string | null>(null)
   // Always start loading — role/orgPermissions (which gate canManageOrg and admin-only nav
   // items) are always fetched fresh on mount below, even when initialFirms is already populated.
   const [isLoading, setIsLoading] = useState(true)
+  const [showSwitchWorkspace, setShowSwitchWorkspace] = useState(false)
 
   // Firm selector state
   const [firms, setFirms] = useState<FirmOption[]>(initialFirms as FirmOption[] || [])
@@ -397,6 +397,14 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
   }, [slug])
 
   useEffect(() => {
+    let cancelled = false
+    shouldShowSwitchWorkspace()
+      .then((show) => { if (!cancelled) setShowSwitchWorkspace(show) })
+      .catch(() => { if (!cancelled) setShowSwitchWorkspace(false) })
+    return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
     if (slug) {
       setSelectedFirmSlug(slug)
     } else if (firms.length > 0) {
@@ -561,24 +569,28 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
               <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden custom-scrollbar px-3 space-y-4 pt-3 pb-3">
                 <nav className="space-y-1">
 
-                  {/* FIRM SWITCHER — compact when expanded, icon when collapsed */}
-                  {!isCollapsed && (slug || firms.length > 0) && (
-                    <>
-                      <div data-demo-tour="firm-switcher">
-                      <FirmSelector
-                        firms={firms}
-                        selectedFirmSlug={selectedFirmSlug}
-                        onFirmChange={(firmSlug) => {
-                          setSelectedFirmSlug(firmSlug)
-                          // Use the target firm's own groupSlug (not necessarily the currently
-                          // active group) — a user's firm list can span multiple groups.
-                          const targetGroupSlug = firms.find((f) => f.slug === firmSlug)?.groupSlug ?? groupSlug
-                          if (targetGroupSlug) router.push(`/d/${targetGroupSlug}/f/${firmSlug}`)
-                        }}
-                        compact
-                        isFirmAdmin={role === 'FIRM_ADMIN'}
-                        groupSlug={groupSlug}
-                      />
+                  {/* FIRM SWITCHER — compact when expanded, icon when collapsed. Gated on `slug`
+                      (a specific firm selected in the URL), not just `firms.length > 0` — on
+                      bare /d/ or /d/[groupSlug]/f (no firm segment) there's no active firm to
+                      show, so rendering this would misleadingly imply one is selected. */}
+                  {!isCollapsed && (
+                    <div className={`transition-opacity duration-200 ease-out ${slug ? 'opacity-100' : 'opacity-0 h-0 overflow-hidden pointer-events-none'}`}>
+                      {/* Static firm name — same visual treatment as the old FirmSelector's
+                          compact trigger, minus the chevron/dropdown. Switching firms now
+                          happens via the /d/ group picker or the Profile menu's
+                          "Switch Workspace" link. */}
+                      <div data-demo-tour="firm-switcher" className="flex h-8 w-full items-center gap-2 rounded px-3 py-1 text-[#1b1b1d]">
+                        <span className="shrink-0 flex items-center"><Building2 className="h-4 w-4 text-[#45474c]" /></span>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="d-sidebar-section truncate flex-1 text-left">
+                              {firms.find((f) => f.slug === selectedFirmSlug)?.name || 'Select Workspace...'}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" className="text-xs">
+                            {firms.find((f) => f.slug === selectedFirmSlug)?.name || 'Select Workspace...'}
+                          </TooltipContent>
+                        </Tooltip>
                       </div>
                       {/* Tree sub-items: Overview + Clients + Settings */}
                       <div className="ml-1 space-y-0.5">
@@ -614,11 +626,12 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                           </Link>
                         )}
                       </div>
-                    </>
+                    </div>
                   )}
 
-                  {/* Collapsed: firm icon + clients + analytics icons */}
-                  {isCollapsed && (
+                  {/* Collapsed: firm icon + clients + analytics icons — same `slug` gate as the
+                      expanded FIRM SWITCHER above; nothing to show when no firm is selected. */}
+                  {isCollapsed && slug && (
                     <>
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -988,7 +1001,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                   <SeparatorLine />
 
                   {/* RESOURCES — expanded: inline accordion (collapsed by default); collapsed sidebar: icons navigate */}
-                  <div className={isCollapsed ? 'w-full flex items-center gap-0.5' : 'pt-2'}>
+                  <div className={isCollapsed ? 'w-full flex flex-col items-center gap-0.5' : 'pt-2'}>
                     {!isCollapsed && (
                       <>
                         <button
@@ -998,7 +1011,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                         >
                           <BookOpen className="h-3 w-3 shrink-0 mr-1.5 text-[#45474c]" />
                           <span className="flex-1 text-left">Resources</span>
-                          {hasUnread && (
+                          {hasUnread && !isResourcesOpen && (
                             <span className="mr-1.5 w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
                           )}
                           <ChevronDown className={`h-3 w-3 shrink-0 text-[#9ca3af] transition-transform duration-200 ${isResourcesOpen ? 'rotate-180' : ''}`} />
@@ -1043,7 +1056,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                               href="/resources/faq"
                               target="_blank"
                               rel="noopener noreferrer"
-                              className={`flex-1 flex items-center d-sidebar-nav transition-colors px-0 justify-center py-2 ${pathname?.startsWith('/resources/faq') ? 'text-primary' : 'text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}
+                              className={`w-full flex items-center d-sidebar-nav transition-colors px-0 justify-center py-2 ${pathname?.startsWith('/resources/faq') ? 'text-primary' : 'text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}
                             >
                               <HelpCircle className="h-4 w-4 mx-auto" />
                             </Link>
@@ -1055,7 +1068,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                             <button
                               type="button"
                               onClick={() => setIsWhatsNewOpen(true)}
-                              className="relative flex-1 flex items-center d-sidebar-nav transition-colors px-0 justify-center py-2 text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d]"
+                              className="relative w-full flex items-center d-sidebar-nav transition-colors px-0 justify-center py-2 text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d]"
                             >
                               <Megaphone className="h-4 w-4 mx-auto" />
                               {hasUnread && (
@@ -1146,6 +1159,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                 showBillingLink={canManageOrg}
                 billingHref={buildBillingPageHref({ firmSlug: billingFirmSlug, groupSlug: billingGroupSlug, pathname })}
                 isSystemAdmin={isSystemAdmin}
+                showSwitchWorkspace={showSwitchWorkspace}
                 {...(firms.length > 0 && billingFirmId
                   ? { planSubtitle: profilePlanSubtitle, planSubtitleLoading: billingPlanLoading }
                   : {})}

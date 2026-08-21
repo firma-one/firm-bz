@@ -58,7 +58,7 @@ export function useSignInFlow() {
           router.push(redirectTo)
           return
         }
-        router.push('/d')
+        router.push('/d?entry=auth')
       }
     }
     checkSession()
@@ -266,7 +266,7 @@ export function useSignInFlow() {
 
         await new Promise((resolve) => setTimeout(resolve, 150))
 
-        window.location.href = '/d'
+        window.location.href = '/d?entry=auth'
       } else {
         setError('Failed to establish session')
         setLoading(false)

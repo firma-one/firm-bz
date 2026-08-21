@@ -169,7 +169,7 @@ export function SignupForm({
             // Honour ?next= / ?redirect= so invite links aren't dropped for logged-in users
             const nextRel = searchParams.get('next') || searchParams.get('redirect')
             const isSafeRedirect = nextRel && nextRel.startsWith('/')
-            window.location.href = isSafeRedirect && nextRel ? nextRel : '/d'
+            window.location.href = isSafeRedirect && nextRel ? nextRel : '/d?entry=auth'
         }
         void checkSession()
     }, [searchParams])
@@ -397,7 +397,12 @@ export function SignupForm({
         // Resolve the post-signup destination
         const nextRel = searchParams.get('next') || searchParams.get('redirect')
         const isSafeRedirect = nextRel && nextRel.startsWith('/')
-        let navTarget = '/d'
+        // `?entry=auth` tells /d to auto-route (resolve + redirect into the right firm/group
+        // picker/onboarding target) rather than show the group picker as-is — see
+        // app/(app)/d/(landing)/page.tsx. Only applies to the bare-/d default target, not an
+        // explicit `next`/`redirect` deep link (e.g. an invite link), which should land exactly
+        // where it points.
+        let navTarget = '/d?entry=auth'
         if (isSafeRedirect && nextRel) {
             navTarget =
                 nextRel === '/dash' || nextRel.startsWith('/dash/')

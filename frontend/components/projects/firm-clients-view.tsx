@@ -20,6 +20,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { useAuth } from '@/lib/auth-context'
 import { LandingArrivalOverlay } from '@/components/app/landing-arrival-overlay'
 import { Skeleton } from '@/components/ui/skeleton'
+import Link from 'next/link'
+import { groupFirmListPath } from '@/lib/navigation/firm-paths'
 
 interface FirmClientsViewProps {
     clients: ClientSummary[]
@@ -175,7 +177,9 @@ export function FirmClientsView({ clients, groupSlug, orgSlug, orgId, firmSandbo
             )}
             {/* Breadcrumbs — monospace architectural style */}
             <nav className="flex items-center gap-1.5 mb-4 print:hidden">
-                <Home className="h-4 w-4 text-[#45474c] opacity-60" />
+                <Link href={groupFirmListPath(groupSlug)} className="hover:opacity-80">
+                    <Home className="h-4 w-4 text-[#1b1b1d]" />
+                </Link>
                 <ChevronRight className="h-3.5 w-3.5 text-[#d1d5db]" />
                 <Building2 className="h-4 w-4 text-primary" />
                 <span className="font-mono text-[11px] font-bold text-[#1b1b1d] uppercase tracking-tighter">{orgName || 'Firm'}</span>

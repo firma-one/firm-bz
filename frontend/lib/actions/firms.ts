@@ -116,6 +116,92 @@ export async function getIsAdminOnAnyFirm(): Promise<boolean> {
     return membership !== null
 }
 
+export interface UserGroupOption {
+    id: string
+    slug: string
+    name: string
+    /** Whether the current user is this group's `GROUP_ADMIN` (its creator, in practice —
+     * see lib/onboarding/auto-provision.ts and friends, which each write exactly one such
+     * row per group at creation time). */
+    isGroupAdmin: boolean
+    firmCount: number
+}
+
+/**
+ * Distinct groups the current user has any firm membership in, deduped from `getUserFirms()`,
+ * each annotated with whether the user is that group's `GROUP_ADMIN` (checked via `GroupMember`,
+ * not `FirmMember` — a user invited into someone else's firm has no `GroupMember` row in that
+ * group at all, which correctly reads as "not admin" here).
+ */
+export async function getUserGroups(): Promise<UserGroupOption[]> {
+    const supabase = await createClient()
+    const { data: { user }, error } = await supabase.auth.getUser()
+    if (error || !user) return []
+
+    const firms = await getUserFirms()
+    const groupsById = new Map<string, { slug: string; name: string; firmCount: number }>()
+    for (const firm of firms) {
+        if (!firm.groupId || !firm.groupSlug) continue
+        const existing = groupsById.get(firm.groupId)
+        if (existing) {
+            existing.firmCount += 1
+        } else {
+            groupsById.set(firm.groupId, { slug: firm.groupSlug, name: firm.groupName || 'Firm Group', firmCount: 1 })
+        }
+    }
+
+    const groupIds = Array.from(groupsById.keys())
+    if (groupIds.length === 0) return []
+
+    const adminRows = await (prisma as any).groupMember.findMany({
+        where: { userId: user.id, groupId: { in: groupIds }, role: 'GROUP_ADMIN' },
+        select: { groupId: true },
+    })
+    const adminGroupIds = new Set(adminRows.map((r: { groupId: string }) => r.groupId))
+
+    return groupIds.map((id) => {
+        const g = groupsById.get(id)!
+        return { id, slug: g.slug, name: g.name, firmCount: g.firmCount, isGroupAdmin: adminGroupIds.has(id) }
+    })
+}
+
+/**
+ * Whether the "Switch Workspace" entry point (Profile menu) should be shown for the current
+ * user — see .claude/plans/sandbox-firm-removal.md, Step 6. Always shown for any signed-in
+ * user with at least one group, so there's a standing path to `/d/` — to switch between
+ * multiple workspaces, to create an additional one as an existing admin, or (for an invited
+ * firm member with no group of their own) to create their first one.
+ */
+export async function shouldShowSwitchWorkspace(): Promise<boolean> {
+    const groups = await getUserGroups()
+    return groups.length > 0
+}
+
+/**
+ * Creates a brand-new Group + Firm + free-tier Subscription for the current user, from the
+ * `/d/` group picker's "Create your own workspace" action — see
+ * .claude/plans/sandbox-firm-removal.md, Step 6. Deliberately NOT the same action as "Add Firm"
+ * on the firm-picker page (which adds a satellite firm to an EXISTING group/subscription): this
+ * always creates a genuinely new, independent Group with its own Subscription, regardless of how
+ * many firms/groups the user already belongs to. Reuses `autoProvisionFirstFirm` directly — that
+ * function has no "zero firms" precondition of its own (the zero-firms gate lives in its caller,
+ * `resolveDefaultFirmLandingPath`), so it's already safe to call here for a user who has firms.
+ */
+export async function createOwnWorkspace(): Promise<{ path: string } | { error: string }> {
+    const supabase = await createClient()
+    const { data: { user }, error } = await supabase.auth.getUser()
+    if (error || !user) return { error: 'Not signed in.' }
+
+    try {
+        const { autoProvisionFirstFirm } = await import('@/lib/onboarding/auto-provision')
+        const { groupSlug, firmSlug } = await autoProvisionFirstFirm(user)
+        return { path: firmPath(groupSlug, firmSlug) }
+    } catch (err) {
+        logger.error('[createOwnWorkspace] Failed to create workspace', err as Error, undefined, { userId: user.id })
+        return { error: 'Failed to create your workspace. Please try again.' }
+    }
+}
+
 /**
  * Get the default firm slug for the current user
  */

@@ -84,7 +84,7 @@ export default function WorkspacePickerPage() {
                 <Home className="h-4 w-4 text-[#45474c] opacity-60" />
                 <ChevronRight className="h-3.5 w-3.5 text-[#d1d5db]" />
                 <Building2 className="h-4 w-4 text-primary" />
-                <span className="font-mono text-[11px] font-bold text-[#1b1b1d] uppercase tracking-tighter">Workspaces</span>
+                <span className="font-mono text-[11px] font-bold text-[#1b1b1d] uppercase tracking-tighter">Firms</span>
             </nav>
 
             {/* Page header */}
@@ -94,9 +94,9 @@ export default function WorkspacePickerPage() {
                 </div>
                 <div>
                     <h1 className="font-headline text-3xl md:text-4xl font-bold tracking-tight text-[#1b1b1d]">
-                        Choose your workspace
+                        Choose your firm
                     </h1>
-                    <p className="text-sm text-[#45474c] mt-1">Select a workspace to continue in {BRAND_NAME}</p>
+                    <p className="text-sm text-[#45474c] mt-1">Select a firm to continue in {BRAND_NAME}</p>
                 </div>
             </div>
 
@@ -109,7 +109,7 @@ export default function WorkspacePickerPage() {
                                 className="h-full px-4 rounded-none font-medium text-sm text-[#45474c] hover:text-[#1b1b1d] border-b-2 border-transparent data-[state=active]:border-brand-accent data-[state=active]:text-[#1b1b1d] data-[state=active]:font-bold data-[state=active]:bg-transparent data-[state=active]:opacity-100 opacity-60 hover:opacity-100 transition-all shadow-none bg-transparent"
                             >
                                 <LayoutGrid className="w-4 h-4 mr-2" />
-                                Workspaces
+                                Firms
                                 {firms.length > 0 && (
                                     <span className="ml-2 font-mono text-[10px] font-bold bg-primary text-white px-1.5 py-0.5 rounded-sm tabular-nums leading-none">
                                         {firms.length}
@@ -219,7 +219,7 @@ export default function WorkspacePickerPage() {
                                         <p className="text-xs text-[#45474c]/70">Request access to join</p>
                                     </div>
                                     <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-[#45474c] bg-[#f9f9fb] border border-[#e5e7eb] px-2 py-0.5 rounded-sm w-fit">
-                                        Join workspace
+                                        Join firm
                                     </span>
                                 </button>
                             ))}

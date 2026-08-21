@@ -205,7 +205,7 @@ export async function proxy(request: NextRequest) {
         // Try to get default organization slug (this is async, so we'll redirect to /d and let it handle)
         // Actually, we can't do async DB calls in middleware easily, so redirect to /d
         // The /d page or a client-side redirect can handle going to default org
-        return NextResponse.redirect(new URL('/d', request.url))
+        return NextResponse.redirect(new URL('/d?entry=auth', request.url))
     }
 
     // Rewrite client subdomains (e.g. datasentry.firma.bz) to /d, preserving the URL.

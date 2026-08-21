@@ -15,7 +15,7 @@ import { ClientContactsTab } from './client-contacts-tab'
 import { ClientMembersTab } from './members/client-members-tab'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import Link from 'next/link'
-import { firmPath, firmTabPath } from '@/lib/navigation/firm-paths'
+import { firmPath, firmTabPath, groupFirmListPath } from '@/lib/navigation/firm-paths'
 
 interface ClientProjectViewProps {
     clients: HierarchyClient[]
@@ -128,7 +128,9 @@ export function ClientProjectView({ clients, groupSlug, firmSlug, firmName, firm
         <div className="flex flex-col h-full">
             {/* Breadcrumbs — monospace architectural style */}
             <nav className="flex items-center gap-1.5 mb-4">
-                <Home className="h-4 w-4 text-[#45474c] opacity-60" />
+                <Link href={groupFirmListPath(groupSlug)} className="hover:opacity-80">
+                    <Home className="h-4 w-4 text-[#1b1b1d]" />
+                </Link>
                 <ChevronRight className="h-3.5 w-3.5 text-[#d1d5db]" />
                 <Building2 className="h-4 w-4 text-[#45474c] opacity-60" />
                 <Link

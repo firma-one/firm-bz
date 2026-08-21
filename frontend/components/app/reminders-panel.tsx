@@ -252,7 +252,7 @@ export function RemindersPanel({ onCountChange }: Props) {
                         return !v
                     })
                 }}
-                className="p-2 hover:bg-orange-50 rounded-xl transition-colors relative"
+                className="w-10 h-10 flex items-center justify-center hover:bg-orange-50 rounded-xl transition-colors relative"
                 style={{ color: '#C4572B' }}
             >
                 <AlarmClock className={`h-5 w-5${hasNewReminders ? ' animate-pulse' : ''}`} />

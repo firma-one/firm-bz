@@ -22,7 +22,7 @@ import type { LwCrmEngagementStatus } from '@/lib/actions/project'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { GoogleDriveIcon } from '@/components/ui/google-drive-icon'
 import { OneDriveIcon } from '@/components/ui/onedrive-icon'
-import { firmPath, clientPath } from '@/lib/navigation/firm-paths'
+import { firmPath, clientPath, groupFirmListPath } from '@/lib/navigation/firm-paths'
 
 export interface ProjectPathSegments {
     tab: string
@@ -214,7 +214,9 @@ export function EngagementWorkspace({
         <div className="flex flex-col flex-1 min-h-0">
             {/* Breadcrumbs — monospace architectural style */}
             <nav className="flex items-center gap-1.5 mb-4">
-                <Home className="h-4 w-4 text-[#45474c] opacity-60" />
+                <Link href={groupFirmListPath(groupSlug)} className="hover:opacity-80">
+                    <Home className="h-4 w-4 text-[#1b1b1d]" />
+                </Link>
                 <ChevronRight className="h-3.5 w-3.5 text-[#d1d5db]" />
                 <Tooltip>
                     <TooltipTrigger asChild>
