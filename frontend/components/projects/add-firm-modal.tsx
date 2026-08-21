@@ -22,9 +22,15 @@ interface AddFirmModalProps {
     trigger?: React.ReactNode
     open?: boolean
     onOpenChange?: (open: boolean) => void
+    /**
+     * The group whose picker page this modal was opened from, if any — passed straight
+     * through to createFirm() so the new firm attaches to THIS group, not an arbitrary
+     * "first eligible group" pick. Omit only when there's no specific group in context.
+     */
+    groupSlug?: string
 }
 
-export function AddFirmModal({ trigger, open: controlledOpen, onOpenChange: controlledOnOpenChange }: AddFirmModalProps) {
+export function AddFirmModal({ trigger, open: controlledOpen, onOpenChange: controlledOnOpenChange, groupSlug }: AddFirmModalProps) {
     const [capBlocked, setCapBlocked] = useState(false)
     const [capMessage, setCapMessage] = useState<string | null>(null)
 
@@ -32,7 +38,7 @@ export function AddFirmModal({ trigger, open: controlledOpen, onOpenChange: cont
         let mounted = true
         const run = async () => {
             try {
-                const response = await fetch('/api/billing/firm-gate')
+                const response = await fetch(groupSlug ? `/api/billing/firm-gate?groupSlug=${encodeURIComponent(groupSlug)}` : '/api/billing/firm-gate')
                 if (!response.ok) return
                 const payload = (await response.json()) as { allowed?: boolean; reason?: string; cap?: number | null }
                 if (!mounted) return
@@ -50,7 +56,7 @@ export function AddFirmModal({ trigger, open: controlledOpen, onOpenChange: cont
         }
         run()
         return () => { mounted = false }
-    }, [])
+    }, [groupSlug])
 
     const [internalOpen, setInternalOpen] = useState(false)
     const isControlled = controlledOpen !== undefined && controlledOnOpenChange !== undefined
@@ -100,7 +106,7 @@ export function AddFirmModal({ trigger, open: controlledOpen, onOpenChange: cont
         setCreating(true)
         setError(null)
         try {
-            const newFirm = await createFirm({ name })
+            const newFirm = await createFirm({ name, groupSlug })
             await updateFirm(newFirm.slug, {
                 internalMemo: internalMemo.trim() || null,
                 industry: industry.trim() || null,

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, usePathname, useParams } from 'next/navigation'
 import { Building2, ArrowRight, Loader2, SquarePlus, Home, ChevronRight, LayoutGrid } from 'lucide-react'
 import { getDomainOnboardingOptionsForCurrentUser, joinOrganizationByDomain, type DomainOnboardingOptions, type DomainOrgOption } from '@/lib/actions/domain-onboarding'
-import { getUserFirms, getIsAdminOnAnyFirm, type FirmOption } from '@/lib/actions/firms'
+import { getUserFirms, getIsGroupAdmin, type FirmOption } from '@/lib/actions/firms'
 import { BRAND_NAME } from '@/config/brand'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -19,7 +19,7 @@ export default function WorkspacePickerPage() {
     const { groupSlug } = useParams<{ groupSlug: string }>()
     const [firms, setFirms] = useState<FirmOption[]>([])
     const [domainOptions, setDomainOptions] = useState<DomainOnboardingOptions | null>(null)
-    const [isAdminOnAnyFirm, setIsAdminOnAnyFirm] = useState(false)
+    const [isGroupAdmin, setIsGroupAdmin] = useState(false)
     const [addFirmOpen, setAddFirmOpen] = useState(false)
     const [loading, setLoading] = useState(true)
     const [joiningId, setJoiningId] = useState<string | null>(null)
@@ -34,15 +34,19 @@ export default function WorkspacePickerPage() {
             const [userFirms, opts, isAdmin] = await Promise.all([
                 getUserFirms(),
                 getDomainOnboardingOptionsForCurrentUser(),
-                getIsAdminOnAnyFirm(),
+                getIsGroupAdmin(groupSlug),
             ])
-            setFirms(userFirms)
+            // getUserFirms() returns every firm the user belongs to across ALL groups — this
+            // page is scoped to one group (groupSlug), so it must filter down to that group's
+            // firms. Without this, a user with firms in multiple groups sees them all mixed
+            // together under any single group's /d/[groupSlug]/f URL.
+            setFirms(userFirms.filter((f) => f.groupSlug === groupSlug))
             setDomainOptions(opts)
-            setIsAdminOnAnyFirm(isAdmin)
+            setIsGroupAdmin(isAdmin)
             setLoading(false)
         }
         void load()
-    }, [])
+    }, [groupSlug])
 
     if (loading) {
         return (
@@ -117,7 +121,7 @@ export default function WorkspacePickerPage() {
                                 )}
                             </TabsTrigger>
                         </TabsList>
-                        {isAdminOnAnyFirm && (
+                        {isGroupAdmin && (
                         <button
                             type="button"
                             className="h-auto px-4 py-1.5 rounded bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:brightness-105 shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all inline-flex items-center gap-1.5"
@@ -140,7 +144,7 @@ export default function WorkspacePickerPage() {
                             <button
                                 key={firm.id}
                                 type="button"
-                                className="group relative flex flex-col gap-4 p-5 rounded border bg-white shadow-md hover:shadow-lg text-left transition-all overflow-hidden h-48 border-[#e5e7eb] hover:border-primary/40"
+                                className="group relative flex flex-col gap-4 p-5 rounded border bg-white shadow-md hover:shadow-lg text-left transition-all overflow-hidden h-56 border-[#e5e7eb] hover:border-primary/40"
                                 onClick={() => handleFirmClick(firm)}
                             >
                                 {/* Brand corner decoration */}
@@ -172,11 +176,17 @@ export default function WorkspacePickerPage() {
                                     <div className="flex items-center gap-1.5 mb-1">
                                         <p className="font-bold text-[#1b1b1d] text-base leading-tight">{firm.name}</p>
                                     </div>
-                                    <p className="text-xs text-[#45474c]/70">You&apos;re already a member</p>
+                                    <p className="text-xs text-[#45474c]/70">
+                                        {firm.clientCount ?? 0} {firm.clientCount === 1 ? 'client' : 'clients'}
+                                    </p>
                                 </div>
-                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-sm w-fit text-primary bg-primary/10">
-                                    Continue <ArrowRight className="h-2.5 w-2.5 transition-transform group-hover:translate-x-0.5" />
-                                </span>
+                                <div className="mt-auto pt-3 border-t border-[#e5e7eb]">
+                                    <p className="text-[11px] text-[#45474c]/70">
+                                        You are a <span className={`inline-flex items-center font-mono text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm ${firm.isFirmAdmin ? 'text-primary bg-primary/10' : 'text-[#45474c] bg-[#f3f4f6]'}`}>
+                                            {firm.isFirmAdmin ? 'Firm Admin' : 'Firm Member'}
+                                        </span>
+                                    </p>
+                                </div>
                             </button>
                         ))}
                     </div>
@@ -233,7 +243,7 @@ export default function WorkspacePickerPage() {
                 </div>
                 </TabsContent>
             </Tabs>
-            <AddFirmModal open={addFirmOpen} onOpenChange={setAddFirmOpen} />
+            <AddFirmModal open={addFirmOpen} onOpenChange={setAddFirmOpen} groupSlug={groupSlug} />
             {targetOrg && (
                 <FirmSwitchDialog
                     open={switchDialogOpen}

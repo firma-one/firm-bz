@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Building2, ArrowRight, Loader2, SquarePlus, Home, ChevronRight, LayoutGrid } from 'lucide-react'
+import { Building2, Loader2, SquarePlus, Home, ChevronRight, LayoutGrid } from 'lucide-react'
 import { getUserGroups, getUserFirms, createOwnWorkspace, type UserGroupOption } from '@/lib/actions/firms'
 import { BRAND_NAME } from '@/config/brand'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
@@ -215,7 +215,7 @@ export function GroupPicker() {
                             <button
                                 key={group.id}
                                 type="button"
-                                className="group relative flex flex-col gap-4 p-5 rounded border bg-white shadow-md hover:shadow-lg text-left transition-all overflow-hidden h-48 border-[#e5e7eb] hover:border-primary/40"
+                                className="group relative flex flex-col gap-4 p-5 rounded border bg-white shadow-md hover:shadow-lg text-left transition-all overflow-hidden h-56 border-[#e5e7eb] hover:border-primary/40"
                                 onClick={() => handleGroupClick(group)}
                             >
                                 {/* Brand corner decoration — groups have no theme color, plain primary accent */}
@@ -236,9 +236,13 @@ export function GroupPicker() {
                                         {group.firmCount} {group.firmCount === 1 ? 'firm' : 'firms'}
                                     </p>
                                 </div>
-                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-sm w-fit text-primary bg-primary/10">
-                                    Continue <ArrowRight className="h-2.5 w-2.5 transition-transform group-hover:translate-x-0.5" />
-                                </span>
+                                <div className="mt-auto pt-3 border-t border-[#e5e7eb]">
+                                    <p className="text-[11px] text-[#45474c]/70">
+                                        You are a <span className={`inline-flex items-center font-mono text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm ${group.isGroupAdmin ? 'text-primary bg-primary/10' : 'text-[#45474c] bg-[#f3f4f6]'}`}>
+                                            {group.isGroupAdmin ? 'Group Admin' : 'Group Member'}
+                                        </span>
+                                    </p>
+                                </div>
                             </button>
                         ))}
                     </div>

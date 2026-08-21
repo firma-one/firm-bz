@@ -6,7 +6,7 @@ import { getProjectMemberSummaries, type ProjectMemberSummary } from '@/lib/acti
 import { ProjectList } from './engagement-list'
 import { ClientSettingsForm } from './client-settings-form'
 import type { LwCrmClientStatus } from '@/lib/actions/client'
-import { SquarePlus, ChevronRight, Building2, Users, Briefcase, LayoutGrid, List, Home, Settings, UserCog, Lock, Contact } from 'lucide-react'
+import { SquarePlus, ChevronRight, Building2, Users, Briefcase, Home, Settings, UserCog, Lock, Contact } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { AddEngagementModal } from './add-engagement-modal'
@@ -32,7 +32,6 @@ export function ClientProjectView({ clients, groupSlug, firmSlug, firmName, firm
     const router = useRouter()
     const pathname = usePathname()
     const searchParams = useSearchParams()
-    const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
     const [isClientDetailsOpen, setIsClientDetailsOpen] = useState(false)
     const [isFirmInternal, setIsFirmInternal] = useState(false)
     const [memberSummaries, setMemberSummaries] = useState<Record<string, ProjectMemberSummary>>({})
@@ -40,20 +39,6 @@ export function ClientProjectView({ clients, groupSlug, firmSlug, firmName, firm
     const [isFirmOwner, setIsFirmOwner] = useState(false)
     const [isPendingRefresh, startRefresh] = useTransition()
     const [pendingTab, setPendingTab] = useState<string | null>(null)
-
-    // Load view mode preference from localStorage on mount
-    useEffect(() => {
-        const savedViewMode = localStorage.getItem('fm-project-view-mode')
-        if (savedViewMode === 'grid' || savedViewMode === 'list') {
-            setViewMode(savedViewMode)
-        }
-    }, [])
-
-    // Save view mode preference to localStorage when it changes
-    const handleViewModeChange = (mode: 'grid' | 'list') => {
-        setViewMode(mode)
-        localStorage.setItem('fm-project-view-mode', mode)
-    }
 
     const tabParam = searchParams.get('tab') || 'projects'
     const currentTab =
@@ -248,24 +233,6 @@ export function ClientProjectView({ clients, groupSlug, firmSlug, firmName, firm
                                     </TabsList>
                                     <div className="flex items-center gap-3 ml-auto">
                                         {currentTab === 'projects' && (
-                                            <div className="flex items-center bg-[#f3f4f6] p-0.5 rounded border border-[#e5e7eb]">
-                                                <button
-                                                    onClick={() => handleViewModeChange('grid')}
-                                                    className={`px-1.5 py-1 rounded transition-all ${viewMode === 'grid' ? 'bg-white shadow-sm text-primary' : 'text-[#45474c] hover:text-[#1b1b1d] hover:bg-[#f0edee]'}`}
-                                                    title="Grid View"
-                                                >
-                                                    <LayoutGrid className="h-3 w-3" />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleViewModeChange('list')}
-                                                    className={`px-1.5 py-1 rounded transition-all ${viewMode === 'list' ? 'bg-white shadow-sm text-primary' : 'text-[#45474c] hover:text-[#1b1b1d] hover:bg-[#f0edee]'}`}
-                                                    title="List View"
-                                                >
-                                                    <List className="h-3 w-3" />
-                                                </button>
-                                            </div>
-                                        )}
-                                        {currentTab === 'projects' && (
                                             <AddEngagementModal
                                                 groupSlug={groupSlug}
                                                 firmSlug={firmSlug}
@@ -299,9 +266,6 @@ export function ClientProjectView({ clients, groupSlug, firmSlug, firmName, firm
                                                 orgSlug={firmSlug}
                                                 clientSlug={selectedClient.slug}
                                                 clientStatus={selectedClient.status}
-                                                viewMode={viewMode}
-                                                isOrgInternal={isFirmInternal}
-                                                memberSummaries={memberSummaries}
                                                 isRefreshing={isPendingRefresh}
                                             />
                                         </div>

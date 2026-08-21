@@ -9,7 +9,8 @@ import { logger } from '@/lib/logger'
 import {
     canCreateNonSandboxFirm,
     requireNonSandboxFirmCreationAccess,
-    resolveBillingAnchorForNewSatelliteFirm,
+    resolveGroupForNewFirm,
+    resolveGroupForNewFirmInGroup,
 } from '@/lib/billing/firm-creation-gate'
 import { mergeLeanAppMetadata } from '@/lib/auth/supabase-jwt-metadata'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
@@ -27,12 +28,23 @@ export interface FirmOption {
     groupId?: string | null
     groupName?: string | null
     groupSlug?: string | null
+    /** Whether the current user is `firm_admin` on this specific firm. */
+    isFirmAdmin?: boolean
+    /** Count of non-deleted clients in this firm. */
+    clientCount?: number
 }
 
 export interface CreateFirmData {
     name: string
     allowDomainAccess?: boolean
     allowedEmailDomain?: string | null
+    /**
+     * The group whose picker page ("Add Firm") this was called from, if any. When provided,
+     * the new firm is validated against and attached to THIS group specifically — never an
+     * arbitrary "first eligible group" pick. Omit only when the caller has no specific group
+     * in context (e.g. the top-level /d/ fallback view's own "Add Firm" entry point).
+     */
+    groupSlug?: string
 }
 
 /**
@@ -56,6 +68,7 @@ export async function getUserFirms(): Promise<FirmOption[]> {
                     include: {
                         members: true,
                         group: { select: { id: true, name: true, slug: true } },
+                        _count: { select: { clients: { where: { deletedAt: null } } } },
                     },
                 },
             },
@@ -78,6 +91,8 @@ export async function getUserFirms(): Promise<FirmOption[]> {
                 groupId: firm.groupId ?? null,
                 groupName: firm.group?.name ?? null,
                 groupSlug: firm.group?.slug ?? null,
+                isFirmAdmin: membership?.role === 'firm_admin',
+                clientCount: firm._count?.clients ?? 0,
             }
         })
     } catch (err) {
@@ -111,6 +126,26 @@ export async function getIsAdminOnAnyFirm(): Promise<boolean> {
     if (error || !user) return false
     const membership = await prisma.firmMember.findFirst({
         where: { userId: user.id, role: 'firm_admin', firm: { deletedAt: null } },
+        select: { id: true },
+    })
+    return membership !== null
+}
+
+/**
+ * Whether the current user is this specific group's `GROUP_ADMIN` (its creator, in practice —
+ * see getUserGroups()'s doc comment) — used for gating group-scoped actions like "Add Firm" on
+ * /d/[groupSlug]/f. Deliberately checks GroupMember, not FirmMember.role === 'firm_admin' — a
+ * firm-level admin on some firm in this group is not sufficient to add ANOTHER firm to the
+ * group; only its GROUP_ADMIN may do that (adding a firm is a group-level action with its own
+ * subscription-entitlement gate, checked separately by requireNonSandboxFirmCreationAccess /
+ * resolveGroupForNewFirmInGroup inside createFirm()).
+ */
+export async function getIsGroupAdmin(groupSlug: string): Promise<boolean> {
+    const supabase = await createClient()
+    const { data: { user }, error } = await supabase.auth.getUser()
+    if (error || !user) return false
+    const membership = await (prisma as any).groupMember.findFirst({
+        where: { userId: user.id, role: 'GROUP_ADMIN', group: { slug: groupSlug } },
         select: { id: true },
     })
     return membership !== null
@@ -348,7 +383,13 @@ export async function createFirm(data: CreateFirmData): Promise<FirmOption> {
 
     await requireNonSandboxFirmCreationAccess(user.id)
 
-    const billingAnchorId = await resolveBillingAnchorForNewSatelliteFirm(user.id)
+    let billingAnchorId: string | null
+    if (data.groupSlug) {
+        const targetGroup = await prisma.group.findUnique({ where: { slug: data.groupSlug }, select: { id: true } })
+        billingAnchorId = targetGroup ? await resolveGroupForNewFirmInGroup(user.id, targetGroup.id) : null
+    } else {
+        billingAnchorId = await resolveGroupForNewFirm(user.id)
+    }
     if (!billingAnchorId) {
         throw new Error('Could not attach your new firm to a billing subscription. Please try again.')
     }
