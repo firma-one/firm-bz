@@ -139,7 +139,7 @@ export function ProjectList({ projects, groupSlug, orgSlug, clientSlug, clientSt
                             href={engagementPath(groupSlug, orgSlug, clientSlug, project.slug)}
                             className={`group relative bg-white rounded p-5 shadow-md hover:shadow-lg transition-all duration-200 flex flex-col h-56 ${isProspect ? 'border border-dashed border-amber-300 hover:border-amber-400' : 'border border-[#e5e7eb] hover:border-primary/50'}`}
                         >
-                            <div className="flex items-start gap-3">
+                            <div className="flex items-start gap-3 pb-3">
                                 <div className="h-10 w-10 bg-[#f3f4f6] text-[#45474c] rounded flex items-center justify-center group-hover:bg-primary/10 group-hover:text-primary transition-all shrink-0">
                                     <Briefcase className="h-5 w-5" />
                                 </div>
