@@ -36,7 +36,7 @@ export const BLOG_BASE_PATH = "/resources/blog" as const
 export const TRUST_CENTER_PATH = "/resources/trust-center" as const
 
 /** Calendly scheduling — header/footer Contact mega-menu and marketing CTAs. */
-export const CALENDLY_DEMO_URL = "https://calendly.com/firmaone/30min" as const
+export const CALENDLY_DEMO_URL = "https://calendly.com/firmaone/firma-connect" as const
 
 /**
  * Max width + horizontal padding aligned with the marketing header rail (`Header`) and main landing sections.
