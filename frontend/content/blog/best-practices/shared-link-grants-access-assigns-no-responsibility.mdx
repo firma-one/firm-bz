@@ -1,0 +1,122 @@
+---
+title: 'A Shared Link Grants Access to Clients. It Assigns No Responsibility.'
+date: '2026-09-07'
+excerpt: >-
+  Viewer, commenter, editor. Cloud storage permissions describe what a person can do, never what they are expected to do. That gap is why client delivery runs on memory instead of structure.
+category: best-practices
+tags:
+  - client-delivery
+  - permissions
+  - collaboration
+  - best-practices
+image: /images/blog/blog-6.jpg
+id: best-practices-shared-link-grants-access-assigns-no-responsibility-2026-09-07
+author: firmä Team
+authorTitle: Client Delivery
+focusKeyword: client file sharing permissions
+tldr: Cloud storage offers three permission levels — viewer, commenter, editor — and all three answer only what a person is technically able to do with a file. None of them answer the question client work turns on: what that person is responsible for. Role assignment gets communicated in prose, in the covering email, once, then reconstructed from memory every time the engagement moves. This is a modeling gap, not an organization gap.
+---
+
+# A Shared Link Grants Access to Clients. It Assigns No Responsibility.
+
+_Why cloud storage permissions can't carry the structure client work needs._
+
+## TL;DR
+
+Cloud storage offers three permission levels: viewer, commenter, editor. All three answer the same question, which is what a person is technically able to do with a file. None of them answer the question client work actually turns on, which is what that person is responsible for. The result is that role assignment gets communicated in prose, in the covering email, once, and then has to be reconstructed from memory every time the engagement moves. This is a modeling gap, not an organization gap.
+
+## The setting is ordinary
+
+You share a folder with a client. Five people get the link.
+
+You set two of them to commenter and three to viewer, because that is roughly right and because those are the options available. You write a short covering note. Everyone has what they need.
+
+A week later you are trying to work out why nothing has happened, and the thing you actually need to know is not in the system anywhere. Which of those five was supposed to act. Whether the person who has gone quiet is a blocker or a bystander. Whether the second document you uploaded superseded the first in anyone's mind but yours.
+
+None of that is retrievable from the permissions. It was in the email, or it was never written down at all.
+
+## Two properties, one field
+
+The confusion is worth stating precisely, because most tools conflate these and most of us have stopped noticing.
+
+Access is binary and technical. Can this person retrieve this file. Cloud storage models access extremely well. Encryption, link expiry, domain restrictions, audit trails on opens. This is a genuinely solved problem and Drive solves it.
+
+Responsibility is relational and contextual. Does this person owe you a decision, an input, or nothing. It cannot be derived from access, because two people with identical permissions can occupy entirely different positions in the work.
+
+The permission field looks like it is carrying both. It is not. A commenter might be the person whose sign-off releases the campaign, or might be a junior copied in so they can learn the account. Same setting, opposite meanings, and the tool cannot tell them apart because the distinction is not a property of the file. It is a property of the engagement the file belongs to.
+
+## What roles actually exist in client work
+
+Strip the permission language away and look at who is really on a typical shared folder.
+
+There is usually one person whose decision closes something. There are one or two whose opinions genuinely shape the work but do not gate it. There are people producing parts of the deliverable, some on your side, some on the client's. And there are people present for visibility, politics, or courtesy, whose silence carries no information at all.
+
+That is four distinct positions, and the distinction between internal and external cuts across all of them. An external contributor is not the same as an internal one: they need to add work without seeing the rest of the engagement. An external viewer is not the same as an internal viewer: what they can see determines what your delivery looks like from the outside.
+
+So the real matrix is roughly eight positions, and the tooling offers three. The overflow has to go somewhere, and where it goes is your memory, plus a covering email that nobody will reread.
+
+## Where the assumption breaks
+
+The failure modes are recognizable enough that most practitioners have stopped treating them as failures.
+
+**You chase the responsive person, not the responsible one.** Responsiveness is the only signal the system gives you, so you follow up with whoever answered last. That is very often not the person holding things up.
+
+**Permissions drift into meaning things they don't.** Over months, "editor" quietly becomes a proxy for "involved" and "viewer" for "not really." Nobody decided this. It accreted, and now new joiners inherit a permission scheme that encodes a role model nobody wrote down.
+
+**Client-side structure never materializes.** Your client's team is not organized either. If your process does not impose clarity about who does what, theirs will not supply it. The resulting confusion is legible to them as your delivery being unclear, which is a perception cost you pay without ever seeing the invoice.
+
+**Everything is re-explained.** Because the assignment lived in an email rather than on the work, the next deliverable requires it again. And the one after that. This is the same reason [reply-all is not a document management strategy](https://www.firma.bz/resources/blog/guides/reply-all-not-document-management): a thread carries an instruction exactly once and then buries it.
+
+None of these are discipline failures. They are the predictable output of a system that grants entry and assigns no responsibility.
+
+## The workaround, honestly
+
+You can close most of this gap without changing tools. It costs consistency rather than money.
+
+**Separate the two statements when you share.** The permission is one decision. The responsibility is another, and it needs saying out loud. "Sarah signs off, Tom and Aisha are welcome to comment, Raj is copied for visibility." One sentence, stated at the point of sharing rather than assumed from the To field.
+
+**Write the role next to the name, somewhere durable.** A line at the top of the deliverable, a pinned note in the engagement folder, a row in whatever tracker you keep. Anywhere that is not an email thread. The test is whether someone picking up the work in six months could reconstruct who was responsible without asking you.
+
+**Distinguish internal from external explicitly.** Your subcontractor and your client's brand lead are both "external" to a Drive permission model and are nothing alike in practice. If your sharing scheme cannot tell them apart, you will eventually send one of them something meant for the other.
+
+**Re-state roles when the engagement changes shape.** New phase, new stakeholder, new deliverable type. The map from the kickoff is stale within a month and nobody will tell you it has expired.
+
+These four habits work. They also share a property worth being clear-eyed about: every one of them depends on you remembering to do it, every time, across every active engagement. At two clients that is realistic. At six it is the first thing that goes, and it goes silently, which is why most practitioners discover the gap through a stalled deliverable rather than through noticing they stopped.
+
+## Why the permission model was never going to be enough
+
+This is not a criticism of Google Drive. Drive is excellent at what it was built for, and it was built to answer questions about files: where is it, who can open it, what changed, how do I get it back.
+
+Client work asks questions about engagements: who is responsible, what state is this in, what has been agreed, when does this end. Those questions have no natural home in a file system, because their answers are not properties of any file. They are properties of a relationship that happens to produce files.
+
+Anchoring roles to documents guarantees you lose the mapping the moment a second document enters the picture. Anchoring them to the engagement is what makes them stable, reusable across deliverables, and inheritable by anyone who joins the work later.
+
+Access is the floor. It is not the structure.
+
+## Frequently asked questions
+
+### What is the difference between access and accountability in client file sharing?
+
+Access is a technical fact about whether someone can open a file. Accountability is a relational fact about whether that person owes you a decision, an input, or nothing at all. Cloud storage models the first and leaves the second to be communicated separately.
+
+### Are Google Drive permissions enough for client work?
+
+Drive permissions are capability grants: viewer, commenter, editor. They describe what someone is able to do, not what they are expected to do. For engagements involving reviewers, approvers, and observers, that distinction has to be carried somewhere other than the permission setting.
+
+### How should you assign roles when sharing client documents?
+
+State the role explicitly at the point of sharing, separately from the permission level. Name who signs off, who is invited to comment, and who is copied for visibility, then keep that assignment attached to the work rather than to the covering email.
+
+### Why does client file sharing get harder as you add clients?
+
+Each engagement carries its own map of who occupies which role, and that map lives in memory rather than in the tooling. Adding clients multiplies the maps and adds the cost of switching between them, so the load grows faster than the client count.
+
+## Related reading
+
+- [Most Client Deliverables Don't Stall on Disagreement](https://www.firma.bz/resources/blog/guides/most-client-deliverables-dont-stall-on-disagreement)
+- [Why 'Reply-All' Is Not a Document Management Strategy](https://www.firma.bz/resources/blog/guides/reply-all-not-document-management)
+- [The Marketing Consultant's Guide to Document Security When Working with Competitors in the Same Niche](https://www.firma.bz/resources/blog/best-practices/marketing-consultant-document-security-competitors)
+
+---
+
+firmä turns the Google Drive or OneDrive you already use into a structured client portal. Files stay in your Drive, non-custodial by design.
