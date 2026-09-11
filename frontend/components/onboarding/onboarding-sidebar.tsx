@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { Lock, Minus, CreditCard } from 'lucide-react'
 import { useOnboarding } from '@/lib/onboarding-context'
 import { useAuth } from '@/lib/auth-context'
-import { getUserFirms } from '@/lib/actions/firms'
+import { getUserFirms, shouldShowSwitchWorkspace } from '@/lib/actions/firms'
 import { buildBillingPageHref } from '@/lib/billing/build-billing-page-href'
 import { fetchBillingCurrentPlan } from '@/lib/billing/fetch-billing-current-plan'
 import { formatProfilePlanSubtitle } from '@/lib/billing/format-profile-plan-subtitle'
@@ -50,9 +50,14 @@ export function OnboardingSidebar() {
     const [firms, setFirms] = useState<Awaited<ReturnType<typeof getUserFirms>>>([])
     const [billingPlanState, setBillingPlanState] = useState<BillingCurrentPlanState | null>(null)
     const [billingPlanLoading, setBillingPlanLoading] = useState(false)
+    const [showSwitchWorkspace, setShowSwitchWorkspace] = useState(false)
 
     const billingFirmSlug =
         firms.find((o) => o.isDefault)?.slug ?? firms[0]?.slug ?? null
+    const billingGroupSlug = useMemo(() => {
+        if (!billingFirmSlug) return null
+        return firms.find((f) => f.slug === billingFirmSlug)?.groupSlug ?? null
+    }, [firms, billingFirmSlug])
     const billingFirmId = useMemo(() => {
         if (!billingFirmSlug) return null
         return firms.find((f) => f.slug === billingFirmSlug)?.id ?? null
@@ -84,6 +89,14 @@ export function OnboardingSidebar() {
     useEffect(() => {
         activeStepRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' })
     }, [currentStep])
+
+    useEffect(() => {
+        let cancelled = false
+        shouldShowSwitchWorkspace()
+            .then((show) => { if (!cancelled) setShowSwitchWorkspace(show) })
+            .catch(() => { if (!cancelled) setShowSwitchWorkspace(false) })
+        return () => { cancelled = true }
+    }, [])
 
     useEffect(() => {
         if (!billingFirmId) {
@@ -220,8 +233,9 @@ export function OnboardingSidebar() {
                     signOut={signOut}
                     isCollapsed={false}
                     showBillingLink
-                    billingHref={buildBillingPageHref({ firmSlug: billingFirmSlug, pathname })}
+                    billingHref={buildBillingPageHref({ firmSlug: billingFirmSlug, groupSlug: billingGroupSlug, pathname })}
                     supportHref={billingFirmSlug ? `/d/support?firmSlug=${billingFirmSlug}` : undefined}
+                    showSwitchWorkspace={showSwitchWorkspace}
                     {...(firms.length > 0 && billingFirmId
                         ? { planSubtitle: profilePlanSubtitle, planSubtitleLoading: billingPlanLoading }
                         : {})}

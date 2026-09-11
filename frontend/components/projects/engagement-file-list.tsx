@@ -15,6 +15,7 @@ import { DocumentPreviewPanelContent } from '@/components/files/document-edit-sh
 import { DocumentBlobPreviewPane } from '@/components/files/document-blob-preview-pane'
 import { DocumentDocCommentsPane } from '@/components/projects/document-doc-comments-pane'
 import { formatFileSize } from '@/lib/utils'
+import { clientTabPath, firmSettingsPath } from '@/lib/navigation/firm-paths'
 import { DriveFile } from '@/lib/types'
 import { useAuth } from '@/lib/auth-context'
 import { cn } from '@/lib/utils'
@@ -25,7 +26,6 @@ import { Progress } from "@/components/ui/progress"
 import { Checkbox } from "@/components/ui/checkbox"
 import { logger } from '@/lib/logger'
 import { useToast } from '@/components/ui/toast'
-import { useOrgSandbox } from '@/lib/use-org-sandbox'
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
 import {
     Dialog,
@@ -54,7 +54,6 @@ import {
     DropdownMenuSubContent
 } from "@/components/ui/dropdown-menu"
 import useDrivePicker from 'react-google-drive-picker'
-import { SANDBOX_OPERATION_MESSAGE } from '@/components/ui/sandbox-info-banner'
 import { useViewAs } from '@/lib/view-as-context'
 import { useRightPane } from '@/lib/right-pane-context'
 import { useEngagementSearch, EngagementSearchProvider } from '@/components/projects/engagement-search-context'
@@ -63,8 +62,15 @@ import { consumeDeeplinkHighlight, type BreadcrumbItem } from '@/lib/files-folde
 import { useSecureOpenDocument } from '@/lib/use-secure-open-document'
 import { SecureAccessModal } from '@/components/projects/shares/secure-access-modal'
 import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
-import { SandboxFilePreview } from '@/components/projects/sandbox-file-preview'
 import { EngagementFileRow } from '@/components/projects/engagement-file-row'
+import {
+    FILE_TABLE_GRID_COLS_CLASS,
+    FILE_TABLE_CONTAINER_CLASS,
+    OWNER_COL_CLASS,
+    DATE_MODIFIED_COL_CLASS,
+    DUE_DATE_COL_CLASS,
+    FILE_SIZE_COL_CLASS,
+} from '@/components/projects/engagement-file-table-grid'
 import { useEngagementUpload } from '@/components/projects/hooks/use-engagement-upload'
 import { useEngagementFileOps } from '@/components/projects/hooks/use-engagement-file-ops'
 import { useEngagementDragDrop } from '@/components/projects/hooks/use-engagement-drag-drop'
@@ -84,6 +90,7 @@ interface EngagementFileListProps {
     restrictToSharedOnly?: boolean
     /** Optional; used for secure-open modal thumbnail. */
     firmId?: string
+    groupSlug?: string
     orgSlug?: string
     /** When true, firm is sandbox-only (restricts Add menu: no new folder / native Google types; upload + Drive import allowed). */
     firmSandboxOnly?: boolean
@@ -166,7 +173,7 @@ function isValidWebUrl(raw: string): boolean {
 
 const VIEW_AS_SHARED_ONLY_PERSONAS = ['eng_ext_collaborator', 'eng_viewer']
 
-export function EngagementFileList({ projectId, connectorRootFolderId, clientConnectorId, clientConnectorType, workspaceRootLocation, rootFolderName = 'Engagement Files', orgName, clientName, projectName, canEdit = false, canManage = false, isFirmAdmin = false, restrictToSharedOnly = false, firmId, orgSlug, firmSandboxOnly = false, navSlot, clientSlug, connectorAccountEmail, onFileCountChange }: EngagementFileListProps) {
+export function EngagementFileList({ projectId, connectorRootFolderId, clientConnectorId, clientConnectorType, workspaceRootLocation, rootFolderName = 'Engagement Files', orgName, clientName, projectName, canEdit = false, canManage = false, isFirmAdmin = false, restrictToSharedOnly = false, firmId, groupSlug, orgSlug, firmSandboxOnly = false, navSlot, clientSlug, connectorAccountEmail, onFileCountChange }: EngagementFileListProps) {
     const isOneDriveClient = clientConnectorType === 'ONEDRIVE'
     const { session } = useAuth()
     const sessionRef = useRef(session)
@@ -178,8 +185,6 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
         const count = fileList.filter((f: any) => !f.mimeType?.includes('folder')).length
         onFileCountChangeRef.current(count)
     }, [])
-    const orgSandbox = useOrgSandbox()
-    const isSandboxFirm = Boolean(firmSandboxOnly || orgSandbox?.sandboxOnly)
     const { viewAsPersonaSlug } = useViewAs()
     const rightPane = useRightPane()
     const [activeCommentDocId, setActiveCommentDocId] = useState<string | null>(null)
@@ -481,14 +486,6 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
         }
     }, [projectId, addToast])
 
-    const showSandboxPickerToast = useCallback(() => {
-        addToast({
-            type: 'error',
-            title: 'Demo Firm',
-            message: SANDBOX_OPERATION_MESSAGE,
-            duration: 8000,
-        })
-    }, [addToast])
     const coffeeIconRef = useRef<CoffeeIconHandle>(null)
 
     // Intake action state
@@ -897,15 +894,6 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
         rightPane.setTitle('Search')
         rightPane.setHeaderIcon(<Search className="h-4 w-4" />)
         rightPane.setHeaderActions(null)
-        if (isSandboxFirm) {
-            rightPane.setHeaderSubtitle('Sandbox preview')
-            rightPane.setContent(
-                <div className="flex flex-col items-center justify-center h-48 text-center px-6">
-                    <p className="text-xs text-[#45474c]">Search is available on real files. Upgrade to a paid plan to connect Google Drive and manage client files.</p>
-                </div>
-            )
-            return
-        }
         rightPane.setSearchRoot({
             searchRootFolderId: searchRootFolderId ?? null,
             searchRootLabel: searchRootLabel ?? null,
@@ -932,7 +920,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
                 />
             </EngagementSearchProvider>
         )
-    }, [rightPane, projectId, viewAsPersonaSlug, currentFolderType, generalFolderId, confidentialFolderId, stagingFolderId, navigateToItem, firmId, searchRootFolderId, searchRootLabel, isSandboxFirm])
+    }, [rightPane, projectId, viewAsPersonaSlug, currentFolderType, generalFolderId, confidentialFolderId, stagingFolderId, navigateToItem, firmId, searchRootFolderId, searchRootLabel])
 
     // Register search icon in the right panel header (mount-only to avoid infinite loop: setHeaderActions updates context and would re-trigger this effect).
     const rightPaneRef = useRef(rightPane)
@@ -1046,7 +1034,6 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
         files,
         viewAsPersonaSlug,
         restrictToSharedOnly,
-        isSandboxFirm,
         fetchFiles,
     })
 
@@ -1112,7 +1099,6 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
         startProcessing,
         stopProcessing,
         setFiles,
-        orgSandbox,
     })
 
     const handleMarkAsDeliverable = useCallback(async (doc: any, dueDate?: string) => {
@@ -1181,11 +1167,6 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
 
     const handleBulkTrashConfirmed = useCallback(async () => {
         if (!pendingBulkTrashIds.size || !sessionRef.current?.access_token) return
-        if (orgSandbox?.sandboxOnly) {
-            addToast({ type: 'error', title: 'Sandbox', message: SANDBOX_OPERATION_MESSAGE, duration: 12000 } as any)
-            setBulkTrashConfirmOpen(false)
-            return
-        }
         const ids = Array.from(pendingBulkTrashIds)
         const filesToTrash = files.filter(f => ids.includes(f.id))
         setBulkTrashConfirmOpen(false)
@@ -1216,7 +1197,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
 
         const currentFolderId = currentFolderIdRef.current
         if (currentFolderId) fetchFiles(currentFolderId, true)
-    }, [pendingBulkTrashIds, sessionRef, orgSandbox, files, projectId, currentFolderIdRef, fetchFiles, addToast])
+    }, [pendingBulkTrashIds, sessionRef, files, projectId, currentFolderIdRef, fetchFiles, addToast])
 
     // Drag & drop hook
     const {
@@ -1335,10 +1316,6 @@ const handleRefresh = async () => {
     }
 
     const openCreateDialog = (type: CreateItemType) => {
-        if (isSandboxFirm) {
-            showSandboxPickerToast()
-            return
-        }
         setCreateItemType(type)
         setNewItemName('')
         setNewItemUrl('')
@@ -1348,10 +1325,6 @@ const handleRefresh = async () => {
     const handleCreateItem = async () => {
         if (!newItemName.trim() || !session?.access_token) return
         if (isCreatingRef.current) return
-        if (isSandboxFirm) {
-            showSandboxPickerToast()
-            return
-        }
         isCreatingRef.current = true
         setLoading(true)
         try {
@@ -1416,10 +1389,6 @@ const handleRefresh = async () => {
     const handleCreateLink = async () => {
         if (!newItemName.trim() || !isValidWebUrl(newItemUrl) || !session?.access_token) return
         if (isCreatingRef.current) return
-        if (isSandboxFirm) {
-            showSandboxPickerToast()
-            return
-        }
         isCreatingRef.current = true
         setLoading(true)
         try {
@@ -1944,7 +1913,7 @@ const handleRefresh = async () => {
 
                 {/* New Document button portaled into the workspace nav bar slot */}
                 {navSlot && createPortal(
-                    (isSandboxFirm || (!isAtProjectRoot && !currentFolderIsApprovedDeliverable && (canEdit || (restrictToSharedOnly && currentFolderIsDeliverable)))) ? (
+                    (!isAtProjectRoot && !currentFolderIsApprovedDeliverable && (canEdit || (restrictToSharedOnly && currentFolderIsDeliverable))) ? (
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button data-demo-tour="engagement-upload-btn" disabled={loading || isLoadingFolders || isUploading || isUploadInitiating} className="h-auto px-4 py-1.5 rounded bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:bg-primary hover:brightness-105 hover:text-white shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all border-0 inline-flex items-center gap-1.5">
@@ -1953,9 +1922,6 @@ const handleRefresh = async () => {
                                 </Button>
                             </DropdownMenuTrigger>
                                 <DropdownMenuContent align="start" className="w-[280px] py-1 rounded">
-                                {isSandboxFirm && (
-                                    <div className="absolute inset-0 z-10 rounded-[inherit] pointer-events-auto cursor-not-allowed bg-transparent" />
-                                )}
                                     <DropdownMenuItem onClick={() => openCreateDialog('folder')} className="text-xs py-1.5">
                                         <Folder className="mr-2 h-3.5 w-3.5 text-slate-500" />
                                         New folder
@@ -2119,11 +2085,6 @@ const handleRefresh = async () => {
                                         </div>
                                     </div>
 
-                                {isSandboxFirm && (
-                                    <div className="px-3 py-2 border-t border-[#e5e7eb] bg-[#f9f9fb]">
-                                        <p className="text-[10px] text-[#9a9ba0] leading-snug">Actions are unavailable in demo projects.</p>
-                                    </div>
-                                )}
                                 </DropdownMenuContent>
                             </DropdownMenu>
                     ) : null,
@@ -2392,7 +2353,7 @@ const handleRefresh = async () => {
             </div >
 
             {/* Content Area - Styled as a Card */}
-            <div className="flex-1 overflow-hidden flex flex-col relative bg-white rounded border border-[#e5e7eb]">
+            <div className={cn("flex-1 overflow-hidden flex flex-col relative bg-white rounded border border-[#e5e7eb]", FILE_TABLE_CONTAINER_CLASS)}>
                 {/* Download Progress Panel — portaled to body, stacked above upload panel */}
                 {downloadQueue.length > 0 && typeof document !== 'undefined' && document.body && createPortal(
                     <div className={cn(
@@ -2552,7 +2513,7 @@ const handleRefresh = async () => {
 
                 {/* Fixed Table Header (Compact) */}
                 <div className="sticky top-0 bg-white border-b border-[#e5e7eb] pl-3 pr-2 py-2.5 shrink-0 z-10 group">
-                    <div className="grid gap-4 items-center" style={{ gridTemplateColumns: '24px 72px minmax(0, 1fr) minmax(124px, 10%) 10% 14% 12% 10% 8%' }}>
+                    <div className={`grid gap-4 items-center ${FILE_TABLE_GRID_COLS_CLASS}`}>
                         {/* Select-all checkbox column */}
                         <div
                             className="flex-shrink-0 w-4 h-4 flex items-center justify-center cursor-pointer"
@@ -2574,10 +2535,10 @@ const handleRefresh = async () => {
                             <TableHeader label="Name" />
                         </div>
                         <div className="col-span-2 flex items-center justify-center"><TableHeader label="Quick" /></div>
-                        <div className="flex items-center"><TableHeader label="Owner" /></div>
-                        <div className="flex items-center"><TableHeader label="Date modified" /></div>
-                        <div className="flex items-center"><TableHeader label="Due date" /></div>
-                        <div className="flex items-center"><TableHeader label="File size" /></div>
+                        <div className={`items-center ${OWNER_COL_CLASS}`}><TableHeader label="Owner" /></div>
+                        <div className={`items-center ${DATE_MODIFIED_COL_CLASS}`}><TableHeader label="Date modified" /></div>
+                        <div className={`items-center ${DUE_DATE_COL_CLASS}`}><TableHeader label="Due date" /></div>
+                        <div className={`items-center ${FILE_SIZE_COL_CLASS}`}><TableHeader label="File size" /></div>
                     </div>
                 </div>
 
@@ -2610,23 +2571,7 @@ const handleRefresh = async () => {
                             <Button variant="link" onClick={() => window.location.reload()} className="h-auto p-0 mt-2 text-slate-700 hover:text-slate-900 text-xs">Try Refreshing</Button>
                         </div>
                     ) : !connectorRootFolderId && !deeplinkResolving ? (
-                        isSandboxFirm ? (
-                            <SandboxFilePreview
-                                projectName={projectName}
-                                onOpenCommentPane={(docId) => {
-                                    rightPane.setTitle('Comments')
-                                    rightPane.setHeaderIcon(<MessagesSquare className="h-4 w-4" />)
-                                    rightPane.setHeaderActions(null)
-                                    rightPane.setHeaderSubtitle('Sandbox preview')
-                                    rightPane.setContent(
-                                        <div className="flex flex-col items-center justify-center h-48 text-center px-6">
-                                            <p className="text-xs text-[#45474c]">Comments are available on real files. Upgrade to a paid plan to connect Google Drive and manage client files.</p>
-                                        </div>
-                                    )
-                                }}
-                                onOpenSearch={openSearchPanel}
-                            />
-                        ) : clientConnectorId ? (
+                        clientConnectorId ? (
                         <div className="flex flex-col items-center justify-center h-64 text-center px-6">
                             <div className="h-12 w-12 bg-[#f3f4f6] rounded-full flex items-center justify-center mb-4">
                                 <Folder className="h-6 w-6 text-[#9a9ba0]" />
@@ -2637,9 +2582,9 @@ const handleRefresh = async () => {
                                     <p className="text-xs text-[#45474c] max-w-[280px] mx-auto mb-4">
                                         This workspace uses a Shared Drive. Go to <strong>Client Settings → Document Storage</strong> and use <strong>Migrate</strong> to re-select your workspace folder and create the folder structure.
                                     </p>
-                                    {orgSlug && clientSlug && (
+                                    {groupSlug && orgSlug && clientSlug && (
                                         <a
-                                            href={`/d/f/${orgSlug}/c/${clientSlug}?tab=settings`}
+                                            href={clientTabPath(groupSlug, orgSlug, clientSlug, 'settings')}
                                             className="inline-flex items-center gap-1.5 h-8 px-4 rounded bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:brightness-105 transition-all"
                                         >
                                             Go to Client Settings
@@ -2671,9 +2616,9 @@ const handleRefresh = async () => {
                             <p className="text-xs text-[#45474c] max-w-[260px] mx-auto mb-4">
                                 Connect a Google Drive account to this client to start uploading and managing engagement files.
                             </p>
-                            {orgSlug && (
+                            {groupSlug && orgSlug && (
                                 <a
-                                    href={`/d/f/${orgSlug}?tab=settings&section=storage`}
+                                    href={firmSettingsPath(groupSlug, orgSlug, 'storage')}
                                     className="inline-flex items-center gap-1.5 h-8 px-4 rounded bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:brightness-105 transition-all"
                                 >
                                     Go to Settings
@@ -2692,9 +2637,9 @@ const handleRefresh = async () => {
                                     ? 'This client is not linked to a Drive connector. Go to Firm Settings → Document Storage to link this client.'
                                     : 'This client is not linked to a Drive connector. Contact your firm administrator to set up Document Storage.'}
                             </p>
-                            {canManage && orgSlug && (
+                            {canManage && groupSlug && orgSlug && (
                                 <a
-                                    href={`/d/f/${orgSlug}?tab=settings&section=storage`}
+                                    href={firmSettingsPath(groupSlug, orgSlug, 'storage')}
                                     className="inline-flex items-center gap-1.5 h-8 px-4 rounded bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:brightness-105 transition-all"
                                 >
                                     Go to Document Storage

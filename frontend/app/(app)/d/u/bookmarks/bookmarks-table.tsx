@@ -72,8 +72,8 @@ function bookmarkLabel(b: BookmarkWithContext): string {
 }
 
 function bookmarkHref(b: BookmarkWithContext): string {
-  if (b.firmSlug && b.clientSlug && b.engagementSlug) {
-    const base = `/d/f/${b.firmSlug}/c/${b.clientSlug}/e/${b.engagementSlug}`
+  if (b.groupSlug && b.firmSlug && b.clientSlug && b.engagementSlug) {
+    const base = `/d/${b.groupSlug}/f/${b.firmSlug}/c/${b.clientSlug}/e/${b.engagementSlug}`
     if (b.kind === 'document' && b.documentId) return `${base}/files`
     if (b.kind === 'comment') return `${base}/comments`
     return base

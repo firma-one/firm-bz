@@ -1,7 +1,7 @@
 import { Polar } from '@polar-sh/sdk'
 import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
-import { ensurePolarFreePlanForSandboxFirm } from '@/lib/billing/polar-free-plan'
+import { ensureGroupFreePlan } from '@/lib/billing/polar-free-plan'
 import { upsertFollowUpReminder } from '@/lib/actions/user-reminders'
 import { createAdminClient } from '@/utils/supabase/admin'
 
@@ -63,16 +63,12 @@ export async function revokeAllOtherPolarSubscriptions(params: {
 }
 
 /**
- * When a paid subscription ends (canceled/revoked), re-provision the sandbox anchor’s free Polar
- * subscription so the firm row can show an active free tier again.
+ * When a paid subscription ends (canceled/revoked), re-provision the group's free Polar
+ * subscription so it can show an active free tier again. Group-scoped, not firm-scoped —
+ * no longer depends on a sandboxOnly:true firm existing in the group (see
+ * .claude/plans/sandbox-firm-removal.md, Step 1).
  */
-export async function resyncSandboxFreePlanAfterPaidSubscriptionEnd(groupId: string): Promise<void> {
-    const sandboxFirm = await prisma.firm.findFirst({
-        where: { groupId, sandboxOnly: true, deletedAt: null },
-        select: { id: true },
-    })
-    if (!sandboxFirm) return
-
+export async function resyncGroupFreePlanAfterPaidSubscriptionEnd(groupId: string): Promise<void> {
     // Look up the group admin's email from GroupMember + Supabase.
     let userEmail = `billing-resync+${groupId.replace(/-/g, '').slice(0, 12)}@sandbox.invalid`
     try {
@@ -90,17 +86,16 @@ export async function resyncSandboxFreePlanAfterPaidSubscriptionEnd(groupId: str
     }
 
     try {
-        await ensurePolarFreePlanForSandboxFirm({
-            firmId: sandboxFirm.id,
+        await ensureGroupFreePlan({
+            groupId,
             userEmail,
         })
-        logger.warn('[polar-billing-lifecycle] Resynced sandbox free Polar plan after paid subscription ended', {
+        logger.warn('[polar-billing-lifecycle] Resynced free Polar plan after paid subscription ended', {
             groupId,
-            sandboxFirmId: sandboxFirm.id,
         })
     } catch (e) {
         logger.error(
-            '[polar-billing-lifecycle] Failed to resync sandbox free plan after paid subscription ended',
+            '[polar-billing-lifecycle] Failed to resync free plan after paid subscription ended',
             e instanceof Error ? e : new Error(String(e)),
             undefined,
             { groupId }

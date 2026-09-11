@@ -8,6 +8,14 @@ import { usePathname } from 'next/navigation'
 import { formatDistanceToNow } from 'date-fns'
 import { FirmSwitchDialog } from './firm-switch-dialog'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { firmPath } from '@/lib/navigation/firm-paths'
+
+/** Falls back to a legacy-shaped path (still resolves via middleware/redirect handling elsewhere)
+ * on the rare chance a firm's groupSlug isn't populated — should not happen for any firm created
+ * after the Group.slug migration, but avoids a hard crash on stale/malformed data. */
+function firmHref(org: Pick<FirmOption, 'slug' | 'groupSlug'>): string {
+    return org.groupSlug ? firmPath(org.groupSlug, org.slug) : `/d/${org.slug}`
+}
 
 interface FirmListProps {
     firms: FirmOption[]
@@ -18,10 +26,10 @@ interface FirmListProps {
 export function FirmList({ firms, viewMode = 'grid', activeOrgIdFromJWT }: FirmListProps) {
     const pathname = usePathname()
     const [switchDialogOpen, setSwitchDialogOpen] = useState(false)
-    const [targetOrg, setTargetOrg] = useState<{ slug: string; name: string } | null>(null)
+    const [targetOrg, setTargetOrg] = useState<{ slug: string; name: string; groupSlug?: string | null } | null>(null)
 
     // Current org from URL; when on /d (no org in path), use default org as "active"
-    const currentOrgSlug = pathname?.match(/^\/d\/f\/([^\/]+)/)?.[1] ?? null
+    const currentOrgSlug = pathname?.match(/^\/d\/[^/]+\/f\/([^/]+)/)?.[1] ?? null
     const activeOrgSlug = currentOrgSlug ?? firms.find(o => o.isDefault)?.slug ?? null
     const currentOrg = currentOrgSlug ? firms.find(o => o.slug === currentOrgSlug) : null
 
@@ -41,7 +49,7 @@ export function FirmList({ firms, viewMode = 'grid', activeOrgIdFromJWT }: FirmL
                 await switchFirm(org.slug)
                 const { supabase } = await import('@/lib/supabase')
                 await supabase.auth.refreshSession()
-                window.location.href = `/d/f/${org.slug}`
+                window.location.href = firmHref(org)
                 return
             } catch (err) {
                 console.error('Failed to auto-switch to default org:', err)
@@ -49,7 +57,7 @@ export function FirmList({ firms, viewMode = 'grid', activeOrgIdFromJWT }: FirmL
             }
         }
 
-        setTargetOrg({ slug: org.slug, name: org.name })
+        setTargetOrg({ slug: org.slug, name: org.name, groupSlug: org.groupSlug })
         setSwitchDialogOpen(true)
     }
 
@@ -95,7 +103,7 @@ export function FirmList({ firms, viewMode = 'grid', activeOrgIdFromJWT }: FirmL
                                 <tr key={org.id} className="group hover:bg-slate-50 transition-colors">
                                     <td className="px-4 py-3">
                                         <Link
-                                            href={`/d/f/${org.slug}`}
+                                            href={firmHref(org)}
                                             prefetch={false}
                                             onClick={(e) => handleOrgClick(e, org)}
                                             className="flex items-center gap-3"
@@ -110,11 +118,6 @@ export function FirmList({ firms, viewMode = 'grid', activeOrgIdFromJWT }: FirmL
                                                 <span className="font-medium text-slate-900 group-hover:text-black transition-colors truncate">
                                                     {org.name}
                                                 </span>
-                                                {org.sandboxOnly && (
-                                                    <span className="px-1.5 py-0.5 bg-amber-100/50 text-amber-700 rounded text-[10px] font-medium shrink-0 border border-amber-200/50">
-                                                        Sandbox
-                                                    </span>
-                                                )}
                                                 {org.isDefault && (
                                                     <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded text-[10px] font-medium shrink-0">
                                                         Default
@@ -138,6 +141,7 @@ export function FirmList({ firms, viewMode = 'grid', activeOrgIdFromJWT }: FirmL
                     <FirmSwitchDialog
                         open={switchDialogOpen}
                         onOpenChange={setSwitchDialogOpen}
+                        groupSlug={targetOrg.groupSlug ?? undefined}
                         targetFirmSlug={targetOrg.slug}
                         targetFirmName={targetOrg.name}
                         currentFirmName={currentOrg?.name}
@@ -153,7 +157,7 @@ export function FirmList({ firms, viewMode = 'grid', activeOrgIdFromJWT }: FirmL
                 {firms.map((org) => (
                     <Link
                         key={org.id}
-                        href={`/d/f/${org.slug}`}
+                        href={firmHref(org)}
                         prefetch={false}
                         onClick={(e) => handleOrgClick(e, org)}
                         className="group relative bg-white border border-slate-200 rounded-xl p-5 hover:shadow-lg hover:border-slate-300 hover:-translate-y-0.5 transition-all duration-200 flex flex-col h-48"
@@ -165,11 +169,6 @@ export function FirmList({ firms, viewMode = 'grid', activeOrgIdFromJWT }: FirmL
                             <div className="flex items-center gap-2 shrink-0">
                                 {activeOrgSlug === org.slug && (
                                     <ActiveIndicator />
-                                )}
-                                {org.sandboxOnly && (
-                                    <span className="px-2 py-1 bg-amber-100/50 text-amber-700 rounded-full text-[10px] font-medium border border-amber-200/50">
-                                        Sandbox
-                                    </span>
                                 )}
                                 {org.isDefault && (
                                     <span className="px-2 py-1 bg-slate-100 text-slate-500 rounded-full text-[10px] font-medium">
@@ -200,6 +199,7 @@ export function FirmList({ firms, viewMode = 'grid', activeOrgIdFromJWT }: FirmL
                 <FirmSwitchDialog
                     open={switchDialogOpen}
                     onOpenChange={setSwitchDialogOpen}
+                    groupSlug={targetOrg.groupSlug ?? undefined}
                     targetFirmSlug={targetOrg.slug}
                     targetFirmName={targetOrg.name}
                     currentFirmName={currentOrg?.name}

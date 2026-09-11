@@ -3,9 +3,28 @@
 import { createContext, useContext, useState, type ReactNode } from 'react'
 
 const TOUR_KEY = 'fm_demo_tour'
+const NEVER_SHOW_KEY = 'fm_demo_tour_never_show'
 
 interface TourState {
     stepIndex?: number
+}
+
+export function hasOptedOutOfTour(): boolean {
+    if (typeof window === 'undefined') return false
+    try {
+        return window.localStorage.getItem(NEVER_SHOW_KEY) === '1'
+    } catch {
+        return false
+    }
+}
+
+function setNeverShowAgain(): void {
+    if (typeof window === 'undefined') return
+    try {
+        window.localStorage.setItem(NEVER_SHOW_KEY, '1')
+    } catch {
+        /* ignore */
+    }
 }
 
 function readTourState(): TourState {
@@ -53,7 +72,7 @@ interface DemoTourContextValue {
     /** Non-null when there's a saved mid-tour position the visitor can resume, persisted in localStorage. */
     resumableStepIndex: number | null
     openIntroModal: () => void
-    closeIntroModal: () => void
+    closeIntroModal: (neverShowAgain?: boolean) => void
     startTour: () => void
     /** Resume from the saved step index. */
     resumeTour: () => void
@@ -82,7 +101,10 @@ export function DemoTourProvider({ children }: { children: ReactNode }) {
         setResumableStepIndex(loadTourProgress())
         setShowIntroModal(true)
     }
-    const closeIntroModal = () => setShowIntroModal(false)
+    const closeIntroModal = (neverShowAgain?: boolean) => {
+        if (neverShowAgain) setNeverShowAgain()
+        setShowIntroModal(false)
+    }
 
     const startTour = () => {
         setShowIntroModal(false)

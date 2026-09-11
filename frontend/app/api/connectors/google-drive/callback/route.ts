@@ -14,11 +14,18 @@ const supabase = createClient(
   config.supabase.serviceRoleKey!
 )
 
-function parseStateFlow(state: string | null): { flow?: string; nonce?: string; openerOrigin?: string } {
+function parseStateFlow(state: string | null): { flow?: string; nonce?: string; openerOrigin?: string; declaredAccountType?: 'personal' | 'work_school' } {
   if (!state) return {}
   try {
     const decoded = JSON.parse(Buffer.from(state, 'base64').toString('utf-8'))
-    return { flow: decoded.flow, nonce: decoded.nonce, openerOrigin: decoded.openerOrigin }
+    return {
+      flow: decoded.flow,
+      nonce: decoded.nonce,
+      openerOrigin: decoded.openerOrigin,
+      declaredAccountType: decoded.declaredAccountType === 'personal' || decoded.declaredAccountType === 'work_school'
+        ? decoded.declaredAccountType
+        : undefined,
+    }
   } catch {
     return {}
   }
@@ -88,7 +95,7 @@ export async function GET(request: NextRequest) {
     const code = searchParams.get('code')
     const state = searchParams.get('state')
     const error = searchParams.get('error')
-    const { flow: stateFlow, nonce: stateNonce } = parseStateFlow(state)
+    const { flow: stateFlow, nonce: stateNonce, declaredAccountType: earlyDeclaredAccountType } = parseStateFlow(state)
     const isPopup = stateFlow === 'popup'
 
     if (error) {
@@ -184,7 +191,19 @@ export async function GET(request: NextRequest) {
     }
 
     const tokens = await tokenResponse.json()
-    const isPersonalAccount = isPersonalGoogleAccount(tokens.id_token)
+    const detectedIsPersonalAccount = isPersonalGoogleAccount(tokens.id_token)
+    // Declared answer (from the upfront AccountTypeDialog) is authoritative — explicit product
+    // decision 2026-08-19 to prioritize self-serve speed over defensively cross-checking before
+    // acting. Falls back to the id_token-detected value when no declaration was made (e.g. an
+    // older client, or state decode failure). Mismatches are surfaced post-connect via a banner
+    // (see accountTypeMismatch below) with a "reconnect and choose again" path, rather than
+    // silently trusting or silently correcting. See .claude/plans/connector-microsoft-impl.md, item 20.
+    const isPersonalAccount = earlyDeclaredAccountType
+      ? earlyDeclaredAccountType === 'personal'
+      : detectedIsPersonalAccount
+    const accountTypeMismatch = earlyDeclaredAccountType
+      ? (earlyDeclaredAccountType === 'personal') !== detectedIsPersonalAccount
+      : false
 
     // Get user info
     let userResponse: Response
@@ -244,6 +263,7 @@ export async function GET(request: NextRequest) {
     let replaceConnectorId: string | undefined = undefined
     let clientId: string | undefined = undefined
     let friendlyName: string | undefined = undefined
+    let declaredAccountType: 'personal' | 'work_school' | undefined = undefined
 
     try {
       if (state) {
@@ -256,6 +276,9 @@ export async function GET(request: NextRequest) {
         replaceConnectorId = decodedState.replaceConnectorId || undefined
         clientId = decodedState.clientId || undefined
         friendlyName = decodedState.friendlyName || undefined
+        declaredAccountType = decodedState.declaredAccountType === 'personal' || decodedState.declaredAccountType === 'work_school'
+          ? decodedState.declaredAccountType
+          : undefined
       } else {
         throw new Error('No state provided')
       }
@@ -394,6 +417,8 @@ export async function GET(request: NextRequest) {
         clientId,        // Links Client.connectorId after upsert
         replaceConnectorId,
         isPersonalAccount,
+        accountTypeMismatch,
+        detectedIsPersonalAccount,
       )
 
       const auditBuilder = audit(AUDIT_EVENT.STORAGE_CONNECTOR_ATTACHED)

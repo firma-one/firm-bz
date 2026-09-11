@@ -173,10 +173,16 @@ export interface IConnectorPermissionAdapter {
    * confirmed live 2026-08-14 that a bare driveItem.webUrl does show that blank prompt for a
    * genuinely new external guest, while inviteRedeemUrl is expected to skip straight to
    * OTP/federation-consent. Not implemented by other providers (undefined when absent) — Google's
-   * guest-access flow has no equivalent friction point to fix. See
+   * guest-access flow has no equivalent friction point to fix. `outcome: 'confirmed'` means Graph's
+   * call succeeded and the guest is provisioned — NOT necessarily that it was newly created this
+   * call (Graph can return success with the same underlying guest object on a repeat invite, no
+   * reliable way to distinguish "new" from "re-confirmed" without an extra pre-check lookup, not
+   * done here — confirmed live 2026-08-19). `already_guest_or_member` means Graph explicitly
+   * declined because the person is already a guest or an internal tenant member on a verified
+   * domain. Callers that only care about the redeem URL can ignore `outcome`. See
    * .claude/plans/connector-microsoft-impl.md.
    */
-  preInviteGuest?(connectionId: string, email: string, documentUrl?: string): Promise<{ inviteRedeemUrl: string | null }>
+  preInviteGuest?(connectionId: string, email: string, documentUrl?: string): Promise<{ inviteRedeemUrl: string | null; outcome: 'confirmed' | 'already_guest_or_member' | 'failed' }>
   /**
    * Heuristic duplicate-file detection: groups recently-sampled files by content signature
    * (checksum, falling back to name+size) and returns groups with >1 member, sorted by

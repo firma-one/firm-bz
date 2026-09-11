@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import { FirmService } from '@/lib/firm-service'
-import { isWorkspaceOnboardingComplete } from '@/lib/onboarding/workspace-onboarding-complete'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,14 +12,9 @@ export async function GET() {
 
     const defaultFirm = await FirmService.getDefaultFirm(user.id)
     const slug = defaultFirm?.slug ?? null
-    const onboardingComplete = defaultFirm
-        ? await isWorkspaceOnboardingComplete({
-              id: defaultFirm.id,
-              settings: defaultFirm.settings,
-              connectorId: defaultFirm.connectorId ?? null,
-              sandboxOnly: defaultFirm.sandboxOnly ?? false,
-          })
-        : false
+    // Having any firm at all is now the onboarding-complete signal — see
+    // resolveDefaultFirmLandingPath's identical reasoning in lib/actions/firms.ts.
+    const onboardingComplete = defaultFirm !== null
     const isFirmAdmin = defaultFirm
         ? defaultFirm.members.some((m: any) => m.userId === user.id && m.role === 'firm_admin')
         : false

@@ -29,7 +29,6 @@ import { checkEmailExists, sendOTPWithTurnstile } from '@/app/actions/send-otp'
 import { sendEvent, ANALYTICS_EVENTS } from "@/lib/analytics"
 import { logger } from '@/lib/logger'
 import { persistCheckoutIntent } from '@/lib/marketing/checkout-intent'
-import { SignupSuccess } from '@/components/onboarding/signup-success'
 
 type OnboardingStep = SignupStepKey
 
@@ -170,7 +169,7 @@ export function SignupForm({
             // Honour ?next= / ?redirect= so invite links aren't dropped for logged-in users
             const nextRel = searchParams.get('next') || searchParams.get('redirect')
             const isSafeRedirect = nextRel && nextRel.startsWith('/')
-            window.location.href = isSafeRedirect && nextRel ? nextRel : '/d/onboarding'
+            window.location.href = isSafeRedirect && nextRel ? nextRel : '/d?entry=auth'
         }
         void checkSession()
     }, [searchParams])
@@ -398,7 +397,12 @@ export function SignupForm({
         // Resolve the post-signup destination
         const nextRel = searchParams.get('next') || searchParams.get('redirect')
         const isSafeRedirect = nextRel && nextRel.startsWith('/')
-        let navTarget = '/d'
+        // `?entry=auth` tells /d to auto-route (resolve + redirect into the right firm/group
+        // picker/onboarding target) rather than show the group picker as-is — see
+        // app/(app)/d/(landing)/page.tsx. Only applies to the bare-/d default target, not an
+        // explicit `next`/`redirect` deep link (e.g. an invite link), which should land exactly
+        // where it points.
+        let navTarget = '/d?entry=auth'
         if (isSafeRedirect && nextRel) {
             navTarget =
                 nextRel === '/dash' || nextRel.startsWith('/dash/')
@@ -406,13 +410,11 @@ export function SignupForm({
                     : nextRel
         }
 
-        // Returning users go straight through; new signups see the success screen
-        if (isReturningUser) {
-            window.location.href = navTarget
-            return
-        }
-
-        window.location.href = '/d/signup-success'
+        // New signups' auto-provisioning and returning users' normal landing-path resolution
+        // both happen behind /d's loading skeleton — no separate success screen needed, and this
+        // also means an invite link's `next`/`redirect` is honored for new signups too, not just
+        // returning users.
+        window.location.href = navTarget
     }
 
     const inputClass = isSplitLight ? inputLight : inputDark

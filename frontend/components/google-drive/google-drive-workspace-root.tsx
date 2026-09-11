@@ -132,8 +132,6 @@ export function GoogleDriveWorkspaceRoot({
   const [estimateLoading, setEstimateLoading] = useState(false)
   const [fromBreadcrumb, setFromBreadcrumb] = useState<string[] | null>(null)
   const [toBreadcrumb, setToBreadcrumb] = useState<string[] | null>(null)
-  const [knownFirmaFolders, setKnownFirmaFolders] = useState<{ sharedDriveId: string; driveName: string | null; firmaFolderId: string }[]>([])
-  const [knownFoldersLoading, setKnownFoldersLoading] = useState(false)
   // Gates the Shared Drive picker step behind a yes/no check — Picker can only select EXISTING
   // folders (it has no inline "New Folder" capability, and the app can't create one either since
   // drive.file scope grants no access to a Shared Drive until something in it is picked — see
@@ -145,6 +143,14 @@ export function GoogleDriveWorkspaceRoot({
   // folder, then continued to Select Folder", both of which leave hasFolderReady === true. Needed
   // purely to keep the step-progress dot count accurate (4 steps via the No path, 3 via Yes).
   const [wentThroughRedirect, setWentThroughRedirect] = useState(false)
+  // Gates GooglePickerButton's autoOpen — set true the moment the Picker is first confirmed
+  // genuinely open (onPickerOpen), so a parent-level re-render/remount later in the same flow
+  // (e.g. triggered by onUpdated() after a successful pick, before the dialog closes) can't cause
+  // a freshly-mounted GooglePickerButton instance to auto-open the Picker a SECOND time — its own
+  // internal ref-based guard resets on every remount and can't protect against this by itself.
+  // Confirmed live 2026-08-22: after selecting a folder, focus returned to this same screen and
+  // the Picker auto-opened again. See .claude/plans/connector-microsoft-impl.md, item 22.
+  const [pickerAutoOpenedOnce, setPickerAutoOpenedOnce] = useState(false)
   // In-progress radio selection before "Continue" is pressed — kept separate from hasFolderReady
   // so picking a tile doesn't immediately navigate/open a tab; the user must confirm.
   const [folderReadyChoice, setFolderReadyChoice] = useState<boolean | null>(null)
@@ -236,12 +242,12 @@ export function GoogleDriveWorkspaceRoot({
     setPickerOpen(false)
     setWizardStep(1)
     setWentThroughRedirect(false)
+    setPickerAutoOpenedOnce(false)
     setGeneratedFolderName("")
     setEstimate(null)
     setEstimateLoading(false)
     setFromBreadcrumb(null)
     setToBreadcrumb(null)
-    setKnownFirmaFolders([])
     setHasFolderReady(null)
     setFolderReadyChoice(null)
     setFolderReadyCountdown(null)
@@ -265,6 +271,7 @@ export function GoogleDriveWorkspaceRoot({
       setFolderReadyCountdown(null)
       setHasOpenedDrive(false)
       setWentThroughRedirect(false)
+      setPickerAutoOpenedOnce(false)
       return
     }
     if (step === 3 && wentThroughRedirect) {
@@ -397,7 +404,6 @@ export function GoogleDriveWorkspaceRoot({
     setPreviewDrive("Shared Drive")
     setWizardStep(1)
     void fetchEstimate()
-    void fetchKnownFirmaFolders()
   }
 
   const confirmLocationChoice = useCallback((choice: "My Drive" | "Shared Drive") => {
@@ -418,63 +424,6 @@ export function GoogleDriveWorkspaceRoot({
     const t = setTimeout(() => setLocationCountdown(s => (s === null ? null : s - 1)), 1000)
     return () => clearTimeout(t)
   }, [locationChoice, locationCountdown, confirmLocationChoice])
-
-  // Reuse: on a repeat Shared Drive setup for the same Google account, offer any _firma folders
-  // already known from a prior connector's setup — skips the picker entirely.
-  const fetchKnownFirmaFolders = useCallback(async () => {
-    if (!accessToken || !connectionId) return
-    setKnownFoldersLoading(true)
-    try {
-      const res = await fetch('/api/connectors/google-drive', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-        body: JSON.stringify({ action: 'list-known-firma-folders', connectionId }),
-      })
-      if (res.ok) {
-        const data = await res.json() as { knownFolders: { sharedDriveId: string; driveName: string | null; firmaFolderId: string }[] }
-        setKnownFirmaFolders(data.knownFolders ?? [])
-      }
-    } catch { /* ignore — falls through to the picker */ } finally {
-      setKnownFoldersLoading(false)
-    }
-  }, [accessToken, connectionId])
-
-  const useKnownFirmaFolder = async (folder: { sharedDriveId: string; driveName: string | null; firmaFolderId: string }) => {
-    if (!accessToken) return
-    const oldRoot = rootFolderId?.trim() || ""
-    const parent = { id: folder.firmaFolderId, name: folder.driveName ? `${FIRMA_PARENT_FOLDER_NAME} in ${folder.driveName}` : FIRMA_PARENT_FOLDER_NAME }
-    if (oldRoot) {
-      setPendingFolder(parent)
-      setWizardStep(3)
-      void fetchBreadcrumbs(oldRoot, folder.firmaFolderId)
-      return
-    }
-    setSaving(true)
-    try {
-      // firmaFolderId is already the _firma folder itself — create the workspace folder directly
-      // inside it rather than routing through createWorkspaceUnder (which would create a second,
-      // redundant _firma nested inside this one).
-      const folderName = generateWorkspaceFolderName()
-      const createRes = await fetch('/api/connectors/google-drive', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-        body: JSON.stringify({ action: 'ensure-folder', connectionId, name: folderName, parentId: folder.firmaFolderId }),
-      })
-      if (!createRes.ok) {
-        const err = await createRes.json().catch(() => ({}))
-        throw new Error((err as { error?: string }).error || 'Failed to ensure workspace folder')
-      }
-      const { folderId } = await createRes.json()
-      await setWorkspaceRoot(folderId, accessToken)
-      addToast({ title: 'Folder created', message: `"${folderName}" set as your workspace root.`, type: 'success' })
-      await onUpdated()
-      closeDialog()
-    } catch (e) {
-      addToast({ title: 'Could not create folder', message: e instanceof Error ? e.message : 'Try again.', type: 'error' })
-    } finally {
-      setSaving(false)
-    }
-  }
 
   // The picked item is now a PARENT location, not a pre-named target — Picker can't discover a
   // hand-made _firma folder under drive.file scope, so the app always creates it itself, inside
@@ -907,31 +856,16 @@ export function GoogleDriveWorkspaceRoot({
               </div>
 
               <div className="space-y-3">
-                {knownFoldersLoading ? (
-                  <p className="text-xs text-[#45474c]">Checking for shared drives you&rsquo;ve already set up…</p>
-                ) : knownFirmaFolders.length > 0 ? (
-                  <div className="space-y-2 rounded border border-[#e5e7eb] bg-[#f9f9fb] p-3">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#45474c]">Reuse an existing setup</p>
-                    <div className="space-y-1.5">
-                      {knownFirmaFolders.map((folder) => (
-                        <button
-                          key={folder.firmaFolderId}
-                          type="button"
-                          disabled={saving}
-                          onClick={() => void useKnownFirmaFolder(folder)}
-                          className="flex w-full items-center gap-2 rounded border border-[#e5e7eb] bg-white px-3 py-2 text-left text-xs text-[#1b1b1d] hover:border-[#1b1b1d] hover:bg-[#f9f9fb] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <GoogleSharedDriveIcon size={14} className="shrink-0 opacity-80" aria-hidden />
-                          <span className="truncate">
-                            Use {FIRMA_PARENT_FOLDER_NAME} in <span className="font-semibold">{folder.driveName || "this shared drive"}</span>
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                    <p className="text-[11px] text-[#45474c]">Or answer below to pick a different location.</p>
-                  </div>
-                ) : null}
-
+                {/* The prior "Reuse a known _firma folder" shortcut was removed (2026-08-21) —
+                    without Google's restricted drives.get scope, the app can never show which
+                    Shared Drive a candidate folder actually lives in, and a single unlabeled
+                    candidate is not actually unambiguous (the account could have other Shared
+                    Drives Firma has simply never seen yet). Rather than offer a choice that can't
+                    be told apart from "a different drive that happens to also contain a _firma
+                    folder," the Picker (which IS backed by Google's own UI and does show real
+                    Shared Drive names) is the single source of truth again. Detection backend
+                    (listKnownFirmaFolders/persistKnownFirmaFolder) is kept, just unused by this
+                    screen — see .claude/plans/connector-microsoft-impl.md, item 21. */}
                 {hasFolderReady === null ? (
                   // Gate before Picker opens — Picker can only select an EXISTING folder (it has
                   // no inline "New Folder" capability, and the app can't create one on the user's
@@ -1081,7 +1015,16 @@ export function GoogleDriveWorkspaceRoot({
                       mode="select-folder"
                       connectionId={connectionId}
                       driveType="Shared Drive"
-                      onPickerOpen={() => { setSaving(true); setPickerOpen(true) }}
+                      // Auto-open only for the direct "Yes, I have a folder" path — the countdown
+                      // (or the click confirming it) already established a genuine intent to pick
+                      // a folder now, so opening the Picker immediately here skips a redundant
+                      // "click again to open the picker" screen. NOT auto-opened after the "No,
+                      // create one first" redirect path (wentThroughRedirect) — that path already
+                      // required an explicit "I've created a folder — continue" click, closer to
+                      // the actual picking moment, so the extra confirm step there is less
+                      // redundant. See .claude/plans/connector-microsoft-impl.md, item 21.
+                      autoOpen={!wentThroughRedirect && !pickerAutoOpenedOnce}
+                      onPickerOpen={() => { setSaving(true); setPickerOpen(true); setPickerAutoOpenedOnce(true) }}
                       onPickerCancel={() => { setSaving(false); setPickerOpen(false) }}
                       onImport={(items) => { setPickerOpen(false); void handleFolderPicked(items as { id: string; name: string }[]) }}
                     >

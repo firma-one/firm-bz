@@ -67,7 +67,7 @@ function initials(name: string) {
     return name.split(' ').map((p) => p[0]).join('').toUpperCase().slice(0, 2)
 }
 
-/** Static counterpart to firm-scoped EngagementAuditPane / AuditWithFilters, modeled on SandboxAuditPreview's pattern — aggregated across all demo clients/engagements. */
+/** Static counterpart to firm-scoped EngagementAuditPane / AuditWithFilters — aggregated across all demo clients/engagements. */
 export function DemoFirmAudit({ firm }: { firm: DemoFirm }) {
     const rows = buildAuditRows(firm).sort((a, b) => a.offsetDays - b.offsetDays)
     const now = Date.now()

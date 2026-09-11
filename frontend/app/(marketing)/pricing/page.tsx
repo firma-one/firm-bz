@@ -6,9 +6,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import {
     PRICING_COMPARISON,
     PRICING_PLANS,
-    PRICING_SANDBOX_COLUMN_ID,
     planCardUsageSummary,
-    sandboxPlanUsageSummary,
 } from "@/config/pricing"
 import { Header } from "@/components/layout/Header"
 import { Footer } from "@/components/layout/Footer"
@@ -153,7 +151,7 @@ function PricingComparisonTooltipBody({ row }: { row: PricingComparisonRow }) {
     ) : null
 }
 
-type MobileMatrixColumnId = typeof PRICING_SANDBOX_COLUMN_ID | PricingPlanColumnId
+type MobileMatrixColumnId = PricingPlanColumnId
 
 function getDisplayPrice(plan: PricingPlan, billingPeriod: "monthly" | "annual"): string | null {
     if (!plan.price || plan.price === "Contact Us") return null
@@ -177,9 +175,7 @@ export default function PricingPage() {
     }, [checkoutPlanFocus, billingPeriod])
 
     useEffect(() => {
-        if (mobileMatrixColumn !== PRICING_SANDBOX_COLUMN_ID) {
-            setCheckoutPlanFocus(checkoutPlanFromPricingPlanId(mobileMatrixColumn))
-        }
+        setCheckoutPlanFocus(checkoutPlanFromPricingPlanId(mobileMatrixColumn))
     }, [mobileMatrixColumn])
 
     const highlightPlanId = "Standard"
@@ -315,59 +311,9 @@ export default function PricingPage() {
 
                 {activeTab === "pricing" && <>
 
-                {/* Plan cards — sandbox first, then paid tiers */}
+                {/* Plan cards */}
                 <section className={cn(MARKETING_PAGE_SHELL, "mb-20 md:mb-28")}>
-                    <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-5 xl:gap-5 xl:items-stretch">
-                        {/* Free sandbox card — light theme matches Standard (featured) card */}
-                        <div
-                            className={cn(
-                                "relative z-[1] flex flex-col rounded-none border border-[#006e16]/35 bg-white/90 p-7 backdrop-blur-md shadow-[0_6px_24px_-6px_rgba(0,110,22,0.07),0_4px_14px_-4px_rgba(27,27,29,0.06)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_10px_32px_-8px_rgba(0,110,22,0.1),0_6px_18px_-6px_rgba(27,27,29,0.08)] md:p-8",
-                            )}
-                        >
-                            <div
-                                className={cn(
-                                    "mb-4 text-sm font-bold uppercase tracking-[0.18em] text-[#006e16]",
-                                    H,
-                                )}
-                            >
-                                Free
-                            </div>
-                            <div className="mb-2 flex items-baseline gap-1">
-                                <span className={cn("text-4xl font-bold tracking-tight text-[#1b1b1d]", H)}>$0</span>
-                                <span className="text-sm text-[#45474c]">/month</span>
-                            </div>
-                            <p className={cn("mb-0.5 text-xs text-[#006e16] font-semibold", H)}>
-                                Free forever
-                            </p>
-                            <p className="mb-4 text-xs text-[#45474c]">
-                                No credit card required
-                            </p>
-                            <div className="mb-5 space-y-1">
-                                {sandboxPlanUsageSummary().map((line, idx) => (
-                                    <p key={idx} className="text-sm text-[#45474c]">
-                                        {line}
-                                    </p>
-                                ))}
-                            </div>
-                            <p className="mb-8 flex-grow text-sm leading-relaxed text-[#45474c]">
-                                Explore the portal with your Demo firm. You can also create your own firm and start using the app right away (limits apply) — no card required.
-                            </p>
-                            <div className="mt-auto">
-                                <Link
-                                    href="/signup"
-                                    className={LANDING_LIME_CTA_CARD}
-                                    onClick={() => setCheckoutPlanFocus("Free Sandbox")}
-                                >
-                                    Get Started
-                                    <ArrowRight
-                                        className="h-4 w-4 shrink-0 transition-transform duration-200 group-hover:translate-x-0.5"
-                                        strokeWidth={2}
-                                        aria-hidden
-                                    />
-                                </Link>
-                            </div>
-                        </div>
-
+                    <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4 xl:gap-5 xl:items-stretch">
                         {PRICING_PLANS.map((plan) => {
                             const displayPrice = getDisplayPrice(plan, billingPeriod)
                             const isEnterprise = plan.id === "Enterprise"
@@ -479,29 +425,13 @@ export default function PricingPage() {
                     <TooltipProvider delayDuration={0}>
                         <div className="lg:hidden">
                             <p className={cn("mb-4 text-sm leading-relaxed text-[#45474c]", B)}>
-                                Select a column to compare. Demo is always shown as a reference when a paid plan is
-                                selected.
+                                Select a column to compare.
                             </p>
                             <div
                                 className="mb-6 flex flex-wrap gap-2"
                                 role="tablist"
                                 aria-label="Comparison column"
                             >
-                                <button
-                                    type="button"
-                                    role="tab"
-                                    aria-selected={mobileMatrixColumn === PRICING_SANDBOX_COLUMN_ID}
-                                    onClick={() => setMobileMatrixColumn(PRICING_SANDBOX_COLUMN_ID)}
-                                    className={cn(
-                                        "rounded-none border px-3 py-2 text-xs font-bold uppercase tracking-widest transition-colors min-h-[44px]",
-                                        H,
-                                        mobileMatrixColumn === PRICING_SANDBOX_COLUMN_ID
-                                            ? "border-[#006e16] bg-[#72ff70]/25 text-[#002203]"
-                                            : "border-[#c6c6cc]/40 bg-white text-[#45474c] hover:border-[#006e16]/40",
-                                    )}
-                                >
-                                    Demo
-                                </button>
                                 {PRICING_PLANS.map((plan) => (
                                     <button
                                         key={plan.id}
@@ -539,11 +469,7 @@ export default function PricingPage() {
                                         <div className="space-y-3">
                                             {category.rows.map((row) => {
                                                 const primary: PlanValue = row.values[mobileMatrixColumn] ?? false
-                                                const sandboxValue: PlanValue =
-                                                    row.values[PRICING_SANDBOX_COLUMN_ID] ?? false
-                                                const primaryHi =
-                                                    mobileMatrixColumn !== PRICING_SANDBOX_COLUMN_ID &&
-                                                    mobileMatrixColumn === highlightPlanId
+                                                const primaryHi = mobileMatrixColumn === highlightPlanId
                                                 return (
                                                     <div
                                                         key={`${category.name}-${row.feature}`}
@@ -568,10 +494,8 @@ export default function PricingPage() {
                                                         </div>
                                                         <div className="mt-3 flex flex-col gap-1 border-t border-[#eae7e9] pt-3">
                                                             <span className={cn("text-[10px] font-bold uppercase tracking-widest text-[#45474c]", H)}>
-                                                                {mobileMatrixColumn === PRICING_SANDBOX_COLUMN_ID
-                                                                    ? "Demo"
-                                                                    : PRICING_PLANS.find((p) => p.id === mobileMatrixColumn)
-                                                                          ?.title ?? mobileMatrixColumn}
+                                                                {PRICING_PLANS.find((p) => p.id === mobileMatrixColumn)
+                                                                    ?.title ?? mobileMatrixColumn}
                                                             </span>
                                                             <div className="flex justify-start">
                                                                 <PricingMatrixCell
@@ -580,24 +504,6 @@ export default function PricingPage() {
                                                                 />
                                                             </div>
                                                         </div>
-                                                        {mobileMatrixColumn !== PRICING_SANDBOX_COLUMN_ID ? (
-                                                            <div className="mt-3 flex flex-col gap-1 border-t border-dashed border-[#c6c6cc]/30 pt-3">
-                                                                <span
-                                                                    className={cn(
-                                                                        "text-[10px] font-bold uppercase tracking-widest text-[#45474c]",
-                                                                        H,
-                                                                    )}
-                                                                >
-                                                                    vs Demo
-                                                                </span>
-                                                                <div className="flex justify-start">
-                                                                    <PricingMatrixCell
-                                                                        value={sandboxValue}
-                                                                        standardHighlight={false}
-                                                                    />
-                                                                </div>
-                                                            </div>
-                                                        ) : null}
                                                     </div>
                                                 )
                                             })}
@@ -620,14 +526,6 @@ export default function PricingPage() {
                                             >
                                                 Capability
                                             </th>
-                                            <th
-                                                className={cn(
-                                                    "border-r border-[#c6c6cc]/15 p-4 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-[#45474c] md:p-6",
-                                                    H,
-                                                )}
-                                            >
-                                                Free
-                                            </th>
                                             {PRICING_PLANS.map((plan) => (
                                                 <th
                                                     key={plan.id}
@@ -648,7 +546,7 @@ export default function PricingPage() {
                                             <Fragment key={category.name}>
                                                 <tr>
                                                     <td
-                                                        colSpan={6}
+                                                        colSpan={5}
                                                         className={cn(
                                                             "bg-[#f6f3f4] px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.2em] text-[#45474c] md:px-6",
                                                             H,
@@ -658,8 +556,6 @@ export default function PricingPage() {
                                                     </td>
                                                 </tr>
                                                 {category.rows.map((row) => {
-                                                    const sandboxValue: PlanValue =
-                                                        row.values[PRICING_SANDBOX_COLUMN_ID] ?? false
                                                     return (
                                                         <tr
                                                             key={`${category.name}-${row.feature}`}
@@ -683,17 +579,6 @@ export default function PricingPage() {
                                                                         </Tooltip>
                                                                     )}
                                                                 </div>
-                                                            </td>
-                                                            <td
-                                                                className={cn(
-                                                                    "border-r border-[#c6c6cc]/15 p-4 text-center align-middle md:p-6",
-                                                                    "bg-[#f0edee]/50",
-                                                                )}
-                                                            >
-                                                                <PricingMatrixCell
-                                                                    value={sandboxValue}
-                                                                    standardHighlight={false}
-                                                                />
                                                             </td>
                                                             {PRICING_PLANS.map((plan) => {
                                                                 const value: PlanValue = row.values[plan.id] ?? false
@@ -753,7 +638,7 @@ export default function PricingPage() {
                                     Bring your own Storage Drive. Setup your client portal atop your Drive.
                                 </h2>
                                 <p className="mt-4 text-lg text-[#bfc6da]">
-                                    Start with a Demo firm or create your own — no card required. Upgrade to Standard and take off the training wheels.
+                                    Create your own firm and start using the app right away — no card required. Upgrade to Standard when you're ready to scale.
                                 </p>
                             </div>
                             <div className="flex w-full flex-col gap-4 sm:flex-row sm:w-auto">

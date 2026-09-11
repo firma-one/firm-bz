@@ -1,7 +1,6 @@
 import { Polar } from '@polar-sh/sdk'
 import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
-import { resolveGroupId } from '@/lib/billing/billing-group'
 import { type PricingModel, pricingModelFromRecurringFlag } from '@/lib/billing/pricing-model'
 import { refreshBillingPlanForFirmGroupUsers } from '@/lib/billing/billing-user-session-sync'
 import { resolveSubscriptionAuditUserId } from '@/lib/billing/subscription-audit'
@@ -256,8 +255,8 @@ async function shouldSkipFreeProvisioningForActivePaid(groupId: string): Promise
  * Required for onboarding unless POLAR_ALLOW_ONBOARDING_WITHOUT_BILLING=true.
  * On failure, throws so sandbox onboarding does not succeed.
  */
-export async function ensurePolarFreePlanForSandboxFirm(params: {
-    firmId: string
+export async function ensureGroupFreePlan(params: {
+    groupId: string
     userEmail: string
     customerName?: string | null
     /** User performing onboarding / billing setup; used for `subscriptions.createdBy` / `updatedBy`. */
@@ -292,7 +291,7 @@ export async function ensurePolarFreePlanForSandboxFirm(params: {
         )
     }
 
-    const groupId = await resolveGroupId(params.firmId)
+    const groupId = params.groupId
     if (await shouldSkipFreeProvisioningForActivePaid(groupId)) {
         return
     }
@@ -300,7 +299,6 @@ export async function ensurePolarFreePlanForSandboxFirm(params: {
     const server = polarServer()
 
     logger.info('[polar-free-plan] Starting free-plan provisioning', {
-        firmId: params.firmId,
         groupId,
         polarServer: server,
         userEmailDomain: params.userEmail.includes('@') ? params.userEmail.split('@')[1] : 'unknown',
@@ -334,7 +332,6 @@ export async function ensurePolarFreePlanForSandboxFirm(params: {
     if (state) {
         await persistGroupWithLifetimeFreePlan(groupId, state.id, params.userId, polarProduct)
         logger.info('[polar-free-plan] Linked existing Polar customer to lifetime free plan', {
-            firmId: params.firmId,
             groupId,
         })
         await assertGroupBillingLinked(groupId, expectedPricingModel)
@@ -378,6 +375,6 @@ export async function ensurePolarFreePlanForSandboxFirm(params: {
     const refreshed = await polar.customers.getStateExternal({ externalId: groupId })
     await persistGroupWithLifetimeFreePlan(groupId, refreshed.id, params.userId, polarProduct)
     await assertGroupBillingLinked(groupId, expectedPricingModel)
-    logger.info('[polar-free-plan] Lifetime free plan provisioning complete', { firmId: params.firmId, groupId })
+    logger.info('[polar-free-plan] Lifetime free plan provisioning complete', { groupId })
     await refreshBillingPlanForFirmGroupUsers(groupId)
 }

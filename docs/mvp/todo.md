@@ -40,6 +40,11 @@ See [`.claude/plans/beta-feedback-fixes.md`](../../.claude/plans/beta-feedback-f
 
 ## Delivery Workflow
 
+- [ ] **Deliverable Status Derivation, Multi-Assignee & History** — [plan](../../.claude/plans/2026-08-deliverable-status-derivation-and-assignee-history.md)
+  - Deliverable status becomes derived from sub-task Document statuses instead of manually set (drag-drop/dropdown removed for Deliverables)
+  - Document assignee becomes multi-select; in-review assignees shown as "Approver(s)" in UI (same underlying field)
+  - Persistent status/assignee change history per Document, powering a timeline view (reuses `PlatformAuditEvent`, exempted from purge)
+
 - [ ] **Redesign Share Status Labels** — [plan](../../.claude/plans/global-search-share-status-overview-metrics.md)
   - Replace `to_do | in_progress | in_review | done` with `ready | in_progress | in_review | approved`
   - "Ready" = deliverable identified but not yet shared; "Approved" = client confirmed
@@ -111,6 +116,13 @@ AI layer using Gemma 4 (HuggingFace Transformers, same runtime as release notes 
   - Body: personal note from Deepak asking how they heard about firmä and whether it's a good fit, offering a walkthrough call ([Calendly link](https://calendly.com/firmaone/firma-connect)) or async help
   - Needs `[name]` interpolation from signup data
 
+## Growth / Outreach
+
+- [ ] **Reddit Prospecting Screener** — discover-and-draft daily screener that finds Reddit threads matching the client-delivery/file-sharing ICP pain, scores/dedupes them, and drafts two reply variations per top thread for manual review and posting; never posts automatically
+  - DB-backed skill design (Prisma/Postgres `reddit_screener` schema, reuses existing local embeddings, thin non-LLM scripts + Claude does drafting live when the skill runs) — [plan](../../.claude/plans/reddit-screener-skill-db-backed.md)
+  - Earlier filesystem-based design (no DB, `/watch` slash command, JSON config/history files) — [plan](../../.claude/plans/reddit-watcher-plan-v2.md)
+  - Two distinct designs exist; pick one (or merge) before implementation starts
+
 ## Marketing / Landing
 
 - [ ] **Landing Page: "Enterprise-grade everything" security section** — [plan](../../.claude/plans/landing-security-section.md)
@@ -128,6 +140,11 @@ AI layer using Gemma 4 (HuggingFace Transformers, same runtime as release notes 
 - [ ] **GDrive Recycle Bin quick link (Firm Admin only)** — quick link icon in the Topbar that opens the Google Drive Recycle Bin in a new tab; visible to Firm Admins only. See [beta-feedback-fixes.md §7](../../.claude/plans/beta-feedback-fixes.md)
 
 ## Infrastructure / Maintenance
+
+- [ ] **Admin Scripts: Persisted Run History** — [plan](../../.claude/plans/admin-scripts-run-history.md)
+  - `/system/admin-scripts` runs one-off scripts server-side but only shows results live in the browser tab that triggered them — no DB-backed history of past runs (status, timestamp, who ran it, summary)
+  - New `AdminScriptRun` model + write from the existing POST route; new run-history UI per script
+  - Discovered while adding the OneDrive guest pre-invite backfill script (see Connector: OneDrive Support plan, item 19 Part 4)
 
 - [ ] **IMP: Batch `index-file` calls in `processUploads` (multi-file picker upload)** — `frontend/components/projects/hooks/use-engagement-upload.ts`
   - `processUploads` (plain multi-file picker, not folder upload) still POSTs `/api/projects/[projectId]/index-file` once **per file**, sequentially inside its upload loop — unlike `handleBatchResolution` and `processFolderUpload`, which already send one batched POST (`files: [...]`) for the whole set
@@ -180,3 +197,9 @@ AI layer using Gemma 4 (HuggingFace Transformers, same runtime as release notes 
 ## Future Roadmap
 
 - [ ] **Branded Link Redirect System (`/to/`)** — [PRD](../prd-linkfarm.md) — Deferred; self-hosted URL shortener at `firma.bz/to/<slug>` with click tracking, source attribution, and UTM passthrough. Revisit when content distribution volume justifies the infrastructure (see PRD for conditions).
+
+- [ ] **DocuSign-Style E-Signature ("Firma Sign")** — [plan](../../.claude/plans/docusign-alt.md) — Request signatures on engagement documents from external signers via tokenized links; captured signature burned into the PDF and routed back through the existing connector storage.
+  - Phase 1 (MVP, ~2–3 wks): single signer, visual-only stamp (not cryptographically sealed), reuses `pdf-lib` watermark pattern + existing invitation/email infra
+  - Phase 2 (~1–2 wks): multi-signer sequential/parallel routing, reminder cron
+  - Phase 3 (optional, 2–4 wks + legal review): cryptographic PDF sealing, tamper-evident audit trail, ESIGN/UETA compliance — only if legally-binding signatures (not just visual) are required
+  - Net-new: PDF viewer/annotation UI (no `react-pdf`/`pdf.js` in stack today), signer routing state machine, signature capture UI

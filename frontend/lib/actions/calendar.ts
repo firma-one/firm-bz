@@ -6,6 +6,7 @@ import { createAdminClient } from '@/utils/supabase/admin'
 import { redirect } from 'next/navigation'
 import { parseSettingsFromDb, type ActivityStatus } from '@/lib/sharing-settings'
 import { getReminderKeysForUser } from '@/lib/actions/user-reminders'
+import { engagementPath } from '@/lib/navigation/firm-paths'
 
 export type CalendarEngagement = {
   id: string
@@ -75,7 +76,7 @@ export async function getFirmCalendarData(firmSlug: string): Promise<CalendarDat
 
   const firm = await prisma.firm.findUnique({
     where: { slug: firmSlug },
-    select: { id: true },
+    select: { id: true, group: { select: { slug: true } } },
   })
   if (!firm) return EMPTY_CALENDAR_DATA
 
@@ -188,7 +189,7 @@ export async function getFirmCalendarData(firmSlug: string): Promise<CalendarDat
   const hasDocumentReminder = (documentId: string) => reminderKeys.has(`platform.documents:${documentId}`)
 
   for (const e of engagements) {
-    const engagementUrl = `/d/f/${firmSlug}/c/${e.client.slug}/e/${e.slug}`
+    const engagementUrl = engagementPath(firm.group.slug, firmSlug, e.client.slug, e.slug)
     const engagementDueDate = e.dueDate?.toISOString() ?? null
     const engagementHasReminder = hasEngagementReminder(e.id)
 

@@ -65,11 +65,6 @@ export function planCardUsageSummary(plan: PricingPlan): string[] {
     return []
 }
 
-/** Free Demo card — same usage framing as the comparison table Sandbox column. */
-export function sandboxPlanUsageSummary(): string[] {
-    return ['1 firm · 1 client', '1 active engagement', '10 documents']
-}
-
 /**
  * Four engagement personas — same copy as `persona.description` in `frontend/prisma/seed.ts`.
  * Used for rich pricing tooltips (`role` highlighted) and plain `ENGAGEMENT_PERSONAS_PRICING_TOOLTIP` elsewhere.
@@ -172,17 +167,6 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
     {
         name: "USAGE",
         rows: [
-            {
-                feature: "Demo firm",
-                tooltip: "A pre-loaded firm workspace with sample clients, engagements, and documents — included on all plans for exploration and demos. Does not count toward your firm limit.",
-                values: {
-                    Sandbox: true,
-                    Standard: true,
-                    Pro: true,
-                    Business: true,
-                    Enterprise: true,
-                },
-            },
             {
                 feature: "Firm → Client → Engagement → Deliverable → Document hierarchy",
                 tooltip: "Clean structure: Firm → Client → Engagement → Deliverable → Document. Maps to folders in your Drive. Clients see a clear place for their engagement and document handoffs. Each column shows the included limit at every level.",
@@ -381,13 +365,4 @@ export function getSandboxPlanHighlights(): string[] {
         }
     }
     return bullets
-}
-
-/** First line of Profile → What's included for the free plan. */
-export const PRICING_SANDBOX_PROFILE_LEAD =
-    'Free plan — no credit card required. Upgrade to Standard and take off the training wheels.'
-
-/** Sandbox workspace: same facts as /pricing (Standard column) plus hero line. */
-export function getProfileBillingSandboxInclusions(): string[] {
-    return [PRICING_SANDBOX_PROFILE_LEAD, ...getPricingComparisonBulletsForPlan('Standard')]
 }

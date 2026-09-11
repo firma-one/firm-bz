@@ -76,6 +76,15 @@ export async function POST(request: NextRequest) {
       // Use state parameter to pass userId, organizationId, next redirect path, and popup flow metadata
       const flow = body.flow === 'popup' ? 'popup' : 'redirect'
       const nonce = flow === 'popup' ? randomBytes(16).toString('hex') : undefined
+      // declaredAccountType (2026-08-19) — upfront Personal/Work-School answer from the new
+      // AccountTypeDialog, carried through state. Does NOT currently branch `scopes` above — no
+      // Google scope requires Workspace admin consent today, confirmed via research — unlike
+      // OneDrive, this field has no scope-selection effect here. It DOES still override
+      // isPersonalAccount at callback time (callback/route.ts) the same way OneDrive's does — the
+      // declared answer is authoritative there, not merely a fallback input to detection — which
+      // in turn drives GoogleDriveWorkspaceRoot's existing auto-skip of the My Drive/Shared Drive
+      // picker. See .claude/plans/connector-microsoft-impl.md, item 20.
+      const declaredAccountType = body.declaredAccountType === 'personal' ? 'personal' : 'work_school'
       const stateObj = {
         userId,
         organizationId: body.organizationId,
@@ -87,7 +96,8 @@ export async function POST(request: NextRequest) {
         ...(body.replaceConnectorId && { replaceConnectorId: body.replaceConnectorId }),
         ...(body.friendlyName && { friendlyName: body.friendlyName }),
         ...(nonce && { nonce }),
-        ...(flow === 'popup' && body.openerOrigin && { openerOrigin: body.openerOrigin })
+        ...(flow === 'popup' && body.openerOrigin && { openerOrigin: body.openerOrigin }),
+        declaredAccountType,
       }
       const state = Buffer.from(JSON.stringify(stateObj)).toString('base64')
 
@@ -804,6 +814,8 @@ export async function GET(request: NextRequest) {
               name: connector.name,
               email: (connector.settings as any)?.accountEmail || null,
               isPersonalAccount: (connector.settings as any)?.isPersonalAccount ?? null,
+              accountTypeMismatch: (connector.settings as any)?.accountTypeMismatch ?? false,
+              detectedIsPersonalAccount: (connector.settings as any)?.detectedIsPersonalAccount ?? null,
               externalAccountId: connector.externalAccountId,
               rootFolderId,
               rootFolderName,

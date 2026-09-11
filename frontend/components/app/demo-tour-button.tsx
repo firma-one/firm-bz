@@ -7,9 +7,10 @@ import { usePathname } from "next/navigation"
 
 interface DemoTourButtonProps {
   firmSlug: string
+  groupSlug: string
 }
 
-export function DemoTourButton({ firmSlug }: DemoTourButtonProps) {
+export function DemoTourButton({ firmSlug, groupSlug }: DemoTourButtonProps) {
   const { restartTour, run } = useDemoTour()
   const pathname = usePathname()
 
@@ -22,7 +23,7 @@ export function DemoTourButton({ firmSlug }: DemoTourButtonProps) {
         <TooltipTrigger asChild>
           <button
             type="button"
-            onClick={() => restartTour(firmSlug)}
+            onClick={() => restartTour(firmSlug, groupSlug)}
             className="h-11 w-11 rounded-full bg-primary text-white shadow-lg hover:brightness-105 hover:shadow-xl transition-all flex items-center justify-center"
             aria-label="Restart guided tour"
           >
