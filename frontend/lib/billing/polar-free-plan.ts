@@ -250,6 +250,34 @@ async function shouldSkipFreeProvisioningForActivePaid(groupId: string): Promise
 }
 
 /**
+ * `getStateExternal` can 404 for a customer that was only just created — the customer is not yet
+ * readable by external id. Retries briefly and returns `null` instead of throwing, so callers
+ * decide whether a miss is fatal.
+ */
+async function getStateExternalWithRetry(
+    polar: Polar,
+    groupId: string,
+    attempts = 3
+): Promise<Awaited<ReturnType<Polar['customers']['getStateExternal']>> | null> {
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+        try {
+            return await polar.customers.getStateExternal({ externalId: groupId })
+        } catch (e) {
+            const giveUp = attempt === attempts
+            logger.warn('[polar-free-plan] getStateExternal miss', {
+                groupId,
+                attempt,
+                giveUp,
+                message: e instanceof Error ? e.message : String(e),
+            })
+            if (giveUp) return null
+            await new Promise((resolve) => setTimeout(resolve, attempt * 300))
+        }
+    }
+    return null
+}
+
+/**
  * Sandbox free tier: **Polar API first** (`getStateExternal` / `customers.create`), then **DB insert on success**
  * (`platform.subscriptions` active row + firm billing columns). Initial free provisioning is not done via Polar webhooks.
  * Required for onboarding unless POLAR_ALLOW_ONBOARDING_WITHOUT_BILLING=true.
@@ -347,6 +375,12 @@ export async function ensureGroupFreePlan(params: {
         billingEmailLocal: email.split('@')[0]?.slice(0, 20),
     })
 
+    // `customers.create` returns the customer, so take the id straight from it. Re-reading it back
+    // by external id here used to 404 — the customer is not immediately readable that way — and
+    // that 404 escaped, aborting auto-provisioning for every new signup (it surfaces to the user
+    // as the onboarding screen, via resolveDefaultFirmLandingPath's catch).
+    let polarCustomerId: string | null = null
+
     try {
         const created = await polar.customers.create({
             email,
@@ -354,6 +388,7 @@ export async function ensureGroupFreePlan(params: {
             externalId: groupId,
             metadata: { groupId },
         })
+        polarCustomerId = created.id
         logger.info('[polar-free-plan] customers.create ok', {
             groupId,
             polarCustomerId: created.id,
@@ -372,8 +407,19 @@ export async function ensureGroupFreePlan(params: {
         logger.warn('[polar-free-plan] customers.create duplicate/race; continuing', { groupId, msg })
     }
 
-    const refreshed = await polar.customers.getStateExternal({ externalId: groupId })
-    await persistGroupWithLifetimeFreePlan(groupId, refreshed.id, params.userId, polarProduct)
+    if (!polarCustomerId) {
+        // Duplicate/race path above: the customer exists but we never saw its id, so a lookup is
+        // the only way to get one. Retry rather than failing provisioning on a single miss.
+        const existing = await getStateExternalWithRetry(polar, groupId)
+        if (!existing) {
+            throw new Error(
+                `Polar customer for group ${groupId} could not be resolved after create reported a duplicate.`
+            )
+        }
+        polarCustomerId = existing.id
+    }
+
+    await persistGroupWithLifetimeFreePlan(groupId, polarCustomerId, params.userId, polarProduct)
     await assertGroupBillingLinked(groupId, expectedPricingModel)
     logger.info('[polar-free-plan] Lifetime free plan provisioning complete', { groupId })
     await refreshBillingPlanForFirmGroupUsers(groupId)
