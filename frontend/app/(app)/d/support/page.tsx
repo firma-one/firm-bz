@@ -3,6 +3,7 @@ import { LifeBuoy, ChevronRight, Building2, Home } from 'lucide-react'
 import { getFirmName } from '@/lib/actions/hierarchy'
 import { canManageOrganization } from '@/lib/permission-helpers'
 import { prisma, basePrisma } from '@/lib/prisma'
+import { firmPath } from '@/lib/navigation/firm-paths'
 import { CreateSupportRequestModal } from '@/components/support/create-support-request-modal'
 import { SupportRequestsList } from '@/components/support/support-requests-list'
 import Link from 'next/link'
@@ -18,7 +19,10 @@ export default async function SupportPage({
 
   if (!firmSlug) redirect('/d')
 
-  const firm = await prisma.firm.findUnique({ where: { slug: firmSlug }, select: { id: true } })
+  const firm = await prisma.firm.findUnique({
+    where: { slug: firmSlug },
+    select: { id: true, group: { select: { slug: true } } },
+  })
   if (!firm) redirect('/d')
 
   const canManage = await canManageOrganization(firm.id)
@@ -37,7 +41,7 @@ export default async function SupportPage({
         <ChevronRight className="h-3.5 w-3.5 text-[#d1d5db]" />
         <Building2 className="h-4 w-4 text-primary" />
         <Link
-          href={`/d/f/${firmSlug}`}
+          href={firmPath(firm.group.slug, firmSlug)}
           className="font-mono text-[11px] font-bold text-[#1b1b1d] uppercase tracking-tighter hover:text-primary transition-colors"
         >
           {firmName || 'Organization'}

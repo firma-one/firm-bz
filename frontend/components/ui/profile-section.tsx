@@ -35,6 +35,9 @@ interface ProfileSectionProps {
   supportHref?: string
   /** When true, shows an Administration link to /system (SYS_ADMIN only). */
   isSystemAdmin?: boolean
+  /** When true, shows a "Switch Workspace" link to `/d/` — see shouldShowSwitchWorkspace()
+   *  in lib/actions/firms.ts (2+ groups, or 1 group where the user isn't the group admin). */
+  showSwitchWorkspace?: boolean
 }
 
 export function ProfileSection({
@@ -47,6 +50,7 @@ export function ProfileSection({
   planSubtitleLoading = false,
   supportHref,
   isSystemAdmin = false,
+  showSwitchWorkspace = false,
 }: ProfileSectionProps) {
   const [isProfileOpen, setIsProfileOpen] = useState(false)
   const profileRef = useRef<HTMLDivElement>(null)
@@ -241,14 +245,16 @@ export function ProfileSection({
                       Sys Admin
                     </Link>
                   )}
-                  <Link
-                    href="/d/f/"
-                    onClick={() => setIsProfileOpen(false)}
-                    className="d-sidebar-nav flex w-full items-center gap-2 rounded px-3 py-2.5 text-[#45474c] transition-colors hover:bg-[#f3f4f6] hover:text-[#1b1b1d]"
-                  >
-                    <Building2 className="h-4 w-4 shrink-0" aria-hidden />
-                    Switch Firm
-                  </Link>
+                  {showSwitchWorkspace && (
+                    <Link
+                      href="/d/"
+                      onClick={() => setIsProfileOpen(false)}
+                      className="d-sidebar-nav flex w-full items-center gap-2 rounded px-3 py-2.5 text-[#45474c] transition-colors hover:bg-[#f3f4f6] hover:text-[#1b1b1d]"
+                    >
+                      <Building2 className="h-4 w-4 shrink-0" aria-hidden />
+                      Switch Workspace
+                    </Link>
+                  )}
                   <button
                     type="button"
                     onClick={() => signOut()}

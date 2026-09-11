@@ -26,6 +26,7 @@ import type { FirmInsightsResponse, ProspectItem, PendingInviteItem, EngagementD
 import type { DriveAlertsResponse, EngagementDriveAlert } from '@/app/api/firms/[firmId]/drive-alerts/route'
 import type { ReminderWithContext } from '@/lib/actions/user-reminders'
 import { markAllRemindersDone, markReminderDone } from '@/lib/actions/user-reminders'
+import { clientPath, engagementPath } from '@/lib/navigation/firm-paths'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -124,7 +125,7 @@ function ReminderRow({ reminder, onMarkDone, isMarkingDone }: { reminder: Remind
     )
 }
 
-function ThreadRow({ item, firmSlug }: { item: UnansweredThreadItem; firmSlug: string }) {
+function ThreadRow({ item, groupSlug, firmSlug }: { item: UnansweredThreadItem; groupSlug: string; firmSlug: string }) {
     const timeAgo = (() => {
         const diff = Date.now() - new Date(item.lastMessageAt).getTime()
         const h = Math.floor(diff / 3600000)
@@ -134,7 +135,7 @@ function ThreadRow({ item, firmSlug }: { item: UnansweredThreadItem; firmSlug: s
     })()
     return (
         <Link
-            href={`/d/f/${firmSlug}/c/${item.clientSlug}/e/${item.engagementSlug}`}
+            href={engagementPath(groupSlug, firmSlug, item.clientSlug, item.engagementSlug)}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-[#f3f4f6] transition-colors rounded border border-[#d1d5db] bg-white shadow-sm"
@@ -156,11 +157,11 @@ function ThreadRow({ item, firmSlug }: { item: UnansweredThreadItem; firmSlug: s
     )
 }
 
-function ProspectRow({ item, firmSlug }: { item: ProspectItem; firmSlug: string }) {
+function ProspectRow({ item, groupSlug, firmSlug }: { item: ProspectItem; groupSlug: string; firmSlug: string }) {
     const labelClass = deltaColor(item.daysUntil)
     return (
         <Link
-            href={`/d/f/${firmSlug}/c/${item.clientSlug}`}
+            href={clientPath(groupSlug, firmSlug, item.clientSlug)}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-[#f3f4f6] transition-colors rounded border border-[#d1d5db] bg-white shadow-sm"
@@ -186,11 +187,11 @@ function ProspectRow({ item, firmSlug }: { item: ProspectItem; firmSlug: string 
     )
 }
 
-function InviteRow({ item, firmSlug }: { item: PendingInviteItem; firmSlug: string }) {
+function InviteRow({ item, groupSlug, firmSlug }: { item: PendingInviteItem; groupSlug: string; firmSlug: string }) {
     const labelClass = item.daysUntilExpiry <= 2 ? 'bg-red-50 text-red-700 border-red-200' : item.daysUntilExpiry <= 5 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-slate-50 text-slate-600 border-slate-200'
     return (
         <Link
-            href={`/d/f/${firmSlug}/c/${item.clientSlug}/e/${item.engagementSlug}/members`}
+            href={engagementPath(groupSlug, firmSlug, item.clientSlug, item.engagementSlug, { tab: 'members' })}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-[#f3f4f6] transition-colors rounded border border-[#d1d5db] bg-white shadow-sm"
@@ -209,11 +210,11 @@ function InviteRow({ item, firmSlug }: { item: PendingInviteItem; firmSlug: stri
     )
 }
 
-function EngagementDueRow({ item, firmSlug }: { item: EngagementDueSoonItem; firmSlug: string }) {
+function EngagementDueRow({ item, groupSlug, firmSlug }: { item: EngagementDueSoonItem; groupSlug: string; firmSlug: string }) {
     const labelClass = deltaColor(item.daysUntil)
     return (
         <Link
-            href={`/d/f/${firmSlug}/c/${item.clientSlug}/e/${item.engagementSlug}`}
+            href={engagementPath(groupSlug, firmSlug, item.clientSlug, item.engagementSlug)}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-[#f3f4f6] transition-colors rounded border border-[#d1d5db] bg-white shadow-sm"
@@ -232,10 +233,10 @@ function EngagementDueRow({ item, firmSlug }: { item: EngagementDueSoonItem; fir
     )
 }
 
-function DriveAlertRow({ item, firmSlug }: { item: EngagementDriveAlert; firmSlug: string }) {
+function DriveAlertRow({ item, groupSlug, firmSlug }: { item: EngagementDriveAlert; groupSlug: string; firmSlug: string }) {
     return (
         <Link
-            href={`/d/f/${firmSlug}/c/${item.clientSlug}/e/${item.engagementSlug}`}
+            href={engagementPath(groupSlug, firmSlug, item.clientSlug, item.engagementSlug)}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-[#f3f4f6] transition-colors rounded border border-[#d1d5db] bg-white shadow-sm"
@@ -258,10 +259,11 @@ function DriveAlertRow({ item, firmSlug }: { item: EngagementDriveAlert; firmSlu
 
 interface FirmActionCenterProps {
     firmId: string
+    groupSlug: string
     firmSlug: string
 }
 
-export function FirmActionCenter({ firmId, firmSlug }: FirmActionCenterProps) {
+export function FirmActionCenter({ firmId, groupSlug, firmSlug }: FirmActionCenterProps) {
     const { session } = useAuth()
     const [data, setData] = useState<FirmInsightsResponse | null>(null)
     const [loading, setLoading] = useState(true)
@@ -588,7 +590,7 @@ export function FirmActionCenter({ firmId, firmSlug }: FirmActionCenterProps) {
                         <SectionBlock title="Unanswered Client Threads" icon={MessageSquare}>
                             <div className="space-y-2">
                                 {unansweredThreads.length > 0 ? unansweredThreads.map((t) => (
-                                    <ThreadRow key={t.threadId} item={t} firmSlug={firmSlug} />
+                                    <ThreadRow key={t.threadId} item={t} groupSlug={groupSlug} firmSlug={firmSlug} />
                                 )) : (
                                     <div className="flex items-center gap-2 p-3 rounded bg-green-50 border border-green-100">
                                         <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
@@ -621,7 +623,7 @@ export function FirmActionCenter({ firmId, firmSlug }: FirmActionCenterProps) {
                             <SectionBlock title="Overdue Engagements" icon={Briefcase}>
                                 <div className="space-y-2">
                                     {overdueEngagements.slice(0, 5).map((e) => (
-                                        <EngagementDueRow key={e.engagementId} item={e} firmSlug={firmSlug} />
+                                        <EngagementDueRow key={e.engagementId} item={e} groupSlug={groupSlug} firmSlug={firmSlug} />
                                     ))}
                                 </div>
                             </SectionBlock>
@@ -630,7 +632,7 @@ export function FirmActionCenter({ firmId, firmSlug }: FirmActionCenterProps) {
                             <SectionBlock title="Overdue Follow-ups" icon={TrendingUp}>
                                 <div className="space-y-2">
                                     {overdueProspects.slice(0, 5).map((p) => (
-                                        <ProspectRow key={p.clientId} item={p} firmSlug={firmSlug} />
+                                        <ProspectRow key={p.clientId} item={p} groupSlug={groupSlug} firmSlug={firmSlug} />
                                     ))}
                                 </div>
                             </SectionBlock>
@@ -639,7 +641,7 @@ export function FirmActionCenter({ firmId, firmSlug }: FirmActionCenterProps) {
                             <SectionBlock title="Expired Invitations" icon={MailOpen}>
                                 <div className="space-y-2">
                                     {expiredInvites.slice(0, 5).map((inv) => (
-                                        <InviteRow key={inv.invitationId} item={inv} firmSlug={firmSlug} />
+                                        <InviteRow key={inv.invitationId} item={inv} groupSlug={groupSlug} firmSlug={firmSlug} />
                                     ))}
                                 </div>
                             </SectionBlock>
@@ -668,7 +670,7 @@ export function FirmActionCenter({ firmId, firmSlug }: FirmActionCenterProps) {
                             <SectionBlock title="Engagement Due Dates" icon={Briefcase}>
                                 <div className="space-y-2">
                                     {upcomingEngagements.slice(0, 6).map((e) => (
-                                        <EngagementDueRow key={e.engagementId} item={e} firmSlug={firmSlug} />
+                                        <EngagementDueRow key={e.engagementId} item={e} groupSlug={groupSlug} firmSlug={firmSlug} />
                                     ))}
                                 </div>
                             </SectionBlock>
@@ -677,7 +679,7 @@ export function FirmActionCenter({ firmId, firmSlug }: FirmActionCenterProps) {
                             <SectionBlock title="Pending Invitations" icon={MailOpen}>
                                 <div className="space-y-2">
                                     {pendingInvites.slice(0, 5).map((inv) => (
-                                        <InviteRow key={inv.invitationId} item={inv} firmSlug={firmSlug} />
+                                        <InviteRow key={inv.invitationId} item={inv} groupSlug={groupSlug} firmSlug={firmSlug} />
                                     ))}
                                 </div>
                             </SectionBlock>
@@ -693,7 +695,7 @@ export function FirmActionCenter({ firmId, firmSlug }: FirmActionCenterProps) {
                                 <SectionBlock title={title} icon={icon}>
                                     <div className="space-y-2">
                                         {items.map(item => (
-                                            <DriveAlertRow key={item.engagementId} item={item} firmSlug={firmSlug} />
+                                            <DriveAlertRow key={item.engagementId} item={item} groupSlug={groupSlug} firmSlug={firmSlug} />
                                         ))}
                                     </div>
                                 </SectionBlock>

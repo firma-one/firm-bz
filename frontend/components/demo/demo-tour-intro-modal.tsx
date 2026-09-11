@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { Clock3, FastForward, MapPinned, Play, Square } from 'lucide-react'
 import { useDemoTour } from '@/lib/demo/demo-tour-context'
 
@@ -7,14 +8,16 @@ import { useDemoTour } from '@/lib/demo/demo-tour-context'
  * localStorage instead of a server-resolved firm/client/engagement slug set. */
 export function DemoTourIntroModal() {
     const { showIntroModal, closeIntroModal, startTour, resumeTour, resumableStepIndex } = useDemoTour()
+    const [neverShowAgain, setNeverShowAgain] = useState(false)
 
     if (!showIntroModal) return null
 
     const hasProgress = resumableStepIndex !== null && resumableStepIndex > 0
+    const skip = () => closeIntroModal(neverShowAgain)
 
     return (
         <div className="fixed inset-0 z-[10060] flex items-center justify-center">
-            <div className="absolute inset-0 bg-black/40" onClick={closeIntroModal} />
+            <div className="absolute inset-0 bg-black/40" onClick={skip} />
 
             <div className="relative bg-white rounded shadow-2xl border border-[#e5e7eb] w-full max-w-sm mx-4 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
                 <div className="bg-primary/8 border-b border-[#e5e7eb] px-5 py-4 flex items-center gap-3">
@@ -51,6 +54,20 @@ export function DemoTourIntroModal() {
                     )}
                 </div>
 
+                {!hasProgress && (
+                    <div className="px-5 pb-2">
+                        <label className="flex items-center gap-1.5 text-[11px] text-[#45474c] cursor-pointer select-none">
+                            <input
+                                type="checkbox"
+                                checked={neverShowAgain}
+                                onChange={(e) => setNeverShowAgain(e.target.checked)}
+                                className="h-3 w-3 rounded border-[#e5e7eb] accent-primary"
+                            />
+                            Don&apos;t show this again
+                        </label>
+                    </div>
+                )}
+
                 <div className="px-5 pb-5 flex items-center gap-2">
                     {hasProgress ? (
                         <>
@@ -80,7 +97,7 @@ export function DemoTourIntroModal() {
                             </button>
                             <button
                                 type="button"
-                                onClick={closeIntroModal}
+                                onClick={skip}
                                 className="flex-1 h-9 rounded border border-[#e5e7eb] text-[10px] font-headline font-bold tracking-widest uppercase text-[#45474c] hover:bg-[#f3f4f6] transition-colors flex items-center justify-center gap-1.5"
                             >
                                 <Square className="h-3.5 w-3.5" /> Skip

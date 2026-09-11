@@ -11,9 +11,12 @@ import {
 } from '@/lib/billing/billing-group'
 import { parseEntitledFirms, parseEntitledEngagements, parseEntitledClients, parseEntitledClientContacts, parseEntitledDeliverables, parseEntitledDocuments, parseEntitledAuditDays, parseEntitledCommentHistoryDays } from '@/lib/billing/subscription-metadata'
 
-// Sandbox (demo) firms keep full audit history so seeded demo data is visible,
+// Free-plan groups keep full audit history so seeded/early data is visible,
 // regardless of entitledAuditDays in metadata (which is 0 for the free plan).
 const SANDBOX_AUDIT_DAYS = null
+
+/** The Subscription.plan value written for every free-tier group (see lib/billing/polar-free-plan.ts). */
+const FREE_PLAN_NAME = 'Free'
 
 /**
  * Returns true when a firm is a platform anchor/demo firm.
@@ -49,7 +52,6 @@ function planEngagementCapFallback(plan: string | null): number {
 export type AnchorCapsRow = {
     id: string
     groupId: string
-    sandboxOnly: boolean
     subscriptionStatus: string | null
     subscriptionPlan: string | null
     pricingModel: string | null
@@ -65,17 +67,14 @@ export type AnchorCapsRow = {
     capsLocked: boolean
 }
 
-export async function loadAnchorForCaps(firmId: string): Promise<AnchorCapsRow | null> {
-    const groupId = await resolveGroupId(firmId)
-    const requestingFirm = await prisma.firm.findUnique({ where: { id: firmId }, select: { id: true, sandboxOnly: true } })
-    if (!requestingFirm) return null
+/** Shared row-building logic for both firm-scoped and group-scoped anchor lookups. */
+async function buildAnchorCapsRow(id: string, groupId: string): Promise<AnchorCapsRow> {
     const sub = await getActiveSubscriptionForGroup(groupId)
     const settings = (sub?.settings ?? {}) as Record<string, unknown>
     const meta = (settings.metadata ?? {}) as Record<string, unknown>
     return {
-        id: requestingFirm.id,
+        id,
         groupId,
-        sandboxOnly: isAnchorFirm(requestingFirm),
         subscriptionStatus: subscriptionAccessStatusLabel(sub),
         subscriptionPlan: sub?.plan ?? null,
         pricingModel: sub?.pricingModel ?? null,
@@ -92,15 +91,28 @@ export async function loadAnchorForCaps(firmId: string): Promise<AnchorCapsRow |
     }
 }
 
+export async function loadAnchorForCaps(firmId: string): Promise<AnchorCapsRow | null> {
+    const requestingFirm = await prisma.firm.findUnique({ where: { id: firmId }, select: { id: true, groupId: true } })
+    if (!requestingFirm) return null
+    return buildAnchorCapsRow(requestingFirm.id, requestingFirm.groupId)
+}
+
+/** Group-scoped variant — used where there's no specific "requesting firm" in context
+ * (e.g. checking a group's overall firm-workspace cap before a new firm is created). */
+export async function loadAnchorForCapsByGroupId(groupId: string): Promise<AnchorCapsRow> {
+    return buildAnchorCapsRow(groupId, groupId)
+}
+
 /**
- * True when anchor should use sandbox demo caps (free sandbox), not paid caps.
- * Uses hasPolarSubscriptionId as the discriminator — free plan provisioning always writes
- * polarSubscriptionId=null regardless of whether the Polar free product is one-time or recurring.
+ * True when the anchor's group is on the free plan and should use free-tier default caps,
+ * not paid-plan caps. Derived from the group's actual Subscription.plan — not any firm's
+ * sandboxOnly flag, since sandboxOnly firms are being retired (see
+ * .claude/plans/sandbox-firm-removal.md). hasPolarSubscriptionId is kept as a secondary
+ * signal: free-plan provisioning always writes polarSubscriptionId=null.
  */
 export function anchorUsesSandboxCapDefaults(anchor: AnchorCapsRow): boolean {
-    if (!isAnchorFirm(anchor)) return false
     if (anchor.hasPolarSubscriptionId) return false
-    return true
+    return anchor.subscriptionPlan === FREE_PLAN_NAME || anchor.subscriptionPlan == null
 }
 
 export function effectiveActiveEngagementCap(anchor: AnchorCapsRow): number {
@@ -174,19 +186,11 @@ export async function assertWithinActiveEngagementCap(workspaceFirmId: string): 
     }
 }
 
-/** Firm workspaces allowed for this billing group. Sandbox firm excluded from count. */
+/** Firm workspaces allowed for this billing group. Sandbox firms excluded from count. */
 export async function assertWithinFirmGroupCap(groupId: string): Promise<void> {
     if (!enforceBillingCaps()) return
 
-    // Find the sandbox firm in the group to load caps from
-    const sandboxFirm = await prisma.firm.findFirst({
-        where: { groupId, sandboxOnly: true, deletedAt: null },
-        select: { id: true },
-    })
-    if (!sandboxFirm) return
-
-    const anchor = await loadAnchorForCaps(sandboxFirm.id)
-    if (!anchor) return
+    const anchor = await loadAnchorForCapsByGroupId(groupId)
 
     const cap = anchorUsesSandboxCapDefaults(anchor)
         ? (anchor.entitledFirms ?? 1)

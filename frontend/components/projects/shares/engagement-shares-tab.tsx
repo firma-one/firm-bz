@@ -51,7 +51,6 @@ import { cn, formatFullDate } from '@/lib/utils'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useProjectPersonaLabels } from '@/lib/hooks/use-project-persona-labels'
 import { useToast } from '@/components/ui/toast'
-import { SandboxBoardPreview } from '@/components/projects/sandbox-board-comments-preview'
 import { getAllowedTransitions, type EngagementRoleSlug } from '@/lib/deliverable-stage-roles'
 
 type ActivityStatus = 'to_do' | 'in_progress' | 'in_review' | 'approved'
@@ -2236,8 +2235,6 @@ export function EngagementSharesTab({
             <div className="flex items-center justify-center min-h-[200px]">
               <LoadingSpinner size="md" className="min-h-0" />
             </div>
-          ) : filteredShares.length === 0 && viewMode === 'board' && !connectorRootFolderId ? (
-            <SandboxBoardPreview projectName={projectName} />
           ) : filteredShares.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-slate-500 bg-white/60 rounded-2xl border border-slate-200/60 mx-2">
               <Share2 className="h-11 w-11 mb-3 text-slate-300" />

@@ -17,6 +17,7 @@ import { BRAND_NAME } from "@/config/brand"
 import { logger } from '@/lib/logger'
 import { buildUserSettingsPlus } from '@/lib/actions/user-settings'
 import { getUserFirms } from '@/lib/actions/firms'
+import { firmPath } from '@/lib/navigation/firm-paths'
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { supabase } from "@/lib/supabase"
 import { GooglePickerButton } from "@/components/google-drive/google-picker-button"
@@ -329,18 +330,21 @@ const OnboardingContent = () => {
     const [isFinalizing, setIsFinalizing] = useState(false)
 
     const resolvePostOnboardingPath = useCallback(async (): Promise<string> => {
-        // Prefer already-known slugs from onboarding flow to avoid an extra /d -> /d/f/* redirect hop.
+        // Workspace URLs are group-scoped (/d/[groupSlug]/f/[firmSlug]) — /d/f/... is no longer a
+        // route. The slugs this flow tracks are firm slugs only, so the group slug has to come from
+        // getUserFirms(); we prefer the firm this flow just worked with and fall back to the
+        // default. Freshly created memberships can be briefly stale, hence the retry. Final
+        // fallback is /d, which resolves the landing path server-side.
         const preferredSlug = defaultOrgSlug || newOrgSlug || existingOrg?.slug
-        if (preferredSlug) {
-            return `/d/f/${preferredSlug}`
-        }
-        // Freshly created org membership can be briefly stale. Retry a few times before falling back.
         for (let attempt = 0; attempt < 3; attempt++) {
             try {
                 const firms = await getUserFirms()
-                const fallbackSlug = firms.find((o) => o.isDefault)?.slug ?? firms[0]?.slug
-                if (fallbackSlug) {
-                    return `/d/f/${fallbackSlug}`
+                const target =
+                    (preferredSlug ? firms.find((o) => o.slug === preferredSlug) : undefined)
+                    ?? firms.find((o) => o.isDefault)
+                    ?? firms[0]
+                if (target?.slug && target.groupSlug) {
+                    return firmPath(target.groupSlug, target.slug)
                 }
             } catch {
                 // Ignore and retry
@@ -836,13 +840,16 @@ const OnboardingContent = () => {
 
                             if (resolvedOrg && resolvedOrg.id) {
                                 // Invited members (non-owners) should never see the onboarding flow —
-                                // redirect them straight to their org workspace.
+                                // redirect them straight to their workspace. /api/onboarding/ensure-org
+                                // returns the legacy { id, slug, name } firm shape with no group slug,
+                                // and workspace URLs are group-scoped now, so we hand off to /d and let
+                                // resolveDefaultFirmLandingPath build the real path server-side.
                                 const { data: { user: currentUser } } = await supabase.auth.getUser()
                                 const userMembership = resolvedOrg.members?.find((m: any) => m.userId === currentUser?.id)
                                 const isOwner = userMembership?.role === 'firm_admin'
 
-                                if (!isOwner && resolvedOrg.slug) {
-                                    router.replace(`/d/f/${resolvedOrg.slug}`)
+                                if (!isOwner) {
+                                    router.replace('/d')
                                     return
                                 }
 

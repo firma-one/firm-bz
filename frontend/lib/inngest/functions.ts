@@ -7,6 +7,7 @@ import { logger } from "@/lib/logger";
 import { DocumentSharingPermissionStatus, Prisma } from "@prisma/client";
 import { grantEngagementDriveFolderAccess } from "@/lib/grant-engagement-drive-folder-access";
 import { safeInngestSend } from "./client";
+import { clientPath } from "@/lib/navigation/firm-paths";
 import {
     setMaintenanceMode,
     setMigrationPending,
@@ -1288,7 +1289,7 @@ export const checkClientFollowUpReminders = inngest.createFunction(
                 select: {
                     id: true, name: true, slug: true,
                     firmId: true, ownerId: true, followUpDate: true,
-                    firm: { select: { slug: true } },
+                    firm: { select: { slug: true, group: { select: { slug: true } } } },
                 },
             })
 
@@ -1303,7 +1304,7 @@ export const checkClientFollowUpReminders = inngest.createFunction(
                 priority: "WARNING",
                 title: `Follow up due: ${c.name}`,
                 body: `Your scheduled follow-up with ${c.name} is due today.`,
-                ctaUrl: c.firm?.slug ? `/d/f/${c.firm.slug}/c/${c.slug}` : null,
+                ctaUrl: c.firm?.group?.slug && c.firm?.slug ? clientPath(c.firm.group.slug, c.firm.slug, c.slug) : null,
                 channels: { inApp: true, email: false },
                 dedupeKey: `client:${c.id}:followup:${dateStr}`,
                 metadata: { followUpDate: c.followUpDate?.toISOString(), clientName: c.name, internal: true },

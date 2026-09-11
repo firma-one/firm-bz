@@ -8,6 +8,7 @@ import { ConnectorType } from '@prisma/client'
 import { logger } from '@/lib/logger'
 import type { IConnectorStorageAdapter } from './types'
 import { METADATA_FILE_NAME, METADATA_FOLDER_NAME } from './types'
+import { generateGroupSlug } from '@/lib/slug-utils'
 
 export const FOLDERS = {
   GENERAL: { name: 'General', type: 'general' },
@@ -412,7 +413,7 @@ export async function importStructureFromDrive(
     } else {
       try {
         const group = await (prisma as any).group.create({
-          data: { name: orgFolder.name, createdBy: userId },
+          data: { name: orgFolder.name, slug: generateGroupSlug(orgFolder.name), createdBy: userId },
         })
         await (prisma as any).groupMember.create({
           data: { groupId: group.id, userId, role: 'GROUP_ADMIN' },

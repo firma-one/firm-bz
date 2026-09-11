@@ -40,6 +40,11 @@ See [`.claude/plans/beta-feedback-fixes.md`](../../.claude/plans/beta-feedback-f
 
 ## Delivery Workflow
 
+- [ ] **Deliverable Status Derivation, Multi-Assignee & History** — [plan](../../.claude/plans/2026-08-deliverable-status-derivation-and-assignee-history.md)
+  - Deliverable status becomes derived from sub-task Document statuses instead of manually set (drag-drop/dropdown removed for Deliverables)
+  - Document assignee becomes multi-select; in-review assignees shown as "Approver(s)" in UI (same underlying field)
+  - Persistent status/assignee change history per Document, powering a timeline view (reuses `PlatformAuditEvent`, exempted from purge)
+
 - [ ] **Redesign Share Status Labels** — [plan](../../.claude/plans/global-search-share-status-overview-metrics.md)
   - Replace `to_do | in_progress | in_review | done` with `ready | in_progress | in_review | approved`
   - "Ready" = deliverable identified but not yet shared; "Approved" = client confirmed

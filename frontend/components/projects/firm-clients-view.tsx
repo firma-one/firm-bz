@@ -17,9 +17,15 @@ import { FirmBusinessInsights } from '@/components/dashboard/firm-business-insig
 import { FirmActionCenter } from '@/components/dashboard/firm-action-center'
 import { CalendarView } from '@/components/calendar/calendar-view'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { useAuth } from '@/lib/auth-context'
+import { LandingArrivalOverlay } from '@/components/app/landing-arrival-overlay'
+import { Skeleton } from '@/components/ui/skeleton'
+import Link from 'next/link'
+import { groupFirmListPath } from '@/lib/navigation/firm-paths'
 
 interface FirmClientsViewProps {
     clients: ClientSummary[]
+    groupSlug: string
     orgSlug: string
     orgId?: string
     /** From server: show "+ New Client" in sandbox so restriction toast is discoverable */
@@ -30,10 +36,16 @@ interface FirmClientsViewProps {
     microsoftConnectorEnabled?: boolean
 }
 
-export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = false, memberCount, auditCount, microsoftConnectorEnabled = false }: FirmClientsViewProps) {
+export function FirmClientsView({ clients, groupSlug, orgSlug, orgId, firmSandboxOnly = false, memberCount, auditCount, microsoftConnectorEnabled = false }: FirmClientsViewProps) {
     const router = useRouter()
     const pathname = usePathname()
     const searchParams = useSearchParams()
+    const { user } = useAuth()
+    const [arrivalVariant] = useState<'new' | 'returning' | null>(() => {
+        const landed = searchParams.get('landed')
+        return landed === 'new' || landed === 'returning' ? landed : null
+    })
+    const [showArrivalOverlay, setShowArrivalOverlay] = useState(arrivalVariant !== null)
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
     const [orgName, setOrgName] = useState<string | null>(null)
     const [firmLogoUrl, setFirmLogoUrl] = useState<string | null>(null)
@@ -41,6 +53,10 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
     const [canCreateClient, setCanCreateClient] = useState(false)
     const [canViewOrgSettings, setCanViewOrgSettings] = useState(false)
     const [canViewOrgAudit, setCanViewOrgAudit] = useState(false)
+    // Gates tab content until /api/permissions/firm resolves — otherwise the tab briefly
+    // defaults to 'clients' (since canViewOrgAudit starts false) then jumps to 'analytics'
+    // once permissions load, a visible flash on every landing.
+    const [permissionsLoading, setPermissionsLoading] = useState(true)
     const [pendingTab, setPendingTab] = useState<string | null>(null)
 
     const tabParam = searchParams.get('tab') || 'analytics'
@@ -103,7 +119,10 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
     // Fetch permissions: canCreateClient (client scope can_manage), canViewOrgSettings (org scope can_manage)
     useEffect(() => {
         const organizationId = orgId ?? (clients.length > 0 ? clients[0].firmId : null)
-        if (!organizationId) return
+        if (!organizationId) {
+            setPermissionsLoading(false)
+            return
+        }
         fetch(
             `/api/permissions/firm?firmId=${encodeURIComponent(organizationId)}&firmSlug=${encodeURIComponent(orgSlug)}`
         )
@@ -121,6 +140,7 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                 setCanViewOrgSettings(false)
                 setCanViewOrgAudit(false)
             })
+            .finally(() => setPermissionsLoading(false))
     }, [orgId, clients])
 
     // When permissions finish loading and user can't view Analytics, correct the URL to avoid tab/URL mismatch
@@ -138,11 +158,28 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
         localStorage.setItem('fm-client-view-mode', mode)
     }
 
+    const closeArrivalOverlay = () => {
+        setShowArrivalOverlay(false)
+        const params = new URLSearchParams(searchParams.toString())
+        params.delete('landed')
+        const query = params.toString()
+        router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
+    }
+
     return (
         <div className="flex flex-col h-full">
+            {showArrivalOverlay && arrivalVariant && (
+                <LandingArrivalOverlay
+                    variant={arrivalVariant}
+                    firstName={user?.user_metadata?.first_name as string | undefined}
+                    onClose={closeArrivalOverlay}
+                />
+            )}
             {/* Breadcrumbs — monospace architectural style */}
             <nav className="flex items-center gap-1.5 mb-4 print:hidden">
-                <Home className="h-4 w-4 text-[#45474c] opacity-60" />
+                <Link href={groupFirmListPath(groupSlug)} className="hover:opacity-80">
+                    <Home className="h-4 w-4 text-[#1b1b1d]" />
+                </Link>
                 <ChevronRight className="h-3.5 w-3.5 text-[#d1d5db]" />
                 <Building2 className="h-4 w-4 text-primary" />
                 <span className="font-mono text-[11px] font-bold text-[#1b1b1d] uppercase tracking-tighter">{orgName || 'Firm'}</span>
@@ -168,7 +205,13 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                 </div>
             </div>
 
-            <Tabs value={currentTab} onValueChange={handleTabChange} className="flex-1 flex flex-col min-h-0 print:block print:flex-none">
+            {permissionsLoading ? (
+                <div className="flex-1 flex flex-col min-h-0 gap-4 animate-in fade-in duration-200 ease-out">
+                    <Skeleton className="h-14 w-full rounded" />
+                    <Skeleton className="flex-1 w-full rounded" />
+                </div>
+            ) : (
+            <Tabs value={currentTab} onValueChange={handleTabChange} className="flex-1 flex flex-col min-h-0 print:block print:flex-none animate-in fade-in duration-200 ease-out">
                 {/* Tab navigation — full-width white strip with border-b, matching HTML sub-header */}
                 <div className="bg-white border border-[#e5e7eb] rounded mb-6 shrink-0 print:hidden">
                     <div className="flex items-center justify-between h-14 pr-4">
@@ -315,9 +358,9 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                             {/* New Client CTA — emerald, uppercase, tracking-widest */}
                             {currentTab === 'clients' && (canCreateClient || firmSandboxOnly) && (
                             <AddClientModal
+                                groupSlug={groupSlug}
                                 orgSlug={orgSlug}
                                 firmId={orgId}
-                                firmSandboxOnly={firmSandboxOnly}
                                 onSaved={() => startRefresh(() => router.refresh())}
                                 trigger={
                                     <Button
@@ -343,6 +386,7 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                             <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
                                 <ClientList
                                     clients={clients}
+                                    groupSlug={groupSlug}
                                     orgSlug={orgSlug}
                                     viewMode={viewMode}
                                     isRefreshing={isPendingRefresh}
@@ -356,6 +400,7 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                             <div className="py-1 h-full">
                                 <FirmMembersTab
                                     firmId={orgId ?? clients[0]?.firmId ?? clients[0]?.firmId ?? ''}
+                                    groupSlug={groupSlug}
                                     orgSlug={orgSlug}
                                     canManage={canViewOrgAudit}
                                 />
@@ -407,6 +452,7 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                                 </div>
                                 <FirmActionCenter
                                     firmId={orgId ?? clients[0]?.firmId ?? clients[0]?.firmId ?? ''}
+                                    groupSlug={groupSlug}
                                     firmSlug={orgSlug}
                                 />
                             </div>
@@ -420,7 +466,6 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                                     orgSlug={orgSlug}
                                     orgId={orgId}
                                     initialName={orgName ?? ''}
-                                    firmSandboxOnly={firmSandboxOnly}
                                     microsoftConnectorEnabled={microsoftConnectorEnabled}
                                     initialSection={(searchParams.get('section') as 'main' | 'branding' | 'appsettings' | 'storage' | 'danger') || undefined}
                                     onSaved={() => {
@@ -434,6 +479,7 @@ export function FirmClientsView({ clients, orgSlug, orgId, firmSandboxOnly = fal
                     )}
                 </div>
             </Tabs>
+            )}
         </div>
     )
 }

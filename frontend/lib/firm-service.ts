@@ -3,6 +3,7 @@ import { User } from '@supabase/supabase-js'
 import { logger } from './logger'
 import { assertWithinFirmGroupCap } from '@/lib/billing/effective-billing-caps'
 import { userHasMembershipInGroup } from '@/lib/billing/firm-creation-gate'
+import { generateGroupSlug } from '@/lib/slug-utils'
 
 export interface CreateFirmData {
   userId: string
@@ -22,6 +23,15 @@ export interface CreateFirmData {
   connectorId?: string | null
   /** Whether this is a sandbox firm. */
   sandboxOnly?: boolean
+  /** Initial firm.settings JSON (e.g. to mark onboarding pre-completed for auto-provisioned firms). */
+  settings?: Record<string, unknown>
+  /**
+   * Skips the `userHasMembershipInGroup` gate. Only safe when the caller just created the
+   * group (and its GroupMember row) in the same flow, so there is intentionally no FirmMember
+   * yet for this user in this group — the normal membership check would otherwise always fail
+   * for the very first firm created in a brand-new group.
+   */
+  skipGroupMembershipCheck?: boolean
 }
 
 export interface FirmWithMembers {
@@ -39,6 +49,9 @@ export interface FirmWithMembers {
   createdAt: Date
   sandboxOnly: boolean
   createdBy?: string | null
+  groupId: string
+  /** Present when the query's Prisma include selected `group.slug` (e.g. getUserFirms) — undefined otherwise, not fetched lazily. */
+  groupSlug?: string
   members: {
     id: string
     userId: string
@@ -65,6 +78,8 @@ export class FirmService {
       createdAt: firm.createdAt,
       sandboxOnly: firm.sandboxOnly,
       createdBy: firm.createdBy ?? null,
+      groupId: firm.groupId,
+      groupSlug: firm.group?.slug ?? undefined,
       members: firm.members
         ? firm.members.map((m: any) => ({
             id: m.id,
@@ -85,9 +100,11 @@ export class FirmService {
 
     const groupId = data.groupId
     if (!data.sandboxOnly) {
-      const allowed = await userHasMembershipInGroup(data.userId, groupId)
-      if (!allowed) {
-        throw new Error('You cannot attach this workspace to that billing group.')
+      if (!data.skipGroupMembershipCheck) {
+        const allowed = await userHasMembershipInGroup(data.userId, groupId)
+        if (!allowed) {
+          throw new Error('You cannot attach this workspace to that billing group.')
+        }
       }
       await assertWithinFirmGroupCap(groupId)
     }
@@ -106,6 +123,7 @@ export class FirmService {
           groupId,
           createdBy: data.userId,
           updatedBy: data.userId,
+          ...(data.settings !== undefined ? { settings: data.settings } : {}),
         },
       })
 
@@ -130,7 +148,7 @@ export class FirmService {
 
       return tx.firm.findUnique({
         where: { id: created.id },
-        include: { members: true },
+        include: { members: true, group: { select: { slug: true } } },
       })
     })
 
@@ -152,7 +170,7 @@ export class FirmService {
     const firmName = `${firstName}'s Firm`
 
     const group = await (prisma as any).group.create({
-      data: { name: firmName, createdBy: user.id },
+      data: { name: firmName, slug: generateGroupSlug(firstName), createdBy: user.id },
     })
     await (prisma as any).groupMember.create({
       data: { groupId: group.id, userId: user.id, role: 'GROUP_ADMIN' },
@@ -165,13 +183,14 @@ export class FirmService {
       lastName,
       firmName,
       groupId: group.id,
+      skipGroupMembershipCheck: true,
     })
   }
 
   static async getUserFirms(userId: string): Promise<FirmWithMembers[]> {
     const memberships = await (prisma as any).firmMember.findMany({
-      where: { userId },
-      include: { firm: { include: { members: true } } },
+      where: { userId, firm: { sandboxOnly: false } },
+      include: { firm: { include: { members: true, group: { select: { slug: true } } } } },
       orderBy: { firm: { createdAt: 'asc' } },
     })
 
@@ -180,7 +199,7 @@ export class FirmService {
 
   static async getDefaultFirm(userId: string): Promise<FirmWithMembers | null> {
     const records = await (prisma as any).firmMember.findMany({
-      where: { userId, isDefault: true },
+      where: { userId, isDefault: true, firm: { sandboxOnly: false } },
       include: { firm: { include: { members: true } } },
     })
     if (records.length > 0) return this.mapToInterface(records[0].firm)

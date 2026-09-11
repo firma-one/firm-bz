@@ -17,6 +17,7 @@ interface EngagementSettingsModalProps {
     open: boolean
     onOpenChange: (open: boolean) => void
     projectId: string
+    groupSlug: string
     orgSlug: string
     clientSlug: string
     initialName: string
@@ -35,6 +36,7 @@ export function EngagementSettingsModal({
     open,
     onOpenChange,
     projectId,
+    groupSlug,
     orgSlug,
     clientSlug,
     initialName,
@@ -57,6 +59,7 @@ export function EngagementSettingsModal({
                 </DialogHeader>
                 <EngagementSettingsForm
                     projectId={projectId}
+                    groupSlug={groupSlug}
                     orgSlug={orgSlug}
                     clientSlug={clientSlug}
                     initialName={initialName}

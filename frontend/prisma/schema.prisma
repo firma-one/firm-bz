@@ -205,6 +205,8 @@ model Connector {
 model Group {
   id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name      String
+  /** Globally unique, top-level URL segment: /d/[slug]/f/... */
+  slug      String   @unique
   settings  Json     @default("{}")
   createdBy String?  @db.Uuid
   createdAt DateTime @default(now())

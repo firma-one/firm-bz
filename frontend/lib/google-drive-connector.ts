@@ -977,20 +977,20 @@ export class GoogleDriveConnector {
     })
 
     const seen = new Set<string>()
-    const candidates: KnownFirmaFolder[] = []
+    const candidates: { entry: KnownFirmaFolder; ownerConnectorId: string }[] = []
     for (const sibling of siblings) {
       const settings = (sibling.settings as Record<string, unknown>) || {}
       const known = Array.isArray(settings.knownFirmaFolders) ? (settings.knownFirmaFolders as KnownFirmaFolder[]) : []
       for (const entry of known) {
         if (seen.has(entry.firmaFolderId)) continue
         seen.add(entry.firmaFolderId)
-        candidates.push(entry)
+        candidates.push({ entry, ownerConnectorId: sibling.id })
       }
     }
     if (candidates.length === 0) return []
 
     const live: KnownFirmaFolder[] = []
-    for (const entry of candidates) {
+    for (const { entry } of candidates) {
       const meta = await this.getFileMetadata(connectionId, entry.firmaFolderId)
       if (meta) live.push(entry)
       // Stale/deleted folders drop silently — the caller falls through to the picker.
@@ -998,6 +998,19 @@ export class GoogleDriveConnector {
     return live
   }
 
+  /**
+   * KNOWN PERMANENT LIMITATION (confirmed live 2026-08-21, not a bug): `drives.get` — the only
+   * Drive API endpoint that returns a Shared Drive's display name — requires the `drive` or
+   * `drive.readonly` scope, both classified RESTRICTED by Google (CASA security assessment +
+   * restricted-app review + "unverified app" warning until approved). This app only has
+   * `drive.file`/`drive.appdata` (non-restricted, self-consentable) — this call 403s with
+   * ACCESS_TOKEN_SCOPE_INSUFFICIENT under those scopes and always will, no workaround exists
+   * (confirmed: no other endpoint/field, including files.get's driveId or about.get, exposes a
+   * Shared Drive's name under drive.file). Callers must treat a null return as PERMANENT, not
+   * "not yet captured" — do not add retry/backfill logic expecting this to eventually succeed
+   * without an explicit, deliberate decision to add the restricted scope (real recurring cost,
+   * discussed and declined for now — see .claude/plans/connector-microsoft-impl.md, item 21).
+   */
   private async fetchSharedDriveDisplayName(connectionId: string, sharedDriveId: string): Promise<string | null> {
     const connector = await prisma.connector.findUnique({ where: { id: connectionId } })
     if (!connector) return null
@@ -1010,7 +1023,13 @@ export class GoogleDriveConnector {
         `https://www.googleapis.com/drive/v3/drives/${encodeURIComponent(sharedDriveId)}?fields=id,name`,
         { headers: { Authorization: `Bearer ${accessToken}` } }
       )
-      if (!res.ok) return null
+      if (!res.ok) {
+        const bodyText = await res.text().catch(() => '<unreadable>')
+        logger.warn(`fetchSharedDriveDisplayName: non-OK response for ${sharedDriveId}`, {
+          status: res.status, statusText: res.statusText, body: bodyText,
+        })
+        return null
+      }
       const j = (await res.json()) as { name?: string }
       return typeof j.name === 'string' ? j.name : null
     } catch (e) {

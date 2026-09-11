@@ -13,6 +13,7 @@ import { canManageOrganization } from '@/lib/permission-helpers'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { upsertFollowUpReminder, removeRemindersByEntity } from '@/lib/actions/user-reminders'
 import { getAvatarUrlFromSupabaseUser } from '@/lib/supabase-user-helpers'
+import { firmSettingsPath } from '@/lib/navigation/firm-paths'
 
 const supabaseAdmin = createSupabaseAdmin(
     process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321',
@@ -112,7 +113,7 @@ export async function removeFirmMember(firmId: string, memberId: string) {
         .meta({ removedUserId: member.userId })
         .fireAndForget()
 
-    revalidatePath('/d/f/[slug]')
+    revalidatePath('/d/[groupSlug]/f/[firmSlug]', 'layout')
 }
 
 export async function inviteFirmMember(firmId: string, email: string) {
@@ -125,7 +126,7 @@ export async function inviteFirmMember(firmId: string, email: string) {
 
     const firm = await prisma.firm.findUnique({
         where: { id: firmId },
-        select: { sandboxOnly: true, slug: true, name: true }
+        select: { sandboxOnly: true, slug: true, name: true, group: { select: { slug: true } } }
     })
     if (!firm) throw new Error('Firm not found')
     if (firm.sandboxOnly) {
@@ -196,7 +197,7 @@ export async function inviteFirmMember(firmId: string, email: string) {
         dateValue: expireAt.toISOString(),
         entityName: normalizedEmail,
         firmId,
-        ctaUrl: `/d/f/${firm.slug}/settings`,
+        ctaUrl: firmSettingsPath(firm.group.slug, firm.slug),
     }).catch(() => {})
 
     await maybeProvisionInviteeAccount(normalizedEmail)
@@ -212,7 +213,7 @@ export async function inviteFirmMember(firmId: string, email: string) {
         .meta({ invitedEmail: normalizedEmail })
         .fireAndForget()
 
-    revalidatePath('/d/f/[slug]')
+    revalidatePath('/d/[groupSlug]/f/[firmSlug]', 'layout')
 }
 
 export async function resendFirmInvitation(invitationId: string) {
@@ -222,7 +223,7 @@ export async function resendFirmInvitation(invitationId: string) {
 
     const invite = await prisma.firmInvitation.findUnique({
         where: { id: invitationId },
-        include: { firm: { select: { sandboxOnly: true, slug: true, name: true } } }
+        include: { firm: { select: { sandboxOnly: true, slug: true, name: true, group: { select: { slug: true } } } } }
     })
     if (!invite) throw new Error('Invitation not found')
     if (invite.status === InvitationStatus.JOINED) throw new Error('User has already joined')
@@ -249,7 +250,7 @@ export async function resendFirmInvitation(invitationId: string) {
         dateValue: expireAt.toISOString(),
         entityName: invite.email,
         firmId: invite.firmId,
-        ctaUrl: `/d/f/${invite.firm?.slug}/settings`,
+        ctaUrl: invite.firm ? firmSettingsPath(invite.firm.group.slug, invite.firm.slug) : null,
     }).catch(() => {})
 
     await maybeProvisionInviteeAccount(invite.email)
@@ -265,7 +266,7 @@ export async function resendFirmInvitation(invitationId: string) {
             data: { status: InvitationStatus.ERROR, updatedAt: new Date() }
         })
     }
-    revalidatePath('/d/f/[slug]')
+    revalidatePath('/d/[groupSlug]/f/[firmSlug]', 'layout')
 }
 
 export async function revokeFirmInvitation(invitationId: string) {
@@ -283,5 +284,5 @@ export async function revokeFirmInvitation(invitationId: string) {
 
     await prisma.firmInvitation.delete({ where: { id: invitationId } })
     await removeRemindersByEntity(invite.createdBy ?? user.id, 'platform.firm_invitations', invitationId).catch(() => {})
-    revalidatePath('/d/f/[slug]')
+    revalidatePath('/d/[groupSlug]/f/[firmSlug]', 'layout')
 }

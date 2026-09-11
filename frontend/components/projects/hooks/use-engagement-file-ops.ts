@@ -2,7 +2,6 @@ import { useState, useCallback, useRef } from 'react'
 import { logger } from '@/lib/logger'
 import { useToast } from '@/components/ui/toast'
 import { DriveFile } from '@/lib/types'
-import { SANDBOX_OPERATION_MESSAGE } from '@/components/ui/sandbox-info-banner'
 
 type Session = {
     access_token?: string
@@ -22,7 +21,6 @@ interface UseEngagementFileOpsOptions {
     startProcessing: (id: string) => void
     stopProcessing: (id: string) => void
     setFiles: React.Dispatch<React.SetStateAction<DriveFile[]>>
-    orgSandbox?: { sandboxOnly?: boolean } | null
 }
 
 export function useEngagementFileOps({
@@ -38,7 +36,6 @@ export function useEngagementFileOps({
     startProcessing,
     stopProcessing,
     setFiles,
-    orgSandbox,
 }: UseEngagementFileOpsOptions) {
     const { addToast } = useToast()
 
@@ -138,17 +135,6 @@ export function useEngagementFileOps({
     const handleTrashConfirmed = useCallback(async () => {
         if (!trashConfirmTarget || trashConfirming || !sessionRef.current?.access_token) return
 
-        if (orgSandbox?.sandboxOnly) {
-            addToast({
-                type: 'error',
-                title: 'Sandbox',
-                message: SANDBOX_OPERATION_MESSAGE,
-                duration: 12000,
-            } as any)
-            setTrashConfirmTarget(null)
-            return
-        }
-
         // Safety guard: Don't allow confirmation if dialog was opened less than 400ms ago
         if (Date.now() - trashDialogOpenTime.current < 400) return
 
@@ -197,7 +183,7 @@ export function useEngagementFileOps({
             setTrashConfirming(false)
             stopProcessing(doc.id)
         }
-    }, [trashConfirmTarget, trashConfirming, currentFolderIdRef, fetchFiles, addToast, startProcessing, stopProcessing, projectId, orgSandbox])
+    }, [trashConfirmTarget, trashConfirming, currentFolderIdRef, fetchFiles, addToast, startProcessing, stopProcessing, projectId])
 
     const fetchFolderChildrenResult = useCallback(async (folderId: string): Promise<DriveFile[]> => {
         if (!sessionRef.current?.access_token) return []

@@ -12,6 +12,7 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { SelectWithCustomEntry } from "@/components/ui/select-with-custom-entry"
 import { OptionalFieldsSection } from "@/components/ui/optional-fields-toggle"
 import { createFirm, updateFirm } from '@/lib/actions/firms'
+import { firmPath } from '@/lib/navigation/firm-paths'
 
 const fieldLabel = 'font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] block mb-1'
 const inputCls = 'border-[#e5e7eb] text-[#1b1b1d] text-xs font-normal placeholder:text-[#9a9ba0] rounded focus-visible:ring-1 focus-visible:ring-primary focus-visible:border-primary disabled:opacity-50 disabled:cursor-not-allowed'
@@ -21,9 +22,15 @@ interface AddFirmModalProps {
     trigger?: React.ReactNode
     open?: boolean
     onOpenChange?: (open: boolean) => void
+    /**
+     * The group whose picker page this modal was opened from, if any — passed straight
+     * through to createFirm() so the new firm attaches to THIS group, not an arbitrary
+     * "first eligible group" pick. Omit only when there's no specific group in context.
+     */
+    groupSlug?: string
 }
 
-export function AddFirmModal({ trigger, open: controlledOpen, onOpenChange: controlledOnOpenChange }: AddFirmModalProps) {
+export function AddFirmModal({ trigger, open: controlledOpen, onOpenChange: controlledOnOpenChange, groupSlug }: AddFirmModalProps) {
     const [capBlocked, setCapBlocked] = useState(false)
     const [capMessage, setCapMessage] = useState<string | null>(null)
 
@@ -31,7 +38,7 @@ export function AddFirmModal({ trigger, open: controlledOpen, onOpenChange: cont
         let mounted = true
         const run = async () => {
             try {
-                const response = await fetch('/api/billing/firm-gate')
+                const response = await fetch(groupSlug ? `/api/billing/firm-gate?groupSlug=${encodeURIComponent(groupSlug)}` : '/api/billing/firm-gate')
                 if (!response.ok) return
                 const payload = (await response.json()) as { allowed?: boolean; reason?: string; cap?: number | null }
                 if (!mounted) return
@@ -49,7 +56,7 @@ export function AddFirmModal({ trigger, open: controlledOpen, onOpenChange: cont
         }
         run()
         return () => { mounted = false }
-    }, [])
+    }, [groupSlug])
 
     const [internalOpen, setInternalOpen] = useState(false)
     const isControlled = controlledOpen !== undefined && controlledOnOpenChange !== undefined
@@ -99,7 +106,7 @@ export function AddFirmModal({ trigger, open: controlledOpen, onOpenChange: cont
         setCreating(true)
         setError(null)
         try {
-            const newFirm = await createFirm({ name })
+            const newFirm = await createFirm({ name, groupSlug })
             await updateFirm(newFirm.slug, {
                 internalMemo: internalMemo.trim() || null,
                 industry: industry.trim() || null,
@@ -111,7 +118,7 @@ export function AddFirmModal({ trigger, open: controlledOpen, onOpenChange: cont
             })
             setOpen(false)
             resetForm()
-            router.push(`/d/f/${newFirm.slug}`)
+            router.push(newFirm.groupSlug ? firmPath(newFirm.groupSlug, newFirm.slug) : `/d/${newFirm.slug}`)
             router.refresh()
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : 'Failed to create firm')

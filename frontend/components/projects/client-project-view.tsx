@@ -6,7 +6,7 @@ import { getProjectMemberSummaries, type ProjectMemberSummary } from '@/lib/acti
 import { ProjectList } from './engagement-list'
 import { ClientSettingsForm } from './client-settings-form'
 import type { LwCrmClientStatus } from '@/lib/actions/client'
-import { SquarePlus, ChevronRight, Building2, Users, Briefcase, LayoutGrid, List, Home, Settings, UserCog, Lock, Contact } from 'lucide-react'
+import { SquarePlus, ChevronRight, Building2, Users, Briefcase, Home, Settings, UserCog, Lock, Contact } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { AddEngagementModal } from './add-engagement-modal'
@@ -15,23 +15,23 @@ import { ClientContactsTab } from './client-contacts-tab'
 import { ClientMembersTab } from './members/client-members-tab'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import Link from 'next/link'
+import { firmPath, firmTabPath, groupFirmListPath } from '@/lib/navigation/firm-paths'
 
 interface ClientProjectViewProps {
     clients: HierarchyClient[]
+    groupSlug: string
     firmSlug: string
     firmName?: string
     firmId?: string
-    firmSandboxOnly?: boolean
     selectedClientSlug?: string
     contactCount?: number
     memberCount?: number
 }
 
-export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSandboxOnly = false, selectedClientSlug, contactCount, memberCount }: ClientProjectViewProps) {
+export function ClientProjectView({ clients, groupSlug, firmSlug, firmName, firmId, selectedClientSlug, contactCount, memberCount }: ClientProjectViewProps) {
     const router = useRouter()
     const pathname = usePathname()
     const searchParams = useSearchParams()
-    const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
     const [isClientDetailsOpen, setIsClientDetailsOpen] = useState(false)
     const [isFirmInternal, setIsFirmInternal] = useState(false)
     const [memberSummaries, setMemberSummaries] = useState<Record<string, ProjectMemberSummary>>({})
@@ -39,20 +39,6 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
     const [isFirmOwner, setIsFirmOwner] = useState(false)
     const [isPendingRefresh, startRefresh] = useTransition()
     const [pendingTab, setPendingTab] = useState<string | null>(null)
-
-    // Load view mode preference from localStorage on mount
-    useEffect(() => {
-        const savedViewMode = localStorage.getItem('fm-project-view-mode')
-        if (savedViewMode === 'grid' || savedViewMode === 'list') {
-            setViewMode(savedViewMode)
-        }
-    }, [])
-
-    // Save view mode preference to localStorage when it changes
-    const handleViewModeChange = (mode: 'grid' | 'list') => {
-        setViewMode(mode)
-        localStorage.setItem('fm-project-view-mode', mode)
-    }
 
     const tabParam = searchParams.get('tab') || 'projects'
     const currentTab =
@@ -127,11 +113,13 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
         <div className="flex flex-col h-full">
             {/* Breadcrumbs — monospace architectural style */}
             <nav className="flex items-center gap-1.5 mb-4">
-                <Home className="h-4 w-4 text-[#45474c] opacity-60" />
+                <Link href={groupFirmListPath(groupSlug)} className="hover:opacity-80">
+                    <Home className="h-4 w-4 text-[#1b1b1d]" />
+                </Link>
                 <ChevronRight className="h-3.5 w-3.5 text-[#d1d5db]" />
                 <Building2 className="h-4 w-4 text-[#45474c] opacity-60" />
                 <Link
-                    href={`/d/f/${firmSlug}`}
+                    href={firmPath(groupSlug, firmSlug)}
                     className="font-mono text-[11px] text-[#45474c] opacity-60 uppercase tracking-tighter hover:opacity-100 transition-opacity"
                 >
                     {firmName || 'Firm'}
@@ -245,28 +233,10 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                                     </TabsList>
                                     <div className="flex items-center gap-3 ml-auto">
                                         {currentTab === 'projects' && (
-                                            <div className="flex items-center bg-[#f3f4f6] p-0.5 rounded border border-[#e5e7eb]">
-                                                <button
-                                                    onClick={() => handleViewModeChange('grid')}
-                                                    className={`px-1.5 py-1 rounded transition-all ${viewMode === 'grid' ? 'bg-white shadow-sm text-primary' : 'text-[#45474c] hover:text-[#1b1b1d] hover:bg-[#f0edee]'}`}
-                                                    title="Grid View"
-                                                >
-                                                    <LayoutGrid className="h-3 w-3" />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleViewModeChange('list')}
-                                                    className={`px-1.5 py-1 rounded transition-all ${viewMode === 'list' ? 'bg-white shadow-sm text-primary' : 'text-[#45474c] hover:text-[#1b1b1d] hover:bg-[#f0edee]'}`}
-                                                    title="List View"
-                                                >
-                                                    <List className="h-3 w-3" />
-                                                </button>
-                                            </div>
-                                        )}
-                                        {currentTab === 'projects' && (
                                             <AddEngagementModal
+                                                groupSlug={groupSlug}
                                                 firmSlug={firmSlug}
                                                 clientSlug={selectedClient.slug}
-                                                firmSandboxOnly={firmSandboxOnly}
                                                 onSaved={() => startRefresh(() => router.refresh())}
                                                 trigger={
                                                     <Button
@@ -292,12 +262,10 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                                         <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
                                             <ProjectList
                                                 projects={selectedClient.engagements}
+                                                groupSlug={groupSlug}
                                                 orgSlug={firmSlug}
                                                 clientSlug={selectedClient.slug}
                                                 clientStatus={selectedClient.status}
-                                                viewMode={viewMode}
-                                                isOrgInternal={isFirmInternal}
-                                                memberSummaries={memberSummaries}
                                                 isRefreshing={isPendingRefresh}
                                             />
                                         </div>
@@ -311,7 +279,6 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                                             orgSlug={firmSlug}
                                             clientSlug={selectedClient.slug}
                                             canManage={canManageClient}
-                                            firmSandboxOnly={firmSandboxOnly}
                                         />
                                     </div>
                                 </TabsContent>
@@ -335,6 +302,7 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                                     <TabsContent value="settings" className="m-0 h-full">
                                         <div className="w-full py-2">
                                             <ClientSettingsForm
+                                            groupSlug={groupSlug}
                                             orgSlug={firmSlug}
                                             firmId={firmId ?? selectedClient.firmId}
                                             clientId={selectedClient.id}
@@ -355,7 +323,6 @@ export function ClientProjectView({ clients, firmSlug, firmName, firmId, firmSan
                                             initialLinkedInUrl={selectedClient.linkedInUrl ?? undefined}
                                             initialCompanySizeBracket={selectedClient.companySizeBracket ?? undefined}
                                             initialBillingAddress={selectedClient.billingAddress ?? undefined}
-                                            firmSandboxOnly={firmSandboxOnly}
                                             onSaved={() => router.refresh()}
                                             />
                                         </div>

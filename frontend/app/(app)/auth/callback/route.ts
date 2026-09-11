@@ -49,6 +49,13 @@ export async function GET(request: Request) {
         const resolved = await resolveDefaultFirmLandingPath(userId)
         // No slug / malformed firm data: same as legacy "no default firm" — send to onboarding.
         next = resolved ?? '/d/onboarding'
+        // Already resolved here (unlike the client-side signin/signup flows, which redirect to
+        // a bare `/d` and let `(landing)/page.tsx` do this resolution) — no need for `?entry=auth`.
+        // But if resolution lands on the literal group-picker route, tag it anyway so
+        // `(landing)/page.tsx` doesn't redundantly re-run `shouldShowSwitchWorkspace()`.
+        if (next === '/d/') {
+          next = '/d/?entry=auth'
+        }
       }
 
       // Warm JWT claims and userSettingsPlus cache on signin.

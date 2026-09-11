@@ -6,8 +6,6 @@ import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { inviteFirmMember } from '@/lib/actions/firm-members'
-import { SandboxInfoBanner } from '@/components/ui/sandbox-info-banner'
-import { useOrgSandbox } from '@/lib/use-org-sandbox'
 import { ShieldCheck } from 'lucide-react'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 
@@ -25,13 +23,10 @@ export function FirmInviteModal({ firmId, open, onOpenChange, onSuccess }: FirmI
     const [email, setEmail] = useState('')
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [error, setError] = useState('')
-    const orgSandbox = useOrgSandbox()
-    const isSandboxFirm = Boolean(orgSandbox?.sandboxOnly)
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         setError('')
-        if (isSandboxFirm) return
         setIsSubmitting(true)
         try {
             await inviteFirmMember(firmId, email)
@@ -68,8 +63,6 @@ export function FirmInviteModal({ firmId, open, onOpenChange, onSuccess }: FirmI
 
                 <form onSubmit={handleSubmit}>
                     <div className="p-5 space-y-3">
-                        {isSandboxFirm && <SandboxInfoBanner />}
-
                         {error && (
                             <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs px-3 py-2 rounded">
                                 {error}
@@ -96,8 +89,7 @@ export function FirmInviteModal({ firmId, open, onOpenChange, onSuccess }: FirmI
                                 placeholder="admin@example.com"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
-                                required={!isSandboxFirm}
-                                disabled={isSandboxFirm}
+                                required
                                 className={inputCls}
                             />
                         </div>
@@ -111,7 +103,7 @@ export function FirmInviteModal({ firmId, open, onOpenChange, onSuccess }: FirmI
                         <Button
                             type="submit"
                             variant="greenCta"
-                            disabled={isSandboxFirm || isSubmitting || !email.trim()}
+                            disabled={isSubmitting || !email.trim()}
                             className="rounded w-36 text-[10px] font-headline font-bold tracking-widest uppercase text-white"
                         >
                             {isSubmitting ? <LoadingSpinner size="sm" /> : 'Send Invitation'}

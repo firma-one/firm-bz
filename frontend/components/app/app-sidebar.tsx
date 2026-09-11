@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react"
 import Link from "next/link"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { usePathname, useSearchParams, useParams } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { useSidebar } from "@/lib/sidebar-context"
 import {
@@ -33,8 +33,8 @@ import { WhatsNewModal } from "@/components/ui/whats-new-modal"
 import { useWhatsNew, type ReleaseMeta } from "@/lib/use-whats-new"
 import _releasesMetaData from "@/content/releases-meta.json"
 const releasesMetaData = _releasesMetaData as ReleaseMeta[]
-import { FirmSelector, type FirmOption } from "@/components/projects/firm-selector"
-import { getUserFirms } from "@/lib/actions/firms"
+import type { FirmOption } from "@/components/projects/firm-selector"
+import { getUserFirms, shouldShowSwitchWorkspace } from "@/lib/actions/firms"
 import { getFirmRole } from "@/lib/actions/firm"
 import { Skeleton } from "@/components/ui/skeleton"
 import { buildBillingPageHref } from "@/lib/billing/build-billing-page-href"
@@ -107,13 +107,17 @@ function toLabel(slug: string) {
 
 const ENGAGEMENT_TABS = new Set(['files', 'shares', 'comments', 'members', 'analytics', 'sources', 'audit', 'settings', 'wiki'])
 
-function parseRecentFromPath(pathname: string, firmSlug: string): RecentItem | null {
-  const engMatch = pathname.match(/\/d\/f\/[^/]+\/c\/([^/]+)\/e\/([^/]+)(?:\/([^/]+))?/)
+// Recents are keyed/stored per-firm (storageKey below), but the href stored alongside each
+// recent item must carry whichever groupSlug was current *when that page was visited* — not
+// necessarily today's route params — so we still parse groupSlug out of the pathname here
+// rather than relying on useParams() (which only reflects the *current* route).
+function parseRecentFromPath(pathname: string, groupSlug: string, firmSlug: string): RecentItem | null {
+  const engMatch = pathname.match(/\/d\/[^/]+\/f\/[^/]+\/c\/([^/]+)\/e\/([^/]+)(?:\/([^/]+))?/)
   if (engMatch) {
     const clientSlug = engMatch[1]
     const engSlug = engMatch[2]
     const tab = engMatch[3] && ENGAGEMENT_TABS.has(engMatch[3]) ? engMatch[3] : null
-    const base = `/d/f/${firmSlug}/c/${clientSlug}/e/${engSlug}`
+    const base = `/d/${groupSlug}/f/${firmSlug}/c/${clientSlug}/e/${engSlug}`
     return {
       type: 'engagement',
       name: toLabel(engSlug),
@@ -123,20 +127,20 @@ function parseRecentFromPath(pathname: string, firmSlug: string): RecentItem | n
     }
   }
   // Client detail pages only — not firm-level sub-routes like /insights, /audit, /connectors
-  const clientMatch = pathname.match(/\/d\/f\/[^/]+\/c\/([^/]+)(?:\/|$)/)
+  const clientMatch = pathname.match(/\/d\/[^/]+\/f\/[^/]+\/c\/([^/]+)(?:\/|$)/)
   if (clientMatch) {
     return {
       type: 'client',
       name: toLabel(clientMatch[1]),
       slug: clientMatch[1],
-      href: `/d/f/${firmSlug}/c/${clientMatch[1]}`,
+      href: `/d/${groupSlug}/f/${firmSlug}/c/${clientMatch[1]}`,
       visitedAt: Date.now(),
     }
   }
   return null
 }
 
-function useRecentNavItems(firmSlug: string | null, pathname: string): RecentItem[] {
+function useRecentNavItems(groupSlug: string | null, firmSlug: string | null, pathname: string): RecentItem[] {
   const storageKey = firmSlug ? `fm_nav_recents_${firmSlug}` : null
   const [recents, setRecents] = useState<RecentItem[]>([])
 
@@ -156,8 +160,8 @@ function useRecentNavItems(firmSlug: string | null, pathname: string): RecentIte
   }, [storageKey])
 
   useEffect(() => {
-    if (!firmSlug || !storageKey) return
-    const item = parseRecentFromPath(pathname, firmSlug)
+    if (!groupSlug || !firmSlug || !storageKey) return
+    const item = parseRecentFromPath(pathname, groupSlug, firmSlug)
     if (!item) return
     setRecents((prev) => {
       const deduped = prev.filter((r) => !(r.type === item.type && r.slug === item.slug))
@@ -165,7 +169,7 @@ function useRecentNavItems(firmSlug: string | null, pathname: string): RecentIte
       try { localStorage.setItem(storageKey, JSON.stringify(updated)) } catch { /* ignore */ }
       return updated
     })
-  }, [pathname, firmSlug, storageKey])
+  }, [pathname, groupSlug, firmSlug, storageKey])
 
   // Patch stored names when a page broadcasts its real entity names
   useEffect(() => {
@@ -206,11 +210,13 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
   const { viewAsPersonaSlug, setViewAsPersonaSlug, effectivePermissions, isViewAsActive, personas } = useViewAs()
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const router = useRouter()
   const initialFirms = useSidebarFirms()
   const [viewAsSelectOpen, setViewAsSelectOpen] = useState(false)
   const [role, setRole] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(!initialFirms || initialFirms.length === 0)
+  // Always start loading — role/orgPermissions (which gate canManageOrg and admin-only nav
+  // items) are always fetched fresh on mount below, even when initialFirms is already populated.
+  const [isLoading, setIsLoading] = useState(true)
+  const [showSwitchWorkspace, setShowSwitchWorkspace] = useState(false)
 
   // Firm selector state
   const [firms, setFirms] = useState<FirmOption[]>(initialFirms as FirmOption[] || [])
@@ -254,26 +260,37 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
   const [isWhatsNewOpen, setIsWhatsNewOpen] = useState(false)
   const { hasUnread, markAsRead } = useWhatsNew(releasesMetaData)
 
-  // Extract firm slug from URL
+  // Current firm/group come from route params when this sidebar is rendered inside the
+  // group-scoped firm route tree (/d/[groupSlug]/f/[firmSlug]/...). Fall back to regex-parsing
+  // the pathname for routes where useParams() won't have them (e.g. this component is mounted
+  // by the shared /d layout, so it also renders on non-firm-scoped pages like /d/support,
+  // /d/u/*, where routeParams is empty).
+  const routeParams = useParams<{ groupSlug?: string; firmSlug?: string }>()
   const getSlug = () => {
-    const match = pathname.match(/\/(?:d\/)?f\/([^\/]+)/)
+    if (routeParams?.firmSlug) return routeParams.firmSlug
+    const match = pathname.match(/\/d\/[^/]+\/f\/([^\/]+)/)
     return match ? match[1] : null
   }
   const slug = getSlug()
 
-  const baseUrl = slug ? `/d/f/${slug}` : '/d'
-  const firmScopedNavBase =
-    slug != null
-      ? `/d/f/${slug}`
-      : (() => {
-          const s =
-            selectedFirmSlug ||
-            firms.find((o) => o.isDefault)?.slug ||
-            firms[0]?.slug
-          return s ? `/d/f/${s}` : '/d'
-        })()
+  const getGroupSlug = () => {
+    if (routeParams?.groupSlug) return routeParams.groupSlug
+    const match = pathname.match(/\/d\/([^/]+)\/f\/[^\/]+/)
+    if (match) return match[1]
+    // Non-firm-scoped pages (e.g. /d/support, /d/u/*) have no groupSlug in the route at all —
+    // fall back to the current/selected firm's own groupSlug from the firms list.
+    const currentFirm = firms.find((f) => f.slug === (slug || selectedFirmSlug))
+    return currentFirm?.groupSlug ?? null
+  }
+  const groupSlug = getGroupSlug()
 
-  const recents = useRecentNavItems(slug || selectedFirmSlug || null, pathname)
+  const baseUrl = slug && groupSlug ? `/d/${groupSlug}/f/${slug}` : '/d'
+  const firmScopedNavBase =
+    slug != null && groupSlug != null
+      ? `/d/${groupSlug}/f/${slug}`
+      : '/d'
+
+  const recents = useRecentNavItems(groupSlug || null, slug || selectedFirmSlug || null, pathname)
 
   // Load reminders on mount and when event fires
   const loadReminders = useCallback(async () => {
@@ -320,7 +337,16 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
 
   // Fetch firms + permissions
   const fetchData = async () => {
-    const hasCachedData = firms.length > 0 && (slug ? firms.some(o => o.slug === slug) : true)
+    // Not just "do we have a firm list" — role/orgPermissions gate real nav items (Overview,
+    // Settings) and canManageOrg defaults to false while they're in flight, so treat this as
+    // still-loading until BOTH are resolved too, not just once `firms` is populated. Otherwise
+    // the sidebar renders its "real" tree immediately with stale canManageOrg=false, silently
+    // hiding admin-only nav items for a beat instead of showing the loading skeleton.
+    const hasCachedData =
+      firms.length > 0 &&
+      (slug ? firms.some(o => o.slug === slug) : true) &&
+      role !== null &&
+      orgPermissions !== null
     if (!hasCachedData) setIsLoading(true)
     try {
       const orgs = await getUserFirms()
@@ -369,6 +395,14 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
     window.addEventListener('pockett:refresh-firms', handleRefresh)
     return () => window.removeEventListener('pockett:refresh-firms', handleRefresh)
   }, [slug])
+
+  useEffect(() => {
+    let cancelled = false
+    shouldShowSwitchWorkspace()
+      .then((show) => { if (!cancelled) setShowSwitchWorkspace(show) })
+      .catch(() => { if (!cancelled) setShowSwitchWorkspace(false) })
+    return () => { cancelled = true }
+  }, [])
 
   useEffect(() => {
     if (slug) {
@@ -421,6 +455,10 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
 
   const billingFirmSlug =
     slug || selectedFirmSlug || firms.find((o) => o.isDefault)?.slug || firms[0]?.slug || null
+
+  const billingGroupSlug = billingFirmSlug
+    ? firms.find((f) => f.slug === billingFirmSlug)?.groupSlug ?? groupSlug
+    : groupSlug
 
   const billingFirmId = useMemo(() => {
     if (!billingFirmSlug) return null
@@ -487,7 +525,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
   return (
     <div className={outerClass}>
       {isLoading ? (
-        <div className="flex flex-col h-full px-3 pt-6 gap-4">
+        <div className="flex flex-col h-full px-3 pt-6 gap-4 animate-in fade-in duration-200 ease-out">
           {!isCollapsed && (
             <>
               <Skeleton className="h-10 w-full rounded" />
@@ -508,7 +546,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
         </div>
       ) : (
         <>
-          <div className="flex flex-col h-full">
+          <div className="flex flex-col h-full animate-in fade-in duration-200 ease-out">
             {/* Collapse toggle */}
             <button
               type="button"
@@ -531,20 +569,28 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
               <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden custom-scrollbar px-3 space-y-4 pt-3 pb-3">
                 <nav className="space-y-1">
 
-                  {/* FIRM SWITCHER — compact when expanded, icon when collapsed */}
-                  {!isCollapsed && (slug || firms.length > 0) && (
-                    <>
-                      <div data-demo-tour="firm-switcher">
-                      <FirmSelector
-                        firms={firms}
-                        selectedFirmSlug={selectedFirmSlug}
-                        onFirmChange={(firmSlug) => {
-                          setSelectedFirmSlug(firmSlug)
-                          router.push(`/d/f/${firmSlug}`)
-                        }}
-                        compact
-                        isFirmAdmin={role === 'FIRM_ADMIN'}
-                      />
+                  {/* FIRM SWITCHER — compact when expanded, icon when collapsed. Gated on `slug`
+                      (a specific firm selected in the URL), not just `firms.length > 0` — on
+                      bare /d/ or /d/[groupSlug]/f (no firm segment) there's no active firm to
+                      show, so rendering this would misleadingly imply one is selected. */}
+                  {!isCollapsed && (
+                    <div className={`transition-opacity duration-200 ease-out ${slug ? 'opacity-100' : 'opacity-0 h-0 overflow-hidden pointer-events-none'}`}>
+                      {/* Static firm name — same visual treatment as the old FirmSelector's
+                          compact trigger, minus the chevron/dropdown. Switching firms now
+                          happens via the /d/ group picker or the Profile menu's
+                          "Switch Workspace" link. */}
+                      <div data-demo-tour="firm-switcher" className="flex h-8 w-full items-center gap-2 rounded px-3 py-1 text-[#1b1b1d]">
+                        <span className="shrink-0 flex items-center"><Building2 className="h-4 w-4 text-[#45474c]" /></span>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="d-sidebar-section truncate flex-1 text-left">
+                              {firms.find((f) => f.slug === selectedFirmSlug)?.name || 'Select Workspace...'}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" className="text-xs">
+                            {firms.find((f) => f.slug === selectedFirmSlug)?.name || 'Select Workspace...'}
+                          </TooltipContent>
+                        </Tooltip>
                       </div>
                       {/* Tree sub-items: Overview + Clients + Settings */}
                       <div className="ml-1 space-y-0.5">
@@ -580,11 +626,12 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                           </Link>
                         )}
                       </div>
-                    </>
+                    </div>
                   )}
 
-                  {/* Collapsed: firm icon + clients + analytics icons */}
-                  {isCollapsed && (
+                  {/* Collapsed: firm icon + clients + analytics icons — same `slug` gate as the
+                      expanded FIRM SWITCHER above; nothing to show when no firm is selected. */}
+                  {isCollapsed && slug && (
                     <>
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -954,7 +1001,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                   <SeparatorLine />
 
                   {/* RESOURCES — expanded: inline accordion (collapsed by default); collapsed sidebar: icons navigate */}
-                  <div className={isCollapsed ? 'w-full flex items-center gap-0.5' : 'pt-2'}>
+                  <div className={isCollapsed ? 'w-full flex flex-col items-center gap-0.5' : 'pt-2'}>
                     {!isCollapsed && (
                       <>
                         <button
@@ -964,7 +1011,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                         >
                           <BookOpen className="h-3 w-3 shrink-0 mr-1.5 text-[#45474c]" />
                           <span className="flex-1 text-left">Resources</span>
-                          {hasUnread && (
+                          {hasUnread && !isResourcesOpen && (
                             <span className="mr-1.5 w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
                           )}
                           <ChevronDown className={`h-3 w-3 shrink-0 text-[#9ca3af] transition-transform duration-200 ${isResourcesOpen ? 'rotate-180' : ''}`} />
@@ -1009,7 +1056,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                               href="/resources/faq"
                               target="_blank"
                               rel="noopener noreferrer"
-                              className={`flex-1 flex items-center d-sidebar-nav transition-colors px-0 justify-center py-2 ${pathname?.startsWith('/resources/faq') ? 'text-primary' : 'text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}
+                              className={`w-full flex items-center d-sidebar-nav transition-colors px-0 justify-center py-2 ${pathname?.startsWith('/resources/faq') ? 'text-primary' : 'text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}
                             >
                               <HelpCircle className="h-4 w-4 mx-auto" />
                             </Link>
@@ -1021,7 +1068,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                             <button
                               type="button"
                               onClick={() => setIsWhatsNewOpen(true)}
-                              className="relative flex-1 flex items-center d-sidebar-nav transition-colors px-0 justify-center py-2 text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d]"
+                              className="relative w-full flex items-center d-sidebar-nav transition-colors px-0 justify-center py-2 text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d]"
                             >
                               <Megaphone className="h-4 w-4 mx-auto" />
                               {hasUnread && (
@@ -1110,8 +1157,9 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                 signOut={signOut}
                 isCollapsed={isCollapsed}
                 showBillingLink={canManageOrg}
-                billingHref={buildBillingPageHref({ firmSlug: billingFirmSlug, pathname })}
+                billingHref={buildBillingPageHref({ firmSlug: billingFirmSlug, groupSlug: billingGroupSlug, pathname })}
                 isSystemAdmin={isSystemAdmin}
+                showSwitchWorkspace={showSwitchWorkspace}
                 {...(firms.length > 0 && billingFirmId
                   ? { planSubtitle: profilePlanSubtitle, planSubtitleLoading: billingPlanLoading }
                   : {})}

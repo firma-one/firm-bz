@@ -9,11 +9,12 @@ import { logger } from '@/lib/logger'
 import {
     canCreateNonSandboxFirm,
     requireNonSandboxFirmCreationAccess,
-    resolveBillingAnchorForNewSatelliteFirm,
+    resolveGroupForNewFirm,
+    resolveGroupForNewFirmInGroup,
 } from '@/lib/billing/firm-creation-gate'
-import { isWorkspaceOnboardingComplete } from '@/lib/onboarding/workspace-onboarding-complete'
 import { mergeLeanAppMetadata } from '@/lib/auth/supabase-jwt-metadata'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
+import { firmPath, groupFirmListPath } from '@/lib/navigation/firm-paths'
 
 export interface FirmOption {
     id: string
@@ -26,12 +27,24 @@ export interface FirmOption {
     themeColor?: string | null
     groupId?: string | null
     groupName?: string | null
+    groupSlug?: string | null
+    /** Whether the current user is `firm_admin` on this specific firm. */
+    isFirmAdmin?: boolean
+    /** Count of non-deleted clients in this firm. */
+    clientCount?: number
 }
 
 export interface CreateFirmData {
     name: string
     allowDomainAccess?: boolean
     allowedEmailDomain?: string | null
+    /**
+     * The group whose picker page ("Add Firm") this was called from, if any. When provided,
+     * the new firm is validated against and attached to THIS group specifically — never an
+     * arbitrary "first eligible group" pick. Omit only when the caller has no specific group
+     * in context (e.g. the top-level /d/ fallback view's own "Add Firm" entry point).
+     */
+    groupSlug?: string
 }
 
 /**
@@ -49,12 +62,13 @@ export async function getUserFirms(): Promise<FirmOption[]> {
 
     try {
         const memberships = await (prisma as any).firmMember.findMany({
-            where: { userId: user.id },
+            where: { userId: user.id, firm: { sandboxOnly: false } },
             include: {
                 firm: {
                     include: {
                         members: true,
-                        group: { select: { id: true, name: true } },
+                        group: { select: { id: true, name: true, slug: true } },
+                        _count: { select: { clients: { where: { deletedAt: null } } } },
                     },
                 },
             },
@@ -76,6 +90,9 @@ export async function getUserFirms(): Promise<FirmOption[]> {
                 themeColor: (branding.primaryColor as string | null | undefined) ?? null,
                 groupId: firm.groupId ?? null,
                 groupName: firm.group?.name ?? null,
+                groupSlug: firm.group?.slug ?? null,
+                isFirmAdmin: membership?.role === 'firm_admin',
+                clientCount: firm._count?.clients ?? 0,
             }
         })
     } catch (err) {
@@ -115,6 +132,112 @@ export async function getIsAdminOnAnyFirm(): Promise<boolean> {
 }
 
 /**
+ * Whether the current user is this specific group's `GROUP_ADMIN` (its creator, in practice —
+ * see getUserGroups()'s doc comment) — used for gating group-scoped actions like "Add Firm" on
+ * /d/[groupSlug]/f. Deliberately checks GroupMember, not FirmMember.role === 'firm_admin' — a
+ * firm-level admin on some firm in this group is not sufficient to add ANOTHER firm to the
+ * group; only its GROUP_ADMIN may do that (adding a firm is a group-level action with its own
+ * subscription-entitlement gate, checked separately by requireNonSandboxFirmCreationAccess /
+ * resolveGroupForNewFirmInGroup inside createFirm()).
+ */
+export async function getIsGroupAdmin(groupSlug: string): Promise<boolean> {
+    const supabase = await createClient()
+    const { data: { user }, error } = await supabase.auth.getUser()
+    if (error || !user) return false
+    const membership = await (prisma as any).groupMember.findFirst({
+        where: { userId: user.id, role: 'GROUP_ADMIN', group: { slug: groupSlug } },
+        select: { id: true },
+    })
+    return membership !== null
+}
+
+export interface UserGroupOption {
+    id: string
+    slug: string
+    name: string
+    /** Whether the current user is this group's `GROUP_ADMIN` (its creator, in practice —
+     * see lib/onboarding/auto-provision.ts and friends, which each write exactly one such
+     * row per group at creation time). */
+    isGroupAdmin: boolean
+    firmCount: number
+}
+
+/**
+ * Distinct groups the current user has any firm membership in, deduped from `getUserFirms()`,
+ * each annotated with whether the user is that group's `GROUP_ADMIN` (checked via `GroupMember`,
+ * not `FirmMember` — a user invited into someone else's firm has no `GroupMember` row in that
+ * group at all, which correctly reads as "not admin" here).
+ */
+export async function getUserGroups(): Promise<UserGroupOption[]> {
+    const supabase = await createClient()
+    const { data: { user }, error } = await supabase.auth.getUser()
+    if (error || !user) return []
+
+    const firms = await getUserFirms()
+    const groupsById = new Map<string, { slug: string; name: string; firmCount: number }>()
+    for (const firm of firms) {
+        if (!firm.groupId || !firm.groupSlug) continue
+        const existing = groupsById.get(firm.groupId)
+        if (existing) {
+            existing.firmCount += 1
+        } else {
+            groupsById.set(firm.groupId, { slug: firm.groupSlug, name: firm.groupName || 'Firm Group', firmCount: 1 })
+        }
+    }
+
+    const groupIds = Array.from(groupsById.keys())
+    if (groupIds.length === 0) return []
+
+    const adminRows = await (prisma as any).groupMember.findMany({
+        where: { userId: user.id, groupId: { in: groupIds }, role: 'GROUP_ADMIN' },
+        select: { groupId: true },
+    })
+    const adminGroupIds = new Set(adminRows.map((r: { groupId: string }) => r.groupId))
+
+    return groupIds.map((id) => {
+        const g = groupsById.get(id)!
+        return { id, slug: g.slug, name: g.name, firmCount: g.firmCount, isGroupAdmin: adminGroupIds.has(id) }
+    })
+}
+
+/**
+ * Whether the "Switch Workspace" entry point (Profile menu) should be shown for the current
+ * user — see .claude/plans/sandbox-firm-removal.md, Step 6. Always shown for any signed-in
+ * user with at least one group, so there's a standing path to `/d/` — to switch between
+ * multiple workspaces, to create an additional one as an existing admin, or (for an invited
+ * firm member with no group of their own) to create their first one.
+ */
+export async function shouldShowSwitchWorkspace(): Promise<boolean> {
+    const groups = await getUserGroups()
+    return groups.length > 0
+}
+
+/**
+ * Creates a brand-new Group + Firm + free-tier Subscription for the current user, from the
+ * `/d/` group picker's "Create your own workspace" action — see
+ * .claude/plans/sandbox-firm-removal.md, Step 6. Deliberately NOT the same action as "Add Firm"
+ * on the firm-picker page (which adds a satellite firm to an EXISTING group/subscription): this
+ * always creates a genuinely new, independent Group with its own Subscription, regardless of how
+ * many firms/groups the user already belongs to. Reuses `autoProvisionFirstFirm` directly — that
+ * function has no "zero firms" precondition of its own (the zero-firms gate lives in its caller,
+ * `resolveDefaultFirmLandingPath`), so it's already safe to call here for a user who has firms.
+ */
+export async function createOwnWorkspace(): Promise<{ path: string } | { error: string }> {
+    const supabase = await createClient()
+    const { data: { user }, error } = await supabase.auth.getUser()
+    if (error || !user) return { error: 'Not signed in.' }
+
+    try {
+        const { autoProvisionFirstFirm } = await import('@/lib/onboarding/auto-provision')
+        const { groupSlug, firmSlug } = await autoProvisionFirstFirm(user)
+        return { path: firmPath(groupSlug, firmSlug) }
+    } catch (err) {
+        logger.error('[createOwnWorkspace] Failed to create workspace', err as Error, undefined, { userId: user.id })
+        return { error: 'Failed to create your workspace. Please try again.' }
+    }
+}
+
+/**
  * Get the default firm slug for the current user
  */
 export async function getDefaultFirmSlug(): Promise<string | null> {
@@ -143,74 +266,94 @@ export async function getDefaultFirmWithOnboardingStatus(): Promise<{
     const defaultFirm = await FirmService.getDefaultFirm(user.id)
     const slug = defaultFirm?.slug ?? null
 
-    const onboardingComplete = defaultFirm
-        ? await isWorkspaceOnboardingComplete({
-              id: defaultFirm.id,
-              settings: defaultFirm.settings,
-              connectorId: defaultFirm.connectorId ?? null,
-              sandboxOnly: defaultFirm.sandboxOnly ?? false,
-          })
-        : false
-
-    return { slug, onboardingComplete }
+    // Having any firm at all is now the onboarding-complete signal — see
+    // resolveDefaultFirmLandingPath's identical reasoning above.
+    return { slug, onboardingComplete: defaultFirm !== null }
 }
 
 /**
  * Where to send the user when entering the app at `/d` (and when auth callback has no explicit `next`).
  *
- * Routing rules (in order):
- * 1. No firm memberships at all → `/d/onboarding` (new user)
- * 2. Multiple firm memberships → `/d/f/` (workspace picker)
- * 3. Single firm, non-admin → `/d/f/{slug}` (go straight in)
- * 4. Single firm, admin, onboarding incomplete → `/d/onboarding`
- * 5. Single firm, admin, onboarding complete, domain orgs available → `/d/f/` (workspace picker)
- * 6. Single firm, admin, onboarding complete, no domain orgs → `/d/f/{slug}`
+ * Groups are the top-level routing unit, firms are the second-level unit within a group
+ * (see .claude/plans/sandbox-firm-removal.md, Step 6).
  *
- * Returns `null` only if the resolved firm has no slug (malformed data).
+ * Routing rules (in order):
+ * 1. No firm memberships at all → silently auto-provision a real Group+Firm (see
+ *    lib/onboarding/auto-provision.ts) and land directly in it — no onboarding wizard. The
+ *    provisioning runs inline here (server-side redirect); `app/(app)/d/page.tsx`'s own
+ *    inner Suspense boundary covers it, scoped to that one route only.
+ * 2. 2+ distinct groups → `/d/` (group picker — one card per group)
+ * 3. Exactly 1 group, 2+ firms in it → `/d/{groupSlug}/f/` (firm picker, scoped to that group)
+ * 4. Exactly 1 group, exactly 1 firm → `/d/{groupSlug}/f/{firmSlug}` (go straight in) — having
+ *    any firm at all is treated as onboarding-complete, no per-firm Drive/settings gate
+ * 5. Admin with joinable/already-joined domain orgs → `/d/{groupSlug}/f/` instead of step 4
+ *
+ * Returns `null` only if the resolved firm/group has no slug (malformed data).
  */
 export async function resolveDefaultFirmLandingPath(userId: string): Promise<string | null> {
     const allFirms = await FirmService.getUserFirms(userId)
 
     logger.info('[resolveDefaultFirmLandingPath]', { userId, firmCount: allFirms.length, slugs: allFirms.map(f => f.slug) })
 
-    if (allFirms.length === 0) return '/d/onboarding'
+    if (allFirms.length === 0) {
+        try {
+            const supabase = await createClient()
+            const { data: { user } } = await supabase.auth.getUser()
+            if (!user) return '/d/onboarding'
 
-    // Multiple memberships → always show picker so user can choose the right workspace
-    if (allFirms.length > 1) return '/d/f/'
+            const { autoProvisionFirstFirm } = await import('@/lib/onboarding/auto-provision')
+            const { groupSlug, firmSlug } = await autoProvisionFirstFirm(user)
+            // `?landed=new` lets the destination firm page show a one-time "just landed"
+            // overlay (loading phase -> a closing welcome message) — the /d loader itself
+            // can't show this (it renders before we know a fresh auto-provision even
+            // happened, or even whether this is a first-time vs. returning landing at all),
+            // so the closing message lives on arrival instead. See resolveDefaultFirmLandingPath's
+            // other two `firmPath(...)` returns below for the `?landed=returning` counterpart.
+            return `${firmPath(groupSlug, firmSlug)}?landed=new`
+        } catch (err) {
+            // Auto-provisioning failure (e.g. DB down) shouldn't crash landing-path resolution —
+            // fall back to the old onboarding route, which will retry provisioning on next visit.
+            logger.error('[resolveDefaultFirmLandingPath] Auto-provisioning failed', err as Error, undefined, { userId })
+            return '/d/onboarding'
+        }
+    }
 
-    const targetFirm = allFirms[0]
+    const distinctGroupSlugs = Array.from(new Set(allFirms.map((f) => f.groupSlug).filter((s): s is string => Boolean(s))))
+    if (distinctGroupSlugs.length === 0) return null
+
+    // 2+ distinct groups → group picker. Nothing about which firm to land in is decided yet.
+    if (distinctGroupSlugs.length > 1) return '/d/'
+
+    const groupSlug = distinctGroupSlugs[0]
+    const firmsInGroup = allFirms.filter((f) => f.groupSlug === groupSlug)
+
+    // Exactly 1 group, but 2+ firms in it → firm picker, scoped to this group.
+    if (firmsInGroup.length > 1) return groupFirmListPath(groupSlug)
+
+    const targetFirm = firmsInGroup[0]
     if (!targetFirm?.slug) return null
 
     const membership = targetFirm.members.find((m) => m.userId === userId)
     const isFirmAdmin = membership?.role === 'firm_admin'
 
     if (!isFirmAdmin) {
-        return `/d/f/${targetFirm.slug}`
+        return `${firmPath(groupSlug, targetFirm.slug)}?landed=returning`
     }
 
-    const onboardingComplete = await isWorkspaceOnboardingComplete({
-        id: targetFirm.id,
-        settings: targetFirm.settings,
-        connectorId: targetFirm.connectorId ?? null,
-        sandboxOnly: targetFirm.sandboxOnly ?? false,
-    })
-
-    if (!onboardingComplete) {
-        return '/d/onboarding'
-    }
-
-    // Admin, onboarding done — check for joinable/already-joined domain orgs
+    // Belonging to a group at all (checked at the top of this function) is now the only
+    // "onboarding complete" signal — no per-firm Drive/settings gate. A user who already has a
+    // firm never gets routed into /d/onboarding again.
     const { getDomainOnboardingOptions } = await import('@/lib/actions/domain-onboarding')
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (user?.email) {
         const domainOpts = await getDomainOnboardingOptions(userId, user.email)
         if ((domainOpts.orgsToJoin.length + domainOpts.orgsAlreadyIn.length) > 0) {
-            return '/d/f/'
+            return groupFirmListPath(groupSlug)
         }
     }
 
-    return `/d/f/${targetFirm.slug}`
+    return `${firmPath(groupSlug, targetFirm.slug)}?landed=returning`
 }
 
 /**
@@ -240,7 +383,13 @@ export async function createFirm(data: CreateFirmData): Promise<FirmOption> {
 
     await requireNonSandboxFirmCreationAccess(user.id)
 
-    const billingAnchorId = await resolveBillingAnchorForNewSatelliteFirm(user.id)
+    let billingAnchorId: string | null
+    if (data.groupSlug) {
+        const targetGroup = await prisma.group.findUnique({ where: { slug: data.groupSlug }, select: { id: true } })
+        billingAnchorId = targetGroup ? await resolveGroupForNewFirmInGroup(user.id, targetGroup.id) : null
+    } else {
+        billingAnchorId = await resolveGroupForNewFirm(user.id)
+    }
     if (!billingAnchorId) {
         throw new Error('Could not attach your new firm to a billing subscription. Please try again.')
     }
@@ -291,13 +440,18 @@ export async function createFirm(data: CreateFirmData): Promise<FirmOption> {
 
     revalidatePath('/d')
 
+    const group = await prisma.group.findUnique({ where: { id: billingAnchorId }, select: { name: true, slug: true } })
+
     return {
         id: firm.id,
         name: firm.name,
         slug: firm.slug,
         isDefault: true,
         createdAt: new Date().toISOString(),
-        sandboxOnly: false
+        sandboxOnly: false,
+        groupId: billingAnchorId,
+        groupName: group?.name ?? null,
+        groupSlug: group?.slug ?? null,
     }
 }
 
@@ -408,7 +562,7 @@ export async function updateFirm(
 
     const firm = await prisma.firm.findUnique({
         where: { slug: firmSlug },
-        select: { id: true, settings: true }
+        select: { id: true, settings: true, group: { select: { slug: true } } }
     })
     if (!firm) throw new Error('Firm not found')
 
@@ -492,7 +646,7 @@ export async function updateFirm(
         .meta({ changedFields: Object.keys(data) })
         .fireAndForget()
 
-    revalidatePath(`/d/f/${firmSlug}`)
+    revalidatePath(firmPath(firm.group.slug, firmSlug))
 }
 
 /**
@@ -619,7 +773,7 @@ export async function disconnectFirmConnector({ connectorId, firmId }: { connect
         .meta({ connectorId, action: 'disconnect' })
         .fireAndForget()
 
-    revalidatePath('/d/f')
+    revalidatePath('/d/[groupSlug]/f', 'layout')
 }
 
 export async function removeFirmConnector({ connectorId }: { connectorId: string; firmId?: string }): Promise<void> {
@@ -643,7 +797,7 @@ export async function renameFirmConnector({ connectorId, firmId, name }: { conne
         where: { id: connectorId },
         data: { name: name.trim() },
     })
-    revalidatePath('/d/f')
+    revalidatePath('/d/[groupSlug]/f', 'layout')
 }
 
 export interface FirmClientRecord {
@@ -699,5 +853,5 @@ export async function detachConnectorFromClient({ clientId, firmId }: { clientId
         where: { id: clientId },
         data: { connectorId: null, driveFolderId: null },
     })
-    revalidatePath('/d/f')
+    revalidatePath('/d/[groupSlug]/f', 'layout')
 }

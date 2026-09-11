@@ -11,9 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Persona } from '@prisma/client'
 import { inviteMember } from '@/lib/actions/invitations'
-import { SandboxInfoBanner } from '@/components/ui/sandbox-info-banner'
 import { Shield, Briefcase, Eye, CheckCircle2, UserPlus, Users, Info } from 'lucide-react'
-import { useOrgSandbox } from '@/lib/use-org-sandbox'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { PersonaUiRole, PersonaUiSubRole, SUB_ROLE_LABEL, getPersonaUiGroup, resolvePersonaSlug } from '@/lib/persona-ui-groups'
 
@@ -36,8 +34,6 @@ export function InviteMemberModal({ projectId, open, onOpenChange, personas, pre
     const [subRole, setSubRole] = useState<PersonaUiSubRole>('internal')
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [error, setError] = useState('')
-    const orgSandbox = useOrgSandbox()
-    const isSandboxFirm = Boolean(orgSandbox?.sandboxOnly)
 
     const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
 
@@ -99,8 +95,6 @@ export function InviteMemberModal({ projectId, open, onOpenChange, personas, pre
         e.preventDefault()
         setError('')
 
-        if (isSandboxFirm) return
-
         if (!isValidEmail(email)) {
             setEmailError('Please enter a valid email address')
             return
@@ -148,8 +142,6 @@ export function InviteMemberModal({ projectId, open, onOpenChange, personas, pre
 
                 <form onSubmit={handleSubmit}>
                     <div className="p-5 space-y-3">
-                        {isSandboxFirm && <SandboxInfoBanner />}
-
                         {error && (
                             <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs px-3 py-2 rounded">
                                 {error}
@@ -166,7 +158,6 @@ export function InviteMemberModal({ projectId, open, onOpenChange, personas, pre
                                     placeholder="colleague@example.com"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
-                                    disabled={isSandboxFirm}
                                     className={`${inputCls} ${emailError ? 'border-red-400 focus-visible:ring-red-400' : ''} ${email && !emailError ? 'pr-9' : ''}`}
                                 />
                                 {email && !emailError && (
@@ -181,7 +172,7 @@ export function InviteMemberModal({ projectId, open, onOpenChange, personas, pre
                         {/* Persona Selection */}
                         <div>
                             <label className={fieldLabel}>Role</label>
-                            <Select value={uiRole} onValueChange={(v) => handleUiRoleChange(v as PersonaUiRole)} required={!isSandboxFirm} disabled={isSandboxFirm}>
+                            <Select value={uiRole} onValueChange={(v) => handleUiRoleChange(v as PersonaUiRole)} required>
                                 <SelectTrigger className={inputCls}>
                                     <SelectValue placeholder="Select a role" />
                                 </SelectTrigger>
@@ -206,7 +197,7 @@ export function InviteMemberModal({ projectId, open, onOpenChange, personas, pre
                                             const persona = personas.find(p => p.slug === resolvePersonaSlug('contributor', sr))
                                             return (
                                                 <div key={sr} className="flex items-center gap-2 cursor-pointer" onClick={() => handleSubRoleChange(sr)}>
-                                                    <RadioGroupItem value={sr} id={`invite-sub-${sr}`} disabled={isSandboxFirm} />
+                                                    <RadioGroupItem value={sr} id={`invite-sub-${sr}`} />
                                                     <Label htmlFor={`invite-sub-${sr}`} className="text-xs font-medium text-[#1b1b1d] cursor-pointer">
                                                         {SUB_ROLE_LABEL[sr]}
                                                     </Label>
@@ -258,7 +249,7 @@ export function InviteMemberModal({ projectId, open, onOpenChange, personas, pre
                         <Button
                             type="submit"
                             variant="greenCta"
-                            disabled={isSandboxFirm || isSubmitting || !selectedPersonaId || !email || !!emailError}
+                            disabled={isSubmitting || !selectedPersonaId || !email || !!emailError}
                             className="rounded w-36 text-[10px] font-headline font-bold tracking-widest uppercase text-white"
                         >
                             {isSubmitting ? <LoadingSpinner size="sm" /> : 'Send Invitation'}

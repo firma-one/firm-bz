@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from 'react'
 import { usePathname } from 'next/navigation'
-import { Building2, SquarePlus, ChevronDown, ChevronUp, Info, Box } from 'lucide-react'
+import { Building2, SquarePlus, ChevronDown, ChevronUp, Info } from 'lucide-react'
 import {
     Select,
     SelectContent,
@@ -15,6 +15,7 @@ import { AddFirmModal } from './add-firm-modal'
 import { useAuth } from '@/lib/auth-context'
 import { validateCheckoutReturnTo } from '@/lib/billing/checkout-return-path'
 import { buildBillingPageHref } from '@/lib/billing/build-billing-page-href'
+import { firmPath } from '@/lib/navigation/firm-paths'
 
 const ADD_FIRM_VALUE = '__create__'
 
@@ -24,6 +25,7 @@ export interface FirmOption {
     slug: string
     isDefault: boolean
     sandboxOnly: boolean
+    groupSlug?: string | null
 }
 
 interface FirmSelectorProps {
@@ -33,9 +35,16 @@ interface FirmSelectorProps {
     className?: string
     compact?: boolean
     isFirmAdmin?: boolean
+    /**
+     * Group the currently-active firm lives in — passed by app-sidebar.tsx, which already
+     * resolves it from route params. Used only for the internal upgrade-return-path link;
+     * onFirmChange's own navigation is handled by the caller (see app-sidebar.tsx's own
+     * groupSlug TODO for the cross-group switching caveat).
+     */
+    groupSlug?: string | null
 }
 
-export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className, compact, isFirmAdmin = false }: FirmSelectorProps) {
+export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className, compact, isFirmAdmin = false, groupSlug }: FirmSelectorProps) {
     const { user } = useAuth()
     const addFirmDisabled = !user?.id
 
@@ -70,14 +79,18 @@ export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className,
 
     const upgradeReturnPath = useMemo(() => {
         const slug = firmForBilling?.slug ?? billingContextSlug
-        return validateCheckoutReturnTo(pathname ?? null) ?? (slug ? `/d/f/${slug}` : '/d')
-    }, [pathname, firmForBilling, billingContextSlug])
+        // When this selector renders on a non-firm-scoped page (groupSlug null, e.g. /d/support,
+        // /d/u/*) there's no group to scope a firm path into — fall back to /d, which resolves
+        // to the right place via resolveDefaultFirmLandingPath rather than a dead legacy URL.
+        return validateCheckoutReturnTo(pathname ?? null) ?? (slug && groupSlug ? firmPath(groupSlug, slug) : '/d')
+    }, [pathname, firmForBilling, billingContextSlug, groupSlug])
 
     const handleValueChange = (orgSlug: string) => {
         if (orgSlug === ADD_FIRM_VALUE) {
             if (addFirmDisabled) {
                 const href = buildBillingPageHref({
                     firmSlug: firmForBilling?.slug ?? null,
+                    groupSlug: groupSlug ?? null,
                     pathname: pathname ?? null,
                 })
                 window.location.assign(href)
@@ -128,18 +141,6 @@ export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className,
                                 {selectedOrg?.name || 'Select Workspace...'}
                             </TooltipContent>
                         </Tooltip>
-                        {selectedOrg?.sandboxOnly && (
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <span className="shrink-0 flex items-center" aria-label="Demo firm">
-                                        <Box className="h-3.5 w-3.5 text-[#9ca3af]" />
-                                    </span>
-                                </TooltipTrigger>
-                                <TooltipContent side="top" className="text-xs">
-                                    Demo Firm — contains sample data
-                                </TooltipContent>
-                            </Tooltip>
-                        )}
                         <span className="ml-auto shrink-0 flex items-center">
                             {isSelectOpen
                                 ? <ChevronUp className="h-3 w-3 text-[#9ca3af]" />
@@ -167,18 +168,6 @@ export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className,
                                 <span className="truncate text-[10px] leading-snug text-[#45474c] font-mono">
                                     {selectedOrg ? `/${selectedOrg.slug}` : '/—'}
                                 </span>
-                                {selectedOrg?.sandboxOnly && (
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <span className="shrink-0 flex items-center" aria-label="Demo firm">
-                                                <Box className="h-3.5 w-3.5 text-[#9ca3af]" />
-                                            </span>
-                                        </TooltipTrigger>
-                                        <TooltipContent side="top" className="text-xs">
-                                            Demo Firm — contains sample data
-                                        </TooltipContent>
-                                    </Tooltip>
-                                )}
                             </div>
                         </div>
                         <span className="shrink-0 flex items-start mt-0.5">
@@ -246,16 +235,6 @@ export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className,
                                         {org.name}
                                     </TooltipContent>
                                 </Tooltip>
-                                {org.sandboxOnly && (
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <Box className="h-3.5 w-3.5 shrink-0 text-[#9ca3af]" aria-label="Demo firm" />
-                                        </TooltipTrigger>
-                                        <TooltipContent side="top" className="text-xs">
-                                            Demo Firm — contains sample data
-                                        </TooltipContent>
-                                    </Tooltip>
-                                )}
                             </div>
                         </SelectItem>
                     ))}
@@ -266,6 +245,7 @@ export function FirmSelector({ firms, selectedFirmSlug, onFirmChange, className,
                 <FirmSwitchDialog
                     open={switchDialogOpen}
                     onOpenChange={handleDialogClose}
+                    groupSlug={groupSlug ?? undefined}
                     targetFirmSlug={targetOrg.slug}
                     targetFirmName={targetOrg.name}
                     currentFirmName={currentOrg?.name}

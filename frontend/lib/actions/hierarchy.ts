@@ -59,6 +59,10 @@ export type HierarchyClient = {
             canView: boolean
             canEdit: boolean
             canManage: boolean
+            /** The current user's own EngagementMember.role — eng_admin | eng_member |
+             * eng_ext_collaborator | eng_viewer. Only present on the current user's own row
+             * (this array is always pre-filtered to `userId: user.id` by the caller). */
+            role?: string
         }[]
     }[]
 }
@@ -228,7 +232,8 @@ export async function getFirmHierarchy(firmSlug: string): Promise<HierarchyClien
                     userId: user.id,
                     canView: canView || canManage,
                     canEdit: canEdit || canManage,
-                    canManage
+                    canManage,
+                    role: p.members?.[0]?.role
                 }]
             }
         })
@@ -474,7 +479,7 @@ export async function getClientWithEngagements(
                 dueDate: p.dueDate ? new Date(p.dueDate).toISOString() : null,
                 settings: (p.settings as Record<string, unknown>) ?? {},
                 isClosed: engStatus === 'COMPLETED',
-                members: [{ userId: user.id, canView: canView || canManage, canEdit: canEdit || canManage, canManage }]
+                members: [{ userId: user.id, canView: canView || canManage, canEdit: canEdit || canManage, canManage, role: p.members?.[0]?.role }]
             }
         })
     }
