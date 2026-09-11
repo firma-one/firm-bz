@@ -272,7 +272,10 @@ export async function getProjectPersona(
 
 /**
  * Check if user can access RBAC admin (Permission/Privilege/Grants UI).
- * Allowed: SYS_ADMIN (app_metadata) or org_admin in any organization.
+ * Allowed: `firm_admin` on any firm the user belongs to.
+ *
+ * Note: an earlier version of this doc claimed an `app_metadata.role === 'SYS_ADMIN'` override.
+ * No such check exists here or anywhere else in the codebase — `app_metadata.role` is never read.
  */
 export async function canAccessRbacAdmin(userId: string): Promise<boolean> {
   if (!userId) return false

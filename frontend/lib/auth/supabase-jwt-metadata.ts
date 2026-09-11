@@ -5,11 +5,15 @@
  * **Allowlisted keys only.** Unknown keys (e.g. legacy `billing_by_anchor`, `plan_entitlements`) are
  * dropped on merge so updates actively shrink the JWT.
  *
- * Reads in-app: `role` (SYS_ADMIN), `active_firm_id`, `active_persona` (permission-helpers, notifications,
+ * Reads in-app: `active_firm_id` + `active_persona` (permission-helpers' fast path, notifications,
  * sidebar). `active_firm_slug` is optional UX; kept small.
+ *
+ * `role` was listed here for a claimed `SYS_ADMIN` override, but nothing in the codebase ever read
+ * it — not TypeScript, not RLS policies — so it was removed and is now stripped on merge like any
+ * other unknown key. System access is `system_admins` or `firm_admin` of the system-management
+ * firm; see permission-helpers' isSystemManagementAdmin.
  */
 export const JWT_APP_METADATA_KEYS = [
-    'role',
     'active_firm_id',
     'active_firm_slug',
     'active_persona',
