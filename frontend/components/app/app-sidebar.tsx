@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo, useCallback } from "react"
-import Link from "next/link"
+import Link, { useLinkStatus } from "next/link"
 import { usePathname, useSearchParams, useParams } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { useSidebar } from "@/lib/sidebar-context"
@@ -202,6 +202,22 @@ function reminderLabelColor(style: ReminderWithContext['labelStyle']): string {
     case 'red':    return '#7A2414'
     default:       return '#45474c'
   }
+}
+
+/**
+ * Vertical twin of the page-level tab progress bar: while a sidebar link's navigation is pending,
+ * an indeterminate bar runs down the item's left edge — the same place the active-item border sits.
+ * Renders nothing once navigation settles. `useLinkStatus` only reports inside a <Link>, so this
+ * must stay a child of one, and the <Link> needs `relative` for the absolute positioning below.
+ */
+function NavPendingBar() {
+  const { pending } = useLinkStatus()
+  if (!pending) return null
+  return (
+    <span aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-0.5 overflow-hidden">
+      <span className="absolute inset-x-0 h-1/2 rounded-full bg-brand-accent animate-[indeterminate-progress-y_1.5s_infinite_linear]" />
+    </span>
+  )
 }
 
 export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSidebarProps = {}) {
@@ -513,7 +529,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
 
   // Shared nav link + icon class helpers
   const navLinkClass = (active: boolean) =>
-    `flex items-center d-sidebar-nav transition-colors py-2 ${
+    `relative flex items-center d-sidebar-nav transition-colors py-2 ${
       active
         ? 'bg-primary/10 border-l-2 border-brand-accent text-primary font-semibold'
         : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'
@@ -595,30 +611,35 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                       {/* Tree sub-items: Overview + Clients + Settings */}
                       <div className="ml-1 space-y-0.5">
                         {canManageOrg && (
-                          <Link href={`${firmScopedNavBase}?tab=analytics`} className={`group/lock flex w-full items-center transition-colors pl-2 pr-3 py-1.5 text-[0.8125rem] ${isInsightsActive ? 'bg-primary/10 border-l-2 border-brand-accent text-primary font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}>
+                          <Link href={`${firmScopedNavBase}?tab=analytics`} className={`relative group/lock flex w-full items-center transition-colors pl-2 pr-3 py-1.5 text-[0.8125rem] ${isInsightsActive ? 'bg-primary/10 border-l-2 border-brand-accent text-primary font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}>
+                          <NavPendingBar />
                             <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-1.5" />
                             <BarChart3 className={`h-3.5 w-3.5 mr-2 shrink-0 ${isInsightsActive ? 'text-primary' : 'text-[#45474c]'}`} />
                             <span>Overview</span>
                             <span title="Internal only" className="ml-auto flex items-center"><Lock className="w-2.5 h-2.5 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>
                           </Link>
                         )}
-                        <Link href={`${baseUrl}?tab=clients`} className={`flex items-center transition-colors pl-2 pr-2 py-1.5 text-[0.8125rem] ${isClientsActive ? 'bg-primary/10 border-l-2 border-brand-accent text-primary font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}>
+                        <Link href={`${baseUrl}?tab=clients`} className={`relative flex items-center transition-colors pl-2 pr-2 py-1.5 text-[0.8125rem] ${isClientsActive ? 'bg-primary/10 border-l-2 border-brand-accent text-primary font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}>
+                          <NavPendingBar />
                           <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-1.5" />
                           <Users className={`h-3.5 w-3.5 mr-2 shrink-0 ${isClientsActive ? 'text-primary' : 'text-[#45474c]'}`} />
                           <span>Clients</span>
                         </Link>
-                        <Link href={`${firmScopedNavBase}?tab=calendar`} className={`flex items-center transition-colors pl-2 pr-2 py-1.5 text-[0.8125rem] ${isCalendarActive ? 'bg-primary/10 border-l-2 border-brand-accent text-primary font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}>
+                        <Link href={`${firmScopedNavBase}?tab=calendar`} className={`relative flex items-center transition-colors pl-2 pr-2 py-1.5 text-[0.8125rem] ${isCalendarActive ? 'bg-primary/10 border-l-2 border-brand-accent text-primary font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}>
+                          <NavPendingBar />
                           <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-1.5" />
                           <CalendarDays className={`h-3.5 w-3.5 mr-2 shrink-0 ${isCalendarActive ? 'text-primary' : 'text-[#45474c]'}`} />
                           <span>Calendar</span>
                         </Link>
-                        <Link href={`${firmScopedNavBase}?tab=doc-search`} className={`flex items-center transition-colors pl-2 pr-2 py-1.5 text-[0.8125rem] ${isDocumentSearchActive ? 'bg-primary/10 border-l-2 border-brand-accent text-primary font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}>
+                        <Link href={`${firmScopedNavBase}?tab=doc-search`} className={`relative flex items-center transition-colors pl-2 pr-2 py-1.5 text-[0.8125rem] ${isDocumentSearchActive ? 'bg-primary/10 border-l-2 border-brand-accent text-primary font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}>
+                          <NavPendingBar />
                           <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-1.5" />
                           <Search className={`h-3.5 w-3.5 mr-2 shrink-0 ${isDocumentSearchActive ? 'text-primary' : 'text-[#45474c]'}`} />
                           <span>Doc Search</span>
                         </Link>
                         {canManageOrg && (
-                          <Link href={`${firmScopedNavBase}?tab=settings`} className={`group/lock flex w-full items-center transition-colors pl-2 pr-3 py-1.5 text-[0.8125rem] ${isSettingsActive ? 'bg-primary/10 border-l-2 border-brand-accent text-primary font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}>
+                          <Link href={`${firmScopedNavBase}?tab=settings`} className={`relative group/lock flex w-full items-center transition-colors pl-2 pr-3 py-1.5 text-[0.8125rem] ${isSettingsActive ? 'bg-primary/10 border-l-2 border-brand-accent text-primary font-semibold' : 'text-[#45474c] font-medium hover:bg-[#f9f9fb] hover:text-[#1b1b1d]'}`}>
+                          <NavPendingBar />
                             <CornerDownRight className="h-3 w-3 shrink-0 text-[#d1d5db] mr-1.5" />
                             <Settings className={`h-3.5 w-3.5 mr-2 shrink-0 ${isSettingsActive ? 'text-primary' : 'text-[#45474c]'}`} />
                             <span>Settings</span>
@@ -636,6 +657,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Link href={firmScopedNavBase} className={navLinkClass(false)}>
+                            <NavPendingBar />
                             <Building2 className={navIconClass(false)} />
                           </Link>
                         </TooltipTrigger>
@@ -645,6 +667,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Link href={`${firmScopedNavBase}?tab=analytics`} className={navLinkClass(isInsightsActive)}>
+                            <NavPendingBar />
                               <BarChart3 className={navIconClass(isInsightsActive)} />
                             </Link>
                           </TooltipTrigger>
@@ -654,6 +677,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Link href={`${baseUrl}?tab=clients`} className={navLinkClass(isClientsActive)}>
+                            <NavPendingBar />
                             <Users className={navIconClass(isClientsActive)} />
                           </Link>
                         </TooltipTrigger>
@@ -662,6 +686,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Link href={`${firmScopedNavBase}?tab=calendar`} className={navLinkClass(isCalendarActive)}>
+                            <NavPendingBar />
                             <CalendarDays className={navIconClass(isCalendarActive)} />
                           </Link>
                         </TooltipTrigger>
@@ -670,6 +695,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Link href={`${firmScopedNavBase}?tab=doc-search`} className={navLinkClass(isDocumentSearchActive)}>
+                            <NavPendingBar />
                             <Search className={navIconClass(isDocumentSearchActive)} />
                           </Link>
                         </TooltipTrigger>
@@ -679,6 +705,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Link href={`${firmScopedNavBase}?tab=settings`} className={navLinkClass(isSettingsActive)}>
+                            <NavPendingBar />
                               <Settings className={navIconClass(isSettingsActive)} />
                             </Link>
                           </TooltipTrigger>
@@ -694,6 +721,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Link href={slug ? `/d/support?firmSlug=${slug}` : '/d/support'} className={navLinkClass(isSupportActive)}>
+                            <NavPendingBar />
                             <LifeBuoy className={navIconClass(isSupportActive)} />
                           </Link>
                         </TooltipTrigger>
@@ -701,6 +729,7 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
                       </Tooltip>
                     ) : (
                       <Link href={slug ? `/d/support?firmSlug=${slug}` : '/d/support'} data-demo-tour="sidebar-support" className={`group/lock ${navLinkClass(isSupportActive)}`}>
+                            <NavPendingBar />
                         <LifeBuoy className={navIconClass(isSupportActive)} />
                         <span className="flex-1">Support</span>
                         <span title="Internal only" className="flex items-center"><Lock className="w-2.5 h-2.5 text-[#45474c]/40 group-hover/lock:text-[#45474c] transition-colors shrink-0" /></span>

@@ -263,7 +263,7 @@ export function GoogleDriveConnectorTab({
                             rootFolderName={driveRoot?.rootFolderName}
                             workspaceRootLocation={driveRoot?.workspaceRootLocation ?? null}
                             workspaceRootSharedStorageName={driveRoot?.workspaceRootSharedStorageName ?? null}
-                            migrationLocked={isMigrationLocked}
+                            migrateDisabled={isMigrationLocked}
                             onUpdated={onRefreshDriveStatus}
                             onMigrationStarted={onMigrationStarted}
                             firmSlug={firmSlug}

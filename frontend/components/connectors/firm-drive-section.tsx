@@ -125,6 +125,12 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
   const [detachingClientId, setDetachingClientId] = useState<string | null>(null)
   const [attachingAllConnectorId, setAttachingAllConnectorId] = useState<string | null>(null)
 
+  // A client attach/detach is in flight. Disconnect is gated on this because attach/detach updates
+  // `attachedClients` optimistically: a detach taking the count to zero would otherwise re-enable
+  // Disconnect while the request is still running, and disconnecting mid-attach leaves the link
+  // half-applied.
+  const clientLinkBusy = attachingClientId !== null || detachingClientId !== null
+
   // OneDrive/SharePoint connect flow — mirrors the Google "Connect new account" name+arrow
   // pattern exactly: OAuth completes immediately (no location picker upfront), then the
   // Personal-vs-Shared choice happens later via OneDriveWorkspaceRoot's "Choose folder" wizard,
@@ -408,7 +414,12 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
     try {
       const { removeFirmConnector } = await import('@/lib/actions/firms')
       await removeFirmConnector({ connectorId: connector.id, firmId })
+      // Clear the local attachment too, matching handleRemove: without this the clients keep
+      // rendering as attached to a connector that no longer exists until router.refresh() lands.
+      const removedClientIds = new Set(connector.attachedClients.map(c => c.id))
+      setAllClients(prev => prev.map(c => removedClientIds.has(c.id) ? { ...c, connectorId: null } : c))
       setConnectors(prev => prev.filter(c => c.id !== connector.id))
+      setOneDriveStatusMap(prev => { const next = { ...prev }; delete next[connector.id]; return next })
       addToast({ type: 'success', title: 'Removed', message: 'Connector deleted.' })
       router.refresh()
     } catch (e) {
@@ -739,7 +750,7 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
                                 <Button type="button" variant="outline" size="sm"
                                   className="h-8 w-[6.5rem] justify-center px-3 text-xs border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] rounded"
                                   onClick={() => void handleOpenSwitchModal(connector)}
-                                  disabled={loading || isPersonalDrive}>
+                                  disabled={loading || isPersonalDrive || clientLinkBusy}>
                                   <SwitchCamera className="w-3.5 h-3.5 mr-1.5" />Transfer
                                 </Button>
                               </span>
@@ -757,7 +768,7 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
                                 <Button type="button" variant="outline" size="sm"
                                   className="h-8 w-[6.5rem] justify-center px-3 text-xs border-[#e5e7eb] bg-white text-rose-600 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 rounded"
                                   onClick={() => setDisconnectTarget(connector)}
-                                  disabled={connector.attachedClients.length > 0}>
+                                  disabled={connector.attachedClients.length > 0 || clientLinkBusy}>
                                   <Unplug className="w-3.5 h-3.5 mr-1.5" />Disconnect
                                 </Button>
                               </span>
@@ -834,7 +845,7 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
                         workspaceRootLocation={(driveRoot?.workspaceRootLocation as 'PERSONAL' | 'SHARED' | null) ?? null}
                         workspaceRootSharedStorageName={driveRoot?.workspaceRootSharedStorageName ?? null}
                         isPersonalAccount={driveRoot?.isPersonalAccount ?? null}
-                        migrationLocked={false}
+                        migrateDisabled={clientLinkBusy}
                         connectorActive={isActive}
                         onUpdated={() => void loadStatus(connector.id)}
                         onMigrationStarted={() => {}}
@@ -954,7 +965,7 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
                                 <Button type="button" variant="outline" size="sm"
                                   className="h-8 w-[6.5rem] justify-center px-3 text-xs border-[#e5e7eb] bg-white text-[#45474c] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] rounded"
                                   onClick={() => void handleOpenSwitchModal(connector)}
-                                  disabled={oneDriveLoading || !isShared}>
+                                  disabled={oneDriveLoading || !isShared || clientLinkBusy}>
                                   <SwitchCamera className="w-3.5 h-3.5 mr-1.5" />Transfer
                                 </Button>
                               </span>
@@ -968,13 +979,20 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
 
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <Button type="button" variant="outline" size="sm"
-                                className="h-8 w-[6.5rem] justify-center px-3 text-xs border-[#e5e7eb] bg-white text-rose-600 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 rounded"
-                                onClick={() => setOneDriveDisconnectTarget(connector)}>
-                                <Unplug className="w-3.5 h-3.5 mr-1.5" />Disconnect
-                              </Button>
+                              <span tabIndex={connector.attachedClients.length > 0 ? 0 : undefined} className={connector.attachedClients.length > 0 ? 'cursor-not-allowed' : undefined}>
+                                <Button type="button" variant="outline" size="sm"
+                                  className="h-8 w-[6.5rem] justify-center px-3 text-xs border-[#e5e7eb] bg-white text-rose-600 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 rounded"
+                                  onClick={() => setOneDriveDisconnectTarget(connector)}
+                                  disabled={connector.attachedClients.length > 0 || clientLinkBusy}>
+                                  <Unplug className="w-3.5 h-3.5 mr-1.5" />Disconnect
+                                </Button>
+                              </span>
                             </TooltipTrigger>
-                            <TooltipContent side="bottom" className="max-w-xs">Revoke the live session. Reconnect the same account later.</TooltipContent>
+                            <TooltipContent side="bottom" className="max-w-xs">
+                              {connector.attachedClients.length > 0
+                                ? 'Detach all clients before disconnecting.'
+                                : 'Revoke the live session. Reconnect the same account later.'}
+                            </TooltipContent>
                           </Tooltip>
                         </>
                       ) : (
@@ -1045,6 +1063,7 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
                         workspaceRootSharedStorageName={oneDriveRoot?.workspaceRootSharedStorageName ?? null}
                         workspaceRootSharedStorageWebUrl={oneDriveRoot?.workspaceRootSharedStorageWebUrl ?? null}
                         isPersonalAccount={oneDriveRoot?.isPersonalAccount ?? null}
+                        migrateDisabled={clientLinkBusy}
                         connectorActive={isActive}
                         onUpdated={() => void loadOneDriveStatus(connector.id)}
                         firmId={firmId}
@@ -1347,7 +1366,10 @@ function ConnectorClientAttachSection({
   const visibleClients = allClients.filter(c => !c.connectorId || c.connectorId === connector.id)
   const unattachedCount = visibleClients.filter(c => c.connectorId !== connector.id).length
   const attachingAll = attachingAllConnectorId === connector.id
-  const attachAllDisabled = disabled || !rootFolderId || attachingAll || attachingClientId !== null
+  // attachingClientId/detachingClientId are single slots shared across every connector, so only one
+  // link change can be in flight at a time. Everything that could start a second one waits.
+  const clientLinkBusy = attachingClientId !== null || detachingClientId !== null
+  const attachAllDisabled = disabled || !rootFolderId || attachingAll || clientLinkBusy
 
   return (
     <div className="relative z-10 border-t border-[#e5e7eb]">
@@ -1392,42 +1414,70 @@ function ConnectorClientAttachSection({
             const isAttachedHere = client.connectorId === connector.id
             const isWorking = attachingClientId === client.id || detachingClientId === client.id
             const attachDisabled = disabled || !rootFolderId
-            const rowDisabled = isWorking || (isAttachedHere ? disabled : attachDisabled)
+            const rowDisabled = isWorking || clientLinkBusy || (isAttachedHere ? disabled : attachDisabled)
+            // Only explain what the button can't: "Detach from this connector" merely restated the
+            // Unlink label, so the tooltip now carries the disabled reasons and nothing else.
             const tooltipText = isWorking
               ? undefined
-              : isAttachedHere
-                ? 'Detach from this connector'
-                : !rootFolderId
+              : clientLinkBusy
+                ? 'Finishing the current change…'
+                : !isAttachedHere && !rootFolderId
                   ? 'Choose a workspace folder before attaching clients'
-                  : 'Attach to this connector'
+                  : undefined
+            // Four states, not three: the code already distinguishes attaching from detaching, so
+            // the in-flight label can say which way the link is moving.
+            const isDetaching = detachingClientId === client.id
+            const actionLabel = isDetaching
+              ? 'Unlinking…'
+              : attachingClientId === client.id
+                ? 'Linking…'
+                : isAttachedHere
+                  ? 'Unlink'
+                  : 'Link'
             const row = (
-              <button
-                type="button"
-                disabled={rowDisabled}
-                onClick={() => void (isAttachedHere
-                  ? onDetach(connector.id, client.id)
-                  : onAttach(connector.id, client.id))}
-                className="w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded hover:bg-[#f9f9fb] transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent text-left"
+              <div
+                className={cn(
+                  // The row is no longer the click target — the labelled button on the right is.
+                  // Previously the whole w-full row was a button, so ~900px of empty space toggled
+                  // the attachment with nothing out there looking interactive.
+                  "w-full flex items-center justify-between gap-3 px-2 py-1 rounded transition-colors",
+                  rowDisabled && !isWorking && "opacity-40"
+                )}
               >
                 <div className="flex items-center gap-2 min-w-0">
                   {isAttachedHere
-                    ? <SquareCheck className="w-3.5 h-3.5 shrink-0 text-emerald-500" />
-                    : <Square className="w-3.5 h-3.5 shrink-0 text-[#d1d5db]" />
+                    ? <SquareCheck className="w-4 h-4 shrink-0 text-emerald-600" />
+                    : <Square className="w-4 h-4 shrink-0 text-[#d1d5db]" />
                   }
                   <span className={`text-xs truncate ${isAttachedHere ? 'font-medium text-[#1b1b1d]' : 'text-[#45474c]'}`}>
                     {client.name}
                   </span>
                 </div>
-                <div className="shrink-0">
-                  {isWorking ? (
-                    <RefreshCw className="w-3.5 h-3.5 text-[#9a9ba0] animate-spin" />
-                  ) : isAttachedHere ? (
-                    <Unlink className="w-3.5 h-3.5 text-rose-400" />
-                  ) : (
-                    <Link className="w-3.5 h-3.5 text-emerald-500" />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={rowDisabled}
+                  onClick={() => void (isAttachedHere
+                    ? onDetach(connector.id, client.id)
+                    : onAttach(connector.id, client.id))}
+                  className={cn(
+                    "h-7 w-[6.5rem] shrink-0 justify-center px-3 text-xs rounded border-[#e5e7eb] bg-white",
+                    isAttachedHere
+                      ? "text-rose-600 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200"
+                      : "text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-200"
                   )}
-                </div>
-              </button>
+                >
+                  {isWorking ? (
+                    <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                  ) : isAttachedHere ? (
+                    <Unlink className="w-3.5 h-3.5 mr-1.5" />
+                  ) : (
+                    <Link className="w-3.5 h-3.5 mr-1.5" />
+                  )}
+                  {actionLabel}
+                </Button>
+              </div>
             )
             return (
               <Tooltip key={client.id}>

@@ -72,7 +72,12 @@ type OneDriveWorkspaceRootProps = {
    * from the composite site id, unlike Personal OneDrive's onedrive.live.com/?id= pattern). Null
    * for Personal connectors and for Shared connectors selected before this field existed. */
   workspaceRootSharedStorageWebUrl?: string | null
-  migrationLocked?: boolean
+  /**
+   * Disable the Migrate button whenever moving the workspace root would conflict with work
+   * already in flight — a migration that is pending or active, or a client attach/detach the
+   * parent section is still running.
+   */
+  migrateDisabled?: boolean
   onUpdated: () => void | Promise<void>
   firmId?: string | null
   sectionLabel?: string
@@ -106,7 +111,7 @@ export function OneDriveWorkspaceRoot({
   workspaceRootLocation = null,
   workspaceRootSharedStorageName = null,
   workspaceRootSharedStorageWebUrl = null,
-  migrationLocked = false,
+  migrateDisabled = false,
   onUpdated,
   firmId,
   sectionLabel,
@@ -269,10 +274,15 @@ export function OneDriveWorkspaceRoot({
     if (!accessToken) return
     setSelectingSiteId(site.id)
     try {
+      // Bounded because the dialog has no exit while this is in flight (no X, no Escape, no
+      // outside-click) — a hung request would strand the user on a spinner. Deliberately not
+      // routed through fetchWithTimeoutRetry: this POST creates the workspace folder and is not
+      // idempotent, so retrying it risks duplicate folder structures.
       const res = await fetch('/api/connectors/onedrive/sites', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
         body: JSON.stringify({ connectionId, siteId: site.id, siteName: site.name, ...(firmId && { firmId }) }),
+        signal: AbortSignal.timeout(90_000),
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
@@ -282,7 +292,16 @@ export function OneDriveWorkspaceRoot({
       await onUpdated()
       closeDialog()
     } catch (e) {
-      addToast({ title: 'Site selection failed', message: e instanceof Error ? e.message : 'Try again.', type: 'error' })
+      // A timeout does not mean the folder wasn't created — the request was abandoned client-side
+      // while the server may well have finished. Say so, rather than inviting a duplicate attempt.
+      const timedOut = e instanceof DOMException && (e.name === 'TimeoutError' || e.name === 'AbortError')
+      addToast({
+        title: timedOut ? 'Still setting up' : 'Site selection failed',
+        message: timedOut
+          ? 'This is taking longer than expected. It may still be completing — reopen this dialog shortly to check before trying again.'
+          : e instanceof Error ? e.message : 'Try again.',
+        type: 'error',
+      })
     } finally {
       setSelectingSiteId(null)
     }
@@ -302,6 +321,11 @@ export function OneDriveWorkspaceRoot({
       : location === "Personal"
         ? "We'll create a uniquely named folder in your OneDrive."
         : "Pick a SharePoint site — we'll create a dedicated workspace folder inside it."
+
+  // A site selection is in flight: the workspace folder is being created inside the chosen site.
+  // The whole picker locks until it settles — a second pick would race it, and dismissing the
+  // dialog only hides the work, it does not cancel it server-side.
+  const isSelectingSite = selectingSiteId !== null
 
   return (
     <div>
@@ -361,14 +385,14 @@ export function OneDriveWorkspaceRoot({
                         type="button"
                         className={cn(
                           "inline-flex h-8 w-[6.5rem] items-center justify-center gap-1.5 rounded text-xs font-medium text-[#45474c] bg-white border border-[#e5e7eb] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] transition-colors",
-                          (!accessToken || !connectorActive || migrationLocked) && "opacity-40 cursor-not-allowed",
+                          (!accessToken || !connectorActive || migrateDisabled) && "opacity-40 cursor-not-allowed",
                         )}
                         onClick={() => {
-                          if (!connectorActive || migrationLocked) return
+                          if (!connectorActive || migrateDisabled) return
                           resetFlow()
                           setDialogOpen(true)
                         }}
-                        disabled={!accessToken || !connectorActive || migrationLocked}
+                        disabled={!accessToken || !connectorActive || migrateDisabled}
                         aria-label="Migrate workspace folder"
                       >
                         <ArrowRightLeft className="h-3.5 w-3.5 shrink-0" aria-hidden />
@@ -408,14 +432,14 @@ export function OneDriveWorkspaceRoot({
                 type="button"
                 className={cn(
                   "inline-flex items-center gap-1.5 rounded h-8 px-4 text-[10px] font-headline font-bold tracking-widest uppercase text-white bg-primary hover:bg-primary hover:brightness-105 shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all shrink-0",
-                  (!accessToken || !connectorActive || migrationLocked) && "opacity-40 cursor-not-allowed",
+                  (!accessToken || !connectorActive || migrateDisabled) && "opacity-40 cursor-not-allowed",
                 )}
                 onClick={() => {
-                  if (!connectorActive || migrationLocked) return
+                  if (!connectorActive || migrateDisabled) return
                   resetFlow()
                   setDialogOpen(true)
                 }}
-                disabled={!accessToken || !connectorActive || migrationLocked}
+                disabled={!accessToken || !connectorActive || migrateDisabled}
                 aria-label="Choose storage location"
               >
                 <HardDrive className="h-3.5 w-3.5 shrink-0" aria-hidden />
@@ -431,8 +455,21 @@ export function OneDriveWorkspaceRoot({
         ) : null}
       </div>
 
-      <Dialog open={dialogOpen} onOpenChange={(open) => { if (open) setDialogOpen(true); else closeDialog() }}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto rounded">
+      <Dialog
+        open={dialogOpen}
+        onOpenChange={(open) => {
+          if (open) { setDialogOpen(true); return }
+          if (isSelectingSite) return
+          closeDialog()
+        }}
+      >
+        <DialogContent
+          className="sm:max-w-2xl max-h-[90vh] overflow-y-auto rounded"
+          hideClose={isSelectingSite}
+          onEscapeKeyDown={(e) => { if (isSelectingSite) e.preventDefault() }}
+          onPointerDownOutside={(e) => { if (isSelectingSite) e.preventDefault() }}
+          onInteractOutside={(e) => { if (isSelectingSite) e.preventDefault() }}
+        >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-[0.9375rem] font-bold text-[#1b1b1d]">
               <MicrosoftIcon size={18} />
@@ -497,7 +534,8 @@ export function OneDriveWorkspaceRoot({
                 value={siteQuery}
                 onChange={(e) => setSiteQuery(e.target.value)}
                 placeholder="Search sites…"
-                className="w-full rounded border border-[#e5e7eb] bg-white px-2.5 py-1.5 text-xs text-[#1b1b1d] placeholder:text-[#9a9ba0] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                disabled={isSelectingSite}
+                className="w-full rounded border border-[#e5e7eb] bg-white px-2.5 py-1.5 text-xs text-[#1b1b1d] placeholder:text-[#9a9ba0] focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary disabled:opacity-40 disabled:cursor-not-allowed"
               />
               <div className="max-h-64 overflow-y-auto rounded border border-[#e5e7eb] divide-y divide-[#e5e7eb]">
                 {sitesLoading ? (
@@ -514,25 +552,39 @@ export function OneDriveWorkspaceRoot({
                     {sites.length === 0 ? "No sites found." : "No sites match your search."}
                   </p>
                 ) : (
-                  filteredSites.map((site) => (
-                    <button
-                      key={site.id}
-                      type="button"
-                      onClick={() => void selectSite(site)}
-                      disabled={selectingSiteId === site.id}
-                      className="group flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left hover:bg-[#f9f9fb] transition-colors disabled:opacity-50"
-                    >
-                      <span className="text-sm text-[#1b1b1d] truncate">{site.name}</span>
-                      {selectingSiteId === site.id ? (
-                        <RefreshCw className="w-3.5 h-3.5 text-[#9a9ba0] animate-spin shrink-0" />
-                      ) : (
-                        <span className="shrink-0 inline-flex items-center gap-1.5 rounded border border-[#e5e7eb] bg-white px-2.5 py-1 text-[10px] font-headline font-bold tracking-widest uppercase text-[#45474c] opacity-0 transition-opacity group-hover:opacity-100">
-                          <SharePointIcon size={12} className="shrink-0" />
-                          Select Site
-                        </span>
-                      )}
-                    </button>
-                  ))
+                  filteredSites.map((site) => {
+                    // One in-flight selection locks the whole list: the workspace folder is already
+                    // being created inside the chosen site, so picking another would race it.
+                    const isSelecting = isSelectingSite
+                    const isThisSite = selectingSiteId === site.id
+                    return (
+                      <button
+                        key={site.id}
+                        type="button"
+                        onClick={() => void selectSite(site)}
+                        disabled={isSelecting}
+                        aria-busy={isThisSite}
+                        className={cn(
+                          "group flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left transition-colors",
+                          isSelecting
+                            ? isThisSite
+                              ? "cursor-default"
+                              : "opacity-40 cursor-not-allowed"
+                            : "hover:bg-[#f9f9fb]"
+                        )}
+                      >
+                        <span className="text-sm text-[#1b1b1d] truncate">{site.name}</span>
+                        {isThisSite ? (
+                          <RefreshCw className="w-3.5 h-3.5 text-[#9a9ba0] animate-spin shrink-0" />
+                        ) : isSelecting ? null : (
+                          <span className="shrink-0 inline-flex items-center gap-1.5 rounded border border-[#e5e7eb] bg-white px-2.5 py-1 text-[10px] font-headline font-bold tracking-widest uppercase text-[#45474c] opacity-0 transition-opacity group-hover:opacity-100">
+                            <SharePointIcon size={12} className="shrink-0" />
+                            Select Site
+                          </span>
+                        )}
+                      </button>
+                    )
+                  })
                 )}
               </div>
             </div>
