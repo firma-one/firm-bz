@@ -1118,15 +1118,14 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
               </div>
               <div className="flex flex-col min-w-0 flex-1 gap-1.5">
                 <div>
-                  <span className="text-[0.8125rem] font-semibold text-[#1b1b1d] leading-snug">{loading ? 'Connecting…' : 'Connect new account'}</span>
-                  <span className="text-xs text-[#45474c] block">Sign in with Google Drive</span>
+                  <span className="text-[0.8125rem] font-semibold text-[#1b1b1d] leading-snug">Google Drive</span>
+                  <span className="text-xs text-[#45474c] block">{loading ? 'Opening Google sign-in…' : 'Name this connection, then sign in to authorize access.'}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <input
                     type="text"
                     value={friendlyName}
-                    onChange={(e) => setFriendlyName(e.target.value)}
-                    onBlur={() => setFriendlyNameTouched(true)}
+                    onChange={(e) => { setFriendlyName(e.target.value); setFriendlyNameTouched(false) }}
                     onKeyDown={(e) => { if (e.key === 'Enter') handleConnect() }}
                     placeholder='Connection name, e.g. "Acme Corp Drive"'
                     disabled={loading}
@@ -1142,7 +1141,7 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
                   </button>
                 </div>
                 {friendlyNameTouched && !friendlyName.trim() && (
-                  <p className="text-[10px] text-red-500">Enter a name before connecting.</p>
+                  <p className="text-[10px] text-red-500">Give this connection a name first.</p>
                 )}
               </div>
             </div>
@@ -1156,16 +1155,15 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
                   <div className="flex flex-col min-w-0 flex-1 gap-1.5">
                     <div>
                       <span className="text-[0.8125rem] font-semibold text-[#1b1b1d] leading-snug">
-                        {oneDriveLoading ? 'Connecting…' : 'Connect new account'}
+                        Microsoft OneDrive / SharePoint
                       </span>
-                      <span className="text-xs text-[#45474c] block">Sign in with Microsoft OneDrive / SharePoint</span>
+                      <span className="text-xs text-[#45474c] block">{oneDriveLoading ? 'Opening Microsoft sign-in…' : 'Name this connection, then sign in to authorize access.'}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <input
                         type="text"
                         value={oneDriveFriendlyName}
-                        onChange={(e) => setOneDriveFriendlyName(e.target.value)}
-                        onBlur={() => setOneDriveFriendlyNameTouched(true)}
+                        onChange={(e) => { setOneDriveFriendlyName(e.target.value); setOneDriveFriendlyNameTouched(false) }}
                         onKeyDown={(e) => { if (e.key === 'Enter') handleOneDriveConnect() }}
                         placeholder='Connection name, e.g. "Acme Corp OneDrive"'
                         disabled={oneDriveLoading}
@@ -1181,7 +1179,7 @@ export function FirmDriveSection({ firmId, orgSlug, onConnectorsLoaded, microsof
                       </button>
                     </div>
                     {oneDriveFriendlyNameTouched && !oneDriveFriendlyName.trim() && (
-                      <p className="text-[10px] text-red-500">Enter a name before connecting.</p>
+                      <p className="text-[10px] text-red-500">Give this connection a name first.</p>
                     )}
                   </div>
                 </div>
