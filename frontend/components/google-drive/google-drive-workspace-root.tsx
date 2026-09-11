@@ -40,8 +40,12 @@ type GoogleDriveWorkspaceRootProps = {
   /** Persisted workspace root location; null until backfilled from Drive API. */
   workspaceRootLocation?: "PERSONAL" | "SHARED" | null
   workspaceRootSharedStorageName?: string | null
-  /** Disable the Migrate button when a migration is pending or active. */
-  migrationLocked?: boolean
+  /**
+   * Disable the Migrate button whenever moving the workspace root would conflict with work
+   * already in flight — a migration that is pending or active, or a client attach/detach the
+   * parent section is still running.
+   */
+  migrateDisabled?: boolean
   onUpdated: () => void | Promise<void>
   onMigrationStarted?: () => void
   firmSlug?: string
@@ -109,7 +113,7 @@ export function GoogleDriveWorkspaceRoot({
   rootFolderName,
   workspaceRootLocation = null,
   workspaceRootSharedStorageName = null,
-  migrationLocked = false,
+  migrateDisabled = false,
   onUpdated,
   onMigrationStarted,
   firmSlug,
@@ -618,14 +622,14 @@ export function GoogleDriveWorkspaceRoot({
                         type="button"
                         className={cn(
                           "inline-flex h-8 w-[6.5rem] items-center justify-center gap-1.5 rounded text-xs font-medium text-[#45474c] bg-white border border-[#e5e7eb] hover:bg-[#f9f9fb] hover:text-[#1b1b1d] transition-colors",
-                          (!accessToken || !connectorActive || WORKSPACE_MIGRATE_DISABLED || migrationLocked) && "opacity-40 cursor-not-allowed",
+                          (!accessToken || !connectorActive || WORKSPACE_MIGRATE_DISABLED || migrateDisabled) && "opacity-40 cursor-not-allowed",
                         )}
                         onClick={() => {
-                          if (!connectorActive || WORKSPACE_MIGRATE_DISABLED || migrationLocked) return
+                          if (!connectorActive || WORKSPACE_MIGRATE_DISABLED || migrateDisabled) return
                           resetFlow()
                           setDialogOpen(true)
                         }}
-                        disabled={!accessToken || !connectorActive || WORKSPACE_MIGRATE_DISABLED || migrationLocked}
+                        disabled={!accessToken || !connectorActive || WORKSPACE_MIGRATE_DISABLED || migrateDisabled}
                         aria-label="Migrate workspace folder"
                       >
                         <ArrowRightLeft className="h-3.5 w-3.5 shrink-0 text-firma" aria-hidden />
@@ -692,14 +696,14 @@ export function GoogleDriveWorkspaceRoot({
                     type="button"
                     className={cn(
                       "inline-flex items-center gap-1.5 rounded h-8 px-4 text-[10px] font-headline font-bold tracking-widest uppercase text-white bg-primary hover:bg-primary hover:brightness-105 shadow-sm hover:shadow-[0_6px_16px_-4px_rgba(var(--primary-rgb),0.40),0_2px_4px_rgba(0,0,0,0.06)] hover:-translate-y-px active:translate-y-0 active:scale-95 transition-all shrink-0",
-                      (!accessToken || !connectorActive || WORKSPACE_MIGRATE_DISABLED || migrationLocked) && "opacity-40 cursor-not-allowed",
+                      (!accessToken || !connectorActive || WORKSPACE_MIGRATE_DISABLED || migrateDisabled) && "opacity-40 cursor-not-allowed",
                     )}
                     onClick={() => {
-                      if (!connectorActive || WORKSPACE_MIGRATE_DISABLED || migrationLocked) return
+                      if (!connectorActive || WORKSPACE_MIGRATE_DISABLED || migrateDisabled) return
                       resetFlow()
                       setDialogOpen(true)
                     }}
-                    disabled={!accessToken || !connectorActive || WORKSPACE_MIGRATE_DISABLED || migrationLocked}
+                    disabled={!accessToken || !connectorActive || WORKSPACE_MIGRATE_DISABLED || migrateDisabled}
                     aria-label="Choose storage location"
                   >
                     <HardDrive className="h-3.5 w-3.5 shrink-0" aria-hidden />

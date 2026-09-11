@@ -212,7 +212,7 @@ export function GoogleDriveManager({ connectionId, onImport, variant = 'default'
 
                 {isLoading && linkedFiles.length === 0 ? (
                     <div className={cn("space-y-4", compact ? "p-3" : "p-6")}>
-                        {[1, 2, 3].map(i => <Skeleton key={i} className={cn("w-full rounded-xl bg-gray-50", compact ? "h-12" : "h-16")} />)}
+                        {[1, 2, 3].map(i => <Skeleton key={i} className={cn("w-full rounded-xl", compact ? "h-12" : "h-16")} />)}
                     </div>
                 ) : linkedFiles.length === 0 ? (
                     <div className={cn(

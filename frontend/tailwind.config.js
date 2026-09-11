@@ -24,10 +24,16 @@ module.exports = {
 				'indeterminate-progress': {
 					'0%': { transform: 'translateX(-100%)' },
 					'100%': { transform: 'translateX(100%)' }
+				},
+				// Vertical twin, for the sidebar's left-edge active border.
+				'indeterminate-progress-y': {
+					'0%': { transform: 'translateY(-100%)' },
+					'100%': { transform: 'translateY(100%)' }
 				}
 			},
 			animation: {
-				'indeterminate-progress': 'indeterminate-progress 1.5s infinite linear'
+				'indeterminate-progress': 'indeterminate-progress 1.5s infinite linear',
+				'indeterminate-progress-y': 'indeterminate-progress-y 1.5s infinite linear'
 			},
 			colors: {
 				background: 'hsl(var(--background))',
