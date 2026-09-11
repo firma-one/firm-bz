@@ -711,7 +711,7 @@ export async function shareConnectorWithClient({
         throw new ClientLinkedFolderFailedError(`Client linked, but the Drive folder could not be set up: ${message}.${ticketSuffix}`)
     }
 
-    revalidatePath(`/d/f`)
+    revalidatePath('/d/[groupSlug]/f', 'layout')
 }
 
 export async function removeClientConnector({ clientId }: { clientId: string }) {
@@ -742,7 +742,7 @@ export async function renameClientConnector({ connectorId, name }: { connectorId
         where: { id: connectorId },
         data: { name: name.trim() },
     })
-    revalidatePath(`/d/f`)
+    revalidatePath('/d/[groupSlug]/f', 'layout')
 }
 
 export async function disconnectClientConnector({ clientId }: { clientId: string }) {
@@ -766,7 +766,7 @@ export async function disconnectClientConnector({ clientId }: { clientId: string
         where: { id: client.connectorId },
         data: { status: 'REVOKED', accessToken: '', refreshToken: null, tokenExpiresAt: null },
     })
-    revalidatePath(`/d/f`)
+    revalidatePath('/d/[groupSlug]/f', 'layout')
 }
 
 export interface ClientBrandData {
@@ -827,5 +827,5 @@ export async function upsertClientBrand(clientId: string, data: ClientBrandData 
         })
     }
 
-    revalidatePath(`/d/f`)
+    revalidatePath('/d/[groupSlug]/f', 'layout')
 }

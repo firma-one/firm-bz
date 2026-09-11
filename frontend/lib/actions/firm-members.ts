@@ -113,7 +113,7 @@ export async function removeFirmMember(firmId: string, memberId: string) {
         .meta({ removedUserId: member.userId })
         .fireAndForget()
 
-    revalidatePath('/d/f/[slug]')
+    revalidatePath('/d/[groupSlug]/f/[firmSlug]', 'layout')
 }
 
 export async function inviteFirmMember(firmId: string, email: string) {
@@ -213,7 +213,7 @@ export async function inviteFirmMember(firmId: string, email: string) {
         .meta({ invitedEmail: normalizedEmail })
         .fireAndForget()
 
-    revalidatePath('/d/f/[slug]')
+    revalidatePath('/d/[groupSlug]/f/[firmSlug]', 'layout')
 }
 
 export async function resendFirmInvitation(invitationId: string) {
@@ -266,7 +266,7 @@ export async function resendFirmInvitation(invitationId: string) {
             data: { status: InvitationStatus.ERROR, updatedAt: new Date() }
         })
     }
-    revalidatePath('/d/f/[slug]')
+    revalidatePath('/d/[groupSlug]/f/[firmSlug]', 'layout')
 }
 
 export async function revokeFirmInvitation(invitationId: string) {
@@ -284,5 +284,5 @@ export async function revokeFirmInvitation(invitationId: string) {
 
     await prisma.firmInvitation.delete({ where: { id: invitationId } })
     await removeRemindersByEntity(invite.createdBy ?? user.id, 'platform.firm_invitations', invitationId).catch(() => {})
-    revalidatePath('/d/f/[slug]')
+    revalidatePath('/d/[groupSlug]/f/[firmSlug]', 'layout')
 }

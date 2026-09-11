@@ -111,5 +111,5 @@ export async function removeConnector({ connectorId }: { connectorId: string }):
             .fireAndForget()
     }
 
-    revalidatePath('/d/f')
+    revalidatePath('/d/[groupSlug]/f', 'layout')
 }

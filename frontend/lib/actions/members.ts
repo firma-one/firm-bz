@@ -281,7 +281,7 @@ export async function removeMember(memberId: string) {
             timestamp: new Date().toISOString(),
         })
 
-        revalidatePath('/d/f/[slug]/c/[clientSlug]/e/[engagementSlug]')
+        revalidatePath('/d/[groupSlug]/f/[firmSlug]/c/[clientSlug]/e/[engagementSlug]', 'layout')
     } catch (error) {
         logger.error('Failed to remove member', error as Error)
         throw error
@@ -315,7 +315,7 @@ export async function revokeInvitation(invitationId: string) {
         if (invite?.createdBy) {
             await removeRemindersByEntity(invite.createdBy, 'platform.engagement_invitations.id', invitationId).catch(() => {})
         }
-        revalidatePath('/d/f/[slug]/c/[clientSlug]/e/[engagementSlug]')
+        revalidatePath('/d/[groupSlug]/f/[firmSlug]/c/[clientSlug]/e/[engagementSlug]', 'layout')
     } catch (error) {
         logger.error('Failed to revoke invitation', error as Error)
         throw error

@@ -773,7 +773,7 @@ export async function disconnectFirmConnector({ connectorId, firmId }: { connect
         .meta({ connectorId, action: 'disconnect' })
         .fireAndForget()
 
-    revalidatePath('/d/f')
+    revalidatePath('/d/[groupSlug]/f', 'layout')
 }
 
 export async function removeFirmConnector({ connectorId }: { connectorId: string; firmId?: string }): Promise<void> {
@@ -797,7 +797,7 @@ export async function renameFirmConnector({ connectorId, firmId, name }: { conne
         where: { id: connectorId },
         data: { name: name.trim() },
     })
-    revalidatePath('/d/f')
+    revalidatePath('/d/[groupSlug]/f', 'layout')
 }
 
 export interface FirmClientRecord {
@@ -853,5 +853,5 @@ export async function detachConnectorFromClient({ clientId, firmId }: { clientId
         where: { id: clientId },
         data: { connectorId: null, driveFolderId: null },
     })
-    revalidatePath('/d/f')
+    revalidatePath('/d/[groupSlug]/f', 'layout')
 }
