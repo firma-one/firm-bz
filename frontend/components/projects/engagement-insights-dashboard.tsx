@@ -1469,7 +1469,7 @@ function EngagementActionCenterV2({ data, loading, engagementBase, setRefreshTic
     const housekeeping = allHousekeeping.filter(r => r.gatingRing ? ringVisible(r.gatingRing) : true)
 
     return (
-        <div className="sticky top-4">
+        <div className="sticky top-0">
             <div className="bg-white border border-[#e5e7eb] rounded p-6 flex flex-col gap-6 shadow-md">
                 {/* Header — mirrors the Engagement Insights card header */}
                 <div className="flex items-center justify-between">
