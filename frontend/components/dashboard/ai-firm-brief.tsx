@@ -4,8 +4,9 @@ import { useState, useEffect, useCallback } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
 import { formatRelativeTime } from '@/lib/utils'
-import { ASSISTANT } from '@/lib/ai/assistant'
-import { BrioAvatar } from '@/components/ui/brio-avatar'
+import { ASSISTANT, ASSISTANT_POLICY } from '@/lib/ai/assistant'
+import { Brio } from '@/components/ui/brio'
+import { BrioSections } from '@/components/ui/brio-sections'
 
 interface FirmBrief {
     content: string
@@ -66,8 +67,9 @@ export function AiFirmBrief({ firmId }: { firmId: string }) {
         return (
             <div className="bg-white border border-[#e5e7eb] rounded p-6 shadow-sm mb-6">
                 <div className="flex items-center gap-2 mb-3">
-                    <BrioAvatar size={18} title={null} />
                     <span className="text-sm font-semibold text-gray-900">Today&apos;s brief</span>
+                    <span className="text-gray-300">·</span>
+                    <Brio className="text-sm text-primary" />
                 </div>
                 <div className="space-y-2 animate-pulse">
                     <div className="h-3 bg-gray-100 rounded w-full" />
@@ -84,11 +86,9 @@ export function AiFirmBrief({ firmId }: { firmId: string }) {
         <div className="bg-white border border-[#e5e7eb] rounded p-6 shadow-sm mb-6">
             <div className="flex items-start justify-between gap-4 mb-3">
                 <div className="flex items-center gap-2">
-                    <BrioAvatar size={18} title={null} />
                     <span className="text-sm font-semibold text-gray-900">Today&apos;s brief</span>
-                    <span className="text-[10px] uppercase tracking-wide font-medium text-violet-600 bg-violet-50 border border-violet-100 rounded px-1.5 py-0.5">
-                        {ASSISTANT.badge}
-                    </span>
+                    <span className="text-gray-300">·</span>
+                    <Brio className="text-sm text-primary" />
                 </div>
                 <button
                     onClick={refresh}
@@ -101,10 +101,10 @@ export function AiFirmBrief({ firmId }: { firmId: string }) {
                 </button>
             </div>
 
-            <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{brief.content}</p>
+            <BrioSections content={brief.content} className="text-gray-700" />
 
             <p className="text-xs text-gray-400 mt-3">
-                Written by {ASSISTANT.name} {formatRelativeTime(brief.generatedAt)} from your current data — worth checking anything important.
+                Written by <Brio /> {formatRelativeTime(brief.generatedAt)} from your current data. {ASSISTANT_POLICY.short}
             </p>
         </div>
     )

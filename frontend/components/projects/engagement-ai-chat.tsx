@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Send, Loader2 } from 'lucide-react'
 import { ASSISTANT } from '@/lib/ai/assistant'
-import { BrioAvatar } from '@/components/ui/brio-avatar'
+import { Brio } from '@/components/ui/brio'
 import { StreamingText } from '@/components/ui/streaming-text'
 
 interface Message {
@@ -90,15 +90,15 @@ export function EngagementAiChat({ projectId }: { projectId: string }) {
     return (
         <div className="bg-white border border-[#e5e7eb] rounded shadow-sm flex flex-col">
             <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
-                <BrioAvatar size={20} title={null} />
-                <span className="text-sm font-semibold text-gray-900">Ask {ASSISTANT.name}</span>
+                <span className="text-sm font-semibold text-gray-900">Ask</span>
+                <Brio className="text-sm text-primary" />
             </div>
 
             <div ref={scrollRef} className="px-4 py-4 space-y-3 max-h-[420px] overflow-y-auto">
                 {messages.length === 0 && (
                     <div className="space-y-3">
                         <p className="text-sm text-gray-500">
-                            {ASSISTANT.name} answers only from this engagement&apos;s data, and can&apos;t change anything.
+                            <Brio /> answers only from this engagement&apos;s data, and can&apos;t change anything.
                         </p>
                         <div className="flex flex-wrap gap-2">
                             {SUGGESTIONS.map((s) => (
@@ -133,7 +133,7 @@ export function EngagementAiChat({ projectId }: { projectId: string }) {
                             ) : (
                                 <span className="inline-flex items-center gap-1.5 text-gray-400">
                                     <Loader2 className="w-3 h-3 animate-spin" />
-                                    {ASSISTANT.name} is thinking
+                                    <Brio /> is thinking
                                 </span>
                             )}
                         </div>

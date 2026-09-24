@@ -6,9 +6,11 @@
  */
 
 /**
- * `authored: 'lead'` sections are ones the model must never fill. Mitigation plans, contingencies
- * and forward commitments are human judgment, not facts derivable from delivery data. The model
- * emits the heading with a placeholder; publishing is blocked until a lead replaces it.
+ * `authored: 'lead'` sections are reserved for human judgment by design, not because the model
+ * is incapable of producing plausible text for them. Mitigation plans, contingencies and forward
+ * commitments bind the firm to a course of action, and that decision belongs to a person who is
+ * accountable for it. The model emits the heading with a placeholder; publishing is blocked
+ * until a lead replaces it.
  */
 export const SUMMARY_SECTIONS = [
     { heading: 'Summary', authored: 'ai' },
@@ -20,7 +22,27 @@ export const SUMMARY_SECTIONS = [
 ] as const
 
 /** Text the model writes into lead-authored sections, and the marker publishing checks for. */
-export const LEAD_PLACEHOLDER = '_To be completed by the Engagement Lead._'
+export const LEAD_PLACEHOLDER = '_Awaiting the Engagement Lead\u2019s input._'
+
+/**
+ * A section still counts as unfilled if it merely restates the placeholder.
+ *
+ * Exact-matching LEAD_PLACEHOLDER was too brittle: the model emits a straight apostrophe where
+ * the constant has a curly one, so the gate silently passed and Publish was enabled with the
+ * placeholder still in the text. This gate protects client-facing content, so it matches on
+ * intent — normalised punctuation, plus the "awaiting …" phrasing in any form.
+ */
+function isPlaceholderText(body: string): boolean {
+    const normalised = body
+        .replace(/[\u2018\u2019]/g, "'")   // curly -> straight apostrophes
+        .replace(/[_*`]/g, '')              // markdown emphasis
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase()
+    if (!normalised) return true
+    return /^awaiting the engagement lead'?s input\.?$/.test(normalised)
+        || /^to be completed by the engagement lead\.?$/.test(normalised)
+}
 
 /**
  * Returns the lead-authored sections still holding the placeholder (or left empty).
@@ -38,7 +60,7 @@ export function findUnfilledSections(text: string): string[] {
         const rest = text.slice(start + section.heading.length + 3)
         const next = rest.search(/\n##\s/)
         const body = (next === -1 ? rest : rest.slice(0, next)).trim()
-        if (!body || body === LEAD_PLACEHOLDER) unfilled.push(section.heading)
+        if (isPlaceholderText(body)) unfilled.push(section.heading)
     }
     return unfilled
 }

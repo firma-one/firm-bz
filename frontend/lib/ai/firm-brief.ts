@@ -14,14 +14,36 @@ export function isBriefFresh(brief: FirmBrief | null | undefined): boolean {
     return age >= 0 && age < BRIEF_MAX_AGE_MS
 }
 
+/**
+ * Sections the brief is written in. Mirrors the engagement summary's shape so both read as the
+ * same product, minus the approval gate — the brief is internal, never published or exported,
+ * so there is nothing to protect a client from and a review step would be friction for its own
+ * sake. The judgment boundary still holds: Brio states what is true, not what to do about it.
+ */
+export const BRIEF_SECTIONS = ['Where things stand', 'Needs attention', 'Worth watching'] as const
+
 const SYSTEM = `You are a concise advisor to a professional services firm, writing their daily briefing.
 
-Write 3-5 sentences of flowing prose covering what most needs attention today. Rules:
+Produce EXACTLY these three sections, each as a markdown heading on its own line, in this order:
+
+## Where things stand
+## Needs attention
+## Worth watching
+
+Rules:
+- 1-2 sentences per section. Plain prose, no bullet points or nested headings.
+- Where things stand: the shape of the firm right now — active work, pipeline, recent movement.
+- Needs attention: what is most urgent or most at risk today. If nothing is, say so plainly.
+- Worth watching: what is not urgent yet but is trending the wrong way. If nothing is, say so.
 - Be specific. Name clients and engagements, give counts and values, say how many days overdue.
-- Lead with whatever is most urgent or most at risk. If nothing is urgent, say so plainly and note what is worth attention anyway.
-- No bullet points, headers, or markdown. Plain sentences only.
-- Never invent a number, name, or date that is not in the snapshot. If the snapshot is sparse, write less.
-- Address the reader directly as "you". Do not open with a greeting or restate that this is a summary.`
+- Never invent a number, name, or date that is not in the snapshot. If it is sparse, write less.
+- Address the reader as "you". No greeting, and do not restate that this is a summary.
+
+What you must NOT do:
+- Do not tell the reader what to do. No "you should", no "consider", no "worth reaching out".
+  State what is true and let them decide — deciding what the firm does is their call, not yours.
+- Do not speculate about causes you cannot see in the data.
+- Do not comment on any individual's performance.`
 
 function money(val: number, symbol: string): string {
     if (!val) return `${symbol}0`
@@ -122,7 +144,7 @@ export async function generateFirmBrief(data: FirmInsightsResponse): Promise<str
     return completeText({
         system: SYSTEM,
         userMessage: `Today is ${new Date().toISOString().slice(0, 10)}.\n\nFirm snapshot:\n${buildSnapshot(data)}`,
-        maxTokens: 300,
+        maxTokens: 500,
         temperature: 0.4,
         label: 'firm-brief',
     })

@@ -1,13 +1,23 @@
 'use client'
 
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { createPortal } from 'react-dom'
-import { Search, Folder, Sparkles, X, Building2, Briefcase, Package, Hash, FileText, ArrowUpRight, ArrowRight, RefreshCw, History, BrushCleaning, CalendarClock } from 'lucide-react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
+import { Search, Folder, Sparkles, X, Building2, Briefcase, Package, Hash, FileText, ArrowUpRight, ArrowRight, RefreshCw, ChevronDown, History, BrushCleaning, CalendarClock } from 'lucide-react'
 import { DocumentIcon } from '@/components/ui/document-icon'
+import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+  DropdownMenuCheckboxItem,
+} from '@/components/ui/dropdown-menu'
 import { UserAvatarWithTooltip } from '@/components/ui/user-avatar-with-tooltip'
 import { formatRelativeTime, formatDateTimeWithTZ, cn } from '@/lib/utils'
 import { useAuth } from '@/lib/auth-context'
 import { ASSISTANT } from '@/lib/ai/assistant'
+import { Brio } from '@/components/ui/brio'
 import {
   Tooltip,
   TooltipContent,
@@ -99,6 +109,15 @@ interface SelectedChip {
   stage: FilterStage
   id: string
   name: string
+}
+
+/** The "no filter" entry at the top of each dropdown. */
+const STAGE_ANY_LABEL: Record<FilterStage, string> = {
+  client: 'Any client',
+  engagement: 'Any engagement',
+  deliverable: 'Any deliverable',
+  dateRange: 'Anytime',
+  type: 'Any type',
 }
 
 const STAGE_LABEL: Record<FilterStage, string> = {
@@ -262,38 +281,26 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
   // a chip array decoupled from the raw text, rendered before the textarea.
   const [chips, setChips] = useState<SelectedChip[]>([])
   // Index into `chips` of the chip currently focused via keyboard, or null when focus is in the text input.
-  const [focusedChipIndex, setFocusedChipIndex] = useState<number | null>(null)
-  const [pickerOpen, setPickerOpen] = useState(false)
-  const [pickerStage, setPickerStage] = useState<FilterStage>('client')
-  const [pickerQuery, setPickerQuery] = useState('')
-  const [pickerFocusedIndex, setPickerFocusedIndex] = useState(0)
   // In-progress multi-select state while the Type picker is open — not committed to `chips`
   // until the user confirms (Enter) or closes the picker, so partial toggling doesn't
   // re-trigger a search on every Space press.
-  const [pendingFileTypes, setPendingFileTypes] = useState<FileTypeOption[]>([])
   // The picker dropdown is rendered via a portal (see render below) so it can escape the firm
   // page's `overflow-y-auto` tab-content wrapper (firm-clients-view.tsx), which otherwise clips
   // any `position: absolute` descendant that extends past its scrolled viewport — no z-index can
   // fix that, since z-index only affects paint order within a stacking context, not clipping
   // across an overflow boundary. Position is computed from the composer's viewport rect and kept
   // in sync while the picker is open.
-  const [pickerPosition, setPickerPosition] = useState<{ top: number; left: number; width: number } | null>(null)
   // Set right after selectChip/commitFileTypes commits a chip, to auto-advance into the next
   // eligible stage once `chips` state has actually updated — openPickerAtNextStage reads
   // clientChip/engagementChip/etc. derived from `chips`, which are still stale immediately after
   // setChips (React batches the update), so the advance is deferred to an effect keyed off chips
   // itself rather than called synchronously right after setChips.
-  const autoAdvanceRequested = useRef(false)
   // How the picker was opened for the current stage — 'keyboard' (via @ or Tab-skip) keeps the
   // guided auto-advance-through-remaining-stages flow; 'mouse' (clicking an empty filter badge
   // directly) is a one-off lookup with no forced sequence, so selecting a value just closes back
   // to the badge row rather than auto-opening the next stage.
-  const pickerOpenedVia = useRef<'keyboard' | 'mouse'>('keyboard')
   const composerRef = useRef<HTMLDivElement>(null)
-  const pickerRef = useRef<HTMLDivElement>(null)
-  const pickerInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLInputElement>(null)
-  const chipRefs = useRef<Array<HTMLButtonElement | null>>([])
 
   const clientChip = chips.find((c) => c.stage === 'client') || null
   const engagementChip = chips.find((c) => c.stage === 'engagement') || null
@@ -305,14 +312,6 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
   const selectedFileTypes: FileTypeOption[] = typeChip
     ? (typeChip.id.split(',').filter(Boolean) as FileTypeOption[])
     : []
-
-  // Chips always display in FILTER_STAGE_ORDER regardless of the order they were
-  // selected/re-selected in — e.g. removing and re-adding Deliverable after Type was already set
-  // must not move Deliverable after Type visually.
-  const orderedChips = useMemo(
-    () => [...chips].sort((a, b) => FILTER_STAGE_ORDER.indexOf(a.stage) - FILTER_STAGE_ORDER.indexOf(b.stage)),
-    [chips]
-  )
 
   useEffect(() => {
     setSearchHistory(getSearchHistory(firmId))
@@ -415,183 +414,6 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
     }
   }, [firmId, accessToken, searchQuery, interpreting])
 
-  const stageOptions = useMemo((): PickerEntity[] => {
-    if (pickerStage === 'client') return pickerData.clients
-    if (pickerStage === 'engagement') {
-      return clientChip
-        ? pickerData.engagements.filter((e) => e.clientId === clientChip.id)
-        : pickerData.engagements
-    }
-    if (pickerStage === 'dateRange') {
-      return RELATIVE_TIME_PRESETS.map((preset) => ({ id: preset, name: preset }))
-    }
-    if (pickerStage === 'type') {
-      return FILE_TYPE_OPTIONS.map((opt) => ({ id: opt, name: FILE_TYPE_LABEL[opt] }))
-    }
-    return engagementChip
-      ? pickerData.deliverables.filter((d) => d.engagementId === engagementChip.id)
-      : pickerData.deliverables
-  }, [pickerStage, pickerData, clientChip, engagementChip])
-
-  const filteredOptions = pickerQuery.trim()
-    ? stageOptions.filter((o) => o.name.toLowerCase().includes(pickerQuery.trim().toLowerCase()))
-    : stageOptions
-
-  // Closing the picker (whether via Escape, click-outside, or auto-advance finding nothing left
-  // to pick) always hands focus back to the main search input — this is the one place where the
-  // @ session is genuinely "done."
-  const closePicker = useCallback(() => {
-    setPickerOpen(false)
-    setPickerQuery('')
-    textareaRef.current?.focus()
-  }, [])
-
-  // "@" opens the staged picker at whichever stage is next eligible, same trigger mechanism as
-  // the Comments mention picker: consume the keypress, never insert "@" into the text.
-  // Client/Engagement/Deliverable are hierarchical (each narrows the next) — Engagement is only
-  // eligible once Client is set, Deliverable only once Engagement is set, so an empty Client
-  // means Engagement/Deliverable are skipped over entirely, not just optionally offered. Time and
-  // Type have no such dependency and are always eligible. Selecting a chip (selectChip/
-  // commitFileTypes) calls this again afterward to auto-advance into the next eligible stage
-  // within the same @ session; Tab still skips the current stage without selecting.
-  //
-  // Linear scan only, NEVER wraps around — a single @ session walks forward through
-  // ['client','engagement','deliverable','dateRange','type'] exactly once and stops for good once
-  // it falls off the end, even if an earlier stage (e.g. Engagement, skipped via Tab) is still
-  // unfilled. Auto-chaining back to a skipped stage without the user asking again would silently
-  // reopen a picker they'd already moved past. A skipped stage only becomes reachable again via an
-  // explicit fresh "@" press once the picker is fully closed — which naturally restarts this same
-  // scan from index 0, since `pickerOpen` is false at that point.
-  const openPickerAtNextStage = useCallback(() => {
-    pickerOpenedVia.current = 'keyboard'
-    const order = FILTER_STAGE_ORDER
-    const isFilled: Record<FilterStage, boolean> = {
-      client: !!clientChip,
-      engagement: !!engagementChip,
-      deliverable: !!deliverableChip,
-      dateRange: !!dateRangeChip,
-      type: !!typeChip,
-    }
-    const isEligible = (stage: FilterStage): boolean => {
-      if (isFilled[stage]) return false
-      if (stage === 'engagement') return !!clientChip
-      if (stage === 'deliverable') return !!engagementChip
-      return true
-    }
-    const startIndex = pickerOpen ? order.indexOf(pickerStage) + 1 : 0
-    let nextStage: FilterStage | null = null
-    for (let i = startIndex; i < order.length; i++) {
-      if (isEligible(order[i])) { nextStage = order[i]; break }
-    }
-    if (!nextStage) {
-      // Fell off the end of this pass — stop for good, don't wrap back to a skipped stage.
-      if (pickerOpen) closePicker()
-      return
-    }
-    setPickerStage(nextStage)
-    setPickerQuery('')
-    setPickerFocusedIndex(0)
-    setPickerOpen(true)
-    setFocusedChipIndex(null)
-    if (nextStage === 'type') setPendingFileTypes(selectedFileTypes)
-  }, [clientChip, engagementChip, deliverableChip, dateRangeChip, typeChip, pickerOpen, pickerStage, closePicker, selectedFileTypes])
-
-  // Mouse entry point: clicking an empty filter badge opens exactly that stage's picker directly,
-  // no scanning/sequencing — the badge row lets a user pick any stage in any order. Selecting a
-  // value afterward (selectChip/commitFileTypes) checks pickerOpenedVia and skips auto-advance for
-  // this path, closing back to the badge row instead of chaining into the next stage.
-  const openPickerAtStage = useCallback((stage: FilterStage) => {
-    pickerOpenedVia.current = 'mouse'
-    setPickerStage(stage)
-    setPickerQuery('')
-    setPickerFocusedIndex(0)
-    setPickerOpen(true)
-    setFocusedChipIndex(null)
-    if (stage === 'type') setPendingFileTypes(selectedFileTypes)
-  }, [selectedFileTypes])
-
-  const selectChip = useCallback((entity: PickerEntity) => {
-    setChips((prev) => {
-      const withoutStage = prev.filter((c) => c.stage !== pickerStage)
-      // Selecting a Client clears a previously selected Engagement/Deliverable (narrowing changed);
-      // selecting an Engagement clears a previously selected Deliverable — same as picking a new
-      // upstream filter invalidating downstream narrowed selections. dateRange/type have no
-      // narrowing relationship to the other stages (neither is entity-scoped), so they're never
-      // cleared by a Client/Engagement/Deliverable selection.
-      const cleared = pickerStage === 'client'
-        ? withoutStage.filter((c) => c.stage === 'client' || c.stage === 'dateRange' || c.stage === 'type')
-        : pickerStage === 'engagement'
-          ? withoutStage.filter((c) => c.stage !== 'deliverable')
-          : withoutStage
-
-      // Backfill upstream chips the user skipped past — e.g. picking an Engagement directly
-      // (via Tab-skip past Client, or the @-cycle jumping ahead) should still show its owning
-      // Client as a chip, since every Engagement/Deliverable belongs to exactly one Client/
-      // Engagement. Only fills in a stage that's genuinely missing; never overrides an existing
-      // explicit selection.
-      const backfilled: SelectedChip[] = []
-      if (pickerStage === 'engagement' && entity.clientId && !cleared.some((c) => c.stage === 'client')) {
-        const client = pickerData.clients.find((c) => c.id === entity.clientId)
-        if (client) backfilled.push({ stage: 'client', id: client.id, name: client.name })
-      }
-      if (pickerStage === 'deliverable' && entity.engagementId) {
-        if (!cleared.some((c) => c.stage === 'engagement')) {
-          const engagement = pickerData.engagements.find((e) => e.id === entity.engagementId)
-          if (engagement) backfilled.push({ stage: 'engagement', id: engagement.id, name: engagement.name })
-          if (engagement?.clientId && !cleared.some((c) => c.stage === 'client')) {
-            const client = pickerData.clients.find((c) => c.id === engagement.clientId)
-            if (client) backfilled.push({ stage: 'client', id: client.id, name: client.name })
-          }
-        } else if (entity.clientId && !cleared.some((c) => c.stage === 'client')) {
-          const client = pickerData.clients.find((c) => c.id === entity.clientId)
-          if (client) backfilled.push({ stage: 'client', id: client.id, name: client.name })
-        }
-      }
-
-      return [...cleared, ...backfilled, { stage: pickerStage, id: entity.id, name: entity.name }]
-    })
-    if (pickerOpenedVia.current === 'keyboard') {
-      // Auto-advance into the next eligible stage within the same @ session, deferred to the
-      // chips-effect below since `chips` state hasn't updated yet at this point in the callback.
-      // Focus is handled by openPickerAtNextStage/closePicker depending on the outcome — not here,
-      // since focusing the textarea unconditionally would steal focus away from the picker input
-      // when there's another stage to advance into.
-      autoAdvanceRequested.current = true
-    } else {
-      // Mouse-driven badge click — a one-off lookup with no forced sequence. Close back to the
-      // badge row instead of chaining into the next stage.
-      closePicker()
-    }
-  }, [pickerStage, pickerData, closePicker])
-
-  // Type is multi-select: Space toggles a category into pendingFileTypes without closing the
-  // picker; "any" is exclusive with every other category (selecting it clears the rest, and
-  // selecting any other category clears "any"), since "Any" means "don't filter by type."
-  const toggleFileType = useCallback((option: FileTypeOption) => {
-    setPendingFileTypes((prev) => {
-      if (option === 'any') return prev.includes('any') ? [] : ['any']
-      const withoutAny = prev.filter((t) => t !== 'any')
-      return withoutAny.includes(option)
-        ? withoutAny.filter((t) => t !== option)
-        : [...withoutAny, option]
-    })
-  }, [])
-
-  // advanceAfter: true for an explicit confirm (Enter, Apply click) — auto-advances into the next
-  // eligible stage within the same @ session, same as selectChip. False for click-outside (just
-  // close, don't pop open a new dropdown) and Tab-skip (which already advances separately itself,
-  // so committing here must not also advance or the picker would skip two stages at once).
-  const commitFileTypes = useCallback((advanceAfter: boolean) => {
-    setChips((prev) => {
-      const withoutType = prev.filter((c) => c.stage !== 'type')
-      if (pendingFileTypes.length === 0) return withoutType
-      const name = pendingFileTypes.map((t) => FILE_TYPE_LABEL[t]).join(', ')
-      return [...withoutType, { stage: 'type', id: pendingFileTypes.join(','), name }]
-    })
-    if (advanceAfter && pickerOpenedVia.current === 'keyboard') autoAdvanceRequested.current = true
-    else closePicker()
-  }, [pendingFileTypes, closePicker])
-
   const removeChip = useCallback((stage: FilterStage) => {
     setChips((prev) => {
       // Removing a chip also removes any downstream chips that depended on it narrowing.
@@ -601,68 +423,72 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
       if (stage === 'deliverable') return prev.filter((c) => c.stage !== 'deliverable')
       return prev.filter((c) => c.stage !== stage)
     })
-    setFocusedChipIndex(null)
-    textareaRef.current?.focus()
+    setInferredStages((prev) => prev.filter((s) => s !== stage))
   }, [])
 
-  // Keep keyboard focus in sync with which chip element is logically focused.
-  useEffect(() => {
-    if (focusedChipIndex !== null) {
-      chipRefs.current[focusedChipIndex]?.focus()
+  /**
+   * Options for one filter, narrowed by the selections above it: picking a client limits
+   * engagements to that client's, and picking an engagement limits deliverables to its own.
+   */
+  const optionsForStage = useCallback((stage: FilterStage): PickerEntity[] => {
+    if (stage === 'client') return pickerData.clients
+    if (stage === 'engagement') {
+      return clientChip
+        ? pickerData.engagements.filter((e) => e.clientId === clientChip.id)
+        : pickerData.engagements
     }
-  }, [focusedChipIndex, chips.length])
-
-  // Focus the picker's own filter input whenever it opens or advances to a new stage. The input's
-  // `autoFocus` prop only fires on its first real DOM mount — when auto-advance changes
-  // pickerStage while the picker stays open (same JSX position, so React reuses the existing
-  // input node instead of remounting it), autoFocus never re-fires, so focus would otherwise be
-  // left wherever it last was (e.g. stolen back to the main search box), stranding keyboard users.
-  useEffect(() => {
-    if (pickerOpen) pickerInputRef.current?.focus()
-  }, [pickerOpen, pickerStage])
-
-  // Deferred auto-advance: selectChip/commitFileTypes set autoAdvanceRequested and commit a chip,
-  // then this effect (which only re-runs once `chips` has actually updated) opens the next
-  // eligible stage — openPickerAtNextStage reads clientChip/engagementChip/etc. derived from the
-  // now-current `chips`, so eligibility (e.g. Engagement only after Client is set) reflects the
-  // selection that was just made, not stale pre-update state.
-  useEffect(() => {
-    if (autoAdvanceRequested.current) {
-      autoAdvanceRequested.current = false
-      openPickerAtNextStage()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chips])
-
-  useEffect(() => {
-    const onClickOutside = (e: MouseEvent) => {
-      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)
-        && composerRef.current && !composerRef.current.contains(e.target as Node)) {
-        if (pickerStage === 'type') commitFileTypes(false)
-        else closePicker()
+    if (stage === 'deliverable') {
+      if (engagementChip) return pickerData.deliverables.filter((d) => d.engagementId === engagementChip.id)
+      if (clientChip) {
+        const ids = new Set(pickerData.engagements.filter((e) => e.clientId === clientChip.id).map((e) => e.id))
+        return pickerData.deliverables.filter((d) => d.engagementId && ids.has(d.engagementId))
       }
+      return pickerData.deliverables
     }
-    document.addEventListener('mousedown', onClickOutside)
-    return () => document.removeEventListener('mousedown', onClickOutside)
-  }, [closePicker, pickerStage, commitFileTypes])
+    if (stage === 'dateRange') {
+      return RELATIVE_TIME_PRESETS.map((p) => ({ id: p, name: p }))
+    }
+    return []
+  }, [pickerData, clientChip, engagementChip])
 
-  // Recompute the portaled picker's position from the composer's live viewport rect whenever it
-  // opens, and keep it in sync on scroll (capture phase, so scrolling inside the clipping
-  // ancestor — which doesn't bubble a window-level scroll event — still updates it) and resize.
-  useEffect(() => {
-    if (!pickerOpen) { setPickerPosition(null); return }
-    const updatePosition = () => {
-      const rect = composerRef.current?.getBoundingClientRect()
-      if (rect) setPickerPosition({ top: rect.bottom + 4, left: rect.left, width: rect.width })
-    }
-    updatePosition()
-    window.addEventListener('scroll', updatePosition, true)
-    window.addEventListener('resize', updatePosition)
-    return () => {
-      window.removeEventListener('scroll', updatePosition, true)
-      window.removeEventListener('resize', updatePosition)
-    }
-  }, [pickerOpen])
+  /** Why a filter is unavailable, or null when it can be used. */
+  const stageDisabledReason = useCallback((stage: FilterStage): string | null => {
+    if (stage === 'engagement' && pickerData.engagements.length === 0) return 'No engagements available'
+    if (stage === 'deliverable' && !clientChip && !engagementChip) return 'Select a client or engagement first'
+    return null
+  }, [pickerData, clientChip, engagementChip])
+
+  /** Commits a selection, clearing any downstream filter the new value invalidates. */
+  const selectStageValue = useCallback((stage: FilterStage, entity: PickerEntity) => {
+    setChips((prev) => {
+      let next = prev.filter((c) => c.stage !== stage)
+      if (stage === 'client') next = next.filter((c) => c.stage !== 'engagement' && c.stage !== 'deliverable')
+      if (stage === 'engagement') next = next.filter((c) => c.stage !== 'deliverable')
+      return [...next, { stage, id: entity.id, name: entity.name }]
+    })
+    setInferredStages((prev) => prev.filter((s) => s !== stage))
+  }, [])
+
+  /** Type is multi-select; 'any' is exclusive with the rest. */
+  const toggleFileTypeSimple = useCallback((opt: FileTypeOption) => {
+    setChips((prev) => {
+      const current = prev.find((c) => c.stage === 'type')
+      const selected = current ? (current.id.split(',').filter(Boolean) as FileTypeOption[]) : []
+      const next = opt === 'any'
+        ? []
+        : selected.includes(opt) ? selected.filter((t) => t !== opt) : [...selected, opt]
+
+      const without = prev.filter((c) => c.stage !== 'type')
+      if (next.length === 0) return without
+      return [...without, {
+        stage: 'type' as FilterStage,
+        id: next.join(','),
+        name: next.length === 1 ? FILE_TYPE_LABEL[next[0]] : `${next.length} types`,
+      }]
+    })
+    setInferredStages((prev) => prev.filter((s) => s !== 'type'))
+  }, [])
+
 
   const runSearch = useCallback(async () => {
     if (!accessToken) return
@@ -782,31 +608,9 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
               <p className="text-sm text-ki-on-surface-variant mt-1">
                 Search documents across every client and engagement you have access to.
               </p>
-              <p className="flex items-center gap-1 text-xs text-ki-on-surface-variant mt-1">
-                Type
-                <kbd className="px-1 py-0.5 rounded border border-primary/30 bg-primary/10 font-mono font-bold text-primary">@</kbd>
-                to filter by client, engagement, deliverable, doc-type, or time
-              </p>
-              <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-ki-on-surface-variant mt-1.5">
-                <span className="inline-flex items-center gap-1">
-                  <kbd className="px-1 py-0.5 rounded border border-ki-outline bg-ki-surface-low font-mono">↑↓</kbd>
-                  Navigate
-                </span>
-                <span className="text-ki-outline-variant">•</span>
-                <span className="inline-flex items-center gap-1">
-                  <kbd className="px-1 py-0.5 rounded border border-ki-outline bg-ki-surface-low font-mono">Tab</kbd>
-                  Skip
-                </span>
-                <span className="text-ki-outline-variant">•</span>
-                <span className="inline-flex items-center gap-1">
-                  <kbd className="px-1 py-0.5 rounded border border-ki-outline bg-ki-surface-low font-mono">Enter</kbd>
-                  Select
-                </span>
-                <span className="text-ki-outline-variant">•</span>
-                <span className="inline-flex items-center gap-1">
-                  <kbd className="px-1 py-0.5 rounded border border-ki-outline bg-ki-surface-low font-mono">Space</kbd>
-                  Multi-select Toggle
-                </span>
+              <p className="text-xs text-ki-on-surface-variant mt-1">
+                Narrow results with the filters below, or switch to Ask <Brio /> and
+                describe what you need.
               </p>
             </div>
             <button
@@ -854,11 +658,10 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                     onClick={() => { setMode('ask'); setAskNote(null) }}
                     className={cn(
                       'inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors',
-                      mode === 'ask' ? 'bg-violet-600 text-white shadow-sm' : 'text-violet-600 hover:bg-violet-50'
+                      mode === 'ask' ? 'bg-primary text-white shadow-sm' : 'text-primary hover:bg-primary/10'
                     )}
                   >
-                    <Sparkles className="h-3 w-3" />
-                    Ask {ASSISTANT.name}
+                    Ask <Brio />
                   </button>
                 </div>
                 {mode === 'ask' && (
@@ -868,104 +671,122 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                 )}
               </div>
 
-              <div className="flex flex-wrap items-center gap-1.5 px-3 pt-2.5 pb-1.5 border-b border-ki-outline">
+              {/* Filters — plain dropdowns, styled to match the Engagement > Files toolbar.
+                  Client/Engagement/Deliverable are interdependent: each narrows the next. */}
+              <div className="flex flex-wrap items-center gap-2 px-3 pt-2.5 pb-2.5 border-b border-ki-outline">
                 {FILTER_STAGE_ORDER.map((stage) => {
-                  const chip = orderedChips.find((c) => c.stage === stage) || null
-                  const index = chip ? orderedChips.indexOf(chip) : -1
+                  const chip = chips.find((c) => c.stage === stage) || null
                   const Icon = STAGE_ICON[stage]
-                  const isFocused = chip !== null && focusedChipIndex === index
-                  const isGated = (stage === 'engagement' && !clientChip) || (stage === 'deliverable' && !engagementChip)
-
-                  if (chip) {
-                    return (
-                      <button
-                        key={stage}
-                        type="button"
-                        ref={(el) => { chipRefs.current[index] = el }}
-                        tabIndex={-1}
-                        onFocus={() => setFocusedChipIndex(index)}
-                        onClick={() => setFocusedChipIndex(index)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Backspace' || e.key === 'Delete') {
-                            e.preventDefault()
-                            removeChip(chip.stage)
-                            return
-                          }
-                          if (e.key === 'ArrowLeft') {
-                            e.preventDefault()
-                            if (index > 0) setFocusedChipIndex(index - 1)
-                            return
-                          }
-                          if (e.key === 'ArrowRight') {
-                            e.preventDefault()
-                            if (index < orderedChips.length - 1) setFocusedChipIndex(index + 1)
-                            else { setFocusedChipIndex(null); textareaRef.current?.focus() }
-                            return
-                          }
-                          if (e.key === 'Escape') {
-                            setFocusedChipIndex(null)
-                            textareaRef.current?.focus()
-                          }
-                        }}
-                        className={cn(
-                          'inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border shrink-0 transition-colors focus:outline-none font-mono',
-                          isFocused
-                            ? 'bg-red-50 text-red-700 border-red-300 ring-1 ring-red-300'
-                            : 'bg-primary/10 text-primary border-primary/20 hover:bg-primary/15'
-                        )}
-                      >
-                        {inferredStages.includes(chip.stage)
-                          ? <Sparkles className="h-3 w-3 text-violet-500" />
-                          : <Icon className="h-3 w-3" />}
-                        {chip.name}
-                        <span
-                          role="button"
-                          tabIndex={-1}
-                          onClick={(e) => { e.stopPropagation(); removeChip(chip.stage) }}
-                          className={cn('ml-0.5 -mr-0.5 rounded', isFocused ? 'hover:bg-red-100' : 'hover:bg-primary/20')}
-                          aria-label={`Remove ${STAGE_LABEL[chip.stage]} filter`}
-                        >
-                          <X className="h-3 w-3" />
-                        </span>
-                      </button>
-                    )
-                  }
+                  const options = optionsForStage(stage)
+                  const disabledReason = stageDisabledReason(stage)
+                  const isInferred = inferredStages.includes(stage)
 
                   return (
-                    <Tooltip key={stage}>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          disabled={isGated}
-                          onClick={() => openPickerAtStage(stage)}
-                          aria-label={`Filter by ${STAGE_LABEL[stage]}`}
+                    <DropdownMenu key={stage}>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={Boolean(disabledReason)}
+                          title={disabledReason ?? undefined}
                           className={cn(
-                            'inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border shrink-0 transition-colors focus:outline-none font-mono',
-                            isGated
-                              ? 'border-ki-outline-variant text-ki-outline-variant cursor-not-allowed opacity-50'
-                              : 'border-ki-outline text-ki-on-surface-variant bg-ki-surface-low hover:border-primary/40 hover:text-primary hover:bg-primary/10'
+                            'h-8 gap-1.5 text-xs bg-white rounded border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors',
+                            chip && 'border-slate-400 ring-1 ring-slate-300 text-slate-900',
+                            isInferred && 'border-primary/40 ring-primary/30',
                           )}
                         >
-                          <Icon className="h-3 w-3" />
+                          {isInferred
+                            ? <Sparkles className="h-3 w-3 text-primary" />
+                            : <Icon className="h-3 w-3 opacity-60" />}
+                          {chip ? chip.name : STAGE_LABEL[stage]}
+                          {chip && (
+                            <span
+                              role="button"
+                              tabIndex={-1}
+                              aria-label={`Clear ${STAGE_LABEL[stage]} filter`}
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); removeChip(stage) }}
+                              className="ml-0.5 rounded hover:bg-slate-200"
+                            >
+                              <X className="h-3 w-3" />
+                            </span>
+                          )}
+                          <ChevronDown className="h-3 w-3 opacity-50" />
+                        </Button>
+                      </DropdownMenuTrigger>
+
+                      <DropdownMenuContent align="start" className="w-[240px] max-h-[320px] overflow-y-auto py-1 text-xs rounded">
+                        <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-slate-400 px-2 py-1.5 font-medium">
                           {STAGE_LABEL[stage]}
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom">
-                        {isGated
-                          ? `Select ${STAGE_LABEL[stage === 'engagement' ? 'client' : 'engagement']} first`
-                          : `Filter by ${STAGE_LABEL[stage]}`}
-                      </TooltipContent>
-                    </Tooltip>
+                        </DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+
+                        {stage === 'type' ? (
+                          FILE_TYPE_OPTIONS.map((opt) => (
+                            <DropdownMenuCheckboxItem
+                              key={opt}
+                              checked={opt === 'any' ? selectedFileTypes.length === 0 : selectedFileTypes.includes(opt)}
+                              onCheckedChange={() => toggleFileTypeSimple(opt)}
+                              onSelect={(e) => e.preventDefault()}
+                              className="text-xs py-1.5 pl-8"
+                            >
+                              {FILE_TYPE_LABEL[opt]}
+                            </DropdownMenuCheckboxItem>
+                          ))
+                        ) : options.length === 0 ? (
+                          <div className="px-2.5 py-2 text-xs text-slate-400">Nothing available</div>
+                        ) : (
+                          <>
+                            {/* "No filter" option — an explicit way back to unfiltered from inside
+                                the menu, rather than only via the chip's ✕. Not a selectable value:
+                                choosing it clears the filter. */}
+                            <DropdownMenuItem
+                              onClick={() => removeChip(stage)}
+                              className={cn(
+                                'text-xs py-1.5 px-2.5 cursor-pointer',
+                                !chip && 'bg-slate-100 font-medium',
+                              )}
+                            >
+                              {STAGE_ANY_LABEL[stage]}
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            {options.map((o) => (
+                              <DropdownMenuItem
+                                key={o.id}
+                                onClick={() => selectStageValue(stage, o)}
+                                className={cn(
+                                  'text-xs py-1.5 px-2.5 cursor-pointer',
+                                  chip?.id === o.id && 'bg-slate-100 font-medium',
+                                )}
+                              >
+                                {o.name}
+                              </DropdownMenuItem>
+                            ))}
+                          </>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   )
                 })}
+
+                {chips.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => { setChips([]); setInferredStages([]) }}
+                    className="text-[11px] text-slate-500 hover:text-slate-800 underline underline-offset-2"
+                  >
+                    Clear filters
+                  </button>
+                )}
               </div>
 
               {(interpreting || askNote) && (
                 <div className="px-3 pt-2 flex items-center gap-1.5 text-[11px]">
                   {interpreting ? (
                     <>
-                      <Sparkles className="h-3 w-3 text-violet-500 animate-pulse" />
-                      <span className="text-violet-700">{ASSISTANT.name} is reading your question…</span>
+                      <span className="inline-flex items-center gap-1.5 text-primary">
+                        <Brio className="animate-pulse" />
+                        is reading your question…
+                      </span>
                     </>
                   ) : (
                     <span className="text-ki-on-surface-variant">{askNote}</span>
@@ -976,7 +797,7 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
               <div className="flex">
                 <div className="flex flex-col justify-center py-3 pl-4 pr-2 shrink-0">
                   {mode === 'ask'
-                    ? <Sparkles className="h-4 w-4 text-violet-500" />
+                    ? <Sparkles className="h-4 w-4 text-primary" />
                     : <Search className="h-4 w-4 text-primary" />}
                 </div>
                 <div className="flex-1 min-w-0 flex items-center px-1 py-2.5">
@@ -984,21 +805,8 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                     ref={textareaRef}
                     type="text"
                     value={searchQuery}
-                    onFocus={() => setFocusedChipIndex(null)}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.key === '@' && !pickerOpen
-                        && (pickerData.clients.length > 0 || pickerData.engagements.length > 0 || pickerData.deliverables.length > 0)) {
-                        e.preventDefault()
-                        openPickerAtNextStage()
-                        return
-                      }
-                      const atStart = (e.currentTarget.selectionStart ?? 0) === 0 && (e.currentTarget.selectionEnd ?? 0) === 0
-                      if ((e.key === 'Backspace' || e.key === 'ArrowLeft') && atStart && chips.length > 0) {
-                        e.preventDefault()
-                        setFocusedChipIndex(chips.length - 1)
-                        return
-                      }
                       if (e.key === 'Enter') {
                         e.preventDefault()
                         if (mode === 'ask') runAskSearch()
@@ -1028,9 +836,6 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                             setAskNote(null)
                             setResults([])
                             setHasSearched(false)
-                            setFocusedChipIndex(null)
-                            setPendingFileTypes([])
-                            closePicker()
                           }}
                           className="p-1 rounded-full text-ki-on-surface-variant hover:bg-ki-surface-low"
                           aria-label="Clear search and start again"
@@ -1046,7 +851,7 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                           'p-1.5 rounded-full transition-colors',
                           interpreting || !searchQuery.trim()
                             ? 'text-ki-outline-variant'
-                            : 'text-white bg-violet-600 hover:bg-violet-700'
+                            : 'text-white bg-primary hover:bg-primary'
                         )}
                         aria-label={`Ask ${ASSISTANT.name}`}
                       >
@@ -1061,9 +866,6 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                     onClick={() => {
                       setSearchQuery('')
                       setChips([])
-                      setFocusedChipIndex(null)
-                      setPendingFileTypes([])
-                      closePicker()
                     }}
                     disabled={!searchQuery.trim() && chips.length === 0}
                     className={cn(
@@ -1079,130 +881,10 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
               </div>
             </div>
 
-            {pickerOpen && pickerPosition && createPortal(
-              <div
-                ref={pickerRef}
-                style={{ position: 'fixed', top: pickerPosition.top, left: pickerPosition.left, width: pickerPosition.width, maxWidth: 320 }}
-                className="z-50 rounded-md border border-ki-outline bg-ki-surface shadow-lg py-1"
-              >
-                <div className="px-2.5 py-1.5 border-b border-ki-outline text-[10px] font-mono font-medium uppercase tracking-widest text-ki-on-surface-variant">
-                  {STAGE_LABEL[pickerStage]}
-                </div>
-                <input
-                  ref={pickerInputRef}
-                  autoFocus
-                  value={pickerQuery}
-                  onChange={(e) => { setPickerQuery(e.target.value); setPickerFocusedIndex(0) }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Escape') {
-                      closePicker()
-                      e.stopPropagation()
-                      return
-                    }
-                    if (e.key === '@') {
-                      // Already open — treat another "@" as "skip to the next stage",
-                      // so Time is reachable without completing Client/Engagement/Deliverable.
-                      e.preventDefault()
-                      openPickerAtNextStage()
-                      return
-                    }
-                    if (e.key === 'ArrowDown') {
-                      e.preventDefault()
-                      setPickerFocusedIndex((i) => Math.min(i + 1, filteredOptions.length - 1))
-                    } else if (e.key === 'ArrowUp') {
-                      e.preventDefault()
-                      setPickerFocusedIndex((i) => Math.max(i - 1, 0))
-                    } else if (e.key === ' ' && pickerStage === 'type') {
-                      // Type is multi-select — Space toggles the focused category without closing the picker.
-                      e.preventDefault()
-                      if (filteredOptions[pickerFocusedIndex]) toggleFileType(filteredOptions[pickerFocusedIndex].id as FileTypeOption)
-                    } else if (e.key === 'Enter') {
-                      e.preventDefault()
-                      if (pickerStage === 'type') {
-                        commitFileTypes(true)
-                      } else if (filteredOptions[pickerFocusedIndex]) {
-                        selectChip(filteredOptions[pickerFocusedIndex])
-                      }
-                    } else if (e.key === 'Tab') {
-                      // Skip this stage without selecting, advance to the next eligible one
-                      // (Engagement/Deliverable are only eligible once their parent is set).
-                      e.preventDefault()
-                      if (pickerStage === 'type' && pendingFileTypes.length > 0) {
-                        commitFileTypes(true)
-                      } else {
-                        openPickerAtNextStage()
-                      }
-                    }
-                  }}
-                  placeholder={pickerStage === 'type' ? 'Filter types, Space to toggle...' : `Filter ${STAGE_LABEL[pickerStage].toLowerCase()}s, or Tab to skip...`}
-                  className="w-full px-2.5 py-1.5 text-xs border-b border-ki-outline focus:outline-none"
-                />
-                <div className="max-h-56 overflow-y-auto">
-                  {filteredOptions.length === 0 && (
-                    <div className="px-2.5 py-2 text-xs text-ki-on-surface-variant">No matches</div>
-                  )}
-                  {filteredOptions.map((o, i) => {
-                    const isChecked = pickerStage === 'type' && pendingFileTypes.includes(o.id as FileTypeOption)
-                    return (
-                      <button
-                        key={o.id}
-                        type="button"
-                        ref={(el) => { if (el && i === pickerFocusedIndex) el.scrollIntoView({ block: 'nearest' }) }}
-                        onMouseEnter={() => setPickerFocusedIndex(i)}
-                        onClick={() => (pickerStage === 'type' ? toggleFileType(o.id as FileTypeOption) : selectChip(o))}
-                        className={cn(
-                          'w-full text-left px-2.5 py-1.5 text-xs flex items-center gap-2',
-                          i === pickerFocusedIndex ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-ki-surface-low'
-                        )}
-                      >
-                        {pickerStage === 'type' && (
-                          <span className={cn(
-                            'shrink-0 h-3.5 w-3.5 rounded-sm border flex items-center justify-center',
-                            isChecked ? 'bg-primary border-primary' : 'border-ki-outline'
-                          )}>
-                            {isChecked && <span className="h-1.5 w-1.5 rounded-[1px] bg-ki-surface" />}
-                          </span>
-                        )}
-                        {o.name}
-                      </button>
-                    )
-                  })}
-                </div>
-                <div className="px-2.5 py-1.5 border-t border-ki-outline flex items-center justify-between gap-2 text-[9px] font-mono text-ki-on-surface-variant">
-                  <div className="flex items-center gap-2">
-                    <span><kbd className="px-1 py-0.5 rounded border border-ki-outline bg-ki-surface-low">↑↓</kbd> Navigate</span>
-                    {pickerStage === 'type' ? (
-                      <span><kbd className="px-1 py-0.5 rounded border border-ki-outline bg-ki-surface-low">Space</kbd> Toggle</span>
-                    ) : (
-                      <span><kbd className="px-1 py-0.5 rounded border border-ki-outline bg-ki-surface-low">Enter</kbd> Select</span>
-                    )}
-                  </div>
-                  {pickerStage === 'type' ? (
-                    <button
-                      type="button"
-                      onClick={() => commitFileTypes(true)}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-primary/10 text-primary font-bold hover:bg-primary/20 transition-colors"
-                    >
-                      <kbd className="px-1 py-0.5 rounded border border-primary/30 bg-ki-surface">Enter</kbd> Apply
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={openPickerAtNextStage}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-ki-on-surface-variant hover:bg-ki-surface-low hover:text-ki-on-surface font-bold transition-colors"
-                    >
-                      <kbd className="px-1 py-0.5 rounded border border-ki-outline bg-ki-surface-low">Tab</kbd> Skip
-                    </button>
-                  )}
-                </div>
-              </div>,
-              document.body
-            )}
           </div>
 
-          {/* Only surface this confirmation line for chrono's soft, implicit date detection from
-              typed text — an explicit @ Time chip already shows its own preset name as a chip,
-              so repeating the resolved range here would be redundant. */}
+          {/* Only for chrono's soft, implicit date detection from typed text — a Time filter set
+              explicitly already shows its preset name, so repeating the range here is redundant. */}
           {resolvedFilters?.dateRange && !dateRangeChip && (
             <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-ki-on-surface-variant">
               <span className="px-1.5 py-0.5 rounded bg-ki-surface-low font-mono font-medium text-ki-on-surface">

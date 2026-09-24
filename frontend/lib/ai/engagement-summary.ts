@@ -75,6 +75,16 @@ export function isApprovedForExport(draft: InsightsSummaryDraft | null | undefin
  * would produce the same text, so the Generate action skips the model call instead, and a
  * published summary is only flagged stale when this differs from the one captured at publish.
  *
+ * THE RULE, when adding fields: hash what a PERSON changed, never what the CLOCK changed.
+ * Anything derived from `Date.now()` drifts on its own and will flag every summary stale
+ * overnight — that bug shipped once already.
+ *
+ * A field that mixes both is DECOMPOSED rather than dropped: hash its stable core, ignore its
+ * derived wrapper. `pace` contributes `deliveredPct` (moves when work is approved) but not
+ * `timePct` (moves daily). `documentsDueSoon` contributes each document's id and due date, but
+ * not `daysUntil`. Still fully excluded, because nothing in them is stable: `sensitiveFiles` and
+ * `pendingInvitations` (daysUntil), `storageHealth` (monthsStale), and any `isOverdue` flag.
+ *
  * Only inputs a PERSON can change belong here. Anything derived from the current clock —
  * healthScore (which folds in a "behind pace" penalty computed from elapsed time), pace.timePct,
  * and isOverdue — drifts on its own, which would mark every summary stale simply because a day
@@ -100,9 +110,30 @@ export function fingerprintInsights(data: EngagementInsightsResponse): string {
         data.firstTimeRight?.firstTime ?? '',
         data.firstTimeRight?.reworked ?? '',
         data.memberCount ?? '',
+        data.healthScore?.score ?? '',
+        data.approvalCycle?.approvedCount ?? '',
+        data.approvalCycle?.deliverableCount ?? '',
+        data.folderHealth?.score ?? '',
+        data.folderHealth?.totalFiles ?? '',
+        data.sharedDocsCount ?? '',
+        data.pendingApprovalSharesCount ?? '',
+        // Team composition, not just headcount — a member changing role is a real change.
+        ...Object.entries(data.membersByRole ?? {}).sort().map(([r, n]) => `${r}:${n}`),
+        // Which documents have unanswered client comments, not just how many.
+        ...(data.unansweredThreads ?? []).map((t: { documentId?: string }) => `u:${t.documentId ?? ''}`).sort(),
+        // Rework per deliverable — a summary that mentions revisions should notice a new round.
+        ...(data.revisionMetrics ?? []).map((r: { documentId: string; revisions: number }) => `r:${r.documentId}:${r.revisions}`).sort(),
         // Stage and due date per deliverable — what a lead actually changes. isOverdue is omitted
         // because it flips on its own when a due date passes.
         ...(data.deliverables ?? []).map((d) => `${d.id}:${d.stage}:${d.dueDate ?? ''}`),
+        // pace and documentsDueSoon are strong signals, so rather than excluding them wholesale
+        // they are DECOMPOSED: the part a person sets is hashed, the part the clock computes is
+        // not. deliveredPct moves only when work is approved; timePct moves every day, so it is
+        // dropped. Same for the due-date list — the dates are hashed, `daysUntil` is not.
+        `delivered:${data.pace?.deliveredPct ?? ''}`,
+        ...(data.documentsDueSoon ?? [])
+            .map((d: { documentId: string; dueDate: string }) => `due:${d.documentId}:${d.dueDate}`)
+            .sort(),
     ]
     return createHash('sha256').update(parts.join('|')).digest('hex').slice(0, 32)
 }
@@ -143,8 +174,8 @@ Rules for the sections you write — Summary, Progress, Risks, Needs Attention:
 - Do not address the reader as "you" and do not open with a greeting.
 
 Rules for Mitigation & Contingency and Next Steps:
-- You do NOT have the information to write these. They depend on plans and commitments that exist
-  only in the lead's head.
+- These are reserved for the engagement lead. They commit the firm to a course of action, and that
+  decision belongs to the person accountable for it — not to you, and not to a plausible guess.
 - Write EXACTLY this line under each of those two headings, and nothing else:
 ${LEAD_PLACEHOLDER}
 

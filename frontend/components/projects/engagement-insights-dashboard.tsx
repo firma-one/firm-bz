@@ -50,7 +50,7 @@ import {
     Pencil,
     Sparkles,
 } from 'lucide-react'
-import { getFileTypeLabel, formatRelativeTime, formatFileSize } from '@/lib/utils'
+import { getFileTypeLabel, formatRelativeTime, formatDateTimeWithTZ, formatFileSize } from '@/lib/utils'
 import { engagementPath, firmSettingsPath } from '@/lib/navigation/firm-paths'
 import { InsightCard } from '@/components/dashboard/insight-card'
 import { StatTile } from '@/components/ui/stat-tile'
@@ -62,9 +62,9 @@ import { updateEngagementInsightsSummary, approveEngagementAiSummary, dismissEng
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import { EngagementAiChat } from '@/components/projects/engagement-ai-chat'
 import { ASSISTANT } from '@/lib/ai/assistant'
+import { Brio } from '@/components/ui/brio'
 import { StreamingText } from '@/components/ui/streaming-text'
-import { BrioAvatar } from '@/components/ui/brio-avatar'
-import ReactMarkdown from 'react-markdown'
+import { BrioSections } from '@/components/ui/brio-sections'
 import { findUnfilledSections } from '@/lib/ai/summary-sections'
 
 // ─── Ring Registry ────────────────────────────────────────────────────────────
@@ -719,12 +719,12 @@ function EngagementActionCenter({ data, loading, engagementBase, projectId, setR
                                 {(() => {
                                     const isAlert = pendingSharesCount > 0
                                     const border = 'border-[#d1d5db]'
-                                    const hover = isAlert ? 'hover:bg-violet-50' : 'hover:bg-green-50'
-                                    const textColor = isAlert ? 'text-violet-700' : 'text-gray-700'
-                                    const iconBg = isAlert ? 'bg-violet-50' : 'bg-green-50'
-                                    const iconText = isAlert ? 'text-violet-600' : 'text-green-600'
+                                    const hover = isAlert ? 'hover:bg-primary/10' : 'hover:bg-green-50'
+                                    const textColor = isAlert ? 'text-primary' : 'text-gray-700'
+                                    const iconBg = isAlert ? 'bg-primary/10' : 'bg-green-50'
+                                    const iconText = isAlert ? 'text-primary' : 'text-green-600'
                                     const chevronColor = isAlert ? 'text-violet-400' : 'text-gray-400'
-                                    const numColor = isAlert ? 'text-violet-600' : 'text-gray-500'
+                                    const numColor = isAlert ? 'text-primary' : 'text-gray-500'
                                     const sub = isAlert ? `${pendingSharesCount} file${pendingSharesCount > 1 ? 's' : ''} pending approval` : 'No pending approvals'
                                     return (
                                         <Link
@@ -2920,7 +2920,7 @@ export function EngagementInsightsDashboard({
                                             <TooltipTrigger asChild>
                                                 <Link
                                                     href={firmSettingsPath(groupSlug, orgSlug, 'appsettings')}
-                                                    className="p-1.5 rounded text-violet-400 hover:text-violet-600 hover:bg-violet-50 transition-colors"
+                                                    className="p-1.5 rounded text-violet-400 hover:text-primary hover:bg-primary/10 transition-colors"
                                                     aria-label="Display, Print & Sharing settings"
                                                 >
                                                     <Settings className="h-4 w-4" />
@@ -3019,12 +3019,18 @@ export function EngagementInsightsDashboard({
                                     animate={{ opacity: 1, height: 'auto' }}
                                     exit={{ opacity: 0, height: 0 }}
                                     transition={{ duration: 0.2, ease: 'easeOut' }}
-                                    className="mx-6 mt-5 bg-violet-50/40 border border-violet-200 rounded shadow-md p-4 flex flex-col gap-2 overflow-hidden"
+                                    className="mx-6 mt-5 bg-primary/5 border border-primary/30 rounded shadow-md p-4 flex flex-col gap-2 overflow-hidden"
                                 >
                                     <div className="flex items-center gap-2">
-                                        <BrioAvatar size={16} title={null} className={aiStreaming ? 'animate-pulse' : ''} />
-                                        <span className="text-xs font-semibold text-violet-700 uppercase tracking-wide">
-                                            {aiStreaming ? `${ASSISTANT.name} is writing…` : `Suggested by ${ASSISTANT.name}`}
+                                        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary tracking-wide">
+                                            {aiStreaming ? (
+                                                <>
+                                                    <Brio className={aiStreaming ? 'animate-pulse' : ''} />
+                                                    is writing…
+                                                </>
+                                            ) : (
+                                                <>Suggested by <Brio /></>
+                                            )}
                                         </span>
                                         {!aiStreaming && data?.insightsSummaryDraft && (
                                             <span className="text-[11px] text-gray-400">
@@ -3041,17 +3047,17 @@ export function EngagementInsightsDashboard({
                                             initial={{ opacity: 0 }}
                                             animate={{ opacity: 1 }}
                                             transition={{ duration: 0.15 }}
-                                            className="w-full text-sm text-gray-700 bg-white border border-violet-100 rounded px-3 py-2 leading-relaxed whitespace-pre-wrap min-h-[6.5rem]"
+                                            className="w-full text-sm text-gray-700 bg-white border border-primary/20 rounded px-3 py-2 leading-relaxed whitespace-pre-wrap h-[19.5rem] overflow-y-auto"
                                         >
                                             <StreamingText text={aiStreamText} />
                                             {/* Block caret, terminal style. Sized in `em` so it tracks the
                                                 font rather than a fixed pixel width. */}
                                             <span
-                                                className="inline-block w-[0.5em] h-[1.05em] -mb-[0.15em] ml-0.5 translate-y-px bg-violet-500 align-baseline"
+                                                className="inline-block w-[0.5em] h-[1.05em] -mb-[0.15em] ml-0.5 translate-y-px bg-primary/100 align-baseline"
                                                 style={{ animation: 'fm-caret 1.3s ease-in-out infinite' }}
                                             />
                                             {!aiStreamText && (
-                                                <span className="text-gray-400">{ASSISTANT.name} is reading this engagement…</span>
+                                                <span className="text-gray-400"><Brio /> is reading this engagement…</span>
                                             )}
                                         </motion.p>
                                     ) : (
@@ -3063,20 +3069,21 @@ export function EngagementInsightsDashboard({
                                             value={aiDraftEdit}
                                             onChange={(e) => setAiDraftEdit(e.target.value)}
                                             disabled={aiDraftBusy}
-                                            className="w-full text-sm text-gray-700 bg-white border border-violet-100 rounded px-3 py-2 leading-relaxed min-h-[6.5rem] resize-none focus:outline-none focus:ring-1 focus:ring-violet-300 disabled:opacity-60"
+                                            className="w-full text-sm text-gray-700 bg-white border border-primary/20 rounded px-3 py-2 leading-relaxed h-[19.5rem] resize-none overflow-y-scroll [scrollbar-gutter:stable] focus:outline-none focus:ring-1 focus:ring-primary/40 disabled:opacity-60"
                                         />
                                     )}
 
                                     {aiGenerateNote && !aiStreaming && (
-                                        <p className="text-[11px] text-violet-700">{aiGenerateNote}</p>
+                                        <p className="text-[11px] text-primary">{aiGenerateNote}</p>
                                     )}
 
                                     {!aiStreaming && (
                                         <>
                                             {unfilledSections.length > 0 && (
                                                 <p className="text-[11px] text-amber-700">
-                                                    {ASSISTANT.name} cannot write these — add your own notes under{' '}
-                                                    <strong>{unfilledSections.join(' and ')}</strong> before publishing.
+                                                    <strong>{unfilledSections.join(' and ')}</strong> are yours to
+                                                    decide. <Brio /> reports what the data shows; it does not
+                                                    commit your firm to a plan. Add your notes before publishing.
                                                 </p>
                                             )}
                                             <p className="text-[11px] text-gray-500">
@@ -3142,7 +3149,7 @@ export function EngagementInsightsDashboard({
                                         onClick={handleGenerateSummary}
                                         className="underline underline-offset-2 hover:text-amber-900 transition-colors"
                                     >
-                                        Ask {ASSISTANT.name} for an update
+                                        Ask <Brio /> for an update
                                     </button>
                                 </motion.div>
                             )}
@@ -3204,44 +3211,68 @@ export function EngagementInsightsDashboard({
                                                     Engagement Summary
                                                 </span>
                                                 {data.insightsSummaryPublishedAt && (
-                                                    <span className="text-[11px] text-gray-400 shrink-0">
-                                                        {new Date(data.insightsSummaryPublishedAt).toLocaleDateString(undefined, {
-                                                            day: 'numeric', month: 'short', year: 'numeric',
-                                                        })}
-                                                    </span>
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <span className="inline-flex items-center gap-1 text-[11px] text-gray-400 shrink-0 cursor-default">
+                                                                <Clock className="h-3 w-3" />
+                                                                {formatRelativeTime(data.insightsSummaryPublishedAt)}
+                                                            </span>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent side="bottom" className="text-xs">
+                                                            Published {formatDateTimeWithTZ(data.insightsSummaryPublishedAt)}
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                )}
+                                                {/* Deliberately narrow: the fingerprint watches deliverable stages,
+                                                    due dates, comment counts, planning coverage and team size — not
+                                                    everything the summary can describe (pace, health score, approval
+                                                    cycle and storage are excluded). So this states what was checked
+                                                    rather than asserting the text is still correct. */}
+                                                {data.insightsSummaryPublishedAt && !data.insightsSummaryStale && (
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <span className="inline-flex items-center gap-1 text-[11px] text-gray-400 shrink-0 cursor-default">
+                                                                <Check className="h-3 w-3" />
+                                                                No delivery changes
+                                                            </span>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent side="bottom" className="text-xs max-w-[260px]">
+                                                            No deliverable, due date, comment or team change since this
+                                                            was published. Other details can still have moved — worth a
+                                                            rewrite if the engagement has shifted.
+                                                        </TooltipContent>
+                                                    </Tooltip>
                                                 )}
                                             </div>
                                             {/* Controls are marked no-export so they are stripped from the
                                                 clone at capture time and never reach the client's PDF. */}
                                             {isFirmAdmin && !aiStreaming && !data.insightsSummaryDraft && (
-                                                <div data-no-export="" className="flex items-center gap-3 shrink-0">
+                                                <div data-no-export="" className="flex items-center gap-2 shrink-0">
                                                     <button
                                                         onClick={() => { setSummaryDraft(data.insightsSummary ?? ''); setSummaryEditing(true) }}
-                                                        className="inline-flex items-center gap-1.5 text-[11px] text-gray-500 hover:text-gray-800 transition-colors"
+                                                        className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-2.5 text-[11px] font-medium text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
                                                     >
                                                         <Pencil className="h-3 w-3" />
                                                         {data.insightsSummary ? 'Edit' : 'Add'}
                                                     </button>
                                                     <button
                                                         onClick={handleGenerateSummary}
-                                                        className="inline-flex items-center gap-1.5 text-[11px] text-violet-600 hover:text-violet-800 transition-colors"
+                                                        className="inline-flex h-7 items-center gap-1.5 rounded border border-primary/30 bg-primary/5 px-2.5 text-[11px] font-medium text-primary transition-colors hover:border-primary/50 hover:bg-primary/10"
                                                     >
-                                                        <Sparkles className="h-3 w-3" />
-                                                        {data.insightsSummary ? `Rewrite with ${ASSISTANT.name}` : `Write with ${ASSISTANT.name}`}
+                                                        {data.insightsSummary ? <>Rewrite with</> : <>Write with</>}
+                                                        <Brio />
                                                     </button>
                                                 </div>
                                             )}
                                         </div>
                                         {data.insightsSummary ? (
-                                            <div className="px-4 py-3 text-sm text-gray-600 leading-relaxed
-                                                [&_h2]:text-[11px] [&_h2]:font-semibold [&_h2]:uppercase
-                                                [&_h2]:tracking-wide [&_h2]:text-gray-400 [&_h2]:mt-3
-                                                [&_h2:first-child]:mt-0 [&_h2]:mb-1 [&_p]:mb-0">
-                                                <ReactMarkdown>{data.insightsSummary}</ReactMarkdown>
-                                            </div>
+                                            <BrioSections
+                                                content={data.insightsSummary}
+                                                className="px-4 py-3 text-gray-600"
+                                            />
                                         ) : (
                                             <p data-no-export="" className="text-sm text-gray-400 px-4 py-3">
-                                                No summary yet — write one, or let {ASSISTANT.name} draft it
+                                                No summary yet — write one, or let <Brio /> draft it
                                                 from this engagement&apos;s data.
                                             </p>
                                         )}
@@ -3279,7 +3310,7 @@ export function EngagementInsightsDashboard({
                                                     label="Avg Revision Rounds"
                                                     count={avg === null ? '—' : avg.toFixed(1)}
                                                     sub={rm?.length ? 'per deliverable' : undefined}
-                                                    colorClass="bg-violet-50 text-violet-600"
+                                                    colorClass="bg-primary/10 text-primary"
                                                 />
                                             )
                                         })()}
