@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/auth-context'
 import { Users, Briefcase, MailOpen, TrendingUp, RefreshCw, UserPlus, Send, CheckCircle2, PauseCircle, UserMinus, ArrowLeft, CalendarClock } from 'lucide-react'
 import type { FirmInsightsResponse, ClientPipelineItem, EngagementPipelineItem } from '@/app/api/firms/[firmId]/insights/route'
 import { StatTile } from '@/components/ui/stat-tile'
+import { AiFirmBrief } from '@/components/dashboard/ai-firm-brief'
 
 function formatValue(val: number, symbol = ''): string {
     if (val === 0) return '—'
@@ -291,6 +292,8 @@ export function FirmBusinessInsights({ firmId }: FirmBusinessInsightsProps) {
     const atRiskClientCount = data ? (data.clientCounts?.ACTIVE ?? 0) + (data.clientCounts?.PROSPECT ?? 0) - (data.engagementsDueSoon?.length ?? 0) : 0
 
     return (
+        <>
+        <AiFirmBrief firmId={firmId} />
         <div className="bg-white border border-[#e5e7eb] rounded p-6 shadow-sm">
             <div className="flex items-center justify-between mb-6">
                 <div>
@@ -390,5 +393,6 @@ export function FirmBusinessInsights({ firmId }: FirmBusinessInsightsProps) {
                 </div>
             )}
         </div>
+        </>
     )
 }

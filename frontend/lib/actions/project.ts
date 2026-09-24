@@ -889,9 +889,136 @@ export async function updateEngagementInsightsSummary(projectId: string, summary
     })
     if (!project) throw new Error('Project not found')
     const existingSettings = (project.settings as Record<string, unknown> | null) ?? {}
+    const { readInsightsSummary } = await import('@/lib/ai/engagement-summary')
+    const current = readInsightsSummary(existingSettings)
+
+    const supabase = await createSupabaseClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
     await prisma.engagement.update({
         where: { id: projectId },
-        data: { settings: { ...existingSettings, insightsSummary: summary ?? null } },
+        data: {
+            settings: {
+                ...existingSettings,
+                insightsSummary: {
+                    text: summary ?? null,
+                    publishedAt: summary ? new Date().toISOString() : null,
+                    publishedByUserId: summary ? user?.id ?? null : null,
+                    // Hand-written text describes no data snapshot, so there is nothing to
+                    // compare against — no fingerprint rather than a misleading one.
+                    fingerprint: null,
+                    source: summary ? 'manual' : null,
+                    draft: current.draft ?? null,
+                },
+            },
+        },
+    })
+}
+
+/**
+ * Publishes the AI draft into the client-facing summary, optionally with edits by the lead.
+ *
+ * This is the ONLY path by which generated text reaches `insightsSummary` — the field that is
+ * shown to clients and captured into PDF/email exports. The daily cron writes drafts with
+ * status 'pending_review' and can never publish. The approved draft is retained (status
+ * 'approved') as an audit record of what was reviewed, by whom, and whether it was edited.
+ */
+export async function approveEngagementAiSummary(projectId: string, editedContent?: string) {
+    await assertCanManageProject(projectId)
+
+    const supabase = await createSupabaseClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    const project = await prisma.engagement.findFirst({
+        where: { id: projectId, isDeleted: false },
+        select: { settings: true },
+    })
+    if (!project) throw new Error('Project not found')
+
+    const existingSettings = (project.settings as Record<string, unknown> | null) ?? {}
+    const { readInsightsSummary } = await import('@/lib/ai/engagement-summary')
+    const current = readInsightsSummary(existingSettings)
+    const draft = current.draft
+    if (!draft) throw new Error('No draft to approve')
+
+    const originalText = (draft.text ?? '').trim()
+    const text = (editedContent ?? originalText).trim()
+    if (!text) throw new Error('Cannot publish an empty summary')
+
+    // Enforced here, not only in the UI: the client-facing summary must never claim a mitigation
+    // plan or next steps that no human has actually written.
+    const { findUnfilledSections } = await import('@/lib/ai/engagement-summary')
+    const unfilled = findUnfilledSections(text)
+    if (unfilled.length > 0) {
+        throw new Error(
+            `Complete these sections before publishing: ${unfilled.join(', ')}`
+        )
+    }
+
+    const now = new Date().toISOString()
+    await prisma.engagement.update({
+        where: { id: projectId },
+        data: {
+            settings: {
+                ...existingSettings,
+                insightsSummary: {
+                    text,
+                    publishedAt: now,
+                    publishedByUserId: user?.id ?? null,
+                    // Fingerprint of the data this described, so the UI can later tell the
+                    // engagement has moved on and flag the published text as out of date.
+                    fingerprint: draft.fingerprint ?? null,
+                    source: 'ai',
+                    // Retained as an audit record of what was reviewed and by whom.
+                    draft: {
+                        ...draft,
+                        text,
+                        status: 'approved',
+                        reviewedAt: now,
+                        reviewedByUserId: user?.id ?? null,
+                        editedByReviewer: text !== originalText,
+                    },
+                },
+            },
+        },
+    })
+    return { published: text }
+}
+
+/** Rejects the draft. It is retained with status 'dismissed' and never reaches exports. */
+export async function dismissEngagementAiSummary(projectId: string) {
+    await assertCanManageProject(projectId)
+
+    const supabase = await createSupabaseClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    const project = await prisma.engagement.findFirst({
+        where: { id: projectId, isDeleted: false },
+        select: { settings: true },
+    })
+    if (!project) throw new Error('Project not found')
+
+    const existingSettings = (project.settings as Record<string, unknown> | null) ?? {}
+    const { readInsightsSummary } = await import('@/lib/ai/engagement-summary')
+    const current = readInsightsSummary(existingSettings)
+    if (!current.draft) return
+
+    await prisma.engagement.update({
+        where: { id: projectId },
+        data: {
+            settings: {
+                ...existingSettings,
+                insightsSummary: {
+                    ...current,
+                    draft: {
+                        ...current.draft,
+                        status: 'dismissed',
+                        reviewedAt: new Date().toISOString(),
+                        reviewedByUserId: user?.id ?? null,
+                    },
+                },
+            },
+        },
     })
 }
 

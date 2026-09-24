@@ -1,7 +1,8 @@
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import Link from 'next/link'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '@/lib/auth-context'
 import {
     MessagesSquare,
@@ -47,7 +48,7 @@ import {
     FolderTree,
     Settings,
     Pencil,
-    NotebookPen,
+    Sparkles,
 } from 'lucide-react'
 import { getFileTypeLabel, formatRelativeTime, formatFileSize } from '@/lib/utils'
 import { engagementPath, firmSettingsPath } from '@/lib/navigation/firm-paths'
@@ -57,8 +58,14 @@ import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import type { EngagementInsightsResponse, UnansweredThreadItem, DocumentDueDateItem, RecentDocumentItem, SensitiveFileItem, DeliverableProgress, DeliverableStage, EngagementHealthScore, PlanningHygiene, CommentThreads, EngagementPace, FirstTimeRight } from '@/app/api/projects/[projectId]/insights/route'
-import { updateEngagementInsightsSummary } from '@/lib/actions/project'
+import { updateEngagementInsightsSummary, approveEngagementAiSummary, dismissEngagementAiSummary } from '@/lib/actions/project'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
+import { EngagementAiChat } from '@/components/projects/engagement-ai-chat'
+import { ASSISTANT } from '@/lib/ai/assistant'
+import { StreamingText } from '@/components/ui/streaming-text'
+import { BrioAvatar } from '@/components/ui/brio-avatar'
+import ReactMarkdown from 'react-markdown'
+import { findUnfilledSections } from '@/lib/ai/summary-sections'
 
 // ─── Ring Registry ────────────────────────────────────────────────────────────
 // Stable IDs for every ring. Used by Firm Settings to hide/show rings.
@@ -2515,6 +2522,16 @@ export function EngagementInsightsDashboard({
     const [summaryEditing, setSummaryEditing] = useState(false)
     const [summaryDraft, setSummaryDraft] = useState('')
     const [summarySaving, setSummarySaving] = useState(false)
+    // Editable copy of the pending AI draft — the admin can revise before publishing.
+    const [aiDraftEdit, setAiDraftEdit] = useState('')
+    // Which draft action is in flight, so each button shows only its own spinner.
+    const [aiDraftAction, setAiDraftAction] = useState<'publish' | 'dismiss' | null>(null)
+    const aiDraftBusy = aiDraftAction !== null
+    const [aiGenerateNote, setAiGenerateNote] = useState<string | null>(null)
+    // Same check the server enforces on publish — kept in sync via the shared contract module.
+    const unfilledSections = useMemo(() => findUnfilledSections(aiDraftEdit), [aiDraftEdit])
+    const [aiStreaming, setAiStreaming] = useState(false)
+    const [aiStreamText, setAiStreamText] = useState('')
 
     const engagementBase = groupSlug && orgSlug && clientSlug && engagementSlug
         ? engagementPath(groupSlug, orgSlug, clientSlug, engagementSlug)
@@ -2555,6 +2572,14 @@ export function EngagementInsightsDashboard({
         // now-wrapping labels have the full column width available.
         const factorsContainer = clone.querySelector('#ring-health > :last-child') as HTMLElement | null
         if (factorsContainer) factorsContainer.style.maxWidth = 'none'
+        // Reveal export-only blocks (the report identity header). They are hidden on screen
+        // because the page already shows a breadcrumb, but the exported file has no other
+        // indication of which firm, client and engagement it belongs to.
+        clone.querySelectorAll('[data-export-only]').forEach((node) => {
+            (node as HTMLElement).style.display = ''
+        })
+        // Strip interactive controls — they mean nothing in a static export.
+        clone.querySelectorAll('[data-no-export]').forEach((node) => node.remove())
         // --------------------------------
 
         const offscreen = document.createElement('div')
@@ -2651,7 +2676,7 @@ export function EngagementInsightsDashboard({
             headers: { Authorization: `Bearer ${session.access_token}` },
         })
             .then((r) => r.json())
-            .then((d) => { setData(d); setSummaryDraft(d?.insightsSummary ?? '') })
+            .then((d) => { setData(d); setSummaryDraft(d?.insightsSummary ?? ''); setAiDraftEdit(d?.insightsSummaryDraft?.content ?? '') })
             .catch((e) => console.error('Failed to load engagement insights', e))
             .finally(() => setLoading(false))
     }, [projectId, session?.access_token, refreshTick])
@@ -2660,10 +2685,184 @@ export function EngagementInsightsDashboard({
         setSummarySaving(true)
         try {
             await updateEngagementInsightsSummary(projectId, summaryDraft.trim() || null)
-            setData((prev) => prev ? { ...prev, insightsSummary: summaryDraft.trim() || null } : prev)
+            // A hand-written summary clears the fingerprint server-side, so it can never be stale.
+            setData((prev) => prev ? {
+                ...prev,
+                insightsSummary: summaryDraft.trim() || null,
+                insightsSummaryStale: false,
+                insightsSummaryPublishedAt: summaryDraft.trim() ? new Date().toISOString() : null,
+            } : prev)
             setSummaryEditing(false)
+            setRefreshTick((t) => t + 1)
         } finally {
             setSummarySaving(false)
+        }
+    }
+
+    /**
+     * Streams a draft into the card above the report.
+     *
+     * The model's deltas arrive in irregular bursts, so rendering each one directly makes the
+     * text stutter. Arriving text is buffered and drained to the screen on animation frames at
+     * a steady character rate, which decouples display smoothness from network jitter. The rate
+     * adapts to how much is waiting, so a large burst catches up rather than lagging behind.
+     */
+    const handleGenerateSummary = async () => {
+        if (aiStreaming) return
+        setAiGenerateNote(null)
+        setAiStreamText('')
+        setAiStreaming(true)
+
+        let pending = ''          // received but not yet shown
+        let shown = ''            // currently on screen
+        let finished = false      // network stream closed
+        let raf = 0
+
+        // Words are revealed whole rather than character by character: each one blurs in via
+        // StreamingText, and a letter-by-letter drip would fight that animation. Release happens
+        // on a time budget so the pace still reads as typing rather than as chunks landing.
+        // One word per tick. The interval shortens as a backlog builds so a long response still
+        // lands close to the network, but a single word is always the unit — releasing several at
+        // once would defeat the per-word blur-in.
+        let lastEmit = 0
+        // Paced so each word's blur-in is actually perceptible: at ~11 words/sec the 260ms
+        // animation resolves well within view. Faster than this and words stack up mid-animation,
+        // so the blur never reads and the text just appears.
+        const BASE_MS_PER_WORD = 150
+        const MIN_MS_PER_WORD = 80
+
+        const drain = (now: number) => {
+            const waiting = pending.split(/\s+/).length
+            // The floor drops as the backlog grows, so a long response still catches up rather
+            // than leaving the reader watching text well after generation ended. A short one
+            // never reaches the deep end of this curve and stays at the readable base pace.
+            const floor = waiting > 40 ? 28 : waiting > 24 ? 45 : MIN_MS_PER_WORD
+            const interval = Math.max(floor, BASE_MS_PER_WORD - waiting * 4)
+
+            if (pending.length > 0 && now - lastEmit >= interval) {
+                // Take through the end of the next whitespace run, so a word arrives together with
+                // the space that follows it and never lands half-built. While the stream is still
+                // open, hold back a trailing fragment that has no space yet — it may be mid-word.
+                const m = /\S\s+/.exec(pending)
+                const cut = m ? m.index + m[0].length : (finished ? pending.length : 0)
+                if (cut > 0) {
+                    shown += pending.slice(0, cut)
+                    pending = pending.slice(cut)
+                    lastEmit = now
+                    setAiStreamText(shown)
+                }
+            }
+            if (!finished || pending.length > 0) {
+                raf = requestAnimationFrame(drain)
+            }
+        }
+        raf = requestAnimationFrame(drain)
+
+        /** Resolves once the buffer has fully drained, so the UI never cuts off mid-sentence. */
+        const waitForDrain = () => new Promise<void>((resolve) => {
+            const check = () => (pending.length === 0 ? resolve() : setTimeout(check, 16))
+            check()
+        })
+
+        try {
+            const res = await fetch(`/api/projects/${projectId}/ai-summary`, { method: 'POST' })
+            if (!res.ok) {
+                setAiGenerateNote(res.status === 503
+                    ? `${ASSISTANT.name} is not configured.`
+                    : `${ASSISTANT.name} could not write a summary. Try again.`)
+                return
+            }
+            if (!res.body) throw new Error('No stream')
+
+            const reader = res.body.getReader()
+            const decoder = new TextDecoder()
+            let buffer = ''
+            let completed: { content: string; generatedAt: string } | null = null
+
+            for (;;) {
+                const { done, value } = await reader.read()
+                if (done) break
+                buffer += decoder.decode(value, { stream: true })
+
+                // Newline-delimited JSON; the last element may be a partial line.
+                const lines = buffer.split('\n')
+                buffer = lines.pop() ?? ''
+
+                for (const raw of lines) {
+                    if (!raw.trim()) continue
+                    const evt = JSON.parse(raw) as { type: string; text?: string; content?: string; generatedAt?: string }
+
+                    if (evt.type === 'delta' && evt.text) {
+                        pending += evt.text
+                    } else if (evt.type === 'unchanged' && evt.content) {
+                        setAiDraftEdit(evt.content)
+                        setAiGenerateNote(`Nothing has changed since ${ASSISTANT.name} last wrote this.`)
+                        setData((prev) => prev ? {
+                            ...prev,
+                            insightsSummaryDraft: { content: evt.content!, generatedAt: evt.generatedAt! },
+                        } : prev)
+                    } else if (evt.type === 'done' && evt.content) {
+                        completed = { content: evt.content, generatedAt: evt.generatedAt! }
+                    } else if (evt.type === 'error') {
+                        setAiGenerateNote(`${ASSISTANT.name} could not write a summary. Try again.`)
+                    }
+                }
+            }
+
+            finished = true
+            // Let the animation finish before swapping in the editable textarea, otherwise the
+            // last words appear instantly and the effect breaks at the very end.
+            await waitForDrain()
+
+            if (completed) {
+                setAiDraftEdit(completed.content)
+                setData((prev) => prev ? {
+                    ...prev,
+                    insightsSummaryDraft: { content: completed!.content, generatedAt: completed!.generatedAt },
+                } : prev)
+            }
+        } catch {
+            setAiGenerateNote(`${ASSISTANT.name} could not write a summary. Try again.`)
+        } finally {
+            finished = true
+            cancelAnimationFrame(raf)
+            setAiStreaming(false)
+            setAiStreamText('')
+        }
+    }
+
+    const handleAiSummaryApprove = async () => {
+        const content = aiDraftEdit.trim()
+        if (!content) return
+        setAiDraftAction('publish')
+        try {
+            await approveEngagementAiSummary(projectId, content)
+            // Optimistic update for immediate feedback...
+            setData((prev) => prev ? {
+                ...prev,
+                insightsSummary: content,
+                insightsSummaryDraft: null,
+                // ...but staleness and publishedAt are computed server-side against the freshly
+                // stored fingerprint, so clear them here and let the refetch below supply the
+                // real values. Leaving them would keep showing a pre-publish "stale" warning.
+                insightsSummaryStale: false,
+                insightsSummaryPublishedAt: new Date().toISOString(),
+            } : prev)
+            setAiGenerateNote(null)
+            setRefreshTick((t) => t + 1)
+        } finally {
+            setAiDraftAction(null)
+        }
+    }
+
+    const handleAiSummaryDismiss = async () => {
+        setAiDraftAction('dismiss')
+        try {
+            await dismissEngagementAiSummary(projectId)
+            setData((prev) => prev ? { ...prev, insightsSummaryDraft: null } : prev)
+            setAiGenerateNote(null)
+        } finally {
+            setAiDraftAction(null)
         }
     }
 
@@ -2719,18 +2918,6 @@ export function EngagementInsightsDashboard({
                                         <>
                                         <Tooltip>
                                             <TooltipTrigger asChild>
-                                                <button
-                                                    onClick={() => { setSummaryDraft(data.insightsSummary ?? ''); setSummaryEditing(true) }}
-                                                    className="p-1.5 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-                                                    aria-label="Add engagement summary"
-                                                >
-                                                    <NotebookPen className="h-4 w-4" />
-                                                </button>
-                                            </TooltipTrigger>
-                                            <TooltipContent side="bottom" className="text-xs">Add engagement summary</TooltipContent>
-                                        </Tooltip>
-                                        <Tooltip>
-                                            <TooltipTrigger asChild>
                                                 <Link
                                                     href={firmSettingsPath(groupSlug, orgSlug, 'appsettings')}
                                                     className="p-1.5 rounded text-violet-400 hover:text-violet-600 hover:bg-violet-50 transition-colors"
@@ -2774,10 +2961,203 @@ export function EngagementInsightsDashboard({
                                 </div>
                             }
                         >
+                            {/* Manual edit of the published summary. Outside healthCardRef so the
+                                controls never appear in the client's export. */}
+                            <AnimatePresence initial={false}>
+                            {isFirmAdmin && summaryEditing && (
+                                <motion.div
+                                    key="summary-edit"
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: 'auto' }}
+                                    exit={{ opacity: 0, height: 0 }}
+                                    transition={{ duration: 0.2, ease: 'easeOut' }}
+                                    className="mx-6 mt-5 bg-white border border-[#e5e7eb] rounded shadow-md p-4 flex flex-col gap-2 overflow-hidden"
+                                >
+                                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                                        Engagement Summary
+                                    </span>
+                                    <textarea
+                                        value={summaryDraft}
+                                        onChange={(e) => setSummaryDraft(e.target.value)}
+                                        disabled={summarySaving}
+                                        autoFocus
+                                        placeholder="Add a summary for this engagement…"
+                                        // Height set in CSS, not `rows`, so the textarea collapses with the
+                                        // card's height animation instead of holding an intrinsic size.
+                                        className="w-full h-[6.5rem] text-sm text-gray-700 bg-white border border-gray-200 rounded px-3 py-2 leading-relaxed resize-none focus:outline-none focus:ring-1 focus:ring-primary/30 placeholder:text-gray-300 disabled:opacity-60"
+                                    />
+                                    <p className="text-[11px] text-gray-500">
+                                        Visible to the client and included in PDF and email exports.
+                                    </p>
+                                    <div className="flex items-center justify-end gap-2">
+                                        <button
+                                            onClick={() => setSummaryEditing(false)}
+                                            disabled={summarySaving}
+                                            className="rounded text-[10px] font-headline font-bold tracking-widest uppercase border border-gray-200 text-gray-500 hover:bg-white px-3 py-1.5 transition-colors disabled:opacity-50"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            onClick={handleSummarySave}
+                                            disabled={summarySaving}
+                                            className="rounded text-[10px] font-headline font-bold tracking-widest uppercase bg-primary hover:brightness-105 text-white shadow-sm px-3 py-1.5 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                                        >
+                                            {summarySaving && <RefreshCw className="h-3 w-3 animate-spin" />}
+                                            {summarySaving ? 'Saving…' : 'Save'}
+                                        </button>
+                                    </div>
+                                </motion.div>
+                            )}
+
+                            {/* Pending draft — at the top so it reads as the summary it will become, but
+                                deliberately OUTSIDE healthCardRef: only approved text may reach the
+                                PDF/email export. Streams in token-by-token while generating. */}
+                            {isFirmAdmin && !summaryEditing && (aiStreaming || aiStreamText || data?.insightsSummaryDraft) && (
+                                <motion.div
+                                    key="summary-draft"
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: 'auto' }}
+                                    exit={{ opacity: 0, height: 0 }}
+                                    transition={{ duration: 0.2, ease: 'easeOut' }}
+                                    className="mx-6 mt-5 bg-violet-50/40 border border-violet-200 rounded shadow-md p-4 flex flex-col gap-2 overflow-hidden"
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <BrioAvatar size={16} title={null} className={aiStreaming ? 'animate-pulse' : ''} />
+                                        <span className="text-xs font-semibold text-violet-700 uppercase tracking-wide">
+                                            {aiStreaming ? `${ASSISTANT.name} is writing…` : `Suggested by ${ASSISTANT.name}`}
+                                        </span>
+                                        {!aiStreaming && data?.insightsSummaryDraft && (
+                                            <span className="text-[11px] text-gray-400">
+                                                {formatRelativeTime(data.insightsSummaryDraft.generatedAt)}
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    {/* The streaming <p> and the editable textarea share box styling
+                                        and height, so the handoff at the end is not visible. */}
+                                    {aiStreaming ? (
+                                        <motion.p
+                                            key="stream"
+                                            initial={{ opacity: 0 }}
+                                            animate={{ opacity: 1 }}
+                                            transition={{ duration: 0.15 }}
+                                            className="w-full text-sm text-gray-700 bg-white border border-violet-100 rounded px-3 py-2 leading-relaxed whitespace-pre-wrap min-h-[6.5rem]"
+                                        >
+                                            <StreamingText text={aiStreamText} />
+                                            {/* Block caret, terminal style. Sized in `em` so it tracks the
+                                                font rather than a fixed pixel width. */}
+                                            <span
+                                                className="inline-block w-[0.5em] h-[1.05em] -mb-[0.15em] ml-0.5 translate-y-px bg-violet-500 align-baseline"
+                                                style={{ animation: 'fm-caret 1.3s ease-in-out infinite' }}
+                                            />
+                                            {!aiStreamText && (
+                                                <span className="text-gray-400">{ASSISTANT.name} is reading this engagement…</span>
+                                            )}
+                                        </motion.p>
+                                    ) : (
+                                        <motion.textarea
+                                            key="draft-edit"
+                                            initial={{ opacity: 0 }}
+                                            animate={{ opacity: 1 }}
+                                            transition={{ duration: 0.2, ease: 'easeOut' }}
+                                            value={aiDraftEdit}
+                                            onChange={(e) => setAiDraftEdit(e.target.value)}
+                                            disabled={aiDraftBusy}
+                                            className="w-full text-sm text-gray-700 bg-white border border-violet-100 rounded px-3 py-2 leading-relaxed min-h-[6.5rem] resize-none focus:outline-none focus:ring-1 focus:ring-violet-300 disabled:opacity-60"
+                                        />
+                                    )}
+
+                                    {aiGenerateNote && !aiStreaming && (
+                                        <p className="text-[11px] text-violet-700">{aiGenerateNote}</p>
+                                    )}
+
+                                    {!aiStreaming && (
+                                        <>
+                                            {unfilledSections.length > 0 && (
+                                                <p className="text-[11px] text-amber-700">
+                                                    {ASSISTANT.name} cannot write these — add your own notes under{' '}
+                                                    <strong>{unfilledSections.join(' and ')}</strong> before publishing.
+                                                </p>
+                                            )}
+                                            <p className="text-[11px] text-gray-500">
+                                                Review and edit before publishing — once published this becomes the engagement
+                                                summary, visible to the client and included in PDF and email exports.
+                                                {data?.insightsSummary && (
+                                                    <> It replaces the summary published
+                                                        {data.insightsSummaryPublishedAt
+                                                            ? ` ${formatRelativeTime(data.insightsSummaryPublishedAt)}`
+                                                            : ' earlier'}, which is hidden while you review.</>
+                                                )}
+                                            </p>
+                                            <div className="flex items-center justify-end gap-2">
+                                                <button
+                                                    onClick={handleAiSummaryDismiss}
+                                                    disabled={aiDraftBusy}
+                                                    className="rounded text-[10px] font-headline font-bold tracking-widest uppercase border border-gray-200 text-gray-500 hover:bg-white px-3 py-1.5 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                                                >
+                                                    {aiDraftAction === 'dismiss' && <RefreshCw className="h-3 w-3 animate-spin" />}
+                                                    Dismiss
+                                                </button>
+                                                <button
+                                                    onClick={handleAiSummaryApprove}
+                                                    disabled={aiDraftBusy || !aiDraftEdit.trim() || unfilledSections.length > 0}
+                                                    title={unfilledSections.length > 0
+                                                        ? `Complete: ${unfilledSections.join(', ')}`
+                                                        : undefined}
+                                                    className="rounded text-[10px] font-headline font-bold tracking-widest uppercase bg-primary hover:brightness-105 text-white shadow-sm px-3 py-1.5 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                                                >
+                                                    {aiDraftAction === 'publish' && <RefreshCw className="h-3 w-3 animate-spin" />}
+                                                    Publish
+                                                </button>
+                                            </div>
+                                        </>
+                                    )}
+                                </motion.div>
+                            )}
+                            </AnimatePresence>
+
+                            {/* Generation feedback when there is no draft card to host it (AI off, or failure). */}
+                            {isFirmAdmin && aiGenerateNote && !data?.insightsSummaryDraft && !aiStreamText && !aiStreaming && (
+                                <p className="mx-6 mt-4 text-[11px] text-gray-500">{aiGenerateNote}</p>
+                            )}
+
+                            {/* Stale marker — firm users only, and outside healthCardRef so it never
+                                appears on the client's exported report. The summary itself is kept. */}
+                            <AnimatePresence initial={false}>
+                            {isFirmAdmin && data?.insightsSummaryStale && !data?.insightsSummaryDraft && !aiStreaming && (
+                                <motion.div
+                                    key="summary-stale"
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
+                                    transition={{ duration: 0.18, ease: 'easeOut' }}
+                                    className="mx-6 mt-4 flex items-center gap-2 text-[11px] text-amber-700"
+                                >
+                                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                                    <span>
+                                        The engagement has changed since this summary was published
+                                        {data.insightsSummaryPublishedAt ? ` ${formatRelativeTime(data.insightsSummaryPublishedAt)}` : ''}.
+                                    </span>
+                                    <button
+                                        onClick={handleGenerateSummary}
+                                        className="underline underline-offset-2 hover:text-amber-900 transition-colors"
+                                    >
+                                        Ask {ASSISTANT.name} for an update
+                                    </button>
+                                </motion.div>
+                            )}
+                            </AnimatePresence>
+
                             <div ref={healthCardRef}>
-                                {/* PDF header — firm / client / engagement identity + report date */}
+                                {/* Report identity header — hidden on screen (the page already shows a
+                                    breadcrumb) and revealed on the clone at capture time, since the
+                                    exported PDF/email has nothing else naming the engagement. */}
                                 {(firmName || clientName || engagementName) && (
-                                    <div className="px-6 pt-5 pb-3 border-b border-gray-100 flex items-center justify-between gap-4 flex-wrap">
+                                    <div
+                                        data-export-only=""
+                                        style={{ display: 'none' }}
+                                        className="px-6 pt-5 pb-3 border-b border-gray-100 flex items-center justify-between gap-4 flex-wrap"
+                                    >
                                         <div className="flex items-baseline gap-2 flex-wrap">
                                             {firmName && <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{firmName}</span>}
                                             {firmName && clientName && <span className="text-gray-300 text-xs">›</span>}
@@ -2791,6 +3171,83 @@ export function EngagementInsightsDashboard({
                                         </span>
                                     </div>
                                 )}
+                                {/* Engagement Summary — leads the report, and inside healthCardRef so it
+                                    captures into the PDF/email export. Only ever approved text. */}
+                                {/* Rendered even with no summary yet (for firm admins) so the card is
+                                    the single entry point for adding or generating one. */}
+                                <AnimatePresence initial={false}>
+                                {/* Hidden while a draft is under review (or streaming) so the card above
+                                    isn't mistaken for a duplicate of the published summary. */}
+                                {(data.insightsSummary || isFirmAdmin)
+                                    && !summaryEditing
+                                    && !aiStreaming
+                                    && !aiStreamText
+                                    && !data.insightsSummaryDraft && (
+                                    <motion.div
+                                        key="summary-published"
+                                        // With no summary the card exists only to offer Add/Generate, so
+                                        // the whole shell is dropped from the export rather than leaving
+                                        // an empty box in the client's report.
+                                        {...(data.insightsSummary ? {} : { 'data-no-export': '' })}
+                                        // Height is animated as well as opacity: the edit box lives in a
+                                        // separate subtree (the PDF boundary sits between them), so without
+                                        // this the container snaps as one unmounts and the other mounts.
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: 'auto' }}
+                                        exit={{ opacity: 0, height: 0 }}
+                                        transition={{ duration: 0.2, ease: 'easeOut' }}
+                                        className="mx-6 mt-5 bg-white border border-[#e5e7eb] rounded shadow-md flex flex-col overflow-hidden"
+                                    >
+                                        <div className="flex items-center justify-between gap-4 px-4 pt-3 pb-2 border-b border-gray-100">
+                                            <div className="flex items-baseline gap-2 min-w-0">
+                                                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                                                    Engagement Summary
+                                                </span>
+                                                {data.insightsSummaryPublishedAt && (
+                                                    <span className="text-[11px] text-gray-400 shrink-0">
+                                                        {new Date(data.insightsSummaryPublishedAt).toLocaleDateString(undefined, {
+                                                            day: 'numeric', month: 'short', year: 'numeric',
+                                                        })}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            {/* Controls are marked no-export so they are stripped from the
+                                                clone at capture time and never reach the client's PDF. */}
+                                            {isFirmAdmin && !aiStreaming && !data.insightsSummaryDraft && (
+                                                <div data-no-export="" className="flex items-center gap-3 shrink-0">
+                                                    <button
+                                                        onClick={() => { setSummaryDraft(data.insightsSummary ?? ''); setSummaryEditing(true) }}
+                                                        className="inline-flex items-center gap-1.5 text-[11px] text-gray-500 hover:text-gray-800 transition-colors"
+                                                    >
+                                                        <Pencil className="h-3 w-3" />
+                                                        {data.insightsSummary ? 'Edit' : 'Add'}
+                                                    </button>
+                                                    <button
+                                                        onClick={handleGenerateSummary}
+                                                        className="inline-flex items-center gap-1.5 text-[11px] text-violet-600 hover:text-violet-800 transition-colors"
+                                                    >
+                                                        <Sparkles className="h-3 w-3" />
+                                                        {data.insightsSummary ? `Rewrite with ${ASSISTANT.name}` : `Write with ${ASSISTANT.name}`}
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                        {data.insightsSummary ? (
+                                            <div className="px-4 py-3 text-sm text-gray-600 leading-relaxed
+                                                [&_h2]:text-[11px] [&_h2]:font-semibold [&_h2]:uppercase
+                                                [&_h2]:tracking-wide [&_h2]:text-gray-400 [&_h2]:mt-3
+                                                [&_h2:first-child]:mt-0 [&_h2]:mb-1 [&_p]:mb-0">
+                                                <ReactMarkdown>{data.insightsSummary}</ReactMarkdown>
+                                            </div>
+                                        ) : (
+                                            <p data-no-export="" className="text-sm text-gray-400 px-4 py-3">
+                                                No summary yet — write one, or let {ASSISTANT.name} draft it
+                                                from this engagement&apos;s data.
+                                            </p>
+                                        )}
+                                    </motion.div>
+                                )}
+                                </AnimatePresence>
                                 {/* Quick-stats row — inside the card so they export with the PDF */}
                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4 p-6 pb-0">
                                     <TileWithTip text="% of the engagement's planned duration that has elapsed, from kickoff (or engagement creation) to due date. Amber ≥60%, red ≥85%." ariaLabel="About Time Lapsed">
@@ -2844,13 +3301,6 @@ export function EngagementInsightsDashboard({
                                     </TileWithTip>
                                 </div>
                                 <EngagementHealthBody health={data.healthScore} deliverables={data.deliverables ?? []} planningHygiene={data.planningHygiene} commentThreads={data.commentThreads} pace={data.pace} firstTimeRight={data.firstTimeRight} inFlightWithRework={inFlightWithRework} engagementCreatedAt={data.engagementCreatedAt} kickoffDate={data.kickoffDate} engagementDueDate={data.engagementDueDate} hiddenRings={data.insightsConfig?.hiddenRings ?? []} />
-                                {/* Engagement Summary — inside healthCardRef so it captures in PDF/email */}
-                                {data.insightsSummary && (
-                                    <div className="mx-6 mb-8 mt-2 border border-gray-100 rounded-lg p-4 pb-8 bg-gray-50 flex flex-col gap-1.5">
-                                        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Engagement Summary</span>
-                                        <p className="text-sm text-gray-600 whitespace-pre-wrap leading-relaxed">{data.insightsSummary}</p>
-                                    </div>
-                                )}
                                 {/* End of report marker */}
                                 <div className="mx-6 mb-4 flex items-center gap-3">
                                     <div className="flex-1 h-px bg-gray-100" />
@@ -2911,68 +3361,12 @@ export function EngagementInsightsDashboard({
                 )}
             </div>
 
-            {/* Right: Action Center */}
-            <EngagementActionCenterV2 data={data} loading={loading} engagementBase={engagementBase} projectId={projectId} setRefreshTick={setRefreshTick} />
+            {/* Right: Action Center, with the AI chat beneath it (internal roles only) */}
+            <div className="flex flex-col gap-6 min-w-0">
+                <EngagementActionCenterV2 data={data} loading={loading} engagementBase={engagementBase} projectId={projectId} setRefreshTick={setRefreshTick} />
+                {data?.isInternalViewer && <EngagementAiChat projectId={projectId} />}
+            </div>
 
-            {/* Engagement Summary modal */}
-            {summaryEditing && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center">
-                    {/* Backdrop */}
-                    <div
-                        className="absolute inset-0 bg-black/40"
-                        onClick={() => !summarySaving && setSummaryEditing(false)}
-                    />
-                    {/* Dialog */}
-                    <div className="relative z-10 bg-[#f9f9fb] rounded border border-[#e5e7eb] shadow-2xl w-full max-w-lg mx-4 flex flex-col gap-0 overflow-hidden">
-                        {/* Header */}
-                        <div className="flex items-start gap-3 px-5 py-4 border-b border-[#e5e7eb] bg-white">
-                            <div className="mt-0.5 h-7 w-7 rounded flex items-center justify-center shrink-0 bg-primary/10 ring-1 ring-primary/20">
-                                <NotebookPen className="h-4 w-4 text-primary" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <p className="text-[10px] font-headline font-bold tracking-widest uppercase text-[#45474c]">Engagement Summary</p>
-                                <p className="text-xs text-gray-400 mt-0.5">Visible to all members · included in PDF and email exports</p>
-                            </div>
-                            <button
-                                onClick={() => !summarySaving && setSummaryEditing(false)}
-                                className="p-1 rounded text-gray-400 hover:text-gray-600 transition-colors"
-                                aria-label="Close"
-                            >
-                                <X className="h-4 w-4" />
-                            </button>
-                        </div>
-                        {/* Body */}
-                        <div className="px-5 py-4">
-                            <textarea
-                                value={summaryDraft}
-                                onChange={(e) => setSummaryDraft(e.target.value)}
-                                rows={6}
-                                placeholder="Add a summary note for this engagement…"
-                                className="w-full text-sm text-gray-700 bg-white border border-[#e5e7eb] rounded px-3 py-2.5 resize-none focus:outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary/40 placeholder:text-gray-300 transition-shadow"
-                                autoFocus
-                            />
-                        </div>
-                        {/* Footer */}
-                        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-[#e5e7eb] bg-white">
-                            <button
-                                onClick={() => setSummaryEditing(false)}
-                                disabled={summarySaving}
-                                className="rounded text-[10px] font-headline font-bold tracking-widest uppercase border border-[#e5e7eb] text-[#45474c] hover:bg-[#f9f9fb] px-3 py-1.5 transition-colors disabled:opacity-50"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleSummarySave}
-                                disabled={summarySaving}
-                                className="rounded text-[10px] font-headline font-bold tracking-widest uppercase bg-primary hover:brightness-105 text-white shadow-sm px-3 py-1.5 transition-colors disabled:opacity-50 flex items-center gap-1.5"
-                            >
-                                {summarySaving && <RefreshCw className="h-3 w-3 animate-spin" />}
-                                {summarySaving ? 'Saving…' : 'Save'}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
         </TooltipProvider>
     )

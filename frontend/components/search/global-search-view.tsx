@@ -2,11 +2,12 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { Search, Folder, Sparkles, X, Building2, Briefcase, Package, Hash, FileText, ArrowUpRight, History, BrushCleaning, CalendarClock } from 'lucide-react'
+import { Search, Folder, Sparkles, X, Building2, Briefcase, Package, Hash, FileText, ArrowUpRight, ArrowRight, RefreshCw, History, BrushCleaning, CalendarClock } from 'lucide-react'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { UserAvatarWithTooltip } from '@/components/ui/user-avatar-with-tooltip'
 import { formatRelativeTime, formatDateTimeWithTZ, cn } from '@/lib/utils'
 import { useAuth } from '@/lib/auth-context'
+import { ASSISTANT } from '@/lib/ai/assistant'
 import {
   Tooltip,
   TooltipContent,
@@ -231,6 +232,21 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
 
   const [searchQuery, setSearchQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
+  // 'filters' is today's live chip-picker search. 'ask' interprets prose into chips on submit,
+  // costs AI credits, and never fires while typing.
+  const [mode, setMode] = useState<'filters' | 'ask'>('filters')
+  const [interpreting, setInterpreting] = useState(false)
+  const [askNote, setAskNote] = useState<string | null>(null)
+  // Chips the model inferred, by stage — rendered with a marker so they are distinguishable
+  // from ones the user picked, and cleared whenever the user edits the query.
+  const [inferredStages, setInferredStages] = useState<FilterStage[]>([])
+  // Set when an Ask submission has resolved and its search should run. Intent cannot be inferred
+  // by comparing searchQuery to debouncedQuery: interpretation deliberately rewrites the query
+  // (stripping the parts that became filters), so the two differ exactly when a search is wanted.
+  const [askSubmitted, setAskSubmitted] = useState(false)
+  // Bumped on every Ask submission. Without it, resubmitting an identical query changes no
+  // dependency and the search effect never re-runs.
+  const [askRunId, setAskRunId] = useState(0)
   const [isSearching, setIsSearching] = useState(false)
   const [results, setResults] = useState<GlobalSearchResult[]>([])
   const [resolvedFilters, setResolvedFilters] = useState<ResolvedFilters | null>(null)
@@ -324,9 +340,80 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
   }, [firmId, accessToken])
 
   useEffect(() => {
+    // Ask mode submits explicitly, so no debounce — typing must not fire a paid interpretation.
+    if (mode === 'ask') return
     const t = setTimeout(() => setDebouncedQuery(searchQuery), DEBOUNCE_MS)
     return () => clearTimeout(t)
+  }, [searchQuery, mode])
+
+  // Editing the query invalidates chips inferred from the previous one.
+  useEffect(() => {
+    setAskSubmitted(false)
+    if (inferredStages.length > 0) {
+      setChips((prev) => prev.filter((c) => !inferredStages.includes(c.stage)))
+      setInferredStages([])
+      setAskNote(null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery])
+
+  /**
+   * Ask mode submit: interpret the sentence into chips, then run the normal search with them.
+   * One model call per submission — never while typing.
+   */
+  const runAskSearch = useCallback(async () => {
+    const text = searchQuery.trim()
+    if (!text || interpreting || !accessToken) return
+
+    setInterpreting(true)
+    setAskNote(null)
+    try {
+      const res = await fetch(`/api/firms/${firmId}/search/interpret`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ text }),
+      })
+
+      if (!res.ok) {
+        // Interpretation is an enhancement: fall back to searching the raw text.
+        setAskNote(res.status === 503
+          ? `${ASSISTANT.name} is unavailable — searching without filters.`
+          : `Could not interpret that — searching without filters.`)
+        setAskSubmitted(true)
+        setAskRunId((n) => n + 1)
+        setDebouncedQuery(text)
+        return
+      }
+
+      const data = await res.json() as {
+        chips?: SelectedChip[]
+        residualText?: string
+        degraded?: boolean
+      }
+      const inferred = data.chips ?? []
+
+      // User-picked chips always win; inference only fills stages left empty.
+      setChips((prev) => {
+        const taken = new Set(prev.map((c) => c.stage))
+        return [...prev, ...inferred.filter((c) => !taken.has(c.stage))]
+      })
+      setInferredStages(inferred.map((c) => c.stage))
+
+      if (data.degraded) setAskNote('Searching without filters.')
+      else if (inferred.length === 0) setAskNote('No filters matched — searching everything.')
+
+      setAskSubmitted(true)
+      setAskRunId((n) => n + 1)
+      setDebouncedQuery((data.residualText ?? text).trim() || text)
+    } catch {
+      setAskNote('Could not interpret that — searching without filters.')
+      setAskSubmitted(true)
+      setAskRunId((n) => n + 1)
+      setDebouncedQuery(text)
+    } finally {
+      setInterpreting(false)
+    }
+  }, [firmId, accessToken, searchQuery, interpreting])
 
   const stageOptions = useMemo((): PickerEntity[] => {
     if (pickerStage === 'client') return pickerData.clients
@@ -628,9 +715,12 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
   }, [firmId, accessToken, debouncedQuery, clientChip, engagementChip, deliverableChip, dateRangeChip, typeChip, chips])
 
   useEffect(() => {
+    // Ask mode searches only on submit, so typing must not trigger a search. Chip removals still
+    // re-run (they change the chip deps, not the query), which is how a misread is corrected.
+    if (mode === 'ask' && !askSubmitted) return
     runSearch()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedQuery, clientChip, engagementChip, deliverableChip, dateRangeChip, typeChip, accessToken])
+  }, [debouncedQuery, clientChip, engagementChip, deliverableChip, dateRangeChip, typeChip, accessToken, mode, askSubmitted, askRunId])
 
   // Deep-links to the Files tab, reusing the existing /api/deeplink resolver (slug lookup +
   // permission check) unmodified — same cookie-auth fetch as components/ui/top-bar.tsx's
@@ -745,6 +835,39 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                   mouse or keyboard) turns the same slot into the filled pill in place. Engagement/
                   Deliverable badges are disabled until their parent (Client/Engagement) is set,
                   matching the same hierarchy gating the keyboard flow already enforces. */}
+              {/* Mode toggle. Filters is today's search, unchanged and free. Ask interprets a
+                  sentence into filters on submit and consumes AI credits. */}
+              <div className="flex items-center gap-1 px-3 pt-2.5">
+                <div className="inline-flex rounded-full border border-ki-outline p-0.5 bg-ki-surface-low">
+                  <button
+                    type="button"
+                    onClick={() => { setMode('filters'); setAskNote(null) }}
+                    className={cn(
+                      'rounded-full px-3 py-1 text-xs font-medium transition-colors',
+                      mode === 'filters' ? 'bg-primary text-white shadow-sm' : 'text-ki-on-surface-variant hover:text-primary'
+                    )}
+                  >
+                    Filters
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setMode('ask'); setAskNote(null) }}
+                    className={cn(
+                      'inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors',
+                      mode === 'ask' ? 'bg-violet-600 text-white shadow-sm' : 'text-violet-600 hover:bg-violet-50'
+                    )}
+                  >
+                    <Sparkles className="h-3 w-3" />
+                    Ask {ASSISTANT.name}
+                  </button>
+                </div>
+                {mode === 'ask' && (
+                  <span className="text-[11px] text-ki-on-surface-variant ml-1">
+                    Describe what you need, then press Enter.
+                  </span>
+                )}
+              </div>
+
               <div className="flex flex-wrap items-center gap-1.5 px-3 pt-2.5 pb-1.5 border-b border-ki-outline">
                 {FILTER_STAGE_ORDER.map((stage) => {
                   const chip = orderedChips.find((c) => c.stage === stage) || null
@@ -791,7 +914,9 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                             : 'bg-primary/10 text-primary border-primary/20 hover:bg-primary/15'
                         )}
                       >
-                        <Icon className="h-3 w-3" />
+                        {inferredStages.includes(chip.stage)
+                          ? <Sparkles className="h-3 w-3 text-violet-500" />
+                          : <Icon className="h-3 w-3" />}
                         {chip.name}
                         <span
                           role="button"
@@ -835,9 +960,24 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                 })}
               </div>
 
+              {(interpreting || askNote) && (
+                <div className="px-3 pt-2 flex items-center gap-1.5 text-[11px]">
+                  {interpreting ? (
+                    <>
+                      <Sparkles className="h-3 w-3 text-violet-500 animate-pulse" />
+                      <span className="text-violet-700">{ASSISTANT.name} is reading your question…</span>
+                    </>
+                  ) : (
+                    <span className="text-ki-on-surface-variant">{askNote}</span>
+                  )}
+                </div>
+              )}
+
               <div className="flex">
                 <div className="flex flex-col justify-center py-3 pl-4 pr-2 shrink-0">
-                  <Search className="h-4 w-4 text-primary" />
+                  {mode === 'ask'
+                    ? <Sparkles className="h-4 w-4 text-violet-500" />
+                    : <Search className="h-4 w-4 text-primary" />}
                 </div>
                 <div className="flex-1 min-w-0 flex items-center px-1 py-2.5">
                   <input
@@ -861,16 +1001,61 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                       }
                       if (e.key === 'Enter') {
                         e.preventDefault()
-                        setDebouncedQuery(searchQuery)
+                        if (mode === 'ask') runAskSearch()
+                        else setDebouncedQuery(searchQuery)
                       }
                     }}
-                    placeholder="Search by filename or topic, e.g. SEO strategy documents"
+                    placeholder={mode === 'ask'
+                      ? `Ask ${ASSISTANT.name}, e.g. overdue spreadsheets on the Nexus rollout`
+                      : 'Search by filename or topic, e.g. SEO strategy documents'}
                     className="flex-1 min-w-[10rem] py-1 px-1 border-0 bg-transparent text-sm font-medium shadow-none focus:outline-none focus:ring-0"
                     autoFocus
                     aria-label="Document search"
                   />
                 </div>
-                <div className="flex flex-col justify-center py-2 pl-1.5 pr-3 shrink-0">
+                <div className="flex flex-row items-center justify-center gap-1 py-2 pl-1.5 pr-3 shrink-0">
+                  {/* Ask mode is submit-driven, so it needs an explicit send affordance. Clear only
+                      appears once there are results to clear — before that there is nothing to undo. */}
+                  {mode === 'ask' ? (
+                    <>
+                      {hasSearched && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSearchQuery('')
+                            setChips([])
+                            setInferredStages([])
+                            setAskNote(null)
+                            setResults([])
+                            setHasSearched(false)
+                            setFocusedChipIndex(null)
+                            setPendingFileTypes([])
+                            closePicker()
+                          }}
+                          className="p-1 rounded-full text-ki-on-surface-variant hover:bg-ki-surface-low"
+                          aria-label="Clear search and start again"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={runAskSearch}
+                        disabled={interpreting || !searchQuery.trim()}
+                        className={cn(
+                          'p-1.5 rounded-full transition-colors',
+                          interpreting || !searchQuery.trim()
+                            ? 'text-ki-outline-variant'
+                            : 'text-white bg-violet-600 hover:bg-violet-700'
+                        )}
+                        aria-label={`Ask ${ASSISTANT.name}`}
+                      >
+                        {interpreting
+                          ? <RefreshCw className="h-4 w-4 animate-spin" />
+                          : <ArrowRight className="h-4 w-4" />}
+                      </button>
+                    </>
+                  ) : (
                   <button
                     type="button"
                     onClick={() => {
@@ -889,6 +1074,7 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                   >
                     <X className="h-4 w-4" />
                   </button>
+                  )}
                 </div>
               </div>
             </div>
