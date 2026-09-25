@@ -383,12 +383,52 @@ Everything AI, in one table. Verified against the tree on 2026-09-25.
 | Weighted rank fusion | **Open** | §A.10 #4 |
 | Credits enforcement | **Open — deliberate** | §7a phases 2–3; waiting on real usage data |
 | Content-aware sensitivity | **Not started** | Phase B |
+| Failure handling | **Shipped** `f0c65f3c` | All four surfaces; see §12 |
 | Auto-reminder / checklist / digest | **HOLD** | §7 — parked as not AI-native |
+
+**Nothing pending is a correctness risk.** The one that was — a mid-stream chat error closing the
+response cleanly, so a truncated answer read as a complete one — was fixed in `f0c65f3c` (§12).
+Everything left below is capability or cost, not wrong output.
 
 **Recommended order.** §A.10 #1 and #2 first: both are self-contained, need no backfill, and #1 is
 the gate this plan named. #4 next. #3 only after the §A.6 dilution A/B resolves and the re-embed
 backfill exists — shipping it alone leaves old and new documents embedded on different bases, which
 is worse than not widening at all. Credits enforcement stays parked until §7a phase 2 has data.
+
+---
+
+## 12. Failure handling — done `f0c65f3c` (2026-09-25)
+
+Audited all four surfaces for unconfigured, runtime-error, stream-abort and timeout behaviour.
+The graceful-degradation contract in `lib/ai/client.ts` (return null, never throw, so callers
+render without the AI section) was sound but incompletely applied at the edges.
+
+**Fixed:**
+
+- `ai-chat/route.ts` swallowed mid-stream model errors and closed the controller normally. That
+  route streams raw text with no envelope, so a clean close is byte-identical to a complete
+  answer — a truncated answer about an engagement was presented as authoritative. Now
+  `controller.error()`.
+- Summary streams ending without a `done` event evaporated silently: `finally` clears the streamed
+  text, so the draft the user had just watched appear vanished with no message. Discarding a
+  partial summary stays deliberate; it is now explained.
+- No AI fetch had a timeout. `lib/ai/fetch-timeout.ts` wraps all five call sites — interpret 15s,
+  brief 45s, streams 120s — with a distinct `AiTimeoutError`.
+- The chat panel unmounted itself after the first question on unconfigured deploys. Renders inert
+  with an explanation instead.
+- The firm brief swallowed refresh failures entirely. Now notes the failure and keeps the existing
+  brief; initial load also checks `res.ok`.
+
+**Verified already correct, no change needed:** every loading flag resets in a `finally` (no stuck
+spinners on any surface); Ask Brio's fallback to plain search works on all three failure paths.
+
+**Knowingly left:**
+
+- The summary's "Write with Brio" button still renders on unconfigured deploys. It fails with a
+  clear message; cosmetic only.
+- `ai-brief/route.ts` and `ai-chat/route.ts` fan out to the insights route server-side with no
+  timeout, so a slow insights route stalls an AI route before the model is called. Real, but it is
+  an insights-route concern rather than an AI one.
 
 ---
 
