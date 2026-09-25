@@ -44,6 +44,8 @@ interface GlobalSearchResult {
   externalId: string
   fileName: string
   updatedAt: string
+  createdAt?: string | null
+  dueDate?: string | null
   score: number
   metadata?: any
   isFolder?: boolean
@@ -1147,8 +1149,32 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                                     {formatRelativeTime(file.updatedAt)}
                                   </span>
                                 </TooltipTrigger>
+                                {/* All three dates, because a date filter matches on
+                                    COALESCE(dueDate, createdAt) while the row displays updatedAt —
+                                    without this it is not obvious why a document matched "Q3". The
+                                    field the filter actually used is marked. */}
                                 <TooltipContent side="top">
-                                  {formatDateTimeWithTZ(file.updatedAt)}
+                                  <div className="space-y-0.5 text-[11px]">
+                                    <div className="flex justify-between gap-4">
+                                      <span className="opacity-70">Updated</span>
+                                      <span>{formatDateTimeWithTZ(file.updatedAt)}</span>
+                                    </div>
+                                    {file.createdAt && (
+                                      <div className="flex justify-between gap-4">
+                                        <span className="opacity-70">Created{!file.dueDate && dateRangeChip ? ' \u2713' : ''}</span>
+                                        <span>{formatDateTimeWithTZ(file.createdAt)}</span>
+                                      </div>
+                                    )}
+                                    <div className="flex justify-between gap-4">
+                                      <span className="opacity-70">Due{file.dueDate && dateRangeChip ? ' \u2713' : ''}</span>
+                                      <span>{file.dueDate ? formatDateTimeWithTZ(file.dueDate) : '\u2014'}</span>
+                                    </div>
+                                    {dateRangeChip && (
+                                      <div className="pt-1 mt-1 border-t border-white/15 opacity-70">
+                                        \u2713 matched the {dateRangeChip.name} filter
+                                      </div>
+                                    )}
+                                  </div>
                                 </TooltipContent>
                               </Tooltip>
                             </div>

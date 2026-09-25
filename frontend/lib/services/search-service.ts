@@ -76,6 +76,8 @@ export interface VectorSearchResult {
     engagementId?: string
     /** Optional — only set by searchGlobal's branches, used to score against an auto-detected softDateRange. */
     dueDate?: Date | null
+    /** Selected so the UI can show WHY a document matched a date filter (dueDate vs createdAt). */
+    createdAt?: Date | null
     /** Optional — only set by searchGlobal's branches, e.g. "NVQ-7". Used to suffix the filename in results and as a dedicated exact-match search branch. */
     docId?: string | null
     /** Optional — only set by searchGlobal's branches, raw Supabase auth user ids, resolved to name/email/avatar in the route layer. */
@@ -896,7 +898,7 @@ export class SearchService {
             const results = await prisma.$queryRawUnsafe<any[]>(`
         SELECT
           d."externalId", d."fileName", d."updatedAt", d."metadata", d."isFolder",
-          d."parentId", d."clientId", d."engagementId", d."dueDate", d."docId", d."createdBy", d."updatedBy",
+          d."parentId", d."clientId", d."engagementId", d."dueDate", d."createdAt", d."docId", d."createdBy", d."updatedBy",
           1 - (d.embedding <=> ${embeddingParam}::vector) as score
         FROM platform.engagement_documents d
         WHERE d."firmId" = ${firmIdParam}::uuid
@@ -951,7 +953,7 @@ export class SearchService {
 
             const results = await prisma.$queryRawUnsafe<any[]>(`
         SELECT d."externalId", d."fileName", d."updatedAt", d."metadata", d."isFolder",
-          d."parentId", d."clientId", d."engagementId", d."dueDate", d."docId", d."createdBy", d."updatedBy"
+          d."parentId", d."clientId", d."engagementId", d."dueDate", d."createdAt", d."docId", d."createdBy", d."updatedBy"
         FROM platform.engagement_documents d
         WHERE d."firmId" = ${firmIdParam}::uuid
           ${scopeFilter}
@@ -1008,7 +1010,7 @@ export class SearchService {
 
             const results = await prisma.$queryRawUnsafe<any[]>(`
         SELECT d."externalId", d."fileName", d."updatedAt", d."metadata", d."isFolder",
-          d."parentId", d."clientId", d."engagementId", d."dueDate", d."docId", d."createdBy", d."updatedBy"
+          d."parentId", d."clientId", d."engagementId", d."dueDate", d."createdAt", d."docId", d."createdBy", d."updatedBy"
         FROM platform.engagement_documents d
         WHERE d."firmId" = ${firmIdParam}::uuid
           ${scopeFilter}
@@ -1061,7 +1063,7 @@ export class SearchService {
 
             const results = await prisma.$queryRawUnsafe<any[]>(`
         SELECT d."externalId", d."fileName", d."updatedAt", d."metadata", d."isFolder",
-          d."parentId", d."clientId", d."engagementId", d."dueDate", d."docId", d."createdBy", d."updatedBy"
+          d."parentId", d."clientId", d."engagementId", d."dueDate", d."createdAt", d."docId", d."createdBy", d."updatedBy"
         FROM platform.engagement_documents d
         WHERE d."firmId" = ${firmIdParam}::uuid
           ${scopeFilter}
@@ -1119,7 +1121,7 @@ export class SearchService {
 
             const results = await prisma.$queryRawUnsafe<any[]>(`
         SELECT d."externalId", d."fileName", d."updatedAt", d."metadata", d."isFolder", 0.5 as score,
-          d."parentId", d."clientId", d."engagementId", d."dueDate", d."docId", d."createdBy", d."updatedBy"
+          d."parentId", d."clientId", d."engagementId", d."dueDate", d."createdAt", d."docId", d."createdBy", d."updatedBy"
         FROM platform.engagement_documents d
         WHERE d."firmId" = ${firmIdParam}::uuid
           ${scopeFilter}

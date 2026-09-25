@@ -60,7 +60,7 @@ export async function GET(
                 ? dateFieldParam
                 : 'dueDate'
         // "Overdue" is the one range with strict dueDate semantics: a document with no due date is
-        // not overdue. Every other dueDate range falls back to updatedAt so un-dated documents are
+        // not overdue. Every other dueDate range falls back to createdAt so un-dated documents are
         // not silently excluded.
         const strictDueDate = searchParams.get('strictDueDate') === '1'
 
