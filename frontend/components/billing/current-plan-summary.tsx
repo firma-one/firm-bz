@@ -262,41 +262,40 @@ export function CurrentPlanSummary({
 
     return (
         <div className={shell}>
-            {/* Billing entity — one line in the same label/value style as the plan row below, so
-                the two read as a pair rather than a heading block followed by a data row. */}
-            {entity && (
-                <div className="mb-3 pb-3 border-b border-primary/15 flex items-center gap-3">
-                    <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded border border-primary/25 bg-white text-primary shadow-sm">
-                        <CreditCard className="h-3.5 w-3.5" aria-hidden />
-                    </span>
-                    <div className="flex items-center gap-4 min-w-0 flex-wrap">
-                        <p className={cn('text-xs', labelClass)}>
-                            <span className="font-medium">Billing Entity Type:</span>{' '}
-                            <span className={valueClass}>{entity.kind}</span>
-                        </p>
-                        {entity.name && (
-                            <>
-                                <span className="text-primary/25 text-xs select-none">·</span>
-                                <p className={cn('text-xs min-w-0', labelClass)}>
-                                    <span className="font-medium">Billing Entity Name:</span>{' '}
-                                    <span className={valueClass}>{entity.name}</span>
-                                </p>
-                            </>
-                        )}
-                    </div>
-                </div>
-            )}
-
-            {/* Top row: plan name · valid until · manage button */}
+            {/* Identity block: billing entity above plan, sharing one two-column grid so "Plan"
+                sits under "Billing Entity Type" and "Valid until" under "Billing Entity Name".
+                No divider between them — they describe the same subject, and a rule implied two
+                unrelated sections. Manage spans both rows. */}
+            {/* items-center so the icon sits across both rows rather than against the first. */}
             <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-4 min-w-0 flex-wrap">
-                    <p className={cn('text-xs', labelClass)}>
+                {/* Carried over from the standalone entity card this block replaced. */}
+                <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded border border-primary/25 bg-white text-primary shadow-sm">
+                    <CreditCard className="h-3.5 w-3.5" aria-hidden />
+                </span>
+                <div className="min-w-0 flex-1 grid grid-cols-[auto_1fr] gap-x-8 gap-y-1.5 items-baseline">
+                    {entity && (
+                        <>
+                            <p className={cn('text-xs whitespace-nowrap', labelClass)}>
+                                <span className="font-medium">Billing Entity Type:</span>{' '}
+                                <span className={valueClass}>{entity.kind}</span>
+                            </p>
+                            <p className={cn('text-xs min-w-0', labelClass)}>
+                                {entity.name && (
+                                    <>
+                                        <span className="font-medium">Billing Entity Name:</span>{' '}
+                                        <span className={valueClass}>{entity.name}</span>
+                                    </>
+                                )}
+                            </p>
+                        </>
+                    )}
+
+                    <p className={cn('text-xs whitespace-nowrap', labelClass)}>
                         <span className="font-medium">{upgradeCopy.currentPlanLabelPlan}:</span>{' '}
                         <span className={valueClass}>{planName}</span>
                     </p>
-                    <span className="text-primary/25 text-xs select-none">·</span>
-                    <p className={cn('text-xs flex items-center gap-1.5', labelClass)}>
-                        <span className="font-medium">{validUntilLabel}:</span>{' '}
+                    <p className={cn('text-xs flex items-center gap-1.5 min-w-0', labelClass)}>
+                        <span className="font-medium whitespace-nowrap">{validUntilLabel}:</span>{' '}
                         <span className={cn('tabular-nums', scheduledCancel ? 'text-red-600 font-bold' : valueClass)}>{validUntil}</span>
                         {scheduledCancel && (
                             <TooltipProvider delayDuration={200}>
@@ -316,25 +315,25 @@ export function CurrentPlanSummary({
                         )}
                     </p>
                 </div>
-                {showManageSubscription ? (
-                    <div className="shrink-0">
-                        <Button
-                            type="button"
-                            variant="blackCta"
-                            className="h-auto py-1.5 px-4 gap-2 rounded text-[10px] font-headline font-bold tracking-widest uppercase"
-                            disabled={portalLoading}
-                            onClick={() => void openBillingPortal()}
-                        >
-                            {portalLoading ? (
-                                <Loader2 className="h-4 w-4 shrink-0 animate-spin opacity-90" aria-hidden />
-                            ) : (
-                                <Settings className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
-                            )}
-                            {portalLoading ? upgradeCopy.billingPortalOpening : upgradeCopy.billingPortalManageShortCta}
-                        </Button>
-                        {portalError ? <p className="mt-2 text-right text-sm text-red-600">{portalError}</p> : null}
-                    </div>
-                ) : null}
+            {showManageSubscription ? (
+                <div className="shrink-0">
+                    <Button
+                        type="button"
+                        variant="blackCta"
+                        className="h-auto py-1.5 px-4 gap-2 rounded text-[10px] font-headline font-bold tracking-widest uppercase"
+                        disabled={portalLoading}
+                        onClick={() => void openBillingPortal()}
+                    >
+                        {portalLoading ? (
+                            <Loader2 className="h-4 w-4 shrink-0 animate-spin opacity-90" aria-hidden />
+                        ) : (
+                            <Settings className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
+                        )}
+                        {portalLoading ? upgradeCopy.billingPortalOpening : upgradeCopy.billingPortalManageShortCta}
+                    </Button>
+                    {portalError ? <p className="mt-2 text-right text-sm text-red-600">{portalError}</p> : null}
+                </div>
+            ) : null}
             </div>
             {/* Entitlement usage bars */}
             {hasCaps && entitlements && (
