@@ -1,6 +1,8 @@
 # Plan: AI-Native Features for the Client Delivery OS
 
-**Supersedes:** `.claude/plans/ai-insights-and-business-features.md` (Phases 2/3/4 of that plan move to HOLD — see §7).
+**This is the single AI plan.** It absorbed `ai-insights-and-business-features.md` (the
+Gemma/HuggingFace design) on 2026-09-25; everything still worth keeping from that file now lives
+here, in §7 and §11. That file was deleted as redundant — see §11 to recover it from git if needed.
 
 **Status (2026-09-25):** Phase A is **built and on `origin/dev`** (commit `c0a7898f`), except four
 items tracked in §A.10. Phases C and D also shipped ahead of their sketches — see their sections.
@@ -245,15 +247,44 @@ Phase 5 of the superseded plan. The only genuinely agentic item there. Revisit a
 
 ---
 
-## 7. HOLD — deprecated from the previous plan
+## 7. HOLD — parked, with the build detail kept
 
-Moved to HOLD as not AI-native by §0's test. Each uses the LLM as a cosmetic layer over deterministic logic:
+Three features from the retired plan fail §0's test: each uses the LLM as a cosmetic layer over
+deterministic logic. They are **parked, not abandoned** — the reason is recorded so this is not
+relitigated from scratch, and the useful design detail is kept here so nothing has to be
+rediscovered if they are picked up.
 
-- **HOLD — Auto-Reminder from Unanswered Threads.** Thread detection is SQL + date math. The LLM only maps text → `high|medium|low`. The reminder is worth building; it does not need an LLM. *Ship the rule, skip the AI.*
-- **HOLD — Engagement Kickoff Checklist.** Generates a list from three strings. A per-contract-type template gets ~the same result, deterministically and free.
-- **HOLD — Weekly Digest.** Same mechanism as Phase C on a cron. Fold into C rather than build separately.
+### 7.1 HOLD — Auto-reminder from unanswered threads
 
-Not abandoned — deliberately parked, with the reason recorded so this isn't relitigated from scratch.
+Thread detection is SQL plus date math; the LLM only maps text → `high|medium|low`. **The reminder
+is worth building — it just does not need an LLM.** *Ship the rule, skip the AI.*
+
+If built as a plain rule, most of the groundwork already exists:
+
+- Detection logic **already lives in** `lib/insights/engagement-insights.ts` (~line 570, building
+  `UnansweredThreadItem[]`). The retired plan proposed extracting it into
+  `lib/insights/unanswered-threads.ts`; that extraction is no longer needed — the shared module
+  exists and background callers can import from it directly.
+- Trigger: Inngest cron `0 */4 * * *`; qualify a thread when the last message is from
+  `eng_ext_collaborator` / `eng_viewer` and `lastMessageAt < now - 48h`.
+- Urgency without a model: derive from age (48h → amber, 96h → orange, 7d → red). This is what the
+  classifier was approximating anyway.
+- Duplicate safety: store `{ source: 'ai_thread_alert', threadId, engagementId }` in the reminder's
+  `metadata` and check for an existing row on `metadata->>'threadId'` before creating. Keep the
+  `source` value even without AI so existing rows stay matchable.
+
+### 7.2 HOLD — Engagement kickoff checklist
+
+Generates a list from three strings (engagement name, contract type, client name). A per-contract-type
+template gets approximately the same result, deterministically and for free. If revisited, write the
+templates first and only reach for a model if they demonstrably fall short.
+
+### 7.3 HOLD — Weekly digest
+
+Same mechanism as Phase C on a cron. **Fold into C** rather than build separately: the firm brief
+already produces this narrative, so a digest is a delivery channel (Monday 8am, per-firm timezone
+from `firm.settings.timezone`, in-app notification) wrapped around an existing generator — not a new
+AI feature.
 
 ---
 
@@ -325,25 +356,64 @@ disable, with an upgrade prompt. Filters-mode search is unaffected.
 
 ---
 
+---
+
 ## 9. `docs/mvp/todo.md`
 
-```markdown
-## AI Features
+The AI section of [`docs/mvp/todo.md`](../../docs/mvp/todo.md) was updated to match §10 on
+2026-09-25. Keep the two in step: §10 is the detail, the todo entry is the pointer. Do not restate
+the status in a third place.
 
-- [x] **Natural-Language Document Search** — shipped `c0a7898f` 2026-09-25 (§A.10 lists the remainder)
-- [x] **AI narrative brief** — firm brief + engagement summary, shipped `c0a7898f`
-- [x] **Conversational engagement Q&A** — read-only analyst panel, shipped `c0a7898f`
+---
 
-- [ ] **Doc Search: close out Phase A** — [plan](.claude/plans/ai-native-features.md#a10-what-remains--phase-a-is-not-closed)
-  - Zero-result auto-broadening (the release gate named in §A.8) — not built
-  - Cache interpretation by `(normalized text, candidate-set hash)` — identical repeat Ask searches re-bill today
-  - Snippet 500→2000 chars + re-embed backfill, pending the §A.6 dilution A/B
-  - Weighted rank fusion in `search-service.ts`
+## 10. Status board — the single source of truth
 
-- [ ] **Content-aware sensitivity detection** — classify over the unused `content` column, not filenames
+Everything AI, in one table. Verified against the tree on 2026-09-25.
 
-### On hold — not AI-native (see plan §7)
-- [~] Auto-reminder urgency classification — build the rule without the LLM
-- [~] Engagement kickoff checklist — templates suffice
-- [~] Weekly digest — fold into the narrative brief
+| Feature | Status | Where |
+|---|---|---|
+| Firm brief | **Shipped** `c0a7898f` | `lib/ai/firm-brief.ts`; Analytics tab, 60-min read-triggered cache |
+| Engagement summary | **Shipped** `c0a7898f` | `lib/ai/engagement-summary.ts`; six sections, streamed, human-approval gate |
+| Engagement chat | **Shipped** `c0a7898f` | Read-only; excludes document content and comment bodies by design |
+| Ask Brio (NL Doc Search) | **Shipped, tail open** | `lib/ai/search-interpreter.ts` + interpret route; see §A.10 |
+| AI usage ledger | **Shipped, not enforced** | `platform_ai_usage`; §7a phase 1 of 3 done |
+| Zero-result guard | **Open — release gate** | §A.10 #1 |
+| Interpret caching | **Open — cost leak** | §A.10 #2 |
+| Snippet 500→2000 + backfill | **Open — blocked** | §A.10 #3; needs the §A.6 A/B first |
+| Weighted rank fusion | **Open** | §A.10 #4 |
+| Credits enforcement | **Open — deliberate** | §7a phases 2–3; waiting on real usage data |
+| Content-aware sensitivity | **Not started** | Phase B |
+| Auto-reminder / checklist / digest | **HOLD** | §7 — parked as not AI-native |
+
+**Recommended order.** §A.10 #1 and #2 first: both are self-contained, need no backfill, and #1 is
+the gate this plan named. #4 next. #3 only after the §A.6 dilution A/B resolves and the re-embed
+backfill exists — shipping it alone leaves old and new documents embedded on different bases, which
+is worse than not widening at all. Credits enforcement stays parked until §7a phase 2 has data.
+
+---
+
+## 11. Appendix — what the retired plan contributed
+
+`ai-insights-and-business-features.md` was written against Gemma/Gemini running locally through
+HuggingFace Transformers. Merged here and **deleted** on 2026-09-25 — it was fully redundant once
+its content moved into §7 and this appendix. The full original text is in git history:
+
 ```
+git show c9f7d505:.claude/plans/ai-insights-and-business-features.md
+```
+
+**Carried forward:** its Phase 1 (narrative brief) became Phase C and shipped. Its Phase 5
+(conversational Q&A) became Phase D and shipped. Its Phases 2–4 are §7 above, with their
+implementation detail preserved.
+
+**Deliberately dropped:**
+
+- *The Gemma/HuggingFace runtime and its API-key setup section.* Replaced by Anthropic Haiku through
+  `lib/ai/client.ts` — see §8.1. A local-model section would now be actively misleading.
+- *`lib/insights/unanswered-threads.ts` as a new extraction.* Superseded: that logic already lives in
+  `lib/insights/engagement-insights.ts`.
+- *`lib/inngest/ai-functions.ts` as a new file.* Never created; the three functions that would have
+  populated it are all on HOLD. If one is revived, decide then whether it earns its own module or
+  belongs in the existing `lib/inngest/functions.ts`.
+- *Its per-phase day estimates.* They were written against a different runtime and a smaller
+  codebase, and re-quoting them now would be false precision.

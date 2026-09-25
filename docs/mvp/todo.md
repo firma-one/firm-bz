@@ -93,9 +93,9 @@ See [`.claude/plans/beta-feedback-fixes.md`](../../.claude/plans/beta-feedback-f
 ## AI Features — [plan](../../.claude/plans/ai-native-features.md)
 
 Brio, the in-product assistant. Anthropic Haiku via `lib/ai/client.ts` — server-side only,
-`ANTHROPIC_API_KEY`. Supersedes the earlier Gemma/HuggingFace design in
-[ai-insights-and-business-features.md](../../.claude/plans/ai-insights-and-business-features.md),
-whose phases 2/3/4 are on HOLD (see ai-native-features.md §7).
+`ANTHROPIC_API_KEY`. **One plan covers all AI work:**
+[ai-native-features.md](../../.claude/plans/ai-native-features.md) — its §10 status board is the
+source of truth, and the older Gemma-era plan was merged into it and retired on 2026-09-25.
 
 **Shipped 2026-09-25** (`c0a7898f`, `4212f829`, `4013f191`):
 
