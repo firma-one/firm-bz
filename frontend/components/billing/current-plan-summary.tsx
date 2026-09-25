@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { useCallback, useState, type ReactNode } from 'react'
 import { AlertTriangle, Loader2, Settings } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
@@ -59,9 +59,9 @@ function UsageBar({
 
 function RetentionStat({ value, label }: { value: string; label: string }) {
     return (
-        <div className="flex flex-col items-center gap-0.5 min-w-[3rem]">
-            <span className="text-base font-bold leading-none text-primary tabular-nums">{value}</span>
-            <span className="text-[10px] leading-none text-[#45474c] whitespace-nowrap">{label}</span>
+        <div className="flex flex-col gap-1 min-w-0">
+            <span className="text-[10px] text-[#45474c] whitespace-nowrap">{label}</span>
+            <span className="text-[13px] font-bold leading-none text-primary tabular-nums">{value}</span>
         </div>
     )
 }
@@ -74,69 +74,92 @@ function PlanEntitlementsSection({
     usage: BillingPlanUsage | null | undefined
 }) {
     return (
-        <div className="mt-3 pt-3 border-t border-primary/15 flex items-start gap-6">
-            {/* Usage bars for capped resources */}
-            <div className="flex-1 grid grid-cols-5 gap-x-4 gap-y-2">
+        <div className="mt-3 pt-3 border-t border-primary/15">
+            <SectionLabel>Plan usage</SectionLabel>
+            {/* One grid for everything, so bars and retention share the same columns instead of a
+                five-across row competing with a side rail. Two columns on narrow screens. */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-5 gap-y-3">
                 <UsageBar label={e.firms === 1 ? 'firm' : 'firms'} cap={e.firms} used={usage?.firms ?? null} />
                 <UsageBar label={e.clients === 1 ? 'client' : 'clients'} cap={e.clients} used={usage?.clients ?? null} />
                 <UsageBar label={e.engagements === 1 ? 'engagement' : 'engagements'} cap={e.engagements} used={usage?.engagements ?? null} />
                 <UsageBar label={e.documents === 1 ? 'document' : 'documents'} cap={e.documents} used={usage?.documents ?? null} />
                 <UsageBar label={e.clientContacts === 1 ? 'contact' : 'contacts'} cap={e.clientContacts} used={usage?.clientContacts ?? null} />
-            </div>
-            {/* Divider */}
-            <div className="w-px self-stretch bg-primary/15" aria-hidden />
-            {/* Retention (no usage concept — just the policy) */}
-            <div className="flex items-start gap-6">
+                {/* Retention has no usage concept — just the policy — so it renders as a value,
+                    not a bar, but still occupies a grid cell to keep the alignment. */}
                 <RetentionStat value={e.auditDays === 0 ? 'No' : daysLabel(e.auditDays)} label="audit trail" />
                 <RetentionStat value={daysLabel(e.commentHistoryDays)} label="comments" />
             </div>
         </div>
+    )
+}
 
+/** Small caps heading shared by the usage subsections. */
+function SectionLabel({ children }: { children: ReactNode }) {
+    return (
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#45474c]">
+            {children}
+        </p>
     )
 }
 
 /**
- * AI credit usage. Separate from EntitlementsRow because that only renders when a cap exists, and
- * a group on the free plan still uses AI and still needs to see it.
+ * AI credit usage, as its own subsection matching the plan-usage grid.
  *
- * Deliberately not a usage bar: there is no cap to draw against, and a bar with no ceiling implies
- * a limit that does not exist. A count plus the per-feature split is honest about what this is —
- * metering, gathering the distribution a cap should later be set from.
+ * Separate from PlanEntitlementsSection because that only renders when a cap exists, and a group on
+ * the free plan still uses AI and still needs to see it.
+ *
+ * The per-feature bars are proportions of this period's own total, NOT progress toward a limit —
+ * there is no limit. They answer "where did the credits go", which is the question phase 2 needs
+ * answered before a cap number can be chosen. The heading says "no limit applied" so the bars are
+ * not read as an allowance running down.
  */
 function AiCreditsRow({ usage }: { usage: BillingPlanUsage | null | undefined }) {
     const ai = usage?.aiCredits ?? null
     if (!ai) return null
 
-    const AI_FEATURE_LABEL: Record<string, string> = {
-        brief: 'firm briefs',
-        summary: 'engagement summaries',
-        chat: 'chat answers',
-        searchInterpret: 'Ask searches',
-    }
+    const AI_FEATURES: Array<{ key: keyof typeof ai.byFeature; label: string }> = [
+        { key: 'summary', label: 'summaries' },
+        { key: 'chat', label: 'chat answers' },
+        { key: 'brief', label: 'firm briefs' },
+        { key: 'searchInterpret', label: 'Ask searches' },
+    ]
     const fmt = (n: number) => (n % 1 === 0 ? String(n) : n.toFixed(1))
+    const since = new Date(ai.periodStartIso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
 
     return (
         <div className="mt-3 pt-3 border-t border-primary/15">
-            <div className="flex items-baseline gap-2 flex-wrap">
-                <span className="text-sm font-semibold text-gray-900 tabular-nums">{fmt(ai.used)}</span>
-                <span className="text-xs text-gray-500">
-                    AI {ai.used === 1 ? 'credit' : 'credits'} used since{' '}
-                    {new Date(ai.periodStartIso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
+            <div className="mb-2 flex items-baseline gap-2 flex-wrap">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-[#45474c]">
+                    AI credits
+                </p>
+                <span className="text-[10px] text-[#45474c]">
+                    {fmt(ai.used)} used since {since}
                 </span>
-                <span className="text-[11px] text-gray-400">· no limit applied</span>
+                <span className="text-[10px] text-gray-400">· no limit applied</span>
             </div>
-            {ai.used > 0 && (
-                <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1">
-                    {(Object.entries(ai.byFeature) as Array<[string, number]>)
-                        .filter(([, n]) => n > 0)
-                        .sort((a, b) => b[1] - a[1])
-                        .map(([feature, n]) => (
-                            <span key={feature} className="text-[11px] text-gray-500 tabular-nums">
-                                {fmt(n)} {AI_FEATURE_LABEL[feature] ?? feature}
-                            </span>
-                        ))}
-                </div>
-            )}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-5 gap-y-3">
+                {AI_FEATURES.map(({ key, label }) => {
+                    const value = ai.byFeature[key] ?? 0
+                    // Share of this period's total, not of a cap.
+                    const pct = ai.used > 0 ? Math.min(100, (value / ai.used) * 100) : 0
+                    return (
+                        <div key={key} className="flex flex-col gap-1 min-w-0">
+                            <div className="flex items-baseline justify-between gap-2">
+                                <span className="text-[10px] text-[#45474c] whitespace-nowrap">{label}</span>
+                                <span className="text-[10px] tabular-nums font-medium text-[#1b1b1d] whitespace-nowrap">
+                                    {fmt(value)}
+                                </span>
+                            </div>
+                            <div className="h-1.5 w-full rounded-full bg-primary/10 overflow-hidden">
+                                <div
+                                    className="h-full rounded-full bg-primary/60 transition-all"
+                                    style={{ width: `${pct}%` }}
+                                />
+                            </div>
+                        </div>
+                    )
+                })}
+            </div>
         </div>
     )
 }
