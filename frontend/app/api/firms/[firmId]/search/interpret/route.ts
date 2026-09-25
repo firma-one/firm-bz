@@ -109,7 +109,6 @@ export async function POST(
         })
 
         setCachedInterpretation(cacheKey, { chips: result.chips, residualText: result.residualText, ambiguity: result.ambiguity })
-
         return NextResponse.json({ chips: result.chips, residualText: result.residualText, ambiguity: result.ambiguity })
     } catch (error) {
         logger.error('Search interpret API error:', error as Error)

@@ -371,7 +371,6 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
       setRelaxedNote(null)
       setRelaxedStages([])
       setConflicts([])
-    setRelaxedStages([])
       setAmbiguity(null)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -665,9 +664,11 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
 
     setIsSearching(true)
     setHasSearched(true)
+    // Relaxation state is produced by THIS function, so it resets here. Conflicts are produced by
+    // runAskSearch, which then bumps askRunId to trigger this search — clearing them here wiped
+    // the banner before it ever rendered. They are cleared when a new Ask search starts instead.
     setRelaxedNote(null)
     setRelaxedStages([])
-    setConflicts([])
     try {
       const base = {
         client: clientChip ?? undefined,
