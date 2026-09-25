@@ -1,6 +1,7 @@
 import 'server-only'
 import { getAnthropic, AI_MODEL } from './client'
 import { logger } from '@/lib/logger'
+import { resolvePeriod } from '@/lib/search/period'
 
 export type FilterStage = 'client' | 'engagement' | 'deliverable' | 'dateRange' | 'type'
 
@@ -63,13 +64,15 @@ Rules:
   is shown the alternative and can switch in one click, which beats returning nothing.
 - Time expressions map to one of the fixed presets, never to explicit dates. If nothing in the list
   fits the phrase, omit the date filter.
-- A time expression that has no matching preset must be dropped entirely — NOT resolved as an
-  entity. "Q1", "Q2", "last spring", "in 2024" and "H2" are periods, not names. Never set an
-  engagement, client or deliverable id because its NAME happens to contain the same token. The
-  available presets cannot express a specific quarter or year, so those queries simply carry no
-  date filter. Leave the words in residualText so the search still sees them.
+- A specific calendar period goes in the "period" field, NOT "dateRange". Format: "Q1 2026", "H2 2025" or
+  "2024" — a quarter or half MUST carry its year. Today's date is given below; use it to resolve
+  relative phrasing ("last quarter", "this quarter", "last year") into an explicit period.
+- NEVER resolve a period as an entity. "Q1", "Q2", "H2", "2024" are periods, not names. Do not set
+  an engagement, client or deliverable id because its NAME happens to contain the same token.
   Example: "DataSentry playbooks from Q2" with an engagement named "Q2 Go-To-Market Positioning"
-  -> client DataSentry, NO engagement, NO date, residualText "playbooks from Q2".
+  -> client DataSentry, period "Q2 <current year>", NO engagement.
+- If a period is too vague to pin to a quarter, half or year ("last spring", "a while back"),
+  set neither field and leave the words in residualText.
 - residualText is what remains after removing the parts you turned into filters — the words about
   document content. If the whole query became filters, residualText is an empty string.
 - Prefer resolving nothing over resolving wrongly. A missing filter costs the user a wider result
@@ -89,6 +92,10 @@ const TOOL = {
                 type: 'array',
                 items: { type: 'string', enum: [...FILE_TYPES] },
                 description: 'file type categories, if the query names one',
+            },
+            period: {
+                type: 'string',
+                description: 'a specific calendar period as "Q1 2026", "H2 2025" or "2024" (a quarter or half must include the year); use instead of dateRange when the query names a specific period',
             },
             ambiguousClientId: {
                 type: 'string',
@@ -174,7 +181,7 @@ export async function interpretSearchQuery(
             tool_choice: { type: 'tool', name: 'apply_filters' },
             messages: [{
                 role: 'user',
-                content: `${renderCandidates(candidates)}\n\nQUERY: ${text}`,
+                content: `TODAY: ${new Date().toISOString().slice(0, 10)}\n\n${renderCandidates(candidates)}\n\nQUERY: ${text}`,
             }],
         })
 
@@ -211,9 +218,20 @@ export async function interpretSearchQuery(
             logger.info(`Dropped deliverable "${d.name}": resolved only from a period token in "${text}"`)
         }
 
-        const preset = args.dateRange
-        if (typeof preset === 'string' && (TIME_PRESETS as readonly string[]).includes(preset)) {
-            chips.push({ stage: 'dateRange', id: preset, name: preset })
+        // An absolute period wins over a relative preset: it is strictly more specific, and a
+        // model that emits both is describing the same intent twice.
+        const periodToken = typeof args.period === 'string' ? args.period : ''
+        const period = periodToken ? resolvePeriod(periodToken) : null
+        if (period) {
+            // The id carries the canonical token, not a date — resolution stays in one place and
+            // the chip round-trips through the URL without a serialised range.
+            chips.push({ stage: 'dateRange', id: period.label, name: period.label })
+        } else {
+            if (periodToken) logger.info(`Dropped unresolvable period "${periodToken}" from "${text}"`)
+            const preset = args.dateRange
+            if (typeof preset === 'string' && (TIME_PRESETS as readonly string[]).includes(preset)) {
+                chips.push({ stage: 'dateRange', id: preset, name: preset })
+            }
         }
 
         const types = Array.isArray(args.fileTypes)

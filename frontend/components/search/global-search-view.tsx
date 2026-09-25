@@ -18,6 +18,7 @@ import { formatRelativeTime, formatDateTimeWithTZ, cn } from '@/lib/utils'
 import { useAuth } from '@/lib/auth-context'
 import { ASSISTANT } from '@/lib/ai/assistant'
 import { Brio } from '@/components/ui/brio'
+import { resolvePeriod } from '@/lib/search/period'
 import { fetchWithTimeout, AI_TIMEOUT_MS } from '@/lib/ai/fetch-timeout'
 import {
   Tooltip,
@@ -516,13 +517,23 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
     if (filters.engagement) params.set('engagementId', filters.engagement.id)
     if (filters.deliverable) params.set('deliverableDocumentId', filters.deliverable.id)
     if (filters.dateRange) {
-      const preset = filters.dateRange.id as RelativeTimePreset
-      const { start, end } = resolveRelativeTimeRange(preset)
-      params.set('dateStart', start.toISOString())
-      params.set('dateEnd', end.toISOString())
-      // Recency presets reflect recent activity (updatedAt); only "Overdue" is meaningfully
-      // tied to a document's dueDate.
-      params.set('dateField', preset === 'Overdue' ? 'dueDate' : 'updatedAt')
+      // The chip id is either a relative preset ("Last 7 days") or an absolute period token
+      // ("Q1 2026"). Absolute periods are resolved by the shared grammar so the same token means
+      // the same range wherever it is read.
+      const absolute = resolvePeriod(filters.dateRange.id)
+      if (absolute) {
+        params.set('dateStart', absolute.start.toISOString())
+        params.set('dateEnd', absolute.end.toISOString())
+        params.set('dateField', 'updatedAt')
+      } else {
+        const preset = filters.dateRange.id as RelativeTimePreset
+        const { start, end } = resolveRelativeTimeRange(preset)
+        params.set('dateStart', start.toISOString())
+        params.set('dateEnd', end.toISOString())
+        // Recency presets reflect recent activity (updatedAt); only "Overdue" is meaningfully
+        // tied to a document's dueDate.
+        params.set('dateField', preset === 'Overdue' ? 'dueDate' : 'updatedAt')
+      }
     }
 
     const res = await fetch(`/api/firms/${firmId}/search?${params.toString()}`, {

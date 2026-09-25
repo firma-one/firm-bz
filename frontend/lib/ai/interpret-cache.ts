@@ -21,6 +21,15 @@ import type { InterpretCandidates, InterpretResult } from './search-interpreter'
  * call, exactly as today.
  */
 
+/**
+ * Bump whenever the interpreter's prompt, tool schema or validation changes.
+ *
+ * Without this, a cached interpretation outlives the change that was meant to fix it — a guard or
+ * prompt edit appears to do nothing for up to the TTL, which is genuinely confusing when testing.
+ * Including it in the key makes a deploy invalidate everything automatically.
+ */
+const INTERPRETER_VERSION = 'v2-periods'
+
 const TTL_MS = 15 * 60 * 1000
 /** Bounded so a long-lived server process cannot grow this without limit. */
 const MAX_ENTRIES = 500
@@ -59,7 +68,7 @@ export function buildInterpretCacheKey(
     // userId is in the key as a second line of defence. The candidate hash already differs between
     // users with different access, but two users with identical scope would otherwise share an
     // entry — correct today, yet a subtle thing to rely on if scoping ever changes.
-    return `${firmId}:${userId}:${hashCandidates(candidates)}:${normalizeText(text)}`
+    return `${INTERPRETER_VERSION}:${firmId}:${userId}:${hashCandidates(candidates)}:${normalizeText(text)}`
 }
 
 export function getCachedInterpretation(key: string): InterpretResult | null {
