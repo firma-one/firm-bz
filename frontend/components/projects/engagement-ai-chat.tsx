@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { Send, Loader2 } from 'lucide-react'
 import { ASSISTANT } from '@/lib/ai/assistant'
 import { Brio } from '@/components/ui/brio'
+import { fetchWithTimeout, AI_TIMEOUT_MS, AiTimeoutError } from '@/lib/ai/fetch-timeout'
 import { StreamingText } from '@/components/ui/streaming-text'
 
 interface Message {
@@ -46,11 +47,11 @@ export function EngagementAiChat({ projectId }: { projectId: string }) {
         setStreaming(true)
 
         try {
-            const res = await fetch(`/api/projects/${projectId}/ai-chat`, {
+            const res = await fetchWithTimeout(`/api/projects/${projectId}/ai-chat`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ question: trimmed, history }),
-            })
+            }, AI_TIMEOUT_MS.stream)
 
             if (!res.ok) {
                 if (res.status === 503) setUnavailable(true)
@@ -76,7 +77,13 @@ export function EngagementAiChat({ projectId }: { projectId: string }) {
                 })
             }
         } catch (e) {
-            setError(e instanceof Error ? e.message : 'Something went wrong')
+            // A timeout gets its own wording: "Could not get an answer" reads like a refusal,
+            // when in fact nothing came back in time and retrying is worthwhile.
+            setError(
+                e instanceof AiTimeoutError
+                    ? `${ASSISTANT.name} took too long to answer. Try asking again.`
+                    : e instanceof Error ? e.message : 'Something went wrong',
+            )
             // Drop the empty assistant placeholder so a failed turn leaves no blank bubble.
             setMessages((prev) => (prev[prev.length - 1]?.content === '' ? prev.slice(0, -1) : prev))
         } finally {
@@ -85,7 +92,22 @@ export function EngagementAiChat({ projectId }: { projectId: string }) {
         }
     }, [projectId, messages, streaming])
 
-    if (unavailable) return null
+    // Deliberately not `return null`: the panel renders before we can know AI is unconfigured,
+    // so unmounting here would make it vanish underneath the user right after they asked a
+    // question. Show it inert with an explanation instead.
+    if (unavailable) {
+        return (
+            <div className="bg-white border border-[#e5e7eb] rounded shadow-sm p-4">
+                <div className="flex items-center gap-2 mb-1.5">
+                    <span className="text-sm font-semibold text-gray-900">Ask</span>
+                    <Brio className="text-sm text-gray-400" />
+                </div>
+                <p className="text-xs text-gray-500">
+                    {ASSISTANT.name} is not available right now. Everything else on this page works as usual.
+                </p>
+            </div>
+        )
+    }
 
     return (
         <div className="bg-white border border-[#e5e7eb] rounded shadow-sm flex flex-col">

@@ -7,6 +7,7 @@ import { formatRelativeTime } from '@/lib/utils'
 import { ASSISTANT, ASSISTANT_POLICY } from '@/lib/ai/assistant'
 import { Brio } from '@/components/ui/brio'
 import { BrioSections } from '@/components/ui/brio-sections'
+import { fetchWithTimeout, AI_TIMEOUT_MS, AiTimeoutError } from '@/lib/ai/fetch-timeout'
 
 interface FirmBrief {
     content: string
@@ -23,16 +24,23 @@ export function AiFirmBrief({ firmId }: { firmId: string }) {
     // Distinguishes "no API key configured" from "generation failed" — when unconfigured the
     // component renders nothing at all rather than showing an error to every user.
     const [configured, setConfigured] = useState(true)
+    const [refreshError, setRefreshError] = useState<string | null>(null)
 
     useEffect(() => {
         if (!accessToken) return
         let cancelled = false
 
         setLoading(true)
-        fetch(`/api/firms/${firmId}/ai-brief`, {
+        fetchWithTimeout(`/api/firms/${firmId}/ai-brief`, {
             headers: { Authorization: `Bearer ${accessToken}` },
-        })
-            .then((r) => r.json())
+        }, AI_TIMEOUT_MS.brief)
+            .then((r) => {
+                // Without this, a 500 returning an HTML body throws on .json() into the same
+                // silent catch as "no brief", making a real failure indistinguishable from
+                // having nothing to show.
+                if (!r.ok) throw new Error(`Brief request failed (${r.status})`)
+                return r.json()
+            })
             .then((d) => {
                 if (cancelled) return
                 setBrief(d.brief ?? null)
@@ -47,15 +55,24 @@ export function AiFirmBrief({ firmId }: { firmId: string }) {
     const refresh = useCallback(async () => {
         if (!accessToken || refreshing) return
         setRefreshing(true)
+        setRefreshError(null)
         try {
-            const res = await fetch(`/api/firms/${firmId}/ai-brief`, {
+            const res = await fetchWithTimeout(`/api/firms/${firmId}/ai-brief`, {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${accessToken}` },
-            })
+            }, AI_TIMEOUT_MS.brief)
+            if (!res.ok) throw new Error(`Refresh failed (${res.status})`)
             const d = await res.json()
             if (d.brief) setBrief(d.brief)
-        } catch {
-            // Keep the existing brief on screen rather than blanking it.
+            else throw new Error('No brief returned')
+        } catch (e) {
+            // Keep the existing brief on screen rather than blanking it, but say the refresh
+            // failed: the user pressed a button and silence reads as "nothing happened".
+            setRefreshError(
+                e instanceof AiTimeoutError
+                    ? `${ASSISTANT.name} took too long. The brief below is unchanged.`
+                    : `Could not refresh. The brief below is unchanged.`,
+            )
         } finally {
             setRefreshing(false)
         }
@@ -100,6 +117,12 @@ export function AiFirmBrief({ firmId }: { firmId: string }) {
                     <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
                 </button>
             </div>
+
+            {refreshError && (
+                <p role="status" className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5 mb-3">
+                    {refreshError}
+                </p>
+            )}
 
             <BrioSections content={brief.content} className="text-gray-700" />
 

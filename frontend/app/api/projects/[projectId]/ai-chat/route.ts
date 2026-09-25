@@ -100,9 +100,15 @@ export async function POST(
                     }
                 } catch (error) {
                     logger.error('AI chat stream error:', error as Error)
-                } finally {
-                    controller.close()
+                    // Fail the stream rather than closing it cleanly. This response is raw text
+                    // with no envelope to carry an error flag, so a clean close is byte-identical
+                    // to a complete answer — the client would present a truncated answer about an
+                    // engagement as an authoritative one. `error()` surfaces as a read failure the
+                    // caller already catches, keeping whatever streamed but marking the turn failed.
+                    controller.error(error)
+                    return
                 }
+                controller.close()
             },
         })
 

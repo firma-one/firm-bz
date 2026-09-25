@@ -62,6 +62,7 @@ import { updateEngagementInsightsSummary, approveEngagementAiSummary, dismissEng
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import { EngagementAiChat } from '@/components/projects/engagement-ai-chat'
 import { ASSISTANT } from '@/lib/ai/assistant'
+import { fetchWithTimeout, AI_TIMEOUT_MS } from '@/lib/ai/fetch-timeout'
 import { Brio } from '@/components/ui/brio'
 import { StreamingText } from '@/components/ui/streaming-text'
 import { BrioSections } from '@/components/ui/brio-sections'
@@ -2765,7 +2766,11 @@ export function EngagementInsightsDashboard({
         })
 
         try {
-            const res = await fetch(`/api/projects/${projectId}/ai-summary`, { method: 'POST' })
+            const res = await fetchWithTimeout(
+                `/api/projects/${projectId}/ai-summary`,
+                { method: 'POST' },
+                AI_TIMEOUT_MS.stream,
+            )
             if (!res.ok) {
                 setAiGenerateNote(res.status === 503
                     ? `${ASSISTANT.name} is not configured.`
@@ -2778,6 +2783,9 @@ export function EngagementInsightsDashboard({
             const decoder = new TextDecoder()
             let buffer = ''
             let completed: { content: string; generatedAt: string } | null = null
+            // Tracks whether a note was already shown, so the interrupted-stream branch below does not
+            // overwrite a more specific message. State is async and stale inside this closure.
+            let noted = false
 
             for (;;) {
                 const { done, value } = await reader.read()
@@ -2804,6 +2812,7 @@ export function EngagementInsightsDashboard({
                     } else if (evt.type === 'done' && evt.content) {
                         completed = { content: evt.content, generatedAt: evt.generatedAt! }
                     } else if (evt.type === 'error') {
+                        noted = true
                         setAiGenerateNote(`${ASSISTANT.name} could not write a summary. Try again.`)
                     }
                 }
@@ -2820,6 +2829,13 @@ export function EngagementInsightsDashboard({
                     ...prev,
                     insightsSummaryDraft: { content: completed!.content, generatedAt: completed!.generatedAt },
                 } : prev)
+            } else if (!noted) {
+                // The stream ended without a `done` event and without an `error` event — a
+                // connection dropped cleanly mid-generation. `finally` is about to clear the
+                // streamed text, so without this the draft the user just watched appear would
+                // vanish with no explanation at all. Discarding a partial summary is deliberate
+                // (half a client-facing document is worse than none), but it has to be said.
+                setAiGenerateNote(`${ASSISTANT.name} was interrupted before finishing. Nothing was saved — try again.`)
             }
         } catch {
             setAiGenerateNote(`${ASSISTANT.name} could not write a summary. Try again.`)

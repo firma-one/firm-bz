@@ -18,6 +18,7 @@ import { formatRelativeTime, formatDateTimeWithTZ, cn } from '@/lib/utils'
 import { useAuth } from '@/lib/auth-context'
 import { ASSISTANT } from '@/lib/ai/assistant'
 import { Brio } from '@/components/ui/brio'
+import { fetchWithTimeout, AI_TIMEOUT_MS } from '@/lib/ai/fetch-timeout'
 import {
   Tooltip,
   TooltipContent,
@@ -367,11 +368,11 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
     setInterpreting(true)
     setAskNote(null)
     try {
-      const res = await fetch(`/api/firms/${firmId}/search/interpret`, {
+      const res = await fetchWithTimeout(`/api/firms/${firmId}/search/interpret`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
         body: JSON.stringify({ text }),
-      })
+      }, AI_TIMEOUT_MS.interpret)
 
       if (!res.ok) {
         // Interpretation is an enhancement: fall back to searching the raw text.
