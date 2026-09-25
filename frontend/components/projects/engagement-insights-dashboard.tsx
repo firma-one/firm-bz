@@ -2268,7 +2268,12 @@ function EngagementHealthBody({ health, deliverables, planningHygiene, commentTh
     const hygieneCovs = [phDelivTotal > 0 ? delivDueCov : null, phDocTotal > 0 ? docDueCov : null, phDocTotal > 0 ? docAssigneeCov : null].filter((v): v is number => v !== null)
     const hygieneOverallPct = hygieneCovs.length > 0 ? Math.round(hygieneCovs.reduce((a, b) => a + b, 0) / hygieneCovs.length) : 0
     const hygieneNoWork = phDelivTotal === 0 && phDocTotal === 0
-    const respPct = commentThreads && commentThreads.total > 0 ? Math.round((commentThreads.answered / commentThreads.total) * 100) : 100
+    // A thread the firm replied to but that is still flagged urgent / looking is NOT resolved, so
+    // it does not count toward responsiveness — otherwise a thread marked urgent reads as 100%
+    // simply because the firm posted last.
+    const respFlaggedOpen = commentThreads?.flaggedOpen ?? 0
+    const respResolved = Math.max(0, (commentThreads?.answered ?? 0) - respFlaggedOpen)
+    const respPct = commentThreads && commentThreads.total > 0 ? Math.round((respResolved / commentThreads.total) * 100) : 100
     const paceScore = pace && pace.hasDeadline ? (pace.timePct > 0 ? Math.min(100, Math.round((pace.deliveredPct / pace.timePct) * 100)) : 100) : 0
     const paceHex = !pace || !pace.hasDeadline ? RING.gray : paceScore >= 90 ? RING.green : paceScore >= 60 ? RING.amber : RING.red
     const paceGap = pace ? pace.timePct - pace.deliveredPct : 0
@@ -2406,15 +2411,16 @@ function EngagementHealthBody({ health, deliverables, planningHygiene, commentTh
                         <div id="ring-comments" className="flex flex-col items-center gap-3 scroll-mt-24">
                             <p className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
                                 <MessagesSquare className="h-4 w-4 text-gray-400" /> Comment Responsiveness
-                                <InfoTip ariaLabel="About Comment Responsiveness" text="Share of document comment threads that have been answered by the firm (last message not from an external contributor). Higher is better." />
+                                <InfoTip ariaLabel="About Comment Responsiveness" text="Share of document comment threads that are resolved — answered by the firm and not still flagged. A thread the firm replied to but that is marked Urgent or Looking counts as open, not resolved. Higher is better." />
                             </p>
                             <RingWithLegend
                                 items={[
-                                    { label: 'Answered', hex: RING.green, value: commentThreads?.answered ?? 0 },
+                                    { label: 'Resolved', hex: RING.green, value: respResolved },
+                                    { label: 'Flagged open', hex: RING.amber, value: respFlaggedOpen },
                                     { label: 'Unanswered', hex: RING.red, value: commentThreads?.unanswered ?? 0 },
                                 ]}
                                 centerTop={<span className="text-xl font-bold text-gray-900 tabular-nums leading-none">{respPct}%</span>}
-                                centerBottom={<span className="text-[10px] text-gray-400 mt-0.5">answered</span>}
+                                centerBottom={<span className="text-[10px] text-gray-400 mt-0.5">resolved</span>}
                             />
                         </div>
                 )}

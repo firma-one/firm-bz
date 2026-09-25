@@ -172,6 +172,17 @@ export interface CommentThreads {
   unanswered: number
   total: number
   /**
+   * Threads the firm has replied to but that are still flagged open by a reaction — `urgent` or
+   * `looking`. Counted separately from `unanswered` because responsiveness is about whether the
+   * conversation is resolved, not only about who posted last: a thread marked urgent scored as
+   * fully responsive simply because the firm replied.
+   *
+   * Decision reactions (`yes`/`no`/`ok`/`plus_one`) are NOT counted here. They mean a next step is
+   * owed somewhere, which the Collaboration section reports, but they do not mean the firm is
+   * being unresponsive.
+   */
+  flaggedOpen: number
+  /**
    * Every document carrying a comment thread, answered or not, with the count of messages on it.
    * `unansweredThreads` covers only threads awaiting a firm reply, so a fully-answered engagement
    * previously reached the summary as a bare count with no way to say WHERE the conversation is.
@@ -874,6 +885,10 @@ export async function computeEngagementInsights(
     const penalties: HealthPenalty[] = []
     const overdueDocCount = (documentsDueSoon ?? []).filter((d) => d.daysUntil < 0).length
 
+    // Deliberately unanswered-only, unlike the Comment Responsiveness ring, which also treats a
+    // replied-but-flagged thread as open. The overall health score already penalises the same work
+    // through other inputs, and double-counting a flagged thread here would move the headline
+    // number twice for one signal.
     if ((unansweredThreads?.length ?? 0) > 0) penalties.push({ label: `${unansweredThreads.length} unanswered thread${unansweredThreads.length > 1 ? 's' : ''}`, points: Math.min(20, unansweredThreads.length * 5) })
     if (overdueDocCount > 0) penalties.push({ label: `${overdueDocCount} overdue doc${overdueDocCount > 1 ? 's' : ''}`, points: Math.min(15, overdueDocCount * 5) })
     if ((sensitiveFiles?.length ?? 0) > 0) penalties.push({ label: `${sensitiveFiles.length} sensitive file${sensitiveFiles.length > 1 ? 's' : ''}`, points: Math.min(20, sensitiveFiles.length * 5) })
@@ -1071,10 +1086,16 @@ export async function computeEngagementInsights(
         || (Number(b.awaitingReply) - Number(a.awaitingReply))
         || (b.messageCount - a.messageCount))
 
+    // Answered threads still flagged urgent / looking — unresolved despite a reply.
+    const flaggedOpen = threadDocuments.filter((d) =>
+      !d.awaitingReply && d.followUpReasons.some((r) => r === 'urgent' || r === 'looking')
+    ).length
+
     const commentThreads: CommentThreads = {
       answered: Math.max(0, totalThreads - unansweredThreads.length),
       unanswered: unansweredThreads.length,
       total: totalThreads,
+      flaggedOpen,
       documents: threadDocuments,
     }
 
