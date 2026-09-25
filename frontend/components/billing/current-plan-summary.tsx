@@ -117,11 +117,13 @@ function AiCreditsRow({ usage }: { usage: BillingPlanUsage | null | undefined })
     const ai = usage?.aiCredits ?? null
     if (!ai) return null
 
+    // Ordered firm-scoped first, then engagement-scoped, so the two halves of the product read
+    // as groups rather than an arbitrary list. Labels name the surface the credit was spent on.
     const AI_FEATURES: Array<{ key: keyof typeof ai.byFeature; label: string }> = [
-        { key: 'summary', label: 'summaries' },
-        { key: 'chat', label: 'chat answers' },
-        { key: 'brief', label: 'firm briefs' },
-        { key: 'searchInterpret', label: 'Ask searches' },
+        { key: 'brief', label: 'Firm briefs' },
+        { key: 'searchInterpret', label: 'Firm Doc Search' },
+        { key: 'summary', label: 'Engagement summaries' },
+        { key: 'chat', label: 'Engagement assistant chat' },
     ]
     const fmt = (n: number) => (n % 1 === 0 ? String(n) : n.toFixed(1))
     const since = new Date(ai.periodStartIso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
