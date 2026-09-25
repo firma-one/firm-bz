@@ -652,9 +652,14 @@ export class SearchService {
         deliverableDocumentIds?: string[]
         dateRange?: { start: Date; end: Date }
         dateField: 'dueDate' | 'kickoffDate' | 'updatedAt'
+        /**
+         * True when the range means "overdue" — strict dueDate semantics, no fallback. A document
+         * with no due date cannot be overdue, so it must be excluded.
+         */
+        strictDueDate?: boolean
         push: (value: any) => string
     }): string {
-        const { userId, fullAccessEngagementIds, grantGatedEngagementIds, clientId, engagementId, deliverableDocumentIds, dateRange, dateField, push } = params
+        const { userId, fullAccessEngagementIds, grantGatedEngagementIds, clientId, engagementId, deliverableDocumentIds, dateRange, dateField, strictDueDate, push } = params
 
         const accessConditions: string[] = []
         if (fullAccessEngagementIds.length > 0) {
@@ -682,7 +687,14 @@ export class SearchService {
         if (dateRange) {
             const startParam = push(dateRange.start)
             const endParam = push(dateRange.end)
-            filter += ` AND d."${dateField}" BETWEEN ${startParam}::timestamptz AND ${endParam}::timestamptz`
+            // A date filter on `dueDate` silently excludes every document that has none — and in
+            // practice most documents never get one, so a quarter filter would return nothing at
+            // all. Fall back to `updatedAt` for those rows so "from Q3" means "due in Q3, or
+            // worked on in Q3 if it has no due date" rather than "has a due date AND it is in Q3".
+            // `updatedAt` is NOT NULL, so the fallback always resolves.
+            filter += dateField === 'dueDate' && !strictDueDate
+                ? ` AND COALESCE(d."dueDate", d."updatedAt") BETWEEN ${startParam}::timestamptz AND ${endParam}::timestamptz`
+                : ` AND d."${dateField}" BETWEEN ${startParam}::timestamptz AND ${endParam}::timestamptz`
         }
         return filter
     }
@@ -712,13 +724,15 @@ export class SearchService {
         /** Auto-detected from typed text (e.g. "from July") — applied as a ranking boost only, never excludes a document with no/different dueDate. Unlike dateRange, this is not explicit user intent. */
         softDateRange?: { start: Date; end: Date }
         dateField?: 'dueDate' | 'kickoffDate' | 'updatedAt'
+        /** See buildScopeFilter: strict dueDate semantics for "Overdue", no updatedAt fallback. */
+        strictDueDate?: boolean
         limit?: number
     }): Promise<VectorSearchResult[]> {
         const {
             firmId, userId, semanticText, isFirmAdmin,
             fullAccessEngagementIds, grantGatedEngagementIds,
             clientId, engagementId, deliverableDocumentIds, dateRange, softDateRange,
-            dateField = 'dueDate',
+            dateField = 'dueDate', strictDueDate = false,
         } = params
         const embeddingQuery = params.embeddingQuery ?? semanticText
         const limit = params.limit || 30
@@ -750,16 +764,16 @@ export class SearchService {
 
         const [vectorResults, filenameResults, termResults, docIdResults] = await Promise.all([
             trimmedEmbeddingQuery
-                ? SearchService.searchGlobalVector({ firmId, userId, semanticText: trimmedEmbeddingQuery, fullAccessEngagementIds, grantGatedEngagementIds, clientId, engagementId, deliverableDocumentIds, dateRange, dateField, limit: 50 })
-                : SearchService.searchGlobalStructuredOnly({ firmId, userId, fullAccessEngagementIds, grantGatedEngagementIds, clientId, engagementId, deliverableDocumentIds, dateRange, dateField, limit }),
+                ? SearchService.searchGlobalVector({ firmId, userId, semanticText: trimmedEmbeddingQuery, fullAccessEngagementIds, grantGatedEngagementIds, clientId, engagementId, deliverableDocumentIds, dateRange, dateField, strictDueDate, limit: 50 })
+                : SearchService.searchGlobalStructuredOnly({ firmId, userId, fullAccessEngagementIds, grantGatedEngagementIds, clientId, engagementId, deliverableDocumentIds, dateRange, dateField, strictDueDate, limit }),
             trimmedQuery
-                ? SearchService.searchGlobalFileName({ firmId, userId, query: trimmedQuery, fullAccessEngagementIds, grantGatedEngagementIds, clientId, engagementId, deliverableDocumentIds, dateRange, dateField, limit: 20 })
+                ? SearchService.searchGlobalFileName({ firmId, userId, query: trimmedQuery, fullAccessEngagementIds, grantGatedEngagementIds, clientId, engagementId, deliverableDocumentIds, dateRange, dateField, strictDueDate, limit: 20 })
                 : Promise.resolve([]),
             trimmedQuery && significantTerms.length > 0
-                ? SearchService.searchGlobalFileNameTerms({ firmId, userId, terms: significantTerms, fullAccessEngagementIds, grantGatedEngagementIds, clientId, engagementId, deliverableDocumentIds, dateRange, dateField, limit: 25 })
+                ? SearchService.searchGlobalFileNameTerms({ firmId, userId, terms: significantTerms, fullAccessEngagementIds, grantGatedEngagementIds, clientId, engagementId, deliverableDocumentIds, dateRange, dateField, strictDueDate, limit: 25 })
                 : Promise.resolve([]),
             looksLikeDocId
-                ? SearchService.searchGlobalDocId({ firmId, userId, query: trimmedQuery, fullAccessEngagementIds, grantGatedEngagementIds, clientId, engagementId, deliverableDocumentIds, dateRange, dateField, limit: 10 })
+                ? SearchService.searchGlobalDocId({ firmId, userId, query: trimmedQuery, fullAccessEngagementIds, grantGatedEngagementIds, clientId, engagementId, deliverableDocumentIds, dateRange, dateField, strictDueDate, limit: 10 })
                 : Promise.resolve([]),
         ])
 
@@ -860,6 +874,7 @@ export class SearchService {
         deliverableDocumentIds?: string[]
         dateRange?: { start: Date; end: Date }
         dateField: 'dueDate' | 'kickoffDate' | 'updatedAt'
+        strictDueDate?: boolean
         limit: number
     }): Promise<VectorSearchResult[]> {
         try {
@@ -918,6 +933,7 @@ export class SearchService {
         deliverableDocumentIds?: string[]
         dateRange?: { start: Date; end: Date }
         dateField: 'dueDate' | 'kickoffDate' | 'updatedAt'
+        strictDueDate?: boolean
         limit: number
     }): Promise<VectorSearchResult[]> {
         try {
@@ -974,6 +990,7 @@ export class SearchService {
         deliverableDocumentIds?: string[]
         dateRange?: { start: Date; end: Date }
         dateField: 'dueDate' | 'kickoffDate' | 'updatedAt'
+        strictDueDate?: boolean
         limit: number
     }): Promise<VectorSearchResult[]> {
         try {
@@ -1023,6 +1040,7 @@ export class SearchService {
         deliverableDocumentIds?: string[]
         dateRange?: { start: Date; end: Date }
         dateField: 'dueDate' | 'kickoffDate' | 'updatedAt'
+        strictDueDate?: boolean
         limit: number
     }): Promise<VectorSearchResult[]> {
         if (params.terms.length === 0) return []
@@ -1084,6 +1102,7 @@ export class SearchService {
         deliverableDocumentIds?: string[]
         dateRange?: { start: Date; end: Date }
         dateField: 'dueDate' | 'kickoffDate' | 'updatedAt'
+        strictDueDate?: boolean
         limit: number
     }): Promise<VectorSearchResult[]> {
         try {

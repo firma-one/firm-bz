@@ -287,6 +287,24 @@ it is guarded in two places, not one:
 
 Same principle as validating ids against the candidate list: the prompt asks, the code enforces.
 
+#### Date filters must not exclude un-dated documents
+
+Found in testing 2026-09-25. "playbooks from Q3 2026" returned nothing, although every document
+had been updated in Q3. Cause: `dateField` defaults to `dueDate` throughout the search service, and
+**34 of 35 documents in the test corpus have no due date at all** — so a `dueDate` range excluded
+essentially the whole corpus.
+
+This is a semantics question, not a plumbing one. "From Q3" means *due in Q3, or worked on in Q3 if
+it has no due date* — not *has a due date AND that date is in Q3*. A `dueDate` range now falls back
+to `updatedAt` per row (`COALESCE`), which is NOT NULL so it always resolves.
+
+The exception is **Overdue**, which keeps strict `dueDate` semantics: a document with no due date is
+not overdue, and coalescing would make every un-dated document appear overdue. That is carried by an
+explicit `strictDueDate` flag rather than inferred from `dateField`, since both cases send
+`dueDate`.
+
+Verified against the corpus: Q3 2026 → 34, Q2 2026 → 0, Overdue → 0.
+
 #### Ambiguity disclosure
 
 Today two similarly-named clients means the interpreter resolves **nothing**: `SYSTEM` instructs

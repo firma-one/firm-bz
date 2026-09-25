@@ -533,6 +533,8 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
         // Recency presets reflect recent activity (updatedAt); only "Overdue" is meaningfully
         // tied to a document's dueDate.
         params.set('dateField', preset === 'Overdue' ? 'dueDate' : 'updatedAt')
+        // Overdue must not fall back to updatedAt: an un-dated document is not overdue.
+        if (preset === 'Overdue') params.set('strictDueDate', '1')
       }
     }
 

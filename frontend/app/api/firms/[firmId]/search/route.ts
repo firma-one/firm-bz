@@ -57,6 +57,10 @@ export async function GET(
         const dateFieldParam = searchParams.get('dateField')
         const dateField: 'dueDate' | 'kickoffDate' | 'updatedAt' =
             dateFieldParam === 'updatedAt' || dateFieldParam === 'kickoffDate' ? dateFieldParam : 'dueDate'
+        // "Overdue" is the one range with strict dueDate semantics: a document with no due date is
+        // not overdue. Every other dueDate range falls back to updatedAt so un-dated documents are
+        // not silently excluded.
+        const strictDueDate = searchParams.get('strictDueDate') === '1'
 
         const authResult = await requireFirmSearch(request, firmId)
         if (authResult instanceof NextResponse) return authResult
@@ -133,6 +137,7 @@ export async function GET(
             dateRange,
             softDateRange,
             dateField,
+            strictDueDate,
             limit: 30,
         })
 
