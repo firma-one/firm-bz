@@ -1,4 +1,6 @@
 import { Polar } from '@polar-sh/sdk'
+import { aiCreditUsageForGroup } from '@/lib/ai/usage'
+import { logger } from '@/lib/logger'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { createClient } from '@/utils/supabase/server'
@@ -194,12 +196,21 @@ export async function GET(request: Request) {
             ? prisma.clientContact.count({ where: { client: { firmId: { in: billableFirmIds } } } })
             : Promise.resolve(null),
     ])
+    // AI credits are metered but not capped: this is reported so the real distribution can be
+    // seen before any cap number is chosen. A failure here must not break the billing page, which
+    // is why it is caught rather than awaited alongside the counts above.
+    const aiCredits = await aiCreditUsageForGroup(groupId, periodEnd).catch((error) => {
+        logger.error('Failed to load AI credit usage:', error as Error)
+        return null
+    })
+
     const usage = {
         firms: usedFirms,
         clients: usedClients,
         engagements: usedEngagements,
         documents: usedDocuments,
         clientContacts: usedClientContacts,
+        aiCredits,
     }
 
     return NextResponse.json(

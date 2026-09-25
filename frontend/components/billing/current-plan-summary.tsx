@@ -91,8 +91,56 @@ function PlanEntitlementsSection({
                 <RetentionStat value={daysLabel(e.commentHistoryDays)} label="comments" />
             </div>
         </div>
+
     )
 }
+
+/**
+ * AI credit usage. Separate from EntitlementsRow because that only renders when a cap exists, and
+ * a group on the free plan still uses AI and still needs to see it.
+ *
+ * Deliberately not a usage bar: there is no cap to draw against, and a bar with no ceiling implies
+ * a limit that does not exist. A count plus the per-feature split is honest about what this is —
+ * metering, gathering the distribution a cap should later be set from.
+ */
+function AiCreditsRow({ usage }: { usage: BillingPlanUsage | null | undefined }) {
+    const ai = usage?.aiCredits ?? null
+    if (!ai) return null
+
+    const AI_FEATURE_LABEL: Record<string, string> = {
+        brief: 'firm briefs',
+        summary: 'engagement summaries',
+        chat: 'chat answers',
+        searchInterpret: 'Ask searches',
+    }
+    const fmt = (n: number) => (n % 1 === 0 ? String(n) : n.toFixed(1))
+
+    return (
+        <div className="mt-3 pt-3 border-t border-primary/15">
+            <div className="flex items-baseline gap-2 flex-wrap">
+                <span className="text-sm font-semibold text-gray-900 tabular-nums">{fmt(ai.used)}</span>
+                <span className="text-xs text-gray-500">
+                    AI {ai.used === 1 ? 'credit' : 'credits'} used since{' '}
+                    {new Date(ai.periodStartIso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
+                </span>
+                <span className="text-[11px] text-gray-400">· no limit applied</span>
+            </div>
+            {ai.used > 0 && (
+                <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1">
+                    {(Object.entries(ai.byFeature) as Array<[string, number]>)
+                        .filter(([, n]) => n > 0)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([feature, n]) => (
+                            <span key={feature} className="text-[11px] text-gray-500 tabular-nums">
+                                {fmt(n)} {AI_FEATURE_LABEL[feature] ?? feature}
+                            </span>
+                        ))}
+                </div>
+            )}
+        </div>
+    )
+}
+
 
 type Props = {
     currentPlanState: BillingCurrentPlanState | null
@@ -238,6 +286,8 @@ export function CurrentPlanSummary({
             {hasCaps && entitlements && (
                 <PlanEntitlementsSection e={entitlements} usage={usage} />
             )}
+            {/* Outside the hasCaps guard: a free-plan group has no caps but still uses AI. */}
+            <AiCreditsRow usage={usage} />
         </div>
     )
 }

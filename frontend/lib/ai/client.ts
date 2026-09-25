@@ -37,6 +37,13 @@ export async function completeText(params: {
     maxTokens: number
     temperature?: number
     label: string
+    /**
+     * Called with the token counts when the call succeeds, so the caller can meter it.
+     *
+     * A hook rather than a changed return type: every existing caller wants the text and nothing
+     * else, and metering must never be able to fail the completion — hence the catch below.
+     */
+    onUsage?: (usage: { inputTokens: number; outputTokens: number }) => void | Promise<void>
 }): Promise<string | null> {
     const client = getAnthropic()
     if (!client) return null
@@ -49,6 +56,17 @@ export async function completeText(params: {
             system: params.system,
             messages: [{ role: 'user', content: params.userMessage }],
         })
+        if (params.onUsage) {
+            try {
+                await params.onUsage({
+                    inputTokens: message.usage.input_tokens,
+                    outputTokens: message.usage.output_tokens,
+                })
+            } catch (error) {
+                // Metering is bookkeeping; losing a row must not cost the user their result.
+                logger.error(`AI usage hook failed (${params.label}):`, error as Error)
+            }
+        }
         return extractText(message) || null
     } catch (error) {
         logger.error(`AI completion failed (${params.label}):`, error as Error)

@@ -5,6 +5,7 @@ import { resolveProjectContext } from '@/lib/resolve-project-context'
 import { canViewProject, canViewProjectInternalTabs } from '@/lib/permission-helpers'
 import { logger } from '@/lib/logger'
 import { getAnthropic, isAiConfigured, AI_MODEL } from '@/lib/ai/client'
+import { recordAiUsage } from '@/lib/ai/usage'
 import {
     CHAT_SYSTEM_PROMPT,
     buildEngagementContext,
@@ -93,11 +94,21 @@ export async function POST(
         const body_ = new ReadableStream<Uint8Array>({
             async start(controller) {
                 try {
+                    // Streaming reports tokens across two events: the input count arrives with
+                    // message_start, the output count with message_delta at the end.
+                    let inputTokens = 0
+                    let outputTokens = 0
                     for await (const event of stream) {
-                        if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+                        if (event.type === 'message_start') {
+                            inputTokens = event.message.usage?.input_tokens ?? 0
+                        } else if (event.type === 'message_delta') {
+                            outputTokens = event.usage?.output_tokens ?? 0
+                        } else if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
                             controller.enqueue(encoder.encode(event.delta.text))
                         }
                     }
+                    // Metered only on a complete stream: a failed answer is not a billable one.
+                    await recordAiUsage({ firmId: ctx.firmId, userId: user.id, feature: 'chat', inputTokens, outputTokens })
                 } catch (error) {
                     logger.error('AI chat stream error:', error as Error)
                     // Fail the stream rather than closing it cleanly. This response is raw text

@@ -76,3 +76,55 @@ export async function creditsUsedSince(groupId: string, since: Date): Promise<nu
     })
     return Number(agg._sum.credits ?? 0)
 }
+
+/**
+ * Start of the current billing period, derived from its end.
+ *
+ * `Subscription` stores `currentPeriodEnd` but no start, so a month is stepped back from the end
+ * rather than adding a column. Using calendar months (not 30 days) keeps the window aligned with
+ * the invoice the customer is reading. With no subscription — free plan — the calendar month is
+ * the honest fallback: there is no billing period to align to.
+ */
+export function creditPeriodStart(periodEnd: Date | null | undefined, now: Date = new Date()): Date {
+    if (!periodEnd) return new Date(now.getFullYear(), now.getMonth(), 1)
+    const start = new Date(periodEnd)
+    start.setMonth(start.getMonth() - 1)
+    return start
+}
+
+export interface AiCreditUsage {
+    /** Total credits consumed in the period. */
+    used: number
+    /** Per-feature split, so the page can show WHERE the credits went, not just how many. */
+    byFeature: Record<AiFeature, number>
+    periodStartIso: string
+}
+
+/**
+ * Credits consumed by a billing group in the current period, with a per-feature breakdown.
+ *
+ * Read-only. Nothing is capped yet: the point of showing this is to gather the real distribution
+ * that a cap should later be set from, rather than guessing a number now.
+ */
+export async function aiCreditUsageForGroup(
+    groupId: string,
+    periodEnd: Date | null | undefined,
+): Promise<AiCreditUsage> {
+    const since = creditPeriodStart(periodEnd)
+    const rows = await prisma.platformAiUsage.groupBy({
+        by: ['feature'],
+        where: { groupId, createdAt: { gte: since } },
+        _sum: { credits: true },
+    })
+
+    const byFeature: Record<AiFeature, number> = { brief: 0, summary: 0, chat: 0, searchInterpret: 0 }
+    let used = 0
+    for (const r of rows) {
+        const feature = r.feature as AiFeature
+        const credits = Number(r._sum.credits ?? 0)
+        if (feature in byFeature) byFeature[feature] = credits
+        used += credits
+    }
+
+    return { used, byFeature, periodStartIso: since.toISOString() }
+}

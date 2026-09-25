@@ -5,6 +5,7 @@ import { resolveProjectContext } from '@/lib/resolve-project-context'
 import { canManageProject } from '@/lib/permission-helpers'
 import { logger } from '@/lib/logger'
 import { getAnthropic, isAiConfigured, AI_MODEL } from '@/lib/ai/client'
+import { recordAiUsage } from '@/lib/ai/usage'
 import { computeEngagementInsights } from '@/lib/insights/engagement-insights'
 import { buildEngagementContext } from '@/lib/ai/engagement-chat'
 import { SUMMARY_SYSTEM_PROMPT, fingerprintInsights, readInsightsSummary } from '@/lib/ai/engagement-summary'
@@ -92,8 +93,16 @@ export async function POST(
                 try {
                     controller.enqueue(line({ type: 'meta', generatedAt }))
 
+                    // Streaming reports tokens across two events: input with message_start,
+                    // output with message_delta at the end.
+                    let inputTokens = 0
+                    let outputTokens = 0
                     for await (const event of modelStream) {
-                        if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+                        if (event.type === 'message_start') {
+                            inputTokens = event.message.usage?.input_tokens ?? 0
+                        } else if (event.type === 'message_delta') {
+                            outputTokens = event.usage?.output_tokens ?? 0
+                        } else if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
                             full += event.delta.text
                             controller.enqueue(line({ type: 'delta', text: event.delta.text }))
                         }
@@ -104,6 +113,16 @@ export async function POST(
                         controller.enqueue(line({ type: 'error', message: 'Empty response' }))
                         return
                     }
+
+                    // Metered only on a complete stream, matching persistence: an aborted
+                    // generation produces no draft and no charge.
+                    await recordAiUsage({
+                        firmId: ctx.firmId,
+                        userId: user.id,
+                        feature: 'summary',
+                        inputTokens,
+                        outputTokens,
+                    })
 
                     // Persist only after a complete stream, so an aborted generation leaves no
                     // half-written draft behind.

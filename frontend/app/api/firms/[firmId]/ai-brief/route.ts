@@ -11,15 +11,16 @@ import type { FirmInsightsResponse } from '../insights/route'
 async function authorize(request: NextRequest, firmId: string) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) }
+    if (!user) return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }), userId: undefined }
 
     const settings = await userSettingsPlus.getUserSettingsPlus(user.id)
     const firm = findFirmInPermissions(settings.permissions, firmId)
-    if (!firm) return { error: NextResponse.json({ error: 'Firm not found' }, { status: 404 }) }
+    if (!firm) return { error: NextResponse.json({ error: 'Firm not found' }, { status: 404 }), userId: undefined }
     if (!(firm.scopes?.firm ?? []).includes('can_manage')) {
-        return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) }
+        return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }), userId: undefined }
     }
-    return { error: null }
+    // userId is returned so the caller can attribute AI usage to the person who triggered it.
+    return { error: null, userId: user.id }
 }
 
 async function readCachedBrief(firmId: string): Promise<{ settings: Record<string, unknown>; brief: FirmBrief | null }> {
@@ -38,6 +39,7 @@ async function regenerate(
     request: NextRequest,
     firmId: string,
     existingSettings: Record<string, unknown>,
+    userId?: string,
 ): Promise<FirmBrief | null> {
     const insightsRes = await fetch(new URL(`/api/firms/${firmId}/insights`, request.url), {
         headers: {
@@ -54,7 +56,10 @@ async function regenerate(
         return null
     }
 
-    const content = await generateFirmBrief(await insightsRes.json() as FirmInsightsResponse)
+    const content = await generateFirmBrief(
+        await insightsRes.json() as FirmInsightsResponse,
+        { firmId, userId },
+    )
     if (!content) return null
 
     const brief: FirmBrief = { content, generatedAt: new Date().toISOString() }
@@ -77,7 +82,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         const { settings, brief } = await readCachedBrief(firmId)
         if (isBriefFresh(brief)) return NextResponse.json({ brief, configured: true })
 
-        const fresh = await regenerate(request, firmId, settings)
+        const fresh = await regenerate(request, firmId, settings, auth.userId)
         // Fall back to the stale brief rather than showing nothing when generation fails.
         return NextResponse.json({ brief: fresh ?? brief, configured: true })
     } catch (error) {
@@ -96,7 +101,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         if (!isAiConfigured()) return NextResponse.json({ brief: null, configured: false })
 
         const { settings } = await readCachedBrief(firmId)
-        const fresh = await regenerate(request, firmId, settings)
+        const fresh = await regenerate(request, firmId, settings, auth.userId)
         if (!fresh) return NextResponse.json({ error: 'Brief generation failed' }, { status: 502 })
 
         return NextResponse.json({ brief: fresh, configured: true })

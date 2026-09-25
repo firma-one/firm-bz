@@ -1,5 +1,6 @@
 import type { FirmInsightsResponse } from '@/app/api/firms/[firmId]/insights/route'
 import { completeText } from './client'
+import { recordAiUsage } from './usage'
 
 export interface FirmBrief {
     content: string
@@ -140,12 +141,24 @@ export function buildSnapshot(data: FirmInsightsResponse): string {
     return lines.join('\n')
 }
 
-export async function generateFirmBrief(data: FirmInsightsResponse): Promise<string | null> {
+export async function generateFirmBrief(
+    data: FirmInsightsResponse,
+    meta?: { firmId?: string; userId?: string },
+): Promise<string | null> {
     return completeText({
         system: SYSTEM,
         userMessage: `Today is ${new Date().toISOString().slice(0, 10)}.\n\nFirm snapshot:\n${buildSnapshot(data)}`,
         maxTokens: 500,
         temperature: 0.4,
         label: 'firm-brief',
+        onUsage: meta?.firmId
+            ? (u) => recordAiUsage({
+                firmId: meta.firmId,
+                userId: meta.userId ?? null,
+                feature: 'brief',
+                inputTokens: u.inputTokens,
+                outputTokens: u.outputTokens,
+            })
+            : undefined,
     })
 }
