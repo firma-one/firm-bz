@@ -502,8 +502,20 @@ questions each) uses roughly 130 credits, so 500 is ~4× realistic usage.
 **Three phases, in order:**
 
 1. **Measure.** A `PlatformAiUsage` ledger — one append-only row per call recording groupId, firmId,
-   feature, model, input/output tokens, and userId. Written inside `lib/ai/client.ts` so every
-   feature is instrumented by construction. **No enforcement.**
+   feature, model, input/output tokens, and userId. **No enforcement.**
+
+   > **Data caveat.** Between `c0a7898f` (2026-09-24) and `7fb30703` (2026-09-26) only the interpret
+   > route called `recordAiUsage`. Brief, summary and chat — the three actions weighted at 1 credit —
+   > recorded nothing, so rows from that window under-count real usage by roughly 9×. The calls are
+   > unrecoverable: the ledger was the only place those token counts were written. **Discard rows
+   > before 2026-09-26 when sizing the cap.**
+   >
+   > The original design note said instrumentation lived "inside `lib/ai/client.ts` so every feature
+   > is instrumented by construction" — that was the intent, not the implementation. Only the brief
+   > used `completeText`; the two streaming routes called the SDK directly and the interpret route
+   > metered itself. `completeText` now takes an `onUsage` hook and both streaming routes read
+   > tokens off the stream, but metering is still per-call-site, not structural. A fifth AI surface
+   > added later will meter only if someone remembers to wire it.
 2. **Understand.** Run for several weeks. Look at real cost per group, feature mix, and the heaviest
    users before committing to a number.
 3. **Cap.** `entitledAiCredits` in Polar product metadata → `parseEntitledAiCredits` →
