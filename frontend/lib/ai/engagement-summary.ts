@@ -183,6 +183,10 @@ Rules for the sections you write — Summary, Progress, Collaboration, Risks, Ne
   repeat Collaboration verbatim — mention threads here only where the delay itself is the risk.
 - Needs Attention: what the reader must act on now. If nothing does, write "Nothing requires
   immediate attention." — never leave it blank.
+- Whenever you name a deliverable or document, lead with the reference the snapshot gives it
+  ("QSR-9 — Market & Competitive Intelligence Report"). The reference is how a reader finds the
+  artefact; a name alone makes them hunt for it. If an item has no reference, use its name alone —
+  never invent one.
 - Be specific with counts and dates. Never invent a number, name, or date not in the snapshot.
 - Professional and neutral. Not a pitch, not a warning.
 - Never comment on an individual's performance, and never name a team member.

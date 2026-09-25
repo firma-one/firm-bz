@@ -67,7 +67,7 @@ export function buildEngagementContext(
     if (data.deliverables?.length) {
         lines.push('Deliverables:')
         for (const d of data.deliverables.slice(0, 40)) {
-            lines.push(`  - ${d.name} [${d.docId ?? 'no id'}] stage=${d.stage}` +
+            lines.push(`  - ${d.docId ? `${d.docId} — ` : ''}${d.name} stage=${d.stage}` +
                 `, due=${fmtDate(d.dueDate)}${d.isOverdue ? ' OVERDUE' : ''}` +
                 `${d.finalizedAt ? ', finalized' : ''}`)
         }
@@ -77,7 +77,7 @@ export function buildEngagementContext(
     if (data.documentsDueSoon?.length) {
         lines.push('Documents due soon: ' +
             data.documentsDueSoon.slice(0, 15)
-                .map((d: any) => `${d.fileName ?? d.name} (due ${fmtDate(d.dueDate)})`)
+                .map((d: any) => `${d.docId ? `${d.docId} — ` : ''}${d.documentName ?? d.fileName ?? d.name} (due ${fmtDate(d.dueDate)})`)
                 .join('; ') + '.')
     }
 
@@ -145,7 +145,7 @@ export function buildEngagementContext(
         const reworked = data.revisionMetrics.filter((r: any) => r.revisions > 0)
         if (reworked.length) {
             lines.push('Revision rounds: ' +
-                reworked.slice(0, 10).map((r: any) => `${r.name} x${r.revisions}`).join('; ') + '.')
+                reworked.slice(0, 10).map((r: any) => `${r.docId ? `${r.docId} — ` : ''}${r.name} x${r.revisions}`).join('; ') + '.')
         }
     }
 

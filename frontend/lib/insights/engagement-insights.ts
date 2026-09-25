@@ -13,6 +13,8 @@ export interface UnansweredThreadItem {
 
 export interface DocumentDueDateItem {
   documentId: string
+  /** Parent deliverable's reference where the doc has none of its own, so every surface can cite one. */
+  docId: string | null
   documentName: string
   dueDate: string
   daysUntil: number
@@ -653,8 +655,10 @@ export async function computeEngagementInsights(
         const dd = new Date(d.dueDate!)
         dd.setHours(0, 0, 0, 0)
         const daysUntil = Math.round((dd.getTime() - today.getTime()) / 86400000)
+        const parentDoc = d.parentId ? docMap.get(d.parentId) : undefined
         return {
           documentId: d.id,
+          docId: d.docId ?? parentDoc?.docId ?? null,
           documentName: d.fileName,
           dueDate: d.dueDate!.toISOString(),
           daysUntil,
