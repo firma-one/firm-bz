@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { Search, Folder, Sparkles, X, Building2, Briefcase, Package, Hash, FileText, ArrowUpRight, ArrowRight, RefreshCw, ChevronDown, History, BrushCleaning, CalendarClock, AlertTriangle, ChevronRight } from 'lucide-react'
+import { Search, Folder, Sparkles, X, Building2, Briefcase, Package, Hash, FileText, ArrowUpRight, ArrowRight, RefreshCw, ChevronDown, History, BrushCleaning, CalendarClock, Info, ChevronRight } from 'lucide-react'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { Button } from '@/components/ui/button'
 import {
@@ -853,7 +853,7 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                             'h-8 gap-1.5 text-xs bg-white rounded border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors',
                             chip && 'border-slate-400 ring-1 ring-slate-300 text-slate-900',
                             isInferred && 'border-primary/40 ring-primary/30',
-                            isRelaxed && 'border-amber-300 bg-amber-50 text-amber-900 ring-1 ring-amber-200 hover:bg-amber-100 hover:text-amber-950',
+                            isRelaxed && 'border-dashed border-ki-outline-variant bg-ki-surface-low text-ki-on-surface-variant ring-0 hover:bg-ki-surface-mid',
                           )}
                           title={isRelaxed
                             ? `Not applied — no results matched this ${STAGE_LABEL[stage].toLowerCase()} filter`
@@ -864,7 +864,7 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                             : <Icon className="h-3 w-3 opacity-60" />}
                           {chip ? chip.name : STAGE_LABEL[stage]}
                           {isRelaxed && (
-                            <span className="ml-0.5 rounded-sm bg-amber-200/70 px-1 py-px text-[9px] font-semibold uppercase tracking-wide">
+                            <span className="ml-0.5 rounded-sm bg-ki-outline px-1 py-px text-[9px] font-semibold uppercase tracking-wide text-ki-on-surface-variant">
                               not applied
                             </span>
                           )}
@@ -961,14 +961,14 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                     <span className="text-ki-on-surface-variant">{askNote}</span>
                   )}
                   {relaxedNote && !interpreting && (
-                    <span className="inline-flex items-center gap-1.5 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-amber-900">
-                      <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden />
+                    <span className="inline-flex items-center gap-1.5 rounded border border-ki-outline bg-ki-surface-low px-2 py-1 text-ki-on-surface-variant">
+                      <Info className="h-3 w-3 shrink-0 text-ki-on-surface-variant" aria-hidden />
                       <span>{relaxedNote}</span>
                       {relaxedStages.length > 0 && (
                         <button
                           type="button"
                           onClick={() => relaxedStages.forEach((st) => removeChip(st))}
-                          className="underline underline-offset-2 font-medium hover:text-amber-950"
+                          className="font-medium text-primary underline underline-offset-2 hover:text-primary/80"
                         >
                           Remove {relaxedStages.length > 1 ? 'them' : 'it'}
                         </button>
