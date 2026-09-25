@@ -120,6 +120,12 @@ export interface DeliveryHealthScore {
   // Avg days deliverables have been sitting in their current stage (proxy — we
   // don't track full per-stage transition history).
   avgDaysPerStage: Record<DeliverableStage, number>
+  /**
+   * Deliverables sitting in review for 14+ days. Previously this only survived as text inside a
+   * penalty label; exposed as a number so surfaces like the board can show it without parsing
+   * a human-readable string.
+   */
+  stalledInReview: number
 }
 
 export interface StorageHealthReport {
@@ -937,6 +943,7 @@ export async function computeEngagementInsights(
       overdueCount,
       totalCount: totalDeliverables,
       avgDaysPerStage,
+      stalledInReview,
     }
 
     // ── Overall Health Score inputs (Phase 7 & 8) ─────────────────────────────

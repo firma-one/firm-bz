@@ -15,6 +15,10 @@
 export const SUMMARY_SECTIONS = [
     { heading: 'Summary', authored: 'ai' },
     { heading: 'Progress', authored: 'ai' },
+    // Collaboration sits after Progress and before Risks: responsiveness is part of how the
+    // engagement is running, not a risk in itself. An unanswered thread only becomes a risk once
+    // it is old enough to threaten delivery, and Risks already covers that case.
+    { heading: 'Collaboration', authored: 'ai' },
     { heading: 'Risks', authored: 'ai' },
     { heading: 'Mitigation & Contingency', authored: 'lead' },
     { heading: 'Needs Attention', authored: 'ai' },

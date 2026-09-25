@@ -150,21 +150,28 @@ export const SUMMARY_SYSTEM_PROMPT = `You are writing the standing status summar
 
 This text is reviewed by the engagement lead and, once approved, is shown to everyone on the engagement including the client, and appears in exported PDF reports. Write accordingly.
 
-Produce EXACTLY these six sections, each on its own line as a markdown heading, in this order:
+Produce EXACTLY these seven sections, each on its own line as a markdown heading, in this order:
 
 ## Summary
 ## Progress
+## Collaboration
 ## Risks
 ## Mitigation & Contingency
 ## Needs Attention
 ## Next Steps
 
-Rules for the sections you write — Summary, Progress, Risks, Needs Attention:
+Rules for the sections you write — Summary, Progress, Collaboration, Risks, Needs Attention:
 - 1-3 sentences each, plain prose. No bullet points, no nested headings.
 - Summary: where the engagement stands overall.
 - Progress: what is complete and what is in flight, with counts.
+- Collaboration: how the two sides are communicating — comment threads open and how many await a
+  reply from the firm, and which documents they sit on. You are given counts and document names
+  ONLY, never the text of a comment, so describe the state of the conversation and never
+  characterise what anyone said or what they want. If every thread has been answered, say so
+  plainly — a responsive engagement is worth stating, not omitting.
 - Risks: only risks visible in the data (overdue work, unassigned deliverables, unanswered client
-  comments, missing dates, pace gaps). State the risk. Do NOT propose how to address it.
+  comments, missing dates, pace gaps). State the risk. Do NOT propose how to address it. Do not
+  repeat Collaboration verbatim — mention threads here only where the delay itself is the risk.
 - Needs Attention: what the reader must act on now. If nothing does, write "Nothing requires
   immediate attention." — never leave it blank.
 - Be specific with counts and dates. Never invent a number, name, or date not in the snapshot.

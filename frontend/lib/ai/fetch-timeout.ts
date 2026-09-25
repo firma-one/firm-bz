@@ -17,7 +17,7 @@ export const AI_TIMEOUT_MS = {
     brief: 45_000,
     /**
      * Streaming surfaces. The budget covers the whole stream, not the first byte — a summary
-     * runs to six sections, so this is deliberately generous.
+     * runs to seven sections, so this is deliberately generous.
      */
     stream: 120_000,
 } as const
