@@ -55,8 +55,10 @@ export async function GET(
         const dateStart = searchParams.get('dateStart')
         const dateEnd = searchParams.get('dateEnd')
         const dateFieldParam = searchParams.get('dateField')
-        const dateField: 'dueDate' | 'kickoffDate' | 'updatedAt' =
-            dateFieldParam === 'updatedAt' || dateFieldParam === 'kickoffDate' ? dateFieldParam : 'dueDate'
+        const dateField: 'dueDate' | 'kickoffDate' | 'updatedAt' | 'createdAt' =
+            dateFieldParam === 'updatedAt' || dateFieldParam === 'kickoffDate' || dateFieldParam === 'createdAt'
+                ? dateFieldParam
+                : 'dueDate'
         // "Overdue" is the one range with strict dueDate semantics: a document with no due date is
         // not overdue. Every other dueDate range falls back to updatedAt so un-dated documents are
         // not silently excluded.

@@ -294,9 +294,22 @@ had been updated in Q3. Cause: `dateField` defaults to `dueDate` throughout the 
 **34 of 35 documents in the test corpus have no due date at all** — so a `dueDate` range excluded
 essentially the whole corpus.
 
-This is a semantics question, not a plumbing one. "From Q3" means *due in Q3, or worked on in Q3 if
-it has no due date* — not *has a due date AND that date is in Q3*. A `dueDate` range now falls back
-to `updatedAt` per row (`COALESCE`), which is NOT NULL so it always resolves.
+This is a semantics question, not a plumbing one. "From Q3" means *due in Q3, or created in Q3 if it
+has no due date* — not *has a due date AND that date is in Q3*. A `dueDate` range falls back per row
+to `createdAt` (`COALESCE`), which is NOT NULL so it always resolves.
+
+**Why coalesce rather than one field.** A due date is a deliberate human statement about when a
+deliverable belongs; `createdAt` is an incidental system timestamp that, for a bulk upload, records
+when someone dragged a folder in. Where a person has said "due in Q4", honouring that beats
+overriding it with an upload time. Two documents can therefore match the same quarter via different
+fields — that is semantic, not arbitrary: both answer "which period does this belong to" from the
+best evidence each has.
+
+**Why `createdAt` and not `updatedAt` as the fallback.** `updatedAt` moves on any touch — a rename,
+a status change, a re-index — so a Q1 document edited once in Q3 would vanish from "Q1" and appear
+under "Q3", and the same query would return different results over time with no visible cause.
+`createdAt` is stable. Recency ranking already uses `updatedAt` independently (`compositeScore`), so
+filtering on `createdAt` costs nothing: recently-touched documents still rank higher within results.
 
 The exception is **Overdue**, which keeps strict `dueDate` semantics: a document with no due date is
 not overdue, and coalescing would make every un-dated document appear overdue. That is carried by an

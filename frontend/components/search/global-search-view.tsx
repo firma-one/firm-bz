@@ -524,14 +524,19 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
       if (absolute) {
         params.set('dateStart', absolute.start.toISOString())
         params.set('dateEnd', absolute.end.toISOString())
-        params.set('dateField', 'updatedAt')
+        // An absolute period asks which quarter/year a document BELONGS to, so it falls back to
+        // creation rather than last activity — a Q1 document edited in Q3 still belongs to Q1.
+        // `dueDate` is sent so the server's COALESCE(dueDate, createdAt) applies: due date wins
+        // when there is one, creation date otherwise.
+        params.set('dateField', 'dueDate')
       } else {
         const preset = filters.dateRange.id as RelativeTimePreset
         const { start, end } = resolveRelativeTimeRange(preset)
         params.set('dateStart', start.toISOString())
         params.set('dateEnd', end.toISOString())
-        // Recency presets reflect recent activity (updatedAt); only "Overdue" is meaningfully
-        // tied to a document's dueDate.
+        // Recency presets genuinely mean recent ACTIVITY ("Last 7 days" = touched recently), so
+        // updatedAt is correct here — unlike an absolute period above. Only "Overdue" is tied to
+        // a document's dueDate.
         params.set('dateField', preset === 'Overdue' ? 'dueDate' : 'updatedAt')
         // Overdue must not fall back to updatedAt: an un-dated document is not overdue.
         if (preset === 'Overdue') params.set('strictDueDate', '1')

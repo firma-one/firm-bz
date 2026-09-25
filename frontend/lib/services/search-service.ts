@@ -651,7 +651,7 @@ export class SearchService {
         engagementId?: string
         deliverableDocumentIds?: string[]
         dateRange?: { start: Date; end: Date }
-        dateField: 'dueDate' | 'kickoffDate' | 'updatedAt'
+        dateField: 'dueDate' | 'kickoffDate' | 'updatedAt' | 'createdAt'
         /**
          * True when the range means "overdue" — strict dueDate semantics, no fallback. A document
          * with no due date cannot be overdue, so it must be excluded.
@@ -687,13 +687,16 @@ export class SearchService {
         if (dateRange) {
             const startParam = push(dateRange.start)
             const endParam = push(dateRange.end)
-            // A date filter on `dueDate` silently excludes every document that has none — and in
-            // practice most documents never get one, so a quarter filter would return nothing at
-            // all. Fall back to `updatedAt` for those rows so "from Q3" means "due in Q3, or
-            // worked on in Q3 if it has no due date" rather than "has a due date AND it is in Q3".
-            // `updatedAt` is NOT NULL, so the fallback always resolves.
+            // A date filter on `dueDate` silently excludes every document that has none, and in
+            // practice most never get one — a quarter filter would return almost nothing. Fall
+            // back per row so "from Q3" means "due in Q3, or created in Q3 if it has no due date".
+            //
+            // The fallback is `createdAt`, NOT `updatedAt`. Which period a document *belongs to*
+            // is fixed when it is created; `updatedAt` moves every time anyone touches it, so a
+            // Q1 document edited in Q3 would vanish from "Q1" and wrongly appear under "Q3".
+            // `createdAt` is NOT NULL, so the fallback always resolves.
             filter += dateField === 'dueDate' && !strictDueDate
-                ? ` AND COALESCE(d."dueDate", d."updatedAt") BETWEEN ${startParam}::timestamptz AND ${endParam}::timestamptz`
+                ? ` AND COALESCE(d."dueDate", d."createdAt") BETWEEN ${startParam}::timestamptz AND ${endParam}::timestamptz`
                 : ` AND d."${dateField}" BETWEEN ${startParam}::timestamptz AND ${endParam}::timestamptz`
         }
         return filter
@@ -723,7 +726,7 @@ export class SearchService {
         dateRange?: { start: Date; end: Date }
         /** Auto-detected from typed text (e.g. "from July") — applied as a ranking boost only, never excludes a document with no/different dueDate. Unlike dateRange, this is not explicit user intent. */
         softDateRange?: { start: Date; end: Date }
-        dateField?: 'dueDate' | 'kickoffDate' | 'updatedAt'
+        dateField?: 'dueDate' | 'kickoffDate' | 'updatedAt' | 'createdAt'
         /** See buildScopeFilter: strict dueDate semantics for "Overdue", no updatedAt fallback. */
         strictDueDate?: boolean
         limit?: number
@@ -873,7 +876,7 @@ export class SearchService {
         engagementId?: string
         deliverableDocumentIds?: string[]
         dateRange?: { start: Date; end: Date }
-        dateField: 'dueDate' | 'kickoffDate' | 'updatedAt'
+        dateField: 'dueDate' | 'kickoffDate' | 'updatedAt' | 'createdAt'
         strictDueDate?: boolean
         limit: number
     }): Promise<VectorSearchResult[]> {
@@ -932,7 +935,7 @@ export class SearchService {
         engagementId?: string
         deliverableDocumentIds?: string[]
         dateRange?: { start: Date; end: Date }
-        dateField: 'dueDate' | 'kickoffDate' | 'updatedAt'
+        dateField: 'dueDate' | 'kickoffDate' | 'updatedAt' | 'createdAt'
         strictDueDate?: boolean
         limit: number
     }): Promise<VectorSearchResult[]> {
@@ -989,7 +992,7 @@ export class SearchService {
         engagementId?: string
         deliverableDocumentIds?: string[]
         dateRange?: { start: Date; end: Date }
-        dateField: 'dueDate' | 'kickoffDate' | 'updatedAt'
+        dateField: 'dueDate' | 'kickoffDate' | 'updatedAt' | 'createdAt'
         strictDueDate?: boolean
         limit: number
     }): Promise<VectorSearchResult[]> {
@@ -1039,7 +1042,7 @@ export class SearchService {
         engagementId?: string
         deliverableDocumentIds?: string[]
         dateRange?: { start: Date; end: Date }
-        dateField: 'dueDate' | 'kickoffDate' | 'updatedAt'
+        dateField: 'dueDate' | 'kickoffDate' | 'updatedAt' | 'createdAt'
         strictDueDate?: boolean
         limit: number
     }): Promise<VectorSearchResult[]> {
@@ -1101,7 +1104,7 @@ export class SearchService {
         engagementId?: string
         deliverableDocumentIds?: string[]
         dateRange?: { start: Date; end: Date }
-        dateField: 'dueDate' | 'kickoffDate' | 'updatedAt'
+        dateField: 'dueDate' | 'kickoffDate' | 'updatedAt' | 'createdAt'
         strictDueDate?: boolean
         limit: number
     }): Promise<VectorSearchResult[]> {
