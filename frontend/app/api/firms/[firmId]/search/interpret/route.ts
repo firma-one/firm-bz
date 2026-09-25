@@ -4,6 +4,7 @@ import { logger } from '@/lib/logger'
 import { requireFirmSearch } from '@/lib/api/firm-search-auth'
 import { computeGlobalSearchAccessScope } from '@/lib/services/global-search-access'
 import { isAiConfigured } from '@/lib/ai/client'
+import { buildInterpretCacheKey, getCachedInterpretation, setCachedInterpretation } from '@/lib/ai/interpret-cache'
 import { interpretSearchQuery, type InterpretCandidates } from '@/lib/ai/search-interpreter'
 import { recordAiUsage } from '@/lib/ai/usage'
 
@@ -86,6 +87,15 @@ export async function POST(
             deliverables: deliverables.map((d) => ({ id: d.id, name: d.name, engagementId: d.engagementId })),
         }
 
+        // An identical question against an unchanged visible entity set resolves identically, so
+        // serve it from cache rather than paying for — and charging for — the same call twice.
+        const cacheKey = buildInterpretCacheKey(firmId, user.id, text, candidates)
+        const cached = getCachedInterpretation(cacheKey)
+        if (cached) {
+            // No recordAiUsage: no model call was made, so no credits are consumed.
+            return NextResponse.json({ chips: cached.chips, residualText: cached.residualText, ambiguity: cached.ambiguity, cached: true })
+        }
+
         const result = await interpretSearchQuery(text, candidates)
         // Interpretation is an enhancement: on failure the caller searches the raw text instead.
         if (!result) return NextResponse.json({ chips: [], residualText: text, degraded: true })
@@ -98,7 +108,9 @@ export async function POST(
             outputTokens: result.usage.outputTokens,
         })
 
-        return NextResponse.json({ chips: result.chips, residualText: result.residualText })
+        setCachedInterpretation(cacheKey, { chips: result.chips, residualText: result.residualText, ambiguity: result.ambiguity })
+
+        return NextResponse.json({ chips: result.chips, residualText: result.residualText, ambiguity: result.ambiguity })
     } catch (error) {
         logger.error('Search interpret API error:', error as Error)
         return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

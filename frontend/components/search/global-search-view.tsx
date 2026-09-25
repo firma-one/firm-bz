@@ -264,6 +264,10 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
   // by comparing searchQuery to debouncedQuery: interpretation deliberately rewrites the query
   // (stripping the parts that became filters), so the two differ exactly when a search is wanted.
   const [askSubmitted, setAskSubmitted] = useState(false)
+  /** Set when the zero-result ladder (§A.11) had to relax an inferred filter to find anything. */
+  const [relaxedNote, setRelaxedNote] = useState<string | null>(null)
+  /** A client Brio nearly picked instead (§A.11). Offered as a switch, never as a blocking question. */
+  const [ambiguity, setAmbiguity] = useState<{ chosenId: string; alternativeId: string; alternativeName: string } | null>(null)
   // Bumped on every Ask submission. Without it, resubmitting an identical query changes no
   // dependency and the search effect never re-runs.
   const [askRunId, setAskRunId] = useState(0)
@@ -353,6 +357,8 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
       setChips((prev) => prev.filter((c) => !inferredStages.includes(c.stage)))
       setInferredStages([])
       setAskNote(null)
+      setRelaxedNote(null)
+      setAmbiguity(null)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery])
@@ -367,6 +373,8 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
 
     setInterpreting(true)
     setAskNote(null)
+    setRelaxedNote(null)
+    setAmbiguity(null)
     try {
       const res = await fetchWithTimeout(`/api/firms/${firmId}/search/interpret`, {
         method: 'POST',
@@ -389,7 +397,9 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
         chips?: SelectedChip[]
         residualText?: string
         degraded?: boolean
+        ambiguity?: { stage: FilterStage; chosenId: string; alternativeId: string; alternativeName: string }
       }
+      setAmbiguity(data.ambiguity && data.ambiguity.stage === 'client' ? data.ambiguity : null)
       const inferred = data.chips ?? []
 
       // User-picked chips always win; inference only fills stages left empty.
@@ -491,6 +501,103 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
   }, [])
 
 
+  /**
+   * Runs one search against an explicit chip set, rather than reading chip state. The zero-result
+   * ladder needs to try progressively relaxed filter sets within a single pass, which is only
+   * possible if the filters are an argument instead of a dependency.
+   */
+  const executeSearch = useCallback(async (
+    query: string,
+    filters: { client?: SelectedChip; engagement?: SelectedChip; deliverable?: SelectedChip; dateRange?: SelectedChip; type?: SelectedChip },
+  ): Promise<GlobalSearchResult[] | null> => {
+    const params = new URLSearchParams()
+    if (query.trim()) params.set('q', query.trim())
+    if (filters.client) params.set('clientId', filters.client.id)
+    if (filters.engagement) params.set('engagementId', filters.engagement.id)
+    if (filters.deliverable) params.set('deliverableDocumentId', filters.deliverable.id)
+    if (filters.dateRange) {
+      const preset = filters.dateRange.id as RelativeTimePreset
+      const { start, end } = resolveRelativeTimeRange(preset)
+      params.set('dateStart', start.toISOString())
+      params.set('dateEnd', end.toISOString())
+      // Recency presets reflect recent activity (updatedAt); only "Overdue" is meaningfully
+      // tied to a document's dueDate.
+      params.set('dateField', preset === 'Overdue' ? 'dueDate' : 'updatedAt')
+    }
+
+    const res = await fetch(`/api/firms/${firmId}/search?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    const data = await res.json()
+    // null distinguishes "request failed" from "searched, found nothing" — the ladder must not
+    // treat a 500 as a reason to relax filters.
+    if (!res.ok) return null
+    setResolvedFilters(data.resolvedFilters ?? null)
+    return (data.files ?? []) as GlobalSearchResult[]
+  }, [firmId, accessToken])
+
+  /**
+   * Relaxes inferred filters one at a time, stopping at the first step that returns results.
+   *
+   * Two rules make this a *broader* version of the user's search rather than a different one
+   * (§A.11):
+   *
+   * 1. The client chip is never relaxed. It is the highest-confidence inference — resolved against
+   *    a real, access-scoped entity list rather than guessed from a phrase — and it is what keeps
+   *    results relevant. Widening past it is exactly what produces unrelated results.
+   * 2. A step that would leave no query text AND no filters is skipped. That is not a broader
+   *    search, it is "list everything".
+   *
+   * Only inferred filters are candidates. A chip the user picked by hand is an instruction.
+   *
+   * There is no per-chip confidence to order these by — `InferredChip` is `{stage, id, name}` —
+   * so the order is fixed by what is most often misread: a date phrase ("last spring") is a looser
+   * inference than a named entity, and a deliverable is narrower than an engagement.
+   */
+  const runRelaxationLadder = useCallback(async (
+    query: string,
+    base: { client?: SelectedChip; engagement?: SelectedChip; deliverable?: SelectedChip; dateRange?: SelectedChip; type?: SelectedChip },
+  ): Promise<{ files: GlobalSearchResult[]; note: string } | null> => {
+    const inferred = new Set(inferredStages)
+    const steps: { stage: FilterStage; label: string }[] = [
+      { stage: 'dateRange', label: 'date' },
+      { stage: 'deliverable', label: 'deliverable' },
+      { stage: 'engagement', label: 'engagement' },
+    ]
+
+    const dropped: string[] = []
+    const current = { ...base }
+
+    for (const step of steps) {
+      if (!inferred.has(step.stage)) continue
+      if (step.stage === 'dateRange') current.dateRange = undefined
+      if (step.stage === 'deliverable') current.deliverable = undefined
+      if (step.stage === 'engagement') current.engagement = undefined
+      dropped.push(step.label)
+
+      // Rule 2: never run a search with nothing left to constrain it.
+      const stillConstrained = Boolean(
+        query.trim().length >= 2 || current.client || current.engagement || current.deliverable || current.type,
+      )
+      if (!stillConstrained) return null
+
+      const files = await executeSearch(query, current)
+      if (files === null) return null
+      if (files.length > 0) {
+        const kept = current.client ? ` in ${current.client.name}` : ''
+        const relaxedList = dropped.length === 1 ? dropped[0] : `${dropped.slice(0, -1).join(', ')} and ${dropped[dropped.length - 1]}`
+        return {
+          files,
+          note: `No exact matches${kept}. Showing results with the ${relaxedList} filter${dropped.length > 1 ? 's' : ''} relaxed.`,
+        }
+      }
+    }
+
+    // Exhausted without results: a deliberate dead end reads better than a page of unrelated
+    // documents. Chips stay on screen and removable, so the user can widen where they know to.
+    return null
+  }, [inferredStages, executeSearch])
+
   const runSearch = useCallback(async () => {
     if (!accessToken) return
     const hasQuery = debouncedQuery.trim().length >= 2
@@ -504,34 +611,34 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
 
     setIsSearching(true)
     setHasSearched(true)
+    setRelaxedNote(null)
     try {
-      const params = new URLSearchParams()
-      if (debouncedQuery.trim()) params.set('q', debouncedQuery.trim())
-      if (clientChip) params.set('clientId', clientChip.id)
-      if (engagementChip) params.set('engagementId', engagementChip.id)
-      if (deliverableChip) params.set('deliverableDocumentId', deliverableChip.id)
-      if (dateRangeChip) {
-        const preset = dateRangeChip.id as RelativeTimePreset
-        const { start, end } = resolveRelativeTimeRange(preset)
-        params.set('dateStart', start.toISOString())
-        params.set('dateEnd', end.toISOString())
-        // Recency presets reflect recent activity (updatedAt); only "Overdue" is meaningfully
-        // tied to a document's dueDate.
-        params.set('dateField', preset === 'Overdue' ? 'dueDate' : 'updatedAt')
+      const base = {
+        client: clientChip ?? undefined,
+        engagement: engagementChip ?? undefined,
+        deliverable: deliverableChip ?? undefined,
+        dateRange: dateRangeChip ?? undefined,
+        type: typeChip ?? undefined,
       }
 
-      const res = await fetch(`/api/firms/${firmId}/search?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      })
-      const data = await res.json()
-      if (!res.ok) {
+      let files = await executeSearch(debouncedQuery, base)
+      if (files === null) {
         setResults([])
         setResolvedFilters(null)
         return
       }
-      const files: GlobalSearchResult[] = data.files ?? []
+
+      // Zero-result ladder (§A.11). Only ever relaxes filters Brio *inferred* — a filter the user
+      // picked by hand is an instruction, not a guess, and is never second-guessed.
+      if (files.length === 0 && inferredStages.length > 0) {
+        const relaxed = await runRelaxationLadder(debouncedQuery, base)
+        if (relaxed) {
+          files = relaxed.files
+          setRelaxedNote(relaxed.note)
+        }
+      }
+
       setResults(files)
-      setResolvedFilters(data.resolvedFilters ?? null)
       currentHistoryEntryId.current = recordSearchHistory(firmId, debouncedQuery, chips, files.length)
       setSearchHistory(getSearchHistory(firmId))
     } catch {
@@ -539,7 +646,8 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
     } finally {
       setIsSearching(false)
     }
-  }, [firmId, accessToken, debouncedQuery, clientChip, engagementChip, deliverableChip, dateRangeChip, typeChip, chips])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firmId, accessToken, debouncedQuery, clientChip, engagementChip, deliverableChip, dateRangeChip, typeChip, chips, inferredStages, executeSearch])
 
   useEffect(() => {
     // Ask mode searches only on submit, so typing must not trigger a search. Chip removals still
@@ -791,6 +899,32 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                     </>
                   ) : (
                     <span className="text-ki-on-surface-variant">{askNote}</span>
+                  )}
+                  {relaxedNote && !interpreting && (
+                    <span className="text-amber-700">{relaxedNote}</span>
+                  )}
+                  {/* Ambiguity is disclosed alongside results, never as a question that blocks the
+                      search (§A.11). Switching re-runs locally — no second model call. */}
+                  {ambiguity && !interpreting && (
+                    <span className="text-ki-on-surface-variant">
+                      Did you mean{' '}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setChips((prev) => prev.map((c) => (
+                            c.stage === 'client'
+                              ? { ...c, id: ambiguity.alternativeId, name: ambiguity.alternativeName }
+                              : c
+                          )))
+                          setAmbiguity(null)
+                          setAskRunId((n) => n + 1)
+                        }}
+                        className="underline underline-offset-2 hover:text-primary"
+                      >
+                        {ambiguity.alternativeName}
+                      </button>
+                      ?
+                    </span>
                   )}
                 </div>
               )}

@@ -765,11 +765,30 @@ export class SearchService {
 
         // Merge: docId matches first (most specific/unambiguous), then vector, then filename/term
         // matches not already present, dedup by externalId.
+        //
+        // While merging, record WHICH branches found each document. First-branch-wins dedup keeps
+        // the right row but throws away corroboration: a document that vector search, the filename
+        // search and the term search all returned is a much stronger match than one a single
+        // branch returned weakly, and before this that agreement was invisible to ranking.
+        const branchesById = new Map<string, Set<'docId' | 'vector' | 'filename' | 'terms'>>()
+        const noteBranch = (externalId: string, branch: 'docId' | 'vector' | 'filename' | 'terms') => {
+            const existing = branchesById.get(externalId)
+            if (existing) existing.add(branch)
+            else branchesById.set(externalId, new Set([branch]))
+        }
+
         const byId = new Map<string, VectorSearchResult>(docIdResults.map(r => [r.externalId, { ...r, matchType: 'name' }]))
+        for (const r of docIdResults) noteBranch(r.externalId, 'docId')
         for (const r of vectorResults) {
+            noteBranch(r.externalId, 'vector')
             if (!byId.has(r.externalId)) byId.set(r.externalId, { ...r, matchType: trimmedQuery ? 'semantic' : r.matchType })
         }
-        for (const r of [...filenameResults, ...termResults]) {
+        for (const r of filenameResults) {
+            noteBranch(r.externalId, 'filename')
+            if (!byId.has(r.externalId)) byId.set(r.externalId, { ...r, matchType: 'name' })
+        }
+        for (const r of termResults) {
+            noteBranch(r.externalId, 'terms')
             if (!byId.has(r.externalId)) byId.set(r.externalId, { ...r, matchType: 'name' })
         }
         const merged = Array.from(byId.values())
@@ -790,7 +809,28 @@ export class SearchService {
             const inRange = r.dueDate.getTime() >= softDateRange.start.getTime() && r.dueDate.getTime() <= softDateRange.end.getTime()
             return inRange ? 0.15 : 0
         }
-        const compositeScore = (r: VectorSearchResult) => (r.score || 0) * 0.7 + recencyBoost(r.updatedAt) * 0.2 + matchTypeBonus(r) + softDateBonus(r)
+        /**
+         * Weighted fusion across branches. Branches are not equal evidence: a filename match is a
+         * far stronger signal of intent than a mild semantic resemblance, because the user is
+         * usually half-remembering a name. docId is excluded — an exact id match already sorts
+         * above everything below, so weighting it here would be double-counting.
+         *
+         * Capped so agreement can reorder near-ties without overwhelming genuine relevance: a
+         * weakly-scoring document found by three branches should not outrank a strong single-branch
+         * match outright.
+         */
+        const AGREEMENT_WEIGHTS = { filename: 0.10, terms: 0.06, vector: 0.04 } as const
+        const AGREEMENT_CAP = 0.15
+        const agreementBonus = (r: VectorSearchResult) => {
+            const branches = branchesById.get(r.externalId)
+            if (!branches || branches.size < 2) return 0
+            let total = 0
+            branches.forEach((b) => {
+                if (b !== 'docId') total += AGREEMENT_WEIGHTS[b]
+            })
+            return Math.min(total, AGREEMENT_CAP)
+        }
+        const compositeScore = (r: VectorSearchResult) => (r.score || 0) * 0.7 + recencyBoost(r.updatedAt) * 0.2 + matchTypeBonus(r) + softDateBonus(r) + agreementBonus(r)
 
         const docIdExternalIds = new Set(docIdResults.map(r => r.externalId))
         merged.sort((a, b) => {

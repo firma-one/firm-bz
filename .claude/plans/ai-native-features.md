@@ -258,6 +258,14 @@ If the ladder exhausts without results, **stop deliberately** — *"No matches f
 Acme"* — with all chips still visible and removable. A clear dead end beats a page of irrelevant
 results, and the user can widen manually in whatever direction they know is right.
 
+#### No per-chip confidence exists
+
+Checked 2026-09-25 before building: `InferredChip` is `{stage, id, name}` and nothing in
+`search-interpreter.ts` returns a confidence, score or certainty. So the ladder's drop order is a
+**design decision**, not a fallback for missing data — ordered by what is most often misread. If a
+future model returns calibrated per-chip confidence (see §A.12), the order should become derived
+rather than fixed, and this section should be revisited.
+
 #### Ambiguity disclosure
 
 Today two similarly-named clients means the interpreter resolves **nothing**: `SYSTEM` instructs
@@ -288,16 +296,46 @@ inline. Revisit only if real queries show a single pass genuinely cannot get the
 
 ---
 
+### A.12 Open evaluation — System One models for the interpret call
+
+Raised 2026-09-25 after TypeSafe's Jev announcement. **Evaluation only — nothing is committed.**
+
+The interpret call is the one AI surface here that is *not* generative: nobody reads its output, it
+classifies a query and extracts entities to feed a search. That is precisely the shape these models
+target ("classify, route, score, extract, or branch where hand-written logic is too brittle").
+
+Two claims would matter if they hold:
+
+- **Calibrated confidence per output.** This is the gap named above — the ladder's drop order and
+  the ambiguity threshold are both hand-tuned because Haiku returns an id with no confidence
+  attached. A calibrated score would make both derived. This is the claim worth testing first.
+- **70–500ms latency**, against seconds for Haiku. This was a stated reason for rejecting
+  conversational search; sub-second changes that calculation.
+
+Cost is the least interesting difference but is stark ($0.042/MTok input, free output), and would
+make §A.8's caching concern largely moot.
+
+**Caveats.** Every figure above is the vendor's own comparison table, unverified on our data. It
+fits *one* of four AI surfaces — brief, summary and chat are generative prose and explicitly not
+what these models do. The grounding constraint is unchanged: whatever resolves the query still needs
+the access-scoped candidate list. And none of the §A.10 work depends on the answer, since the ladder,
+fusion and cache are all deterministic.
+
+**Next step if pursued:** test the calibrated-confidence claim against real queries before
+restructuring anything around it.
+
+---
+
 ### A.10 What remains — Phase A is not closed
 
 Four items from §A.4–A.8 did not ship with `c0a7898f`. Verified against the tree on 2026-09-25.
 
 | # | Item | Where | Why it matters |
 |---|---|---|---|
-| 1 | **Zero-result guard** (spec: §A.11) | `components/search/global-search-view.tsx` | §A.8 names this *the release gate*. An over-constrained Ask search currently returns nothing with no automatic way back — exactly the dead end §A.5 was written to prevent. Self-contained; no backfill. |
-| 2 | **Interpret caching** (§A.8) | interpret route | Keyed on `(normalized text, candidate-set hash)`. Without it an identical repeat Ask search costs another 0.5 credits. |
+| ~~1~~ | ~~**Zero-result guard**~~ — **BUILT**, spec §A.11 | `components/search/global-search-view.tsx` | §A.8 names this *the release gate*. An over-constrained Ask search currently returns nothing with no automatic way back — exactly the dead end §A.5 was written to prevent. Self-contained; no backfill. |
+| ~~2~~ | ~~**Interpret caching**~~ — **BUILT** | `lib/ai/interpret-cache.ts` | Keyed on `(normalized text, candidate-set hash)`. Without it an identical repeat Ask search costs another 0.5 credits. |
 | 3 | **Snippet 500 → 2000** (§A.6) | `lib/snippet.ts` | Cannot ship alone — needs the re-embed backfill, and the dilution question in §A.6 is still unanswered. |
-| 4 | **Weighted rank fusion** (§A.6) | `lib/services/search-service.ts` | Independent of #3; the four branches still merge-and-dedupe. |
+| ~~4~~ | ~~**Weighted rank fusion**~~ — **BUILT** | `lib/services/search-service.ts` | Independent of #3; the four branches still merge-and-dedupe. |
 
 **Sequencing.** #1 and #2 are independent of everything else and should go first — #1 because it is
 the stated release gate, #2 because it is a direct cost leak. #3 must not ship before the
@@ -457,10 +495,10 @@ Everything AI, in one table. Verified against the tree on 2026-09-25.
 | Engagement chat | **Shipped** `c0a7898f` | Read-only; excludes document content and comment bodies by design |
 | Ask Brio (NL Doc Search) | **Shipped, tail open** | `lib/ai/search-interpreter.ts` + interpret route; see §A.10 |
 | AI usage ledger | **Shipped, not enforced** | `platform_ai_usage`; §7a phase 1 of 3 done |
-| Zero-result guard | **Open — release gate** | §A.10 #1 |
-| Interpret caching | **Open — cost leak** | §A.10 #2 |
-| Snippet 500→2000 + backfill | **Open — blocked** | §A.10 #3; needs the §A.6 A/B first |
-| Weighted rank fusion | **Open** | §A.10 #4 |
+| Zero-result guard | **Built** — ladder + ambiguity disclosure | §A.11 |
+| Interpret caching | **Built** | `lib/ai/interpret-cache.ts`; 15-min TTL, cache hits bill nothing |
+| Snippet 500→2000 + backfill | **Open — blocked** | §A.10 #3; the only Phase A item left, needs the §A.6 A/B first |
+| Weighted rank fusion | **Built** — branch-agreement bonus | `search-service.ts` |
 | Credits enforcement | **Open — deliberate** | §7a phases 2–3; waiting on real usage data |
 | Content-aware sensitivity | **Not started** | Phase B |
 | Failure handling | **Shipped** `f0c65f3c` | All four surfaces; see §12 |

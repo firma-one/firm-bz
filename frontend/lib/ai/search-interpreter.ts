@@ -31,8 +31,21 @@ export interface InferredChip {
     name: string
 }
 
+/**
+ * A client the model nearly chose instead. Surfaced to the user as a one-click switch rather than
+ * a blocking question — the search still runs with the chosen one.
+ */
+export interface AmbiguousAlternative {
+    stage: FilterStage
+    chosenId: string
+    alternativeId: string
+    alternativeName: string
+}
+
 export interface InterpretResult {
     chips: InferredChip[]
+    /** Set when the model resolved an entity but a similarly-named one was a close second. */
+    ambiguity?: AmbiguousAlternative
     /** The part of the query that is about content, passed to the existing search as `q`. */
     residualText: string
 }
@@ -44,8 +57,10 @@ against that list — it is the complete set of things they can search.
 
 Rules:
 - Resolve an entity ONLY when the query clearly refers to one in the list. A rough match on a
-  distinctive name is fine ("Acme" -> "Acme Corporation"). An ambiguous match between two similar
-  names is NOT — resolve nothing rather than guess.
+  distinctive name is fine ("Acme" -> "Acme Corporation").
+- When two clients match similarly well ("Acme" against both "Acme Corp" and "Acme Industries"),
+  pick the closer one AND set ambiguousClientId to the other. Do not silently drop both: the user
+  is shown the alternative and can switch in one click, which beats returning nothing.
 - Time expressions map to one of the fixed presets, never to explicit dates. If nothing in the list
   fits the phrase, omit the date filter.
 - residualText is what remains after removing the parts you turned into filters — the words about
@@ -67,6 +82,10 @@ const TOOL = {
                 type: 'array',
                 items: { type: 'string', enum: [...FILE_TYPES] },
                 description: 'file type categories, if the query names one',
+            },
+            ambiguousClientId: {
+                type: 'string',
+                description: 'id of a client that matched almost as well as clientId, if the reference was genuinely ambiguous',
             },
             residualText: { type: 'string', description: 'the remaining content-related words' },
         },
@@ -131,6 +150,13 @@ export async function interpretSearchQuery(
         const c = byId(candidates.clients, args.clientId)
         if (c) chips.push({ stage: 'client', id: c.id, name: c.name })
 
+        // The runner-up is validated against the candidate list exactly like the chosen one, and
+        // only kept when it is a genuinely different entity.
+        const alt = byId(candidates.clients, args.ambiguousClientId)
+        const ambiguity: AmbiguousAlternative | undefined = c && alt && alt.id !== c.id
+            ? { stage: 'client', chosenId: c.id, alternativeId: alt.id, alternativeName: alt.name }
+            : undefined
+
         const e = byId(candidates.engagements, args.engagementId)
         if (e) chips.push({ stage: 'engagement', id: e.id, name: e.name })
 
@@ -152,6 +178,7 @@ export async function interpretSearchQuery(
 
         return {
             chips,
+            ambiguity,
             residualText: typeof args.residualText === 'string' ? args.residualText.trim() : '',
             usage: {
                 inputTokens: message.usage.input_tokens,
