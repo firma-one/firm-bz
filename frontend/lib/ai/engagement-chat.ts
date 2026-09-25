@@ -84,9 +84,23 @@ export function buildEngagementContext(
     if (data.commentThreads) {
         lines.push(`Comment threads: ${data.commentThreads.total} total, ` +
             `${data.commentThreads.unanswered} awaiting a reply from the firm.`)
+
+        // Which documents the conversation is on, answered or not. Without this a fully-answered
+        // engagement reached the model as a bare count, so it could only say "one thread exists"
+        // and never name where. Document names only — never the message bodies, which are
+        // user-authored text and are kept out of every AI surface.
+        const threadDocs = (data.commentThreads as any).documents as
+            | Array<{ documentName: string; messageCount: number; awaitingReply: boolean }>
+            | undefined
+        if (threadDocs?.length) {
+            lines.push('Documents with comment threads: ' +
+                threadDocs.slice(0, 10)
+                    .map((d) => `${d.documentName} (${d.messageCount} message${d.messageCount === 1 ? '' : 's'}` +
+                        `${d.awaitingReply ? ', awaiting firm reply' : ''})`)
+                    .join('; ') + '.')
+        }
     }
 
-    // Document names only — never the message bodies, which are user-authored text.
     if (data.unansweredThreads?.length) {
         lines.push('Documents with unanswered client comments: ' +
             data.unansweredThreads.slice(0, 10).map((t: any) => t.documentName).join('; ') + '.')

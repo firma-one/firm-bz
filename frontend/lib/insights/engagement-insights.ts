@@ -171,6 +171,15 @@ export interface CommentThreads {
   answered: number
   unanswered: number
   total: number
+  /**
+   * Every document carrying a comment thread, answered or not, with the count of messages on it.
+   * `unansweredThreads` covers only threads awaiting a firm reply, so a fully-answered engagement
+   * previously reached the summary as a bare count with no way to say WHERE the conversation is.
+   *
+   * Document names only — never message bodies. Comment text is user-authored and is deliberately
+   * kept out of every AI surface.
+   */
+  documents: Array<{ documentId: string; documentName: string; messageCount: number; awaitingReply: boolean }>
 }
 
 export interface EngagementPace {
@@ -994,10 +1003,27 @@ export async function computeEngagementInsights(
 
     // Comment responsiveness — answered vs unanswered threads.
     const totalThreads = commentsByDoc.size
+    const unansweredDocIds = new Set(unansweredThreads.map((t) => t.documentId))
+    const threadDocuments = Array.from(commentsByDoc.entries())
+      .map(([docId, thread]) => {
+        const doc = docMap.get(docId)
+        if (!doc) return null
+        return {
+          documentId: docId,
+          documentName: doc.fileName,
+          messageCount: thread.length,
+          awaitingReply: unansweredDocIds.has(docId),
+        }
+      })
+      .filter((d): d is NonNullable<typeof d> => d !== null)
+      // Threads awaiting a reply first, then the busiest conversations.
+      .sort((a, b) => (Number(b.awaitingReply) - Number(a.awaitingReply)) || (b.messageCount - a.messageCount))
+
     const commentThreads: CommentThreads = {
       answered: Math.max(0, totalThreads - unansweredThreads.length),
       unanswered: unansweredThreads.length,
       total: totalThreads,
+      documents: threadDocuments,
     }
 
     // Pace — % delivered vs % of engagement duration elapsed.

@@ -121,6 +121,11 @@ export function fingerprintInsights(data: EngagementInsightsResponse): string {
         ...Object.entries(data.membersByRole ?? {}).sort().map(([r, n]) => `${r}:${n}`),
         // Which documents have unanswered client comments, not just how many.
         ...(data.unansweredThreads ?? []).map((t: { documentId?: string }) => `u:${t.documentId ?? ''}`).sort(),
+        // Every threaded document and its message count, so a reply — or a thread opened on a new
+        // document — marks the summary stale. Hashing only the unanswered ids missed both.
+        ...((data.commentThreads?.documents ?? []) as Array<{ documentId: string; messageCount: number }>)
+            .map((d) => `t:${d.documentId}:${d.messageCount}`)
+            .sort(),
         // Rework per deliverable — a summary that mentions revisions should notice a new round.
         ...(data.revisionMetrics ?? []).map((r: { documentId: string; revisions: number }) => `r:${r.documentId}:${r.revisions}`).sort(),
         // Stage and due date per deliverable — what a lead actually changes. isOverdue is omitted
@@ -164,11 +169,12 @@ Rules for the sections you write — Summary, Progress, Collaboration, Risks, Ne
 - 1-3 sentences each, plain prose. No bullet points, no nested headings.
 - Summary: where the engagement stands overall.
 - Progress: what is complete and what is in flight, with counts.
-- Collaboration: how the two sides are communicating — comment threads open and how many await a
-  reply from the firm, and which documents they sit on. You are given counts and document names
-  ONLY, never the text of a comment, so describe the state of the conversation and never
-  characterise what anyone said or what they want. If every thread has been answered, say so
-  plainly — a responsive engagement is worth stating, not omitting.
+- Collaboration: how the two sides are communicating. NAME the documents carrying comment threads
+  — "one thread exists" is not useful without saying where. Say which await a reply from the firm.
+  You are given counts and document names ONLY, never the text of a comment, so describe the state
+  of the conversation and never characterise what anyone said or what they want. If every thread
+  has been answered, say so plainly and still name the documents — a responsive engagement is worth
+  stating, not omitting.
 - Risks: only risks visible in the data (overdue work, unassigned deliverables, unanswered client
   comments, missing dates, pace gaps). State the risk. Do NOT propose how to address it. Do not
   repeat Collaboration verbatim — mention threads here only where the delay itself is the risk.
