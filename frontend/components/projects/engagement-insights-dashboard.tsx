@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useRef, useMemo } from 'react'
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '@/lib/auth-context'
@@ -49,6 +49,7 @@ import {
     Settings,
     Pencil,
     Sparkles,
+    Copy,
 } from 'lucide-react'
 import { getFileTypeLabel, formatRelativeTime, formatDateTimeWithTZ, formatFileSize } from '@/lib/utils'
 import { engagementPath, firmSettingsPath } from '@/lib/navigation/firm-paths'
@@ -2527,6 +2528,23 @@ export function EngagementInsightsDashboard({
     const [dlState, setDlState] = useState<'idle' | 'capturing' | 'done'>('idle')
     const healthCardRef = useRef<HTMLDivElement>(null)
     const [summaryEditing, setSummaryEditing] = useState(false)
+    /** Which summary was last copied ('draft' | 'published'), so only that button confirms. */
+    const [summaryCopied, setSummaryCopied] = useState<string | null>(null)
+
+    /**
+     * Copies the raw markdown, not the rendered text: the headings are what make the summary
+     * paste usefully into an email or a doc, and stripping them would flatten it to prose.
+     */
+    const copySummary = useCallback(async (text: string, which: string) => {
+        try {
+            await navigator.clipboard.writeText(text)
+            setSummaryCopied(which)
+            setTimeout(() => setSummaryCopied((c) => (c === which ? null : c)), 1500)
+        } catch {
+            // Clipboard can be blocked by permissions or a non-secure context. Nothing is lost —
+            // the text is on screen and selectable — so fail quietly rather than alarm the user.
+        }
+    }, [])
     const [summaryDraft, setSummaryDraft] = useState('')
     const [summarySaving, setSummarySaving] = useState(false)
     // Editable copy of the pending AI draft — the admin can revise before publishing.
@@ -3120,6 +3138,17 @@ export function EngagementInsightsDashboard({
                                             </p>
                                             <div className="flex items-center justify-end gap-2">
                                                 <button
+                                                    onClick={() => copySummary(aiDraftEdit, 'draft')}
+                                                    disabled={!aiDraftEdit.trim()}
+                                                    aria-label="Copy draft summary to clipboard"
+                                                    className="mr-auto rounded text-[10px] font-headline font-bold tracking-widest uppercase border border-gray-200 text-gray-500 hover:bg-white px-3 py-1.5 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                                                >
+                                                    {summaryCopied === 'draft'
+                                                        ? <Check className="h-3 w-3 text-primary" />
+                                                        : <Copy className="h-3 w-3" />}
+                                                    {summaryCopied === 'draft' ? 'Copied' : 'Copy'}
+                                                </button>
+                                                <button
                                                     onClick={handleAiSummaryDismiss}
                                                     disabled={aiDraftBusy}
                                                     className="rounded text-[10px] font-headline font-bold tracking-widest uppercase border border-gray-200 text-gray-500 hover:bg-white px-3 py-1.5 transition-colors disabled:opacity-50 flex items-center gap-1.5"
@@ -3270,6 +3299,25 @@ export function EngagementInsightsDashboard({
                                                 clone at capture time and never reach the client's PDF. */}
                                             {isFirmAdmin && !aiStreaming && !data.insightsSummaryDraft && (
                                                 <div data-no-export="" className="flex items-center gap-2 shrink-0">
+                                                    {data.insightsSummary && (
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <button
+                                                                    onClick={() => copySummary(data.insightsSummary!, 'published')}
+                                                                    aria-label="Copy summary to clipboard"
+                                                                    className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-2.5 text-[11px] font-medium text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
+                                                                >
+                                                                    {summaryCopied === 'published'
+                                                                        ? <Check className="h-3 w-3 text-primary" />
+                                                                        : <Copy className="h-3 w-3" />}
+                                                                    {summaryCopied === 'published' ? 'Copied' : 'Copy'}
+                                                                </button>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent side="bottom" className="text-xs">
+                                                                Copy the summary as markdown
+                                                            </TooltipContent>
+                                                        </Tooltip>
+                                                    )}
                                                     <button
                                                         onClick={() => { setSummaryDraft(data.insightsSummary ?? ''); setSummaryEditing(true) }}
                                                         className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-2.5 text-[11px] font-medium text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
