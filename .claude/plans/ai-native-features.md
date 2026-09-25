@@ -318,6 +318,21 @@ explicit `strictDueDate` flag rather than inferred from `dateField`, since both 
 
 Verified against the corpus: Q3 2026 → 34, Q2 2026 → 0, Overdue → 0.
 
+#### Conflicts between a hand-picked chip and the typed sentence
+
+Found in testing 2026-09-25. With `This Quarter` picked by hand, "show me DataSentry messaging
+playbooks from Q2" resolved `Q2 2026` — and it was silently dropped. The precedence was right (a
+chip set by hand is an instruction, not a guess, so prose never overrides it) but the user was told
+nothing, and read the results as answering their sentence.
+
+A second, worse bug sat underneath: `setInferredStages` marked every resolved stage inferred,
+including ones whose chip the user had set. The zero-result ladder only relaxes *inferred* filters,
+so it would have dropped the user's own hand-picked chip believing Brio had guessed it.
+
+Now: only stages inference actually filled are marked inferred, and a conflict is disclosed with a
+one-click switch — *"Using your This Quarter filter, not Q2 2026 from your question. [Use Q2 2026]"*.
+Same principle as §A.11 throughout: **never block, always disclose.**
+
 #### Ambiguity disclosure
 
 Today two similarly-named clients means the interpreter resolves **nothing**: `SYSTEM` instructs

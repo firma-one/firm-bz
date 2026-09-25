@@ -272,6 +272,11 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
   const [relaxedNote, setRelaxedNote] = useState<string | null>(null)
   /** Stages the zero-result ladder dropped for the current result set (§A.11). */
   const [relaxedStages, setRelaxedStages] = useState<FilterStage[]>([])
+  /**
+   * Stages where the typed sentence asked for one value and a hand-picked chip already held
+   * another. The chip wins, but the user is told, and can switch in one click.
+   */
+  const [conflicts, setConflicts] = useState<{ stage: FilterStage; keptName: string; ignoredName: string; ignoredId: string }[]>([])
   /** A client Brio nearly picked instead (§A.11). Offered as a switch, never as a blocking question. */
   const [ambiguity, setAmbiguity] = useState<{ chosenId: string; alternativeId: string; alternativeName: string } | null>(null)
   // Bumped on every Ask submission. Without it, resubmitting an identical query changes no
@@ -365,6 +370,7 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
       setAskNote(null)
       setRelaxedNote(null)
       setRelaxedStages([])
+      setConflicts([])
     setRelaxedStages([])
       setAmbiguity(null)
     }
@@ -383,6 +389,7 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
     setAskNote(null)
     setRelaxedNote(null)
     setRelaxedStages([])
+    setConflicts([])
     setAmbiguity(null)
     try {
       const res = await fetchWithTimeout(`/api/firms/${firmId}/search/interpret`, {
@@ -411,12 +418,24 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
       setAmbiguity(data.ambiguity && data.ambiguity.stage === 'client' ? data.ambiguity : null)
       const inferred = data.chips ?? []
 
-      // User-picked chips always win; inference only fills stages left empty.
-      setChips((prev) => {
-        const taken = new Set(prev.map((c) => c.stage))
-        return [...prev, ...inferred.filter((c) => !taken.has(c.stage))]
+      // User-picked chips always win; inference only fills stages left empty. A chip the user set
+      // by hand is an instruction, not a guess, so prose never overrides it.
+      const taken = new Set(chips.map((c) => c.stage))
+      const applied = inferred.filter((c) => !taken.has(c.stage))
+      // Conflicts: prose resolved a filter for a stage the user had already set, to a DIFFERENT
+      // value. Silently dropping it leaves the user believing their sentence was honoured.
+      const conflicts = inferred.filter((c) => {
+        const existing = chips.find((x) => x.stage === c.stage)
+        return existing !== undefined && existing.id !== c.id
       })
-      setInferredStages(inferred.map((c) => c.stage))
+      setChips((prev) => [...prev, ...applied])
+      // Only stages inference actually FILLED are inferred. Marking a conflicting stage inferred
+      // would let the zero-result ladder relax the user's own hand-picked chip.
+      setInferredStages(applied.map((c) => c.stage))
+      setConflicts(conflicts.map((c) => {
+        const existing = chips.find((x) => x.stage === c.stage)!
+        return { stage: c.stage, keptName: existing.name, ignoredName: c.name, ignoredId: c.id }
+      }))
 
       if (data.degraded) setAskNote('Searching without filters.')
       else if (inferred.length === 0) setAskNote('No filters matched — searching everything.')
@@ -432,7 +451,9 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
     } finally {
       setInterpreting(false)
     }
-  }, [firmId, accessToken, searchQuery, interpreting])
+    // `chips` is a dependency because the conflict check compares inference against the
+    // chips the user currently has set; a stale array would miss or invent conflicts.
+  }, [firmId, accessToken, searchQuery, interpreting, chips])
 
   const removeChip = useCallback((stage: FilterStage) => {
     setChips((prev) => {
@@ -646,6 +667,7 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
     setHasSearched(true)
     setRelaxedNote(null)
     setRelaxedStages([])
+    setConflicts([])
     try {
       const base = {
         client: clientChip ?? undefined,
@@ -948,7 +970,7 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                 )}
               </div>
 
-              {(interpreting || askNote || relaxedNote || ambiguity) && (
+              {(interpreting || askNote || relaxedNote || ambiguity || conflicts.length > 0) && (
                 <div className="px-3 pt-2 flex items-center gap-1.5 text-[11px]">
                   {interpreting ? (
                     <>
@@ -975,6 +997,33 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                       )}
                     </span>
                   )}
+                  {/* A hand-picked chip beats the typed sentence, but saying nothing would leave
+                      the user believing their words were honoured. Offer the switch instead. */}
+                  {conflicts.length > 0 && !interpreting && conflicts.map((c) => (
+                    <span
+                      key={c.stage}
+                      className="inline-flex items-center gap-1.5 rounded border border-ki-outline bg-ki-surface-low px-2 py-1 text-ki-on-surface-variant"
+                    >
+                      <Info className="h-3 w-3 shrink-0" aria-hidden />
+                      <span>
+                        Using your <span className="font-medium text-ki-on-surface">{c.keptName}</span> filter,
+                        not <span className="font-medium text-ki-on-surface">{c.ignoredName}</span> from your question.
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setChips((prev) => prev.map((chip) => (
+                            chip.stage === c.stage ? { ...chip, id: c.ignoredId, name: c.ignoredName } : chip
+                          )))
+                          setConflicts((prev) => prev.filter((x) => x.stage !== c.stage))
+                          setAskRunId((n) => n + 1)
+                        }}
+                        className="font-medium text-primary underline underline-offset-2 hover:text-primary/80"
+                      >
+                        Use {c.ignoredName}
+                      </button>
+                    </span>
+                  ))}
                   {/* Ambiguity is disclosed alongside results, never as a question that blocks the
                       search (§A.11). Switching re-runs locally — no second model call. */}
                   {ambiguity && !interpreting && (
