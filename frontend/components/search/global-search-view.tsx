@@ -1132,9 +1132,9 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                     {conflicts.length > 0 && !interpreting && conflicts.map((c) => (
                       <span
                         key={c.stage}
-                        className="inline-flex items-center gap-1.5 rounded border border-ki-outline bg-ki-surface-low px-2 py-1 text-ki-on-surface-variant"
+                        className="inline-flex items-center gap-1.5 rounded border border-ki-outline-variant bg-ki-surface px-2.5 py-1.5 text-ki-on-surface shadow-sm"
                       >
-                        <Info className="h-3 w-3 shrink-0" aria-hidden />
+                        <Info className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
                         <span>
                           Using your <span className="font-medium text-ki-on-surface">{c.keptName}</span> filter,
                           not <span className="font-medium text-ki-on-surface">{c.ignoredName}</span> from your question.
@@ -1155,8 +1155,8 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                       </span>
                     ))}
                     {relaxedNote && !interpreting && (
-                      <span className="inline-flex items-center gap-1.5 rounded border border-ki-outline bg-ki-surface-low px-2 py-1 text-ki-on-surface-variant">
-                        <Info className="h-3 w-3 shrink-0 text-ki-on-surface-variant" aria-hidden />
+                      <span className="inline-flex items-center gap-1.5 rounded border border-ki-outline-variant bg-ki-surface px-2.5 py-1.5 text-ki-on-surface shadow-sm">
+                        <Info className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
                         <span>{relaxedNote}</span>
                         {relaxedStages.length > 0 && (
                           <button
