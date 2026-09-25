@@ -14,10 +14,11 @@ import {
   DropdownMenuCheckboxItem,
 } from '@/components/ui/dropdown-menu'
 import { UserAvatarWithTooltip } from '@/components/ui/user-avatar-with-tooltip'
-import { formatRelativeTime, formatDateTimeWithTZ, cn } from '@/lib/utils'
+import { formatRelativeTime, formatDateTimeWithTZ, formatFullDate, cn } from '@/lib/utils'
 import { useAuth } from '@/lib/auth-context'
 import { ASSISTANT } from '@/lib/ai/assistant'
 import { Brio } from '@/components/ui/brio'
+import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import { resolvePeriod } from '@/lib/search/period'
 import { fetchWithTimeout, AI_TIMEOUT_MS } from '@/lib/ai/fetch-timeout'
 import {
@@ -269,6 +270,8 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
   const [askSubmitted, setAskSubmitted] = useState(false)
   /** Set when the zero-result ladder (§A.11) had to relax an inferred filter to find anything. */
   const [relaxedNote, setRelaxedNote] = useState<string | null>(null)
+  /** Stages the zero-result ladder dropped for the current result set (§A.11). */
+  const [relaxedStages, setRelaxedStages] = useState<FilterStage[]>([])
   /** A client Brio nearly picked instead (§A.11). Offered as a switch, never as a blocking question. */
   const [ambiguity, setAmbiguity] = useState<{ chosenId: string; alternativeId: string; alternativeName: string } | null>(null)
   // Bumped on every Ask submission. Without it, resubmitting an identical query changes no
@@ -361,6 +364,8 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
       setInferredStages([])
       setAskNote(null)
       setRelaxedNote(null)
+      setRelaxedStages([])
+    setRelaxedStages([])
       setAmbiguity(null)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -377,6 +382,7 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
     setInterpreting(true)
     setAskNote(null)
     setRelaxedNote(null)
+    setRelaxedStages([])
     setAmbiguity(null)
     try {
       const res = await fetchWithTimeout(`/api/firms/${firmId}/search/interpret`, {
@@ -577,7 +583,7 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
   const runRelaxationLadder = useCallback(async (
     query: string,
     base: { client?: SelectedChip; engagement?: SelectedChip; deliverable?: SelectedChip; dateRange?: SelectedChip; type?: SelectedChip },
-  ): Promise<{ files: GlobalSearchResult[]; note: string } | null> => {
+  ): Promise<{ files: GlobalSearchResult[]; note: string; relaxedStages: FilterStage[] } | null> => {
     const inferred = new Set(inferredStages)
     const steps: { stage: FilterStage; label: string }[] = [
       { stage: 'dateRange', label: 'date' },
@@ -586,6 +592,7 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
     ]
 
     const dropped: string[] = []
+    const droppedStages: FilterStage[] = []
     const current = { ...base }
 
     for (const step of steps) {
@@ -594,6 +601,7 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
       if (step.stage === 'deliverable') current.deliverable = undefined
       if (step.stage === 'engagement') current.engagement = undefined
       dropped.push(step.label)
+      droppedStages.push(step.stage)
 
       // Rule 2: never run a search with nothing left to constrain it.
       const stillConstrained = Boolean(
@@ -609,6 +617,7 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
         return {
           files,
           note: `No exact matches${kept}. Showing results with the ${relaxedList} filter${dropped.length > 1 ? 's' : ''} relaxed.`,
+          relaxedStages: droppedStages.slice(),
         }
       }
     }
@@ -632,6 +641,7 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
     setIsSearching(true)
     setHasSearched(true)
     setRelaxedNote(null)
+    setRelaxedStages([])
     try {
       const base = {
         client: clientChip ?? undefined,
@@ -655,6 +665,7 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
         if (relaxed) {
           files = relaxed.files
           setRelaxedNote(relaxed.note)
+          setRelaxedStages(relaxed.relaxedStages)
         }
       }
 
@@ -809,6 +820,9 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                   const options = optionsForStage(stage)
                   const disabledReason = stageDisabledReason(stage)
                   const isInferred = inferredStages.includes(stage)
+                  // A chip the zero-result ladder relaxed is shown struck through: it is still
+                  // there to be restored or removed, but it did NOT constrain these results.
+                  const isRelaxed = relaxedStages.includes(stage)
 
                   return (
                     <DropdownMenu key={stage}>
@@ -817,12 +831,13 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                           variant="outline"
                           size="sm"
                           disabled={Boolean(disabledReason)}
-                          title={disabledReason ?? undefined}
                           className={cn(
                             'h-8 gap-1.5 text-xs bg-white rounded border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors',
                             chip && 'border-slate-400 ring-1 ring-slate-300 text-slate-900',
                             isInferred && 'border-primary/40 ring-primary/30',
+                            isRelaxed && 'opacity-60 line-through decoration-slate-400',
                           )}
+                          title={isRelaxed ? 'Relaxed: no results matched this filter' : disabledReason ?? undefined}
                         >
                           {isInferred
                             ? <Sparkles className="h-3 w-3 text-primary" />
@@ -1070,6 +1085,9 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                 {filteredResults.length > 0 ? (
                   <div className="space-y-3">
                     {filteredResults.map((file) => {
+                      // A chip the ladder relaxed is still on screen but was NOT applied to these
+                      // results, so it must not be cited as the reason a document matched.
+                      const dateFilterApplied = Boolean(dateRangeChip) && !relaxedStages.includes('dateRange')
                       const matchType = file.matchType === 'name' || file.matchType === 'semantic' ? file.matchType : 'semantic'
                       const isOpening = openingExternalId === file.externalId
                       const breadcrumbParts = [
@@ -1128,9 +1146,41 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                                 })}
                               </div>
                             )}
-                            <div className="mt-2 inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-widest bg-primary/10 text-primary">
-                              {matchType === 'semantic' ? <Sparkles className="h-2.5 w-2.5" /> : <Hash className="h-2.5 w-2.5" />}
-                              {matchType === 'semantic' ? 'Semantic Match' : 'File Match'}
+                            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-widest bg-primary/10 text-primary">
+                                {matchType === 'semantic' ? <Sparkles className="h-2.5 w-2.5" /> : <Hash className="h-2.5 w-2.5" />}
+                                {matchType === 'semantic' ? 'Semantic Match' : 'File Match'}
+                              </span>
+                              {/* All three dates inline. A date filter matches on
+                                  COALESCE(dueDate, createdAt) while the row's timestamp shows
+                                  updatedAt, so without these it is not obvious why a document
+                                  matched "Q3 2026". The one the active filter used is highlighted. */}
+                              <span className="inline-flex items-center gap-1.5 text-[10px] text-ki-on-surface-variant">
+                                {([
+                                  { label: 'Created', value: file.createdAt, used: dateFilterApplied && !file.dueDate },
+                                  { label: 'Updated', value: file.updatedAt, used: false },
+                                  { label: 'Due', value: file.dueDate, used: dateFilterApplied && Boolean(file.dueDate) },
+                                ] as const).map(({ label, value, used }, i) => (
+                                  <React.Fragment key={label}>
+                                    {i > 0 && <span className="opacity-30">|</span>}
+                                    <span className={cn('inline-flex items-center gap-1', used && 'text-primary font-semibold')}>
+                                      <span className="opacity-60">{label}</span>
+                                      {value ? (
+                                        <RelativeDateTime
+                                          date={value}
+                                          tooltipSide="top"
+                                          tooltipPrefix={used ? `Matched the ${dateRangeChip?.name} filter ·` : undefined}
+                                          className="gap-0.5"
+                                          iconClassName="hidden"
+                                          textClassName={cn('text-[10px]', used && 'text-primary font-semibold')}
+                                        />
+                                      ) : (
+                                        <span>Not set</span>
+                                      )}
+                                    </span>
+                                  </React.Fragment>
+                                ))}
+                              </span>
                             </div>
                           </div>
                           <div className="text-right flex flex-col justify-between items-end shrink-0">
@@ -1149,32 +1199,8 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                                     {formatRelativeTime(file.updatedAt)}
                                   </span>
                                 </TooltipTrigger>
-                                {/* All three dates, because a date filter matches on
-                                    COALESCE(dueDate, createdAt) while the row displays updatedAt —
-                                    without this it is not obvious why a document matched "Q3". The
-                                    field the filter actually used is marked. */}
                                 <TooltipContent side="top">
-                                  <div className="space-y-0.5 text-[11px]">
-                                    <div className="flex justify-between gap-4">
-                                      <span className="opacity-70">Updated</span>
-                                      <span>{formatDateTimeWithTZ(file.updatedAt)}</span>
-                                    </div>
-                                    {file.createdAt && (
-                                      <div className="flex justify-between gap-4">
-                                        <span className="opacity-70">Created{!file.dueDate && dateRangeChip ? ' \u2713' : ''}</span>
-                                        <span>{formatDateTimeWithTZ(file.createdAt)}</span>
-                                      </div>
-                                    )}
-                                    <div className="flex justify-between gap-4">
-                                      <span className="opacity-70">Due{file.dueDate && dateRangeChip ? ' \u2713' : ''}</span>
-                                      <span>{file.dueDate ? formatDateTimeWithTZ(file.dueDate) : '\u2014'}</span>
-                                    </div>
-                                    {dateRangeChip && (
-                                      <div className="pt-1 mt-1 border-t border-white/15 opacity-70">
-                                        \u2713 matched the {dateRangeChip.name} filter
-                                      </div>
-                                    )}
-                                  </div>
+                                  {formatDateTimeWithTZ(file.updatedAt)}
                                 </TooltipContent>
                               </Tooltip>
                             </div>
