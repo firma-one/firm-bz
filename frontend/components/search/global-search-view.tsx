@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { Search, Folder, Sparkles, X, Building2, Briefcase, Package, Hash, FileText, ArrowUpRight, ArrowRight, RefreshCw, ChevronDown, History, BrushCleaning, CalendarClock, AlertTriangle } from 'lucide-react'
+import { Search, Folder, Sparkles, X, Building2, Briefcase, Package, Hash, FileText, ArrowUpRight, ArrowRight, RefreshCw, ChevronDown, History, BrushCleaning, CalendarClock, AlertTriangle, ChevronRight } from 'lucide-react'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { Button } from '@/components/ui/button'
 import {
@@ -767,9 +767,22 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                   : 'bg-ki-surface border-ki-outline text-ki-on-surface-variant hover:bg-ki-surface-low'
               )}
               aria-pressed={historyOpen}
+              aria-expanded={historyOpen}
+              aria-controls="doc-search-history-pane"
+              title={historyOpen ? 'Hide search history' : 'Show search history'}
             >
               <History className="h-3.5 w-3.5" />
               History
+              {/* A directional chevron, so the button reads as a disclosure control rather than a
+                  filter toggle: pointing right when the pane is closed, and back toward the pane
+                  once it is open. Colour alone did not say it expands anything. */}
+              <ChevronRight
+                className={cn(
+                  'h-3 w-3 transition-transform duration-200',
+                  historyOpen && 'rotate-180',
+                )}
+                aria-hidden
+              />
             </button>
           </div>
 
@@ -1261,9 +1274,18 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
       </div>
 
       {historyOpen && (
-        <aside className="w-80 shrink-0 border border-ki-outline bg-ki-surface flex flex-col min-h-0 mb-4 mr-4 rounded-md overflow-hidden">
+        <aside id="doc-search-history-pane" className="w-80 shrink-0 border border-ki-outline bg-ki-surface flex flex-col min-h-0 mb-4 mr-4 rounded-md overflow-hidden">
           <div className="shrink-0 px-4 py-3 border-b border-ki-outline flex items-center justify-between">
             <p className="text-[10px] font-mono font-bold uppercase tracking-widest text-ki-on-surface">Search History</p>
+            <button
+              type="button"
+              onClick={() => setHistoryOpen(false)}
+              title="Hide search history"
+              aria-label="Hide search history"
+              className="ml-auto mr-1 shrink-0 rounded p-1 text-ki-on-surface-variant hover:bg-ki-surface-low hover:text-ki-on-surface transition-colors"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
             {searchHistory.length > 0 && (
               <Tooltip>
                 <TooltipTrigger asChild>
