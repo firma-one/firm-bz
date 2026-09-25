@@ -569,16 +569,36 @@ Everything AI, in one table. Verified against the tree on 2026-09-25.
 | Credits enforcement | **Open — deliberate** | §7a phases 2–3; waiting on real usage data |
 | Content-aware sensitivity | **Not started** | Phase B |
 | Failure handling | **Shipped** `f0c65f3c` | All four surfaces; see §12 |
+| Absolute periods (Q1 2026) | **Shipped** `d3820fcb` | `lib/search/period.ts`; model emits a token, never a date |
+| Conflict disclosure | **Shipped** `5d4725bd` | Picked chip wins, prose conflict surfaced with a switch |
 | Auto-reminder / checklist / digest | **HOLD** | §7 — parked as not AI-native |
 
 **Nothing pending is a correctness risk.** The one that was — a mid-stream chat error closing the
 response cleanly, so a truncated answer read as a complete one — was fixed in `f0c65f3c` (§12).
 Everything left below is capability or cost, not wrong output.
 
-**Recommended order.** §A.10 #1 and #2 first: both are self-contained, need no backfill, and #1 is
-the gate this plan named. #4 next. #3 only after the §A.6 dilution A/B resolves and the re-embed
-backfill exists — shipping it alone leaves old and new documents embedded on different bases, which
-is worse than not widening at all. Credits enforcement stays parked until §7a phase 2 has data.
+**Phase A is closed** except the snippet widening, which is deliberately deferred: it cannot ship
+before the §A.6 dilution A/B resolves and the re-embed backfill exists, since widening alone leaves
+old and new documents embedded on different bases — worse than not widening at all.
+
+**What is actually next, in order of value:**
+
+1. **A query corpus for Ask Brio.** Every fix on 2026-09-25 was validated against the single query
+   that exposed it, which is why several landed in sequence rather than together. Twenty
+   representative queries with expected chips would turn "did I break something" from a guess into
+   a test run. This is the highest-value next step and needs no AI work.
+2. **§A.12 — evaluate calibrated confidence.** The known gap below is the argument for it.
+3. **§7a phase 2 — read the usage ledger.** It has been recording since `c0a7898f`; a few weeks of
+   real data is the precondition for setting a credit cap that is not guesswork.
+4. **Phase B — content-aware sensitivity.** Unstarted, and the one place where buying might beat
+   building, but it runs into the "never reads your clients' work" promise, so it is a product
+   decision before a technical one.
+
+**Known gap, unguarded.** `resolvedFromPeriodToken()` stops a period token resolving as an entity
+name, but that is one token class handled by regex. The general case is unhandled: an engagement
+named "Legal Review" can still absorb the word "legal" from "legal docs for Acme". Calibrated
+per-chip confidence (§A.12) would replace that regex, the ladder's hand-ranked drop order, and the
+ambiguity threshold with one mechanism — which is the real case for the evaluation.
 
 ---
 
