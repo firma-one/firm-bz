@@ -14,8 +14,16 @@
  * Safe on both client and server: pure arithmetic, no imports.
  */
 
-/** `Q1 2026` | `H2 2025` | `2024`. Case-insensitive. A bare "Q1" is rejected — the year is required. */
-const PERIOD_GRAMMAR = /^(?:(Q[1-4]|H[12])\s+)?(\d{4})$/i
+/**
+ * `Q1 2026` | `H2 2025` | `2024` | `Q1` | `H2`.
+ *
+ * A bare quarter or half resolves against the current year. The model is told to supply the year,
+ * but it does not always, and silently dropping "Q2" made the same phrase behave differently
+ * between runs — sometimes filtering, sometimes doing nothing at all. Defaulting is both the
+ * obvious reading of "from Q2" and the consistent one. A bare year still needs four digits, so
+ * nothing here can be confused for one.
+ */
+const PERIOD_GRAMMAR = /^(?:(Q[1-4]|H[12])(?:\s+(\d{4}))?|(\d{4}))$/i
 
 const MIN_YEAR = 2000
 /** One year ahead, so a forward-looking due date still resolves without accepting "Q1 2190". */
@@ -33,7 +41,9 @@ export function resolvePeriod(token: string, now: Date = new Date()): ResolvedPe
     if (!m) return null
 
     const unit = m[1]?.toUpperCase()
-    const year = Number(m[2])
+    // Group 2 is the year after a quarter/half; group 3 is a bare year. A quarter with neither
+    // defaults to the current year.
+    const year = m[3] ? Number(m[3]) : m[2] ? Number(m[2]) : now.getFullYear()
     if (!Number.isInteger(year)) return null
     if (year < MIN_YEAR || year > now.getFullYear() + MAX_YEAR_AHEAD) return null
 

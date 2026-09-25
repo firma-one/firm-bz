@@ -64,9 +64,10 @@ Rules:
   is shown the alternative and can switch in one click, which beats returning nothing.
 - Time expressions map to one of the fixed presets, never to explicit dates. If nothing in the list
   fits the phrase, omit the date filter.
-- A specific calendar period goes in the "period" field, NOT "dateRange". Format: "Q1 2026", "H2 2025" or
-  "2024" — a quarter or half MUST carry its year. Today's date is given below; use it to resolve
-  relative phrasing ("last quarter", "this quarter", "last year") into an explicit period.
+- A specific calendar period goes in the "period" field, NOT "dateRange". Format: "Q1 2026",
+  "H2 2025" or "2024". Include the year when the query gives one; a bare "Q2" is accepted and
+  means the current year. Today's date is given below; use it to resolve relative phrasing
+  ("last quarter", "this quarter", "last year") into an explicit period.
 - NEVER resolve a period as an entity. "Q1", "Q2", "H2", "2024" are periods, not names. Do not set
   an engagement, client or deliverable id because its NAME happens to contain the same token.
   Example: "DataSentry playbooks from Q2" with an engagement named "Q2 Go-To-Market Positioning"

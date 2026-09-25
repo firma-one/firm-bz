@@ -28,7 +28,7 @@ import type { InterpretCandidates, InterpretResult } from './search-interpreter'
  * prompt edit appears to do nothing for up to the TTL, which is genuinely confusing when testing.
  * Including it in the key makes a deploy invalidate everything automatically.
  */
-const INTERPRETER_VERSION = 'v2-periods'
+const INTERPRETER_VERSION = 'v3-bare-quarters'
 
 const TTL_MS = 15 * 60 * 1000
 /** Bounded so a long-lived server process cannot grow this without limit. */

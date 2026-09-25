@@ -767,7 +767,9 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
     <TooltipProvider>
       <div className="flex h-full min-h-0 bg-ki-bg">
       <div className="flex flex-col flex-1 min-w-0 min-h-0">
-        <div className="shrink-0 px-6 pb-4 bg-ki-bg">
+        {/* No horizontal padding: the tab shell already sets the page gutter and sibling tabs
+            (Analytics, Clients) render flush to it. px-6 here inset Doc Search by 24px. */}
+        <div className="shrink-0 pb-4 bg-ki-bg">
           <div className="flex items-start justify-between gap-4">
             <div>
               <h1 className="font-headline text-2xl font-semibold tracking-tight text-ki-on-surface">Document Search</h1>
@@ -970,7 +972,7 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                 )}
               </div>
 
-              {(interpreting || askNote || relaxedNote || ambiguity || conflicts.length > 0) && (
+              {(interpreting || askNote || ambiguity) && (
                 <div className="px-3 pt-2 flex items-center gap-1.5 text-[11px]">
                   {interpreting ? (
                     <>
@@ -982,48 +984,6 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                   ) : (
                     <span className="text-ki-on-surface-variant">{askNote}</span>
                   )}
-                  {relaxedNote && !interpreting && (
-                    <span className="inline-flex items-center gap-1.5 rounded border border-ki-outline bg-ki-surface-low px-2 py-1 text-ki-on-surface-variant">
-                      <Info className="h-3 w-3 shrink-0 text-ki-on-surface-variant" aria-hidden />
-                      <span>{relaxedNote}</span>
-                      {relaxedStages.length > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => relaxedStages.forEach((st) => removeChip(st))}
-                          className="font-medium text-primary underline underline-offset-2 hover:text-primary/80"
-                        >
-                          Remove {relaxedStages.length > 1 ? 'them' : 'it'}
-                        </button>
-                      )}
-                    </span>
-                  )}
-                  {/* A hand-picked chip beats the typed sentence, but saying nothing would leave
-                      the user believing their words were honoured. Offer the switch instead. */}
-                  {conflicts.length > 0 && !interpreting && conflicts.map((c) => (
-                    <span
-                      key={c.stage}
-                      className="inline-flex items-center gap-1.5 rounded border border-ki-outline bg-ki-surface-low px-2 py-1 text-ki-on-surface-variant"
-                    >
-                      <Info className="h-3 w-3 shrink-0" aria-hidden />
-                      <span>
-                        Using your <span className="font-medium text-ki-on-surface">{c.keptName}</span> filter,
-                        not <span className="font-medium text-ki-on-surface">{c.ignoredName}</span> from your question.
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setChips((prev) => prev.map((chip) => (
-                            chip.stage === c.stage ? { ...chip, id: c.ignoredId, name: c.ignoredName } : chip
-                          )))
-                          setConflicts((prev) => prev.filter((x) => x.stage !== c.stage))
-                          setAskRunId((n) => n + 1)
-                        }}
-                        className="font-medium text-primary underline underline-offset-2 hover:text-primary/80"
-                      >
-                        Use {c.ignoredName}
-                      </button>
-                    </span>
-                  ))}
                   {/* Ambiguity is disclosed alongside results, never as a question that blocks the
                       search (§A.11). Switching re-runs locally — no second model call. */}
                   {ambiguity && !interpreting && (
@@ -1150,7 +1110,7 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
           )}
         </div>
 
-        <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-6">
+        <div className="flex-1 min-h-0 overflow-y-auto pb-6">
           {hasSearched && (
             isSearching ? (
               <div className="py-12 flex flex-col items-center gap-4">
@@ -1162,8 +1122,54 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
               </div>
             ) : results.length > 0 ? (
               <>
-                <div className="flex items-center justify-end gap-2 mb-4">
-                  <span className="text-[10px] font-mono text-ki-on-surface-variant shrink-0">
+                {/* Notices sit on the count row: they qualify what was counted, and reading the
+                    number apart from them invites believing the results answered the query as asked. */}
+                <div className="flex items-start justify-between gap-3 mb-4 text-[11px]">
+                  <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                    {/* A hand-picked chip beats the typed sentence, but saying nothing would leave
+                        the user believing their words were honoured. Offer the switch instead. */}
+                    {conflicts.length > 0 && !interpreting && conflicts.map((c) => (
+                      <span
+                        key={c.stage}
+                        className="inline-flex items-center gap-1.5 rounded border border-ki-outline bg-ki-surface-low px-2 py-1 text-ki-on-surface-variant"
+                      >
+                        <Info className="h-3 w-3 shrink-0" aria-hidden />
+                        <span>
+                          Using your <span className="font-medium text-ki-on-surface">{c.keptName}</span> filter,
+                          not <span className="font-medium text-ki-on-surface">{c.ignoredName}</span> from your question.
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setChips((prev) => prev.map((chip) => (
+                              chip.stage === c.stage ? { ...chip, id: c.ignoredId, name: c.ignoredName } : chip
+                            )))
+                            setConflicts((prev) => prev.filter((x) => x.stage !== c.stage))
+                            setAskRunId((n) => n + 1)
+                          }}
+                          className="font-medium text-primary underline underline-offset-2 hover:text-primary/80"
+                        >
+                          Use {c.ignoredName}
+                        </button>
+                      </span>
+                    ))}
+                    {relaxedNote && !interpreting && (
+                      <span className="inline-flex items-center gap-1.5 rounded border border-ki-outline bg-ki-surface-low px-2 py-1 text-ki-on-surface-variant">
+                        <Info className="h-3 w-3 shrink-0 text-ki-on-surface-variant" aria-hidden />
+                        <span>{relaxedNote}</span>
+                        {relaxedStages.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => relaxedStages.forEach((st) => removeChip(st))}
+                            className="font-medium text-primary underline underline-offset-2 hover:text-primary/80"
+                          >
+                            Remove {relaxedStages.length > 1 ? 'them' : 'it'}
+                          </button>
+                        )}
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-[10px] font-mono text-ki-on-surface-variant shrink-0 pt-1">
                     {filteredResults.length} {filteredResults.length === 1 ? 'Result' : 'Results'} found
                   </span>
                 </div>
@@ -1324,7 +1330,7 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
       </div>
 
       {historyOpen && (
-        <aside id="doc-search-history-pane" className="w-80 shrink-0 border border-ki-outline bg-ki-surface flex flex-col min-h-0 mb-4 mr-4 rounded-md overflow-hidden">
+        <aside id="doc-search-history-pane" className="w-80 shrink-0 border border-ki-outline bg-ki-surface flex flex-col min-h-0 mb-4 rounded-md overflow-hidden">
           <div className="shrink-0 px-4 py-3 border-b border-ki-outline flex items-center justify-between">
             <p className="text-[10px] font-mono font-bold uppercase tracking-widest text-ki-on-surface">Search History</p>
             <button
