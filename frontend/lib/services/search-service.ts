@@ -918,6 +918,7 @@ export class SearchService {
                     score: Number(r.score), metadata: r.metadata, isFolder: Boolean(r.isFolder),
                     parentId: r.parentId, clientId: r.clientId, engagementId: r.engagementId,
                     dueDate: r.dueDate ? new Date(r.dueDate) : null,
+                    createdAt: r.createdAt ? new Date(r.createdAt) : null,
                     docId: r.docId, createdBy: r.createdBy, updatedBy: r.updatedBy,
                 }))
                 .filter(r => r.score >= MIN_SEMANTIC_SCORE)
@@ -969,6 +970,7 @@ export class SearchService {
                 score: 0.92, metadata: r.metadata, isFolder: Boolean(r.isFolder),
                 parentId: r.parentId, clientId: r.clientId, engagementId: r.engagementId,
                 dueDate: r.dueDate ? new Date(r.dueDate) : null,
+                createdAt: r.createdAt ? new Date(r.createdAt) : null,
                 docId: r.docId, createdBy: r.createdBy, updatedBy: r.updatedBy,
             }))
         } catch (error) {
@@ -1025,7 +1027,8 @@ export class SearchService {
                 externalId: r.externalId, fileName: r.fileName, updatedAt: new Date(r.updatedAt),
                 score: 0.92, metadata: r.metadata, isFolder: Boolean(r.isFolder),
                 parentId: r.parentId, clientId: r.clientId, engagementId: r.engagementId,
-                dueDate: r.dueDate ? new Date(r.dueDate) : null, docId: r.docId,
+                dueDate: r.dueDate ? new Date(r.dueDate) : null, 
+                createdAt: r.createdAt ? new Date(r.createdAt) : null, docId: r.docId,
                 createdBy: r.createdBy, updatedBy: r.updatedBy,
             }))
         } catch (error) {
@@ -1088,6 +1091,7 @@ export class SearchService {
                     score: 0.5 + matchFraction * 0.42, metadata: r.metadata, isFolder: Boolean(r.isFolder),
                     parentId: r.parentId, clientId: r.clientId, engagementId: r.engagementId,
                     dueDate: r.dueDate ? new Date(r.dueDate) : null,
+                    createdAt: r.createdAt ? new Date(r.createdAt) : null,
                     docId: r.docId, createdBy: r.createdBy, updatedBy: r.updatedBy,
                 }
             })
@@ -1136,6 +1140,7 @@ export class SearchService {
                 score: Number(r.score), metadata: r.metadata, isFolder: Boolean(r.isFolder),
                 parentId: r.parentId, clientId: r.clientId, engagementId: r.engagementId,
                 dueDate: r.dueDate ? new Date(r.dueDate) : null,
+                createdAt: r.createdAt ? new Date(r.createdAt) : null,
                 docId: r.docId, createdBy: r.createdBy, updatedBy: r.updatedBy,
             }))
         } catch (error) {
