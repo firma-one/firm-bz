@@ -14,7 +14,7 @@ import {
   DropdownMenuCheckboxItem,
 } from '@/components/ui/dropdown-menu'
 import { UserAvatarWithTooltip } from '@/components/ui/user-avatar-with-tooltip'
-import { formatRelativeTime, formatDateTimeWithTZ, formatFullDate, cn } from '@/lib/utils'
+import { formatRelativeTime, cn } from '@/lib/utils'
 import { useAuth } from '@/lib/auth-context'
 import { ASSISTANT } from '@/lib/ai/assistant'
 import { Brio } from '@/components/ui/brio'
@@ -1272,30 +1272,25 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                                     </span>
                                   </React.Fragment>
                                 ))}
+                                {!file.isFolder && file.updatedByName && (
+                                  <>
+                                    <span className="opacity-30">|</span>
+                                    <span onClick={(e) => e.stopPropagation()} className="inline-flex">
+                                      <UserAvatarWithTooltip
+                                        displayName={file.updatedByName}
+                                        email={file.updatedByEmail ?? undefined}
+                                        photoLink={file.updatedByAvatarUrl ?? undefined}
+                                        avatarSize="sm"
+                                      />
+                                    </span>
+                                  </>
+                                )}
                               </span>
                             </div>
                           </div>
-                          <div className="text-right flex flex-col justify-between items-end shrink-0">
-                            <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                              {!file.isFolder && file.updatedByName && (
-                                <UserAvatarWithTooltip
-                                  displayName={file.updatedByName}
-                                  email={file.updatedByEmail ?? undefined}
-                                  photoLink={file.updatedByAvatarUrl ?? undefined}
-                                  avatarSize="sm"
-                                />
-                              )}
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <span className="text-[10px] font-mono text-ki-on-surface-variant">
-                                    {formatRelativeTime(file.updatedAt)}
-                                  </span>
-                                </TooltipTrigger>
-                                <TooltipContent side="top">
-                                  {formatDateTimeWithTZ(file.updatedAt)}
-                                </TooltipContent>
-                              </Tooltip>
-                            </div>
+                          {/* The relative timestamp that used to sit here duplicated "Updated" in
+                              the date row below, and the avatar now sits beside those dates. */}
+                          <div className="flex flex-col justify-end items-end shrink-0">
                             <ArrowUpRight className="h-4 w-4 text-ki-on-surface-variant opacity-0 group-hover:opacity-100 transition-opacity" />
                           </div>
                         </button>
