@@ -63,6 +63,13 @@ Rules:
   is shown the alternative and can switch in one click, which beats returning nothing.
 - Time expressions map to one of the fixed presets, never to explicit dates. If nothing in the list
   fits the phrase, omit the date filter.
+- A time expression that has no matching preset must be dropped entirely — NOT resolved as an
+  entity. "Q1", "Q2", "last spring", "in 2024" and "H2" are periods, not names. Never set an
+  engagement, client or deliverable id because its NAME happens to contain the same token. The
+  available presets cannot express a specific quarter or year, so those queries simply carry no
+  date filter. Leave the words in residualText so the search still sees them.
+  Example: "DataSentry playbooks from Q2" with an engagement named "Q2 Go-To-Market Positioning"
+  -> client DataSentry, NO engagement, NO date, residualText "playbooks from Q2".
 - residualText is what remains after removing the parts you turned into filters — the words about
   document content. If the whole query became filters, residualText is an empty string.
 - Prefer resolving nothing over resolving wrongly. A missing filter costs the user a wider result
@@ -91,6 +98,39 @@ const TOOL = {
         },
         required: ['residualText'],
     },
+}
+
+/**
+ * Period expressions the available presets cannot represent: bare quarters, half-years and bare
+ * years. `TIME_PRESETS` has nothing finer than "This Quarter", so a query naming a *specific*
+ * period carries no date filter at all.
+ *
+ * The risk that creates is resolving the period as an ENTITY instead — a firm with an engagement
+ * called "Q2 Go-To-Market Positioning" would otherwise have "from Q2" silently become an
+ * engagement filter, which is a different search from the one the user asked for and hides
+ * everything outside that engagement. The prompt forbids it; this enforces it, in the same spirit
+ * as validating every id against the candidate list rather than trusting the model.
+ */
+const PERIOD_TOKEN = /\b(q[1-4]|h[12]|fy\s?\d{2,4}|20\d{2})\b/i
+
+/**
+ * True when the query mentions a specific period and the entity's name owes its match to that
+ * period token — i.e. stripping the token leaves nothing of the name to match on.
+ */
+function resolvedFromPeriodToken(entityName: string, queryText: string): boolean {
+    const queryPeriods = queryText.match(new RegExp(PERIOD_TOKEN, 'gi'))
+    if (!queryPeriods) return false
+    const nameLower = entityName.toLowerCase()
+    return queryPeriods.some((period) => {
+        const p = period.toLowerCase()
+        if (!nameLower.includes(p)) return false
+        // The name carries the period token. Does the rest of the name appear in the query at all?
+        // If the query says "Q2 Go-To-Market" the match is real; if it only says "from Q2", it is
+        // the token alone doing the work.
+        const rest = nameLower.split(p).join(' ').split(/[^a-z0-9]+/).filter((w) => w.length > 2)
+        const q = queryText.toLowerCase()
+        return !rest.some((w) => q.includes(w))
+    })
 }
 
 /** Caps the candidate list sent to the model so a large firm cannot blow the context window. */
@@ -158,10 +198,18 @@ export async function interpretSearchQuery(
             : undefined
 
         const e = byId(candidates.engagements, args.engagementId)
-        if (e) chips.push({ stage: 'engagement', id: e.id, name: e.name })
+        if (e && !resolvedFromPeriodToken(e.name, text)) {
+            chips.push({ stage: 'engagement', id: e.id, name: e.name })
+        } else if (e) {
+            logger.info(`Dropped engagement "${e.name}": resolved only from a period token in "${text}"`)
+        }
 
         const d = byId(candidates.deliverables, args.deliverableId)
-        if (d) chips.push({ stage: 'deliverable', id: d.id, name: d.name })
+        if (d && !resolvedFromPeriodToken(d.name, text)) {
+            chips.push({ stage: 'deliverable', id: d.id, name: d.name })
+        } else if (d) {
+            logger.info(`Dropped deliverable "${d.name}": resolved only from a period token in "${text}"`)
+        }
 
         const preset = args.dateRange
         if (typeof preset === 'string' && (TIME_PRESETS as readonly string[]).includes(preset)) {

@@ -266,6 +266,27 @@ Checked 2026-09-25 before building: `InferredChip` is `{stage, id, name}` and no
 future model returns calibrated per-chip confidence (see §A.12), the order should become derived
 rather than fixed, and this section should be revisited.
 
+#### Period tokens must never resolve as entities
+
+Found in testing 2026-09-25. `TIME_PRESETS` has nothing finer than `This Quarter`, so "from Q1" or
+"from Q2" cannot become a date filter. The failure was that the model then matched the period token
+against an **engagement name** instead: a firm with `Q2 Go-To-Market Positioning` had "playbooks
+from Q2" silently become an engagement filter. That looks right when the engagement happens to be
+named after the quarter, and is wrong the moment a second Q2-named engagement exists — the user
+asked for a period and got a scope filter, hiding everything outside it.
+
+This is the exact class §A.2 cited when recording why the 2026-07 chrono approach was rejected, so
+it is guarded in two places, not one:
+
+- The prompt states that a period with no matching preset is dropped entirely, never resolved as a
+  name, with a worked example.
+- `resolvedFromPeriodToken()` enforces it structurally: an engagement or deliverable whose match
+  owes itself *solely* to a period token (`Q1-Q4`, `H1/H2`, `FY24`, a bare year) is dropped. A
+  genuine reference still resolves — "DataSentry Q2 Go-To-Market playbooks" keeps the engagement,
+  because the query names the rest of it too.
+
+Same principle as validating ids against the candidate list: the prompt asks, the code enforces.
+
 #### Ambiguity disclosure
 
 Today two similarly-named clients means the interpreter resolves **nothing**: `SYSTEM` instructs
