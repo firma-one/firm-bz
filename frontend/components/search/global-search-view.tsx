@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { Search, Folder, Sparkles, X, Building2, Briefcase, Package, Hash, FileText, ArrowUpRight, ArrowRight, RefreshCw, ChevronDown, History, BrushCleaning, CalendarClock } from 'lucide-react'
+import { Search, Folder, Sparkles, X, Building2, Briefcase, Package, Hash, FileText, ArrowUpRight, ArrowRight, RefreshCw, ChevronDown, History, BrushCleaning, CalendarClock, AlertTriangle } from 'lucide-react'
 import { DocumentIcon } from '@/components/ui/document-icon'
 import { Button } from '@/components/ui/button'
 import {
@@ -585,10 +585,10 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
     base: { client?: SelectedChip; engagement?: SelectedChip; deliverable?: SelectedChip; dateRange?: SelectedChip; type?: SelectedChip },
   ): Promise<{ files: GlobalSearchResult[]; note: string; relaxedStages: FilterStage[] } | null> => {
     const inferred = new Set(inferredStages)
-    const steps: { stage: FilterStage; label: string }[] = [
-      { stage: 'dateRange', label: 'date' },
-      { stage: 'deliverable', label: 'deliverable' },
-      { stage: 'engagement', label: 'engagement' },
+    const steps: { stage: FilterStage; label: string; key: 'dateRange' | 'deliverable' | 'engagement' }[] = [
+      { stage: 'dateRange', label: '', key: 'dateRange' },
+      { stage: 'deliverable', label: 'deliverable', key: 'deliverable' },
+      { stage: 'engagement', label: 'engagement', key: 'engagement' },
     ]
 
     const dropped: string[] = []
@@ -600,7 +600,7 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
       if (step.stage === 'dateRange') current.dateRange = undefined
       if (step.stage === 'deliverable') current.deliverable = undefined
       if (step.stage === 'engagement') current.engagement = undefined
-      dropped.push(step.label)
+      dropped.push(base[step.key] ? `${step.label} ${base[step.key]!.name}` : `the ${step.label} filter`)
       droppedStages.push(step.stage)
 
       // Rule 2: never run a search with nothing left to constrain it.
@@ -613,10 +613,14 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
       if (files === null) return null
       if (files.length > 0) {
         const kept = current.client ? ` in ${current.client.name}` : ''
-        const relaxedList = dropped.length === 1 ? dropped[0] : `${dropped.slice(0, -1).join(', ')} and ${dropped[dropped.length - 1]}`
+        // Name the filter AND its value: "the Q2 2026 date filter" tells the user what to correct,
+        // where "the date filter" makes them look back at the chips to find out.
+        const relaxedList = dropped.length === 1
+          ? dropped[0]
+          : `${dropped.slice(0, -1).join(', ')} and ${dropped[dropped.length - 1]}`
         return {
           files,
-          note: `No exact matches${kept}. Showing results with the ${relaxedList} filter${dropped.length > 1 ? 's' : ''} relaxed.`,
+          note: `Nothing${kept} matched ${relaxedList}. Showing results without ${dropped.length > 1 ? 'those filters' : 'that filter'}.`,
           relaxedStages: droppedStages.slice(),
         }
       }
@@ -835,14 +839,21 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                             'h-8 gap-1.5 text-xs bg-white rounded border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors',
                             chip && 'border-slate-400 ring-1 ring-slate-300 text-slate-900',
                             isInferred && 'border-primary/40 ring-primary/30',
-                            isRelaxed && 'opacity-60 line-through decoration-slate-400',
+                            isRelaxed && 'border-amber-300 bg-amber-50 text-amber-900 ring-1 ring-amber-200 hover:bg-amber-100 hover:text-amber-950',
                           )}
-                          title={isRelaxed ? 'Relaxed: no results matched this filter' : disabledReason ?? undefined}
+                          title={isRelaxed
+                            ? `Not applied — no results matched this ${STAGE_LABEL[stage].toLowerCase()} filter`
+                            : disabledReason ?? undefined}
                         >
                           {isInferred
                             ? <Sparkles className="h-3 w-3 text-primary" />
                             : <Icon className="h-3 w-3 opacity-60" />}
                           {chip ? chip.name : STAGE_LABEL[stage]}
+                          {isRelaxed && (
+                            <span className="ml-0.5 rounded-sm bg-amber-200/70 px-1 py-px text-[9px] font-semibold uppercase tracking-wide">
+                              not applied
+                            </span>
+                          )}
                           {chip && (
                             <span
                               role="button"
@@ -923,7 +934,7 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                 )}
               </div>
 
-              {(interpreting || askNote) && (
+              {(interpreting || askNote || relaxedNote || ambiguity) && (
                 <div className="px-3 pt-2 flex items-center gap-1.5 text-[11px]">
                   {interpreting ? (
                     <>
@@ -936,7 +947,19 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
                     <span className="text-ki-on-surface-variant">{askNote}</span>
                   )}
                   {relaxedNote && !interpreting && (
-                    <span className="text-amber-700">{relaxedNote}</span>
+                    <span className="inline-flex items-center gap-1.5 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-amber-900">
+                      <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden />
+                      <span>{relaxedNote}</span>
+                      {relaxedStages.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => relaxedStages.forEach((st) => removeChip(st))}
+                          className="underline underline-offset-2 font-medium hover:text-amber-950"
+                        >
+                          Remove {relaxedStages.length > 1 ? 'them' : 'it'}
+                        </button>
+                      )}
+                    </span>
                   )}
                   {/* Ambiguity is disclosed alongside results, never as a question that blocks the
                       search (§A.11). Switching re-runs locally — no second model call. */}
