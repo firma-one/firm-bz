@@ -177,7 +177,7 @@ type Props = {
      * Billing entity shown as the card's first row. Previously a separate card beside this one,
      * which split one subject — who is billed and what they are on — across two boxes.
      */
-    entity?: { heading: string; kind: string; name: string | null } | null
+    entity?: { kind: string; name: string | null } | null
 }
 
 export function CurrentPlanSummary({
@@ -262,20 +262,26 @@ export function CurrentPlanSummary({
 
     return (
         <div className={shell}>
-            {/* Billing entity — who is being billed, above what they are on. Carries the same
-                CreditCard tile the standalone card used, so the icon survives the merge. */}
+            {/* Billing entity — one line in the same label/value style as the plan row below, so
+                the two read as a pair rather than a heading block followed by a data row. */}
             {entity && (
-                <div className="mb-3 pb-3 border-b border-primary/15 flex items-start gap-3.5">
-                    <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded border border-primary/25 bg-white text-primary shadow-sm">
-                        <CreditCard className="h-4.5 w-4.5" aria-hidden />
+                <div className="mb-3 pb-3 border-b border-primary/15 flex items-center gap-3">
+                    <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded border border-primary/25 bg-white text-primary shadow-sm">
+                        <CreditCard className="h-3.5 w-3.5" aria-hidden />
                     </span>
-                    <div className="min-w-0">
-                        <h2 className="text-[0.8125rem] font-bold text-[#1b1b1d]">{entity.heading}</h2>
-                        <p className="mt-0.5 text-[10px] font-bold uppercase tracking-[0.2em] text-[#45474c]">
-                            {entity.kind}
+                    <div className="flex items-center gap-4 min-w-0 flex-wrap">
+                        <p className={cn('text-xs', labelClass)}>
+                            <span className="font-medium">Billing Entity Type:</span>{' '}
+                            <span className={valueClass}>{entity.kind}</span>
                         </p>
                         {entity.name && (
-                            <p className="mt-0.5 text-[0.8125rem] font-bold text-[#1b1b1d]">{entity.name}</p>
+                            <>
+                                <span className="text-primary/25 text-xs select-none">·</span>
+                                <p className={cn('text-xs min-w-0', labelClass)}>
+                                    <span className="font-medium">Billing Entity Name:</span>{' '}
+                                    <span className={valueClass}>{entity.name}</span>
+                                </p>
+                            </>
                         )}
                     </div>
                 </div>

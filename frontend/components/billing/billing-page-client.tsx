@@ -398,7 +398,6 @@ export function BillingPageClient({
                         loading={!currentPlanFetchCompleted || currentPlanLoading}
                         variant="embedded"
                         entity={{
-                            heading: upgradeCopy.billingCardWorkspaceHeading,
                             kind: 'Firm Group',
                             name: selectedFirm.groupName ?? selectedFirm.name,
                         }}
