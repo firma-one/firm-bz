@@ -50,5 +50,5 @@ export const { GET, POST, PUT } = serve({
         cleanupDocumentReminders,
         purgeDeletedEngagements,
         sendDeliverableDueReminder,
-    ],
+        ],
 });

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { NotificationsTable } from "./notifications-table"
 import { BroadcastModal } from "./broadcast-modal"
+import { PushNotificationToggle } from "./push-notification-toggle"
 import { useTabRightSlot, useTabCount } from "../layout-context"
 import { Megaphone } from "lucide-react"
 
@@ -77,6 +78,7 @@ export default function NotificationsPage() {
 
   return (
     <>
+      <PushNotificationToggle />
       <NotificationsTable initialNotifications={notifications} onRefresh={load} />
       <BroadcastModal
         open={broadcastOpen}

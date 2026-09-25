@@ -5,9 +5,12 @@ import { resolveProjectContext } from '@/lib/resolve-project-context'
 import { canViewProject } from '@/lib/permission-helpers'
 import { getProjectDocumentContext } from '@/lib/file-utils'
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
-import { requireEngagementMember, externalMemberCanAccessDocument } from '@/lib/engagement-access'
+import { requireEngagementMember, externalMemberCanAccessDocument, isExternalEngagementRole } from '@/lib/engagement-access'
 import { loadAnchorForCaps, effectiveCommentHistoryDays } from '@/lib/billing/effective-billing-caps'
 import { engagementDocCommentPath } from '@/lib/navigation/firm-paths'
+import { getFirmReminderConfig } from '@/lib/actions/firms'
+import { createEventNotifications, sendEventEmailToUser, buildAbsoluteUrl } from '@/lib/notify-event'
+import { renderClientCommentEmail } from '@/lib/email-templates/client-comment'
 
 async function purgeStaleDocComments(firmId: string): Promise<void> {
   try {
@@ -189,6 +192,66 @@ export async function POST(
 
     // Fire-and-forget rolling purge — do not await, never block the caller
     void purgeStaleDocComments(ctx.orgId)
+
+    // Event notification — new comment from an external client (EC/EV), gated per-firm
+    if (isExternalEngagementRole(member.role)) {
+      Promise.resolve().then(async () => {
+        try {
+          const config = await getFirmReminderConfig(ctx.orgId)
+          const eventCfg = config.events.externalClientComment
+          if (!eventCfg.inApp && !eventCfg.email) return
+
+          const staff = await prisma.engagementMember.findMany({
+            where: { engagementId: projectId, role: { in: ['eng_admin', 'eng_member'] } },
+            select: { userId: true },
+          })
+          if (staff.length === 0) return
+
+          const engDetails = await prisma.engagement.findUnique({
+            where: { id: projectId },
+            select: { name: true, slug: true, client: { select: { slug: true, firm: { select: { slug: true, group: { select: { slug: true } } } } } } },
+          })
+          const groupSlug = engDetails?.client?.firm?.group?.slug ?? ''
+          const firmSlug = engDetails?.client?.firm?.slug ?? ''
+          const clientSlug = engDetails?.client?.slug ?? ''
+          const engSlug = engDetails?.slug ?? ''
+          const relativeUrl = groupSlug && firmSlug && clientSlug && engSlug
+            ? engagementDocCommentPath(groupSlug, firmSlug, clientSlug, engSlug, docCtx.id, message.id)
+            : null
+          const ctaUrl = buildAbsoluteUrl(relativeUrl)
+          const commenterName = user.email ?? 'A client'
+          const commentPreview = content.slice(0, 140)
+
+          if (eventCfg.inApp) {
+            await createEventNotifications(staff.map((m) => ({
+              firmId: ctx.orgId,
+              clientId: docCtx.clientId,
+              engagementId: projectId,
+              documentId: docCtx.id,
+              userId: m.userId,
+              type: 'EXTERNAL_CLIENT_COMMENT',
+              title: `New comment from ${commenterName}`,
+              body: commentPreview,
+              ctaUrl: relativeUrl,
+              metadata: { commentId: message.id, commenterName },
+              dedupeKey: `comment:${message.id}:notify`,
+            })))
+          }
+          if (eventCfg.email) {
+            await Promise.all(staff.map((m) => sendEventEmailToUser(m.userId, () =>
+              renderClientCommentEmail({
+                commenterName,
+                engagementName: engDetails?.name ?? '',
+                commentPreview,
+                ctaUrl,
+              })
+            )))
+          }
+        } catch (e) {
+          console.error('[doc-comments] event notification error:', e)
+        }
+      })
+    }
 
     // Create reminder for tagged recipient
     if (isReminder && recipientId) {

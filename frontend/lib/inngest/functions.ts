@@ -1690,7 +1690,14 @@ export const sendDeliverableDueReminder = inngest.createFunction(
             return { dateStillSet: doc.dueDate?.toISOString() === dueDate, isApproved }
         }
 
-        const sendEmails = async (action: string, entityName: string) => {
+        const getEventConfig = async () => {
+            if (!firmId) return null
+            const { getFirmReminderConfig } = await import("@/lib/actions/firms")
+            return getFirmReminderConfig(firmId)
+        }
+
+        const sendEmails = async (recipientIds: string[], action: string, entityName: string) => {
+            if (recipientIds.length === 0) return
             const { createAdminClient } = await import("@/utils/supabase/admin")
             const { sendEmail } = await import("@/lib/email")
             const { renderReminderEmail } = await import("@/lib/email-templates/reminder")
@@ -1704,7 +1711,7 @@ export const sendDeliverableDueReminder = inngest.createFunction(
                 ctaLabel: 'View Deliverable →',
                 kind: 'created',
             })
-            await Promise.allSettled((memberUserIds as string[]).map(async (userId: string) => {
+            await Promise.allSettled(recipientIds.map(async (userId: string) => {
                 const { data } = await admin.auth.admin.getUserById(userId)
                 const email = data?.user?.email
                 if (!email) return
@@ -1712,14 +1719,15 @@ export const sendDeliverableDueReminder = inngest.createFunction(
             }))
         }
 
-        const createInAppNotifications = async (title: string, windowKey: string) => {
-            const rows = (memberUserIds as string[]).map((userId) => ({
+        const createInAppNotifications = async (recipientIds: string[], title: string, windowKey: string, notifType = 'DELIVERABLE_DUE_REMINDER') => {
+            if (recipientIds.length === 0) return
+            const rows = recipientIds.map((userId) => ({
                 firmId: firmId ?? null,
                 clientId: clientId ?? null,
                 engagementId: engagementId ?? null,
                 documentId,
                 userId,
-                type: 'DELIVERABLE_DUE_REMINDER',
+                type: notifType,
                 title,
                 body: `Due ${dueDay}`,
                 ctaUrl: boardUrl ?? null,
@@ -1730,18 +1738,59 @@ export const sendDeliverableDueReminder = inngest.createFunction(
             if (rows.length) {
                 await (prisma as any).notification.createMany({ data: rows, skipDuplicates: true })
             }
+            const { sendPushToUser } = await import("@/lib/push")
+            await Promise.all(recipientIds.map((userId) => sendPushToUser(userId, { title, body: `Due ${dueDay}`, ctaUrl: boardUrl ?? null })))
         }
 
-        // Fires one reminder window: skip if stale/approved, else email + in-app notify all members
+        // Fires one advance reminder window (24h/1h before): skip if stale/approved, gated per-firm
         const fire = async (windowKey: '24h' | '1h', whenLabel: string) => {
             const { dateStillSet, isApproved } = await getState()
             if (!dateStillSet) return { skipped: 'date-changed' }
             if (isApproved) return { skipped: 'approved' }
-            await sendEmails(
-                `Due ${whenLabel}: ${documentName}`,
-                `<p><strong>${documentName}</strong> is due ${whenLabel} (<strong>${dueDay}</strong>).</p>`
-            )
-            await createInAppNotifications(`${documentName} is due ${whenLabel}`, windowKey)
+            const config = await getEventConfig()
+            const eventCfg = config?.events?.deliverableOverdue // advance windows reuse the deliverableOverdue toggle group
+                ?? { email: false, inApp: true }
+            const recipientIds = memberUserIds as string[]
+            if (eventCfg.email) {
+                await sendEmails(
+                    recipientIds,
+                    `Due ${whenLabel}: ${documentName}`,
+                    `<p><strong>${documentName}</strong> is due ${whenLabel} (<strong>${dueDay}</strong>).</p>`
+                )
+            }
+            if (eventCfg.inApp) {
+                await createInAppNotifications(recipientIds, `${documentName} is due ${whenLabel}`, windowKey)
+            }
+            return { sent: true }
+        }
+
+        // Fires once, 24h after the due date has passed if the deliverable still isn't approved
+        const fireOverdue = async () => {
+            const { dateStillSet, isApproved } = await getState()
+            if (!dateStillSet) return { skipped: 'date-changed' }
+            if (isApproved) return { skipped: 'approved' }
+            const config = await getEventConfig()
+            const eventCfg = config?.events?.deliverableOverdue ?? { email: true, inApp: true }
+            if (!eventCfg.email && !eventCfg.inApp) return { skipped: 'disabled' }
+
+            const admins = engagementId
+                ? await prisma.engagementMember.findMany({
+                    where: { engagementId, role: 'eng_admin' },
+                    select: { userId: true },
+                })
+                : []
+            const recipientIds = Array.from(new Set([...(memberUserIds as string[]), ...admins.map((a) => a.userId)]))
+
+            if (eventCfg.email) {
+                await sendEmails(
+                    recipientIds,
+                    `Overdue: ${documentName}`,
+                    `<p><strong>${documentName}</strong> was due <strong>${dueDay}</strong> and is still not approved.</p>`
+                )
+            }
+            if (eventCfg.inApp) {
+                await createInAppNotifications(recipientIds, `${documentName} is overdue`, 'overdue', 'DELIVERABLE_OVERDUE')
+            }
             return { sent: true }
         }
 
@@ -1758,6 +1807,11 @@ export const sendDeliverableDueReminder = inngest.createFunction(
             await step.sleepUntil("wait-1h", at1h.toISOString())
             await step.run("send-1h", () => fire('1h', 'in 1 hour'))
         }
+
+        // Overdue reminder — fires once, 24h after the due date, if still not approved
+        const atOverdue = new Date(due.getTime() + 24 * 60 * 60 * 1000)
+        await step.sleepUntil("wait-overdue", atOverdue.toISOString())
+        await step.run("send-overdue", () => fireOverdue())
 
         return { documentId, dueDate }
     }

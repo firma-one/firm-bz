@@ -15,6 +15,9 @@ import { getPermissionAdapter } from '@/lib/connectors/registry'
 import { resolveEngagementConnectorId } from '@/lib/connectors/resolve-client-connector'
 import { Prisma } from '@prisma/client'
 import { engagementPath } from '@/lib/navigation/firm-paths'
+import { getFirmReminderConfig } from '@/lib/actions/firms'
+import { createEventNotifications, sendEventEmailToUser, buildAbsoluteUrl } from '@/lib/notify-event'
+import { renderInviteAcceptedEmail } from '@/lib/email-templates/invite-accepted'
 
 type EngagementInvitationWithRelations = Prisma.EngagementInvitationGetPayload<{
     include: {
@@ -183,6 +186,56 @@ export async function joinEngagementForUser(
             email: userEmail || '',
             personaSlug: invite.persona.slug,
             timestamp: new Date().toISOString()
+        })
+
+        // Event notification — engagement invite accepted, gated per-firm
+        Promise.resolve().then(async () => {
+            try {
+                const config = await getFirmReminderConfig(firmId)
+                const eventCfg = config.events.engagementInviteAccepted
+                if (!eventCfg.inApp && !eventCfg.email) return
+
+                const admins = await prisma.engagementMember.findMany({
+                    where: { engagementId: invite.engagementId, role: 'eng_admin', userId: { not: userId } },
+                    select: { userId: true },
+                })
+                if (admins.length === 0) return
+
+                const relativeUrl = engagementPath(
+                    invite.engagement.client.firm.group.slug,
+                    invite.engagement.client.firm.slug,
+                    invite.engagement.client.slug,
+                    invite.engagement.slug,
+                    { tab: 'members' }
+                )
+                const ctaUrl = buildAbsoluteUrl(relativeUrl)
+                const memberName = userEmail || 'A new member'
+
+                if (eventCfg.inApp) {
+                    await createEventNotifications(admins.map((a) => ({
+                        firmId,
+                        clientId,
+                        engagementId: invite.engagementId,
+                        userId: a.userId,
+                        type: 'ENGAGEMENT_INVITE_ACCEPTED',
+                        title: `${memberName} joined ${invite.engagement.name}`,
+                        ctaUrl: relativeUrl,
+                        metadata: { newMemberUserId: userId, personaSlug: invite.persona.slug },
+                        dedupeKey: `invite:${invite.id}:accepted`,
+                    })))
+                }
+                if (eventCfg.email) {
+                    await Promise.all(admins.map((a) => sendEventEmailToUser(a.userId, () =>
+                        renderInviteAcceptedEmail({
+                            memberName,
+                            engagementName: invite.engagement.name,
+                            ctaUrl,
+                        })
+                    )))
+                }
+            } catch (e) {
+                logger.error('Invite-accepted event notification failed', e as Error, 'Notifications', { engagementId: invite.engagementId })
+            }
         })
     }
 

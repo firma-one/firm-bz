@@ -8,6 +8,10 @@ import { getFileInfo } from '@/lib/file-utils'
 import { getProjectPersona } from '@/lib/permission-helpers'
 import { STAGE_ROLE_MAP, getAllowedTransitions, type EngagementRoleSlug } from '@/lib/deliverable-stage-roles'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
+import { getFirmReminderConfig } from '@/lib/actions/firms'
+import { createEventNotifications, sendEventEmailToUser, buildAbsoluteUrl } from '@/lib/notify-event'
+import { resolveEntity } from '@/lib/reminders/entity-registry'
+import { renderDocumentStatusChangedEmail } from '@/lib/email-templates/document-status-changed'
 
 const VALID_STATUSES: ActivityStatus[] = ['to_do', 'in_progress', 'in_review', 'approved']
 const STAGE_ORDER: Record<ActivityStatus, number> = { to_do: 0, in_progress: 1, in_review: 2, approved: 3 }
@@ -170,6 +174,65 @@ export async function PATCH(
       .actor(user.id)
       .meta({ fileName: existing.fileName, oldStatus: oldStatus ?? null, newStatus: status })
       .fireAndForget()
+
+    // Event notifications — status changed / rejected, gated per-firm via Event Notifications grid
+    Promise.resolve().then(async () => {
+      try {
+        const isRejection = oldStatus === 'in_review' && status === 'in_progress'
+        const config = await getFirmReminderConfig(fileInfo.organizationId)
+        const eventCfg = isRejection ? config.events.documentRejected : config.events.statusChanged
+        if (!eventCfg.inApp && !eventCfg.email) return
+
+        const recipientIds = new Set<string>()
+        if (isRejection) {
+          if (existing.createdBy) recipientIds.add(existing.createdBy)
+        } else {
+          const staff = await prisma.engagementMember.findMany({
+            where: { engagementId: projectId, role: { in: ['eng_admin', 'eng_member'] } },
+            select: { userId: true },
+          })
+          staff.forEach((m) => recipientIds.add(m.userId))
+        }
+        recipientIds.delete(user.id) // don't notify the actor of their own change
+        if (recipientIds.size === 0) return
+
+        const entityCtx = await resolveEntity('platform.engagements.shares', projectId)
+        const ctaUrl = buildAbsoluteUrl(entityCtx?.ctaUrl ?? null)
+        const notifType = isRejection ? 'DOCUMENT_REJECTED' : 'DOCUMENT_STATUS_CHANGED'
+        const title = isRejection
+          ? `Changes requested: "${existing.fileName}"`
+          : `Status changed to ${status}: "${existing.fileName}"`
+
+        if (eventCfg.inApp) {
+          await createEventNotifications(Array.from(recipientIds).map((userId) => ({
+            firmId: fileInfo.organizationId,
+            clientId: ctx.clientId,
+            engagementId: projectId,
+            documentId: existing.id,
+            userId,
+            type: notifType,
+            title,
+            ctaUrl: entityCtx?.ctaUrl ?? null,
+            metadata: { fileName: existing.fileName, oldStatus: oldStatus ?? null, newStatus: status },
+            dedupeKey: `doc:${existing.id}:${notifType}:${status}`,
+          })))
+        }
+        if (eventCfg.email) {
+          await Promise.all(Array.from(recipientIds).map((userId) => sendEventEmailToUser(userId, () =>
+            renderDocumentStatusChangedEmail({
+              fileName: existing.fileName,
+              engagementName: entityCtx?.name ?? '',
+              oldStatus: oldStatus ?? null,
+              newStatus: status,
+              isRejection,
+              ctaUrl,
+            })
+          )))
+        }
+      } catch (e) {
+        console.error('[activity] event notification error:', e)
+      }
+    })
 
     const updated = await prisma.engagementDocument.findUnique({
       where: {
