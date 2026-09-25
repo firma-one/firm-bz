@@ -89,14 +89,28 @@ export function buildEngagementContext(
         // engagement reached the model as a bare count, so it could only say "one thread exists"
         // and never name where. Document names only — never the message bodies, which are
         // user-authored text and are kept out of every AI surface.
-        const threadDocs = (data.commentThreads as any).documents as
-            | Array<{ documentName: string; messageCount: number; awaitingReply: boolean }>
-            | undefined
-        if (threadDocs?.length) {
-            lines.push('Documents with comment threads: ' +
-                threadDocs.slice(0, 10)
-                    .map((d) => `${d.documentName} (${d.messageCount} message${d.messageCount === 1 ? '' : 's'}` +
-                        `${d.awaitingReply ? ', awaiting firm reply' : ''})`)
+        // Only threads that need something: awaiting a firm reply, or explicitly marked urgent.
+        // An answered, unflagged thread is already covered by the counts above — naming it adds
+        // length without telling the reader anything to act on.
+        const threadDocs = ((data.commentThreads as any).documents ?? []) as
+            Array<{ docId: string | null; documentName: string; messageCount: number; awaitingReply: boolean; needsFollowUp: boolean; followUpReasons: string[] }>
+        const needsAttention = threadDocs.filter((d) => d.awaitingReply || d.needsFollowUp)
+        if (needsAttention.length > 0) {
+            const REASON_LABEL: Record<string, string> = {
+                urgent: 'marked urgent', looking: 'someone is looking into it',
+                yes: 'answered yes', no: 'answered no', ok: 'agreed', plus_one: 'supported',
+            }
+            lines.push('Comment threads needing attention: ' +
+                needsAttention.slice(0, 10)
+                    .map((d) => {
+                        const notes = [
+                            ...(d.awaitingReply ? ['awaiting firm reply'] : []),
+                            ...d.followUpReasons.map((r) => REASON_LABEL[r] ?? r),
+                        ]
+                        return `${d.docId ? `${d.docId} — ` : ''}${d.documentName} ` +
+                            `(${d.messageCount} message${d.messageCount === 1 ? '' : 's'}` +
+                            `${notes.length ? `, ${notes.join(', ')}` : ''})`
+                    })
                     .join('; ') + '.')
         }
     }

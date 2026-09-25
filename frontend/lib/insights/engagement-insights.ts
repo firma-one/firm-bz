@@ -179,7 +179,23 @@ export interface CommentThreads {
    * Document names only — never message bodies. Comment text is user-authored and is deliberately
    * kept out of every AI surface.
    */
-  documents: Array<{ documentId: string; documentName: string; messageCount: number; awaitingReply: boolean }>
+  documents: Array<{
+    documentId: string
+    /** The parent deliverable's reference ("QSR-17"), so a reader can look up the deliverable and
+     *  find the document beneath it. Falls back to the document's own id when it has no parent. */
+    docId: string | null
+    documentName: string
+    messageCount: number
+    awaitingReply: boolean
+    /**
+     * A reaction on this thread implies an open loop, so it is surfaced even when the firm has
+     * already replied. `done`, `celebrate` and `thumbs_up` are deliberately excluded: they CLOSE a
+     * thread, and treating them as attention would surface exactly what someone just resolved.
+     */
+    needsFollowUp: boolean
+    /** The specific reactions driving needsFollowUp, e.g. ['urgent', 'looking']. */
+    followUpReasons: string[]
+  }>
 }
 
 export interface EngagementPace {
@@ -505,6 +521,8 @@ export async function computeEngagementInsights(
         select: {
           id: true,
           fileName: true,
+          // Human-facing reference ("QSR-17") so surfaces can point at the artefact, not just name it.
+          docId: true,
           isFolder: true,
           fileSize: true,
           parentId: true,
@@ -524,6 +542,9 @@ export async function computeEngagementInsights(
           authorUserId: true,
           content: true,
           createdAt: true,
+          // The `urgent` reaction is an explicit human signal that a thread needs attention,
+          // regardless of whether the firm has already replied.
+          reactions: true,
         },
         orderBy: { createdAt: 'asc' },
       }),
@@ -581,6 +602,15 @@ export async function computeEngagementInsights(
       if (!commentsByDoc.has(c.projectDocumentId)) commentsByDoc.set(c.projectDocumentId, [])
       commentsByDoc.get(c.projectDocumentId)!.push(c)
     }
+
+    /**
+     * Reactions that leave a thread OPEN. Mirrors the picker in document-doc-comments-pane.tsx,
+     * minus the three that close a thread (`done`, `celebrate`, `thumbs_up`) — surfacing those as
+     * needing attention would flag exactly the conversations someone just marked resolved.
+     *
+     * `yes`/`no`/`ok`/`plus_one` are decisions: a decision given is a next step owed.
+     */
+    const OPEN_LOOP_REACTIONS = ['urgent', 'looking', 'yes', 'no', 'ok', 'plus_one'] as const
 
     const unansweredThreads: UnansweredThreadItem[] = []
     const docMap = new Map(docs.map((d) => [d.id, d]))
@@ -1008,16 +1038,38 @@ export async function computeEngagementInsights(
       .map(([docId, thread]) => {
         const doc = docMap.get(docId)
         if (!doc) return null
+        // Prefer the parent deliverable's reference: a reader looks up the deliverable and finds
+        // the document beneath it, which is how the workspace is actually navigated. Subtask
+        // documents often carry no docId of their own.
+        const parent = doc.parentId ? docMap.get(doc.parentId) : undefined
+        const reference = parent?.docId ?? doc.docId ?? null
+        const followUpSet = new Set<string>()
+        for (const m of thread) {
+          const r = (m as { reactions?: unknown }).reactions
+          if (!r || typeof r !== 'object') continue
+          for (const key of OPEN_LOOP_REACTIONS) {
+            const users = (r as Record<string, unknown>)[key]
+            if (Array.isArray(users) && users.length > 0) followUpSet.add(key)
+          }
+        }
+        const followUpReasons = Array.from(followUpSet)
         return {
           documentId: docId,
+          docId: reference,
           documentName: doc.fileName,
           messageCount: thread.length,
           awaitingReply: unansweredDocIds.has(docId),
+          needsFollowUp: followUpReasons.length > 0,
+          followUpReasons,
         }
       })
       .filter((d): d is NonNullable<typeof d> => d !== null)
-      // Threads awaiting a reply first, then the busiest conversations.
-      .sort((a, b) => (Number(b.awaitingReply) - Number(a.awaitingReply)) || (b.messageCount - a.messageCount))
+      // Urgent first, then anything else needing follow-up, then awaiting a reply, then busiest.
+      .sort((a, b) =>
+        (Number(b.followUpReasons.includes('urgent')) - Number(a.followUpReasons.includes('urgent')))
+        || (Number(b.needsFollowUp) - Number(a.needsFollowUp))
+        || (Number(b.awaitingReply) - Number(a.awaitingReply))
+        || (b.messageCount - a.messageCount))
 
     const commentThreads: CommentThreads = {
       answered: Math.max(0, totalThreads - unansweredThreads.length),

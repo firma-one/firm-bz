@@ -123,8 +123,8 @@ export function fingerprintInsights(data: EngagementInsightsResponse): string {
         ...(data.unansweredThreads ?? []).map((t: { documentId?: string }) => `u:${t.documentId ?? ''}`).sort(),
         // Every threaded document and its message count, so a reply — or a thread opened on a new
         // document — marks the summary stale. Hashing only the unanswered ids missed both.
-        ...((data.commentThreads?.documents ?? []) as Array<{ documentId: string; messageCount: number }>)
-            .map((d) => `t:${d.documentId}:${d.messageCount}`)
+        ...((data.commentThreads?.documents ?? []) as Array<{ documentId: string; messageCount: number; followUpReasons?: string[] }>)
+            .map((d) => `t:${d.documentId}:${d.messageCount}:${(d.followUpReasons ?? []).slice().sort().join(',')}`)
             .sort(),
         // Rework per deliverable — a summary that mentions revisions should notice a new round.
         ...(data.revisionMetrics ?? []).map((r: { documentId: string; revisions: number }) => `r:${r.documentId}:${r.revisions}`).sort(),
@@ -169,12 +169,15 @@ Rules for the sections you write — Summary, Progress, Collaboration, Risks, Ne
 - 1-3 sentences each, plain prose. No bullet points, no nested headings.
 - Summary: where the engagement stands overall.
 - Progress: what is complete and what is in flight, with counts.
-- Collaboration: how the two sides are communicating. NAME the documents carrying comment threads
-  — "one thread exists" is not useful without saying where. Say which await a reply from the firm.
-  You are given counts and document names ONLY, never the text of a comment, so describe the state
-  of the conversation and never characterise what anyone said or what they want. If every thread
-  has been answered, say so plainly and still name the documents — a responsive engagement is worth
-  stating, not omitting.
+- Collaboration: how the two sides are communicating. Give the overall counts, then NAME only the
+  threads that need something — those awaiting a reply from the firm, or marked urgent. Lead with
+  the reference the snapshot gives ("QSR-17 — Sales Playbooks"): it points at the deliverable, so
+  the reader can find the document beneath it. A thread also needs attention when a reaction leaves
+  it open — marked urgent, someone looking into it, or a yes/no/ok/+1 decision that still has to be
+  acted on. Do NOT list threads that are answered and unflagged;
+  the counts already cover them. If nothing needs a reply, say so in one sentence and name nothing.
+  You are given counts, references and document names ONLY, never the text of a comment, so
+  describe the state of the conversation and never characterise what anyone said or what they want.
 - Risks: only risks visible in the data (overdue work, unassigned deliverables, unanswered client
   comments, missing dates, pace gaps). State the risk. Do NOT propose how to address it. Do not
   repeat Collaboration verbatim — mention threads here only where the delay itself is the risk.
