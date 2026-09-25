@@ -381,41 +381,28 @@ export function BillingPageClient({
                 </li>
             </ul>
 
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-stretch sm:gap-4">
-                <div className="flex min-w-0 items-start gap-3.5 sm:w-1/4 sm:shrink-0 rounded border-2 border-primary/30 bg-primary/5 px-4 py-4 sm:px-5 shadow-md">
-                    <span className={trustIconTileClass}>
-                        <CreditCard className="h-5 w-5" aria-hidden />
-                    </span>
-                    <div className="min-w-0">
-                        <h2 className="text-[0.8125rem] font-bold text-[#1b1b1d]">
-                            {upgradeCopy.billingCardWorkspaceHeading}
-                        </h2>
-                        <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.2em] text-[#45474c]">
-                            Firm Group
-                        </p>
-                        {loadError ? (
-                            <p className="mt-1 text-sm text-red-600">{loadError}</p>
-                        ) : !firms.length ? (
-                            <p className="mt-1 text-sm text-slate-600">
-                                No workspaces found. Open the app from a firm first.
-                            </p>
-                        ) : selectedFirm ? (
-                            <p className="mt-0.5 text-[0.8125rem] font-bold text-[#1b1b1d]">
-                                {selectedFirm.groupName ?? selectedFirm.name}
-                            </p>
-                        ) : null}
-                    </div>
-                </div>
-                {selectedFirm ? (
-                    <div className="flex-1 min-w-0">
-                        <CurrentPlanSummary
-                            firmId={selectedFirm.id}
-                            portalReturnPath={portalReturnPath}
-                            currentPlanState={currentPlanState}
-                            loading={!currentPlanFetchCompleted || currentPlanLoading}
-                            variant="embedded"
-                        />
-                    </div>
+            {/* One card: the billing entity is the plan card's first row rather than a separate
+                box beside it, so "who is billed" and "what they are on" read as one subject. */}
+            <div className="flex flex-col gap-4">
+                {loadError ? (
+                    <p className="text-sm text-red-600">{loadError}</p>
+                ) : !firms.length ? (
+                    <p className="text-sm text-slate-600">
+                        No workspaces found. Open the app from a firm first.
+                    </p>
+                ) : selectedFirm ? (
+                    <CurrentPlanSummary
+                        firmId={selectedFirm.id}
+                        portalReturnPath={portalReturnPath}
+                        currentPlanState={currentPlanState}
+                        loading={!currentPlanFetchCompleted || currentPlanLoading}
+                        variant="embedded"
+                        entity={{
+                            heading: upgradeCopy.billingCardWorkspaceHeading,
+                            kind: 'Firm Group',
+                            name: selectedFirm.groupName ?? selectedFirm.name,
+                        }}
+                    />
                 ) : null}
             </div>
 

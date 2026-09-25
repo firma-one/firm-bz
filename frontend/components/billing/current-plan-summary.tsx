@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useState, type ReactNode } from 'react'
-import { AlertTriangle, Loader2, Settings } from 'lucide-react'
+import { AlertTriangle, Loader2, Settings, CreditCard } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
 import type { BillingCurrentPlanState, BillingPlanEntitlements, BillingPlanUsage } from '@/components/billing/polar-plans-picker'
@@ -173,6 +173,11 @@ type Props = {
     /** When set with `portalReturnPath`, billing admins can open Polar customer portal from this card. */
     firmId?: string
     portalReturnPath?: string
+    /**
+     * Billing entity shown as the card's first row. Previously a separate card beside this one,
+     * which split one subject — who is billed and what they are on — across two boxes.
+     */
+    entity?: { heading: string; kind: string; name: string | null } | null
 }
 
 export function CurrentPlanSummary({
@@ -181,6 +186,7 @@ export function CurrentPlanSummary({
     variant = 'embedded',
     firmId,
     portalReturnPath,
+    entity,
 }: Props) {
     const [portalLoading, setPortalLoading] = useState(false)
     const [portalError, setPortalError] = useState<string | null>(null)
@@ -256,6 +262,25 @@ export function CurrentPlanSummary({
 
     return (
         <div className={shell}>
+            {/* Billing entity — who is being billed, above what they are on. Carries the same
+                CreditCard tile the standalone card used, so the icon survives the merge. */}
+            {entity && (
+                <div className="mb-3 pb-3 border-b border-primary/15 flex items-start gap-3.5">
+                    <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded border border-primary/25 bg-white text-primary shadow-sm">
+                        <CreditCard className="h-4.5 w-4.5" aria-hidden />
+                    </span>
+                    <div className="min-w-0">
+                        <h2 className="text-[0.8125rem] font-bold text-[#1b1b1d]">{entity.heading}</h2>
+                        <p className="mt-0.5 text-[10px] font-bold uppercase tracking-[0.2em] text-[#45474c]">
+                            {entity.kind}
+                        </p>
+                        {entity.name && (
+                            <p className="mt-0.5 text-[0.8125rem] font-bold text-[#1b1b1d]">{entity.name}</p>
+                        )}
+                    </div>
+                </div>
+            )}
+
             {/* Top row: plan name · valid until · manage button */}
             <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-4 min-w-0 flex-wrap">
