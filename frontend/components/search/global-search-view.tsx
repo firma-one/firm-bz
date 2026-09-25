@@ -773,13 +773,14 @@ export function GlobalSearchView({ firmId }: { firmId: string }) {
             >
               <History className="h-3.5 w-3.5" />
               History
-              {/* A directional chevron, so the button reads as a disclosure control rather than a
-                  filter toggle: pointing right when the pane is closed, and back toward the pane
-                  once it is open. Colour alone did not say it expands anything. */}
+              {/* The pane sits to the RIGHT of this button, so the chevron points at it: right
+                  when open (the pane is there), left when closed (it is tucked away off to the
+                  side). The opposite mapping — the sidebar "which way will it move" convention —
+                  ends up pointing left at nothing while the pane is open on the right. */}
               <ChevronRight
                 className={cn(
                   'h-3 w-3 transition-transform duration-200',
-                  historyOpen && 'rotate-180',
+                  !historyOpen && 'rotate-180',
                 )}
                 aria-hidden
               />
