@@ -141,9 +141,10 @@ a surprise. What remains guards against *misreading*, not against imposition.
    see exactly what was applied.
 2. **One-click undo, immediate re-run, no credit charged.** Removing an inferred chip re-runs the
    search with the remaining chips. No model call, so correcting a misread is free.
-3. **Zero-result guard.** *(NOT BUILT — see §A.10.)* If an Ask search returns 0 results,
-   automatically re-run without the inferred chips and label the fallback — *"No matches with the
-   filters Brio inferred — showing broader results."* Interpretation can never produce a dead end.
+3. **Zero-result guard.** *(NOT BUILT — spec in §A.11.)* If an Ask search returns 0 results, relax
+   the inferred filters **one at a time, in a fixed order**, and stop at the first step that
+   returns something. Interpretation can never produce a dead end — but "broaden" must not become
+   "show unrelated results". See §A.11 for the ladder and its stopping rules.
    Items 1, 2, 4 and 5 shipped; this one did not, so the release gate named in §A.8 is still open.
 4. **Failure falls back to Filters mode.** If the interpret call errors, times out, or AI is not
    configured, the query runs as a plain search with no filters. The user gets results, not an error.
@@ -208,13 +209,92 @@ Two changes the user asked for, independent of the LLM:
 - At zero credits the Ask toggle is disabled with an upgrade prompt; Filters mode unaffected.
 
 
+
+### A.11 Zero-result recovery and ambiguity disclosure — spec
+
+Written 2026-09-25 after working through the failure cases. Supersedes the one-line sketch that
+previously stood in §A.5.3.
+
+#### The problem with "drop the chips and re-run"
+
+The obvious implementation is wrong. For *"Acme scope doc from last spring"* the interpreter returns
+chips `client=Acme`, `time=last spring` and `residualText: "scope doc"`. Dropping all chips searches
+for **"scope doc" across every client and all time** — every scope document in the firm, most of
+them unrelated. That is not a broader version of the user's search; it is a different search.
+
+Worse, for *"NaviQure deliverables from last month"* the **whole query becomes filters** and
+`residualText` is empty (`search-interpreter.ts:52` states this contract). Dropping the chips leaves
+no search terms at all, which matches everything.
+
+#### The ladder
+
+Relax one filter at a time and **stop at the first step that returns results**. No model call at any
+step — the chips are already structured, this is local manipulation.
+
+| Step | Relax | Why here |
+|---|---|---|
+| 1 | Date filter | The most common misread. "Last spring" is an interpretation; a resolved client rarely is. |
+| 2 | Deliverable, then engagement | Narrowest scope filter first, preserving the client. |
+| — | **Stop.** | Never relax the client chip. |
+
+**Two hard rules:**
+
+1. **Never drop the client chip.** It is the highest-confidence inference — resolved against a real,
+   access-scoped entity list rather than guessed — and it is what keeps results relevant. Widening
+   past it is exactly what produces the unrelated results this guard exists to prevent.
+2. **Never search on empty `residualText`.** If relaxing a chip leaves no search terms, that is not
+   a broader search, it is "list everything". Stop and report no matches.
+
+#### Labelling
+
+State what was relaxed and what still applies. Not *"showing broader results"*:
+
+> **No Acme scope documents from last spring. Showing Acme scope documents from any date.**
+> [Restore date filter]
+
+#### Where it stops
+
+If the ladder exhausts without results, **stop deliberately** — *"No matches for 'scope doc' in
+Acme"* — with all chips still visible and removable. A clear dead end beats a page of irrelevant
+results, and the user can widen manually in whatever direction they know is right.
+
+#### Ambiguity disclosure
+
+Today two similarly-named clients means the interpreter resolves **nothing**: `SYSTEM` instructs
+*"resolve nothing rather than guess"* (`search-interpreter.ts:47-48`) and the tool schema has no
+field for a runner-up, so the ambiguity is discarded at the moment it is detected. The user is never
+told a choice existed.
+
+Fix: let the tool return the runner-up alongside the chosen entity, and disclose it **after** the
+search, inline with results:
+
+> Showing results for **Acme Corp**. Did you mean **Acme Industries**? [Switch]
+
+No extra AI call — the model already knows both matched. Switching re-runs locally with the other id.
+
+#### Why not ask before searching
+
+Considered and rejected 2026-09-25. Cost is not the reason (a second interpret call is 0.5 credits,
+still under a chat answer); **latency and friction** are. Search is a reflex — type, glance, click —
+and a blocking question breaks it on the one interaction that most needs to be instant.
+
+The deciding argument: **every chip is already visible and removable**. Asking "did you mean last
+spring?" when a removable `last spring ×` chip is on screen asks a question the interface has
+already answered, and correcting a chip is one click and free. Users who want a dialogue have the
+chat panel, which is already conversational and where they have opted into a back-and-forth.
+
+**Principle: never block, always disclose.** Run the search, relax deliberately, surface ambiguity
+inline. Revisit only if real queries show a single pass genuinely cannot get there.
+
+---
+
 ### A.10 What remains — Phase A is not closed
 
 Four items from §A.4–A.8 did not ship with `c0a7898f`. Verified against the tree on 2026-09-25.
 
 | # | Item | Where | Why it matters |
 |---|---|---|---|
-| 1 | **Zero-result guard** (§A.5.3) | `components/search/global-search-view.tsx` | §A.8 names this *the release gate*. An over-constrained Ask search currently returns nothing with no automatic way back — exactly the dead end §A.5 was written to prevent. Self-contained; no backfill. |
+| 1 | **Zero-result guard** (spec: §A.11) | `components/search/global-search-view.tsx` | §A.8 names this *the release gate*. An over-constrained Ask search currently returns nothing with no automatic way back — exactly the dead end §A.5 was written to prevent. Self-contained; no backfill. |
 | 2 | **Interpret caching** (§A.8) | interpret route | Keyed on `(normalized text, candidate-set hash)`. Without it an identical repeat Ask search costs another 0.5 credits. |
 | 3 | **Snippet 500 → 2000** (§A.6) | `lib/snippet.ts` | Cannot ship alone — needs the re-embed backfill, and the dilution question in §A.6 is still unanswered. |
 | 4 | **Weighted rank fusion** (§A.6) | `lib/services/search-service.ts` | Independent of #3; the four branches still merge-and-dedupe. |
