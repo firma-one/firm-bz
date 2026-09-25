@@ -1,5 +1,19 @@
 # Plan: AI Insights & AI-Backed Business Features
 
+> **SUPERSEDED (2026-09-25) — do not implement from this plan.**
+>
+> Replaced by [`ai-native-features.md`](./ai-native-features.md). What changed:
+>
+> - **Runtime.** This plan assumed Gemma/Gemini via local HuggingFace Transformers. The product
+>   shipped on Anthropic Haiku through `lib/ai/client.ts` (`server-only`, `ANTHROPIC_API_KEY`).
+> - **Phase 1 (AI Firm Brief)** shipped 2026-09-25 as the Brio firm brief — same intent, different
+>   runtime. See ai-native-features.md §Phase C.
+> - **Phases 2, 3 and 4** (auto-reminder urgency classification, kickoff checklist, weekly digest)
+>   are on **HOLD** per ai-native-features.md §7: each restates what a plain query or a template
+>   already produces, so none meets that plan's bar for AI-native.
+>
+> Kept for the data-shape and signal analysis in the sections below, which remain accurate.
+
 ## Context
 
 The Firm Analytics page (`/insights`) already surfaces rich structured data — pipeline value, overdue engagements, unanswered comment threads, revenue at risk, weekly activity. This plan adds an AI layer on top of that data to:

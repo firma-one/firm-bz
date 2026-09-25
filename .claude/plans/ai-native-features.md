@@ -2,7 +2,9 @@
 
 **Supersedes:** `.claude/plans/ai-insights-and-business-features.md` (Phases 2/3/4 of that plan move to HOLD — see §7).
 
-**Status:** Phase A is the active work. Phases B+ are sketched, not committed.
+**Status (2026-09-25):** Phase A is **built and on `origin/dev`** (commit `c0a7898f`), except four
+items tracked in §A.10. Phases C and D also shipped ahead of their sketches — see their sections.
+Phase B remains unbuilt.
 
 ---
 
@@ -137,9 +139,10 @@ a surprise. What remains guards against *misreading*, not against imposition.
    see exactly what was applied.
 2. **One-click undo, immediate re-run, no credit charged.** Removing an inferred chip re-runs the
    search with the remaining chips. No model call, so correcting a misread is free.
-3. **Zero-result guard.** If an Ask search returns 0 results, automatically re-run without the
-   inferred chips and label the fallback — *"No matches with the filters Brio inferred — showing
-   broader results."* Interpretation can never produce a dead end.
+3. **Zero-result guard.** *(NOT BUILT — see §A.10.)* If an Ask search returns 0 results,
+   automatically re-run without the inferred chips and label the fallback — *"No matches with the
+   filters Brio inferred — showing broader results."* Interpretation can never produce a dead end.
+   Items 1, 2, 4 and 5 shipped; this one did not, so the release gate named in §A.8 is still open.
 4. **Failure falls back to Filters mode.** If the interpret call errors, times out, or AI is not
    configured, the query runs as a plain search with no filters. The user gets results, not an error.
 5. **Filters mode is untouched.** It does not call the model, does not consume credits, and behaves
@@ -148,8 +151,9 @@ a surprise. What remains guards against *misreading*, not against imposition.
 Dropped from the earlier draft: the *"search everything instead"* escape hatch, which existed to
 undo inference the user never asked for. In an opt-in mode the toggle itself is that escape.
 
-### A.6 Ranking improvement (non-AI, ships with A)
+### A.6 Ranking improvement (non-AI, ships with A) — NOT BUILT
 
+Did not ship with A. `lib/snippet.ts` and `lib/services/search-service.ts` are both unmodified.
 Two changes the user asked for, independent of the LLM:
 
 - **Snippet 500 → 2000 chars.** `extractSnippet` (`lib/snippet.ts`) cap raised. Improves both what the user reads *and* what gets embedded, since `prepareTextForEmbedding` builds from the summary. **Requires a re-embed backfill** — a longer snippet changes the vector.
@@ -163,21 +167,21 @@ Two changes the user asked for, independent of the LLM:
 |---|---|
 | `frontend/lib/ai/client.ts` | Exists — Anthropic client, `server-only`. |
 | `frontend/lib/ai/assistant.ts` | Exists — `ASSISTANT.name` ("Brio"). Use for every user-facing string. |
-| `frontend/lib/ai/search-interpreter.ts` | New — `interpretSearchQuery({ text, candidates, existingChips })`; constrained schema output, validates every returned id against the candidate set. |
-| `frontend/app/api/firms/[firmId]/search/interpret/route.ts` | New — auth via `requireFirmSearch`, candidates via `computeGlobalSearchAccessScope`. Never returns an entity outside the user's scope. |
-| `frontend/components/search/global-search-view.tsx` | Modify — call interpret before search; merge chips; render inferred markers, escape hatch, zero-result guard. |
-| `frontend/lib/snippet.ts` | Modify — snippet cap → 2000. |
-| `frontend/lib/services/search-service.ts` | Modify — weighted rank fusion. |
-| `frontend/app/api/firms/[firmId]/search/route.ts` | **Unchanged.** Interpretation happens before it; it keeps receiving structured filters. |
+| `frontend/lib/ai/search-interpreter.ts` | **Done** — `interpretSearchQuery({ text, candidates, existingChips })`; constrained schema output, validates every returned id against the candidate set. |
+| `frontend/app/api/firms/[firmId]/search/interpret/route.ts` | **Done** — auth via `requireFirmSearch`, candidates via `computeGlobalSearchAccessScope`. Never returns an entity outside the user's scope. |
+| `frontend/components/search/global-search-view.tsx` | **Partly done** — interpret call, chip merge and inferred markers shipped; zero-result guard did not. |
+| `frontend/lib/snippet.ts` | **Not started** — snippet cap → 2000. |
+| `frontend/lib/services/search-service.ts` | **Not started** — weighted rank fusion. |
+| `frontend/app/api/firms/[firmId]/search/route.ts` | **Unchanged, as planned.** Interpretation happens before it; it keeps receiving structured filters. |
 
 ### A.8 Risks
 
 | Risk | Mitigation |
 |---|---|
 | Latency on submit | One call on Enter, not per keystroke. Show a clear pending state; the user has explicitly asked and is expecting a moment's work. |
-| Credit burn | Explicit send caps it at one call per search (5× lower than debounced firing). Cache by `(normalized text, candidate-set hash)` so an identical repeat search is free and uncharged. |
+| Credit burn | Explicit send caps it at one call per search (5× lower than debounced firing) — **shipped**. Cache by `(normalized text, candidate-set hash)` so an identical repeat search is free and uncharged — **NOT BUILT** (§A.10); an identical repeat Ask search re-bills today. |
 | Hallucinated entity id | Server validates every id against the candidate set; unknown ids dropped silently. |
-| Misread producing a dead end | §A.5 items 1–3: chips are visible, removable, free to correct, and a 0-result search auto-broadens. **Treat as the release gate.** |
+| Misread producing a dead end | §A.5 items 1–2 shipped (chips visible, removable, free to correct). The 0-result auto-broaden did **not** ship, so this release gate is **still open** — §A.10. |
 | Wrong-but-plausible resolution (two similarly-named clients) | Confidence threshold; inferred chip is visible and removable; ambiguity → resolve nothing. |
 | Regression to the existing search | Filters mode shares no code path with interpretation and is not modified. Verify explicitly. |
 
@@ -195,15 +199,33 @@ Two changes the user asked for, independent of the LLM:
 - Nonexistent client name → no chip, plain semantic search, no error.
 - Two similarly-named clients → no confident resolution, no chip.
 - Explicit user chip + contradicting prose → **user chip wins**.
-- 0 results with inferred chips → auto-broadened results with the explanatory label.
+- 0 results with inferred chips → auto-broadened results with the explanatory label. **(Cannot pass — guard not built, §A.10.)**
 
 **Credits**
-- One Ask search deducts 0.5 credits; an identical repeat within the cache window deducts none.
+- One Ask search deducts 0.5 credits — **shipped**; an identical repeat within the cache window deducts none **(cannot pass — cache not built, §A.10)**.
 - At zero credits the Ask toggle is disabled with an upgrade prompt; Filters mode unaffected.
+
+
+### A.10 What remains — Phase A is not closed
+
+Four items from §A.4–A.8 did not ship with `c0a7898f`. Verified against the tree on 2026-09-25.
+
+| # | Item | Where | Why it matters |
+|---|---|---|---|
+| 1 | **Zero-result guard** (§A.5.3) | `components/search/global-search-view.tsx` | §A.8 names this *the release gate*. An over-constrained Ask search currently returns nothing with no automatic way back — exactly the dead end §A.5 was written to prevent. Self-contained; no backfill. |
+| 2 | **Interpret caching** (§A.8) | interpret route | Keyed on `(normalized text, candidate-set hash)`. Without it an identical repeat Ask search costs another 0.5 credits. |
+| 3 | **Snippet 500 → 2000** (§A.6) | `lib/snippet.ts` | Cannot ship alone — needs the re-embed backfill, and the dilution question in §A.6 is still unanswered. |
+| 4 | **Weighted rank fusion** (§A.6) | `lib/services/search-service.ts` | Independent of #3; the four branches still merge-and-dedupe. |
+
+**Sequencing.** #1 and #2 are independent of everything else and should go first — #1 because it is
+the stated release gate, #2 because it is a direct cost leak. #3 must not ship before the
+embed-500/2000 A/B in §A.6 resolves and the re-embed backfill (§8.4) exists; widening the snippet
+without the backfill leaves old and new documents embedded on different bases, which is worse than
+not widening at all.
 
 ---
 
-## Phase B — Content-aware sensitivity detection *(sketch)*
+## Phase B — Content-aware sensitivity detection *(sketch, not built)*
 
 Sensitive-file detection is a regex over **filenames only** (`projects/[projectId]/insights/route.ts:285-286`). A file named `notes-final.docx` containing bank details is invisible; `contract-template.docx` with nothing sensitive is flagged.
 
@@ -211,13 +233,13 @@ The `EngagementDocument.content` column already holds full extracted text **and 
 
 ---
 
-## Phase C — AI narrative brief *(carried over, unchanged in intent)*
+## Phase C — AI narrative brief — **BUILT** (`c0a7898f`, 2026-09-25)
 
 Phase 1 of the superseded plan survives as legitimate: turning a 25-field `FirmInsightsResponse` into prose is real language work. Lower priority than A.
 
 ---
 
-## Phase D — Conversational engagement Q&A *(sketch)*
+## Phase D — Conversational engagement Q&A — **BUILT** (`c0a7898f`, 2026-09-25)
 
 Phase 5 of the superseded plan. The only genuinely agentic item there. Revisit after A and C.
 
@@ -290,10 +312,16 @@ disable, with an upgrade prompt. Filters-mode search is unaffected.
 
 ## 8. Prerequisites
 
-1. **Choose an LLM provider** — genuinely greenfield; no SDK, key, or `lib/ai/` exists.
-2. **Structured output is mandatory** — the resolver must emit constrained schema output (enum/id selection), not free text. Whichever provider is chosen must support this well; it is the mechanism that makes A.4 safe.
-3. **Feature-flag the whole path** — `NEXT_PUBLIC_AI_SEARCH=1`. Off = today's behavior exactly.
-4. **Re-embed backfill job** — required if the snippet widening lands (A.6), pending the dilution A/B.
+1. ~~**Choose an LLM provider**~~ — **settled.** Anthropic (`claude-haiku-4-5-20251001`) via
+   `lib/ai/client.ts`, `server-only`, key in `ANTHROPIC_API_KEY`. All AI calls are server-side.
+2. ~~**Structured output is mandatory**~~ — **settled.** `lib/ai/search-interpreter.ts` uses
+   constrained tool-use and validates every returned id against the candidate set; a date resolves
+   only to a `RELATIVE_TIME_PRESETS` literal. This is the mechanism that makes §A.4 safe.
+3. ~~**Feature-flag the whole path**~~ — **not needed as specified.** The opt-in Ask/Filters toggle
+   is the flag: Filters mode shares no code path with interpretation, so "off" is a user choice
+   rather than an env var. `NEXT_PUBLIC_AI_SEARCH` was never added.
+4. **Re-embed backfill job** — **still outstanding.** Required before the snippet widening (§A.6)
+   can land, and still pending the dilution A/B. The one open prerequisite.
 
 ---
 
@@ -302,15 +330,17 @@ disable, with an upgrade prompt. Filters-mode search is unaffected.
 ```markdown
 ## AI Features
 
-- [ ] **Natural-Language Document Search** — [plan](.claude/plans/ai-native-features.md)
-  - Prose replaces the manual 5-stage filter picker; LLM resolves against real access-scoped entities
-  - Inferred filters render as removable chips; zero-result auto-broadening; full bypass on failure
-  - Reopens the 2026-07-09 NL-search rejection with a decision record (§A.2)
-  - Snippet 500→2000 chars + weighted rank fusion (non-AI, ships alongside)
+- [x] **Natural-Language Document Search** — shipped `c0a7898f` 2026-09-25 (§A.10 lists the remainder)
+- [x] **AI narrative brief** — firm brief + engagement summary, shipped `c0a7898f`
+- [x] **Conversational engagement Q&A** — read-only analyst panel, shipped `c0a7898f`
+
+- [ ] **Doc Search: close out Phase A** — [plan](.claude/plans/ai-native-features.md#a10-what-remains--phase-a-is-not-closed)
+  - Zero-result auto-broadening (the release gate named in §A.8) — not built
+  - Cache interpretation by `(normalized text, candidate-set hash)` — identical repeat Ask searches re-bill today
+  - Snippet 500→2000 chars + re-embed backfill, pending the §A.6 dilution A/B
+  - Weighted rank fusion in `search-service.ts`
 
 - [ ] **Content-aware sensitivity detection** — classify over the unused `content` column, not filenames
-- [ ] **AI narrative brief** — prose over FirmInsightsResponse
-- [ ] **Conversational engagement Q&A** — read-only analyst panel
 
 ### On hold — not AI-native (see plan §7)
 - [~] Auto-reminder urgency classification — build the rule without the LLM

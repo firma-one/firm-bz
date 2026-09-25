@@ -30,7 +30,7 @@ See [`.claude/plans/beta-feedback-fixes.md`](../../.claude/plans/beta-feedback-f
   - #1b Widen summarizable mime types: Google Sheets/Slides via Drive export, and modern Office (docx/pptx/xlsx) + PDF parsed in-memory (officeparser / pdf-parse; 15MB size guard; no disk writes) — implemented alongside #1
   - #1c System-admin "Re-index documents" button per firm on `/system/user-data-map` (POST `/api/system/user-data-map/reindex`) — implemented, replaces the delete-and-reupload workaround
   - #2 Embed search queries in the browser (preloaded MiniLM worker, `NEXT_PUBLIC_CLIENT_EMBEDDINGS`, server fallback) — approved, value under discussion
-  - NL query interpreter ("#4", prose → inferred filter chips) evaluated and dropped 2026-07-09 — explicit @ picker chips remain the design
+  - NL query interpreter ("#4", prose → inferred filter chips) was dropped 2026-07-09 — **superseded**: shipped 2026-09-25 as grounded, access-scoped resolution under [ai-native-features.md §A](../../.claude/plans/ai-native-features.md). The 2026-07 rejection stands against the *ungrounded regex/chrono* approach only; see §A.2 for the decision record. The keyboard-driven @ picker was also replaced by plain dropdowns in the same round.
 
 - [ ] **Global Document Search** — [plan](../../.claude/plans/global-search-share-status-overview-metrics.md)
   - Cross-engagement search (e.g. "find all legal docs for NaviQure AI"); currently scoped to one project at a time
@@ -90,17 +90,45 @@ See [`.claude/plans/beta-feedback-fixes.md`](../../.claude/plans/beta-feedback-f
   - Top-5 deliverables by revision count shown in a detail card
   - No schema changes; source from existing `PlatformAuditEvent` table and `settings.share` JSON
 
-## AI Features — [plan](../../.claude/plans/ai-insights-and-business-features.md)
+## AI Features — [plan](../../.claude/plans/ai-native-features.md)
 
-AI layer using Gemma 4 (HuggingFace Transformers, same runtime as release notes generation — no API key, model cached locally).
+Brio, the in-product assistant. Anthropic Haiku via `lib/ai/client.ts` — server-side only,
+`ANTHROPIC_API_KEY`. Supersedes the earlier Gemma/HuggingFace design in
+[ai-insights-and-business-features.md](../../.claude/plans/ai-insights-and-business-features.md),
+whose phases 2/3/4 are on HOLD (see ai-native-features.md §7).
 
-- [ ] **AI Firm Brief** — 3–5 sentence plain-English narrative at the top of the Insights page; synthesises pipeline, overdue engagements, unanswered threads, revenue at risk; cached in `firm.settings.aiBrief` (1h TTL), refreshable on demand
+**Shipped 2026-09-25** (`c0a7898f`, `4212f829`, `4013f191`):
 
-- [ ] **Auto-Reminder: Unanswered Comment Threads** — Inngest cron every 4h; threads unanswered > 48h by an external collaborator → AI-classified urgency → reminder auto-created for firm admin; duplicate-safe via `metadata.source = 'ai_thread_alert'`
+- [x] **AI Firm Brief** — narrative at the top of the firm Analytics tab; 60-min read-triggered cache
+- [x] **Engagement AI Summary** — six sections, streamed, with a human-approval gate before anything reaches a client; `settings.insightsSummaryDraft`
+- [x] **Engagement Chat** — read-only Q&A over delivery data; firm users only; excludes document content and comment bodies by design
+- [x] **Natural-Language Doc Search ("Ask Brio")** — prose resolves to access-scoped filter chips; see Search & Discovery above
+- [x] **AI usage ledger** — append-only `platform_ai_usage`; credits **instrumented but not enforced**, deliberately, pending real usage data
 
-- [ ] **Engagement Kickoff Checklist** — when engagement transitions to `ACTIVE`, Gemma generates a 5–8 item task checklist (tailored to contract type) stored in `engagement.settings.aiChecklist` and surfaced in the engagement overview
+**Open:**
 
-- [ ] **Weekly Digest Notification** — Inngest cron every Monday 8am; Gemma-written brief covering last week's activity and top 3 priorities for the week, delivered as an in-app notification to firm admins
+- [ ] **Doc Search: close out Phase A** — [plan §A.10](../../.claude/plans/ai-native-features.md#a10-what-remains--phase-a-is-not-closed)
+  - Zero-result auto-broadening — the release gate named in §A.8; an over-constrained Ask search currently dead-ends
+  - Cache interpretation by `(normalized text, candidate-set hash)` — identical repeat Ask searches re-bill today
+  - Snippet 500→2000 chars + re-embed backfill — blocked on the §A.6 embed-dilution A/B
+  - Weighted rank fusion in `lib/services/search-service.ts`
+
+- [ ] **AI credits: enforcement** — weights and the ledger exist; no cap is applied at generation time yet
+
+- [ ] **Content-aware sensitivity detection** — [plan §B](../../.claude/plans/ai-native-features.md) — classify over the unused `content` column instead of the current filename regex
+
+### On hold — not AI-native (see ai-native-features.md §7)
+
+- [~] **Auto-Reminder: Unanswered Comment Threads** — build the 48h rule without the LLM; urgency classification adds nothing a query cannot do
+- [~] **Engagement Kickoff Checklist** — templates suffice
+- [~] **Weekly Digest Notification** — fold into the narrative brief rather than generating separately
+
+## Notifications
+
+- [ ] **Per-Event Email Notification Config + Web Push Notifications** — [plan](../../.claude/plans/firm-settings-event-email-and-push-notifications.md)
+  - Firm Settings → App Settings → Email Reminders card gets per-event email toggles: new document intake (notify Engagement Admins/Members), document/deliverable status changed, document rejected, external client comment, engagement invite accepted, deliverable overdue
+  - Extends existing `Firm.settings.reminderEmailConfig` JSON — no migration needed for Part A
+  - Part B: Web Push (PWA-style) notifications — fully greenfield (manifest, service worker, VAPID, subscription storage); rides on the same event hooks as Part A; scoped mainly for internal staff given iOS PWA-install friction for external clients
 
 ## Email
 
