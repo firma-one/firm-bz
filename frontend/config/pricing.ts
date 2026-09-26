@@ -217,7 +217,8 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
                 },
             },
             {
-                feature: "AI credits (Brio)",
+                feature: "AI credits",
+                featureIcon: 'ai',
                 tooltip: "One credit is one AI action — an engagement summary, a firm brief, or a chat answer. An Ask search costs half a credit. Credits reset each billing period; unused credits do not roll over.",
                 values: {
                     Sandbox: "25 / month",
@@ -318,8 +319,8 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
                 values: { Sandbox: true, Standard: true, Pro: true, Business: true, Enterprise: true },
             },
             {
-                feature: "AI-powered search",
-                tooltip: "Natural language search across your whole firm — e.g. \"find all competitor analysis docs\". Search by intent, not just exact file names.",
+                feature: "Natural language document search — ask",
+                tooltip: "Describe the document instead of assembling filters — \"the Acme scope doc from last spring\". Brio resolves it against the clients and engagements you can already see. Included on every plan; each search costs half an AI credit.",
                 featureIcon: 'ai',
                 values: { Sandbox: true, Standard: true, Pro: true, Business: true, Enterprise: true },
             },
@@ -335,7 +336,7 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
                     Sandbox: false,
                     Standard: "PDF export",
                     Pro: "+ Email notifications",
-                    Business: "+ AI Assistant",
+                    Business: "+ Priority rollups",
                     Enterprise: "Incl. all features in Business",
                 },
             },

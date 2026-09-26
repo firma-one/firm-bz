@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth-context'
 import { checkEmailExists, sendOTPWithTurnstile } from '@/app/actions/send-otp'
 import { sendEvent, ANALYTICS_EVENTS } from '@/lib/analytics'
+import { resolvePostAuthTarget, AUTO_RESOLVE_TARGET } from '@/lib/auth/post-auth-target'
 
 export const SIGNIN_EMAIL_KEY = 'fm_signin_email'
 
@@ -52,13 +53,7 @@ export function useSignInFlow() {
       } = await supabase.auth.getSession()
       if (session) {
         const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
-        const redirectTo = params?.get('redirect') || params?.get('next') || null
-        const isSafe = redirectTo && redirectTo.startsWith('/')
-        if (isSafe && redirectTo) {
-          router.push(redirectTo)
-          return
-        }
-        router.push('/d?entry=auth')
+        router.push(resolvePostAuthTarget(params))
       }
     }
     checkSession()
@@ -253,20 +248,15 @@ export function useSignInFlow() {
           method: 'otp',
         })
         const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
-        const redirectTo = params?.get('redirect') || params?.get('next') || null
-        const isSafeRedirect = redirectTo && redirectTo.startsWith('/')
-        if (isSafeRedirect && redirectTo) {
-          const normalized =
-            redirectTo === '/dash' || redirectTo.startsWith('/dash/')
-              ? '/d' + (redirectTo === '/dash' ? '' : redirectTo.slice(5))
-              : redirectTo
-          window.location.href = normalized
-          return
+        const target = resolvePostAuthTarget(params)
+
+        // The 150ms pause only matters for the auto-resolving target, where `/d` immediately
+        // does authenticated server work — give the session cookie a beat to settle first.
+        if (target === AUTO_RESOLVE_TARGET) {
+          await new Promise((resolve) => setTimeout(resolve, 150))
         }
 
-        await new Promise((resolve) => setTimeout(resolve, 150))
-
-        window.location.href = '/d?entry=auth'
+        window.location.href = target
       } else {
         setError('Failed to establish session')
         setLoading(false)
