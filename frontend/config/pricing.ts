@@ -284,7 +284,7 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
                 values: { Sandbox: false, Standard: "30 days", Pro: "90 days", Business: "365 days", Enterprise: "Unlimited" },
             },
             {
-                feature: "In-app messaging (Deliverable comment thread)",
+                feature: "In-app messaging (Deliverable comment thread) history.",
                 tooltip: "One thread per deliverable for comments and feedback—shared with everyone on the engagement. Replace scattered email and chat with a single place where the conversation stays with the work. Each column shows how long comment history is retained.",
                 values: { Sandbox: "15 days", Standard: "60 days", Pro: "90 days", Business: "365 days", Enterprise: "Unlimited" },
             },
@@ -304,7 +304,7 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
                 values: { Sandbox: true, Standard: true, Pro: true, Business: true, Enterprise: true },
             },
             {
-                feature: "Engagement summaries & assistant",
+                feature: "Firm / Engagement summaries & AI assistant",
                 featureIcon: 'ai',
                 tooltip: "Brio drafts the engagement status summary — progress, risks, what needs attention — from your delivery data, and answers questions about any engagement. You review, edit and approve before a client sees anything. Included on every plan; usage draws on your AI credits.",
                 values: { Sandbox: true, Standard: true, Pro: true, Business: true, Enterprise: true },
