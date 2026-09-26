@@ -219,7 +219,7 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
             {
                 feature: "AI credits",
                 featureIcon: 'ai',
-                tooltip: "One credit is one AI action — an engagement summary, a firm brief, or a chat answer. An Ask search costs half a credit. Credits reset each billing period; unused credits do not roll over.",
+                tooltip: "One credit is one AI action — an engagement summary, a firm brief, or a chat answer. Natural language document search (describe the document instead of assembling filters) costs half a credit. Every plan includes all four; the allowance is what differs. Credits reset each billing period and do not roll over.",
                 values: {
                     Sandbox: "25 / month",
                     Standard: "500 / month",
@@ -296,21 +296,6 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
         ],
     },
     {
-        name: "SUPPORT",
-        rows: [
-            {
-                feature: "Dedicated Support Portal",
-                tooltip: "Submit bug reports, feature requests, and general enquiries directly from your workspace. Track status, upload attachments, and exchange comments with our team — all in one place.",
-                values: { Sandbox: false, Standard: true, Pro: true, Business: true, Enterprise: true },
-            },
-            {
-                feature: "SLA-based Priority support",
-                tooltip: "Enterprise customers get guaranteed response times under a dedicated SLA, a named support contact, and priority routing through the in-app support portal.",
-                values: { Sandbox: false, Standard: false, Pro: false, Business: false, Enterprise: true },
-            },
-        ],
-    },
-    {
         name: "DELIVERY & OVERSIGHT",
         rows: [
             {
@@ -319,9 +304,9 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
                 values: { Sandbox: true, Standard: true, Pro: true, Business: true, Enterprise: true },
             },
             {
-                feature: "Natural language document search — ask",
-                tooltip: "Describe the document instead of assembling filters — \"the Acme scope doc from last spring\". Brio resolves it against the clients and engagements you can already see. Included on every plan; each search costs half an AI credit.",
+                feature: "AI assistant & health report summaries",
                 featureIcon: 'ai',
+                tooltip: "Brio drafts the engagement status summary — progress, risks, what needs attention — from your delivery data, and answers questions about any engagement. You review, edit and approve before a client sees anything. Included on every plan; usage draws on your AI credits.",
                 values: { Sandbox: true, Standard: true, Pro: true, Business: true, Enterprise: true },
             },
             {
@@ -368,6 +353,21 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
             {
                 feature: "SSO / SAML",
                 tooltip: "Single Sign-On for enterprise authentication. Integrate with your identity provider.",
+                values: { Sandbox: false, Standard: false, Pro: false, Business: false, Enterprise: true },
+            },
+        ],
+    },
+    {
+        name: "SUPPORT",
+        rows: [
+            {
+                feature: "Dedicated Support Portal",
+                tooltip: "Submit bug reports, feature requests, and general enquiries directly from your workspace. Track status, upload attachments, and exchange comments with our team — all in one place.",
+                values: { Sandbox: false, Standard: true, Pro: true, Business: true, Enterprise: true },
+            },
+            {
+                feature: "SLA-based Priority support",
+                tooltip: "Enterprise customers get guaranteed response times under a dedicated SLA, a named support contact, and priority routing through the in-app support portal.",
                 values: { Sandbox: false, Standard: false, Pro: false, Business: false, Enterprise: true },
             },
         ],
