@@ -72,6 +72,28 @@ const PUBLIC_EMAIL_DOMAINS = new Set([
     'live.com', 'icloud.com', 'aol.com', 'mail.com', 'protonmail.com', 'zoho.com',
 ])
 
+type EventNotificationChannels = { email: boolean; inApp: boolean }
+type EventKey = 'newDocumentIntake' | 'statusChanged' | 'documentRejected' | 'externalClientComment' | 'engagementInviteAccepted' | 'deliverableOverdue'
+type EventNotificationConfig = Record<EventKey, EventNotificationChannels>
+
+const EVENT_NOTIFICATION_DEFAULTS: EventNotificationConfig = {
+    newDocumentIntake: { email: true, inApp: true },
+    statusChanged: { email: false, inApp: true },
+    documentRejected: { email: true, inApp: true },
+    externalClientComment: { email: true, inApp: true },
+    engagementInviteAccepted: { email: false, inApp: true },
+    deliverableOverdue: { email: true, inApp: true },
+}
+
+const EVENT_NOTIFICATION_ROWS: { key: EventKey; label: string }[] = [
+    { key: 'newDocumentIntake', label: 'New document intake' },
+    { key: 'statusChanged', label: 'Status changed (doc/deliverable)' },
+    { key: 'documentRejected', label: 'Document rejected' },
+    { key: 'externalClientComment', label: 'Client comment posted' },
+    { key: 'engagementInviteAccepted', label: 'Engagement invite accepted' },
+    { key: 'deliverableOverdue', label: 'Deliverable overdue' },
+]
+
 export interface FirmSettingsFormProps {
     orgSlug: string
     orgId?: string | null
@@ -118,6 +140,7 @@ export function FirmSettingsForm({
     const [recurringFrequencyDays, setRecurringFrequencyDays] = useState(1)
     const [startDaysBeforeDue, setStartDaysBeforeDue] = useState(7)
     const [mentionEmailOnCreate, setMentionEmailOnCreate] = useState(true)
+    const [eventConfig, setEventConfig] = useState<EventNotificationConfig>(EVENT_NOTIFICATION_DEFAULTS)
     const [allowDomainAccess, setAllowDomainAccess] = useState(false)
     const [allowedEmailDomain, setAllowedEmailDomain] = useState('')
     // Which sections external members (Contributor / Reviewer) can see on Overview
@@ -206,6 +229,17 @@ export function FirmSettingsForm({
                     setRecurringFrequencyDays(rc.recurring?.frequencyDays ?? 1)
                     setStartDaysBeforeDue(rc.recurring?.startDaysBeforeDue ?? 7)
                     setMentionEmailOnCreate(rc.mentionEmailOnCreate ?? true)
+                    const rawEvents = (rc.events as Record<string, Partial<EventNotificationChannels>>) ?? {}
+                    const nextEventConfig = {} as EventNotificationConfig
+                    for (const key of Object.keys(EVENT_NOTIFICATION_DEFAULTS) as EventKey[]) {
+                        const defaults = EVENT_NOTIFICATION_DEFAULTS[key]
+                        const rawEvent = rawEvents[key] ?? {}
+                        nextEventConfig[key] = {
+                            email: rawEvent.email ?? defaults.email,
+                            inApp: rawEvent.inApp ?? defaults.inApp,
+                        }
+                    }
+                    setEventConfig(nextEventConfig)
                     const es = (settings.externalSections as Record<string, boolean>) ?? {}
                     setExtEngagementHealth(es.engagementHealth ?? true)
                     setExtFileOrganization(es.fileOrganization ?? false)
@@ -370,6 +404,7 @@ export function FirmSettingsForm({
                         startDaysBeforeDue,
                     },
                     mentionEmailOnCreate,
+                    events: eventConfig,
                 },
                 externalSections: {
                     engagementHealth: extEngagementHealth,
@@ -840,6 +875,50 @@ export function FirmSettingsForm({
                                 </div>{/* end col 2 */}
 
                             </div>{/* end flex row */}
+
+                            {/* Event Notifications grid */}
+                            <div className="mt-4 bg-white rounded border border-[#e5e7eb] p-4 space-y-3">
+                                <div className="flex items-center gap-2">
+                                    <Bell className="h-4 w-4 text-[#45474c] shrink-0" />
+                                    <span className={fieldLabel}>Event Notifications</span>
+                                </div>
+                                <p className="text-[11px] text-[#9a9ba0]">Control which events send an email and which create an in-app notification. Turning In-App off silences the notification entirely — this was previously always-on for some events.</p>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full min-w-[420px] text-xs border-collapse">
+                                        <thead>
+                                            <tr className="border-b border-[#e5e7eb]">
+                                                <th className="text-left font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] py-2 pr-2">Event</th>
+                                                <th className="text-center font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] py-2 px-2 w-32">Notify by Email</th>
+                                                <th className="text-center font-mono text-[9px] font-bold uppercase tracking-widest text-[#45474c] py-2 pl-2 w-32">In-App Notification</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {EVENT_NOTIFICATION_ROWS.map(({ key, label }) => (
+                                                <tr key={key} className="border-b border-[#f0f0f2] last:border-b-0">
+                                                    <td className="py-2.5 pr-2 text-[#1b1b1d]">{label}</td>
+                                                    <td className="py-2.5 px-2 text-center">
+                                                        <Switch
+                                                            checked={eventConfig[key].email}
+                                                            onCheckedChange={(v) => { setEventConfig((prev) => ({ ...prev, [key]: { ...prev[key], email: v } })); setAppDirty(true) }}
+                                                            disabled={!loaded}
+                                                            aria-label={`${label} — notify by email`}
+                                                        />
+                                                    </td>
+                                                    <td className="py-2.5 pl-2 text-center">
+                                                        <Switch
+                                                            checked={eventConfig[key].inApp}
+                                                            onCheckedChange={(v) => { setEventConfig((prev) => ({ ...prev, [key]: { ...prev[key], inApp: v } })); setAppDirty(true) }}
+                                                            disabled={!loaded}
+                                                            aria-label={`${label} — in-app notification`}
+                                                        />
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
                             {appSave}
                         </div>
                     </div>

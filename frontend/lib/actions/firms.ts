@@ -529,6 +529,20 @@ export interface FirmCurrency {
 /**
  * Update firm. Firm admin only.
  */
+export type FirmNotificationChannelConfig = {
+    email: boolean
+    inApp: boolean
+}
+
+export type FirmEventNotificationConfig = {
+    newDocumentIntake: FirmNotificationChannelConfig
+    statusChanged: FirmNotificationChannelConfig
+    documentRejected: FirmNotificationChannelConfig
+    externalClientComment: FirmNotificationChannelConfig
+    engagementInviteAccepted: FirmNotificationChannelConfig
+    deliverableOverdue: FirmNotificationChannelConfig
+}
+
 export type FirmReminderEmailConfig = {
     immediateOnCreate: boolean
     recurring: {
@@ -537,11 +551,31 @@ export type FirmReminderEmailConfig = {
         startDaysBeforeDue: number
     }
     mentionEmailOnCreate?: boolean
+    events?: FirmEventNotificationConfig
 }
 
-export async function getFirmReminderConfig(firmId: string): Promise<FirmReminderEmailConfig> {
+const EVENT_NOTIFICATION_DEFAULTS: FirmEventNotificationConfig = {
+    newDocumentIntake: { email: true, inApp: true },
+    statusChanged: { email: false, inApp: true },
+    documentRejected: { email: true, inApp: true },
+    externalClientComment: { email: true, inApp: true },
+    engagementInviteAccepted: { email: false, inApp: true },
+    deliverableOverdue: { email: true, inApp: true },
+}
+
+export async function getFirmReminderConfig(firmId: string): Promise<FirmReminderEmailConfig & { events: FirmEventNotificationConfig }> {
     const firm = await prisma.firm.findUnique({ where: { id: firmId }, select: { settings: true } })
     const raw = (firm?.settings as any)?.reminderEmailConfig ?? {}
+    const rawEvents = raw.events ?? {}
+    const events = {} as FirmEventNotificationConfig
+    for (const key of Object.keys(EVENT_NOTIFICATION_DEFAULTS) as (keyof FirmEventNotificationConfig)[]) {
+        const defaults = EVENT_NOTIFICATION_DEFAULTS[key]
+        const rawEvent = rawEvents[key] ?? {}
+        events[key] = {
+            email: rawEvent.email ?? defaults.email,
+            inApp: rawEvent.inApp ?? defaults.inApp,
+        }
+    }
     return {
         immediateOnCreate: raw.immediateOnCreate ?? true,
         recurring: {
@@ -549,6 +583,8 @@ export async function getFirmReminderConfig(firmId: string): Promise<FirmReminde
             frequencyDays: raw.recurring?.frequencyDays ?? 1,
             startDaysBeforeDue: raw.recurring?.startDaysBeforeDue ?? 7,
         },
+        mentionEmailOnCreate: raw.mentionEmailOnCreate ?? true,
+        events,
     }
 }
 

@@ -11,7 +11,7 @@ import { resolveEngagementConnector } from '@/lib/connectors/resolve-client-conn
 import { getPermissionAdapter, getContentAdapter } from '@/lib/connectors/registry'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { assertFirmSubscriptionAccess } from '@/lib/billing/subscription-gate'
-import { assertWithinDeliverableCap } from '@/lib/billing/effective-billing-caps'
+import { assertWithinDeliverableCap, assertWithinDocumentCap } from '@/lib/billing/effective-billing-caps'
 import { SubscriptionRevokedError } from '@/lib/errors/api-error'
 import { assignDocId } from '@/lib/doc-id'
 import { DocumentSharingPermissionStatus, EngagementRole } from '@prisma/client'
@@ -444,6 +444,11 @@ export async function PUT(
         data: updateData,
       })
     } else {
+      // Creating a document, not just sharing an existing one. The deliverable cap checked earlier
+      // guards a different branch (marking a folder as a deliverable), so without this the free
+      // tier's 10-document limit is bypassed on this path.
+      await assertWithinDocumentCap(fileInfo.organizationId, 1)
+
       const proj = await prisma.engagement.findUnique({ where: { id: projectId }, select: { clientId: true, name: true } })
       const created = await prisma.engagementDocument.create({
         data: {

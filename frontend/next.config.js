@@ -27,6 +27,15 @@ const nextConfig = {
   // Configure `pageExtensions` to include MDX files
   pageExtensions: ['js', 'jsx', 'mdx', 'ts', 'tsx'],
 
+  // Native/CJS parsers used only on the server for document text extraction.
+  // Bundling them breaks them two different ways:
+  //   - officeparser: the CJS->ESM interop wrapper leaves the `OfficeParser`
+  //     named export undefined, so `OfficeParser.parseOffice` throws.
+  //   - pdf-parse: pdfjs resolves its worker relative to the emitted chunk dir
+  //     and fails with "Cannot find module .../chunks/pdf.worker.mjs".
+  // Keeping them external means Node require()s them from node_modules as-is.
+  serverExternalPackages: ['officeparser', 'pdf-parse'],
+
   async redirects() {
     return [
       { source: '/solutions', destination: '/', permanent: true },

@@ -38,6 +38,12 @@ export type BillingPlanUsage = {
     engagements: number | null
     documents: number | null
     clientContacts: number | null
+    /** Metered, not capped — reported so a cap can later be set from real usage, not a guess. */
+    aiCredits?: {
+        used: number
+        byFeature: Record<'brief' | 'summary' | 'chat' | 'searchInterpret', number>
+        periodStartIso: string
+    } | null
 }
 
 export type BillingCurrentPlanState = {

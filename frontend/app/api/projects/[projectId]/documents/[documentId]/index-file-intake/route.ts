@@ -7,6 +7,11 @@ import { assignDocId } from '@/lib/doc-id'
 import { assertWithinDocumentCap } from '@/lib/billing/effective-billing-caps'
 import { resolveEngagementConnectorId } from '@/lib/connectors/resolve-client-connector'
 import { buildSettingsForDb } from '@/lib/sharing-settings'
+import { getFirmReminderConfig } from '@/lib/actions/firms'
+import { createEventNotifications, sendEventEmailToUser, buildAbsoluteUrl } from '@/lib/notify-event'
+import { resolveEntity } from '@/lib/reminders/entity-registry'
+import { renderDocumentIntakeEmail } from '@/lib/email-templates/document-intake'
+import { sendPushToUser } from '@/lib/push'
 
 /**
  * POST /api/projects/[projectId]/documents/[documentId]/index-file-intake
@@ -133,34 +138,57 @@ export async function POST(
     }
 
     if (!existingPendingRow) {
-      const reminderId = `intake-${projectId}-${externalId}`
       const leads = await prisma.engagementMember.findMany({
         where: { engagementId: projectId, role: { in: ['eng_admin', 'eng_member'] } },
         select: { userId: true },
       })
-      const reminderItem = {
-        id: reminderId,
-        entityKey: 'platform.engagements.shares',
-        entityValue: projectId,
-        action: `Review: "${fileName}"`,
-        dateKey: 'date',
-        dateValue: new Date().toISOString().slice(0, 10),
-        hiddenAt: null,
-        createdAt: new Date().toISOString(),
+      const config = await getFirmReminderConfig(project.client.firmId)
+
+      if (config.events.newDocumentIntake.inApp) {
+        const reminderId = `intake-${projectId}-${externalId}`
+        const reminderItem = {
+          id: reminderId,
+          entityKey: 'platform.engagements.shares',
+          entityValue: projectId,
+          action: `Review: "${fileName}"`,
+          dateKey: 'date',
+          dateValue: new Date().toISOString().slice(0, 10),
+          hiddenAt: null,
+          createdAt: new Date().toISOString(),
+        }
+        await Promise.all(leads.map(async (lead) => {
+          const p = await prisma.userPersonalization.findUnique({
+            where: { userId: lead.userId },
+            select: { reminders: true },
+          })
+          const existing: any[] = Array.isArray(p?.reminders) ? p!.reminders as any[] : []
+          if (existing.find((r: any) => r.id === reminderId)) return
+          await prisma.userPersonalization.upsert({
+            where: { userId: lead.userId },
+            create: { userId: lead.userId, reminders: [reminderItem] as any },
+            update: { reminders: [...existing, reminderItem] as any },
+          })
+        }))
+
+        Promise.resolve().then(async () => {
+          const ctx = await resolveEntity('platform.engagements.shares', projectId)
+          await Promise.all(leads.map((lead) => sendPushToUser(lead.userId, {
+            title: `New file awaiting review — ${fileName}`,
+            body: project.name,
+            ctaUrl: ctx?.ctaUrl ?? null,
+          })))
+        }).catch(() => {})
       }
-      await Promise.all(leads.map(async (lead) => {
-        const p = await prisma.userPersonalization.findUnique({
-          where: { userId: lead.userId },
-          select: { reminders: true },
-        })
-        const existing: any[] = Array.isArray(p?.reminders) ? p!.reminders as any[] : []
-        if (existing.find((r: any) => r.id === reminderId)) return
-        await prisma.userPersonalization.upsert({
-          where: { userId: lead.userId },
-          create: { userId: lead.userId, reminders: [reminderItem] as any },
-          update: { reminders: [...existing, reminderItem] as any },
-        })
-      }))
+
+      if (config.events.newDocumentIntake.email && leads.length > 0) {
+        Promise.resolve().then(async () => {
+          const ctx = await resolveEntity('platform.engagements.shares', projectId)
+          const ctaUrl = buildAbsoluteUrl(ctx?.ctaUrl ?? null)
+          await Promise.all(leads.map((lead) => sendEventEmailToUser(lead.userId, () =>
+            renderDocumentIntakeEmail({ fileName, engagementName: project.name, ctaUrl })
+          )))
+        }).catch(() => {})
+      }
     }
 
     return NextResponse.json({ ok: true, documentId: docId })

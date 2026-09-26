@@ -72,6 +72,9 @@ import { KineticHeroSection } from "@/components/kinetic/KineticHeroSection"
 import { KineticMarketingBadge, KineticSectionIntro } from "@/components/kinetic/kinetic-section-intro"
 import { LegacyHeroScreenMock } from "@/components/landing/LegacyHeroScreenMock"
 import { LandingHeroPrimaryCtas } from "@/components/marketing/landing-hero-primary-ctas"
+import { BrioSection } from "@/components/landing/brio-section"
+import { ASSISTANT } from "@/lib/ai/assistant"
+import { Brio } from '@/components/ui/brio'
 
 function TargetAudienceUseCaseCard({ block }: { block: UseCaseBlock }) {
   const shell = cn(targetAudienceScrollMarginClass, "w-full min-w-0 break-words", block.cardShellClass)
@@ -589,6 +592,16 @@ export function LandingPage({
               </div>
             </FadeIn>
 
+                <FadeIn delay={210} className="pt-5">
+                  <div className="inline-flex items-center gap-2 rounded-full border border-[#049669]/25 bg-[#049669]/[0.07] px-3 py-1.5">
+                    <span className="text-xs font-medium text-[#1b1b1d]">Now with</span>
+                    <Brio className="text-xs text-[#049669]" />
+                    <span className="text-xs font-medium text-[#1b1b1d]">
+                      — drafts your status reports, finds any document
+                    </span>
+                  </div>
+                </FadeIn>
+
                 <FadeIn delay={240} className="pt-4 space-y-3">
                   <p className={t.heroFootnote}>Trusted by modern firms worldwide</p>
                   <div className="flex flex-wrap gap-2">
@@ -965,6 +978,10 @@ export function LandingPage({
           </div>
         </div>
       </section>
+
+      <FadeIn>
+        <BrioSection shellClass={MARKETING_PAGE_SHELL} />
+      </FadeIn>
 
     </>
   )

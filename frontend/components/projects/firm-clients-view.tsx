@@ -143,15 +143,20 @@ export function FirmClientsView({ clients, groupSlug, orgSlug, orgId, firmSandbo
             .finally(() => setPermissionsLoading(false))
     }, [orgId, clients])
 
-    // When permissions finish loading and user can't view Analytics, correct the URL to avoid tab/URL mismatch
+    // Correct the URL only for a user who genuinely cannot view Analytics.
+    //
+    // `permissionsLoading` is the important guard: `canViewOrgAudit` starts false, so without it
+    // this effect fired on mount — before /api/permissions/firm resolved — and rewrote
+    // ?tab=analytics to ?tab=clients for everyone, firm admins included, on every refresh.
     useEffect(() => {
+        if (permissionsLoading) return
         const tab = searchParams.get('tab')
         if (tab === 'analytics' && !canViewOrgAudit) {
             const params = new URLSearchParams(searchParams.toString())
             params.set('tab', 'clients')
             router.replace(`${pathname}?${params.toString()}`, { scroll: false })
         }
-    }, [canViewOrgAudit])
+    }, [canViewOrgAudit, permissionsLoading])
 
     const handleViewModeChange = (mode: 'grid' | 'list') => {
         setViewMode(mode)

@@ -122,3 +122,20 @@ export async function getEntitledFirmsCapForFirm(firmId: string): Promise<number
     const metadata = await getActiveSubscriptionMetadataForFirm(firmId)
     return parseEntitledFirms(metadata)
 }
+
+/**
+ * Parse entitledAiCredits from subscription metadata.
+ *
+ * Returns null when unset or negative, NOT zero — callers treat null as "entitlement unknown" and
+ * do not cap, rather than treating unconfigured as "no AI". Without that, a webhook that has not
+ * synced yet would silently throttle a paying customer.
+ *
+ * An explicit 0 IS honoured: it is a deliberate "no AI on this tier", not a missing value.
+ */
+export function parseEntitledAiCredits(meta: JsonRecord): number | null {
+    const raw = meta['entitledAiCredits']
+    if (raw === undefined || raw === null || raw === '') return null
+    const parsed = parseIntLike(raw)
+    if (parsed == null || parsed < 0) return null
+    return parsed
+}

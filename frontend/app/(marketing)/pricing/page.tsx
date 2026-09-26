@@ -1,6 +1,7 @@
 "use client"
 
 import { ArrowRight, CalendarDays, Check, HelpCircle, MessageSquareMore, Sparkles, SquareFunction } from "lucide-react"
+import { Brio } from '@/components/ui/brio'
 import Link from "next/link"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import {
@@ -38,8 +39,12 @@ function FeatureIcon({ icon }: { icon?: FeatureIconKey | FeatureIconKey[] }) {
             </>
         )
     }
+    // The assistant's own mark, not a bare sparkle — branding goes through one component so the
+    // name, the AI subscript and the icon stay consistent wherever Brio appears.
     if (icon === 'ai') return (
-        <Sparkles className="inline-block ml-1.5 h-4 w-4 shrink-0 align-middle text-[#5a78ff]" aria-label="AI-powered" />
+        <span className="inline-flex ml-1.5 align-middle text-[#049669]">
+            <Brio />
+        </span>
     )
     if (icon === 'google-drive') return (
         <svg className="inline-block ml-1.5 h-5 w-5 shrink-0 align-middle" viewBox="0 0 87.3 78" aria-label="Google Drive">
@@ -112,7 +117,9 @@ function PricingMatrixCell({ value, standardHighlight }: { value: PlanValue; sta
             </span>
         )
     }
-    const hasAiMention = /\bAI\b/.test(value)
+    // Deliberately no auto-sparkle on cell values. This used to paint a bare Sparkles in
+    // marketing blue whenever a cell contained "AI" — the wrong icon and the wrong colour against
+    // FeatureIcon's green Brio mark on the row label. Branding belongs on the row, once.
     return (
         <span
             className={cn(
@@ -120,7 +127,6 @@ function PricingMatrixCell({ value, standardHighlight }: { value: PlanValue; sta
                 standardHighlight ? "text-[#002203]" : "text-[#45474c]",
             )}
         >
-            {hasAiMention && <Sparkles className="h-4 w-4 shrink-0 text-[#5a78ff]" aria-hidden />}
             {value}
         </span>
     )

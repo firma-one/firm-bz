@@ -30,7 +30,7 @@ See [`.claude/plans/beta-feedback-fixes.md`](../../.claude/plans/beta-feedback-f
   - #1b Widen summarizable mime types: Google Sheets/Slides via Drive export, and modern Office (docx/pptx/xlsx) + PDF parsed in-memory (officeparser / pdf-parse; 15MB size guard; no disk writes) — implemented alongside #1
   - #1c System-admin "Re-index documents" button per firm on `/system/user-data-map` (POST `/api/system/user-data-map/reindex`) — implemented, replaces the delete-and-reupload workaround
   - #2 Embed search queries in the browser (preloaded MiniLM worker, `NEXT_PUBLIC_CLIENT_EMBEDDINGS`, server fallback) — approved, value under discussion
-  - NL query interpreter ("#4", prose → inferred filter chips) evaluated and dropped 2026-07-09 — explicit @ picker chips remain the design
+  - NL query interpreter ("#4", prose → inferred filter chips) was dropped 2026-07-09 — **superseded**: shipped 2026-09-25 as grounded, access-scoped resolution under [ai-native-features.md §A](../../.claude/plans/ai-native-features.md). The 2026-07 rejection stands against the *ungrounded regex/chrono* approach only; see §A.2 for the decision record. The keyboard-driven @ picker was also replaced by plain dropdowns in the same round.
 
 - [ ] **Global Document Search** — [plan](../../.claude/plans/global-search-share-status-overview-metrics.md)
   - Cross-engagement search (e.g. "find all legal docs for NaviQure AI"); currently scoped to one project at a time
@@ -90,17 +90,47 @@ See [`.claude/plans/beta-feedback-fixes.md`](../../.claude/plans/beta-feedback-f
   - Top-5 deliverables by revision count shown in a detail card
   - No schema changes; source from existing `PlatformAuditEvent` table and `settings.share` JSON
 
-## AI Features — [plan](../../.claude/plans/ai-insights-and-business-features.md)
+## AI Features — [plan](../../.claude/plans/ai-native-features.md)
 
-AI layer using Gemma 4 (HuggingFace Transformers, same runtime as release notes generation — no API key, model cached locally).
+Brio, the in-product assistant. Anthropic Haiku via `lib/ai/client.ts` — server-side only,
+`ANTHROPIC_API_KEY`. **One plan covers all AI work:**
+[ai-native-features.md](../../.claude/plans/ai-native-features.md) — its §10 status board is the
+source of truth, and the older Gemma-era plan was merged into it and retired on 2026-09-25.
 
-- [ ] **AI Firm Brief** — 3–5 sentence plain-English narrative at the top of the Insights page; synthesises pipeline, overdue engagements, unanswered threads, revenue at risk; cached in `firm.settings.aiBrief` (1h TTL), refreshable on demand
+**Shipped 2026-09-25** (`c0a7898f`, `4212f829`, `4013f191`):
 
-- [ ] **Auto-Reminder: Unanswered Comment Threads** — Inngest cron every 4h; threads unanswered > 48h by an external collaborator → AI-classified urgency → reminder auto-created for firm admin; duplicate-safe via `metadata.source = 'ai_thread_alert'`
+- [x] **AI Firm Brief** — narrative at the top of the firm Analytics tab; 60-min read-triggered cache
+- [x] **Engagement AI Summary** — six sections, streamed, with a human-approval gate before anything reaches a client; `settings.insightsSummaryDraft`
+- [x] **Engagement Chat** — read-only Q&A over delivery data; firm users only; excludes document content and comment bodies by design
+- [x] **Natural-Language Doc Search ("Ask Brio")** — prose resolves to access-scoped filter chips; see Search & Discovery above
+- [x] **AI usage ledger** — append-only `platform_ai_usage`; credits **instrumented but not enforced**, deliberately, pending real usage data
 
-- [ ] **Engagement Kickoff Checklist** — when engagement transitions to `ACTIVE`, Gemma generates a 5–8 item task checklist (tailored to contract type) stored in `engagement.settings.aiChecklist` and surfaced in the engagement overview
+**Open:**
 
-- [ ] **Weekly Digest Notification** — Inngest cron every Monday 8am; Gemma-written brief covering last week's activity and top 3 priorities for the week, delivered as an in-app notification to firm admins
+- [x] **Doc Search: Phase A closed** — zero-result ladder, interpret caching and weighted rank fusion all shipped 2026-09-25 (`be6646e2`). Snippet widening dropped, see below
+
+- [x] **AI credits: enforcement** — shipped 2026-09-26 (`c34814e8`, `2ac1fefe`). Two windows: the billing period (from `entitledAiCredits` in Polar metadata) is the budget; a rolling 4-hour window at 10% of the allowance is a burst tripwire sized above anything a person does by hand, to catch a retry storm a monthly cap would not notice until the allowance was gone. Gating and metering hang off the model client, not each route, so there is no ungated path. Breaches return 429 with a `kind` distinguishing an upgrade prompt from a transient wait. An unset entitlement means "unknown", not zero — a webhook that has not synced must not throttle a paying customer
+
+### Closed without building — 2026-09-26 ([decision record](../../.claude/plans/ai-native-features.md))
+
+Dropped rather than deferred, so they stop reading as pending. Each names its reopen trigger in §13.
+
+- [~] **Snippet 500→2000 + re-embed backfill** — the corpus is 20 documents. Retrieval tuning at that size measures noise; the A/B this gates could not produce a trustworthy result. Reopen when search starts missing documents users know exist
+- [~] **Credit allowance tuning** — enforcement is live and the numbers are generous (500 credits ≈ $4.75 against a $49 plan), so being wrong is cheap. Tuning needs real multi-tenant usage. Reopen when the period cap binds for someone legitimate, or the burst tripwire fires outside a bug
+- [~] **Content-aware sensitivity detection** — the one genuinely AI-native item left, and the one that contradicts the promise that Brio never reads clients' work. A positioning decision, not a backlog item. Reopen only if that promise is deliberately revisited
+
+### On hold — not AI-native (see ai-native-features.md §7)
+
+- [~] **Auto-Reminder: Unanswered Comment Threads** — build the 48h rule without the LLM; urgency classification adds nothing a query cannot do
+- [~] **Engagement Kickoff Checklist** — templates suffice
+- [~] **Weekly Digest Notification** — fold into the narrative brief rather than generating separately
+
+## Notifications
+
+- [ ] **Per-Event Email Notification Config + Web Push Notifications** — [plan](../../.claude/plans/firm-settings-event-email-and-push-notifications.md)
+  - Firm Settings → App Settings → Email Reminders card gets per-event email toggles: new document intake (notify Engagement Admins/Members), document/deliverable status changed, document rejected, external client comment, engagement invite accepted, deliverable overdue
+  - Extends existing `Firm.settings.reminderEmailConfig` JSON — no migration needed for Part A
+  - Part B: Web Push (PWA-style) notifications — fully greenfield (manifest, service worker, VAPID, subscription storage); rides on the same event hooks as Part A; scoped mainly for internal staff given iOS PWA-install friction for external clients
 
 ## Email
 
@@ -156,6 +186,17 @@ AI layer using Gemma 4 (HuggingFace Transformers, same runtime as release notes 
   - Race condition: middleware reads auth cookie before browser has committed it after `verifyOTP()`
   - Fix: gate `window.location.href` on `onAuthStateChange SIGNED_IN` event instead of `getSession()`
   - Also fix: skip button in `components/signup/signup-success.tsx` incorrectly calls `signOut()` before redirecting to `/signin`
+
+- [ ] **Refactor: Billing entitlement interceptor** — [plan](../../.claude/plans/billing-entitlement-interceptor.md)
+  - Entitlement checks are scattered `assert*` calls nothing enforces. An audit on 2026-09-26 found 5 document write paths with only 3 guarded — `index-file` (bulk indexing, no check at all) and the sharing route's create branch both shipped unguarded. Both fixed in `e59b07d9`, but found by hand, not by design
+  - Same failure had already happened with AI metering (1 of 4 call sites for two days), fixed structurally by moving the gate onto the model client — the precedent this follows
+  - Route interceptor wrapping `requireProjectManage`, which already does auth *and* returns `firmId` in the right order. Two earlier objections to this design were wrong and are recorded in the plan so they are not re-derived
+  - Risk is concentrated in documents (9 call sites, 5 write paths); the other five caps have one obvious creation path each
+  - Must preserve the upsert fix from `5ef8072e`: only genuinely new documents count, or re-indexing at the cap breaks
+
+- [ ] **Refactor: `organizationId` → `firmId`** — [plan §4](../../.claude/plans/billing-entitlement-interceptor.md)
+  - 298 occurrences of the old name for a firm. Unsafe as a bulk rename: it appears in Inngest event payloads (cross-process, in-flight events carry the old key), in request body keys (renaming breaks callers), and a dozen files already use both names
+  - Phased like `sandboxOnly` → `isAnchorFirm()`: internal identifiers first, then Inngest payloads with dual-accept for one deploy cycle, then body keys
 
 - [ ] **Refactor: Replace `sandboxOnly` with `isAnchorFirm()`** — [plan](../../.claude/plans/refactor-is-anchor-firm.md)
   - `Firm.sandboxOnly` maps to DB column `isAnchor`; the two names are used interchangeably across 165+ references

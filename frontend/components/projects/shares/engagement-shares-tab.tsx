@@ -17,7 +17,7 @@ import {
   type DraggableAttributes,
 } from '@dnd-kit/core'
 import type { SyntheticListenerMap } from '@dnd-kit/core/dist/hooks/utilities'
-import { Share2, User, Lock, ListTodo, CheckCircle, Eye, GripVertical, FolderOpen, Clock, Copy, Check, Search, MessagesSquare, Link2, ScanEye, X, RefreshCw, ChevronDown, ChevronLeft, ChevronRight, Filter, CheckCircle2, Trash2, BookOpenText, PenLine, PackagePlus, PackageCheck, CalendarDays } from 'lucide-react'
+import { Share2, User, Lock, ListTodo, CheckCircle, Eye, GripVertical, FolderOpen, Clock, Copy, Check, Search, MessagesSquare, Link2, ScanEye, X, RefreshCw, ChevronDown, ChevronLeft, ChevronRight, Filter, CheckCircle2, Trash2, BookOpenText, PenLine, PackagePlus, PackageCheck, CalendarDays, AlertTriangle, CalendarClock } from 'lucide-react'
 import { ProfileBubbleWithPopup } from '@/components/ui/profile-bubble-popup'
 import { DocumentBreadcrumb } from '@/components/ui/document-breadcrumb'
 import { DocumentIcon } from '@/components/ui/document-icon'
@@ -1968,10 +1968,52 @@ export function EngagementSharesTab({
       if (filterOverdue) {
         if (!s.dueDate) return false
         if (new Date(s.dueDate).getTime() >= Date.now()) return false
+        // Approved work is finished, so a past due date no longer makes it overdue. Without this
+        // the board over-reports and disagrees with the insights dashboard, which defines overdue
+        // as `dueDate < now AND stage !== 'approved'` (engagement-insights.ts).
+        const stage = s.activity?.status ?? 'to_do'
+        if (stage === 'approved' || (stage as string) === 'done') return false
       }
       return true
     })
   }, [shares, searchQuery, filterOverdue])
+
+  /**
+   * Signals the columns cannot show. Each is already visible on the insights dashboard, but the
+   * board is where this work is actually managed — "three deliverables have sat in review for two
+   * weeks" is the most board-relevant fact in the system and was the one place it could not be seen.
+   *
+   * Computed from `shares`, which is already loaded, rather than fetching insights: this tab issues
+   * no insights request today, and these three counts do not need one. Deliberately NOT filtered by
+   * the search box — a stat that changes as you type is a search result, not a health signal.
+   */
+  const boardStats = React.useMemo(() => {
+    const DAY_MS = 24 * 60 * 60 * 1000
+    const now = Date.now()
+    let stalledInReview = 0
+    let missingDueDate = 0
+    let overdue = 0
+    let tracked = 0
+
+    shares.forEach((s) => {
+      if (restrictToSharedOnly && !s.activity?.status) return
+      const stage = s.activity?.status ?? 'to_do'
+      const isApproved = stage === 'approved' || (stage as string) === 'done'
+      tracked += 1
+
+      if (stage === 'in_review' && s.activity?.updatedAt) {
+        if (now - new Date(s.activity.updatedAt).getTime() > 14 * DAY_MS) stalledInReview += 1
+      }
+      // Approved work needs no due date and cannot be overdue, so it is excluded from both —
+      // matching the insights definition rather than the board's older filter.
+      if (!isApproved) {
+        if (!s.dueDate) missingDueDate += 1
+        else if (new Date(s.dueDate).getTime() < now) overdue += 1
+      }
+    })
+
+    return { stalledInReview, missingDueDate, overdue, tracked }
+  }, [shares, restrictToSharedOnly])
 
   const byLane = React.useMemo(() => {
     const toDo: ShareRecord[] = []
@@ -2193,9 +2235,47 @@ export function EngagementSharesTab({
           >
             <Clock className="h-3 w-3 opacity-60" />
             Overdue
+            {boardStats.overdue > 0 && (
+              <span className={cn(
+                'ml-0.5 rounded-sm px-1 py-px text-[10px] font-semibold tabular-nums',
+                filterOverdue ? 'bg-red-200/70 text-red-900' : 'bg-slate-100 text-slate-600',
+              )}>
+                {boardStats.overdue}
+              </span>
+            )}
           </Button>
 
+          {/* Signals the columns cannot show. Rendered only when non-zero: a row of zeros is
+              noise, and the absence of a warning is itself the information. */}
+          {boardStats.stalledInReview > 0 && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded border border-amber-200 bg-amber-50 text-xs text-amber-900">
+                  <AlertTriangle className="h-3 w-3 shrink-0" />
+                  <span className="font-semibold tabular-nums">{boardStats.stalledInReview}</span>
+                  stalled in review
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                In review for more than 14 days without a status change
+              </TooltipContent>
+            </Tooltip>
+          )}
 
+          {boardStats.missingDueDate > 0 && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded border border-slate-200 bg-white text-xs text-slate-600">
+                  <CalendarClock className="h-3 w-3 shrink-0 opacity-60" />
+                  <span className="font-semibold tabular-nums">{boardStats.missingDueDate}</span>
+                  no due date
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                Unfinished deliverables with no due date set — they can never show as overdue
+              </TooltipContent>
+            </Tooltip>
+          )}
         </div>
 
         {/* Right: refresh + search */}

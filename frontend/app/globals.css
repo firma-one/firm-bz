@@ -751,3 +751,46 @@
   from { width: 0%; }
   to { width: 100%; }
 }
+/* AI summary streaming caret — a block cursor with a gentle opacity cycle. The floor sits at
+   0.35 rather than near-zero because a solid block dropping to invisible reads as flashing,
+   where a thin bar did not. */
+@keyframes fm-caret {
+  0%, 45% { opacity: 1; }
+  72% { opacity: 0.35; }
+  100% { opacity: 1; }
+}
+
+/* Streaming text — words resolve through a soft cross-blur as they arrive, in the style of
+   transitions.dev's "streaming-text". Only compositor-friendly properties (opacity, filter,
+   transform) so long responses stay smooth. Tokens are exposed as CSS variables for tuning. */
+.t-stream-word {
+  --t-stream-duration: 260ms;
+  --t-stream-blur: 5px;
+  --t-stream-distance: 3px;
+  --t-stream-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  display: inline-block;
+  white-space: pre-wrap;
+  animation: t-stream-in var(--t-stream-duration) var(--t-stream-ease) both;
+  will-change: opacity, filter, transform;
+}
+
+@keyframes t-stream-in {
+  from {
+    opacity: 0;
+    filter: blur(var(--t-stream-blur));
+    transform: translateY(var(--t-stream-distance));
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: none;
+  }
+}
+
+/* Respect reduced-motion: keep the reveal, drop the movement and blur. */
+@media (prefers-reduced-motion: reduce) {
+  .t-stream-word {
+    animation-duration: 1ms;
+    animation-name: none;
+  }
+}

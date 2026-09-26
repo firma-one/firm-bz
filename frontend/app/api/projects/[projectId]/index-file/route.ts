@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { assertWithinDocumentCap } from '@/lib/billing/effective-billing-caps'
 import { prisma } from '@/lib/prisma'
 import { IndexingInterceptor } from '@/lib/services/indexing-interceptor'
 import { logger } from '@/lib/logger'
@@ -74,11 +75,50 @@ export async function POST(
         const authResult = await requireProjectManage(request, projectId)
         if (authResult instanceof NextResponse) return authResult
 
-        const orgId = organizationId || authResult.ctx.orgId
+        // `organizationId` is the old name for the firm; the local name follows current
+        // terminology. The request-body key and `authResult.ctx.orgId` are left alone — one is a
+        // wire format, the other belongs to the shared auth helper.
+        const firmId = organizationId || authResult.ctx.orgId
         const cliId = clientId || authResult.ctx.clientId
 
-        if (!orgId) {
+        if (!firmId) {
             return NextResponse.json({ error: 'Organization context not found' }, { status: 404 })
+        }
+
+        // The document cap exists to keep the free tier a trial rather than a product: free allows
+        // 10 documents, every paid tier is unlimited. This route creates documents via upsert and
+        // accepts a `files` array, so without this check it was the one path where a free-tier user
+        // could create unbounded documents in a single request.
+        //
+        // Counted against the batch size for the same reason the Drive import route does: checking
+        // one at a time would let a batch straddle the limit.
+        //
+        // Only documents that do not already exist are counted. This route UPSERTS on
+        // (engagementId, firmId, externalId), so re-indexing existing files creates nothing — and
+        // counting them as new would make the system-admin re-index button fail on any firm at its
+        // cap, reporting a limit breach for an operation that adds no documents.
+        const requested: { externalId: string }[] = Array.isArray(files)
+            ? (files as { externalId: string }[])
+            : [{ externalId }]
+        const requestedIds = requested.map((f) => f.externalId).filter(Boolean)
+
+        const existing = requestedIds.length > 0
+            ? await prisma.engagementDocument.findMany({
+                where: { engagementId: projectId, firmId, externalId: { in: requestedIds } },
+                select: { externalId: true },
+            })
+            : []
+        const existingIds = new Set(existing.map((d) => d.externalId))
+        const newDocuments = requestedIds.filter((id) => !existingIds.has(id)).length
+
+        try {
+            // Nothing new means nothing to check: a pure re-index cannot breach a cap.
+            if (newDocuments > 0) await assertWithinDocumentCap(firmId, newDocuments)
+        } catch (error) {
+            return NextResponse.json(
+                { error: error instanceof Error ? error.message : 'Document limit reached' },
+                { status: 403 },
+            )
         }
 
         // 3. Index File(s) - Non-blocking (blocks only if waitUntil is missing)
@@ -86,7 +126,7 @@ export async function POST(
             // Assign docIds synchronously, before the async indexing job runs
             await Promise.all((files as { externalId: string; fileName: string }[]).map((f) =>
                 ensureDocIdEarly({
-                    organizationId: orgId,
+                    organizationId: firmId,
                     clientId: cliId,
                     projectId,
                     externalId: f.externalId,
@@ -97,7 +137,7 @@ export async function POST(
 
             // Batch Index
             await IndexingInterceptor.indexBatch(request, {
-                organizationId: orgId,
+                organizationId: firmId,
                 clientId: cliId,
                 projectId,
                 files,
@@ -108,7 +148,7 @@ export async function POST(
             for (const f of files as { externalId: string; fileName: string }[]) {
                 audit(AUDIT_EVENT.DOCUMENT_CREATED)
                     .scope(AUDIT_SCOPE.DOCUMENT)
-                    .firm(orgId)
+                    .firm(firmId)
                     .client(cliId)
                     .engagement(projectId)
                     .actor(userId)
@@ -118,7 +158,7 @@ export async function POST(
         } else {
             // Assign docId synchronously, before the async indexing job runs
             await ensureDocIdEarly({
-                organizationId: orgId,
+                organizationId: firmId,
                 clientId: cliId,
                 projectId,
                 externalId: externalId as string,
@@ -128,7 +168,7 @@ export async function POST(
 
             // Single Index
             await IndexingInterceptor.indexSingle(request, {
-                organizationId: orgId,
+                organizationId: firmId,
                 clientId: cliId,
                 projectId,
                 externalId: externalId as string,
@@ -138,7 +178,7 @@ export async function POST(
             // Audit: file added (upload or import)
             audit(AUDIT_EVENT.DOCUMENT_CREATED)
                 .scope(AUDIT_SCOPE.DOCUMENT)
-                .firm(orgId)
+                .firm(firmId)
                 .client(cliId)
                 .engagement(projectId)
                 .actor(authResult.user?.id)

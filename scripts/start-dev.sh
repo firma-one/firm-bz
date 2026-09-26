@@ -38,29 +38,55 @@ cd "$REPO_ROOT/frontend" || fail_and_stop "could not cd into $REPO_ROOT/frontend
 log_ok "in $(pwd)"
 
 # --- Stage 2: tailscale funnel ------------------------------------------------
-# Runs in the background since it's a long-lived tunnel process; we just
-# confirm it started without immediately erroring out.
+# Always stop any existing funnel and start a fresh one, rather than trying to
+# detect a healthy one and reuse it.
+#
+# The funnel's serve config is ephemeral and daemon-level, shared by every
+# funnel session: Ctrl+C in any one of them, or a tailscaled restart/upgrade,
+# tears the config down while leaving the client process alive. Such a process
+# looks perfectly healthy to pgrep and serves nothing, so "is it running?" is
+# the wrong question. Restarting is fast and idempotent - just take a clean one.
 log_stage "Starting tailscale funnel on localhost:3000"
-EXISTING_FUNNEL_PID="$(pgrep -f 'tailscale funnel localhost:3000' | head -n1 || true)"
-if [ -n "$EXISTING_FUNNEL_PID" ]; then
-  log_ok "tailscale funnel already running (pid $EXISTING_FUNNEL_PID), skipping"
-  TAILSCALE_PID=""
-else
-  tailscale funnel localhost:3000 > /tmp/tailscale-funnel.log 2>&1 &
-  TAILSCALE_PID=$!
-  sleep 3
-  if ! kill -0 "$TAILSCALE_PID" 2>/dev/null; then
-    if grep -qi 'listener already exists' /tmp/tailscale-funnel.log; then
-      log_ok "tailscale funnel already active on port 443 (untracked process), continuing"
-      TAILSCALE_PID=""
-    else
-      cat /tmp/tailscale-funnel.log
-      fail_and_stop "tailscale funnel exited immediately (see log above)"
-    fi
-  else
-    log_ok "tailscale funnel running (pid $TAILSCALE_PID), log: /tmp/tailscale-funnel.log"
+
+# True only when the daemon actually has a funnel config proxying to port 3000.
+#
+# Must read the JSON, not `tailscale funnel status`. A funnel started as
+# `tailscale funnel <target>` is a FOREGROUND session, which lives under
+# .Foreground in the serve config; the text view only renders the background
+# config and prints "No serve config" even while the funnel is live.
+funnel_is_serving() {
+  local json
+  json="$(tailscale serve status --json 2>/dev/null)" || return 1
+  printf '%s' "$json" | grep -q '"AllowFunnel"' || return 1
+  printf '%s' "$json" \
+    | grep -Eq '"Proxy"[[:space:]]*:[[:space:]]*"http://(localhost|127\.0\.0\.1):3000"'
+}
+
+EXISTING_FUNNEL_PIDS="$(pgrep -f 'tailscale funnel localhost:3000' || true)"
+if [ -n "$EXISTING_FUNNEL_PIDS" ]; then
+  echo "  stopping existing funnel process(es): $(echo "$EXISTING_FUNNEL_PIDS" | xargs)"
+  echo "$EXISTING_FUNNEL_PIDS" | xargs kill 2>/dev/null || true
+  sleep 1
+  STILL_RUNNING="$(pgrep -f 'tailscale funnel localhost:3000' || true)"
+  if [ -n "$STILL_RUNNING" ]; then
+    echo "$STILL_RUNNING" | xargs kill -9 2>/dev/null || true
+    sleep 1
   fi
 fi
+
+tailscale funnel localhost:3000 > /tmp/tailscale-funnel.log 2>&1 &
+TAILSCALE_PID=$!
+sleep 3
+if ! kill -0 "$TAILSCALE_PID" 2>/dev/null; then
+  cat /tmp/tailscale-funnel.log
+  fail_and_stop "tailscale funnel exited immediately (see log above)"
+fi
+# Alive is necessary but not sufficient - confirm the config actually landed.
+if ! funnel_is_serving; then
+  cat /tmp/tailscale-funnel.log
+  fail_and_stop "tailscale funnel process started (pid $TAILSCALE_PID) but no serve config is active"
+fi
+log_ok "tailscale funnel serving (pid $TAILSCALE_PID), log: /tmp/tailscale-funnel.log"
 
 # --- Stage 3: npm run inngest:dev ---------------------------------------------
 # Long-lived dev process; start in background and verify it's still alive
@@ -135,9 +161,5 @@ fi
 
 echo -e "\n${GREEN}All stages completed successfully.${NC}"
 echo "Background processes still running:"
-if [ -n "$TAILSCALE_PID" ]; then
-  echo "  tailscale funnel: pid $TAILSCALE_PID (log: /tmp/tailscale-funnel.log)"
-else
-  echo "  tailscale funnel: pre-existing instance (not started by this script)"
-fi
+echo "  tailscale funnel: pid $TAILSCALE_PID (log: /tmp/tailscale-funnel.log)"
 echo "  inngest:dev:      pid $INNGEST_PID (log: /tmp/inngest-dev.log)"

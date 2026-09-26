@@ -76,6 +76,8 @@ export interface VectorSearchResult {
     engagementId?: string
     /** Optional — only set by searchGlobal's branches, used to score against an auto-detected softDateRange. */
     dueDate?: Date | null
+    /** Selected so the UI can show WHY a document matched a date filter (dueDate vs createdAt). */
+    createdAt?: Date | null
     /** Optional — only set by searchGlobal's branches, e.g. "NVQ-7". Used to suffix the filename in results and as a dedicated exact-match search branch. */
     docId?: string | null
     /** Optional — only set by searchGlobal's branches, raw Supabase auth user ids, resolved to name/email/avatar in the route layer. */
@@ -651,10 +653,15 @@ export class SearchService {
         engagementId?: string
         deliverableDocumentIds?: string[]
         dateRange?: { start: Date; end: Date }
-        dateField: 'dueDate' | 'kickoffDate' | 'updatedAt'
+        dateField: 'dueDate' | 'kickoffDate' | 'updatedAt' | 'createdAt'
+        /**
+         * True when the range means "overdue" — strict dueDate semantics, no fallback. A document
+         * with no due date cannot be overdue, so it must be excluded.
+         */
+        strictDueDate?: boolean
         push: (value: any) => string
     }): string {
-        const { userId, fullAccessEngagementIds, grantGatedEngagementIds, clientId, engagementId, deliverableDocumentIds, dateRange, dateField, push } = params
+        const { userId, fullAccessEngagementIds, grantGatedEngagementIds, clientId, engagementId, deliverableDocumentIds, dateRange, dateField, strictDueDate, push } = params
 
         const accessConditions: string[] = []
         if (fullAccessEngagementIds.length > 0) {
@@ -682,7 +689,17 @@ export class SearchService {
         if (dateRange) {
             const startParam = push(dateRange.start)
             const endParam = push(dateRange.end)
-            filter += ` AND d."${dateField}" BETWEEN ${startParam}::timestamptz AND ${endParam}::timestamptz`
+            // A date filter on `dueDate` silently excludes every document that has none, and in
+            // practice most never get one — a quarter filter would return almost nothing. Fall
+            // back per row so "from Q3" means "due in Q3, or created in Q3 if it has no due date".
+            //
+            // The fallback is `createdAt`, NOT `updatedAt`. Which period a document *belongs to*
+            // is fixed when it is created; `updatedAt` moves every time anyone touches it, so a
+            // Q1 document edited in Q3 would vanish from "Q1" and wrongly appear under "Q3".
+            // `createdAt` is NOT NULL, so the fallback always resolves.
+            filter += dateField === 'dueDate' && !strictDueDate
+                ? ` AND COALESCE(d."dueDate", d."createdAt") BETWEEN ${startParam}::timestamptz AND ${endParam}::timestamptz`
+                : ` AND d."${dateField}" BETWEEN ${startParam}::timestamptz AND ${endParam}::timestamptz`
         }
         return filter
     }
@@ -711,14 +728,16 @@ export class SearchService {
         dateRange?: { start: Date; end: Date }
         /** Auto-detected from typed text (e.g. "from July") — applied as a ranking boost only, never excludes a document with no/different dueDate. Unlike dateRange, this is not explicit user intent. */
         softDateRange?: { start: Date; end: Date }
-        dateField?: 'dueDate' | 'kickoffDate' | 'updatedAt'
+        dateField?: 'dueDate' | 'kickoffDate' | 'updatedAt' | 'createdAt'
+        /** See buildScopeFilter: strict dueDate semantics for "Overdue", no updatedAt fallback. */
+        strictDueDate?: boolean
         limit?: number
     }): Promise<VectorSearchResult[]> {
         const {
             firmId, userId, semanticText, isFirmAdmin,
             fullAccessEngagementIds, grantGatedEngagementIds,
             clientId, engagementId, deliverableDocumentIds, dateRange, softDateRange,
-            dateField = 'dueDate',
+            dateField = 'dueDate', strictDueDate = false,
         } = params
         const embeddingQuery = params.embeddingQuery ?? semanticText
         const limit = params.limit || 30
@@ -750,26 +769,45 @@ export class SearchService {
 
         const [vectorResults, filenameResults, termResults, docIdResults] = await Promise.all([
             trimmedEmbeddingQuery
-                ? SearchService.searchGlobalVector({ firmId, userId, semanticText: trimmedEmbeddingQuery, fullAccessEngagementIds, grantGatedEngagementIds, clientId, engagementId, deliverableDocumentIds, dateRange, dateField, limit: 50 })
-                : SearchService.searchGlobalStructuredOnly({ firmId, userId, fullAccessEngagementIds, grantGatedEngagementIds, clientId, engagementId, deliverableDocumentIds, dateRange, dateField, limit }),
+                ? SearchService.searchGlobalVector({ firmId, userId, semanticText: trimmedEmbeddingQuery, fullAccessEngagementIds, grantGatedEngagementIds, clientId, engagementId, deliverableDocumentIds, dateRange, dateField, strictDueDate, limit: 50 })
+                : SearchService.searchGlobalStructuredOnly({ firmId, userId, fullAccessEngagementIds, grantGatedEngagementIds, clientId, engagementId, deliverableDocumentIds, dateRange, dateField, strictDueDate, limit }),
             trimmedQuery
-                ? SearchService.searchGlobalFileName({ firmId, userId, query: trimmedQuery, fullAccessEngagementIds, grantGatedEngagementIds, clientId, engagementId, deliverableDocumentIds, dateRange, dateField, limit: 20 })
+                ? SearchService.searchGlobalFileName({ firmId, userId, query: trimmedQuery, fullAccessEngagementIds, grantGatedEngagementIds, clientId, engagementId, deliverableDocumentIds, dateRange, dateField, strictDueDate, limit: 20 })
                 : Promise.resolve([]),
             trimmedQuery && significantTerms.length > 0
-                ? SearchService.searchGlobalFileNameTerms({ firmId, userId, terms: significantTerms, fullAccessEngagementIds, grantGatedEngagementIds, clientId, engagementId, deliverableDocumentIds, dateRange, dateField, limit: 25 })
+                ? SearchService.searchGlobalFileNameTerms({ firmId, userId, terms: significantTerms, fullAccessEngagementIds, grantGatedEngagementIds, clientId, engagementId, deliverableDocumentIds, dateRange, dateField, strictDueDate, limit: 25 })
                 : Promise.resolve([]),
             looksLikeDocId
-                ? SearchService.searchGlobalDocId({ firmId, userId, query: trimmedQuery, fullAccessEngagementIds, grantGatedEngagementIds, clientId, engagementId, deliverableDocumentIds, dateRange, dateField, limit: 10 })
+                ? SearchService.searchGlobalDocId({ firmId, userId, query: trimmedQuery, fullAccessEngagementIds, grantGatedEngagementIds, clientId, engagementId, deliverableDocumentIds, dateRange, dateField, strictDueDate, limit: 10 })
                 : Promise.resolve([]),
         ])
 
         // Merge: docId matches first (most specific/unambiguous), then vector, then filename/term
         // matches not already present, dedup by externalId.
+        //
+        // While merging, record WHICH branches found each document. First-branch-wins dedup keeps
+        // the right row but throws away corroboration: a document that vector search, the filename
+        // search and the term search all returned is a much stronger match than one a single
+        // branch returned weakly, and before this that agreement was invisible to ranking.
+        const branchesById = new Map<string, Set<'docId' | 'vector' | 'filename' | 'terms'>>()
+        const noteBranch = (externalId: string, branch: 'docId' | 'vector' | 'filename' | 'terms') => {
+            const existing = branchesById.get(externalId)
+            if (existing) existing.add(branch)
+            else branchesById.set(externalId, new Set([branch]))
+        }
+
         const byId = new Map<string, VectorSearchResult>(docIdResults.map(r => [r.externalId, { ...r, matchType: 'name' }]))
+        for (const r of docIdResults) noteBranch(r.externalId, 'docId')
         for (const r of vectorResults) {
+            noteBranch(r.externalId, 'vector')
             if (!byId.has(r.externalId)) byId.set(r.externalId, { ...r, matchType: trimmedQuery ? 'semantic' : r.matchType })
         }
-        for (const r of [...filenameResults, ...termResults]) {
+        for (const r of filenameResults) {
+            noteBranch(r.externalId, 'filename')
+            if (!byId.has(r.externalId)) byId.set(r.externalId, { ...r, matchType: 'name' })
+        }
+        for (const r of termResults) {
+            noteBranch(r.externalId, 'terms')
             if (!byId.has(r.externalId)) byId.set(r.externalId, { ...r, matchType: 'name' })
         }
         const merged = Array.from(byId.values())
@@ -790,7 +828,28 @@ export class SearchService {
             const inRange = r.dueDate.getTime() >= softDateRange.start.getTime() && r.dueDate.getTime() <= softDateRange.end.getTime()
             return inRange ? 0.15 : 0
         }
-        const compositeScore = (r: VectorSearchResult) => (r.score || 0) * 0.7 + recencyBoost(r.updatedAt) * 0.2 + matchTypeBonus(r) + softDateBonus(r)
+        /**
+         * Weighted fusion across branches. Branches are not equal evidence: a filename match is a
+         * far stronger signal of intent than a mild semantic resemblance, because the user is
+         * usually half-remembering a name. docId is excluded — an exact id match already sorts
+         * above everything below, so weighting it here would be double-counting.
+         *
+         * Capped so agreement can reorder near-ties without overwhelming genuine relevance: a
+         * weakly-scoring document found by three branches should not outrank a strong single-branch
+         * match outright.
+         */
+        const AGREEMENT_WEIGHTS = { filename: 0.10, terms: 0.06, vector: 0.04 } as const
+        const AGREEMENT_CAP = 0.15
+        const agreementBonus = (r: VectorSearchResult) => {
+            const branches = branchesById.get(r.externalId)
+            if (!branches || branches.size < 2) return 0
+            let total = 0
+            branches.forEach((b) => {
+                if (b !== 'docId') total += AGREEMENT_WEIGHTS[b]
+            })
+            return Math.min(total, AGREEMENT_CAP)
+        }
+        const compositeScore = (r: VectorSearchResult) => (r.score || 0) * 0.7 + recencyBoost(r.updatedAt) * 0.2 + matchTypeBonus(r) + softDateBonus(r) + agreementBonus(r)
 
         const docIdExternalIds = new Set(docIdResults.map(r => r.externalId))
         merged.sort((a, b) => {
@@ -819,7 +878,8 @@ export class SearchService {
         engagementId?: string
         deliverableDocumentIds?: string[]
         dateRange?: { start: Date; end: Date }
-        dateField: 'dueDate' | 'kickoffDate' | 'updatedAt'
+        dateField: 'dueDate' | 'kickoffDate' | 'updatedAt' | 'createdAt'
+        strictDueDate?: boolean
         limit: number
     }): Promise<VectorSearchResult[]> {
         try {
@@ -838,7 +898,7 @@ export class SearchService {
             const results = await prisma.$queryRawUnsafe<any[]>(`
         SELECT
           d."externalId", d."fileName", d."updatedAt", d."metadata", d."isFolder",
-          d."parentId", d."clientId", d."engagementId", d."dueDate", d."docId", d."createdBy", d."updatedBy",
+          d."parentId", d."clientId", d."engagementId", d."dueDate", d."createdAt", d."docId", d."createdBy", d."updatedBy",
           1 - (d.embedding <=> ${embeddingParam}::vector) as score
         FROM platform.engagement_documents d
         WHERE d."firmId" = ${firmIdParam}::uuid
@@ -858,6 +918,7 @@ export class SearchService {
                     score: Number(r.score), metadata: r.metadata, isFolder: Boolean(r.isFolder),
                     parentId: r.parentId, clientId: r.clientId, engagementId: r.engagementId,
                     dueDate: r.dueDate ? new Date(r.dueDate) : null,
+                    createdAt: r.createdAt ? new Date(r.createdAt) : null,
                     docId: r.docId, createdBy: r.createdBy, updatedBy: r.updatedBy,
                 }))
                 .filter(r => r.score >= MIN_SEMANTIC_SCORE)
@@ -877,7 +938,8 @@ export class SearchService {
         engagementId?: string
         deliverableDocumentIds?: string[]
         dateRange?: { start: Date; end: Date }
-        dateField: 'dueDate' | 'kickoffDate' | 'updatedAt'
+        dateField: 'dueDate' | 'kickoffDate' | 'updatedAt' | 'createdAt'
+        strictDueDate?: boolean
         limit: number
     }): Promise<VectorSearchResult[]> {
         try {
@@ -892,7 +954,7 @@ export class SearchService {
 
             const results = await prisma.$queryRawUnsafe<any[]>(`
         SELECT d."externalId", d."fileName", d."updatedAt", d."metadata", d."isFolder",
-          d."parentId", d."clientId", d."engagementId", d."dueDate", d."docId", d."createdBy", d."updatedBy"
+          d."parentId", d."clientId", d."engagementId", d."dueDate", d."createdAt", d."docId", d."createdBy", d."updatedBy"
         FROM platform.engagement_documents d
         WHERE d."firmId" = ${firmIdParam}::uuid
           ${scopeFilter}
@@ -908,6 +970,7 @@ export class SearchService {
                 score: 0.92, metadata: r.metadata, isFolder: Boolean(r.isFolder),
                 parentId: r.parentId, clientId: r.clientId, engagementId: r.engagementId,
                 dueDate: r.dueDate ? new Date(r.dueDate) : null,
+                createdAt: r.createdAt ? new Date(r.createdAt) : null,
                 docId: r.docId, createdBy: r.createdBy, updatedBy: r.updatedBy,
             }))
         } catch (error) {
@@ -933,7 +996,8 @@ export class SearchService {
         engagementId?: string
         deliverableDocumentIds?: string[]
         dateRange?: { start: Date; end: Date }
-        dateField: 'dueDate' | 'kickoffDate' | 'updatedAt'
+        dateField: 'dueDate' | 'kickoffDate' | 'updatedAt' | 'createdAt'
+        strictDueDate?: boolean
         limit: number
     }): Promise<VectorSearchResult[]> {
         try {
@@ -948,7 +1012,7 @@ export class SearchService {
 
             const results = await prisma.$queryRawUnsafe<any[]>(`
         SELECT d."externalId", d."fileName", d."updatedAt", d."metadata", d."isFolder",
-          d."parentId", d."clientId", d."engagementId", d."dueDate", d."docId", d."createdBy", d."updatedBy"
+          d."parentId", d."clientId", d."engagementId", d."dueDate", d."createdAt", d."docId", d."createdBy", d."updatedBy"
         FROM platform.engagement_documents d
         WHERE d."firmId" = ${firmIdParam}::uuid
           ${scopeFilter}
@@ -963,7 +1027,8 @@ export class SearchService {
                 externalId: r.externalId, fileName: r.fileName, updatedAt: new Date(r.updatedAt),
                 score: 0.92, metadata: r.metadata, isFolder: Boolean(r.isFolder),
                 parentId: r.parentId, clientId: r.clientId, engagementId: r.engagementId,
-                dueDate: r.dueDate ? new Date(r.dueDate) : null, docId: r.docId,
+                dueDate: r.dueDate ? new Date(r.dueDate) : null, 
+                createdAt: r.createdAt ? new Date(r.createdAt) : null, docId: r.docId,
                 createdBy: r.createdBy, updatedBy: r.updatedBy,
             }))
         } catch (error) {
@@ -982,7 +1047,8 @@ export class SearchService {
         engagementId?: string
         deliverableDocumentIds?: string[]
         dateRange?: { start: Date; end: Date }
-        dateField: 'dueDate' | 'kickoffDate' | 'updatedAt'
+        dateField: 'dueDate' | 'kickoffDate' | 'updatedAt' | 'createdAt'
+        strictDueDate?: boolean
         limit: number
     }): Promise<VectorSearchResult[]> {
         if (params.terms.length === 0) return []
@@ -1000,7 +1066,7 @@ export class SearchService {
 
             const results = await prisma.$queryRawUnsafe<any[]>(`
         SELECT d."externalId", d."fileName", d."updatedAt", d."metadata", d."isFolder",
-          d."parentId", d."clientId", d."engagementId", d."dueDate", d."docId", d."createdBy", d."updatedBy"
+          d."parentId", d."clientId", d."engagementId", d."dueDate", d."createdAt", d."docId", d."createdBy", d."updatedBy"
         FROM platform.engagement_documents d
         WHERE d."firmId" = ${firmIdParam}::uuid
           ${scopeFilter}
@@ -1025,6 +1091,7 @@ export class SearchService {
                     score: 0.5 + matchFraction * 0.42, metadata: r.metadata, isFolder: Boolean(r.isFolder),
                     parentId: r.parentId, clientId: r.clientId, engagementId: r.engagementId,
                     dueDate: r.dueDate ? new Date(r.dueDate) : null,
+                    createdAt: r.createdAt ? new Date(r.createdAt) : null,
                     docId: r.docId, createdBy: r.createdBy, updatedBy: r.updatedBy,
                 }
             })
@@ -1043,7 +1110,8 @@ export class SearchService {
         engagementId?: string
         deliverableDocumentIds?: string[]
         dateRange?: { start: Date; end: Date }
-        dateField: 'dueDate' | 'kickoffDate' | 'updatedAt'
+        dateField: 'dueDate' | 'kickoffDate' | 'updatedAt' | 'createdAt'
+        strictDueDate?: boolean
         limit: number
     }): Promise<VectorSearchResult[]> {
         try {
@@ -1057,7 +1125,7 @@ export class SearchService {
 
             const results = await prisma.$queryRawUnsafe<any[]>(`
         SELECT d."externalId", d."fileName", d."updatedAt", d."metadata", d."isFolder", 0.5 as score,
-          d."parentId", d."clientId", d."engagementId", d."dueDate", d."docId", d."createdBy", d."updatedBy"
+          d."parentId", d."clientId", d."engagementId", d."dueDate", d."createdAt", d."docId", d."createdBy", d."updatedBy"
         FROM platform.engagement_documents d
         WHERE d."firmId" = ${firmIdParam}::uuid
           ${scopeFilter}
@@ -1072,6 +1140,7 @@ export class SearchService {
                 score: Number(r.score), metadata: r.metadata, isFolder: Boolean(r.isFolder),
                 parentId: r.parentId, clientId: r.clientId, engagementId: r.engagementId,
                 dueDate: r.dueDate ? new Date(r.dueDate) : null,
+                createdAt: r.createdAt ? new Date(r.createdAt) : null,
                 docId: r.docId, createdBy: r.createdBy, updatedBy: r.updatedBy,
             }))
         } catch (error) {

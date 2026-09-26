@@ -216,6 +216,7 @@ model Group {
   firms         Firm[]
   members       GroupMember[]
   subscriptions Subscription[]
+  aiUsage       PlatformAiUsage[]
 
   @@map("groups")
   @@schema("platform")
@@ -720,6 +721,7 @@ model Notification {
   dismissedAt    DateTime? @db.Timestamptz(6)
   deliveredAt    DateTime? @db.Timestamptz(6)
   emailSentAt    DateTime? @db.Timestamptz(6)
+  pushSentAt     DateTime? @db.Timestamptz(6)
 
   engagement    Engagement?         @relation(fields: [engagementId], references: [id], onDelete: Cascade)
   document       EngagementDocument? @relation(fields: [documentId], references: [id], onDelete: Cascade)
@@ -734,13 +736,15 @@ model Notification {
 }
 
 model UserPersonalization {
-  userId     String   @id @db.Uuid
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  createdBy  String?  @db.Uuid
-  updatedBy  String?  @db.Uuid
-  bookmarks  Json     @default("[]")
-  reminders  Json     @default("[]")
+  userId            String   @id @db.Uuid
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  createdBy         String?  @db.Uuid
+  updatedBy         String?  @db.Uuid
+  bookmarks         Json     @default("[]")
+  reminders         Json     @default("[]")
+  /// Array of { endpoint, keys: { p256dh, auth }, createdAt } — one entry per subscribed device/browser
+  pushSubscriptions Json     @default("[]")
 
   @@map("user_personalizations")
   @@schema("platform")
@@ -828,6 +832,42 @@ enum PlatformAuditScope {
   ENGAGEMENT
   DOCUMENT
 
+  @@schema("platform")
+}
+
+/// Append-only ledger of AI API calls, one row per call.
+///
+/// Separate from Subscription.settings deliberately: the Polar webhook sync replaces that JSON
+/// wholesale, so usage stored there would be erased on every renewal or plan change. This table
+/// is never overwritten, supports atomic inserts under concurrency, and makes the per-group
+/// aggregation that credit metering needs a simple indexed query.
+///
+/// Token counts are the source of truth, not a computed cost — model pricing changes, and a
+/// stored dollar amount would freeze yesterday's rates into history. Cost is derived at read time.
+model PlatformAiUsage {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+
+  groupId      String   @db.Uuid
+  firmId       String?  @db.Uuid
+  userId       String?  @db.Uuid
+
+  /// 'brief' | 'summary' | 'chat' | 'searchInterpret'
+  feature      String
+  model        String
+
+  inputTokens  Int
+  outputTokens Int
+  /// Credit weight applied for this action, recorded at call time so a later reweighting
+  /// does not retroactively change what a group was charged.
+  credits      Decimal  @db.Decimal(8, 2)
+
+  group        Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@index([groupId, createdAt])
+  @@index([firmId, createdAt])
+  @@index([feature, createdAt])
+  @@map("platform_ai_usage")
   @@schema("platform")
 }
 

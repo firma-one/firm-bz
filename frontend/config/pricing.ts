@@ -36,6 +36,24 @@ export interface PricingPlan {
     firmsIncluded?: number
     /** Cap for concurrent active engagements; pricing UI shows with firms line. */
     projectsIncluded?: number
+    /**
+     * PUBLISHED entitlements — the four limits customers see. Mirror the matching
+     * `entitled*` keys in the tier's Polar product metadata.
+     *
+     * Declared per plan rather than in lookup tables keyed by id, so adding a tier means adding
+     * one object here and nothing else. `null` means unlimited; omitted means not yet configured,
+     * and the line is left off rather than guessed.
+     *
+     * The other entitlements (firms, engagements, documents, client contacts) stay in Polar,
+     * parsed and enforced, but are deliberately not published — they are anti-abuse floors that
+     * only ever bind on the free tier.
+     */
+    entitlements?: {
+        clients: number | null
+        aiCredits: number | null
+        auditDays: number | null
+        commentHistoryDays: number | null
+    }
     cta: string | null
     ctaVariant?: 'black' | 'gray'
     href: string | null
@@ -48,21 +66,34 @@ function firmLineForCard(firms: number): string {
     return firms === 1 ? '1 firm' : `${firms} firms`
 }
 
-/** Lines under the plan title on the pricing page (firm scope + engagement cap). */
+/**
+ * Lines under the plan title on the pricing page.
+ *
+ * Derived from `plan.entitlements`, so a new tier needs no change here. Only the four published
+ * limits appear; firms, engagements, documents and contacts remain enforced but unadvertised,
+ * because publishing floors that only bind on free invites comparing plans on the wrong numbers.
+ */
 export function planCardUsageSummary(plan: PricingPlan): string[] {
-    if (plan.id === 'Enterprise') {
-        return ['Custom firms · Unlimited clients', 'Engagement limits negotiated']
+    const e = plan.entitlements
+    if (!e) return []
+
+    const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`
+    const lines: string[] = [
+        e.clients === null ? 'Unlimited clients' : plural(e.clients, 'client'),
+    ]
+
+    if (e.aiCredits !== undefined) {
+        lines.push(e.aiCredits === null ? 'Unlimited AI credits' : `${e.aiCredits} AI credits / month`)
     }
-    if (plan.id === 'Business') {
-        return ['3 firms · 20 clients', '50 active engagements']
+
+    // Audit and comment retention move together per tier, so one line rather than two.
+    if (e.auditDays !== undefined && e.commentHistoryDays !== undefined) {
+        const audit = e.auditDays === null ? 'Unlimited' : e.auditDays === 0 ? 'No' : `${e.auditDays}-day`
+        const comments = e.commentHistoryDays === null ? 'unlimited' : `${e.commentHistoryDays}-day`
+        lines.push(`${audit} audit · ${comments} comments`)
     }
-    if (plan.id === 'Pro') {
-        return ['1 firm · 10 clients', '25 active engagements']
-    }
-    if (plan.id === 'Standard') {
-        return ['1 firm · 3 clients', '10 active engagements']
-    }
-    return []
+
+    return lines
 }
 
 /**
@@ -103,6 +134,7 @@ export const PRICING_PLANS: PricingPlan[] = [
         title: 'Standard',
         firmsIncluded: 1,
         projectsIncluded: 10,
+        entitlements: { clients: 3, aiCredits: 500, auditDays: 30, commentHistoryDays: 60 },
         description:
             'Take off the training wheels. Full client portal on your existing Drive—engagements, personas, and feedback in one place.',
         price: '$49',
@@ -118,6 +150,7 @@ export const PRICING_PLANS: PricingPlan[] = [
         id: 'Pro',
         title: 'Pro',
         firmsIncluded: 1,
+        entitlements: { clients: 10, aiCredits: 1000, auditDays: 90, commentHistoryDays: 90 },
         projectsIncluded: 25,
         description: 'For growing firms needing advanced review and templates.',
         price: '$99',
@@ -133,6 +166,7 @@ export const PRICING_PLANS: PricingPlan[] = [
         id: 'Business',
         title: 'Business',
         firmsIncluded: 3,
+        entitlements: { clients: 20, aiCredits: 3000, auditDays: 365, commentHistoryDays: 365 },
         projectsIncluded: 50,
         description: 'For established firms and mid-size agencies.',
         price: '$149',
@@ -147,6 +181,7 @@ export const PRICING_PLANS: PricingPlan[] = [
     {
         id: 'Enterprise',
         title: 'Enterprise',
+        entitlements: { clients: null, aiCredits: 10000, auditDays: null, commentHistoryDays: null },
         projectsIncluded: 100,
         description: 'For large organizations requiring advanced security and compliance.',
         price: 'Contact Us',
@@ -169,14 +204,28 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
         rows: [
             {
                 feature: "Firm → Client → Engagement → Deliverable → Document hierarchy",
-                tooltip: "Clean structure: Firm → Client → Engagement → Deliverable → Document. Maps to folders in your Drive. Clients see a clear place for their engagement and document handoffs. Each column shows the included limit at every level.",
+                tooltip: "Clean structure: Firm → Client → Engagement → Deliverable → Document. Maps to folders in your Drive. Clients see a clear place for their engagement and document handoffs.",
                 tooltipLayout: "hierarchy-sample",
+                // Clients only. The other levels stay enforced but unpublished — see
+                // planCardUsageSummary for why.
                 values: {
-                    Sandbox: "1 firm\n1 client\n1 engagement\n1 deliverable\n10 documents",
-                    Standard: "1 firm\n3 clients\n10 engagements\nUnlimited deliverables\nUnlimited documents",
-                    Pro: "1 firm\n10 clients\n25 engagements\nUnlimited deliverables\nUnlimited documents",
-                    Business: "3 firms\n20 clients\n50 engagements\nUnlimited deliverables\nUnlimited documents",
-                    Enterprise: "No limits",
+                    Sandbox: "1 client",
+                    Standard: "3 clients",
+                    Pro: "10 clients",
+                    Business: "20 clients",
+                    Enterprise: "Unlimited",
+                },
+            },
+            {
+                feature: "Credits included",
+                featureIcon: 'ai',
+                tooltip: "One credit is one AI action — an engagement summary, a firm brief, or a chat answer. Natural language document search (describe the document instead of assembling filters) costs half a credit. Every plan includes all four; the allowance is what differs. Credits reset each billing period and do not roll over.",
+                values: {
+                    Sandbox: "25 / month",
+                    Standard: "500 / month",
+                    Pro: "1,000 / month",
+                    Business: "3,000 / month",
+                    Enterprise: "10,000 / month",
                 },
             },
             {
@@ -213,8 +262,8 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
                 values: { Sandbox: true, Standard: true, Pro: true, Business: true, Enterprise: true },
             },
             {
-                feature: "Automated follow-ups & reminders",
-                tooltip: "Automated consolidated client follow-up emails on pending documents. Custom follow-up templates and scheduling.",
+                feature: "Scheduled follow-ups & reminders",
+                tooltip: "Rule-based scheduled emails, not AI — consolidated client follow-ups on pending documents. Custom follow-up templates and scheduling.",
                 values: { Sandbox: true, Standard: true, Pro: true, Business: true, Enterprise: true },
             },
             {
@@ -235,7 +284,7 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
                 values: { Sandbox: false, Standard: "30 days", Pro: "90 days", Business: "365 days", Enterprise: "Unlimited" },
             },
             {
-                feature: "In-app messaging (Deliverable comment thread)",
+                feature: "In-app messaging (Deliverable comment thread) history.",
                 tooltip: "One thread per deliverable for comments and feedback—shared with everyone on the engagement. Replace scattered email and chat with a single place where the conversation stays with the work. Each column shows how long comment history is retained.",
                 values: { Sandbox: "15 days", Standard: "60 days", Pro: "90 days", Business: "365 days", Enterprise: "Unlimited" },
             },
@@ -243,21 +292,6 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
                 feature: "One-click engagement closure",
                 tooltip: "Revoke client and external access when an engagement ends. Lock folders to view-only; remove guest members automatically.",
                 values: { Sandbox: true, Standard: true, Pro: true, Business: true, Enterprise: true },
-            },
-        ],
-    },
-    {
-        name: "SUPPORT",
-        rows: [
-            {
-                feature: "Dedicated Support Portal",
-                tooltip: "Submit bug reports, feature requests, and general enquiries directly from your workspace. Track status, upload attachments, and exchange comments with our team — all in one place.",
-                values: { Sandbox: false, Standard: true, Pro: true, Business: true, Enterprise: true },
-            },
-            {
-                feature: "SLA-based Priority support",
-                tooltip: "Enterprise customers get guaranteed response times under a dedicated SLA, a named support contact, and priority routing through the in-app support portal.",
-                values: { Sandbox: false, Standard: false, Pro: false, Business: false, Enterprise: true },
             },
         ],
     },
@@ -270,9 +304,9 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
                 values: { Sandbox: true, Standard: true, Pro: true, Business: true, Enterprise: true },
             },
             {
-                feature: "AI-powered search",
-                tooltip: "Natural language search across your whole firm — e.g. \"find all competitor analysis docs\". Search by intent, not just exact file names.",
+                feature: "Firm / Engagement summaries & AI assistant",
                 featureIcon: 'ai',
+                tooltip: "Brio drafts the engagement status summary — progress, risks, what needs attention — from your delivery data, and answers questions about any engagement. You review, edit and approve before a client sees anything. Included on every plan; usage draws on your AI credits.",
                 values: { Sandbox: true, Standard: true, Pro: true, Business: true, Enterprise: true },
             },
             {
@@ -287,7 +321,7 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
                     Sandbox: false,
                     Standard: "PDF export",
                     Pro: "+ Email notifications",
-                    Business: "+ AI Assistant",
+                    Business: "+ Priority rollups",
                     Enterprise: "Incl. all features in Business",
                 },
             },
@@ -319,6 +353,21 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
             {
                 feature: "SSO / SAML",
                 tooltip: "Single Sign-On for enterprise authentication. Integrate with your identity provider.",
+                values: { Sandbox: false, Standard: false, Pro: false, Business: false, Enterprise: true },
+            },
+        ],
+    },
+    {
+        name: "SUPPORT",
+        rows: [
+            {
+                feature: "Dedicated Support Portal",
+                tooltip: "Submit bug reports, feature requests, and general enquiries directly from your workspace. Track status, upload attachments, and exchange comments with our team — all in one place.",
+                values: { Sandbox: false, Standard: true, Pro: true, Business: true, Enterprise: true },
+            },
+            {
+                feature: "SLA-based Priority support",
+                tooltip: "Enterprise customers get guaranteed response times under a dedicated SLA, a named support contact, and priority routing through the in-app support portal.",
                 values: { Sandbox: false, Standard: false, Pro: false, Business: false, Enterprise: true },
             },
         ],

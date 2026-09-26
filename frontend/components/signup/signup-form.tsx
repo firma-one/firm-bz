@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { isValidEmail, getApplicableOAuthProviders, generateDefaultOrgName } from '@/lib/email-utils'
 import { AuthService } from '@/lib/auth-service'
 import { supabase } from '@/lib/supabase'
+import { resolvePostAuthTarget } from '@/lib/auth/post-auth-target'
 import { ArrowLeft, ArrowRight, Check } from 'lucide-react'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import {
@@ -167,9 +168,7 @@ export function SignupForm({
             const { data: { user } } = await supabase.auth.getUser()
             if (!user) return
             // Honour ?next= / ?redirect= so invite links aren't dropped for logged-in users
-            const nextRel = searchParams.get('next') || searchParams.get('redirect')
-            const isSafeRedirect = nextRel && nextRel.startsWith('/')
-            window.location.href = isSafeRedirect && nextRel ? nextRel : '/d?entry=auth'
+            window.location.href = resolvePostAuthTarget(searchParams)
         }
         void checkSession()
     }, [searchParams])
@@ -394,21 +393,10 @@ export function SignupForm({
             method: 'email'
         })
 
-        // Resolve the post-signup destination
-        const nextRel = searchParams.get('next') || searchParams.get('redirect')
-        const isSafeRedirect = nextRel && nextRel.startsWith('/')
-        // `?entry=auth` tells /d to auto-route (resolve + redirect into the right firm/group
-        // picker/onboarding target) rather than show the group picker as-is — see
-        // app/(app)/d/(landing)/page.tsx. Only applies to the bare-/d default target, not an
-        // explicit `next`/`redirect` deep link (e.g. an invite link), which should land exactly
-        // where it points.
-        let navTarget = '/d?entry=auth'
-        if (isSafeRedirect && nextRel) {
-            navTarget =
-                nextRel === '/dash' || nextRel.startsWith('/dash/')
-                    ? '/d' + (nextRel === '/dash' ? '' : nextRel.slice(5))
-                    : nextRel
-        }
+        // Resolve the post-signup destination — an explicit `next`/`redirect` deep link (e.g. an
+        // invite link) lands exactly where it points; anything else (including a bare `/d`) goes
+        // through `?entry=auth` so /d auto-routes. See lib/auth/post-auth-target.ts.
+        const navTarget = resolvePostAuthTarget(searchParams)
 
         // New signups' auto-provisioning and returning users' normal landing-path resolution
         // both happen behind /d's loading skeleton — no separate success screen needed, and this

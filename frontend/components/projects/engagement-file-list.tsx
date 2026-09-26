@@ -175,6 +175,10 @@ const VIEW_AS_SHARED_ONLY_PERSONAS = ['eng_ext_collaborator', 'eng_viewer']
 
 export function EngagementFileList({ projectId, connectorRootFolderId, clientConnectorId, clientConnectorType, workspaceRootLocation, rootFolderName = 'Engagement Files', orgName, clientName, projectName, canEdit = false, canManage = false, isFirmAdmin = false, restrictToSharedOnly = false, firmId, groupSlug, orgSlug, firmSandboxOnly = false, navSlot, clientSlug, connectorAccountEmail, onFileCountChange }: EngagementFileListProps) {
     const isOneDriveClient = clientConnectorType === 'ONEDRIVE'
+    /** Display name of the client's storage provider — used in user-facing copy so it never hardcodes "Google Drive". */
+    const storageProviderName = isOneDriveClient ? 'OneDrive' : 'Google Drive'
+    /** Provider's own name for the trash location. */
+    const storageBinName = isOneDriveClient ? 'Recycle bin' : 'Google Drive Bin'
     const { session } = useAuth()
     const sessionRef = useRef(session)
     const onFileCountChangeRef = useRef(onFileCountChange)
@@ -481,7 +485,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
             await provisionEngagementDriveFolder(projectId)
             window.location.reload()
         } catch (e) {
-            addToast({ type: 'error', title: 'Setup failed', message: e instanceof Error ? e.message : 'Could not set up Drive folder. Try again.' })
+            addToast({ type: 'error', title: 'Setup failed', message: e instanceof Error ? e.message : 'Could not set up the storage folder. Try again.' })
             setProvisioning(false)
         }
     }, [projectId, addToast])
@@ -2576,7 +2580,7 @@ const handleRefresh = async () => {
                             <div className="h-12 w-12 bg-[#f3f4f6] rounded-full flex items-center justify-center mb-4">
                                 <Folder className="h-6 w-6 text-[#9a9ba0]" />
                             </div>
-                            <h3 className="text-[0.8125rem] font-semibold text-[#1b1b1d] mb-1">Drive folder not set up</h3>
+                            <h3 className="text-[0.8125rem] font-semibold text-[#1b1b1d] mb-1">Storage folder not set up</h3>
                             {workspaceRootLocation === 'SHARED' ? (
                                 <>
                                     <p className="text-xs text-[#45474c] max-w-[280px] mx-auto mb-4">
@@ -2594,7 +2598,7 @@ const handleRefresh = async () => {
                             ) : (
                                 <>
                                     <p className="text-xs text-[#45474c] max-w-[260px] mx-auto mb-4">
-                                        This engagement was created before Google Drive was connected. Set up the folder to start managing files.
+                                        This engagement was created before {storageProviderName} was connected. Set up the folder to start managing files.
                                     </p>
                                     <button
                                         type="button"
@@ -2602,7 +2606,7 @@ const handleRefresh = async () => {
                                         onClick={() => void handleProvisionDriveFolder()}
                                         className="inline-flex items-center gap-1.5 h-8 px-4 rounded bg-primary text-white text-[10px] font-headline font-bold tracking-widest uppercase hover:brightness-105 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                                     >
-                                        {provisioning ? 'Setting up…' : 'Set up Drive Folder'}
+                                        {provisioning ? 'Setting up…' : 'Set up Storage Folder'}
                                     </button>
                                 </>
                             )}
@@ -2612,9 +2616,9 @@ const handleRefresh = async () => {
                             <div className="h-12 w-12 bg-[#f3f4f6] rounded-full flex items-center justify-center mb-4">
                                 <Folder className="h-6 w-6 text-[#9a9ba0]" />
                             </div>
-                            <h3 className="text-[0.8125rem] font-semibold text-[#1b1b1d] mb-1">No Google Drive connected</h3>
+                            <h3 className="text-[0.8125rem] font-semibold text-[#1b1b1d] mb-1">No document storage connected</h3>
                             <p className="text-xs text-[#45474c] max-w-[260px] mx-auto mb-4">
-                                Connect a Google Drive account to this client to start uploading and managing engagement files.
+                                Connect Google Drive or OneDrive (Beta) to this client to start uploading and managing engagement files.
                             </p>
                             {groupSlug && orgSlug && (
                                 <a
@@ -2631,11 +2635,11 @@ const handleRefresh = async () => {
                             <div className="h-16 w-16 bg-slate-50 rounded-full flex items-center justify-center mb-4">
                                 <Folder className="h-8 w-8 text-slate-300" />
                             </div>
-                            <h3 className="text-sm font-medium text-slate-900 mb-1">Drive not connected</h3>
+                            <h3 className="text-sm font-medium text-slate-900 mb-1">Storage not connected</h3>
                             <p className="text-sm text-slate-500 max-w-[280px] mx-auto mb-3">
                                 {canManage
-                                    ? 'This client is not linked to a Drive connector. Go to Firm Settings → Document Storage to link this client.'
-                                    : 'This client is not linked to a Drive connector. Contact your firm administrator to set up Document Storage.'}
+                                    ? 'This client is not linked to a storage connector. Go to Firm Settings → Document Storage to link this client.'
+                                    : 'This client is not linked to a storage connector. Contact your firm administrator to set up Document Storage.'}
                             </p>
                             {canManage && groupSlug && orgSlug && (
                                 <a
@@ -3028,9 +3032,9 @@ const handleRefresh = async () => {
                         {/* Body */}
                         <div className="p-5 space-y-4">
                             <ul className="list-disc list-inside space-y-1.5 pl-1 text-xs text-[#45474c] leading-relaxed">
-                                <li>Uploaded to this engagement folder in your Google Drive</li>
+                                <li>Uploaded to this engagement folder in your {storageProviderName}</li>
                                 <li>Folder structure preserved</li>
-                                <li>Sent directly to your Google Drive and never pass through our servers</li>
+                                <li>Sent directly to your {storageProviderName} and never pass through our servers</li>
                             </ul>
                             <div className="flex items-start gap-2 rounded border border-[#e5e7eb] bg-[#f9f9fb] px-3 py-2.5">
                                 <Info className="h-4 w-4 shrink-0 text-[#45474c] mt-0.5" />
@@ -3234,8 +3238,8 @@ const handleRefresh = async () => {
                     icon={<Trash2 className="h-3.5 w-3.5" />}
                     iconVariant="red"
                     title="Move to Bin"
-                    subtitle="This file will be moved to Google Drive Bin."
-                    description={<><span className="font-semibold text-[#1b1b1d]">{trashConfirmTarget?.name}</span>{' '}will be moved to your Google Drive Bin. Items in the Bin are permanently deleted after 30 days.</>}
+                    subtitle={`This file will be moved to ${storageBinName}.`}
+                    description={<><span className="font-semibold text-[#1b1b1d]">{trashConfirmTarget?.name}</span>{' '}will be moved to your {storageBinName}. Items there are permanently deleted after 30 days.</>}
                     confirmLabel="Move to Bin"
                     confirmVariant="red"
                     onCancel={() => setTrashConfirmTarget(null)}
@@ -3250,8 +3254,8 @@ const handleRefresh = async () => {
                     icon={<Trash2 className="h-3.5 w-3.5" />}
                     iconVariant="red"
                     title="Move to Bin"
-                    subtitle={`${pendingBulkTrashIds.size} item${pendingBulkTrashIds.size > 1 ? 's' : ''} will be moved to Google Drive Bin.`}
-                    description={<>{pendingBulkTrashIds.size} item{pendingBulkTrashIds.size > 1 ? 's' : ''} will be moved to your Google Drive Bin. Items in the Bin are permanently deleted after 30 days.</>}
+                    subtitle={`${pendingBulkTrashIds.size} item${pendingBulkTrashIds.size > 1 ? 's' : ''} will be moved to ${storageBinName}.`}
+                    description={<>{pendingBulkTrashIds.size} item{pendingBulkTrashIds.size > 1 ? 's' : ''} will be moved to your {storageBinName}. Items there are permanently deleted after 30 days.</>}
                     confirmLabel="Move to Bin"
                     confirmVariant="red"
                     onCancel={() => { setBulkTrashConfirmOpen(false); setPendingBulkTrashIds(new Set()) }}
