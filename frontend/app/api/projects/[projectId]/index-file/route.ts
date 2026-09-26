@@ -75,10 +75,13 @@ export async function POST(
         const authResult = await requireProjectManage(request, projectId)
         if (authResult instanceof NextResponse) return authResult
 
-        const orgId = organizationId || authResult.ctx.orgId
+        // `organizationId` is the old name for the firm; the local name follows current
+        // terminology. The request-body key and `authResult.ctx.orgId` are left alone — one is a
+        // wire format, the other belongs to the shared auth helper.
+        const firmId = organizationId || authResult.ctx.orgId
         const cliId = clientId || authResult.ctx.clientId
 
-        if (!orgId) {
+        if (!firmId) {
             return NextResponse.json({ error: 'Organization context not found' }, { status: 404 })
         }
 
@@ -91,7 +94,7 @@ export async function POST(
         // one at a time would let a batch straddle the limit.
         const incoming = Array.isArray(files) ? files.length : 1
         try {
-            await assertWithinDocumentCap(orgId, incoming)
+            await assertWithinDocumentCap(firmId, incoming)
         } catch (error) {
             return NextResponse.json(
                 { error: error instanceof Error ? error.message : 'Document limit reached' },
@@ -104,7 +107,7 @@ export async function POST(
             // Assign docIds synchronously, before the async indexing job runs
             await Promise.all((files as { externalId: string; fileName: string }[]).map((f) =>
                 ensureDocIdEarly({
-                    organizationId: orgId,
+                    organizationId: firmId,
                     clientId: cliId,
                     projectId,
                     externalId: f.externalId,
@@ -115,7 +118,7 @@ export async function POST(
 
             // Batch Index
             await IndexingInterceptor.indexBatch(request, {
-                organizationId: orgId,
+                organizationId: firmId,
                 clientId: cliId,
                 projectId,
                 files,
@@ -126,7 +129,7 @@ export async function POST(
             for (const f of files as { externalId: string; fileName: string }[]) {
                 audit(AUDIT_EVENT.DOCUMENT_CREATED)
                     .scope(AUDIT_SCOPE.DOCUMENT)
-                    .firm(orgId)
+                    .firm(firmId)
                     .client(cliId)
                     .engagement(projectId)
                     .actor(userId)
@@ -136,7 +139,7 @@ export async function POST(
         } else {
             // Assign docId synchronously, before the async indexing job runs
             await ensureDocIdEarly({
-                organizationId: orgId,
+                organizationId: firmId,
                 clientId: cliId,
                 projectId,
                 externalId: externalId as string,
@@ -146,7 +149,7 @@ export async function POST(
 
             // Single Index
             await IndexingInterceptor.indexSingle(request, {
-                organizationId: orgId,
+                organizationId: firmId,
                 clientId: cliId,
                 projectId,
                 externalId: externalId as string,
@@ -156,7 +159,7 @@ export async function POST(
             // Audit: file added (upload or import)
             audit(AUDIT_EVENT.DOCUMENT_CREATED)
                 .scope(AUDIT_SCOPE.DOCUMENT)
-                .firm(orgId)
+                .firm(firmId)
                 .client(cliId)
                 .engagement(projectId)
                 .actor(authResult.user?.id)
