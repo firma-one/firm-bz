@@ -1,5 +1,11 @@
 [
   {
+    "version": "2.0.0",
+    "commit": "04ac9ff0345164efacfb9cb8661d919080012873",
+    "date": "2026-09-26",
+    "title": "Brio AI Assistant, Natural Language Search & Web Push"
+  },
+  {
     "version": "1.2.0",
     "commit": "b503d3f386b30054d64afee0bc10f4486fe31413",
     "date": "2026-07-09",
