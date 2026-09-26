@@ -217,7 +217,7 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
                 },
             },
             {
-                feature: "AI credits",
+                feature: "Credits included",
                 featureIcon: 'ai',
                 tooltip: "One credit is one AI action — an engagement summary, a firm brief, or a chat answer. Natural language document search (describe the document instead of assembling filters) costs half a credit. Every plan includes all four; the allowance is what differs. Credits reset each billing period and do not roll over.",
                 values: {
@@ -262,8 +262,8 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
                 values: { Sandbox: true, Standard: true, Pro: true, Business: true, Enterprise: true },
             },
             {
-                feature: "Automated follow-ups & reminders",
-                tooltip: "Automated consolidated client follow-up emails on pending documents. Custom follow-up templates and scheduling.",
+                feature: "Scheduled follow-ups & reminders",
+                tooltip: "Rule-based scheduled emails, not AI — consolidated client follow-ups on pending documents. Custom follow-up templates and scheduling.",
                 values: { Sandbox: true, Standard: true, Pro: true, Business: true, Enterprise: true },
             },
             {
@@ -304,7 +304,7 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
                 values: { Sandbox: true, Standard: true, Pro: true, Business: true, Enterprise: true },
             },
             {
-                feature: "AI assistant & health report briefings",
+                feature: "Engagement summaries & assistant",
                 featureIcon: 'ai',
                 tooltip: "Brio drafts the engagement status summary — progress, risks, what needs attention — from your delivery data, and answers questions about any engagement. You review, edit and approve before a client sees anything. Included on every plan; usage draws on your AI credits.",
                 values: { Sandbox: true, Standard: true, Pro: true, Business: true, Enterprise: true },

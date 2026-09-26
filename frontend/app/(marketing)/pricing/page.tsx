@@ -117,7 +117,9 @@ function PricingMatrixCell({ value, standardHighlight }: { value: PlanValue; sta
             </span>
         )
     }
-    const hasAiMention = /\bAI\b/.test(value)
+    // Deliberately no auto-sparkle on cell values. This used to paint a bare Sparkles in
+    // marketing blue whenever a cell contained "AI" — the wrong icon and the wrong colour against
+    // FeatureIcon's green Brio mark on the row label. Branding belongs on the row, once.
     return (
         <span
             className={cn(
@@ -125,7 +127,6 @@ function PricingMatrixCell({ value, standardHighlight }: { value: PlanValue; sta
                 standardHighlight ? "text-[#002203]" : "text-[#45474c]",
             )}
         >
-            {hasAiMention && <Sparkles className="h-4 w-4 shrink-0 text-[#5a78ff]" aria-hidden />}
             {value}
         </span>
     )

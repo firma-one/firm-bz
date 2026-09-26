@@ -11,6 +11,24 @@ export interface FAQItem {
 
 export const FAQ_DATA: FAQItem[] = [
   {
+    question: `Does ${BRAND_NAME}'s AI read my clients' documents?`,
+    answer: `No. Brio reads delivery data only — deliverable names, statuses, due dates, comment counts and who is on the engagement. It never receives the contents of a document or the text of a comment. That boundary is deliberate: your files stay in your Drive under the same non-custodial design as the rest of the product, and a client comment cannot influence what Brio says. Brio is also read-only — it cannot share, edit, or change a status.`,
+    displayAnswer: `<strong>No.</strong> Brio reads <strong>delivery data only</strong> — deliverable names, statuses, due dates, comment counts and who is on the engagement. It <strong>never</strong> receives the contents of a document or the text of a comment. That boundary is deliberate: your files stay in your Drive under the same non-custodial design as the rest of the product, and a client comment cannot influence what Brio says. Brio is also <strong>read-only</strong> — it cannot share, edit, or change a status.`,
+    category: "Security"
+  },
+  {
+    question: `Does the AI send anything to my clients automatically?`,
+    answer: `No. Brio drafts; a person approves. An engagement summary is written into a draft that only your team can see, and nothing reaches a client until someone reviews, edits and publishes it. The two sections that commit your firm to a course of action — Mitigation & Contingency, and Next Steps — are left blank for the engagement lead by design, not because the model could not write them. Human review here is policy, not a capability gap.`,
+    displayAnswer: `<strong>No. Brio drafts; a person approves.</strong> An engagement summary is written into a draft that only your team can see, and nothing reaches a client until someone reviews, edits and publishes it. The two sections that commit your firm to a course of action — <strong>Mitigation &amp; Contingency</strong> and <strong>Next Steps</strong> — are left blank for the engagement lead by design, not because the model could not write them. Human review here is policy, not a capability gap.`,
+    category: "Security"
+  },
+  {
+    question: `What are AI credits, and what happens when I run out?`,
+    answer: `One credit is one AI action — an engagement summary, a firm brief, or a chat answer. A natural-language document search costs half a credit. Every plan includes AI; the monthly allowance is what differs, from 25 on the free tier to 10,000 on Enterprise. Credits reset each billing period and do not roll over. If you exhaust them, everything already generated stays exactly where it is — published summaries, briefs and chat history remain readable. Only new generation pauses, and ordinary filtered search is never affected.`,
+    displayAnswer: `One credit is <strong>one AI action</strong> — an engagement summary, a firm brief, or a chat answer. A natural-language document search costs <strong>half</strong> a credit. Every plan includes AI; the monthly allowance is what differs, from 25 on the free tier to 10,000 on Enterprise. Credits reset each billing period and do not roll over. If you exhaust them, <strong>everything already generated stays exactly where it is</strong> — published summaries, briefs and chat history remain readable. Only new generation pauses, and ordinary filtered search is never affected.`,
+    category: "Features"
+  },
+  {
     question: `How does ${BRAND_NAME} connect to my Google Drive?`,
     answer: `${BRAND_NAME} uses secure OAuth 2.0 authentication to act as a management layer on top of your existing Google Drive. We assume a 'Non-Custodial' design, meaning your files effectively never leave your Google Drive. We simply organize them into professional Client Portals and manage sharing permissions.`,
     displayAnswer: `${brandNameInlineHtml()} uses secure OAuth 2.0 authentication to act as a management layer on top of your existing Google Drive. We assume a <strong>'Non-Custodial'</strong> design, meaning your files effectively <strong>never leave your Google Drive</strong>. We simply organize them into professional <strong>Client Portals</strong> and manage sharing permissions.`,
