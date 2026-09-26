@@ -107,15 +107,17 @@ source of truth, and the older Gemma-era plan was merged into it and retired on 
 
 **Open:**
 
-- [ ] **Doc Search: close out Phase A** — [plan §A.10](../../.claude/plans/ai-native-features.md#a10-what-remains--phase-a-is-not-closed)
-  - Zero-result auto-broadening — the release gate named in §A.8; an over-constrained Ask search currently dead-ends
-  - Cache interpretation by `(normalized text, candidate-set hash)` — identical repeat Ask searches re-bill today
-  - Snippet 500→2000 chars + re-embed backfill — blocked on the §A.6 embed-dilution A/B
-  - Weighted rank fusion in `lib/services/search-service.ts`
+- [x] **Doc Search: Phase A closed** — zero-result ladder, interpret caching and weighted rank fusion all shipped 2026-09-25 (`be6646e2`). Snippet widening dropped, see below
 
 - [x] **AI credits: enforcement** — shipped 2026-09-26 (`c34814e8`, `2ac1fefe`). Two windows: the billing period (from `entitledAiCredits` in Polar metadata) is the budget; a rolling 4-hour window at 10% of the allowance is a burst tripwire sized above anything a person does by hand, to catch a retry storm a monthly cap would not notice until the allowance was gone. Gating and metering hang off the model client, not each route, so there is no ungated path. Breaches return 429 with a `kind` distinguishing an upgrade prompt from a transient wait. An unset entitlement means "unknown", not zero — a webhook that has not synced must not throttle a paying customer
 
-- [ ] **Content-aware sensitivity detection** — [plan §B](../../.claude/plans/ai-native-features.md) — classify over the unused `content` column instead of the current filename regex
+### Closed without building — 2026-09-26 ([decision record](../../.claude/plans/ai-native-features.md))
+
+Dropped rather than deferred, so they stop reading as pending. Each names its reopen trigger in §13.
+
+- [~] **Snippet 500→2000 + re-embed backfill** — the corpus is 20 documents. Retrieval tuning at that size measures noise; the A/B this gates could not produce a trustworthy result. Reopen when search starts missing documents users know exist
+- [~] **Credit allowance tuning** — enforcement is live and the numbers are generous (500 credits ≈ $4.75 against a $49 plan), so being wrong is cheap. Tuning needs real multi-tenant usage. Reopen when the period cap binds for someone legitimate, or the burst tripwire fires outside a bug
+- [~] **Content-aware sensitivity detection** — the one genuinely AI-native item left, and the one that contradicts the promise that Brio never reads clients' work. A positioning decision, not a backlog item. Reopen only if that promise is deliberately revisited
 
 ### On hold — not AI-native (see ai-native-features.md §7)
 

@@ -576,11 +576,11 @@ Everything AI, in one table. Verified against the tree on 2026-09-26.
 | AI usage ledger | **Shipped** `c0a7898f` | `platform_ai_usage`; all four surfaces meter since `7fb30703` |
 | Zero-result guard | **Built** — ladder + ambiguity disclosure | §A.11 |
 | Interpret caching | **Built** | `lib/ai/interpret-cache.ts`; 15-min TTL, cache hits bill nothing |
-| Snippet 500→2000 + backfill | **Open — blocked** | §A.10 #3; the only Phase A item left, needs the §A.6 A/B first |
+| Snippet 500→2000 + backfill | **DROPPED** 2026-09-26 | §13 |
 | Weighted rank fusion | **Built** — branch-agreement bonus | `search-service.ts` |
 | Credits enforcement | **Shipped** `c34814e8` | Period + 4h burst; `lib/ai/credit-cap.ts`. §7a phase 3 done ahead of phase 2 |
-| Credit allowance tuning | **Open** | §7a phase 2 — the numbers still need real usage; see the data caveat above |
-| Content-aware sensitivity | **Not started** | Phase B |
+| Credit allowance tuning | **DROPPED** 2026-09-26 | §13 — revisit only if the numbers bind |
+| Content-aware sensitivity | **DROPPED** 2026-09-26 | §13 |
 | Failure handling | **Shipped** `f0c65f3c` | All four surfaces; see §12 |
 | Absolute periods (Q1 2026) | **Shipped** `d3820fcb` | `lib/search/period.ts`; model emits a token, never a date |
 | Conflict disclosure | **Shipped** `5d4725bd` | Picked chip wins, prose conflict surfaced with a switch |
@@ -649,6 +649,43 @@ spinners on any surface); Ask Brio's fallback to plain search works on all three
 - `ai-brief/route.ts` and `ai-chat/route.ts` fan out to the insights route server-side with no
   timeout, so a slow insights route stalls an AI route before the model is called. Real, but it is
   an insights-route concern rather than an AI one.
+
+---
+
+## 13. Closed without building — decision record, 2026-09-26
+
+The three remaining open items were reviewed together and dropped. Not deferred: **dropped**, so
+they stop appearing as pending work. Each would be reopened by a specific trigger, named below.
+
+### Snippet 500→2000 + re-embed backfill
+
+The corpus is **20 documents**. Retrieval tuning at that size measures noise, not quality — the
+§A.6 embed-dilution A/B could not produce a trustworthy result, and the backfill it gates would
+re-embed 35 rows. The work is real but it is sequenced wrong: it is an optimisation for a corpus
+that does not exist yet.
+
+**Reopen when:** a firm has enough documents that users report search missing things they know are
+there. The A/B becomes answerable at that point, and the backfill has something to backfill.
+
+### Credit allowance tuning (§7a phase 2)
+
+Enforcement shipped; the numbers are live. Tuning them requires real multi-tenant usage, and the
+only data today is one day of the author's own testing — which the §7a caveat already says to
+discard. At the measured worst case (~$0.0095/credit) a 500-credit allowance costs ~$4.75 against
+a $49 plan, so the current numbers are generous enough that being wrong is cheap.
+
+**Reopen when:** real customers exist and either the period cap binds for someone legitimate, or
+the burst tripwire fires outside a bug. Both are observable from the ledger without any new work.
+
+### Content-aware sensitivity detection (Phase B)
+
+Never started. It is the one genuinely AI-native item left — classifying document *content* rather
+than filenames — and it is also the one that contradicts the product promise that Brio never reads
+your clients' work. That makes it a positioning decision, not a backlog item, and the positioning
+is currently the more valuable asset.
+
+**Reopen when:** the promise is deliberately revisited. Not before, and not as a technical
+convenience.
 
 ---
 
