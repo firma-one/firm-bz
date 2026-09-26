@@ -92,9 +92,28 @@ export async function POST(
         //
         // Counted against the batch size for the same reason the Drive import route does: checking
         // one at a time would let a batch straddle the limit.
-        const incoming = Array.isArray(files) ? files.length : 1
+        //
+        // Only documents that do not already exist are counted. This route UPSERTS on
+        // (engagementId, firmId, externalId), so re-indexing existing files creates nothing — and
+        // counting them as new would make the system-admin re-index button fail on any firm at its
+        // cap, reporting a limit breach for an operation that adds no documents.
+        const requested: { externalId: string }[] = Array.isArray(files)
+            ? (files as { externalId: string }[])
+            : [{ externalId }]
+        const requestedIds = requested.map((f) => f.externalId).filter(Boolean)
+
+        const existing = requestedIds.length > 0
+            ? await prisma.engagementDocument.findMany({
+                where: { engagementId: projectId, firmId, externalId: { in: requestedIds } },
+                select: { externalId: true },
+            })
+            : []
+        const existingIds = new Set(existing.map((d) => d.externalId))
+        const newDocuments = requestedIds.filter((id) => !existingIds.has(id)).length
+
         try {
-            await assertWithinDocumentCap(firmId, incoming)
+            // Nothing new means nothing to check: a pure re-index cannot breach a cap.
+            if (newDocuments > 0) await assertWithinDocumentCap(firmId, newDocuments)
         } catch (error) {
             return NextResponse.json(
                 { error: error instanceof Error ? error.message : 'Document limit reached' },
