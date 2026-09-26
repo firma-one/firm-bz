@@ -74,18 +74,39 @@ if (!gitLog) {
   process.exit(0);
 }
 
-// --- 4. Parse conventional commits into categorised lists
-const features = [], fixes = [], improvements = [];
+// --- 4. Categorise commits
+//
+// Conventional-commit prefixes are used WHERE PRESENT, but a commit without one is kept rather
+// than discarded. Dropping them silently produced a badly wrong v2.0.0: of 250 commits only 5
+// carried prefixes — all from a prior release — so the model summarised those 5 and described a
+// release that had not happened.
+//
+// `other` holds everything unprefixed. It feeds the model alongside the rest, so the summary is
+// drawn from the whole range regardless of commit style.
+const features = [], fixes = [], improvements = [], other = [];
 gitLog.split('\n').forEach(line => {
-  if (line.startsWith('chore: release v')) return;
-  const match = line.match(/^(\w+)(?:\([\w-]+\))?!?:\s+(.+)$/);
-  if (!match) return;
+  const subject = line.trim();
+  if (!subject) return;
+  if (subject.startsWith('chore: release v')) return;
+  // A squashed release PR ("v2.0.0 — …") describes the release itself, not a change within it.
+  if (/^v\d+\.\d+\.\d+\s*[—-]/.test(subject)) return;
+  // Squash merges append " (#123)" — noise for a summariser.
+  const clean = subject.replace(/\s*\(#\d+\)$/, '');
+
+  const match = clean.match(/^(\w+)(?:\([\w-]+\))?!?:\s+(.+)$/);
+  if (!match) { other.push(clean); return; }
+
   const [, type, desc] = match;
   if (type === 'feat') features.push(desc);
   else if (type === 'fix') fixes.push(desc);
   else if (['refactor', 'perf', 'style'].includes(type)) improvements.push(desc);
+  else if (type !== 'chore' && type !== 'docs' && type !== 'test') other.push(desc);
 });
-console.log(`📋  Commits since ${lastTag}: ${features.length} features, ${fixes.length} fixes, ${improvements.length} improvements`);
+const totalChanges = features.length + fixes.length + improvements.length + other.length;
+console.log(`📋  Commits since ${lastTag}: ${features.length} features, ${fixes.length} fixes, ${improvements.length} improvements, ${other.length} other (${totalChanges} summarised)`);
+if (totalChanges > 60) {
+  console.log(`⚠️   Large range — the generated notes will be broad. Review them before committing.`);
+}
 
 // --- 5. Generate release title + notes with Gemma 4 E2B (Apache 2.0, no API key needed)
 console.log('⏳  Loading Gemma 4 E2B model (first run downloads ~500MB, then cached)...');
@@ -93,10 +114,15 @@ const { pipeline } = await import('@huggingface/transformers');
 const generator = await pipeline('text-generation', 'onnx-community/gemma-4-E2B-it-ONNX');
 console.log('✅  Model loaded');
 
-const allChanges = [...features, ...fixes, ...improvements];
-const changeList = allChanges.length > 0
-  ? allChanges.map(c => `- ${c}`).join('\n')
-  : gitLog.split('\n').slice(0, 8).join('\n');
+// Prefixed commits first — they are the ones an author explicitly marked as user-facing — then
+// everything else. Capped because a 250-commit list exceeds what the model can weigh sensibly,
+// and an arbitrary head of the range reads as random.
+const MAX_CHANGES_FOR_MODEL = 60;
+const allChanges = [...features, ...fixes, ...improvements, ...other];
+const changeList = allChanges.slice(0, MAX_CHANGES_FOR_MODEL).map(c => `- ${c}`).join('\n');
+if (allChanges.length > MAX_CHANGES_FOR_MODEL) {
+  console.log(`ℹ️   Summarising the first ${MAX_CHANGES_FOR_MODEL} of ${allChanges.length} changes.`);
+}
 
 console.log('🤖  Generating release title...');
 const titleResult = await generator(
