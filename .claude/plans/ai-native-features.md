@@ -565,7 +565,7 @@ the status in a third place.
 
 ## 10. Status board — the single source of truth
 
-Everything AI, in one table. Verified against the tree on 2026-09-25.
+Everything AI, in one table. Verified against the tree on 2026-09-26.
 
 | Feature | Status | Where |
 |---|---|---|
@@ -573,7 +573,7 @@ Everything AI, in one table. Verified against the tree on 2026-09-25.
 | Engagement summary | **Shipped** `c0a7898f` | `lib/ai/engagement-summary.ts`; six sections, streamed, human-approval gate |
 | Engagement chat | **Shipped** `c0a7898f` | Read-only; excludes document content and comment bodies by design |
 | Ask Brio (NL Doc Search) | **Shipped, tail open** | `lib/ai/search-interpreter.ts` + interpret route; see §A.10 |
-| AI usage ledger | **Shipped, not enforced** | `platform_ai_usage`; §7a phase 1 of 3 done |
+| AI usage ledger | **Shipped** `c0a7898f` | `platform_ai_usage`; all four surfaces meter since `7fb30703` |
 | Zero-result guard | **Built** — ladder + ambiguity disclosure | §A.11 |
 | Interpret caching | **Built** | `lib/ai/interpret-cache.ts`; 15-min TTL, cache hits bill nothing |
 | Snippet 500→2000 + backfill | **Open — blocked** | §A.10 #3; the only Phase A item left, needs the §A.6 A/B first |
@@ -584,6 +584,8 @@ Everything AI, in one table. Verified against the tree on 2026-09-25.
 | Failure handling | **Shipped** `f0c65f3c` | All four surfaces; see §12 |
 | Absolute periods (Q1 2026) | **Shipped** `d3820fcb` | `lib/search/period.ts`; model emits a token, never a date |
 | Conflict disclosure | **Shipped** `5d4725bd` | Picked chip wins, prose conflict surfaced with a switch |
+| Collaboration section | **Shipped** `7e88f1d3` | Seventh summary section; counts and doc names only, never comment text |
+| Credit usage display | **Shipped** `7fb30703` | Billing page; per-feature split |
 | Auto-reminder / checklist / digest | **HOLD** | §7 — parked as not AI-native |
 
 **Nothing pending is a correctness risk.** The one that was — a mid-stream chat error closing the
