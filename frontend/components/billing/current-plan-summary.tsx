@@ -17,6 +17,17 @@ function daysLabel(value: number | null): string {
     return `${value}d`
 }
 
+/**
+ * PUBLISHED ENTITLEMENTS — clients and AI credits.
+ *
+ * Every other entitlement stays configured in Polar, parsed, stored and ENFORCED; it is simply not
+ * advertised. Firms, engagements, contacts, deliverables and documents are anti-abuse floors that
+ * keep the free tier a trial, and on paid tiers most are unlimited. Publishing them invites people
+ * to compare plans on numbers that only ever bind on free, and makes every future limit change a
+ * pricing-page edit.
+ *
+ * Clients and AI credits are what genuinely differentiate the tiers, so they are what we show.
+ */
 function UsageBar({
     label,
     cap,
@@ -79,11 +90,9 @@ function PlanEntitlementsSection({
             {/* One grid for everything, so bars and retention share the same columns instead of a
                 five-across row competing with a side rail. Two columns on narrow screens. */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-5 gap-y-3">
-                <UsageBar label={e.firms === 1 ? 'firm' : 'firms'} cap={e.firms} used={usage?.firms ?? null} />
+                {/* Clients and AI credits only — see PUBLISHED_ENTITLEMENTS. Firms, engagements,
+                    contacts, deliverables and documents remain enforced, just not advertised. */}
                 <UsageBar label={e.clients === 1 ? 'client' : 'clients'} cap={e.clients} used={usage?.clients ?? null} />
-                <UsageBar label={e.engagements === 1 ? 'engagement' : 'engagements'} cap={e.engagements} used={usage?.engagements ?? null} />
-                <UsageBar label={e.documents === 1 ? 'document' : 'documents'} cap={e.documents} used={usage?.documents ?? null} />
-                <UsageBar label={e.clientContacts === 1 ? 'contact' : 'contacts'} cap={e.clientContacts} used={usage?.clientContacts ?? null} />
                 {/* Retention has no usage concept — just the policy — so it renders as a value,
                     not a bar, but still occupies a grid cell to keep the alignment. */}
                 <RetentionStat value={e.auditDays === 0 ? 'No' : daysLabel(e.auditDays)} label="audit trail" />
@@ -252,12 +261,10 @@ export function CurrentPlanSummary({
     const showManageSubscription = Boolean(firmId) && isFirmBillingAdmin && canOpenCustomerPortal
 
     // Show entitlements section whenever at least one cap is defined
+    // Only the published entitlements decide whether the section renders. An unpublished cap being
+    // set must not open an otherwise-empty block.
     const hasCaps = entitlements && (
-        entitlements.firms !== null ||
         entitlements.clients !== null ||
-        entitlements.engagements !== null ||
-        entitlements.documents !== null ||
-        entitlements.clientContacts !== null ||
         entitlements.auditDays !== null ||
         entitlements.commentHistoryDays !== null
     )

@@ -47,7 +47,7 @@ export const upgradeCopy = {
     /** In-card heading above workspace name (avoids duplicating the page title). */
     billingCardWorkspaceHeading: 'Billing Entity',
     billingHeadline: 'Scale as you grow',
-    billingBody: `Your current plan includes limits on firms, clients, engagements and documents.`,
+    billingBody: `Your current plan includes limits on clients and AI credits.`,
     billingBodyLine2: `Your Demo firm is always available on all plans. Upgrade to increase your limits.`,
     billingCheckoutReturnNote: `When checkout completes, you\'ll return to the workspace you started from.`,
     billingTrustLine1: 'Secure Checkout',
@@ -71,7 +71,7 @@ export const upgradeCopy = {
     /** Step 2 — plan card spotlight (no checkout intent — generic first-visit). */
     billingTourGenericTitle: 'Upgrade your limits',
     billingTourGenericBody:
-        'Paid plans increase limits on firms, clients, engagements, and documents over the free plan. Pick a billing period above, then continue to checkout when you are ready.',
+        'Paid plans increase your client and AI credit limits over the free plan. Pick a billing period above, then continue to checkout when you are ready.',
     /** Step 1 — skip button spotlight when there is no Skip button (standalone billing page). */
     billingTourSkipTitle: 'Come back any time',
     billingTourSkipBody:
@@ -81,9 +81,9 @@ export const upgradeCopy = {
     checkoutHintStripTitle: 'Upgrade to Standard to increase your limits',
     /** Verbose subtitle under headline (mirrors profile plan / email line). */
     checkoutHintStripBodyIntent:
-        'Upgrade to a Standard plan to ease limits on clients, contacts, engagements, documents & audit history.',
+        'Upgrade to a Standard plan for more clients, more AI credits & longer audit history.',
     checkoutHintStripBodyUpgrade:
-        'Upgrade to a Standard plan to ease limits on clients, contacts, engagements, documents & audit history.',
+        'Upgrade to a Standard plan for more clients, more AI credits & longer audit history.',
 freeSandboxFootnote: 'No checkout needed—keep exploring your Demo firm.',
     addFirmModalHint: `The free plan includes your Demo firm. Subscribe to add custom firms for your business.`,
     ctaContinueBilling: 'Continue to billing',
