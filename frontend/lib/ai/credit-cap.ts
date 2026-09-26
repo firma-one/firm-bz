@@ -39,17 +39,17 @@ const BURST_PERCENT = 0.1
 const MIN_ALLOWANCE_FOR_BURST = 100
 
 /**
- * Fallback for a group whose Polar metadata has no `entitledAiCredits` — a safety net, not a tier.
+ * What to do when a group's Polar metadata has no `entitledAiCredits` at all.
  *
- * EVERY tier including free configures its own allowance in its Polar product, so in a correctly
- * configured account this is never used. It exists so that enabling enforcement cannot silently
- * zero out AI for a group whose metadata has not been updated yet.
+ * Deliberately NOT a number. "Metadata has not synced" is not the same as "this tier is small" —
+ * an unconfigured group might be on Enterprise, and falling back to the free-tier figure would let
+ * a webhook failure silently throttle a paying customer. Every tier including free sets its own
+ * allowance in its Polar product, so an absent value means we do not know the entitlement, and the
+ * safe response to not knowing is not to block.
  *
- * Set to the intended free-tier figure: enough to generate summaries for a few engagements, ask
- * real questions about them and search properly — roughly a week of exploration, so the value
- * lands before the wall does. Not enough to run a firm on, where active use is ~130 credits/month.
+ * The usage is still recorded either way, so an unconfigured group remains visible in the ledger.
  */
-export const DEFAULT_AI_CREDITS = 25
+const UNCONFIGURED_ALLOWANCE = Infinity
 
 function enforceAiCreditCaps(): boolean {
     return process.env.ENFORCE_BILLING_GATES === 'true'
@@ -82,7 +82,11 @@ async function allowanceForGroup(groupId: string): Promise<number> {
     const sub = await getActiveSubscriptionForGroup(groupId)
     const meta = ((sub?.settings as { metadata?: Record<string, unknown> } | null)?.metadata ?? {}) as Record<string, unknown>
     const entitled = parseEntitledAiCredits(meta)
-    return entitled ?? DEFAULT_AI_CREDITS
+    if (entitled == null) {
+        logger.warn(`No entitledAiCredits configured for group ${groupId}; AI credits not capped`)
+        return UNCONFIGURED_ALLOWANCE
+    }
+    return entitled
 }
 
 /** Reads both windows without consuming anything. Safe to call for display. */

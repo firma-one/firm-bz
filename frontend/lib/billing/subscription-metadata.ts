@@ -126,9 +126,9 @@ export async function getEntitledFirmsCapForFirm(firmId: string): Promise<number
 /**
  * Parse entitledAiCredits from subscription metadata.
  *
- * Returns null when unset or negative, NOT zero — callers fall back to DEFAULT_AI_CREDITS rather
- * than treating "unconfigured" as "no AI". Without that, enabling enforcement would silently kill
- * AI for every group whose Polar metadata has not been updated yet.
+ * Returns null when unset or negative, NOT zero — callers treat null as "entitlement unknown" and
+ * do not cap, rather than treating unconfigured as "no AI". Without that, a webhook that has not
+ * synced yet would silently throttle a paying customer.
  *
  * An explicit 0 IS honoured: it is a deliberate "no AI on this tier", not a missing value.
  */
