@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { assertWithinDocumentCap } from '@/lib/billing/effective-billing-caps'
 import { prisma } from '@/lib/prisma'
 import { IndexingInterceptor } from '@/lib/services/indexing-interceptor'
 import { logger } from '@/lib/logger'
@@ -79,6 +80,23 @@ export async function POST(
 
         if (!orgId) {
             return NextResponse.json({ error: 'Organization context not found' }, { status: 404 })
+        }
+
+        // The document cap exists to keep the free tier a trial rather than a product: free allows
+        // 10 documents, every paid tier is unlimited. This route creates documents via upsert and
+        // accepts a `files` array, so without this check it was the one path where a free-tier user
+        // could create unbounded documents in a single request.
+        //
+        // Counted against the batch size for the same reason the Drive import route does: checking
+        // one at a time would let a batch straddle the limit.
+        const incoming = Array.isArray(files) ? files.length : 1
+        try {
+            await assertWithinDocumentCap(orgId, incoming)
+        } catch (error) {
+            return NextResponse.json(
+                { error: error instanceof Error ? error.message : 'Document limit reached' },
+                { status: 403 },
+            )
         }
 
         // 3. Index File(s) - Non-blocking (blocks only if waitUntil is missing)
