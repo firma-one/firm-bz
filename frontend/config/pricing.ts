@@ -304,7 +304,7 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
                 values: { Sandbox: true, Standard: true, Pro: true, Business: true, Enterprise: true },
             },
             {
-                feature: "AI assistant & health report summaries",
+                feature: "AI assistant & health report briefings",
                 featureIcon: 'ai',
                 tooltip: "Brio drafts the engagement status summary — progress, risks, what needs attention — from your delivery data, and answers questions about any engagement. You review, edit and approve before a client sees anything. Included on every plan; usage draws on your AI credits.",
                 values: { Sandbox: true, Standard: true, Pro: true, Business: true, Enterprise: true },
