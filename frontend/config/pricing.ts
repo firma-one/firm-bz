@@ -36,6 +36,24 @@ export interface PricingPlan {
     firmsIncluded?: number
     /** Cap for concurrent active engagements; pricing UI shows with firms line. */
     projectsIncluded?: number
+    /**
+     * PUBLISHED entitlements — the four limits customers see. Mirror the matching
+     * `entitled*` keys in the tier's Polar product metadata.
+     *
+     * Declared per plan rather than in lookup tables keyed by id, so adding a tier means adding
+     * one object here and nothing else. `null` means unlimited; omitted means not yet configured,
+     * and the line is left off rather than guessed.
+     *
+     * The other entitlements (firms, engagements, documents, client contacts) stay in Polar,
+     * parsed and enforced, but are deliberately not published — they are anti-abuse floors that
+     * only ever bind on the free tier.
+     */
+    entitlements?: {
+        clients: number | null
+        aiCredits: number | null
+        auditDays: number | null
+        commentHistoryDays: number | null
+    }
     cta: string | null
     ctaVariant?: 'black' | 'gray'
     href: string | null
@@ -51,40 +69,31 @@ function firmLineForCard(firms: number): string {
 /**
  * Lines under the plan title on the pricing page.
  *
- * Deliberately only clients and AI credits. Firms, engagements, deliverables and documents remain
- * configured in Polar, parsed and ENFORCED — they are anti-abuse floors that keep the free tier a
- * trial, and on paid tiers most are unlimited. Publishing them invites comparing plans on numbers
- * that only ever bind on free, and makes every limit change a pricing-page edit.
+ * Derived from `plan.entitlements`, so a new tier needs no change here. Only the four published
+ * limits appear; firms, engagements, documents and contacts remain enforced but unadvertised,
+ * because publishing floors that only bind on free invites comparing plans on the wrong numbers.
  */
 export function planCardUsageSummary(plan: PricingPlan): string[] {
-    const clients = PLAN_CLIENT_LIMIT[plan.id]
-    const credits = PLAN_AI_CREDITS[plan.id]
-    if (!clients) return []
-    return credits ? [clients, credits] : [clients]
-}
+    const e = plan.entitlements
+    if (!e) return []
 
-/** Client limit per tier, as shown on the card. */
-const PLAN_CLIENT_LIMIT: Record<string, string> = {
-    Sandbox: '1 client',
-    Standard: '3 clients',
-    Pro: '10 clients',
-    Business: '20 clients',
-    Enterprise: 'Unlimited clients',
-}
+    const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`
+    const lines: string[] = [
+        e.clients === null ? 'Unlimited clients' : plural(e.clients, 'client'),
+    ]
 
-/**
- * Monthly AI credit allowance per tier, mirroring `entitledAiCredits` in each Polar product.
- *
- * TODO(deepak): confirm the Pro/Business/Enterprise figures against Polar before this ships —
- * only Sandbox and Standard have been agreed. One credit is one AI action (a summary, a brief, a
- * chat answer); an Ask search is half.
- */
-const PLAN_AI_CREDITS: Record<string, string> = {
-    Sandbox: '25 AI credits / month',
-    Standard: '500 AI credits / month',
-    Pro: 'TBC AI credits / month',
-    Business: 'TBC AI credits / month',
-    Enterprise: 'Custom AI credits',
+    if (e.aiCredits !== undefined) {
+        lines.push(e.aiCredits === null ? 'Unlimited AI credits' : `${e.aiCredits} AI credits / month`)
+    }
+
+    // Audit and comment retention move together per tier, so one line rather than two.
+    if (e.auditDays !== undefined && e.commentHistoryDays !== undefined) {
+        const audit = e.auditDays === null ? 'Unlimited' : e.auditDays === 0 ? 'No' : `${e.auditDays}-day`
+        const comments = e.commentHistoryDays === null ? 'unlimited' : `${e.commentHistoryDays}-day`
+        lines.push(`${audit} audit · ${comments} comments`)
+    }
+
+    return lines
 }
 
 /**
@@ -125,6 +134,7 @@ export const PRICING_PLANS: PricingPlan[] = [
         title: 'Standard',
         firmsIncluded: 1,
         projectsIncluded: 10,
+        entitlements: { clients: 3, aiCredits: 500, auditDays: 30, commentHistoryDays: 60 },
         description:
             'Take off the training wheels. Full client portal on your existing Drive—engagements, personas, and feedback in one place.',
         price: '$49',
@@ -140,6 +150,7 @@ export const PRICING_PLANS: PricingPlan[] = [
         id: 'Pro',
         title: 'Pro',
         firmsIncluded: 1,
+        entitlements: { clients: 10, aiCredits: 1000, auditDays: 90, commentHistoryDays: 90 },
         projectsIncluded: 25,
         description: 'For growing firms needing advanced review and templates.',
         price: '$99',
@@ -155,6 +166,7 @@ export const PRICING_PLANS: PricingPlan[] = [
         id: 'Business',
         title: 'Business',
         firmsIncluded: 3,
+        entitlements: { clients: 20, aiCredits: 3000, auditDays: 365, commentHistoryDays: 365 },
         projectsIncluded: 50,
         description: 'For established firms and mid-size agencies.',
         price: '$149',
@@ -169,6 +181,7 @@ export const PRICING_PLANS: PricingPlan[] = [
     {
         id: 'Enterprise',
         title: 'Enterprise',
+        entitlements: { clients: null, aiCredits: 10000, auditDays: null, commentHistoryDays: null },
         projectsIncluded: 100,
         description: 'For large organizations requiring advanced security and compliance.',
         price: 'Contact Us',
@@ -209,9 +222,9 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
                 values: {
                     Sandbox: "25 / month",
                     Standard: "500 / month",
-                    Pro: "TBC",
-                    Business: "TBC",
-                    Enterprise: "Custom",
+                    Pro: "1,000 / month",
+                    Business: "3,000 / month",
+                    Enterprise: "10,000 / month",
                 },
             },
             {
