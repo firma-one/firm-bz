@@ -48,21 +48,43 @@ function firmLineForCard(firms: number): string {
     return firms === 1 ? '1 firm' : `${firms} firms`
 }
 
-/** Lines under the plan title on the pricing page (firm scope + engagement cap). */
+/**
+ * Lines under the plan title on the pricing page.
+ *
+ * Deliberately only clients and AI credits. Firms, engagements, deliverables and documents remain
+ * configured in Polar, parsed and ENFORCED — they are anti-abuse floors that keep the free tier a
+ * trial, and on paid tiers most are unlimited. Publishing them invites comparing plans on numbers
+ * that only ever bind on free, and makes every limit change a pricing-page edit.
+ */
 export function planCardUsageSummary(plan: PricingPlan): string[] {
-    if (plan.id === 'Enterprise') {
-        return ['Custom firms · Unlimited clients', 'Engagement limits negotiated']
-    }
-    if (plan.id === 'Business') {
-        return ['3 firms · 20 clients', '50 active engagements']
-    }
-    if (plan.id === 'Pro') {
-        return ['1 firm · 10 clients', '25 active engagements']
-    }
-    if (plan.id === 'Standard') {
-        return ['1 firm · 3 clients', '10 active engagements']
-    }
-    return []
+    const clients = PLAN_CLIENT_LIMIT[plan.id]
+    const credits = PLAN_AI_CREDITS[plan.id]
+    if (!clients) return []
+    return credits ? [clients, credits] : [clients]
+}
+
+/** Client limit per tier, as shown on the card. */
+const PLAN_CLIENT_LIMIT: Record<string, string> = {
+    Sandbox: '1 client',
+    Standard: '3 clients',
+    Pro: '10 clients',
+    Business: '20 clients',
+    Enterprise: 'Unlimited clients',
+}
+
+/**
+ * Monthly AI credit allowance per tier, mirroring `entitledAiCredits` in each Polar product.
+ *
+ * TODO(deepak): confirm the Pro/Business/Enterprise figures against Polar before this ships —
+ * only Sandbox and Standard have been agreed. One credit is one AI action (a summary, a brief, a
+ * chat answer); an Ask search is half.
+ */
+const PLAN_AI_CREDITS: Record<string, string> = {
+    Sandbox: '25 AI credits / month',
+    Standard: '500 AI credits / month',
+    Pro: 'TBC AI credits / month',
+    Business: 'TBC AI credits / month',
+    Enterprise: 'Custom AI credits',
 }
 
 /**
@@ -169,14 +191,27 @@ export const PRICING_COMPARISON: PricingComparisonCategory[] = [
         rows: [
             {
                 feature: "Firm → Client → Engagement → Deliverable → Document hierarchy",
-                tooltip: "Clean structure: Firm → Client → Engagement → Deliverable → Document. Maps to folders in your Drive. Clients see a clear place for their engagement and document handoffs. Each column shows the included limit at every level.",
+                tooltip: "Clean structure: Firm → Client → Engagement → Deliverable → Document. Maps to folders in your Drive. Clients see a clear place for their engagement and document handoffs.",
                 tooltipLayout: "hierarchy-sample",
+                // Clients only. The other levels stay enforced but unpublished — see
+                // planCardUsageSummary for why.
                 values: {
-                    Sandbox: "1 firm\n1 client\n1 engagement\n1 deliverable\n10 documents",
-                    Standard: "1 firm\n3 clients\n10 engagements\nUnlimited deliverables\nUnlimited documents",
-                    Pro: "1 firm\n10 clients\n25 engagements\nUnlimited deliverables\nUnlimited documents",
-                    Business: "3 firms\n20 clients\n50 engagements\nUnlimited deliverables\nUnlimited documents",
-                    Enterprise: "No limits",
+                    Sandbox: "1 client",
+                    Standard: "3 clients",
+                    Pro: "10 clients",
+                    Business: "20 clients",
+                    Enterprise: "Unlimited",
+                },
+            },
+            {
+                feature: "AI credits (Brio)",
+                tooltip: "One credit is one AI action — an engagement summary, a firm brief, or a chat answer. An Ask search costs half a credit. Credits reset each billing period; unused credits do not roll over.",
+                values: {
+                    Sandbox: "25 / month",
+                    Standard: "500 / month",
+                    Pro: "TBC",
+                    Business: "TBC",
+                    Enterprise: "Custom",
                 },
             },
             {
