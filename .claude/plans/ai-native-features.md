@@ -578,7 +578,8 @@ Everything AI, in one table. Verified against the tree on 2026-09-25.
 | Interpret caching | **Built** | `lib/ai/interpret-cache.ts`; 15-min TTL, cache hits bill nothing |
 | Snippet 500→2000 + backfill | **Open — blocked** | §A.10 #3; the only Phase A item left, needs the §A.6 A/B first |
 | Weighted rank fusion | **Built** — branch-agreement bonus | `search-service.ts` |
-| Credits enforcement | **Open — deliberate** | §7a phases 2–3; waiting on real usage data |
+| Credits enforcement | **Shipped** `c34814e8` | Period + 4h burst; `lib/ai/credit-cap.ts`. §7a phase 3 done ahead of phase 2 |
+| Credit allowance tuning | **Open** | §7a phase 2 — the numbers still need real usage; see the data caveat above |
 | Content-aware sensitivity | **Not started** | Phase B |
 | Failure handling | **Shipped** `f0c65f3c` | All four surfaces; see §12 |
 | Absolute periods (Q1 2026) | **Shipped** `d3820fcb` | `lib/search/period.ts`; model emits a token, never a date |

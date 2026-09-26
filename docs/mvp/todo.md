@@ -113,7 +113,7 @@ source of truth, and the older Gemma-era plan was merged into it and retired on 
   - Snippet 500→2000 chars + re-embed backfill — blocked on the §A.6 embed-dilution A/B
   - Weighted rank fusion in `lib/services/search-service.ts`
 
-- [ ] **AI credits: enforcement** — weights and the ledger exist; no cap is applied at generation time yet
+- [x] **AI credits: enforcement** — shipped 2026-09-26 (`c34814e8`, `2ac1fefe`). Two windows: the billing period (from `entitledAiCredits` in Polar metadata) is the budget; a rolling 4-hour window at 10% of the allowance is a burst tripwire sized above anything a person does by hand, to catch a retry storm a monthly cap would not notice until the allowance was gone. Gating and metering hang off the model client, not each route, so there is no ungated path. Breaches return 429 with a `kind` distinguishing an upgrade prompt from a transient wait. An unset entitlement means "unknown", not zero — a webhook that has not synced must not throttle a paying customer
 
 - [ ] **Content-aware sensitivity detection** — [plan §B](../../.claude/plans/ai-native-features.md) — classify over the unused `content` column instead of the current filename regex
 
@@ -184,6 +184,17 @@ source of truth, and the older Gemma-era plan was merged into it and retired on 
   - Race condition: middleware reads auth cookie before browser has committed it after `verifyOTP()`
   - Fix: gate `window.location.href` on `onAuthStateChange SIGNED_IN` event instead of `getSession()`
   - Also fix: skip button in `components/signup/signup-success.tsx` incorrectly calls `signOut()` before redirecting to `/signin`
+
+- [ ] **Refactor: Billing entitlement interceptor** — [plan](../../.claude/plans/billing-entitlement-interceptor.md)
+  - Entitlement checks are scattered `assert*` calls nothing enforces. An audit on 2026-09-26 found 5 document write paths with only 3 guarded — `index-file` (bulk indexing, no check at all) and the sharing route's create branch both shipped unguarded. Both fixed in `e59b07d9`, but found by hand, not by design
+  - Same failure had already happened with AI metering (1 of 4 call sites for two days), fixed structurally by moving the gate onto the model client — the precedent this follows
+  - Route interceptor wrapping `requireProjectManage`, which already does auth *and* returns `firmId` in the right order. Two earlier objections to this design were wrong and are recorded in the plan so they are not re-derived
+  - Risk is concentrated in documents (9 call sites, 5 write paths); the other five caps have one obvious creation path each
+  - Must preserve the upsert fix from `5ef8072e`: only genuinely new documents count, or re-indexing at the cap breaks
+
+- [ ] **Refactor: `organizationId` → `firmId`** — [plan §4](../../.claude/plans/billing-entitlement-interceptor.md)
+  - 298 occurrences of the old name for a firm. Unsafe as a bulk rename: it appears in Inngest event payloads (cross-process, in-flight events carry the old key), in request body keys (renaming breaks callers), and a dozen files already use both names
+  - Phased like `sandboxOnly` → `isAnchorFirm()`: internal identifiers first, then Inngest payloads with dual-accept for one deploy cycle, then body keys
 
 - [ ] **Refactor: Replace `sandboxOnly` with `isAnchorFirm()`** — [plan](../../.claude/plans/refactor-is-anchor-firm.md)
   - `Firm.sandboxOnly` maps to DB column `isAnchor`; the two names are used interchangeably across 165+ references
