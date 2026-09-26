@@ -10,7 +10,10 @@ export default defineConfig({
         setupFiles: [],
         include: ['**/*.test.{ts,tsx}'],
         alias: {
-            '@': resolve(__dirname, './')
+            '@': resolve(__dirname, './'),
+            // See test/server-only-stub.ts — the real package throws outside an RSC, which would
+            // abort any suite that imports a server module.
+            'server-only': resolve(__dirname, './test/server-only-stub.ts'),
         }
     },
 })
