@@ -6,6 +6,7 @@ import { canViewProject, canViewProjectInternalTabs } from '@/lib/permission-hel
 import { logger } from '@/lib/logger'
 import { getAnthropic, isAiConfigured, AI_MODEL } from '@/lib/ai/client'
 import { recordAiUsage } from '@/lib/ai/usage'
+import { getGuardedAnthropic, meterAiCall, aiLimitResponse } from '@/lib/ai/guarded-client'
 import {
     CHAT_SYSTEM_PROMPT,
     buildEngagementContext,
@@ -78,7 +79,9 @@ export async function POST(
             engagementName: names?.name,
         })
 
-        const client = getAnthropic()
+        // Gate and client in one call: over-budget throws before any tokens are spent.
+        const scope = { firmId: ctx.firmId, userId: user.id, feature: 'chat' as const }
+        const client = await getGuardedAnthropic(scope)
         if (!client) return NextResponse.json({ error: 'AI is not configured' }, { status: 503 })
 
         const stream = await client.messages.create({
@@ -108,7 +111,7 @@ export async function POST(
                         }
                     }
                     // Metered only on a complete stream: a failed answer is not a billable one.
-                    await recordAiUsage({ firmId: ctx.firmId, userId: user.id, feature: 'chat', inputTokens, outputTokens })
+                    await meterAiCall(scope, { inputTokens, outputTokens })
                 } catch (error) {
                     logger.error('AI chat stream error:', error as Error)
                     // Fail the stream rather than closing it cleanly. This response is raw text
@@ -130,6 +133,8 @@ export async function POST(
             },
         })
     } catch (error) {
+        const limited = aiLimitResponse(error)
+        if (limited) return limited
         logger.error('AI chat error:', error as Error)
         return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
     }

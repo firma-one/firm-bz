@@ -1,5 +1,6 @@
 import 'server-only'
-import { getAnthropic, AI_MODEL } from './client'
+import { AI_MODEL } from './client'
+import { getGuardedAnthropic, type AiScope } from './guarded-client'
 import { logger } from '@/lib/logger'
 import { resolvePeriod } from '@/lib/search/period'
 
@@ -164,12 +165,17 @@ function renderCandidates(c: InterpretCandidates): string {
  * dropped rather than applied — the caller can trust that any chip it receives refers to something
  * the user can actually see. Returns null when AI is unavailable or the call fails, so the caller
  * falls back to a plain search.
+ *
+ * `scope` is required: it gates the call against the group's credit allowance before any tokens
+ * are spent. Making it optional would leave an ungated path to the model, which is the failure
+ * this design exists to prevent.
  */
 export async function interpretSearchQuery(
     text: string,
     candidates: InterpretCandidates,
+    scope: AiScope,
 ): Promise<(InterpretResult & { usage: { inputTokens: number; outputTokens: number } }) | null> {
-    const client = getAnthropic()
+    const client = await getGuardedAnthropic(scope)
     if (!client) return null
 
     try {

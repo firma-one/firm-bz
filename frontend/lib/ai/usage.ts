@@ -128,3 +128,73 @@ export async function aiCreditUsageForGroup(
 
     return { used, byFeature, periodStartIso: since.toISOString() }
 }
+
+/**
+ * Rate-limit windows. A cap is meaningless without a window: "500 credits" only means something
+ * paired with "per what".
+ *
+ * `period` is the billing entitlement — it protects margin and aligns with the invoice. The
+ * shorter windows are rate limits, which are a different job: they protect against a retry storm
+ * or a runaway loop burning a month's allowance in an hour, which a monthly cap would not notice
+ * until it was gone. Both can apply at once; the tightest binding window wins.
+ */
+export type CreditWindow = 'sixHours' | 'day' | 'week' | 'period'
+
+export const CREDIT_WINDOW_LABEL: Record<CreditWindow, string> = {
+    sixHours: '6 hours',
+    day: 'day',
+    week: 'week',
+    period: 'billing period',
+}
+
+/** Start instant for a window, relative to now (or the billing period for `period`). */
+export function creditWindowStart(
+    window: CreditWindow,
+    periodEnd: Date | null | undefined,
+    now: Date = new Date(),
+): Date {
+    switch (window) {
+        case 'sixHours':
+            return new Date(now.getTime() - 6 * 60 * 60 * 1000)
+        case 'day':
+            return new Date(now.getTime() - 24 * 60 * 60 * 1000)
+        case 'week':
+            return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+        case 'period':
+            return creditPeriodStart(periodEnd, now)
+    }
+}
+
+export interface CreditLimitCheck {
+    window: CreditWindow
+    limit: number
+    used: number
+    /** Credits the next call would need; a call is blocked when used + cost > limit. */
+    remaining: number
+    exceeded: boolean
+}
+
+/**
+ * Checks one window without consuming anything.
+ *
+ * Rolling windows deliberately, not calendar buckets: a calendar-day limit resets at midnight, so
+ * a burst at 23:59 plus another at 00:01 passes twice the intended rate. A rolling window cannot
+ * be gamed that way.
+ */
+export async function checkCreditWindow(
+    groupId: string,
+    window: CreditWindow,
+    limit: number,
+    cost: number,
+    periodEnd: Date | null | undefined,
+): Promise<CreditLimitCheck> {
+    const since = creditWindowStart(window, periodEnd)
+    const used = await creditsUsedSince(groupId, since)
+    return {
+        window,
+        limit,
+        used,
+        remaining: Math.max(0, limit - used),
+        exceeded: used + cost > limit,
+    }
+}

@@ -1,6 +1,6 @@
 import type { FirmInsightsResponse } from '@/app/api/firms/[firmId]/insights/route'
 import { completeText } from './client'
-import { recordAiUsage } from './usage'
+import { meterAiCall } from './guarded-client'
 
 export interface FirmBrief {
     content: string
@@ -152,13 +152,10 @@ export async function generateFirmBrief(
         temperature: 0.4,
         label: 'firm-brief',
         onUsage: meta?.firmId
-            ? (u) => recordAiUsage({
-                firmId: meta.firmId,
-                userId: meta.userId ?? null,
-                feature: 'brief',
-                inputTokens: u.inputTokens,
-                outputTokens: u.outputTokens,
-            })
+            ? (u) => meterAiCall(
+                { firmId: meta.firmId, userId: meta.userId ?? null, feature: 'brief' },
+                u,
+            )
             : undefined,
     })
 }

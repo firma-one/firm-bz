@@ -6,6 +6,7 @@ import { canManageProject } from '@/lib/permission-helpers'
 import { logger } from '@/lib/logger'
 import { getAnthropic, isAiConfigured, AI_MODEL } from '@/lib/ai/client'
 import { recordAiUsage } from '@/lib/ai/usage'
+import { getGuardedAnthropic, meterAiCall, aiLimitResponse } from '@/lib/ai/guarded-client'
 import { computeEngagementInsights } from '@/lib/insights/engagement-insights'
 import { buildEngagementContext } from '@/lib/ai/engagement-chat'
 import { SUMMARY_SYSTEM_PROMPT, fingerprintInsights, readInsightsSummary } from '@/lib/ai/engagement-summary'
@@ -67,7 +68,8 @@ export async function POST(
             )
         }
 
-        const client = getAnthropic()
+        const scope = { firmId: ctx.firmId, userId: user.id, feature: 'summary' as const }
+        const client = await getGuardedAnthropic(scope)
         if (!client) return NextResponse.json({ error: 'AI is not configured' }, { status: 503 })
 
         const modelStream = await client.messages.create({
@@ -116,13 +118,7 @@ export async function POST(
 
                     // Metered only on a complete stream, matching persistence: an aborted
                     // generation produces no draft and no charge.
-                    await recordAiUsage({
-                        firmId: ctx.firmId,
-                        userId: user.id,
-                        feature: 'summary',
-                        inputTokens,
-                        outputTokens,
-                    })
+                    await meterAiCall(scope, { inputTokens, outputTokens })
 
                     // Persist only after a complete stream, so an aborted generation leaves no
                     // half-written draft behind.
@@ -148,6 +144,8 @@ export async function POST(
 
                     controller.enqueue(line({ type: 'done', content, generatedAt }))
                 } catch (error) {
+        const limited = aiLimitResponse(error)
+        if (limited) return limited
                     logger.error('AI summary stream error:', error as Error)
                     controller.enqueue(line({ type: 'error', message: 'Generation failed' }))
                 } finally {

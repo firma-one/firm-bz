@@ -6,6 +6,7 @@ import { findFirmInPermissions } from '@/lib/permission-helpers'
 import { logger } from '@/lib/logger'
 import { isAiConfigured } from '@/lib/ai/client'
 import { generateFirmBrief, isBriefFresh, type FirmBrief } from '@/lib/ai/firm-brief'
+import { assertWithinAiCreditCap, AiCreditLimitError } from '@/lib/ai/credit-cap'
 import type { FirmInsightsResponse } from '../insights/route'
 
 async function authorize(request: NextRequest, firmId: string) {
@@ -41,6 +42,19 @@ async function regenerate(
     existingSettings: Record<string, unknown>,
     userId?: string,
 ): Promise<FirmBrief | null> {
+    // Gated here, not at the route entry: a cached brief serves without a model call, so reading
+    // one must not consume credits. Returns null on breach, which callers already treat as
+    // "no brief available" — the same path as an AI failure.
+    try {
+        await assertWithinAiCreditCap({ firmId, feature: 'brief' })
+    } catch (error) {
+        if (error instanceof AiCreditLimitError) {
+            logger.info(`AI brief skipped for firm ${firmId}: ${error.kind} limit reached`)
+            return null
+        }
+        throw error
+    }
+
     const insightsRes = await fetch(new URL(`/api/firms/${firmId}/insights`, request.url), {
         headers: {
             // The insights route authenticates from cookies; callers of this route may send a
