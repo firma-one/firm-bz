@@ -12,7 +12,7 @@ const TABS = [
   { label: 'Recent',        href: '/d/u/recent',        icon: Clock,   beta: false },
   { label: 'Reminders',     href: '/d/u/reminders',     icon: AlarmClock, beta: false },
   { label: 'Bookmarks',     href: '/d/u/bookmarks',     icon: Bookmark,beta: false },
-  { label: 'Notifications', href: '/d/u/notifications', icon: BellRing,beta: true  },
+  { label: 'Notifications', href: '/d/u/notifications', icon: BellRing, beta: false },
 ]
 
 export default function UserLayout({ children }: { children: ReactNode }) {
