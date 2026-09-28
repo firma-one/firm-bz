@@ -18,6 +18,9 @@ self.addEventListener('push', (event) => {
     badge: '/logo-120x120.png',
     data: { ctaUrl: payload.ctaUrl || '/' },
     tag: payload.tag || undefined,
+    // The daily digest fires while the user is away from the desk — keep it on screen
+    // until dismissed rather than auto-hiding after a few seconds.
+    requireInteraction: payload.tag === 'reminder-digest',
   }
 
   event.waitUntil(self.registration.showNotification(title, options))

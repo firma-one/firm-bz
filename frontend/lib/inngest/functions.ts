@@ -1311,6 +1311,19 @@ export const checkClientFollowUpReminders = inngest.createFunction(
             }))
 
             await (prisma as any).notification.createMany({ data: rows, skipDuplicates: true })
+
+            const { sendReminderPush } = await import("@/lib/reminders/reminder-push")
+            await Promise.all(clients.map((c: any) => sendReminderPush({
+                userId: c.ownerId,
+                firmId: c.firmId,
+                title: `Follow up due: ${c.name}`,
+                body: `Your scheduled follow-up with ${c.name} is due today.`,
+                ctaUrl: c.firm?.group?.slug && c.firm?.slug
+                    ? clientPath(c.firm.group.slug, c.firm.slug, c.slug)
+                    : null,
+                tag: `client-followup:${c.id}:${dateStr}`,
+            })))
+
             return { notified: clients.length }
         })
     }
@@ -1362,6 +1375,17 @@ export const sendReminderEmail = inngest.createFunction(
                 kind: 'followup',
             })
             await sendEmail(email, subject, html)
+
+            const { sendReminderPush } = await import("@/lib/reminders/reminder-push")
+            await sendReminderPush({
+                userId: event.data.userId,
+                firmId: event.data.firmId ?? null,
+                title: `${event.data.action}: ${event.data.entityName}`,
+                body: 'Due now',
+                ctaUrl: event.data.ctaUrl ?? null,
+                tag: `reminder:${event.data.reminderId}`,
+            })
+
             return { sent: true }
         })
 
@@ -1624,6 +1648,16 @@ export const sendRecurringReminderEmails = inngest.createFunction(
             })
             await sendEmail(email, subject, html)
 
+            const { sendReminderPush } = await import("@/lib/reminders/reminder-push")
+            await sendReminderPush({
+                userId: event.data.userId,
+                firmId: event.data.firmId ?? null,
+                title: `${event.data.action}: ${event.data.entityName}`,
+                body: 'Reminder',
+                ctaUrl: event.data.ctaUrl ?? null,
+                tag: `reminder:${event.data.reminderId}`,
+            })
+
             // Compute next fire time
             const nextFireAt = new Date(event.data.nextFireAt)
             nextFireAt.setDate(nextFireAt.getDate() + event.data.frequencyDays)
@@ -1650,6 +1684,88 @@ export const sendRecurringReminderEmails = inngest.createFunction(
     }
 )
 
+
+
+// ---------------------------------------------------------------------------
+// Daily Reminder Digest (Hourly Cron, fires at each user's local 09:00)
+// ---------------------------------------------------------------------------
+
+/**
+ * Sends one grouped Web Push per user per day covering everything due or overdue in their
+ * Reminders panel. Runs hourly and notifies only users whose LOCAL time is currently 09:00,
+ * so a desktop notification never lands at 3am for someone outside UTC.
+ *
+ * This is the path that covers date-less reminders (Review document / Review comment /
+ * Review shared file) — they have no scheduled email, so without the digest they would
+ * never notify at all.
+ *
+ * Shares the once-per-day claim stamp with the in-app sign-in catch-up via
+ * claimDailyDigest(), so exactly one of the two notifies on any given local day.
+ */
+export const sendDailyReminderDigest = inngest.createFunction(
+    { id: "send-daily-reminder-digest", triggers: [{ cron: "0 * * * *" }] },
+    async ({ step }) => {
+        return step.run("digest-users-at-local-9am", async () => {
+            const {
+                localDateFor, localHourFor, claimDailyDigest,
+            } = await import("@/lib/actions/user-notification-prefs")
+            const { computeDueReminders } = await import("@/lib/actions/user-reminders")
+            const { remindersPushEnabled } = await import("@/lib/reminders/reminder-push")
+            const { sendPushToUser } = await import("@/lib/push")
+
+            // Only users who could actually receive a push are worth scanning.
+            const candidates = await prisma.userPersonalization.findMany({
+                select: { userId: true, notificationPrefs: true, pushSubscriptions: true },
+            })
+
+            const now = new Date()
+            let notified = 0
+
+            for (const row of candidates) {
+                const subs = Array.isArray(row.pushSubscriptions) ? row.pushSubscriptions : []
+                if (subs.length === 0) continue
+
+                const timezone = (row.notificationPrefs as any)?.timezone ?? 'UTC'
+                if (await localHourFor(timezone, now) !== 9) continue
+
+                // Due today, overdue, or date-less (which never have a scheduled email).
+                const items = (await computeDueReminders(row.userId)).filter(
+                    (r) => !r.hiddenAt && (r.delta === null || r.delta <= 0)
+                )
+                if (items.length === 0) continue
+
+                // Firm-scoped gate on a user-scoped surface: keep only reminders whose
+                // owning firm still has reminder notifications switched on.
+                const allowed: typeof items = []
+                for (const item of items) {
+                    if (await remindersPushEnabled(item.firmId)) allowed.push(item)
+                }
+                if (allowed.length === 0) continue
+
+                // Claim last: never burn the day's stamp on a user we then skip.
+                const localDate = await localDateFor(timezone, now)
+                if (!(await claimDailyDigest(row.userId, localDate))) continue
+
+                const overdue = allowed.filter((r) => r.delta !== null && r.delta < 0).length
+                const single = allowed.length === 1 ? allowed[0] : null
+
+                await sendPushToUser(row.userId, {
+                    title: single
+                        ? `${single.action}: ${single.entityName}`
+                        : `${allowed.length} reminders need attention`,
+                    body: single
+                        ? (single.label || 'Due today')
+                        : (overdue > 0 ? `${overdue} overdue` : 'Due today'),
+                    ctaUrl: single ? (single.ctaUrl ?? '/d/u/reminders') : '/d/u/reminders',
+                    tag: 'reminder-digest',
+                })
+                notified++
+            }
+
+            return { notified }
+        })
+    }
+)
 
 // ---------------------------------------------------------------------------
 // Deliverable Due Date Reminders

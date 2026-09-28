@@ -1,6 +1,5 @@
 'use client'
 
-import { useState } from 'react'
 import { Switch } from '@/components/ui/switch'
 import { useRegisterPush } from '@/lib/hooks/use-register-push'
 import { Bell, BellOff } from 'lucide-react'
@@ -11,18 +10,19 @@ import { Bell, BellOff } from 'lucide-react'
  * one deliberate user action that triggers the browser's native permission prompt.
  */
 export function PushNotificationToggle() {
-  const { supportState, subscribing, subscribe, unsubscribe } = useRegisterPush()
-  const [enabled, setEnabled] = useState(false)
+  const { supportState, subscribing, subscribed, subscribe, unsubscribe } = useRegisterPush()
 
   if (supportState === 'unsupported') return null
 
+  // `subscribed` is null until the service worker reports back; treat that as off for
+  // rendering but keep the switch disabled so it cannot be toggled from an unknown state.
+  const enabled = subscribed === true
+
   const handleToggle = async (checked: boolean) => {
     if (checked) {
-      const ok = await subscribe()
-      setEnabled(ok)
+      await subscribe()
     } else {
       await unsubscribe()
-      setEnabled(false)
     }
   }
 
@@ -46,7 +46,7 @@ export function PushNotificationToggle() {
       <Switch
         checked={enabled}
         onCheckedChange={handleToggle}
-        disabled={subscribing || supportState === 'denied'}
+        disabled={subscribing || subscribed === null || supportState === 'denied'}
         aria-label="Push notifications"
       />
     </div>

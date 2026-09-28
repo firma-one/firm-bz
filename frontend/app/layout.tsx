@@ -3,6 +3,7 @@ import { Inter, Space_Grotesk, Work_Sans } from 'next/font/google'
 import type { Metadata } from 'next'
 import Script from 'next/script'
 import { AuthProvider } from '@/lib/auth-context'
+import { TimezoneSync } from '@/components/app/timezone-sync'
 import { ToastProvider } from '@/components/ui/toast'
 import { CookieConsent } from '@/components/ui/cookie-consent'
 import { ConsentAwareGoogleAnalytics } from '@/components/analytics/consent-aware-google-analytics'
@@ -155,6 +156,7 @@ export default async function RootLayout({
         <Script src="/fix-chunk-errors.js" strategy="afterInteractive" />
         <AuthProvider initialSession={initialSession}>
           <ToastProvider>
+            <TimezoneSync />
             {children}
             <CookieConsent />
             <ConsentAwareGoogleAnalytics />

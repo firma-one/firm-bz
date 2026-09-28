@@ -73,7 +73,7 @@ const PUBLIC_EMAIL_DOMAINS = new Set([
 ])
 
 type EventNotificationChannels = { email: boolean; inApp: boolean }
-type EventKey = 'newDocumentIntake' | 'statusChanged' | 'documentRejected' | 'externalClientComment' | 'engagementInviteAccepted' | 'deliverableOverdue'
+type EventKey = 'newDocumentIntake' | 'statusChanged' | 'documentRejected' | 'externalClientComment' | 'engagementInviteAccepted' | 'deliverableOverdue' | 'reminders'
 type EventNotificationConfig = Record<EventKey, EventNotificationChannels>
 
 const EVENT_NOTIFICATION_DEFAULTS: EventNotificationConfig = {
@@ -83,6 +83,7 @@ const EVENT_NOTIFICATION_DEFAULTS: EventNotificationConfig = {
     externalClientComment: { email: true, inApp: true },
     engagementInviteAccepted: { email: false, inApp: true },
     deliverableOverdue: { email: true, inApp: true },
+    reminders: { email: true, inApp: true },
 }
 
 const EVENT_NOTIFICATION_ROWS: { key: EventKey; label: string }[] = [
@@ -92,6 +93,7 @@ const EVENT_NOTIFICATION_ROWS: { key: EventKey; label: string }[] = [
     { key: 'externalClientComment', label: 'Client comment posted' },
     { key: 'engagementInviteAccepted', label: 'Engagement invite accepted' },
     { key: 'deliverableOverdue', label: 'Deliverable overdue' },
+    { key: 'reminders', label: 'Reminders due (in-app also enables push)' },
 ]
 
 export interface FirmSettingsFormProps {

@@ -10,6 +10,8 @@ export type EntityContext = {
     name: string
     slug: string | null
     firmSlug: string | null
+    /** Owning firm id — used to gate notifications against that firm's event config. */
+    firmId: string | null
     ctaUrl: string | null
 }
 
@@ -39,13 +41,14 @@ export function registeredEntityKeys(): string[] {
 registerEntityResolver('platform.clients', async (id) => {
     const c = await (prisma as any).client.findUnique({
         where: { id },
-        select: { name: true, slug: true, firm: { select: { slug: true, group: { select: { slug: true } } } } },
+        select: { name: true, slug: true, firm: { select: { id: true, slug: true, group: { select: { slug: true } } } } },
     })
     const groupSlug = c?.firm?.group?.slug ?? null
     return {
         name: c?.name ?? '',
         slug: c?.slug ?? null,
         firmSlug: c?.firm?.slug ?? null,
+        firmId: c?.firm?.id ?? null,
         ctaUrl: groupSlug && c?.firm?.slug && c?.slug ? clientPath(groupSlug, c.firm.slug, c.slug) : null,
     }
 })
@@ -53,15 +56,17 @@ registerEntityResolver('platform.clients', async (id) => {
 registerEntityResolver('platform.engagements', async (id) => {
     const e = await (prisma as any).engagement.findUnique({
         where: { id },
-        select: { name: true, slug: true, client: { select: { slug: true, firm: { select: { slug: true, group: { select: { slug: true } } } } } } },
+        select: { name: true, slug: true, client: { select: { slug: true, firm: { select: { id: true, slug: true, group: { select: { slug: true } } } } } } },
     })
     const groupSlug = e?.client?.firm?.group?.slug ?? null
     const firmSlug = e?.client?.firm?.slug ?? null
+    const firmId = e?.client?.firm?.id ?? null
     const clientSlug = e?.client?.slug ?? null
     return {
         name: e?.name ?? '',
         slug: e?.slug ?? null,
         firmSlug,
+        firmId,
         ctaUrl: groupSlug && firmSlug && clientSlug && e?.slug
             ? engagementPath(groupSlug, firmSlug, clientSlug, e.slug)
             : null,
@@ -71,15 +76,17 @@ registerEntityResolver('platform.engagements', async (id) => {
 registerEntityResolver('platform.engagements.shares', async (id) => {
     const e = await (prisma as any).engagement.findUnique({
         where: { id },
-        select: { name: true, slug: true, client: { select: { slug: true, firm: { select: { slug: true, group: { select: { slug: true } } } } } } },
+        select: { name: true, slug: true, client: { select: { slug: true, firm: { select: { id: true, slug: true, group: { select: { slug: true } } } } } } },
     })
     const groupSlug = e?.client?.firm?.group?.slug ?? null
     const firmSlug = e?.client?.firm?.slug ?? null
+    const firmId = e?.client?.firm?.id ?? null
     const clientSlug = e?.client?.slug ?? null
     return {
         name: e?.name ?? '',
         slug: e?.slug ?? null,
         firmSlug,
+        firmId,
         ctaUrl: groupSlug && firmSlug && clientSlug && e?.slug
             ? engagementPath(groupSlug, firmSlug, clientSlug, e.slug, { tab: 'shares' })
             : null,
@@ -89,16 +96,18 @@ registerEntityResolver('platform.engagements.shares', async (id) => {
 registerEntityResolver('platform.engagement_invitations', async (id) => {
     const inv = await (prisma as any).engagementInvitation.findUnique({
         where: { id },
-        select: { email: true, engagement: { select: { slug: true, client: { select: { slug: true, firm: { select: { slug: true, group: { select: { slug: true } } } } } } } } },
+        select: { email: true, engagement: { select: { slug: true, client: { select: { slug: true, firm: { select: { id: true, slug: true, group: { select: { slug: true } } } } } } } } },
     })
     const groupSlug = inv?.engagement?.client?.firm?.group?.slug ?? null
     const firmSlug = inv?.engagement?.client?.firm?.slug ?? null
+    const firmId = inv?.engagement?.client?.firm?.id ?? null
     const clientSlug = inv?.engagement?.client?.slug ?? null
     const engSlug = inv?.engagement?.slug ?? null
     return {
         name: inv?.email ?? '',
         slug: null,
         firmSlug,
+        firmId,
         ctaUrl: groupSlug && firmSlug && clientSlug && engSlug
             ? engagementPath(groupSlug, firmSlug, clientSlug, engSlug, { tab: 'members' })
             : null,
@@ -108,23 +117,25 @@ registerEntityResolver('platform.engagement_invitations', async (id) => {
 registerEntityResolver('platform.connectors', async (id) => {
     const c = await (prisma as any).connector.findUnique({
         where: { id },
-        select: { name: true, settings: true },
+        select: { name: true, settings: true, firmId: true },
     })
     const email = (c?.settings as any)?.accountEmail ?? c?.name ?? 'Google Drive'
-    return { name: email, slug: null, firmSlug: null, ctaUrl: '/d/onboarding' }
+    return { name: email, slug: null, firmSlug: null, firmId: c?.firmId ?? null, ctaUrl: '/d/onboarding' }
 })
 
 registerEntityResolver('platform.firm_invitations', async (id) => {
     const inv = await (prisma as any).firmInvitation.findUnique({
         where: { id },
-        select: { email: true, firm: { select: { slug: true, group: { select: { slug: true } } } } },
+        select: { email: true, firm: { select: { id: true, slug: true, group: { select: { slug: true } } } } },
     })
     const groupSlug = inv?.firm?.group?.slug ?? null
     const firmSlug = inv?.firm?.slug ?? null
+    const firmId = inv?.firm?.id ?? null
     return {
         name: inv?.email ?? 'Invited member',
         slug: null,
         firmSlug,
+        firmId,
         ctaUrl: groupSlug && firmSlug ? firmSettingsPath(groupSlug, firmSlug) : null,
     }
 })
@@ -134,17 +145,19 @@ registerEntityResolver('platform.documents', async (id) => {
         where: { id },
         select: {
             name: true,
-            engagement: { select: { slug: true, client: { select: { slug: true, firm: { select: { slug: true, group: { select: { slug: true } } } } } } } },
+            engagement: { select: { slug: true, client: { select: { slug: true, firm: { select: { id: true, slug: true, group: { select: { slug: true } } } } } } } },
         },
     })
     const groupSlug = doc?.engagement?.client?.firm?.group?.slug ?? null
     const firmSlug = doc?.engagement?.client?.firm?.slug ?? null
+    const firmId = doc?.engagement?.client?.firm?.id ?? null
     const clientSlug = doc?.engagement?.client?.slug ?? null
     const engSlug = doc?.engagement?.slug ?? null
     return {
         name: doc?.name ?? 'Shared document',
         slug: null,
         firmSlug,
+        firmId,
         ctaUrl: groupSlug && firmSlug && clientSlug && engSlug
             ? engagementPath(groupSlug, firmSlug, clientSlug, engSlug, { tab: 'files' })
             : null,
@@ -157,11 +170,12 @@ registerEntityResolver('platform.doc_comments', async (id) => {
         select: {
             content: true,
             projectDocumentId: true,
-            engagement: { select: { slug: true, client: { select: { slug: true, firm: { select: { slug: true, group: { select: { slug: true } } } } } } } },
+            engagement: { select: { slug: true, client: { select: { slug: true, firm: { select: { id: true, slug: true, group: { select: { slug: true } } } } } } } },
         },
     })
     const groupSlug = c?.engagement?.client?.firm?.group?.slug ?? null
     const firmSlug = c?.engagement?.client?.firm?.slug ?? null
+    const firmId = c?.engagement?.client?.firm?.id ?? null
     const clientSlug = c?.engagement?.client?.slug ?? null
     const engSlug = c?.engagement?.slug ?? null
     const preview = c?.content?.slice(0, 60) ?? 'Comment'
@@ -169,6 +183,7 @@ registerEntityResolver('platform.doc_comments', async (id) => {
         name: preview,
         slug: null,
         firmSlug,
+        firmId,
         ctaUrl: groupSlug && firmSlug && clientSlug && engSlug
             ? engagementDocCommentPath(groupSlug, firmSlug, clientSlug, engSlug, c?.projectDocumentId, id)
             : null,
@@ -184,6 +199,7 @@ registerEntityResolver('platform.firms', async (id) => {
         name: f?.name ?? 'Firm',
         slug: f?.slug ?? null,
         firmSlug: f?.slug ?? null,
+        firmId: id,
         ctaUrl: '/d/billing',
     }
 })

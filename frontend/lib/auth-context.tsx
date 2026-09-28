@@ -144,6 +144,27 @@ export function AuthProvider({ children, initialSession }: { children: ReactNode
   }
 
   const signOut = async () => {
+    // Drop this browser's push subscription first. The endpoint is bound to the browser
+    // profile, not the session, so without this the signed-out user keeps receiving
+    // notifications on a shared machine. Best-effort: never block sign-out on it.
+    try {
+      if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+        const registration = await navigator.serviceWorker.getRegistration()
+        const subscription = await registration?.pushManager.getSubscription()
+        if (subscription) {
+          const endpoint = subscription.endpoint
+          await subscription.unsubscribe()
+          await fetch('/api/push/subscribe', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ endpoint }),
+          })
+        }
+      }
+    } catch {
+      // Stale rows are pruned server-side on the next failed send anyway.
+    }
+
     const { error } = await supabase.auth.signOut()
 
     if (error) {

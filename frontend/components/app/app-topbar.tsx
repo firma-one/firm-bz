@@ -226,7 +226,6 @@ export function AppTopbar() {
   const currentClientSlugRef = useRef<string | null>(null)
   const reloadBrandingRef = useRef<(() => Promise<void>) | null>(null)
 
-  const [betaFeaturesEnabled, setBetaFeaturesEnabled] = useState(false)
 
   const [showRecentsDropdown, setShowRecentsDropdown] = useState(false)
   const [showBookmarksDropdown, setShowBookmarksDropdown] = useState(false)
@@ -350,7 +349,6 @@ export function AppTopbar() {
           const org = data.organization || data.firm || data
           if (org?.name) setFirmName(org.name)
           const settings = (org?.settings as Record<string, unknown>) || {}
-          setBetaFeaturesEnabled((settings.betaFeatures as Record<string, boolean> | undefined)?.dossier === true)
           const b = (settings.branding as Record<string, string | undefined>) || {}
 
           // Read exclusively from settings.branding — no column fallbacks
@@ -872,7 +870,7 @@ export function AppTopbar() {
           ) : null}
         </div>
 
-        {betaFeaturesEnabled && <div className="relative notifications-container">
+        <div className="relative notifications-container">
           <Tip label="Notifications" position="bottom-right">
           <button
             type="button"
@@ -1194,7 +1192,7 @@ export function AppTopbar() {
               </div>
             </div>
           ) : null}
-        </div>}
+        </div>
 
       </div>
     </div>

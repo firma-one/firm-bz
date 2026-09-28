@@ -38,6 +38,7 @@ export type ReminderWithContext = {
     entityName: string
     entitySlug: string | null
     firmSlug: string | null
+    firmId: string | null
     ctaUrl: string | null
     // computed (null when dateValue is null)
     delta: number | null
@@ -100,12 +101,17 @@ async function saveItems(userId: string, items: ReminderItem[]): Promise<void> {
 
 // ─── Public server actions ───────────────────────────────────────────────────
 
-export async function getUserReminders(): Promise<ReminderWithContext[]> {
-    const supabase = await createClient()
-    const { data: { user }, error } = await supabase.auth.getUser()
-    if (error || !user) return []
-
-    const items = await loadItems(user.id)
+/**
+ * Resolves a user's reminders into the same shape the topbar panel renders: everything
+ * overdue plus the next 30 days, date-less items always included, entity names/CTAs
+ * resolved (falling back to the cached copy when the entity is gone).
+ *
+ * Shared deliberately with the daily digest cron so the notification a user receives can
+ * never disagree with the panel they open. Takes an explicit userId because the cron has
+ * no session; getUserReminders() is the session-scoped wrapper.
+ */
+export async function computeDueReminders(userId: string): Promise<ReminderWithContext[]> {
+    const items = await loadItems(userId)
 
     const today = new Date(); today.setHours(0, 0, 0, 0)
     const in30Days = new Date(today); in30Days.setDate(today.getDate() + 30); in30Days.setHours(23, 59, 59, 999)
@@ -153,6 +159,7 @@ export async function getUserReminders(): Promise<ReminderWithContext[]> {
                 entityName,
                 entitySlug: ctx?.slug ?? null,
                 firmSlug: ctx?.firmSlug ?? null,
+                firmId: ctx?.firmId ?? null,
                 ctaUrl,
                 delta,
                 label,
@@ -169,6 +176,13 @@ export async function getUserReminders(): Promise<ReminderWithContext[]> {
         if (!b.dateValue) return -1
         return new Date(a.dateValue).getTime() - new Date(b.dateValue).getTime()
     })
+}
+
+export async function getUserReminders(): Promise<ReminderWithContext[]> {
+    const supabase = await createClient()
+    const { data: { user }, error } = await supabase.auth.getUser()
+    if (error || !user) return []
+    return computeDueReminders(user.id)
 }
 
 /**
@@ -328,6 +342,18 @@ async function sendImmediateReminderEmail(
     params: { entityName: string; firmId: string; ctaUrl: string | null; userId: string; action: string }
 ): Promise<void> {
     const config = await getFirmReminderConfig(params.firmId)
+
+    // Push is independent of the immediateOnCreate email toggle: it is gated by the
+    // reminders row in the Event Notifications grid instead.
+    const { sendReminderPush } = await import('@/lib/reminders/reminder-push')
+    await sendReminderPush({
+        userId: params.userId,
+        firmId: params.firmId,
+        title: `${params.action}: ${params.entityName}`,
+        body: 'Reminder created',
+        ctaUrl: params.ctaUrl,
+    })
+
     if (!config.immediateOnCreate) return
 
     try {
@@ -351,6 +377,46 @@ async function sendImmediateReminderEmail(
         await sendEmail(email, subject, html)
     } catch (e) {
         logger.error('sendImmediateReminderEmail failed', e as Error, 'Reminders', { userId: params.userId })
+    }
+}
+
+/**
+ * In-app counterpart to the daily digest push: on the first app load of the user's local
+ * day, reports whether they have unseen due/overdue reminders so the panel can surface
+ * itself once. Shares claimDailyDigest() with the cron, so a user who signs in before
+ * their local 09:00 gets this instead of a push — never both.
+ *
+ * Returns notify:false when the day is already claimed or nothing is due.
+ */
+export async function checkDailyReminderDigest(): Promise<{ notify: boolean; count: number; overdue: number }> {
+    const empty = { notify: false, count: 0, overdue: 0 }
+    try {
+        const supabase = await createClient()
+        const { data: { user }, error } = await supabase.auth.getUser()
+        if (error || !user) return empty
+
+        const { getUserNotificationPrefs, localDateFor, claimDailyDigest } =
+            await import('@/lib/actions/user-notification-prefs')
+        const prefs = await getUserNotificationPrefs(user.id)
+        const localDate = await localDateFor(prefs.timezone)
+        if (prefs.remindersDigest.lastNotifiedDate === localDate) return empty
+
+        const items = (await computeDueReminders(user.id)).filter(
+            (r) => !r.hiddenAt && (r.delta === null || r.delta <= 0)
+        )
+        if (items.length === 0) return empty
+
+        // Claim last — never burn the stamp on a day with nothing to show.
+        if (!(await claimDailyDigest(user.id, localDate))) return empty
+
+        return {
+            notify: true,
+            count: items.length,
+            overdue: items.filter((r) => r.delta !== null && r.delta < 0).length,
+        }
+    } catch (e) {
+        logger.error('checkDailyReminderDigest failed', e as Error, 'Reminders')
+        return empty
     }
 }
 
