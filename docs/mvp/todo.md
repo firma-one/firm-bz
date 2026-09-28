@@ -58,6 +58,15 @@ See [`.claude/plans/beta-feedback-fixes.md`](../../.claude/plans/beta-feedback-f
   - "Show full calendar" → `/d/u/calendar` full-page view with month navigation; past dates show historical reminders; new Calendar tab in `/d/u/` layout
   - See also: [Firm Calendar plan](../../.claude/plans/firm-calendar-engagement-deliverable-timeline.md) — separate, firm-scoped calendar of Engagement/Deliverable dates (not personal reminders); distinct feature, same "calendar" surface area
 
+- [ ] **Browser (Web Push) Notifications for Reminders** — [plan](../../.claude/plans/browser-push-reminders.md)
+  - Everything in the topbar Reminders panel also arrives as a native OS notification, delivered while the browser is minimised or has no Firma tab open. Push infra already exists (`lib/push.ts`, `public/sw.js`) and serves event notifications — reminders never called it
+  - Phase 0: endpoint/account exclusivity (steal-on-subscribe, unsubscribe on sign-out, toggle reflects real state) + take the Notifications tab and topbar bell out of `betaFeatures.dossier` — web push ships GA, not beta
+  - Prod prerequisite: generate a dedicated VAPID keypair (`npx web-push generate-vapid-keys`) and set all four vars in Vercel **before** the shipping deploy — `NEXT_PUBLIC_VAPID_PUBLIC_KEY` is build-time inlined, and a public-key mismatch fails silently
+  - Phases 1–2: `notificationPrefs` JSON on `UserPersonalization` (IANA timezone + per-day digest stamp); silent timezone capture on app load
+  - Phase 3: `reminders` row in the Firm Settings Event Notifications grid (push rides the existing `inApp` flag)
+  - Phase 4: per-reminder push alongside each scheduled reminder email + hourly `sendDailyReminderDigest` cron firing at each user's local 09:00, with an in-app sign-in catch-up sharing one `claimDailyDigest()` stamp so the user is notified exactly once per day. Digest is what covers the date-less reminders (Review document/comment/shared file) that have no scheduled email today
+  - Phase 5 (very low priority, non-blocking): PWA polish for mobile — real 192/512 icons, maskable variants, iOS "Add to Home Screen" hint
+
 ## Client Pull Features — [plan](../../.claude/plans/client-pull-features.md)
 
 > Add-ons to give fCMO end-clients a reason to return proactively, without touching core fCMO workflows.

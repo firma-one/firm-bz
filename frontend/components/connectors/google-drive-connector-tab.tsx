@@ -286,7 +286,7 @@ export function GoogleDriveConnectorTab({
                           <p className="text-xs text-amber-700 mt-0.5">
                             Some files failed to move during the last workspace migration.{' '}
                             <a
-                              href="mailto:support@pockett.app?subject=Workspace%20migration%20failed%20files"
+                              href="mailto:info@firmaone.com?subject=Workspace%20migration%20failed%20files"
                               className="underline underline-offset-2 font-medium hover:text-amber-900"
                             >
                               Contact support

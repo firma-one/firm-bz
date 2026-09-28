@@ -11,6 +11,12 @@ const transporter = nodemailer.createTransport({
     },
 })
 
+// Fallback sender, used only when SMTP_FROM is unset. Must stay on a domain we control —
+// mail from an unowned domain fails SPF/DKIM and lands in spam. Warned about once per
+// process so a missing env var is visible rather than silent.
+const DEFAULT_EMAIL_FROM = `"${BRAND_NAME}" <info@firmaone.com>`
+let warnedMissingFrom = false
+
 export interface EmailAttachment {
     filename: string
     content: Buffer
@@ -23,9 +29,14 @@ export async function sendEmail(to: string, subject: string, html: string, attac
         return
     }
 
+    if (!process.env.SMTP_FROM && !warnedMissingFrom) {
+        warnedMissingFrom = true
+        logger.warn(`SMTP_FROM not configured — falling back to ${DEFAULT_EMAIL_FROM}`, 'Email')
+    }
+
     try {
         const info = await transporter.sendMail({
-            from: process.env.SMTP_FROM || `"${BRAND_NAME}" <noreply@pockett.app>`,
+            from: process.env.SMTP_FROM || DEFAULT_EMAIL_FROM,
             to,
             subject,
             html,
