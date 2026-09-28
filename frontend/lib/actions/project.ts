@@ -247,7 +247,7 @@ export async function createEngagement(firmSlug: string, clientSlug: string, dat
 
     const engCtaUrl = engagementPath(firm.group.slug, firmSlug, clientSlug, newProject.slug)
     const engNote = data.internalMemo ?? null
-    upsertFollowUpReminder({
+    await upsertFollowUpReminder({
         userId: user.id,
         entityKey: 'platform.engagements.id',
         entityValue: newProject.id,
@@ -260,7 +260,7 @@ export async function createEngagement(firmSlug: string, clientSlug: string, dat
         note: engNote,
     }).catch(() => {})
     if (kickoff && kickoff > new Date()) {
-        upsertFollowUpReminder({
+        await upsertFollowUpReminder({
             userId: user.id,
             entityKey: 'platform.engagements.id',
             entityValue: newProject.id,
@@ -274,7 +274,7 @@ export async function createEngagement(firmSlug: string, clientSlug: string, dat
         }).catch(() => {})
     }
     if (followUp) {
-        upsertFollowUpReminder({
+        await upsertFollowUpReminder({
             userId: user.id,
             entityKey: 'platform.engagements.id',
             entityValue: newProject.id,
@@ -527,7 +527,7 @@ export async function updateEngagement(
             : ((engDetails?.settings as any)?.internalMemo ?? null)
 
         if (parsedDue !== undefined) {
-            upsertFollowUpReminder({
+            await upsertFollowUpReminder({
                 userId: user.id,
                 entityKey: 'platform.engagements.id',
                 entityValue: projectId,
@@ -542,7 +542,7 @@ export async function updateEngagement(
         }
         if (parsedKickoff !== undefined) {
             const kickoffFuture = parsedKickoff && parsedKickoff > new Date()
-            upsertFollowUpReminder({
+            await upsertFollowUpReminder({
                 userId: user.id,
                 entityKey: 'platform.engagements.id',
                 entityValue: projectId,
@@ -556,7 +556,7 @@ export async function updateEngagement(
             }).catch(() => {})
         }
         if (parsedFollowUp !== undefined) {
-            upsertFollowUpReminder({
+            await upsertFollowUpReminder({
                 userId: user.id,
                 entityKey: 'platform.engagements.id',
                 entityValue: projectId,

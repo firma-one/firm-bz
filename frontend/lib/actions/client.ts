@@ -196,7 +196,7 @@ export async function createClient(organizationSlug: string, data: CreateClientD
     }
 
     // Upsert follow-up reminder if followUpDate was set
-    upsertFollowUpReminder({
+    await upsertFollowUpReminder({
         userId: user.id,
         entityKey: 'platform.clients.id',
         entityValue: newClient.id,
@@ -208,7 +208,7 @@ export async function createClient(organizationSlug: string, data: CreateClientD
         ctaUrl: clientPath(firm.group.slug, organizationSlug, newClient.slug),
         note: data.internalMemo ?? null,
     }).catch(() => {})
-    upsertFollowUpReminder({
+    await upsertFollowUpReminder({
         userId: user.id,
         entityKey: 'platform.clients.id',
         entityValue: newClient.id,
@@ -331,7 +331,7 @@ export async function updateClient(
         const entityName = data.name ?? client.name
         if (effectiveOwnerId) {
             const memo = data.internalMemo !== undefined ? data.internalMemo : latest?.internalMemo ?? null
-            upsertFollowUpReminder({
+            await upsertFollowUpReminder({
                 userId: effectiveOwnerId,
                 entityKey: 'platform.clients.id',
                 entityValue: client.id,
@@ -343,7 +343,7 @@ export async function updateClient(
                 ctaUrl,
                 note: memo,
             }).catch(() => {})
-            upsertFollowUpReminder({
+            await upsertFollowUpReminder({
                 userId: effectiveOwnerId,
                 entityKey: 'platform.clients.id',
                 entityValue: client.id,
