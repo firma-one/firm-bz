@@ -8,12 +8,21 @@ export type StoredPushSubscription = {
   createdAt: string
 }
 
+const DEFAULT_VAPID_SUBJECT = 'mailto:info@firmaone.com'
+
 let vapidConfigured = false
 function ensureVapidConfigured(): boolean {
   if (vapidConfigured) return true
   const publicKey = process.env.VAPID_PUBLIC_KEY
   const privateKey = process.env.VAPID_PRIVATE_KEY
-  const subject = process.env.VAPID_SUBJECT || 'mailto:no-reply@firmaone.com'
+  // Fallback rather than a hard guard: setVapidDetails() throws on a missing/malformed
+  // subject, and push degrading to a slightly-wrong RFC 8292 contact address beats push
+  // failing outright. Warn so a missing env var stays visible instead of silently drifting
+  // from .env / Vercel.
+  const subject = process.env.VAPID_SUBJECT || DEFAULT_VAPID_SUBJECT
+  if (!process.env.VAPID_SUBJECT) {
+    logger.warn(`VAPID_SUBJECT is unset — falling back to ${DEFAULT_VAPID_SUBJECT}`, 'Notifications')
+  }
   if (!publicKey || !privateKey) return false
   webpush.setVapidDetails(subject, publicKey, privateKey)
   vapidConfigured = true
