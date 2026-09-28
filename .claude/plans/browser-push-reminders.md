@@ -37,6 +37,28 @@ The push service never knows who the user is. **The account binding happens once
 
 The consequence: the subscription is bound to the **browser profile**, and it outlives the session. That is what makes delivery-while-signed-out work, and it is also the bug fixed in Phase 0.
 
+## Environment / VAPID keys
+
+Local (`frontend/.env`) is already configured from the earlier push work — all four vars present, keypair the correct P-256 shape, and `VAPID_PUBLIC_KEY` matches `NEXT_PUBLIC_VAPID_PUBLIC_KEY`. `.env` is gitignored and untracked.
+
+**Production needs its own keypair** — generate, do not promote the local one:
+
+```bash
+cd frontend && npx web-push generate-vapid-keys   # web-push is already a dependency
+```
+
+Set in Vercel (Production scope): `VAPID_PUBLIC_KEY`, `NEXT_PUBLIC_VAPID_PUBLIC_KEY` (identical value), `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`.
+
+Three constraints that make this effectively one-shot:
+
+1. **The public key is embedded in every subscription.** Rotating it invalidates every stored `push_subscriptions` row — sends fail 403 and all users must re-subscribe. Choose once, treat as permanent. This is also why production must not share the local keypair: a leaked `.env` would be able to push to production users, and rotating out is expensive.
+2. **`NEXT_PUBLIC_*` is inlined at build time.** Setting it in Vercel is not enough; it needs a redeploy. Set all four *before* the deploy that ships this.
+3. **A public/`NEXT_PUBLIC` mismatch fails silently** — `subscribe()` succeeds, every send 403s, and `sendPushToUser` swallows the error (`lib/push.ts:60`). Verify the two match on every environment.
+
+Also in scope:
+- ~~`VAPID_SUBJECT`~~ — **DONE.** `lib/push.ts` now uses a `DEFAULT_VAPID_SUBJECT = 'mailto:info@firmaone.com'` constant instead of the inline `mailto:no-reply@firmaone.com`, with a `logger.warn` when the env var is unset so the fallback is no longer silent. Local `.env` updated to match. The fallback (rather than a hard guard like the keys have) is deliberate: `setVapidDetails()` throws on a missing subject, and push degrading to a slightly-wrong RFC 8292 contact address beats push failing outright. Still to do: set `VAPID_SUBJECT` in Vercel.
+- Add `frontend/.env.example` documenting these four (no file exists today), given how silent the misconfiguration failure is.
+
 ## Phase 0 — Endpoint/account exclusivity (prerequisite)
 
 A pre-existing defect, already affecting the event pushes shipped in `createEventNotifications`. This plan makes reminders push too, raising both the volume and the sensitivity of what leaks (notification bodies carry client names and engagement titles, visible on a lock screen).
@@ -68,9 +90,13 @@ The `@>` containment operator matches a partial object inside an array element, 
 
 **0c. Toggle reflects real state.** `PushNotificationToggle` (`app/(app)/d/u/notifications/push-notification-toggle.tsx`) initialises `useState(false)`, so the switch renders "off" on every page load even when the browser is subscribed. Resolve it from `pushManager.getSubscription()` in a mount effect. Needed here rather than in Phase 5, because 0a makes the toggle the supported way to re-bind a browser to a different account — it has to show the truth.
 
-**0d. Make the toggle reachable.** `/d/u/notifications` is beta-gated — `frontend/app/(app)/d/u/layout.tsx:15` marks the tab `beta: true`, shown only when `settings.betaFeatures.dossier === true` (line 38). That page hosts the *only* control in the app that creates a push subscription, while `/d/u/reminders` (line 13) is ungated. Shipping reminder pushes without fixing this leaves most users unable to enable them.
+**0d. Remove the beta gate — web push is a GA feature, not a beta one.** `frontend/app/(app)/d/u/layout.tsx:15` marks the Notifications tab `beta: true`, shown only when `settings.betaFeatures.dossier === true` (line 38, filtered at line 43). That page hosts the only control in the app that creates a push subscription. The topbar bell icon in `frontend/components/app/app-topbar.tsx:875` is gated on the same flag.
 
-Mount the same `PushNotificationToggle` on `/d/u/reminders` as well — same component, no duplicated logic, and it sits next to the feature it now governs. The Notifications page and its beta gate are left untouched.
+Drop `beta: true` from the Notifications tab and remove the `betaFeaturesEnabled` condition on the bell icon, taking the push toggle, the notifications list and the broadcast composer GA together. Leave the reminders page alone — the toggle stays on the Notifications settings page where it belongs.
+
+**`betaFeatures.dossier` is shared — do not remove the flag itself.** It also gates the engagement board page (`app/(app)/d/[groupSlug]/f/[firmSlug]/c/[clientSlug]/e/[engagementSlug]/board/page.tsx:54`), the engagement `[[...rest]]` page (line 90), and `app/api/permissions/firm/route.ts:126`, and is written by `components/projects/firm-settings-form.tsx:389`. Those keep it.
+
+Scope the edit to exactly two lines: drop `beta: true` from the Notifications tab entry at `layout.tsx:15`, and remove the `betaFeaturesEnabled` condition on the bell at `app-topbar.tsx:353`.
 
 ### Deliberately not doing: automatic re-claim on load
 
@@ -160,7 +186,8 @@ Android Chrome already receives these pushes with no further work once installed
 | `frontend/app/api/push/subscribe/route.ts` | Phase 0a — steal endpoint from other users on subscribe |
 | `frontend/lib/auth-context.tsx` | Phase 0b — `unsubscribe()` before `signOut()` |
 | `frontend/app/(app)/d/u/notifications/push-notification-toggle.tsx` | Phase 0c — real subscription state on mount |
-| `frontend/app/(app)/d/u/reminders/page.tsx` | Phase 0d — mount `PushNotificationToggle` (ungated surface) |
+| `frontend/app/(app)/d/u/layout.tsx` | Phase 0d — drop `beta: true` from the Notifications tab |
+| `frontend/components/app/app-topbar.tsx` | Phase 0d — ungate the bell icon |
 | `frontend/prisma/schema.prisma` + new migration | `notificationPrefs` Json on `UserPersonalization` |
 | `frontend/lib/actions/user-notification-prefs.ts` | **new** — prefs read/write, `claimDailyDigest` |
 | `frontend/components/app/timezone-sync.tsx` | **new** — silent tz capture |
@@ -187,7 +214,7 @@ Reused as-is, no changes: `lib/push.ts`, `lib/hooks/use-register-push.ts`, `lib/
 
 1. `npm run build` (applies the migration).
 2. Confirm `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_SUBJECT` are set locally — without them `ensureVapidConfigured()` silently returns and nothing sends.
-3. Enable push from the toggle on `/d/u/reminders`, accept the browser prompt. Verify a row landed in `user_personalizations.push_subscriptions`. Reload — the switch must still read "on" (Phase 0c).
+3. Enable push from the toggle on `/d/u/notifications`, accept the browser prompt. Verify a row landed in `user_personalizations.push_subscriptions`. Reload — the switch must still read "on" (Phase 0c).
 3b. **Account exclusivity (Phase 0a):** with A subscribed, sign in as B in the same browser and flip the push toggle on. Verify the endpoint now appears in B's `push_subscriptions` and is **gone** from A's. Then sign out explicitly as B and confirm the row is cleared (Phase 0b).
 4. Verify `notification_prefs.timezone` is populated after one app load.
 5. **Per-reminder:** set a client follow-up date for tomorrow → Inngest dev server (`npx inngest-cli dev`) shows `reminder.email.scheduled`; trigger the run manually → OS notification appears with the client name and a working CTA.
