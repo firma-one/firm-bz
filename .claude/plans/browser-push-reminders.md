@@ -153,7 +153,9 @@ Multi-firm resolution (reminders are user-scoped, the grid is firm-scoped):
 **4a. Per-reminder push.** In `frontend/lib/inngest/functions.ts`, add a `sendPushToUser` call next to the existing `sendEmail` in each of:
 - `sendReminderEmail` (line ~1323)
 - `sendRecurringReminderEmails` (line ~1578)
-- `sendDeliverableDueReminder` (line ~1666)
+- `checkClientFollowUpReminders` (line ~1273) — the daily safety-net cron, in-app only today
+
+**Not** `sendDeliverableDueReminder` (line ~1666): it already calls `sendPushToUser` (line ~1677). Deliverable due dates and the document/comment/invite events already push today — the gap is general reminders.
 
 and in `sendImmediateReminderEmail` in `frontend/lib/actions/user-reminders.ts:327`. Each gated on the firm's `events.reminders.inApp`, reusing the existing `ctaUrl` and `entityName` already on the event payload. Use `tag: \`reminder:${reminderId}\`` so a re-fire replaces rather than stacks the OS notification.
 
