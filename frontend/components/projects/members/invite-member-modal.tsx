@@ -196,9 +196,9 @@ export function InviteMemberModal({ projectId, open, onOpenChange, personas, pre
                                         {(['internal', 'external'] as const).map((sr) => {
                                             const persona = personas.find(p => p.slug === resolvePersonaSlug('contributor', sr))
                                             return (
-                                                <div key={sr} className="flex items-center gap-2 cursor-pointer" onClick={() => handleSubRoleChange(sr)}>
+                                                <div key={sr} className="flex items-center gap-2">
                                                     <RadioGroupItem value={sr} id={`invite-sub-${sr}`} />
-                                                    <Label htmlFor={`invite-sub-${sr}`} className="text-xs font-medium text-[#1b1b1d] cursor-pointer">
+                                                    <Label htmlFor={`invite-sub-${sr}`} className="flex-1 text-xs font-medium text-[#1b1b1d] cursor-pointer">
                                                         {SUB_ROLE_LABEL[sr]}
                                                     </Label>
                                                     <TooltipProvider>
