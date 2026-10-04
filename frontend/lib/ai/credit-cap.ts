@@ -1,7 +1,7 @@
 import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
-import { parseEntitledAiCredits } from '@/lib/billing/subscription-metadata'
+import { parseEntitledAiCredits, applyEntitlementOverrides } from '@/lib/billing/subscription-metadata'
 import { getActiveSubscriptionForGroup } from '@/lib/billing/active-billing-subscription'
 import { CREDIT_WEIGHTS, creditsUsedSince, creditPeriodStart, type AiFeature } from './usage'
 
@@ -80,13 +80,37 @@ export interface AiCreditStatus {
 
 async function allowanceForGroup(groupId: string): Promise<number> {
     const sub = await getActiveSubscriptionForGroup(groupId)
-    const meta = ((sub?.settings as { metadata?: Record<string, unknown> } | null)?.metadata ?? {}) as Record<string, unknown>
+    // Through applyEntitlementOverrides, not settings.metadata directly: a system-admin override
+    // lives in a sibling key and must win here, or the admin UI would appear to work while
+    // enforcement kept using the synced value.
+    const meta = applyEntitlementOverrides(sub?.settings)
     const entitled = parseEntitledAiCredits(meta)
     if (entitled == null) {
         logger.warn(`No entitledAiCredits configured for group ${groupId}; AI credits not capped`)
         return UNCONFIGURED_ALLOWANCE
     }
     return entitled
+}
+
+/**
+ * The period allowance and whether it binds — for display, in a JSON-safe shape.
+ *
+ * `allowance` is null rather than `Infinity` when no entitlement resolved: `Infinity` does not
+ * survive `JSON.stringify` (it becomes null anyway, but silently), and "unknown" is the honest
+ * reading of a missing `entitledAiCredits` — see {@link UNCONFIGURED_ALLOWANCE}.
+ *
+ * `enforced` is reported separately because a configured allowance that nothing enforces must not
+ * be shown as a limit. The billing page needs both to avoid claiming a cap that will not fire, or
+ * denying one that will.
+ */
+export async function aiCreditEntitlement(
+    groupId: string,
+): Promise<{ allowance: number | null; enforced: boolean }> {
+    const allowance = await allowanceForGroup(groupId)
+    return {
+        allowance: Number.isFinite(allowance) ? allowance : null,
+        enforced: enforceAiCreditCaps(),
+    }
 }
 
 /** Reads both windows without consuming anything. Safe to call for display. */

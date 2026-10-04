@@ -1,6 +1,7 @@
 import type { FirmInsightsResponse } from '@/app/api/firms/[firmId]/insights/route'
 import { completeText } from './client'
 import { meterAiCall } from './guarded-client'
+import { assertWithinAiCreditCap } from './credit-cap'
 
 export interface FirmBrief {
     content: string
@@ -141,10 +142,23 @@ export function buildSnapshot(data: FirmInsightsResponse): string {
     return lines.join('\n')
 }
 
+/**
+ * Generates a brief, refusing when the firm is over its AI credit allowance.
+ *
+ * The cap is asserted here as well as in the calling route. That is not redundancy for its own
+ * sake: the route gates *before* fetching insights so a cached read costs nothing, while this
+ * assertion makes the model unreachable without a check — the guarantee every other AI surface
+ * gets from `getGuardedAnthropic`. A second caller added later cannot accidentally skip it.
+ *
+ * Throws `AiCreditLimitError`; the route already translates that into a skipped brief.
+ */
 export async function generateFirmBrief(
     data: FirmInsightsResponse,
     meta?: { firmId?: string; userId?: string },
 ): Promise<string | null> {
+    if (meta?.firmId) {
+        await assertWithinAiCreditCap({ firmId: meta.firmId, feature: 'brief' })
+    }
     return completeText({
         system: SYSTEM,
         userMessage: `Today is ${new Date().toISOString().slice(0, 10)}.\n\nFirm snapshot:\n${buildSnapshot(data)}`,

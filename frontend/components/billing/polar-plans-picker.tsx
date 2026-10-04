@@ -38,11 +38,14 @@ export type BillingPlanUsage = {
     engagements: number | null
     documents: number | null
     clientContacts: number | null
-    /** Metered, not capped — reported so a cap can later be set from real usage, not a guess. */
     aiCredits?: {
         used: number
         byFeature: Record<'brief' | 'summary' | 'chat' | 'searchInterpret', number>
         periodStartIso: string
+        /** Period allowance from `entitledAiCredits`; null when none resolved. */
+        allowance: number | null
+        /** False when a cap exists but `ENFORCE_BILLING_GATES` is off, so nothing is refused. */
+        enforced: boolean
     } | null
 }
 

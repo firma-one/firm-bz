@@ -5,6 +5,7 @@
 
 import type { BillingCatalogPlan, BillingCatalogRecurringInterval } from '@/lib/billing/billing-catalog.types'
 import { inferIntervalFromCatalogPriceLabel } from '@/lib/billing/catalog-plan-helpers'
+import { polarVersionHeaders } from '@/lib/billing/polar-client'
 
 export type { BillingCatalogPlan }
 
@@ -322,10 +323,10 @@ export async function fetchBillingCatalogPlans(): Promise<BillingCatalogPlan[]> 
     url.searchParams.set('sorting', '-created_at')
 
     const res = await fetch(url.toString(), {
-        headers: {
+        headers: polarVersionHeaders({
             Authorization: `Bearer ${token}`,
             Accept: 'application/json',
-        },
+        }),
         cache: 'no-store',
     })
 

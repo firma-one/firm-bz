@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Link2, Wrench, Shield, ChevronRight, Users, CalendarRange, MailPlus, Database, Activity, OctagonPause, Terminal, FlaskConical } from "lucide-react"
+import { Link2, Wrench, Shield, ChevronRight, Users, CalendarRange, MailPlus, Database, Activity, OctagonPause, Terminal, FlaskConical, Building2 } from "lucide-react"
 
 import { usePlatformMaintenanceStatus } from "@/lib/hooks/use-platform-maintenance-status"
 
@@ -47,8 +47,21 @@ const tools = [
         iconClassName: "w-10 h-10 rounded-lg flex items-center justify-center mb-4 bg-gray-100 text-gray-900 group-hover:bg-black group-hover:text-white transition-colors"
     },
     {
-        title: "User Data Map",
-        description: "Inspect user workspace graph, detect discrepancies, and review safe remediation SQL.",
+        title: "Firm Groups",
+        description: "Browse every billing group with its admin, search, resync entitlements from Polar, and open any account's data map.",
+        href: "/system/firm-groups",
+        icon: Building2,
+        className: "group bg-white border border-gray-200 rounded-xl p-6 hover:shadow-sm hover:border-gray-400 transition-all duration-200 flex flex-col items-start",
+        iconClassName: "w-10 h-10 rounded-lg flex items-center justify-center mb-4 bg-gray-100 text-gray-900 group-hover:bg-black group-hover:text-white transition-colors"
+    },
+    {
+        // Kept alongside Firm Groups rather than folded into it. The directory lists GROUPS, so it
+        // surfaces one user per group — its admin. Every other account reaches this page only by
+        // lookup: firm members who are not the group admin, and orphaned auth accounts with no
+        // membership at all. The latter can never be listed by a group directory, which is exactly
+        // what the "operational records but no workspace memberships" finding exists to catch.
+        title: "User Lookup",
+        description: "Look up any single user by email or id — including firm members and accounts with no group. Findings, remediation SQL, and hard reset.",
         href: "/system/user-data-map",
         icon: Database,
         className: "group bg-white border border-gray-200 rounded-xl p-6 hover:shadow-sm hover:border-gray-400 transition-all duration-200 flex flex-col items-start",

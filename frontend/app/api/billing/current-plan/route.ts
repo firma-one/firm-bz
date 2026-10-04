@@ -1,5 +1,5 @@
-import { Polar } from '@polar-sh/sdk'
 import { aiCreditUsageForGroup } from '@/lib/ai/usage'
+import { aiCreditEntitlement } from '@/lib/ai/credit-cap'
 import { logger } from '@/lib/logger'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
@@ -10,10 +10,7 @@ import {
 } from '@/lib/billing/active-billing-subscription'
 import { resolveGroupId, listBillableFirmIdsInBillingGroup } from '@/lib/billing/billing-group'
 import { loadAnchorForCaps, anchorUsesSandboxCapDefaults } from '@/lib/billing/effective-billing-caps'
-
-function polarServer(): 'production' | 'sandbox' {
-    return process.env.POLAR_SERVER === 'production' ? 'production' : 'sandbox'
-}
+import { createPolarClient } from '@/lib/billing/polar-client'
 
 function asRecord(value: unknown): Record<string, unknown> | null {
     if (!value || typeof value !== 'object') return null
@@ -75,7 +72,7 @@ export async function GET(request: Request) {
         const token = process.env.POLAR_ACCESS_TOKEN?.trim()
         if (token) {
             try {
-                const polar = new Polar({ accessToken: token, server: polarServer() })
+                const polar = createPolarClient(token)
                 const sub = await polar.subscriptions.get({ id: anchorSub.polarSubscriptionId })
                 const subRecord = asRecord(sub)
                 const subProduct = asRecord(subRecord?.product)
@@ -115,7 +112,7 @@ export async function GET(request: Request) {
         Boolean(process.env.POLAR_ACCESS_TOKEN?.trim())
     if (stillMissingPaidContext) {
         try {
-            const polar = new Polar({ accessToken: process.env.POLAR_ACCESS_TOKEN!.trim(), server: polarServer() })
+            const polar = createPolarClient(process.env.POLAR_ACCESS_TOKEN!.trim())
             const state = await polar.customers.getStateExternal({ externalId: groupId })
             const stateRecord = asRecord(state)
             const freeProductId = process.env.POLAR_FREE_PRODUCT_ID?.trim() || null
@@ -196,13 +193,15 @@ export async function GET(request: Request) {
             ? prisma.clientContact.count({ where: { client: { firmId: { in: billableFirmIds } } } })
             : Promise.resolve(null),
     ])
-    // AI credits are metered but not capped: this is reported so the real distribution can be
-    // seen before any cap number is chosen. A failure here must not break the billing page, which
-    // is why it is caught rather than awaited alongside the counts above.
-    const aiCredits = await aiCreditUsageForGroup(groupId, periodEnd).catch((error) => {
-        logger.error('Failed to load AI credit usage:', error as Error)
-        return null
-    })
+    // AI credit usage plus the allowance it counts against, so the page can show what remains
+    // rather than a bare total. A failure here must not break the billing page, which is why it is
+    // caught rather than awaited alongside the counts above.
+    const aiCredits = await aiCreditEntitlement(groupId)
+        .then((entitlement) => aiCreditUsageForGroup(groupId, periodEnd, entitlement))
+        .catch((error) => {
+            logger.error('Failed to load AI credit usage:', error as Error)
+            return null
+        })
 
     const usage = {
         firms: usedFirms,

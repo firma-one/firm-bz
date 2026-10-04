@@ -4,15 +4,12 @@ import { logger } from '@/lib/logger'
 import { ensureGroupFreePlan } from '@/lib/billing/polar-free-plan'
 import { upsertFollowUpReminder } from '@/lib/actions/user-reminders'
 import { createAdminClient } from '@/utils/supabase/admin'
-
-function polarServer(): 'production' | 'sandbox' {
-    return process.env.POLAR_SERVER === 'production' ? 'production' : 'sandbox'
-}
+import { createPolarClient } from '@/lib/billing/polar-client'
 
 function polarClient(): Polar | null {
     const token = process.env.POLAR_ACCESS_TOKEN?.trim()
     if (!token) return null
-    return new Polar({ accessToken: token, server: polarServer() })
+    return createPolarClient(token)
 }
 
 /**

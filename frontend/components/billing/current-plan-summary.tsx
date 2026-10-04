@@ -117,10 +117,19 @@ function SectionLabel({ children }: { children: ReactNode }) {
  * Separate from PlanEntitlementsSection because that only renders when a cap exists, and a group on
  * the free plan still uses AI and still needs to see it.
  *
- * The per-feature bars are proportions of this period's own total, NOT progress toward a limit —
- * there is no limit. They answer "where did the credits go", which is the question phase 2 needs
- * answered before a cap number can be chosen. The heading says "no limit applied" so the bars are
- * not read as an allowance running down.
+ * The per-feature bars are proportions of this period's own total, not progress toward the limit —
+ * they answer "where did the credits go". The allowance is reported separately, on the heading row,
+ * because that is the number a user checks before deciding whether to upgrade.
+ *
+ * The caption is derived, never fixed. It previously read "no limit applied" unconditionally, which
+ * silently became false when enforcement was turned on: the API would refuse a call with "you have
+ * used your 500 AI credits" while this page said nothing was capped.
+ *
+ * Every tier configures an allowance (Free 25, Standard 500), so there is no "unlimited plan" to
+ * describe. The caption therefore only ever states a real number — counting down when the cap is
+ * enforced, naming what is included when it is not — and falls silent if the allowance did not
+ * resolve at all. Silence is the honest option there: a null allowance is a fault in the data, not
+ * a generous plan, and this page is the wrong place to diagnose it.
  */
 function AiCreditsRow({ usage }: { usage: BillingPlanUsage | null | undefined }) {
     const ai = usage?.aiCredits ?? null
@@ -128,14 +137,27 @@ function AiCreditsRow({ usage }: { usage: BillingPlanUsage | null | undefined })
 
     // Ordered firm-scoped first, then engagement-scoped, so the two halves of the product read
     // as groups rather than an arbitrary list. Labels name the surface the credit was spent on.
-    const AI_FEATURES: Array<{ key: keyof typeof ai.byFeature; label: string }> = [
-        { key: 'brief', label: 'Firm briefs' },
-        { key: 'searchInterpret', label: 'Firm Doc Search' },
-        { key: 'summary', label: 'Engagement summaries' },
-        { key: 'chat', label: 'Engagement assistant chat' },
+    //
+    // Colours are four steps of the brand green rather than a categorical palette: these segments
+    // are parts of ONE measure (credits against one allowance), so varying lightness reads as a
+    // single bar divided up, where four unrelated hues would read as four competing series.
+    // Descending lightness also keeps the order legible at the 6px height this bar renders at.
+    const AI_FEATURES: Array<{ key: keyof typeof ai.byFeature; label: string; fill: string }> = [
+        { key: 'brief', label: 'Firm briefs', fill: 'hsl(var(--primary))' },
+        { key: 'searchInterpret', label: 'Firm Doc Search', fill: 'hsl(161 70% 45%)' },
+        { key: 'summary', label: 'Engagement summaries', fill: 'hsl(161 55% 62%)' },
+        { key: 'chat', label: 'Engagement assistant chat', fill: 'hsl(161 45% 78%)' },
     ]
     const fmt = (n: number) => (n % 1 === 0 ? String(n) : n.toFixed(1))
     const since = new Date(ai.periodStartIso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+
+    // A cap only counts down when it is both configured and enforced; anything else is usage
+    // reporting. Keeping these distinct is the whole point — see the note above.
+    const hasLiveCap = ai.allowance != null && ai.enforced
+    const remaining = ai.allowance != null ? Math.max(0, ai.allowance - ai.used) : null
+    const usedPct = ai.allowance ? Math.min(100, (ai.used / ai.allowance) * 100) : 0
+    // Warn before the refusal lands, not after: a user who sees "0 left" has already been blocked.
+    const nearlyOut = hasLiveCap && usedPct >= 80
 
     return (
         <div className="mt-3 pt-3 border-t border-primary/15">
@@ -144,29 +166,64 @@ function AiCreditsRow({ usage }: { usage: BillingPlanUsage | null | undefined })
                     AI credits
                 </p>
                 <span className="text-[10px] text-[#45474c]">
-                    {fmt(ai.used)} used since {since}
+                    {hasLiveCap
+                        ? `${fmt(ai.used)} of ${fmt(ai.allowance!)} used since ${since}`
+                        : `${fmt(ai.used)} used since ${since}`}
                 </span>
-                <span className="text-[10px] text-gray-400">· no limit applied</span>
+                {/* Every tier configures `entitledAiCredits` in its Polar product — Free 25,
+                    Standard 500 — so a null allowance is never "this plan is unlimited". It means
+                    the value did not resolve: a stale snapshot, a misspelled metadata key, or
+                    enforcement switched off. Saying "no limit applied" there would repeat the
+                    original bug, telling a capped customer they are uncapped. Say nothing about
+                    limits instead, and let the system admin tools report the fault. */}
+                {hasLiveCap ? (
+                    <span className={`text-[10px] font-medium ${nearlyOut ? 'text-amber-700' : 'text-[#45474c]'}`}>
+                        · {fmt(remaining!)} left
+                    </span>
+                ) : ai.allowance != null ? (
+                    <span className="text-[10px] text-gray-400">· {fmt(ai.allowance)} included</span>
+                ) : null}
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-5 gap-y-3">
-                {AI_FEATURES.map(({ key, label }) => {
+            {/* One stacked bar: each segment is a feature's share, and when a cap is live the
+                segments are scaled against the ALLOWANCE so the unfilled remainder is the credits
+                still available. Without a cap there is no remainder to show, so the segments fill
+                the track and the bar reads as a pure composition of what was spent. */}
+            <div
+                className="mb-2.5 flex h-2 w-full overflow-hidden rounded-full bg-primary/10"
+                role="img"
+                aria-label={AI_FEATURES.map(({ key, label }) => `${label}: ${fmt(ai.byFeature[key] ?? 0)}`).join(', ')}
+            >
+                {AI_FEATURES.map(({ key, label, fill }) => {
                     const value = ai.byFeature[key] ?? 0
-                    // Share of this period's total, not of a cap.
-                    const pct = ai.used > 0 ? Math.min(100, (value / ai.used) * 100) : 0
+                    if (value <= 0) return null
+                    const denominator = hasLiveCap ? ai.allowance! : ai.used
+                    const pct = denominator > 0 ? (value / denominator) * 100 : 0
                     return (
-                        <div key={key} className="flex flex-col gap-1 min-w-0">
-                            <div className="flex items-baseline justify-between gap-2">
-                                <span className="text-[10px] text-[#45474c] whitespace-nowrap">{label}</span>
-                                <span className="text-[10px] tabular-nums font-medium text-[#1b1b1d] whitespace-nowrap">
-                                    {fmt(value)}
-                                </span>
-                            </div>
-                            <div className="h-1.5 w-full rounded-full bg-primary/10 overflow-hidden">
-                                <div
-                                    className="h-full rounded-full bg-primary/60 transition-all"
-                                    style={{ width: `${pct}%` }}
-                                />
-                            </div>
+                        <div
+                            key={key}
+                            className="h-full transition-all first:rounded-l-full last:rounded-r-full"
+                            style={{ width: `${pct}%`, backgroundColor: fill }}
+                            title={`${label}: ${fmt(value)} credit${value === 1 ? '' : 's'}`}
+                        />
+                    )
+                })}
+            </div>
+            {/* Legend doubles as the per-feature readout, so the numbers that used to sit above
+                four separate bars are still here — one row instead of a grid of tracks. */}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+                {AI_FEATURES.map(({ key, label, fill }) => {
+                    const value = ai.byFeature[key] ?? 0
+                    return (
+                        <div key={key} className="flex items-center gap-1.5 min-w-0">
+                            <span
+                                className="h-2 w-2 shrink-0 rounded-[2px]"
+                                style={{ backgroundColor: fill }}
+                                aria-hidden="true"
+                            />
+                            <span className="text-[10px] text-[#45474c] whitespace-nowrap">{label}</span>
+                            <span className="text-[10px] tabular-nums font-medium text-[#1b1b1d] whitespace-nowrap">
+                                {fmt(value)}
+                            </span>
                         </div>
                     )
                 })}

@@ -36,6 +36,12 @@ export type UserDataMapFirmEntry = {
     isDefault: boolean
     sandboxOnly: boolean
     connectorId: string | null
+    /**
+     * Connectors actually serving this firm, counted across both the legacy firm-level column and
+     * the current client-level attachment. `connectorId` alone is not a reliable signal: connectors
+     * moved to clients, so a fully working firm reads null there.
+     */
+    connectorCount: number
     onboardingStage: string | null
     onboardingIsCompleteFlag: boolean
     computedOnboardingComplete: boolean
@@ -209,12 +215,16 @@ function buildFindings(params: {
             })
         }
 
-        if (firm.role === 'firm_admin' && firm.onboardingStage === 'completed' && !firm.connectorId) {
+        // Counts connectors serving the firm, not the legacy `firms.connectorId` column alone.
+        // Connectors are attached at CLIENT level now, so a firm with a working OneDrive/Drive
+        // connection still reads null there — which made this fire on healthy firms and offer SQL
+        // that resets a completed onboarding for no reason.
+        if (firm.role === 'firm_admin' && firm.onboardingStage === 'completed' && firm.connectorCount === 0) {
             findings.push({
                 id: `completed-missing-connector-${firm.id}`,
                 severity: 'critical',
                 title: `Firm ${firm.slug} marked completed without connector`,
-                evidence: 'onboarding.stage=completed but connectorId is null',
+                evidence: 'onboarding.stage=completed but no connector is attached to the firm or any of its clients',
                 recommendedActionType: 'stage-reset',
                 sqlPreview: [
                     '-- Reset onboarding stage so user can restart Drive connect flow',
@@ -287,14 +297,24 @@ export async function buildUserDataMap(identifier: string): Promise<UserDataMapR
             sandboxOnly: firm.sandboxOnly,
         })
         const groupId = await resolveGroupId(firm.id)
-        const sandboxFirm = await prisma.firm.findFirst({
-            where: { groupId, sandboxOnly: true, deletedAt: null },
+        // Checks the GROUP, which is what the finding below reports on.
+        //
+        // This previously looked for a firm with `sandboxOnly: true` in the group and treated its
+        // absence as "the billing group does not exist". Those are different questions, and the
+        // conflation produced a false WARNING on every firm — with remediation SQL that would
+        // repoint the firm at a new empty group, orphaning it from its own subscription.
+        //
+        // Sandbox firms are also no longer a concept: the demo is the unauthenticated
+        // /demo experience, which creates no account and no firm. So the old test could never
+        // pass for a real firm.
+        const group = await prisma.group.findUnique({
+            where: { id: groupId },
             select: { id: true },
         })
-        const anchorExists = Boolean(sandboxFirm)
+        const anchorExists = Boolean(group)
         const activeSubscription = await getActiveSubscriptionForGroup(groupId)
 
-        const [clients, engagements, documents, firmInvites, clientInvites, engagementInvites, notifForFirm] =
+        const [clients, engagements, documents, firmInvites, clientInvites, engagementInvites, notifForFirm, connectorCount] =
             await Promise.all([
                 prisma.client.count({ where: { firmId: firm.id, deletedAt: null } }),
                 prisma.engagement.count({ where: { firmId: firm.id, deletedAt: null, isDeleted: false } }),
@@ -303,6 +323,16 @@ export async function buildUserDataMap(identifier: string): Promise<UserDataMapR
                 prisma.clientInvitation.count({ where: { client: { firmId: firm.id } } }),
                 prisma.engagementInvitation.count({ where: { engagement: { firmId: firm.id } } }),
                 prisma.notification.count({ where: { firmId: firm.id } }),
+                // Either attachment counts as connected: the connector row may point at the firm
+                // (legacy) or be referenced by one of its clients (current model).
+                prisma.connector.count({
+                    where: {
+                        OR: [
+                            { firmId: firm.id },
+                            { clients: { some: { firmId: firm.id, deletedAt: null } } },
+                        ],
+                    },
+                }),
             ])
 
         firms.push({
@@ -313,6 +343,7 @@ export async function buildUserDataMap(identifier: string): Promise<UserDataMapR
             isDefault: membership.isDefault,
             sandboxOnly: firm.sandboxOnly,
             connectorId: firm.connectorId,
+            connectorCount,
             onboardingStage: onboardingBits.stage,
             onboardingIsCompleteFlag: onboardingBits.isComplete,
             computedOnboardingComplete: onboardingComplete,

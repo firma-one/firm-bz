@@ -140,6 +140,17 @@ function parseRecentFromPath(pathname: string, groupSlug: string, firmSlug: stri
   return null
 }
 
+/** Owning client of a recent entry — itself for clients, parsed from the href for engagements. */
+function clientSlugOf(item: RecentItem): string {
+  if (item.type === 'client') return item.slug
+  return item.href?.match(/\/c\/([^/]+)\//)?.[1] ?? ''
+}
+
+/** Engagement slugs are only unique within a client, so identity needs both. */
+function recentKey(type: string, clientSlug: string, slug: string) {
+  return `${type}:${clientSlug}:${slug}`
+}
+
 function useRecentNavItems(groupSlug: string | null, firmSlug: string | null, pathname: string): RecentItem[] {
   const storageKey = firmSlug ? `fm_nav_recents_${firmSlug}` : null
   const [recents, setRecents] = useState<RecentItem[]>([])
@@ -170,6 +181,68 @@ function useRecentNavItems(groupSlug: string | null, firmSlug: string | null, pa
       return updated
     })
   }, [pathname, groupSlug, firmSlug, storageKey])
+
+  // Recents are a localStorage cache with nothing reconciling it against the DB, so an entry
+  // deleted anywhere else — this user on another device, or a colleague — lingered in the
+  // sidebar and 404'd when clicked. Validate the cached list against live data and drop what
+  // no longer resolves. This runs once per mount: the sidebar lives in the /d layout, so it
+  // survives client-side navigation and this is a page-load cost, not a per-route one.
+  useEffect(() => {
+    if (!firmSlug || !storageKey) return
+    let cancelled = false
+
+    let stored: RecentItem[] = []
+    try {
+      const raw = localStorage.getItem(storageKey)
+      const parsed = raw ? JSON.parse(raw) : []
+      if (Array.isArray(parsed)) stored = parsed
+    } catch { /* ignore */ }
+
+    const payload = stored
+      .map((item) => ({ type: item.type, slug: item.slug, clientSlug: clientSlugOf(item) }))
+      .filter((item) => item.slug && item.clientSlug)
+    if (payload.length === 0) return
+
+    void (async () => {
+      let live: Map<string, string>
+      try {
+        const res = await fetch('/api/nav/recents/resolve', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ firmSlug, items: payload }),
+        })
+        // Prune only on an authoritative answer — a 401/503/offline must leave recents alone
+        // rather than read as "none of these exist".
+        if (!res.ok) return
+        const data = await res.json()
+        if (!Array.isArray(data?.items)) return
+        live = new Map<string, string>(
+          data.items.map((i: { type: string; clientSlug: string; slug: string; name: string }) =>
+            [recentKey(i.type, i.clientSlug, i.slug), i.name] as const)
+        )
+      } catch { return }
+      if (cancelled) return
+
+      const asked = new Set(payload.map((i) => recentKey(i.type, i.clientSlug, i.slug)))
+      setRecents((prev) => {
+        const next: RecentItem[] = []
+        for (const item of prev) {
+          const key = recentKey(item.type, clientSlugOf(item), item.slug)
+          // Anything recorded while the request was in flight (e.g. the page being visited
+          // right now) wasn't asked about, so it can't be judged — keep it.
+          if (!asked.has(key)) { next.push(item); continue }
+          const name = live.get(key)
+          if (!name) continue
+          next.push(name === item.name ? item : { ...item, name })
+        }
+        const changed = next.length !== prev.length || next.some((item, i) => item !== prev[i])
+        if (changed) try { localStorage.setItem(storageKey, JSON.stringify(next)) } catch { /* ignore */ }
+        return changed ? next : prev
+      })
+    })()
+
+    return () => { cancelled = true }
+  }, [firmSlug, storageKey])
 
   // Patch stored names when a page broadcasts its real entity names
   useEffect(() => {

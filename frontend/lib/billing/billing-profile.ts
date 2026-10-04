@@ -1,10 +1,10 @@
-import { Polar } from '@polar-sh/sdk'
 import { prisma } from '@/lib/prisma'
 import {
     getActiveSubscriptionForGroup,
     subscriptionAccessStatusLabel,
 } from '@/lib/billing/active-billing-subscription'
 import { resolveGroupId } from '@/lib/billing/billing-group'
+import { createPolarClient } from '@/lib/billing/polar-client'
 
 export type BillingProfilePayload = {
     /** Viewer’s role on workspace firm; portal/cancel are firm_admin-only. */
@@ -66,10 +66,6 @@ export async function getBillingProfileForUser(userId: string): Promise<BillingP
     return buildPayload(userId, membership.firm)
 }
 
-function polarServer(): 'production' | 'sandbox' {
-    return process.env.POLAR_SERVER === 'production' ? 'production' : 'sandbox'
-}
-
 async function buildPayload(
     userId: string,
     workspaceFirm: {
@@ -98,7 +94,7 @@ async function buildPayload(
         const token = process.env.POLAR_ACCESS_TOKEN?.trim()
         if (token) {
             try {
-                const polar = new Polar({ accessToken: token, server: polarServer() })
+                const polar = createPolarClient(token)
                 const sub = await polar.subscriptions.get({ id: polarSubscriptionId })
                 periodEnd = sub.trialEnd ?? sub.currentPeriodEnd ?? null
             } catch {

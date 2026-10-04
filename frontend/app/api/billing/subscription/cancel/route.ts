@@ -1,13 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { Polar } from '@polar-sh/sdk'
 import { prisma } from '@/lib/prisma'
 import { createClient } from '@/utils/supabase/server'
 import { getActiveSubscriptionForGroup } from '@/lib/billing/active-billing-subscription'
 import { resolveGroupId } from '@/lib/billing/billing-group'
 import { refreshBillingPlanForFirmGroupUsers } from '@/lib/billing/billing-user-session-sync'
-function polarServer(): 'production' | 'sandbox' {
-    return process.env.POLAR_SERVER === 'production' ? 'production' : 'sandbox'
-}
+import { createPolarClient } from '@/lib/billing/polar-client'
 
 export async function POST(request: NextRequest) {
     const accessToken = process.env.POLAR_ACCESS_TOKEN?.trim()
@@ -52,7 +49,7 @@ export async function POST(request: NextRequest) {
         )
     }
 
-    const polar = new Polar({ accessToken, server: polarServer() })
+    const polar = createPolarClient(accessToken)
     const updated = await polar.subscriptions.update({
         id: activeSub.polarSubscriptionId,
         subscriptionUpdate: { cancelAtPeriodEnd: true },

@@ -1,14 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { Polar } from '@polar-sh/sdk'
 import { prisma } from '@/lib/prisma'
 import { createClient } from '@/utils/supabase/server'
 import { getActiveSubscriptionForGroup } from '@/lib/billing/active-billing-subscription'
 import { resolveGroupId } from '@/lib/billing/billing-group'
 import { validateCheckoutReturnTo } from '@/lib/billing/checkout-return-path'
-
-function polarServer(): 'production' | 'sandbox' {
-    return process.env.POLAR_SERVER === 'production' ? 'production' : 'sandbox'
-}
+import { createPolarClient } from '@/lib/billing/polar-client'
 
 export async function POST(request: NextRequest) {
     const accessToken = process.env.POLAR_ACCESS_TOKEN?.trim()
@@ -64,7 +60,7 @@ export async function POST(request: NextRequest) {
         returnUrl = null
     }
 
-    const polar = new Polar({ accessToken, server: polarServer() })
+    const polar = createPolarClient(accessToken)
     const customerSession = await polar.customerSessions
         .create({
             externalCustomerId: groupId,
