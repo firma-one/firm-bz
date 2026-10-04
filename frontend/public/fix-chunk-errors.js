@@ -1,6 +1,13 @@
+// Sweeps stale service workers that cause ChunkLoadError. MUST skip the Web Push worker
+// (/sw.js): unregistering it destroys the browser's push subscription, so an unconditional
+// sweep silently killed push on every page load — the subscription was recreated by the
+// toggle and torn down again on the next navigation.
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations().then(function(registrations) {
     for (var registration of registrations) {
+      var worker = registration.active || registration.waiting || registration.installing;
+      var scriptUrl = (worker && worker.scriptURL) || '';
+      if (scriptUrl.indexOf('/sw.js') !== -1) continue;
       registration.unregister();
     }
   });

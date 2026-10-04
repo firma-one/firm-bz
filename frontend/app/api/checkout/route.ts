@@ -5,10 +5,7 @@ import { createAdminClient } from '@/utils/supabase/admin'
 import { createClient } from '@/utils/supabase/server'
 import { validateCheckoutReturnTo } from '@/lib/billing/checkout-return-path'
 import { resolveGroupId } from '@/lib/billing/billing-group'
-
-function polarServer(): 'sandbox' | 'production' {
-    return process.env.POLAR_SERVER === 'production' ? 'production' : 'sandbox'
-}
+import { polarServer } from '@/lib/billing/polar-client'
 
 async function checkoutHandler(request: NextRequest) {
     const accessToken = process.env.POLAR_ACCESS_TOKEN

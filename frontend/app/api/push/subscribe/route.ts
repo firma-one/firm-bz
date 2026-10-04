@@ -20,6 +20,22 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'endpoint and keys.{p256dh,auth} are required' }, { status: 400 })
   }
 
+  // A push endpoint identifies a browser profile, not an account, and it outlives the
+  // session that created it. Without this, signing in as a different user on the same
+  // browser leaves the endpoint stored under BOTH users and they each receive the other's
+  // notifications. Claim it exclusively: strip it from every other user first. Done as one
+  // statement so a concurrent subscribe cannot interleave a read-modify-write.
+  await prisma.$executeRaw`
+    UPDATE platform.user_personalizations
+    SET "pushSubscriptions" = COALESCE(
+      (SELECT jsonb_agg(elem)
+         FROM jsonb_array_elements("pushSubscriptions") elem
+        WHERE elem->>'endpoint' <> ${endpoint}),
+      '[]'::jsonb)
+    WHERE "userId" <> ${user.id}::uuid
+      AND "pushSubscriptions" @> jsonb_build_array(jsonb_build_object('endpoint', ${endpoint}::text))
+  `
+
   const personalization = await prisma.userPersonalization.findUnique({
     where: { userId: user.id },
     select: { pushSubscriptions: true },

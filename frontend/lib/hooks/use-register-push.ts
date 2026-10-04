@@ -23,16 +23,31 @@ export type PushSupportState = 'unsupported' | 'default' | 'granted' | 'denied'
 export function useRegisterPush() {
   const [supportState, setSupportState] = useState<PushSupportState>('unsupported')
   const [subscribing, setSubscribing] = useState(false)
+  // Whether THIS browser currently holds a push subscription. null = not yet determined,
+  // so callers can avoid rendering a toggle in the wrong position before the check lands.
+  const [subscribed, setSubscribed] = useState<boolean | null>(null)
 
   useEffect(() => {
     if (typeof window === 'undefined') return
     if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
       setSupportState('unsupported')
+      setSubscribed(false)
       return
     }
     setSupportState(Notification.permission as PushSupportState)
-    navigator.serviceWorker.register('/sw.js').catch(() => {
+    navigator.serviceWorker.register('/sw.js').then(async () => {
+      // Resolve the real subscription state rather than assuming "off" on every mount —
+      // a subscription survives reloads, so defaulting to off misreports it to the user.
+      try {
+        const registration = await navigator.serviceWorker.ready
+        const subscription = await registration.pushManager.getSubscription()
+        setSubscribed(Boolean(subscription))
+      } catch {
+        setSubscribed(false)
+      }
+    }).catch(() => {
       // Registration failure just means push stays unavailable — not fatal to the app.
+      setSubscribed(false)
     })
   }, [])
 
@@ -59,6 +74,7 @@ export function useRegisterPush() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys }),
       })
+      setSubscribed(true)
       return true
     } catch {
       return false
@@ -72,7 +88,7 @@ export function useRegisterPush() {
     try {
       const registration = await navigator.serviceWorker.ready
       const subscription = await registration.pushManager.getSubscription()
-      if (!subscription) return
+      if (!subscription) { setSubscribed(false); return }
       const endpoint = subscription.endpoint
       await subscription.unsubscribe()
       await fetch('/api/push/subscribe', {
@@ -80,10 +96,11 @@ export function useRegisterPush() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ endpoint }),
       })
+      setSubscribed(false)
     } catch {
       // Best-effort cleanup — a stale subscription will be pruned server-side on next failed send anyway.
     }
   }, [])
 
-  return { supportState, subscribing, subscribe, unsubscribe }
+  return { supportState, subscribing, subscribed, subscribe, unsubscribe }
 }

@@ -6,6 +6,7 @@ import { AlarmClock, ArrowUpRight, BellOff, Building2, CheckCircle2, ChevronRigh
 import Link from "next/link"
 import {
     getUserReminders,
+    checkDailyReminderDigest,
     markReminderDone,
     hideReminder,
     showReminder,
@@ -190,6 +191,23 @@ export function RemindersPanel({ onCountChange }: Props) {
     }, [])
 
     useEffect(() => { load(); mountedRef.current = true }, [load])
+
+    // First app load of the user's local day: if the digest push has not already claimed
+    // today, open the panel once so due reminders are not missed. Shares the claim stamp
+    // with sendDailyReminderDigest, so the user is notified exactly once per day and never
+    // gets both a push and this.
+    useEffect(() => {
+        let cancelled = false
+        void checkDailyReminderDigest()
+            .then((result) => {
+                if (cancelled || !result.notify) return
+                setOpen(true)
+            })
+            .catch(() => {
+                // Catch-up is best-effort — the panel still works normally without it.
+            })
+        return () => { cancelled = true }
+    }, [])
     // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => { if (mountedRef.current) load() }, [pathname])
     // eslint-disable-next-line react-hooks/exhaustive-deps

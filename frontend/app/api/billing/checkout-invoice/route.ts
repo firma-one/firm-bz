@@ -1,12 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { Polar } from '@polar-sh/sdk'
 import { createClient } from '@/utils/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
-
-function polarServer(): 'production' | 'sandbox' {
-    return process.env.POLAR_SERVER === 'production' ? 'production' : 'sandbox'
-}
+import { createPolarClient } from '@/lib/billing/polar-client'
 
 function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms))
@@ -57,7 +53,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Billing is not configured.' }, { status: 503 })
         }
 
-        const polar = new Polar({ accessToken: token, server: polarServer() })
+        const polar = createPolarClient(token)
 
         const checkout = await polar.checkouts.get({ id: checkoutId })
 

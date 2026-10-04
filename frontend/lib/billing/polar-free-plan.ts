@@ -5,6 +5,8 @@ import { type PricingModel, pricingModelFromRecurringFlag } from '@/lib/billing/
 import { refreshBillingPlanForFirmGroupUsers } from '@/lib/billing/billing-user-session-sync'
 import { resolveSubscriptionAuditUserId } from '@/lib/billing/subscription-audit'
 import { subscriptionAccessStatusLabel } from '@/lib/billing/active-billing-subscription'
+import { parseEntitledAiCredits } from '@/lib/billing/subscription-metadata'
+import { createPolarClient, polarServer } from '@/lib/billing/polar-client'
 
 type PolarProduct = Awaited<ReturnType<Polar['products']['get']>>
 
@@ -13,10 +15,6 @@ function polarEntityToJsonSnapshot(value: unknown): Record<string, unknown> {
     return JSON.parse(
         JSON.stringify(value, (_key, v) => (v instanceof Date ? v.toISOString() : v))
     ) as Record<string, unknown>
-}
-
-function polarServer(): 'production' | 'sandbox' {
-    return process.env.POLAR_SERVER === 'production' ? 'production' : 'sandbox'
 }
 
 function allowOnboardingWithoutPolarBilling(): boolean {
@@ -170,6 +168,23 @@ async function persistGroupWithLifetimeFreePlan(
                         entitledDocuments: '10',
                         entitledAuditDays: '0',
                         entitledCommentHistoryDays: '15',
+                        /**
+                         * A true fallback, unlike the keys above it.
+                         *
+                         * Everything else in this block is a literal AFTER the spread, so it
+                         * overrides whatever the Polar product says. That is deliberate for the
+                         * structural caps, but wrong for AI credits: the allowance is configured
+                         * per product in Polar (free 25, Standard 500, …) and must stay
+                         * authoritative there, or editing the dashboard would have no effect.
+                         *
+                         * So this only fills the gap when the product has no value. It matters
+                         * because an absent `entitledAiCredits` parses to "unknown", which the
+                         * credit cap deliberately treats as UNCAPPED — a free product missing the
+                         * field would silently grant unlimited AI rather than failing loudly.
+                         */
+                        ...(parseEntitledAiCredits(polarPlanMetadataFlat) == null
+                            ? { entitledAiCredits: '25' }
+                            : {}),
                         source: 'polar_free_product_sync',
                         polarProductId: polarProduct.id,
                         polarProduct: polarProductSnapshot,
@@ -332,10 +347,7 @@ export async function ensureGroupFreePlan(params: {
         userEmailDomain: params.userEmail.includes('@') ? params.userEmail.split('@')[1] : 'unknown',
     })
 
-    const polar = new Polar({
-        accessToken: token,
-        server,
-    })
+    const polar = createPolarClient(token)
 
     const polarProduct = await loadPolarFreeCatalogProduct(polar, freeProductId)
     const expectedPricingModel = pricingModelFromRecurringFlag(polarProduct.isRecurring)

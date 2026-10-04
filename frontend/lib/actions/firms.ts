@@ -541,6 +541,8 @@ export type FirmEventNotificationConfig = {
     externalClientComment: FirmNotificationChannelConfig
     engagementInviteAccepted: FirmNotificationChannelConfig
     deliverableOverdue: FirmNotificationChannelConfig
+    /** Personal reminders (follow-ups, due dates, review requests). inApp also gates Web Push. */
+    reminders: FirmNotificationChannelConfig
 }
 
 export type FirmReminderEmailConfig = {
@@ -561,6 +563,8 @@ const EVENT_NOTIFICATION_DEFAULTS: FirmEventNotificationConfig = {
     externalClientComment: { email: true, inApp: true },
     engagementInviteAccepted: { email: false, inApp: true },
     deliverableOverdue: { email: true, inApp: true },
+    // email defaults true to preserve existing behaviour — reminder emails already send.
+    reminders: { email: true, inApp: true },
 }
 
 export async function getFirmReminderConfig(firmId: string): Promise<FirmReminderEmailConfig & { events: FirmEventNotificationConfig }> {

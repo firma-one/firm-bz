@@ -1,4 +1,5 @@
 import { logger } from '@/lib/logger'
+import { polarVersionHeaders } from '@/lib/billing/polar-client'
 
 function polarApiBase(): string {
     return process.env.POLAR_SERVER === 'production'
@@ -27,10 +28,10 @@ export async function updatePolarCustomerNameByExternalId(params: {
     try {
         res = await fetch(url, {
             method: 'PATCH',
-            headers: {
+            headers: polarVersionHeaders({
                 Authorization: `Bearer ${token}`,
                 'Content-Type': 'application/json',
-            },
+            }),
             body: JSON.stringify({ name }),
         })
     } catch (e) {

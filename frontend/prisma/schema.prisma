@@ -745,6 +745,9 @@ model UserPersonalization {
   reminders         Json     @default("[]")
   /// Array of { endpoint, keys: { p256dh, auth }, createdAt } — one entry per subscribed device/browser
   pushSubscriptions Json     @default("[]")
+  /// { timezone: IANA string, remindersDigest: { lastNotifiedDate: "YYYY-MM-DD" } } — see
+  /// .claude/plans/browser-push-reminders.md. One JSON column so future prefs need no migration.
+  notificationPrefs Json     @default("{}")
 
   @@map("user_personalizations")
   @@schema("platform")

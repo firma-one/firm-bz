@@ -38,6 +38,7 @@ export type ReminderWithContext = {
     entityName: string
     entitySlug: string | null
     firmSlug: string | null
+    firmId: string | null
     ctaUrl: string | null
     // computed (null when dateValue is null)
     delta: number | null
@@ -98,14 +99,52 @@ async function saveItems(userId: string, items: ReminderItem[]): Promise<void> {
     })
 }
 
+/**
+ * Serialises mutations of one user's reminders array within this process.
+ *
+ * The array lives in a single JSON column, so load → modify → save is a read-modify-write.
+ * updateProject fires up to three upserts for one save (due / kickoff / follow-up), and
+ * concurrent runs each read the same starting array and write back their own copy —
+ * last write wins, and a reminder silently disappears. Its scheduled Inngest job then
+ * wakes, cannot find the id, and returns skipped:'done', so no email and no push.
+ *
+ * Per-user chaining rather than a global lock: two different users never contend.
+ * In-process only, which is enough for the concurrency that actually caused this (one
+ * request fanning out); withReminderLock also re-reads inside the lock so each mutation
+ * sees the previous one's writes.
+ */
+const reminderLocks = new Map<string, Promise<unknown>>()
+
+async function withReminderLock<T>(userId: string, fn: () => Promise<T>): Promise<T> {
+    const previous = reminderLocks.get(userId) ?? Promise.resolve()
+    const run = previous.then(fn, fn)
+    // Keep the chain alive even if this link rejects, and drop it once it is the tail.
+    reminderLocks.set(userId, run.catch(() => undefined))
+    try {
+        return await run
+    } finally {
+        if (reminderLocks.get(userId) === run || reminderLocks.get(userId)) {
+            const current = reminderLocks.get(userId)
+            void Promise.resolve(current).then(() => {
+                if (reminderLocks.get(userId) === current) reminderLocks.delete(userId)
+            })
+        }
+    }
+}
+
 // ─── Public server actions ───────────────────────────────────────────────────
 
-export async function getUserReminders(): Promise<ReminderWithContext[]> {
-    const supabase = await createClient()
-    const { data: { user }, error } = await supabase.auth.getUser()
-    if (error || !user) return []
-
-    const items = await loadItems(user.id)
+/**
+ * Resolves a user's reminders into the same shape the topbar panel renders: everything
+ * overdue plus the next 30 days, date-less items always included, entity names/CTAs
+ * resolved (falling back to the cached copy when the entity is gone).
+ *
+ * Shared deliberately with the daily digest cron so the notification a user receives can
+ * never disagree with the panel they open. Takes an explicit userId because the cron has
+ * no session; getUserReminders() is the session-scoped wrapper.
+ */
+export async function computeDueReminders(userId: string): Promise<ReminderWithContext[]> {
+    const items = await loadItems(userId)
 
     const today = new Date(); today.setHours(0, 0, 0, 0)
     const in30Days = new Date(today); in30Days.setDate(today.getDate() + 30); in30Days.setHours(23, 59, 59, 999)
@@ -153,6 +192,7 @@ export async function getUserReminders(): Promise<ReminderWithContext[]> {
                 entityName,
                 entitySlug: ctx?.slug ?? null,
                 firmSlug: ctx?.firmSlug ?? null,
+                firmId: ctx?.firmId ?? null,
                 ctaUrl,
                 delta,
                 label,
@@ -169,6 +209,13 @@ export async function getUserReminders(): Promise<ReminderWithContext[]> {
         if (!b.dateValue) return -1
         return new Date(a.dateValue).getTime() - new Date(b.dateValue).getTime()
     })
+}
+
+export async function getUserReminders(): Promise<ReminderWithContext[]> {
+    const supabase = await createClient()
+    const { data: { user }, error } = await supabase.auth.getUser()
+    if (error || !user) return []
+    return computeDueReminders(user.id)
 }
 
 /**
@@ -199,61 +246,66 @@ export async function upsertFollowUpReminder(params: {
     ctaUrl: string | null
     note?: string | null
 }): Promise<void> {
-    const items = await loadItems(params.userId)
+    // Serialised per user: updateProject fires due/kickoff/follow-up upserts for one
+    // save, and without this they race on the shared reminders JSON array and drop
+    // each other's writes.
+    return withReminderLock(params.userId, async () => {
+        const items = await loadItems(params.userId)
 
-    const existing = items.find(
-        (r) => r.entityKey === params.entityKey &&
-               r.entityValue === params.entityValue &&
-               r.dateKey === params.dateKey
-    )
-
-    if (!params.dateValue && params.dateKey !== null) {
-        // Date was cleared — remove the reminder node and cancel Inngest
-        if (existing) {
-            await safeInngestSend('reminder.email.cancelled', { reminderId: existing.id })
-            await safeInngestSend('reminder.recurring.cancelled', { reminderId: existing.id })
-            const next = items.filter((r) => r.id !== existing.id)
-            await saveItems(params.userId, next)
-        }
-        return
-    }
-
-    if (existing) {
-        // Update dateValue (and note if provided)
-        const wasScheduled = existing.dateValue !== params.dateValue
-        const next = items.map((r) =>
-            r.id === existing.id
-                ? { ...r, dateValue: params.dateValue, ...(params.note !== undefined && { note: params.note }) }
-                : r
+        const existing = items.find(
+            (r) => r.entityKey === params.entityKey &&
+                   r.entityValue === params.entityValue &&
+                   r.dateKey === params.dateKey
         )
-        await saveItems(params.userId, next)
-        if (wasScheduled) {
-            await safeInngestSend('reminder.email.cancelled', { reminderId: existing.id })
-            await safeInngestSend('reminder.recurring.cancelled', { reminderId: existing.id })
-            await scheduleReminderEmail(existing.id, params)
-            await scheduleRecurringReminder(existing.id, params)
+
+        if (!params.dateValue && params.dateKey !== null) {
+            // Date was cleared — remove the reminder node and cancel Inngest
+            if (existing) {
+                await safeInngestSend('reminder.email.cancelled', { reminderId: existing.id })
+                await safeInngestSend('reminder.recurring.cancelled', { reminderId: existing.id })
+                const next = items.filter((r) => r.id !== existing.id)
+                await saveItems(params.userId, next)
+            }
+            return
         }
-    } else {
-        // Create new reminder item
-        const id = generateId()
-        const newItem: ReminderItem = {
-            id,
-            entityKey: params.entityKey,
-            entityValue: params.entityValue,
-            action: params.action,
-            dateKey: params.dateKey,
-            dateValue: params.dateValue,
-            hiddenAt: null,
-            createdAt: new Date().toISOString(),
-            note: params.note ?? null,
-            entityName: params.entityName,
-            ctaUrl: params.ctaUrl,
+
+        if (existing) {
+            // Update dateValue (and note if provided)
+            const wasScheduled = existing.dateValue !== params.dateValue
+            const next = items.map((r) =>
+                r.id === existing.id
+                    ? { ...r, dateValue: params.dateValue, ...(params.note !== undefined && { note: params.note }) }
+                    : r
+            )
+            await saveItems(params.userId, next)
+            if (wasScheduled) {
+                await safeInngestSend('reminder.email.cancelled', { reminderId: existing.id })
+                await safeInngestSend('reminder.recurring.cancelled', { reminderId: existing.id })
+                await scheduleReminderEmail(existing.id, params)
+                await scheduleRecurringReminder(existing.id, params)
+            }
+        } else {
+            // Create new reminder item
+            const id = generateId()
+            const newItem: ReminderItem = {
+                id,
+                entityKey: params.entityKey,
+                entityValue: params.entityValue,
+                action: params.action,
+                dateKey: params.dateKey,
+                dateValue: params.dateValue,
+                hiddenAt: null,
+                createdAt: new Date().toISOString(),
+                note: params.note ?? null,
+                entityName: params.entityName,
+                ctaUrl: params.ctaUrl,
+            }
+            await saveItems(params.userId, [...items, newItem])
+            await scheduleReminderEmail(id, params)
+            await scheduleRecurringReminder(id, params)
+            await sendImmediateReminderEmail(params)
         }
-        await saveItems(params.userId, [...items, newItem])
-        await scheduleReminderEmail(id, params)
-        await scheduleRecurringReminder(id, params)
-        await sendImmediateReminderEmail(params)
-    }
+    })
 }
 
 async function scheduleReminderEmail(
@@ -328,6 +380,31 @@ async function sendImmediateReminderEmail(
     params: { entityName: string; firmId: string; ctaUrl: string | null; userId: string; action: string }
 ): Promise<void> {
     const config = await getFirmReminderConfig(params.firmId)
+
+    // Push on create only when the reminder is for SOMEONE ELSE — being assigned a review
+    // is worth an interruption. Pushing to the person who just set the date is not: they
+    // performed the action a second ago, so it reports their own work back at them. The
+    // "it's due" pushes still fire later from the scheduled Inngest paths either way.
+    //
+    // Independent of the immediateOnCreate email toggle; gated by the reminders row in the
+    // Event Notifications grid instead.
+    try {
+        const supabase = await createClient()
+        const { data: { user: actor } } = await supabase.auth.getUser()
+        if (actor?.id !== params.userId) {
+            const { sendReminderPush } = await import('@/lib/reminders/reminder-push')
+            await sendReminderPush({
+                userId: params.userId,
+                firmId: params.firmId,
+                title: `${params.action}: ${params.entityName}`,
+                body: 'Assigned to you',
+                ctaUrl: params.ctaUrl,
+            })
+        }
+    } catch {
+        // No session (cron/webhook context) — skip the create push rather than guess.
+    }
+
     if (!config.immediateOnCreate) return
 
     try {
@@ -354,27 +431,69 @@ async function sendImmediateReminderEmail(
     }
 }
 
+/**
+ * In-app counterpart to the daily digest push: on the first app load of the user's local
+ * day, reports whether they have unseen due/overdue reminders so the panel can surface
+ * itself once. Shares claimDailyDigest() with the cron, so a user who signs in before
+ * their local 09:00 gets this instead of a push — never both.
+ *
+ * Returns notify:false when the day is already claimed or nothing is due.
+ */
+export async function checkDailyReminderDigest(): Promise<{ notify: boolean; count: number; overdue: number }> {
+    const empty = { notify: false, count: 0, overdue: 0 }
+    try {
+        const supabase = await createClient()
+        const { data: { user }, error } = await supabase.auth.getUser()
+        if (error || !user) return empty
+
+        const { getUserNotificationPrefs, localDateFor, claimDailyDigest } =
+            await import('@/lib/actions/user-notification-prefs')
+        const prefs = await getUserNotificationPrefs(user.id)
+        const localDate = await localDateFor(prefs.timezone)
+        if (prefs.remindersDigest.lastNotifiedDate === localDate) return empty
+
+        const items = (await computeDueReminders(user.id)).filter(
+            (r) => !r.hiddenAt && (r.delta === null || r.delta <= 0)
+        )
+        if (items.length === 0) return empty
+
+        // Claim last — never burn the stamp on a day with nothing to show.
+        if (!(await claimDailyDigest(user.id, localDate))) return empty
+
+        return {
+            notify: true,
+            count: items.length,
+            overdue: items.filter((r) => r.delta !== null && r.delta < 0).length,
+        }
+    } catch (e) {
+        logger.error('checkDailyReminderDigest failed', e as Error, 'Reminders')
+        return empty
+    }
+}
+
 /** Mark a reminder done: remove the node, clear the dateKey column, cancel Inngest. */
 export async function markReminderDone(reminderId: string): Promise<void> {
     const supabase = await createClient()
     const { data: { user }, error } = await supabase.auth.getUser()
     if (error || !user) return
 
-    const items = await loadItems(user.id)
-    const item = items.find((r) => r.id === reminderId)
-    if (!item) return
+    return withReminderLock(user.id, async () => {
+        const items = await loadItems(user.id)
+        const item = items.find((r) => r.id === reminderId)
+        if (!item) return
 
-    // Clear the date column in the DB
-    if (item.dateKey && DATE_FIELD_CLEARERS[item.dateKey]) {
-        await DATE_FIELD_CLEARERS[item.dateKey](item.entityValue).catch(() => {})
-    }
+        // Clear the date column in the DB
+        if (item.dateKey && DATE_FIELD_CLEARERS[item.dateKey]) {
+            await DATE_FIELD_CLEARERS[item.dateKey](item.entityValue).catch(() => {})
+        }
 
-    // Cancel Inngest jobs
-    await safeInngestSend('reminder.email.cancelled', { reminderId })
-    await safeInngestSend('reminder.recurring.cancelled', { reminderId })
+        // Cancel Inngest jobs
+        await safeInngestSend('reminder.email.cancelled', { reminderId })
+        await safeInngestSend('reminder.recurring.cancelled', { reminderId })
 
-    // Remove node from array
-    await saveItems(user.id, items.filter((r) => r.id !== reminderId))
+        // Remove node from array
+        await saveItems(user.id, items.filter((r) => r.id !== reminderId))
+    })
 }
 
 /** Hide a reminder from the panel (sets hiddenAt). */
@@ -383,11 +502,13 @@ export async function hideReminder(reminderId: string): Promise<void> {
     const { data: { user }, error } = await supabase.auth.getUser()
     if (error || !user) return
 
-    const items = await loadItems(user.id)
-    const next = items.map((r) =>
-        r.id === reminderId ? { ...r, hiddenAt: new Date().toISOString() } : r
-    )
-    await saveItems(user.id, next)
+    return withReminderLock(user.id, async () => {
+        const items = await loadItems(user.id)
+        const next = items.map((r) =>
+            r.id === reminderId ? { ...r, hiddenAt: new Date().toISOString() } : r
+        )
+        await saveItems(user.id, next)
+    })
 }
 
 /** Unhide a reminder (clears hiddenAt). */
@@ -396,11 +517,13 @@ export async function showReminder(reminderId: string): Promise<void> {
     const { data: { user }, error } = await supabase.auth.getUser()
     if (error || !user) return
 
-    const items = await loadItems(user.id)
-    const next = items.map((r) =>
-        r.id === reminderId ? { ...r, hiddenAt: null } : r
-    )
-    await saveItems(user.id, next)
+    return withReminderLock(user.id, async () => {
+        const items = await loadItems(user.id)
+        const next = items.map((r) =>
+            r.id === reminderId ? { ...r, hiddenAt: null } : r
+        )
+        await saveItems(user.id, next)
+    })
 }
 
 function generateId(): string {
@@ -413,15 +536,17 @@ function generateId(): string {
  * Used when an invitation is accepted to clean up the invitor's "Invitation expiring" reminder.
  */
 export async function removeRemindersByEntity(userId: string, entityKey: string, entityValue: string): Promise<void> {
-    const items = await loadItems(userId)
-    const toRemove = items.filter((r) => r.entityKey === entityKey && r.entityValue === entityValue)
-    if (toRemove.length === 0) return
+    return withReminderLock(userId, async () => {
+        const items = await loadItems(userId)
+        const toRemove = items.filter((r) => r.entityKey === entityKey && r.entityValue === entityValue)
+        if (toRemove.length === 0) return
 
-    for (const item of toRemove) {
-        await safeInngestSend('reminder.email.cancelled', { reminderId: item.id })
-        await safeInngestSend('reminder.recurring.cancelled', { reminderId: item.id })
-    }
-    await saveItems(userId, items.filter((r) => r.entityKey !== entityKey || r.entityValue !== entityValue))
+        for (const item of toRemove) {
+            await safeInngestSend('reminder.email.cancelled', { reminderId: item.id })
+            await safeInngestSend('reminder.recurring.cancelled', { reminderId: item.id })
+        }
+        await saveItems(userId, items.filter((r) => r.entityKey !== entityKey || r.entityValue !== entityValue))
+    })
 }
 
 /**

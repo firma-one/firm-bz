@@ -1,7 +1,8 @@
 'use client'
 
-import { FormEvent, useCallback, useMemo, useState } from 'react'
+import { FormEvent, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { ChevronRight, Copy, Database, RotateCw, Search, Shield, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -13,6 +14,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog'
+import { EntitlementsPanel } from '@/components/system/entitlements-panel'
 import type { UserDataMapResult } from '@/lib/system/user-data-map'
 
 type ApiResponse = { data?: UserDataMapResult; error?: string }
@@ -61,7 +63,19 @@ function SeverityBadge({ severity }: { severity: 'critical' | 'warning' | 'info'
     )
 }
 
+/**
+ * Wrapped in Suspense because `useSearchParams` requires it: without the boundary the whole route
+ * opts into client-side rendering at build time.
+ */
 export default function UserDataMapPage() {
+    return (
+        <Suspense fallback={<div className="mx-auto w-full max-w-6xl px-4 py-6 text-sm text-gray-500">Loading…</div>}>
+            <UserDataMapContent />
+        </Suspense>
+    )
+}
+
+function UserDataMapContent() {
     const [identifier, setIdentifier] = useState('')
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
@@ -107,6 +121,16 @@ export default function UserDataMapPage() {
         event.preventDefault()
         void loadMap(identifier.trim())
     }
+
+    // Deep link from the firm-group directory: ?identifier=<email|userId> prefills and runs the
+    // lookup, so "View" lands on a loaded page rather than an empty form.
+    const searchParams = useSearchParams()
+    const linkedIdentifier = searchParams.get('identifier')?.trim() ?? ''
+    useEffect(() => {
+        if (!linkedIdentifier) return
+        setIdentifier(linkedIdentifier)
+        void loadMap(linkedIdentifier)
+    }, [linkedIdentifier, loadMap])
 
     const normalizedConfirm = confirmUserId.trim().toLowerCase()
     const normalizedTargetId = result?.targetUser.id.trim().toLowerCase() ?? ''
@@ -188,6 +212,16 @@ export default function UserDataMapPage() {
                         Administration
                     </Link>
                     <ChevronRight className="w-4 h-4 mx-2" />
+                    {/* Arriving via a group's View button makes Firm Groups the real parent, so the
+                        crumb offers a way back to the list instead of a dead end at /system. */}
+                    {linkedIdentifier ? (
+                        <>
+                            <Link href="/system/firm-groups" className="hover:text-gray-900 transition-colors">
+                                Firm Groups
+                            </Link>
+                            <ChevronRight className="w-4 h-4 mx-2" />
+                        </>
+                    ) : null}
                     <span className="font-medium text-gray-900">User Data Map</span>
                 </nav>
 
@@ -198,7 +232,13 @@ export default function UserDataMapPage() {
                     <div>
                         <h1 className="text-3xl font-bold text-gray-900 tracking-tight">User Data Map</h1>
                         <p className="text-gray-500 mt-1">
-                            Read-only diagnostics for user workspace integrity and recovery recommendations.
+                            Read-only diagnostics for user workspace integrity and recovery recommendations.{' '}
+                            Works for <strong>any</strong> account — including firm members who are not
+                            the group admin, and users with no workspace at all.{' '}
+                            <Link href="/system/firm-groups" className="underline hover:text-gray-900">
+                                Browse firm groups
+                            </Link>{' '}
+                            to find an account by group instead.
                         </p>
                     </div>
                 </div>
@@ -351,7 +391,19 @@ export default function UserDataMapPage() {
                                     ) : null}
                                     <dl className="mt-2 grid grid-cols-1 gap-1 text-sm md:grid-cols-2 xl:grid-cols-3">
                                         <DataRow label="Firm ID" value={firm.id} mono />
-                                        <DataRow label="Connector" value={firm.connectorId ?? 'None'} mono />
+                                        {/* Connectors attach at CLIENT level now, so the legacy
+                                            firm-level column is null on healthy firms. Show the
+                                            count too, or "None" reads as "not connected". */}
+                                        <DataRow
+                                            label="Connector"
+                                            value={
+                                                firm.connectorId
+                                                    ?? (firm.connectorCount > 0
+                                                        ? `${firm.connectorCount} via client${firm.connectorCount === 1 ? '' : 's'}`
+                                                        : 'None')
+                                            }
+                                            mono={Boolean(firm.connectorId)}
+                                        />
                                         <DataRow
                                             label="Onboarding"
                                             value={`${firm.onboardingStage ?? 'unknown'} (computed: ${
@@ -380,6 +432,10 @@ export default function UserDataMapPage() {
                                             value={String(firm.counts.notificationsForFirm)}
                                         />
                                     </dl>
+                                    {/* Entitlements are billing-group scoped, not firm scoped, so two
+                                        firms in one group show the same panel — resyncing from either
+                                        updates the same subscription row. */}
+                                    <EntitlementsPanel groupId={firm.billing.groupId} />
                                 </article>
                             ))}
                         </div>

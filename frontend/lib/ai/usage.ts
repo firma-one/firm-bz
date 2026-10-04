@@ -98,6 +98,19 @@ export interface AiCreditUsage {
     /** Per-feature split, so the page can show WHERE the credits went, not just how many. */
     byFeature: Record<AiFeature, number>
     periodStartIso: string
+    /**
+     * Period allowance from `entitledAiCredits`, and whether it is actually enforced.
+     *
+     * Both are needed to say anything honest on the billing page. `allowance` null means no
+     * entitlement resolved, so there is nothing to count down to; `enforced` false means a cap
+     * exists on paper but `ENFORCE_BILLING_GATES` is off, so no request will be refused.
+     *
+     * Added because the page previously showed usage with the fixed caption "no limit applied",
+     * which stopped being true the moment enforcement was switched on — a user could be refused
+     * by the API and told on this page that nothing was capped.
+     */
+    allowance: number | null
+    enforced: boolean
 }
 
 /**
@@ -109,6 +122,13 @@ export interface AiCreditUsage {
 export async function aiCreditUsageForGroup(
     groupId: string,
     periodEnd: Date | null | undefined,
+    /**
+     * Allowance and enforcement state, resolved by the caller.
+     *
+     * Passed in rather than read here to keep the import direction one-way: `credit-cap` already
+     * imports this module, so reading the entitlement from it would create a cycle.
+     */
+    entitlement?: { allowance: number | null; enforced: boolean },
 ): Promise<AiCreditUsage> {
     const since = creditPeriodStart(periodEnd)
     const rows = await prisma.platformAiUsage.groupBy({
@@ -126,7 +146,13 @@ export async function aiCreditUsageForGroup(
         used += credits
     }
 
-    return { used, byFeature, periodStartIso: since.toISOString() }
+    return {
+        used,
+        byFeature,
+        periodStartIso: since.toISOString(),
+        allowance: entitlement?.allowance ?? null,
+        enforced: entitlement?.enforced ?? false,
+    }
 }
 
 /**
