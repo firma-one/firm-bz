@@ -646,9 +646,6 @@ export function AppTopbar() {
             <MapIcon className="h-5 w-5" />
           </a>
         </Tip>
-        <div data-demo-tour="topbar-reminders">
-          <RemindersPanel />
-        </div>
         <div className="relative recents-container">
           <Tip label="Recents" position="bottom">
           <button
@@ -870,21 +867,24 @@ export function AppTopbar() {
           ) : null}
         </div>
 
+        <div data-demo-tour="topbar-reminders">
+          <RemindersPanel />
+        </div>
         <div className="relative notifications-container">
           <Tip label="Notifications" position="bottom-right">
           <button
             type="button"
-            className="w-10 h-10 flex items-center justify-center rounded-xl text-firma hover:bg-firma/10 transition-colors relative"
+            className="w-10 h-10 flex items-center justify-center rounded-xl text-[#EA580C] hover:bg-[#EA580C]/10 transition-colors relative"
             aria-label="Notifications"
             onClick={() => setShowNotificationsDropdown((v) => !v)}
           >
             <Bell className="h-5 w-5" />
             {unreadCount > 0 ? (
-              <span className="absolute top-1 right-1 min-w-[14px] h-3.5 px-1 bg-firma text-firma-foreground text-[9px] font-bold rounded-full border border-white flex items-center justify-center leading-none">
+              <span className="absolute top-1 right-1 min-w-[14px] h-3.5 px-1 bg-[#EA580C] text-white text-[9px] font-bold rounded-full border border-white flex items-center justify-center leading-none">
                 {unreadCount}
               </span>
             ) : (
-              <span className="absolute top-1 right-1 h-2 w-2 bg-firma rounded-full border border-white" />
+              <span className="absolute top-1 right-1 h-2 w-2 bg-[#EA580C] rounded-full border border-white" />
             )}
           </button>
           </Tip>
