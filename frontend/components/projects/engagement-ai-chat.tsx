@@ -1,13 +1,16 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { Send, Loader2, Sparkles, Copy, Check, RotateCcw, History, X } from 'lucide-react'
+import { Send, Loader2, Sparkles, Copy, Check, RotateCcw, History, X, ThumbsUp, ThumbsDown, ClipboardList } from 'lucide-react'
 import { ASSISTANT } from '@/lib/ai/assistant'
 import { Brio } from '@/components/ui/brio'
+import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import { fetchWithTimeout, AI_TIMEOUT_MS, AiTimeoutError } from '@/lib/ai/fetch-timeout'
 import { StreamingText } from '@/components/ui/streaming-text'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { getChatHistory, recordChatQuestion, clearChatHistory, type ChatHistoryEntry } from '@/lib/ai/chat-history'
+import { FEEDBACK_REASONS, type FeedbackReason } from '@/lib/ai/feedback-reasons'
+import { buildChatTranscript } from '@/lib/ai/chat-transcript'
 import { buildChatSuggestions } from '@/lib/ai/chat-suggestions'
 import { isObviouslyOutOfScope, OUT_OF_SCOPE_REPLY, parseChatReply } from '@/lib/ai/engagement-chat'
 import type { EngagementInsightsResponse } from '@/lib/insights/engagement-insights'
@@ -15,15 +18,157 @@ import type { EngagementInsightsResponse } from '@/lib/insights/engagement-insig
 interface Message {
     role: 'user' | 'assistant'
     content: string
+    /** When the turn was created, for the relative timestamp in the action bar. */
+    at: number
+}
+
+/**
+ * Three lines at the composer's 1.5rem line-height. Past this it scrolls rather than growing, so a
+ * pasted paragraph cannot push the Action Center off the page.
+ */
+const MAX_COMPOSER_HEIGHT_PX = 72
+
+/** A rating already given on an answer. `null` means not yet rated. */
+type Rating = { helpful: boolean } | null
+
+/**
+ * Icon-only actions under a settled answer: copy, retry, and a thumbs rating.
+ *
+ * Labels were dropped because four actions with text crowded a narrow column and competed with the
+ * answer for attention. Each icon carries the shared Radix tooltip and an `aria-label`, so the
+ * meaning is available on hover and to a screen reader without taking horizontal space.
+ */
+function AnswerActions({
+    at, copied, rating, disabled, onCopy, onRetry, onRate,
+}: {
+    at: number
+    copied: boolean
+    rating: Rating
+    disabled: boolean
+    onCopy: () => void
+    onRetry: () => void
+    onRate: (helpful: boolean, reason?: FeedbackReason) => void
+}) {
+    const [reasonOpen, setReasonOpen] = useState(false)
+
+    const iconButton =
+        'inline-flex h-6 w-6 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:opacity-40'
+
+    return (
+        <div className="mt-1.5 border-t border-gray-200/70 pt-1">
+            <TooltipProvider delayDuration={150}>
+                <div className="flex items-center gap-0.5">
+                    {/* Relative time, with the absolute timestamp in its own tooltip. Answers are
+                        regenerated against live data, so how old one is tells the reader whether
+                        its figures still stand. */}
+                    <RelativeDateTime
+                        date={new Date(at)}
+                        className="mr-1.5"
+                        textClassName="text-[10px] text-gray-400"
+                        iconClassName="hidden"
+                    />
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <button type="button" onClick={onCopy} className={iconButton} aria-label="Copy answer">
+                                {copied ? <Check className="h-3.5 w-3.5 text-primary" /> : <Copy className="h-3.5 w-3.5" />}
+                            </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top">{copied ? 'Copied' : 'Copy'}</TooltipContent>
+                    </Tooltip>
+
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <button type="button" onClick={onRetry} disabled={disabled} className={iconButton} aria-label="Ask again">
+                                <RotateCcw className="h-3.5 w-3.5" />
+                            </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top">Ask again</TooltipContent>
+                    </Tooltip>
+
+                    {/* A rating is final once given: re-rating the same answer would double-count it
+                        in the efficacy report, and the user has already said what they think. */}
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <button
+                                type="button"
+                                onClick={() => { if (!rating) onRate(true) }}
+                                disabled={rating !== null}
+                                aria-label="Good response"
+                                aria-pressed={rating?.helpful === true}
+                                className={`${iconButton} ${rating?.helpful === true ? 'text-primary' : ''} disabled:opacity-100`}
+                            >
+                                <ThumbsUp className="h-3.5 w-3.5" />
+                            </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top">
+                            {rating?.helpful === true ? 'Marked helpful' : 'Good response'}
+                        </TooltipContent>
+                    </Tooltip>
+
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <button
+                                type="button"
+                                onClick={() => { if (!rating) setReasonOpen((o) => !o) }}
+                                disabled={rating !== null}
+                                aria-label="Bad response"
+                                aria-pressed={rating?.helpful === false}
+                                className={`${iconButton} ${rating?.helpful === false ? 'text-amber-600' : ''} disabled:opacity-100`}
+                            >
+                                <ThumbsDown className="h-3.5 w-3.5" />
+                            </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top">
+                            {rating?.helpful === false ? 'Marked unhelpful' : 'Bad response'}
+                        </TooltipContent>
+                    </Tooltip>
+                </div>
+            </TooltipProvider>
+
+            {/* Asked only on a thumbs-down, and skippable. A rating with no reason is still useful;
+                refusing to record one until the user categorises it would lose most of them. */}
+            {reasonOpen && !rating && (
+                <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                    <span className="text-[10px] text-gray-500">What went wrong?</span>
+                    {FEEDBACK_REASONS.map((r) => (
+                        <button
+                            key={r.value}
+                            type="button"
+                            onClick={() => { onRate(false, r.value); setReasonOpen(false) }}
+                            className="rounded-full border border-gray-200 px-2 py-0.5 text-[10px] text-gray-600 transition-colors hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800"
+                        >
+                            {r.label}
+                        </button>
+                    ))}
+                    <button
+                        type="button"
+                        onClick={() => { onRate(false); setReasonOpen(false) }}
+                        className="px-1 text-[10px] text-gray-400 underline transition-colors hover:text-gray-700"
+                    >
+                        Skip
+                    </button>
+                </div>
+            )}
+
+            {rating?.helpful === false && (
+                <p className="mt-1 text-[10px] text-gray-400">Thanks — this helps us improve <Brio />.</p>
+            )}
+        </div>
+    )
 }
 
 export function EngagementAiChat({
     projectId,
     data,
+    engagementName,
+    clientName,
 }: {
     projectId: string
     /** Insights payload the page already holds; drives data-aware suggestions. */
     data?: EngagementInsightsResponse | null
+    /** Titles the exported transcript. Optional — it falls back to "this engagement". */
+    engagementName?: string | null
+    clientName?: string | null
 }) {
     const [messages, setMessages] = useState<Message[]>([])
     const [input, setInput] = useState('')
@@ -38,11 +183,28 @@ export function EngagementAiChat({
     const [history, setHistory] = useState<ChatHistoryEntry[]>([])
     const [historyOpen, setHistoryOpen] = useState(false)
     const [copiedIndex, setCopiedIndex] = useState<number | null>(null)
+    const [transcriptCopied, setTranscriptCopied] = useState(false)
+    // Ratings by message index. Session-only: the thumbs are an affordance on an answer still on
+    // screen, and the durable record lives server-side in platform_ai_feedback.
+    const [ratings, setRatings] = useState<Record<number, { helpful: boolean }>>({})
 
     useEffect(() => { setHistory(getChatHistory(projectId)) }, [projectId])
 
+    // Grow the composer with its content, up to three lines.
+    //
+    // Driven from `input` rather than from the keystroke, so it is also correct when the value
+    // changes some other way — picking a suggestion, clearing after send. Height is reset to `auto`
+    // first because scrollHeight never shrinks below the element's current height, so without the
+    // reset the box would grow and never come back down.
+    useEffect(() => {
+        const el = inputRef.current
+        if (!el) return
+        el.style.height = 'auto'
+        el.style.height = `${Math.min(el.scrollHeight, MAX_COMPOSER_HEIGHT_PX)}px`
+    }, [input])
+
     const scrollRef = useRef<HTMLDivElement>(null)
-    const inputRef = useRef<HTMLInputElement>(null)
+    const inputRef = useRef<HTMLTextAreaElement>(null)
 
     // Two sources, in priority order.
     //
@@ -83,8 +245,8 @@ export function EngagementAiChat({
         if (isObviouslyOutOfScope(trimmed)) {
             setMessages((prev) => [
                 ...prev,
-                { role: 'user', content: trimmed },
-                { role: 'assistant', content: OUT_OF_SCOPE_REPLY },
+                { role: 'user', content: trimmed, at: Date.now() },
+                { role: 'assistant', content: OUT_OF_SCOPE_REPLY, at: Date.now() },
             ])
             inputRef.current?.focus()
             return
@@ -92,7 +254,11 @@ export function EngagementAiChat({
 
         // History excludes the message being sent; the route appends it as the final user turn.
         const history = messages.slice(-12)
-        setMessages((prev) => [...prev, { role: 'user', content: trimmed }, { role: 'assistant', content: '' }])
+        setMessages((prev) => [
+            ...prev,
+            { role: 'user', content: trimmed, at: Date.now() },
+            { role: 'assistant', content: '', at: Date.now() },
+        ])
         setStreaming(true)
 
         try {
@@ -119,7 +285,7 @@ export function EngagementAiChat({
                 setMessages((prev) => {
                     const next = [...prev]
                     next[next.length - 1] = {
-                        role: 'assistant',
+                        ...next[next.length - 1],
                         content: next[next.length - 1].content + chunk,
                     }
                     return next
@@ -156,6 +322,54 @@ export function EngagementAiChat({
         void ask(question.content)
     }, [messages, streaming, ask])
 
+    /**
+     * Records a thumbs rating on an answer.
+     *
+     * Optimistic: the UI marks it immediately and the request is fire-and-forget. A failed write
+     * costs one diagnostic data point, whereas an error toast would punish someone for trying to
+     * help — the same trade `recordAiFeedback` makes server-side by never throwing.
+     *
+     * The question is sent so a negative rating is actionable; without it a thumbs-down says only
+     * that something was wrong, on an answer nobody can see. The answer itself is never sent.
+     */
+    const rate = useCallback(async (assistantIndex: number, helpful: boolean, reason?: FeedbackReason) => {
+        setRatings((prev) => ({ ...prev, [assistantIndex]: { helpful } }))
+        const question = messages[assistantIndex - 1]?.role === 'user'
+            ? messages[assistantIndex - 1].content
+            : undefined
+        try {
+            await fetch(`/api/projects/${projectId}/ai-feedback`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ helpful, reason, question }),
+            })
+        } catch {
+            // Deliberately silent — see above.
+        }
+    }, [projectId, messages])
+
+    /**
+     * Copies the whole conversation as Markdown.
+     *
+     * Copy rather than download: a Brio conversation almost always ends up pasted into an
+     * engagement note, a client update, or a message to a colleague. A .md file in ~/Downloads is a
+     * worse clipboard.
+     */
+    const copyTranscript = useCallback(async () => {
+        const text = buildChatTranscript(messages, {
+            engagementName: engagementName ?? undefined,
+            clientName: clientName ?? undefined,
+        })
+        if (!text) return
+        try {
+            await navigator.clipboard.writeText(text)
+            setTranscriptCopied(true)
+            setTimeout(() => setTranscriptCopied(false), 1500)
+        } catch {
+            // Clipboard blocked (permissions, insecure context). Nothing useful to say.
+        }
+    }, [messages, engagementName, clientName])
+
     /** Copies the visible answer — parsed, so the follow-up sentinel never lands on the clipboard. */
     const copyAnswer = useCallback(async (index: number, content: string) => {
         try {
@@ -187,8 +401,11 @@ export function EngagementAiChat({
     // The primary accent and tinted header are deliberate: this panel sits in a column of
     // uniformly white cards, where it read as one more widget rather than the one thing on the
     // page that answers questions.
+    //
+    // `relative` on the card anchors the history overlay; `overflow-hidden` then keeps that overlay
+    // inside the card, which is what we want — it should never spill over the Action Center below.
     return (
-        <div className="bg-white border border-primary/25 rounded shadow-sm flex flex-col overflow-hidden">
+        <div className="relative bg-white border border-primary/25 rounded shadow-sm flex flex-col overflow-hidden">
             <div className="flex items-center gap-2 border-b border-primary/15 bg-primary/5 px-4 py-3">
                 <Sparkles className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
                 <span className="text-sm font-semibold text-gray-900">Ask</span>
@@ -198,24 +415,69 @@ export function EngagementAiChat({
                 </span>
                 {/* Only offered once there is something to recall. Questions survive reload;
                     answers deliberately do not — see lib/ai/chat-history.ts. */}
+                {/* Only once there is a conversation to export, and only on this panel — which
+                    internal roles alone can see, so a transcript cannot reach an external
+                    collaborator who never had access to Brio in the first place. */}
+                {messages.some((m) => m.content.trim()) && (
+                    <TooltipProvider delayDuration={150}>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <button
+                                    type="button"
+                                    onClick={() => void copyTranscript()}
+                                    aria-label="Copy conversation"
+                                    className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-primary/70 transition-colors hover:bg-primary/10"
+                                >
+                                    {transcriptCopied
+                                        ? <Check className="h-3 w-3" />
+                                        : <ClipboardList className="h-3 w-3" />}
+                                </button>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom" className="max-w-xs">
+                                {transcriptCopied
+                                    ? 'Conversation copied'
+                                    : 'Copy this conversation as Markdown, ready to paste into a note or update'}
+                            </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+                )}
+
                 {history.length > 0 && (
-                    <button
-                        type="button"
-                        onClick={() => setHistoryOpen((o) => !o)}
-                        aria-expanded={historyOpen}
-                        aria-label={historyOpen ? 'Hide recent questions' : 'Show recent questions'}
-                        className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] transition-colors ${
-                            historyOpen ? 'bg-primary/15 text-primary' : 'text-primary/70 hover:bg-primary/10'
-                        }`}
-                    >
-                        {historyOpen ? <X className="h-3 w-3" /> : <History className="h-3 w-3" />}
-                        {history.length}
-                    </button>
+                    // The count alone did not say what it counted — a clock and a number could as
+                    // easily have meant elapsed time or unread items.
+                    <TooltipProvider delayDuration={150}>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <button
+                                    type="button"
+                                    onClick={() => setHistoryOpen((o) => !o)}
+                                    aria-expanded={historyOpen}
+                                    aria-label={historyOpen
+                                        ? 'Hide recent questions'
+                                        : `Show ${history.length} recent question${history.length === 1 ? '' : 's'}`}
+                                    className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] transition-colors ${
+                                        historyOpen ? 'bg-primary/15 text-primary' : 'text-primary/70 hover:bg-primary/10'
+                                    }`}
+                                >
+                                    {historyOpen ? <X className="h-3 w-3" /> : <History className="h-3 w-3" />}
+                                    {history.length}
+                                </button>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom" className="max-w-xs">
+                                {historyOpen
+                                    ? 'Hide recent questions'
+                                    : `${history.length} question${history.length === 1 ? '' : 's'} you have asked here before. Answers are not saved — picking one asks it again against current data.`}
+                            </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
                 )}
             </div>
 
+            {/* Overlays the conversation rather than displacing it. In normal flow this pushed the
+                thread down by its own height, so opening history scrolled the answer you were
+                reading off screen — and closing it jumped you back. */}
             {historyOpen && (
-                <div className="border-b border-gray-100 bg-gray-50/70 px-4 py-2">
+                <div className="absolute inset-x-0 top-[2.75rem] z-20 border-b border-gray-200 bg-white px-4 py-2 shadow-md">
                     <div className="mb-1.5 flex items-center justify-between">
                         <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">
                             Recent questions
@@ -228,7 +490,10 @@ export function EngagementAiChat({
                             Clear
                         </button>
                     </div>
-                    <div className="flex flex-col gap-0.5">
+                    {/* Scrolls past about five entries rather than growing. The list is capped at
+                        ten, and letting all ten render pushed the conversation out of the panel —
+                        the history is a lookup, not the main view. */}
+                    <div className="hover-scrollbar flex max-h-[9rem] flex-col gap-0.5 overflow-y-auto">
                         {history.map((h) => (
                             <button
                                 key={`${h.question}-${h.askedAt}`}
@@ -247,7 +512,7 @@ export function EngagementAiChat({
                 </div>
             )}
 
-            <div ref={scrollRef} className="px-4 py-4 space-y-3 max-h-[480px] min-h-[180px] overflow-y-auto">
+            <div ref={scrollRef} className="hover-scrollbar px-4 py-4 space-y-3 max-h-[480px] min-h-[180px] overflow-y-auto">
                 {messages.length === 0 && (
                     <p className="text-sm text-gray-500">
                         <Brio /> answers only from this engagement&apos;s data, and can&apos;t change anything.
@@ -259,7 +524,12 @@ export function EngagementAiChat({
                         <div
                             className={
                                 m.role === 'user'
-                                    ? 'bg-gray-900 text-white text-sm rounded-lg rounded-br-sm px-3 py-2 max-w-[85%]'
+                                    // Grey bubble with black text rather than the former near-black
+                                    // on white: the solid dark block pulled the eye to the question
+                                    // instead of the answer. Kept light enough that black text
+                                    // clears the 4.5:1 contrast minimum — a genuinely dark grey
+                                    // would sit near 1.6:1 and be unreadable.
+                                    ? 'bg-gray-200 text-gray-900 text-sm rounded-lg rounded-br-sm px-3 py-2 max-w-[85%]'
                                     : 'bg-gray-50 border border-gray-100 text-gray-800 text-sm rounded-lg rounded-bl-sm px-3 py-2 max-w-[85%] whitespace-pre-line leading-relaxed'
                             }
                         >
@@ -284,28 +554,15 @@ export function EngagementAiChat({
                                 arriving, so copying it would capture a fragment and retrying would
                                 race the in-flight request. */}
                             {m.role === 'assistant' && m.content && !(streaming && i === messages.length - 1) && (
-                                <div className="mt-1.5 flex items-center gap-1 border-t border-gray-200/70 pt-1.5">
-                                    <button
-                                        type="button"
-                                        onClick={() => void copyAnswer(i, m.content)}
-                                        className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
-                                        aria-label="Copy answer"
-                                    >
-                                        {copiedIndex === i
-                                            ? <><Check className="h-3 w-3" />Copied</>
-                                            : <><Copy className="h-3 w-3" />Copy</>}
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => retry(i)}
-                                        disabled={streaming}
-                                        className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:opacity-40"
-                                        aria-label="Ask again"
-                                    >
-                                        <RotateCcw className="h-3 w-3" />
-                                        Retry
-                                    </button>
-                                </div>
+                                <AnswerActions
+                                    at={m.at}
+                                    copied={copiedIndex === i}
+                                    rating={ratings[i]}
+                                    disabled={streaming}
+                                    onCopy={() => void copyAnswer(i, m.content)}
+                                    onRetry={() => retry(i)}
+                                    onRate={(helpful, reason) => void rate(i, helpful, reason)}
+                                />
                             )}
                         </div>
                     </div>
@@ -348,25 +605,49 @@ export function EngagementAiChat({
 
             <form
                 onSubmit={(e) => { e.preventDefault(); ask(input) }}
-                className="flex items-center gap-2 px-4 py-3 border-t border-gray-100"
+                // A tinted strip behind the composer separates it from the thread without a rule.
+                // The border alone was ambiguous where a message bubble ended near it.
+                className="border-t border-gray-100 bg-gray-50/60 px-3 pb-3 pt-2.5"
             >
-                <input
+                {/* The composer is its own surface — a bordered, rounded box inset from the card —
+                    rather than a hairline rule with text beneath it. At the bottom of a long thread
+                    a divider alone did not read as somewhere to type. `focus-within` moves the ring
+                    to this wrapper so the whole box lights up, not just the textarea inside it. */}
+                <div className="flex items-end gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm transition-colors focus-within:border-primary/40 focus-within:ring-1 focus-within:ring-primary/20">
+                {/* A textarea, not an input: a long question scrolled sideways in a single line, so
+                    the user could not read back what they had typed. It grows to three rows and
+                    scrolls beyond that, which keeps the panel from pushing the Action Center down
+                    the page. Enter still sends; Shift+Enter starts a new line. */}
+                <textarea
                     ref={inputRef}
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault()
+                            void ask(input)
+                        }
+                    }}
                     placeholder={`Ask ${ASSISTANT.name} about this engagement…`}
                     disabled={streaming}
                     maxLength={1000}
-                    className="flex-1 text-sm bg-transparent outline-none placeholder:text-gray-400 disabled:opacity-50"
+                    rows={1}
+                    // maxHeight comes from the same constant the grow effect clamps to; as a
+                    // Tailwind class it would be a second number to keep in step.
+                    style={{ maxHeight: MAX_COMPOSER_HEIGHT_PX }}
+                    className="hover-scrollbar flex-1 resize-none overflow-y-auto bg-transparent text-sm leading-6 outline-none placeholder:text-gray-400 disabled:opacity-50"
                 />
-                <button
-                    type="submit"
-                    disabled={streaming || !input.trim()}
-                    className="text-gray-400 hover:text-gray-700 disabled:opacity-30 transition-colors shrink-0"
-                    aria-label="Send question"
-                >
-                    {streaming ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                </button>
+                    {/* Filled once there is something to send, so the affordance is obvious rather
+                        than a grey glyph that looks permanently disabled. */}
+                    <button
+                        type="submit"
+                        disabled={streaming || !input.trim()}
+                        className="mb-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary text-white transition-colors hover:brightness-105 disabled:bg-gray-100 disabled:text-gray-400"
+                        aria-label="Send question"
+                    >
+                        {streaming ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                    </button>
+                </div>
             </form>
         </div>
     )

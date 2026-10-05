@@ -389,6 +389,51 @@
   background: #6b7280;
 }
 
+/* Scrollbar that stays out of the way until the pointer is over the area.
+   Used where a persistent bar competes with the content for attention — the AI chat thread is a
+   narrow column, and a full-height grey bar beside a few paragraphs reads as chrome.
+
+   The track keeps its width at all times: hiding the bar entirely would reflow the text by 8px on
+   every hover. Only the thumb's colour changes, so nothing moves. */
+.hover-scrollbar {
+  scrollbar-width: thin;
+  /* Firefox has no hover hook for scrollbars, so the thumb is simply kept faint there. */
+  scrollbar-color: rgba(156, 163, 175, 0.35) transparent;
+}
+
+.hover-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.hover-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.hover-scrollbar::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 4px;
+  /* Inset the thumb from the track edge so it reads as a slim bar rather than a full-width block. */
+  border: 2px solid transparent;
+  background-clip: content-box;
+  transition: background-color 150ms ease;
+}
+
+.hover-scrollbar:hover::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  background-clip: content-box;
+}
+
+.hover-scrollbar:hover::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+  background-clip: content-box;
+}
+
+/* Keyboard users never trigger :hover, so the bar also appears while the area has focus within. */
+.hover-scrollbar:focus-within::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  background-clip: content-box;
+}
+
 /* Document Action Menu Modal - Ensure it's at document level */
 .document-action-modal {
   position: fixed !important;
@@ -764,33 +809,48 @@
    transitions.dev's "streaming-text". Only compositor-friendly properties (opacity, filter,
    transform) so long responses stay smooth. Tokens are exposed as CSS variables for tuning. */
 .t-stream-word {
-  --t-stream-duration: 260ms;
-  --t-stream-blur: 5px;
-  --t-stream-distance: 3px;
-  --t-stream-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
-  display: inline-block;
-  white-space: pre-wrap;
+  --t-stream-duration: 420ms;
+  --t-stream-blur: 4px;
+  /* Decelerating ease: fast to legible, slow to settle. The previous curve finished abruptly,
+     which read as a flicker when words landed a few milliseconds apart. */
+  --t-stream-ease: cubic-bezier(0.16, 1, 0.3, 1);
   animation: t-stream-in var(--t-stream-duration) var(--t-stream-ease) both;
-  will-change: opacity, filter, transform;
+  /* Deliberately NOT display:inline-block.
+     That took each word out of normal inline flow, so a word could no longer break across a line
+     and every one became its own layout box. In a narrow column — which is where this renders —
+     the result was visible reflow jitter as the paragraph rewrapped on each new token. Opacity and
+     filter both animate fine on an inline box, so nothing is lost by leaving it. */
+
+  /* No `will-change`: it was set on every word and never cleared, so a long answer accumulated
+     hundreds of permanently promoted compositor layers. Opacity and filter are composited anyway;
+     the hint bought nothing and cost memory that grew with the answer. */
 }
 
 @keyframes t-stream-in {
+  /* Blur and fade only — no translate. `transform` has no effect on a non-replaced inline box, so
+     a rise would have to come back at the cost of inline-block and the reflow it caused. */
   from {
     opacity: 0;
     filter: blur(var(--t-stream-blur));
-    transform: translateY(var(--t-stream-distance));
+  }
+  /* Clear the blur early. Blur is the expensive part and the least useful at the end — letting it
+     finish with the fade made text sit faintly soft for the whole duration. */
+  60% {
+    filter: blur(0);
   }
   to {
     opacity: 1;
     filter: blur(0);
-    transform: none;
   }
 }
 
 /* Respect reduced-motion: keep the reveal, drop the movement and blur. */
 @media (prefers-reduced-motion: reduce) {
   .t-stream-word {
-    animation-duration: 1ms;
-    animation-name: none;
+    /* `animation: both` would otherwise hold the from-state — invisible and blurred — forever once
+       the animation is removed. Reset the properties explicitly so the text simply appears. */
+    animation: none;
+    opacity: 1;
+    filter: none;
   }
 }

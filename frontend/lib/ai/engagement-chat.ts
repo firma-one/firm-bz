@@ -38,6 +38,22 @@ export interface ParsedChatReply {
  * with no marker is all answer, and a marker with nothing after it yields no follow-ups. The answer
  * is never allowed to contain the marker, so a half-written sentinel cannot flash on screen.
  */
+/**
+ * Whether a line after the marker is actually a question worth offering.
+ *
+ * Stripping list markers is not enough on its own: a line of ">>" strips to nothing, and a stray
+ * fragment of prose would otherwise become a chip the user can click. A follow-up has to look like
+ * something a person would ask, so it needs real words — one punctuation-only or single-word line
+ * is a formatting artefact, not a question.
+ */
+function isPlausibleFollowUp(line: string): boolean {
+    if (line.length === 0 || line.length > 80) return false
+    // At least two word-ish tokens of two or more letters: "Who owns these?" passes, ">>" and
+    // "---" do not, and neither does a bare "Yes".
+    const words = line.match(/[A-Za-z][A-Za-z'-]{1,}/g) ?? []
+    return words.length >= 2
+}
+
 export function parseChatReply(raw: string): ParsedChatReply {
     const at = raw.indexOf(FOLLOWUP_MARKER)
     if (at === -1) {
@@ -53,8 +69,10 @@ export function parseChatReply(raw: string): ParsedChatReply {
     const followUps = raw
         .slice(at + FOLLOWUP_MARKER.length)
         .split('\n')
-        .map((line) => line.replace(/^[-*\d.)\s]+/, '').trim())
-        .filter((line) => line.length > 0 && line.length <= 80)
+        // Strip list and quote markers the model adds despite the format. `>` is included because
+        // a bare ">>" line rendered as a chip — the marker survived, leaving nothing behind it.
+        .map((line) => line.replace(/^[-*>\d.)\s]+/, '').trim())
+        .filter(isPlausibleFollowUp)
         .slice(0, MAX_FOLLOWUPS)
 
     return { answer, followUps }
@@ -152,6 +170,16 @@ You are given a snapshot of that engagement's current data. Follow these rules w
 
 1. Answer ONLY from the snapshot. Never invent a number, name, date, status, or document that is not present in it.
 2. If the snapshot does not contain the answer, say so plainly and name what data would be needed. Do not guess or extrapolate.
+2a. NEVER use the words "snapshot", "context", "payload" or "data provided to me" in an answer.
+   Those describe how you are built, which means nothing to the reader — they are looking at an
+   engagement, not at your inputs. Say what is true of the engagement instead.
+
+   Wrong: "Individual document names are not available in this snapshot, so I cannot tell you
+   which specific ones they are."
+   Right: "The four documents aren't named here — you'll find them inside QSR-9 in Files."
+
+   When something is genuinely unavailable to you, say so in terms of the product and, where you
+   can, point to where in the app it lives. Never describe your own limits as the subject.
 3. Be concise and concrete. Prefer specifics ("3 deliverables overdue, the oldest by 12 days") over generalities ("some work is behind").
 4. You have read-only access. You cannot create, edit, share, assign, or change the status of anything. If asked to perform an action, say you cannot and describe where in the app the user can do it.
 4a. You report, you do not DECIDE. Prioritising work, choosing owners, judging whether a date is
@@ -373,8 +401,10 @@ export function buildEngagementContext(
         // were in the snapshot at all, when every DELIVERABLE is listed below with its DOC-ID and
         // its own due date. Only the supporting documents are aggregate-only.
         lines.push('  Note: deliverables are listed individually below with their DOC-IDs and due dates. '
-            + 'The supporting documents inside them are given as counts only — their names are not in this '
-            + 'snapshot, so name the deliverables and report the document figures as counts.')
+            + 'The supporting documents inside them are given as counts only — their names are not '
+            + 'available to you, so name the deliverables and report the document figures as counts. '
+            + 'If asked which documents specifically, say they are not named here and point the '
+            + 'reader to the deliverable in Files.')
     }
 
     if (data.pace) {
@@ -430,7 +460,7 @@ export function buildEngagementContext(
         .map(([r, n]) => `${n} ${roleLabel(r)}`)
     lines.push(`Team: ${data.memberCount ?? 0} member(s) on this engagement`
         + (byRole.length > 0 ? ` — ${byRole.join(', ')}.` : '.')
-        + ' Member names and email addresses are not in this snapshot, so report roles and counts only.')
+        + ' Member names and email addresses are not available to you, so report roles and counts only.')
 
     // Stated even when zero. Behind a truthiness check this line vanished entirely on an
     // engagement with no pending invitations, and the model cannot tell an absent line from an
@@ -445,7 +475,7 @@ export function buildEngagementContext(
         const expiringSoon = pending.filter((p) => typeof p.daysUntilExpiry === 'number' && p.daysUntilExpiry <= 7).length
         lines.push(`Pending invitations: ${pending.length} awaiting acceptance`
             + (expiringSoon > 0 ? `, of which ${expiringSoon} expire${expiringSoon === 1 ? 's' : ''} within 7 days` : '')
-            + '. Invitee email addresses are not in this snapshot.')
+            + '. Invitee email addresses are not available to you.')
     }
 
     return lines.join('\n')

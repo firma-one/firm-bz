@@ -161,7 +161,7 @@ describe('buildEngagementContext — date awareness', () => {
     it('tells the model which level is named and which is counted', () => {
         const ctx = buildEngagementContext(base('2026-10-01'), {})
         expect(ctx).toMatch(/deliverables are listed individually below with their DOC-IDs/i)
-        expect(ctx).toMatch(/names are not in this snapshot/i)
+        expect(ctx).toMatch(/their names are not available to you/i)
     })
 })
 
@@ -231,7 +231,7 @@ describe('member and invitation context', () => {
             pendingInvitations: [{ email: 'secret.person@example.com', expireAt: '2026-10-08', daysUntilExpiry: 3 }],
         }), {})
         expect(ctx).not.toContain('secret.person@example.com')
-        expect(ctx).toMatch(/email addresses are not in this snapshot/i)
+        expect(ctx).toMatch(/email addresses are not available to you/i)
     })
 
     it('renders roles as product labels, not enum keys', () => {
@@ -257,12 +257,13 @@ describe('parseChatReply', () => {
     })
 
     it('strips bullets and numbering the model may add despite the format', () => {
-        const r = parseChatReply(`Done.\n${FOLLOWUP_MARKER}\n- First?\n2. Second?\n* Third?`)
-        expect(r.followUps).toEqual(['First?', 'Second?', 'Third?'])
+        const r = parseChatReply(`Done.\n${FOLLOWUP_MARKER}\n- Who owns it?\n2. What else is open?\n* When is it due?`)
+        expect(r.followUps).toEqual(['Who owns it?', 'What else is open?', 'When is it due?'])
     })
 
     it('caps the number of follow-ups', () => {
-        const many = Array.from({ length: 8 }, (_, i) => `Question ${i}?`).join('\n')
+        // Two words minimum — a single-word line is treated as a formatting artefact.
+        const many = Array.from({ length: 8 }, (_, i) => `Which document is number ${i}?`).join('\n')
         expect(parseChatReply(`A.\n${FOLLOWUP_MARKER}\n${many}`).followUps).toHaveLength(MAX_FOLLOWUPS)
     })
 
@@ -379,5 +380,73 @@ describe('follow-up suggestions must be answerable', () => {
     it('names the data the snapshot does not carry', () => {
         expect(CHAT_SYSTEM_PROMPT).toMatch(/does not carry[\s\S]*individual document names/i)
         expect(CHAT_SYSTEM_PROMPT).toMatch(/comment text, file contents/i)
+    })
+})
+
+describe('no internal vocabulary reaches the user', () => {
+    /**
+     * Brio told a user "Individual document names are not available in this snapshot". "Snapshot"
+     * is our word for the context payload — to the reader it means nothing, or implies some artefact
+     * they could go and open.
+     *
+     * The cause was not the prompt alone: the CONTEXT itself said "not in this snapshot", and the
+     * model copied the phrasing verbatim. Both halves are fixed, and both are guarded here.
+     */
+    it('never uses the word in the context the model reads', () => {
+        const ctx = buildEngagementContext({
+            kickoffDate: '2026-10-01',
+            planningHygiene: { deliverableTotal: 1, deliverableWithDueDate: 1, docTotal: 4, docWithDueDate: 0, docWithAssignee: 0 },
+            memberCount: 3,
+            membersByRole: { firm_admin: 1 },
+            pendingInvitations: [{ email: 'a@b.com', expireAt: '2026-10-20', daysUntilExpiry: 15 }],
+        } as unknown as Parameters<typeof buildEngagementContext>[0], {})
+
+        expect(ctx).not.toMatch(/snapshot/i)
+    })
+
+    it('forbids the vocabulary in answers, with a worked example', () => {
+        expect(CHAT_SYSTEM_PROMPT).toMatch(/NEVER use the words "snapshot", "context", "payload"/)
+        expect(CHAT_SYSTEM_PROMPT).toMatch(/Never describe your own limits as the subject/)
+    })
+
+    /** The summary is shown to clients, so the same leak there would be worse. */
+    it('forbids it in the client-facing summary too', () => {
+        expect(SUMMARY_SYSTEM_PROMPT).toMatch(/NEVER write the words "snapshot"/)
+    })
+})
+
+describe('parseChatReply — malformed follow-up lines', () => {
+    /**
+     * Reported as a bug: a chip reading ">>" appeared under an answer. The parser stripped `-`, `*`
+     * and digits but not `>`, so a stray quote marker survived as a question with nothing behind it.
+     */
+    it('drops a bare ">>" line', () => {
+        const r = parseChatReply(
+            `Answer.\n${FOLLOWUP_MARKER}\nWhat's the status of scope confirmation?\n>>`,
+        )
+        expect(r.followUps).toEqual(["What's the status of scope confirmation?"])
+    })
+
+    it('strips quote markers without losing the question behind them', () => {
+        const r = parseChatReply(`A.\n${FOLLOWUP_MARKER}\n> Who owns these documents?\n>> What else is unplanned?`)
+        expect(r.followUps).toEqual(['Who owns these documents?', 'What else is unplanned?'])
+    })
+
+    it('rejects punctuation-only lines', () => {
+        for (const junk of ['---', '***', '>>>', '...', '|']) {
+            const r = parseChatReply(`A.\n${FOLLOWUP_MARKER}\n${junk}\nWho owns these?`)
+            expect(r.followUps, junk).toEqual(['Who owns these?'])
+        }
+    })
+
+    /** A single word is a formatting artefact, not something a person would click to ask. */
+    it('rejects single-word lines', () => {
+        const r = parseChatReply(`A.\n${FOLLOWUP_MARKER}\nYes\nOverdue\nWho owns these documents?`)
+        expect(r.followUps).toEqual(['Who owns these documents?'])
+    })
+
+    it('still accepts ordinary questions', () => {
+        const r = parseChatReply(`A.\n${FOLLOWUP_MARKER}\nWho owns these?\nWhat else is unplanned?`)
+        expect(r.followUps).toEqual(['Who owns these?', 'What else is unplanned?'])
     })
 })
