@@ -191,14 +191,22 @@ export function FloatingAiChat({
     useEffect(() => setMounted(true), [])
 
     // Re-measured on resize: a scrollbar appears and disappears as content changes, and the panel
-    // should stay flush with the cards either way.
+    // should stay flush with the cards either way. `viewportWidth` excludes any window scrollbar,
+    // which is the frame the docked position must be computed in.
     const [rightInset, setRightInset] = useState(0)
+    const [viewportWidth, setViewportWidth] = useState(0)
     useEffect(() => {
-        const measure = () => setRightInset(rightContentInset())
+        const measure = () => {
+            setRightInset(rightContentInset())
+            setViewportWidth(document.documentElement.clientWidth)
+        }
         measure()
         window.addEventListener('resize', measure)
         return () => window.removeEventListener('resize', measure)
     }, [])
+
+    /** Panel width in pixels, for the docked-position arithmetic. */
+    const panelPx = PANEL_WIDTH_REM * 16
 
     /**
      * The panel's left offset in pixels while a drag is in progress, null when idle.
@@ -236,8 +244,13 @@ export function FloatingAiChat({
         const grabOffset = rect ? event.clientX - rect.left : 0
         const panelWidth = rect?.width ?? 0
 
+        // Same frame as the docked position above: clientWidth excludes the window scrollbar, so a
+        // dragged panel and a docked one land on the same pixel.
         const clamp = (x: number) =>
-            Math.max(GUTTER, Math.min(x, window.innerWidth - panelWidth - GUTTER - rightContentInset()))
+            Math.max(GUTTER, Math.min(
+                x,
+                document.documentElement.clientWidth - panelWidth - GUTTER - rightContentInset(),
+            ))
 
         const onMove = (e: PointerEvent) => setDragLeft(clamp(e.clientX - grabOffset))
         const onUp = (e: PointerEvent) => {
@@ -292,6 +305,7 @@ export function FloatingAiChat({
                 style={{
                     transformOrigin: side === 'right' ? 'bottom right' : 'bottom left',
                     ...(side === 'right' ? { right: `${GUTTER + rightInset}px` } : { left: `${GUTTER}px` }),
+
                 }}
                 className={`fixed bottom-6 z-40 flex animate-in fade-in zoom-in-95 items-center gap-2 rounded-full border border-primary/20 bg-white py-2.5 pl-3 pr-4 shadow-lg duration-200 transition-shadow hover:shadow-xl hover:border-primary/40`}
                 aria-label="Open the engagement assistant"
@@ -325,10 +339,18 @@ export function FloatingAiChat({
             data-ai-chat-panel
             style={{
                 transformOrigin: side === 'right' ? 'bottom right' : 'bottom left',
+                // Always positioned by `left`, which is what lets the dock change animate: swapping
+                // to `right` would mean the browser had no single property to interpolate and the
+                // panel would teleport again.
+                //
+                // The docked offset is derived from documentElement.clientWidth rather than 100vw.
+                // 100vw INCLUDES the scrollbar, so a right-docked panel computed from it sat a
+                // scrollbar's width too far right — visible as the gutter changing after a drag,
+                // because the dragged position was clamped against the true content width.
                 left: dragging
                     ? `${dragLeft}px`
                     : side === 'right'
-                        ? `calc(100vw - ${PANEL_WIDTH_REM}rem - ${GUTTER + rightInset}px)`
+                        ? `${Math.max(GUTTER, viewportWidth - panelPx - GUTTER - rightInset)}px`
                         : `${GUTTER}px`,
             }}
             /* The transition is suppressed while dragging so the panel tracks the pointer exactly;
