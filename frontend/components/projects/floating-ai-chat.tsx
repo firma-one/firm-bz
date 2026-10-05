@@ -41,6 +41,8 @@ const GUTTER = 24
  * a nudge while grabbing the handle does not move the panel by accident.
  */
 const SNAP_TRAVEL_FRACTION = 0.2
+/** Exit animation duration; must match the `duration-200` on the panel. */
+const EXIT_MS = 200
 /** Collapsed state is per engagement: whether you are mid-conversation is engagement-specific. */
 const openKeyFor = (projectId: string) => `fm_ai_chat_open_${projectId}`
 
@@ -127,9 +129,23 @@ export function FloatingAiChat({
         }
     }, [open, side, panelEl])
 
+    /**
+     * True while the panel is playing its exit animation but has not unmounted yet.
+     *
+     * `animate-in` only runs on enter; on close React removed the panel immediately, so it blinked
+     * out while the launcher faded in. Holding it mounted for the duration of the animation gives
+     * the collapse the same motion as the expand.
+     */
+    const [closing, setClosing] = useState(false)
+
     const toggleOpen = useCallback(() => {
         setOpen((wasOpen) => {
             writeStored(openKeyFor(projectId), wasOpen ? '0' : '1')
+            if (wasOpen) {
+                // Keep it on screen until the exit finishes, then let the launcher take over.
+                setClosing(true)
+                window.setTimeout(() => setClosing(false), EXIT_MS)
+            }
             return !wasOpen
         })
     }, [projectId])
@@ -231,7 +247,9 @@ export function FloatingAiChat({
     // over the sidebar correctly.
     if (!mounted) return null
 
-    if (!open) {
+    // While closing, the panel is still rendered (playing its exit) and the launcher is withheld,
+    // so the two never overlap in the same corner.
+    if (!open && !closing) {
         return createPortal(
             <button
                 type="button"
@@ -288,7 +306,13 @@ export function FloatingAiChat({
                Width is a literal class, not interpolated: Tailwind extracts class names
                statically, so an interpolated `w-[...]` would never be generated. PANEL_WIDTH_REM
                must be kept in step with it. */
-            className={`fixed bottom-6 z-40 flex h-[32rem] max-h-[calc(100vh-6rem)] w-[23rem] max-w-[calc(100vw-3rem)] flex-col overflow-hidden rounded-lg border border-primary/25 bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-200 ${
+            className={`fixed bottom-6 z-40 flex h-[32rem] max-h-[calc(100vh-6rem)] w-[23rem] max-w-[calc(100vw-3rem)] flex-col overflow-hidden rounded-lg border border-primary/25 bg-white shadow-2xl duration-200 ${
+                closing
+                    // pointer-events-none so a fast click cannot land on a control in a panel that
+                    // is on its way out.
+                    ? 'animate-out fade-out zoom-out-95 fill-mode-forwards pointer-events-none'
+                    : 'animate-in fade-in zoom-in-95'
+            } ${
                 dragging ? 'cursor-grabbing select-none' : 'transition-[left] duration-200 ease-out'
             }`}
         >
