@@ -3462,10 +3462,13 @@ export function EngagementInsightsDashboard({
                 )}
             </div>
 
-            {/* Right: Action Center, with the AI chat beneath it (internal roles only) */}
+            {/* Right: the AI chat first, then the Action Center (chat is internal roles only).
+                The chat used to sit beneath the full Action Center, which put it roughly 1400px
+                down the page — present but never seen. It leads now because asking a question is
+                the fastest route to an answer the Action Center takes scrolling to find. */}
             <div className="flex flex-col gap-6 min-w-0">
+                {data?.isInternalViewer && <EngagementAiChat projectId={projectId} data={data} />}
                 <EngagementActionCenterV2 data={data} loading={loading} engagementBase={engagementBase} projectId={projectId} setRefreshTick={setRefreshTick} />
-                {data?.isInternalViewer && <EngagementAiChat projectId={projectId} />}
             </div>
 
         </div>

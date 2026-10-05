@@ -1,7 +1,7 @@
 import { createHash } from 'crypto'
 import type { EngagementInsightsResponse } from '@/lib/insights/engagement-insights'
 import { completeText } from './client'
-import { buildEngagementContext } from './engagement-chat'
+import { buildEngagementContext, PLATFORM_DATA_MODEL } from './engagement-chat'
 
 /**
  * Approval state of a generated summary draft.
@@ -154,6 +154,8 @@ import { LEAD_PLACEHOLDER } from './summary-sections'
 export const SUMMARY_SYSTEM_PROMPT = `You are writing the standing status summary for one engagement at a professional services firm.
 
 This text is reviewed by the engagement lead and, once approved, is shown to everyone on the engagement including the client, and appears in exported PDF reports. Write accordingly.
+
+${PLATFORM_DATA_MODEL}
 
 Produce EXACTLY these seven sections, each on its own line as a markdown heading, in this order:
 

@@ -1,34 +1,59 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback } from 'react'
-import { Send, Loader2 } from 'lucide-react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { Send, Loader2, Sparkles } from 'lucide-react'
 import { ASSISTANT } from '@/lib/ai/assistant'
 import { Brio } from '@/components/ui/brio'
 import { fetchWithTimeout, AI_TIMEOUT_MS, AiTimeoutError } from '@/lib/ai/fetch-timeout'
 import { StreamingText } from '@/components/ui/streaming-text'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { buildChatSuggestions } from '@/lib/ai/chat-suggestions'
+import { isObviouslyOutOfScope, OUT_OF_SCOPE_REPLY, parseChatReply } from '@/lib/ai/engagement-chat'
+import type { EngagementInsightsResponse } from '@/lib/insights/engagement-insights'
 
 interface Message {
     role: 'user' | 'assistant'
     content: string
 }
 
-const SUGGESTIONS = [
-    "What's overdue right now?",
-    'Which deliverables are at risk?',
-    'Summarise where this engagement stands',
-    'What needs my attention this week?',
-]
-
-export function EngagementAiChat({ projectId }: { projectId: string }) {
+export function EngagementAiChat({
+    projectId,
+    data,
+}: {
+    projectId: string
+    /** Insights payload the page already holds; drives data-aware suggestions. */
+    data?: EngagementInsightsResponse | null
+}) {
     const [messages, setMessages] = useState<Message[]>([])
     const [input, setInput] = useState('')
     const [streaming, setStreaming] = useState(false)
     const [error, setError] = useState<string | null>(null)
     // Set when the API reports AI is unavailable (no key) — hides the panel entirely.
     const [unavailable, setUnavailable] = useState(false)
+    // Questions already put to the model this session, so a chip is not offered twice.
+    const [asked, setAsked] = useState<Set<string>>(() => new Set())
 
     const scrollRef = useRef<HTMLDivElement>(null)
     const inputRef = useRef<HTMLInputElement>(null)
+
+    // Two sources, in priority order.
+    //
+    // Before the first answer there is no conversation to follow on from, so chips come from the
+    // engagement's own data — a chip is only offered when it has an answer ("What's overdue?" on an
+    // engagement with nothing overdue costs a credit to say "nothing").
+    //
+    // After an answer the model's own follow-ups win, because only it knows what it just said. They
+    // arrive on a sentinel line in the same stream, so they cost no extra call. Falling back to the
+    // data-driven list keeps the row populated if a reply omits the marker.
+    const dataSuggestions = useMemo(() => buildChatSuggestions(data, asked), [data, asked])
+
+    const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant')
+    const modelFollowUps = useMemo(() => {
+        if (!lastAssistant?.content) return []
+        return parseChatReply(lastAssistant.content).followUps.filter((q) => !asked.has(q))
+    }, [lastAssistant?.content, asked])
+
+    const suggestions = modelFollowUps.length > 0 ? modelFollowUps : dataSuggestions
 
     useEffect(() => {
         scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
@@ -40,6 +65,20 @@ export function EngagementAiChat({ projectId }: { projectId: string }) {
 
         setError(null)
         setInput('')
+        setAsked((prev) => new Set(prev).add(trimmed))
+
+        // Refuse the plainly off-topic without a round-trip: instant, and it costs no credit. This
+        // is a convenience gate, not the boundary — the real one is the system prompt plus a
+        // context that contains nothing but this engagement's own counts and statuses.
+        if (isObviouslyOutOfScope(trimmed)) {
+            setMessages((prev) => [
+                ...prev,
+                { role: 'user', content: trimmed },
+                { role: 'assistant', content: OUT_OF_SCOPE_REPLY },
+            ])
+            inputRef.current?.focus()
+            return
+        }
 
         // History excludes the message being sent; the route appends it as the final user turn.
         const history = messages.slice(-12)
@@ -109,31 +148,25 @@ export function EngagementAiChat({ projectId }: { projectId: string }) {
         )
     }
 
+    // The primary accent and tinted header are deliberate: this panel sits in a column of
+    // uniformly white cards, where it read as one more widget rather than the one thing on the
+    // page that answers questions.
     return (
-        <div className="bg-white border border-[#e5e7eb] rounded shadow-sm flex flex-col">
-            <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
+        <div className="bg-white border border-primary/25 rounded shadow-sm flex flex-col overflow-hidden">
+            <div className="flex items-center gap-2 border-b border-primary/15 bg-primary/5 px-4 py-3">
+                <Sparkles className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
                 <span className="text-sm font-semibold text-gray-900">Ask</span>
                 <Brio className="text-sm text-primary" />
+                <span className="ml-auto text-[10px] uppercase tracking-wider text-primary/70">
+                    This engagement
+                </span>
             </div>
 
-            <div ref={scrollRef} className="px-4 py-4 space-y-3 max-h-[420px] overflow-y-auto">
+            <div ref={scrollRef} className="px-4 py-4 space-y-3 max-h-[480px] min-h-[180px] overflow-y-auto">
                 {messages.length === 0 && (
-                    <div className="space-y-3">
-                        <p className="text-sm text-gray-500">
-                            <Brio /> answers only from this engagement&apos;s data, and can&apos;t change anything.
-                        </p>
-                        <div className="flex flex-wrap gap-2">
-                            {SUGGESTIONS.map((s) => (
-                                <button
-                                    key={s}
-                                    onClick={() => ask(s)}
-                                    className="text-xs text-gray-600 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-full px-3 py-1.5 transition-colors"
-                                >
-                                    {s}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
+                    <p className="text-sm text-gray-500">
+                        <Brio /> answers only from this engagement&apos;s data, and can&apos;t change anything.
+                    </p>
                 )}
 
                 {messages.map((m, i) => (
@@ -148,8 +181,12 @@ export function EngagementAiChat({ projectId }: { projectId: string }) {
                             {m.content ? (
                                 // Only the final assistant bubble is still arriving; earlier turns
                                 // render plain so they don't re-animate on every new token.
+                                //
+                                // Assistant text is parsed rather than shown raw: the reply carries
+                                // its follow-up questions after a sentinel, and parseChatReply also
+                                // hides a half-streamed marker so "<<FOLL" never flashes mid-answer.
                                 <StreamingText
-                                    text={m.content}
+                                    text={m.role === 'assistant' ? parseChatReply(m.content).answer : m.content}
                                     animate={m.role === 'assistant' && streaming && i === messages.length - 1}
                                 />
                             ) : (
@@ -164,6 +201,38 @@ export function EngagementAiChat({ projectId }: { projectId: string }) {
 
                 {error && <p className="text-xs text-red-600">{error}</p>}
             </div>
+
+            {/* Suggestions live ABOVE the input and outside the scroll area, so they survive the
+                first question. Previously they rendered only while the thread was empty, which
+                meant clicking one destroyed the other three with no way back short of a reload —
+                turning a discovery aid into a single use. Each chip disappears once asked, so the
+                row stays useful rather than repeating what is already answered above. */}
+            {suggestions.length > 0 && !streaming && (
+                // Wraps rather than scrolling horizontally. A scroll row clipped the second chip
+                // mid-word with no scrollbar and no affordance, so the options simply looked
+                // broken; at this column width two per line is the honest layout.
+                <TooltipProvider delayDuration={150}>
+                    <div className="flex flex-wrap gap-1.5 px-4 pb-2.5 pt-0.5">
+                        {suggestions.map((s) => (
+                            // The shared Radix tooltip, not `title=`: the native one is slow to
+                            // appear, unstyled, and sits outside the product's visual language.
+                            <Tooltip key={s}>
+                                <TooltipTrigger asChild>
+                                    <button
+                                        onClick={() => ask(s)}
+                                        className="max-w-full truncate rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-left text-xs text-gray-600 transition-colors hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
+                                    >
+                                        {s}
+                                    </button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="max-w-xs">
+                                    {s}
+                                </TooltipContent>
+                            </Tooltip>
+                        ))}
+                    </div>
+                </TooltipProvider>
+            )}
 
             <form
                 onSubmit={(e) => { e.preventDefault(); ask(input) }}

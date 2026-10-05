@@ -12,7 +12,10 @@ import {
     buildEngagementContext,
     sanitizeHistory,
     MAX_QUESTION_LENGTH,
+    isObviouslyOutOfScope,
+    OUT_OF_SCOPE_REPLY,
 } from '@/lib/ai/engagement-chat'
+import { buildEngagementActivity } from '@/lib/ai/engagement-activity'
 import type { EngagementInsightsResponse } from '../insights/route'
 
 /**
@@ -58,6 +61,15 @@ export async function POST(
         const question = body.question.trim().slice(0, MAX_QUESTION_LENGTH)
         const history = sanitizeHistory(body.history)
 
+        // The same gate the panel applies, repeated here because the panel's copy is bypassable —
+        // anything can POST to this route. Returned as a normal text stream so the client renders
+        // it like any other answer, and no credit is spent reaching the model.
+        if (isObviouslyOutOfScope(question)) {
+            return new Response(OUT_OF_SCOPE_REPLY, {
+                headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' },
+            })
+        }
+
         // Fetch insights server-side rather than trusting a client-supplied payload — otherwise a
         // caller could inject arbitrary "engagement data" for the model to treat as fact.
         const insightsRes = await fetch(new URL(`/api/projects/${projectId}/insights`, request.url), {
@@ -74,10 +86,15 @@ export async function POST(
             select: { name: true, client: { select: { name: true } } },
         })
 
+        // Audit-derived activity, appended to the snapshot. Event names and counts only — the
+        // module deliberately drops audit `metadata`, which carries file names, descriptions and
+        // emails written by users.
+        const activity = await buildEngagementActivity(projectId)
+
         const context = buildEngagementContext(insights, {
             clientName: names?.client?.name,
             engagementName: names?.name,
-        })
+        }) + (activity ? `\n${activity}` : '')
 
         // Gate and client in one call: over-budget throws before any tokens are spent.
         const scope = { firmId: ctx.firmId, userId: user.id, feature: 'chat' as const }
