@@ -294,3 +294,90 @@ describe('parseChatReply', () => {
         expect(r.answer).toBe('The value is << expected and stayed there.')
     })
 })
+
+describe('judgment questions vs out-of-scope questions', () => {
+    /**
+     * The reported bug: Brio suggested "Which of these four documents should be prioritized first?"
+     * and then answered it with the out-of-scope refusal. Two faults in one exchange — it offered a
+     * question it would decline, and the decline told the user they had asked about the wrong
+     * subject when the subject was exactly right.
+     */
+    it('instructs the model not to suggest questions it would decline', () => {
+        expect(CHAT_SYSTEM_PROMPT).toMatch(/do not suggest questions that ask you\s*\n?\s*to DECIDE/i)
+        expect(CHAT_SYSTEM_PROMPT).toMatch(/Ask about state[\s\S]*never about judgment/i)
+    })
+
+    it('separates "cannot decide" from "wrong subject"', () => {
+        // Rule 4a must exist and must forbid reusing the out-of-scope refusal for judgment calls.
+        expect(CHAT_SYSTEM_PROMPT).toMatch(/You report, you do not DECIDE/)
+        expect(CHAT_SYSTEM_PROMPT).toMatch(/Do not use the out-of-scope refusal for them/i)
+        // And rule 7 must point at 4a rather than swallowing those questions.
+        expect(CHAT_SYSTEM_PROMPT).toMatch(/applies to the SUBJECT being wrong/i)
+    })
+
+    it('tells the model to hand the decision back with the facts, warmly', () => {
+        expect(CHAT_SYSTEM_PROMPT).toMatch(/Give the shape of the decision, never the decision/)
+        expect(CHAT_SYSTEM_PROMPT).toMatch(/warm and useful, never curt/i)
+    })
+
+    /**
+     * The keyword pre-filter must not intercept these: they are in scope, and a canned refusal
+     * would reintroduce exactly the blunt reply this change exists to remove.
+     */
+    it('lets judgment questions reach the model rather than pre-filtering them', () => {
+        for (const q of [
+            'Which of these four documents should be prioritized first?',
+            'What should I do first?',
+            'Who should own these documents?',
+            'Is the October 16 date realistic?',
+        ]) {
+            expect(isObviouslyOutOfScope(q), q).toBe(false)
+        }
+    })
+})
+
+describe("manager's note provenance", () => {
+    const base = { kickoffDate: '2026-10-01', engagementDueDate: '2026-12-31' }
+    const ctx = (over: Record<string, unknown>) =>
+        buildEngagementContext({ ...base, ...over } as unknown as Parameters<typeof buildEngagementContext>[0], {})
+
+    /**
+     * Brio suggested "When was that manager's note last updated?" and would then have had to
+     * decline: the note's text was in the snapshot but its date was not, though the payload
+     * carried `insightsSummaryPublishedAt` all along. A suggested question that dead-ends is worse
+     * than no suggestion.
+     */
+    it('carries the published date alongside the note', () => {
+        expect(ctx({ insightsSummary: 'Scope pending.', insightsSummaryPublishedAt: '2026-09-26' }))
+            .toMatch(/Manager's note \(published 2026-09-26\): Scope pending\./)
+    })
+
+    it('flags a note the engagement has moved past', () => {
+        expect(ctx({
+            insightsSummary: 'Scope pending.',
+            insightsSummaryPublishedAt: '2026-09-26',
+            insightsSummaryStale: true,
+        })).toMatch(/the engagement has changed since it was written/)
+    })
+
+    it('omits the parenthetical when no date is known', () => {
+        const out = ctx({ insightsSummary: 'No date known.' })
+        expect(out).toContain("Manager's note: No date known.")
+        expect(out).not.toMatch(/Manager's note \(/)
+    })
+})
+
+describe('follow-up suggestions must be answerable', () => {
+    /**
+     * The general rule, which the judgment and missing-data cases are both instances of: a chip the
+     * model cannot answer is a dead end, and the user paid a credit to find out.
+     */
+    it('tells the model to answer a question to itself before offering it', () => {
+        expect(CHAT_SYSTEM_PROMPT).toMatch(/ANSWER IT TO YOURSELF from the snapshot/i)
+    })
+
+    it('names the data the snapshot does not carry', () => {
+        expect(CHAT_SYSTEM_PROMPT).toMatch(/does not carry[\s\S]*individual document names/i)
+        expect(CHAT_SYSTEM_PROMPT).toMatch(/comment text, file contents/i)
+    })
+})

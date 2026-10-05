@@ -1,12 +1,13 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { Send, Loader2, Sparkles } from 'lucide-react'
+import { Send, Loader2, Sparkles, Copy, Check, RotateCcw, History, X } from 'lucide-react'
 import { ASSISTANT } from '@/lib/ai/assistant'
 import { Brio } from '@/components/ui/brio'
 import { fetchWithTimeout, AI_TIMEOUT_MS, AiTimeoutError } from '@/lib/ai/fetch-timeout'
 import { StreamingText } from '@/components/ui/streaming-text'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { getChatHistory, recordChatQuestion, clearChatHistory, type ChatHistoryEntry } from '@/lib/ai/chat-history'
 import { buildChatSuggestions } from '@/lib/ai/chat-suggestions'
 import { isObviouslyOutOfScope, OUT_OF_SCOPE_REPLY, parseChatReply } from '@/lib/ai/engagement-chat'
 import type { EngagementInsightsResponse } from '@/lib/insights/engagement-insights'
@@ -32,6 +33,13 @@ export function EngagementAiChat({
     const [unavailable, setUnavailable] = useState(false)
     // Questions already put to the model this session, so a chip is not offered twice.
     const [asked, setAsked] = useState<Set<string>>(() => new Set())
+    // Questions asked previously, surviving reload. Loaded in an effect rather than from a lazy
+    // initialiser because localStorage is unavailable during server render.
+    const [history, setHistory] = useState<ChatHistoryEntry[]>([])
+    const [historyOpen, setHistoryOpen] = useState(false)
+    const [copiedIndex, setCopiedIndex] = useState<number | null>(null)
+
+    useEffect(() => { setHistory(getChatHistory(projectId)) }, [projectId])
 
     const scrollRef = useRef<HTMLDivElement>(null)
     const inputRef = useRef<HTMLInputElement>(null)
@@ -66,6 +74,8 @@ export function EngagementAiChat({
         setError(null)
         setInput('')
         setAsked((prev) => new Set(prev).add(trimmed))
+        setHistory(recordChatQuestion(projectId, trimmed))
+        setHistoryOpen(false)
 
         // Refuse the plainly off-topic without a round-trip: instant, and it costs no credit. This
         // is a convenience gate, not the boundary — the real one is the system prompt plus a
@@ -131,6 +141,32 @@ export function EngagementAiChat({
         }
     }, [projectId, messages, streaming])
 
+    /**
+     * Re-asks the question that produced a given answer.
+     *
+     * Drops the old question/answer pair before re-asking so the thread does not fill with
+     * near-identical replies — a retry is a correction, not a new turn. Costs a credit like any
+     * other question, which is why it is a deliberate click rather than automatic on a poor answer.
+     */
+    const retry = useCallback((assistantIndex: number) => {
+        if (streaming) return
+        const question = messages[assistantIndex - 1]
+        if (question?.role !== 'user') return
+        setMessages((prev) => prev.slice(0, assistantIndex - 1))
+        void ask(question.content)
+    }, [messages, streaming, ask])
+
+    /** Copies the visible answer — parsed, so the follow-up sentinel never lands on the clipboard. */
+    const copyAnswer = useCallback(async (index: number, content: string) => {
+        try {
+            await navigator.clipboard.writeText(parseChatReply(content).answer)
+            setCopiedIndex(index)
+            setTimeout(() => setCopiedIndex((c) => (c === index ? null : c)), 1500)
+        } catch {
+            // Clipboard blocked (permissions, insecure context). Nothing useful to say.
+        }
+    }, [])
+
     // Deliberately not `return null`: the panel renders before we can know AI is unconfigured,
     // so unmounting here would make it vanish underneath the user right after they asked a
     // question. Show it inert with an explanation instead.
@@ -160,7 +196,56 @@ export function EngagementAiChat({
                 <span className="ml-auto text-[10px] uppercase tracking-wider text-primary/70">
                     This engagement
                 </span>
+                {/* Only offered once there is something to recall. Questions survive reload;
+                    answers deliberately do not — see lib/ai/chat-history.ts. */}
+                {history.length > 0 && (
+                    <button
+                        type="button"
+                        onClick={() => setHistoryOpen((o) => !o)}
+                        aria-expanded={historyOpen}
+                        aria-label={historyOpen ? 'Hide recent questions' : 'Show recent questions'}
+                        className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] transition-colors ${
+                            historyOpen ? 'bg-primary/15 text-primary' : 'text-primary/70 hover:bg-primary/10'
+                        }`}
+                    >
+                        {historyOpen ? <X className="h-3 w-3" /> : <History className="h-3 w-3" />}
+                        {history.length}
+                    </button>
+                )}
             </div>
+
+            {historyOpen && (
+                <div className="border-b border-gray-100 bg-gray-50/70 px-4 py-2">
+                    <div className="mb-1.5 flex items-center justify-between">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">
+                            Recent questions
+                        </span>
+                        <button
+                            type="button"
+                            onClick={() => { clearChatHistory(projectId); setHistory([]); setHistoryOpen(false) }}
+                            className="text-[10px] text-gray-400 transition-colors hover:text-gray-700"
+                        >
+                            Clear
+                        </button>
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                        {history.map((h) => (
+                            <button
+                                key={`${h.question}-${h.askedAt}`}
+                                type="button"
+                                onClick={() => ask(h.question)}
+                                disabled={streaming}
+                                className="truncate rounded px-1.5 py-1 text-left text-xs text-gray-600 transition-colors hover:bg-white hover:text-primary disabled:opacity-50"
+                            >
+                                {h.question}
+                            </button>
+                        ))}
+                    </div>
+                    <p className="mt-1.5 text-[10px] text-gray-400">
+                        Answers are not stored — picking one asks it again against current data.
+                    </p>
+                </div>
+            )}
 
             <div ref={scrollRef} className="px-4 py-4 space-y-3 max-h-[480px] min-h-[180px] overflow-y-auto">
                 {messages.length === 0 && (
@@ -194,6 +279,33 @@ export function EngagementAiChat({
                                     <Loader2 className="w-3 h-3 animate-spin" />
                                     <Brio /> is thinking
                                 </span>
+                            )}
+                            {/* Actions on a settled answer only. While streaming the text is still
+                                arriving, so copying it would capture a fragment and retrying would
+                                race the in-flight request. */}
+                            {m.role === 'assistant' && m.content && !(streaming && i === messages.length - 1) && (
+                                <div className="mt-1.5 flex items-center gap-1 border-t border-gray-200/70 pt-1.5">
+                                    <button
+                                        type="button"
+                                        onClick={() => void copyAnswer(i, m.content)}
+                                        className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
+                                        aria-label="Copy answer"
+                                    >
+                                        {copiedIndex === i
+                                            ? <><Check className="h-3 w-3" />Copied</>
+                                            : <><Copy className="h-3 w-3" />Copy</>}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => retry(i)}
+                                        disabled={streaming}
+                                        className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:opacity-40"
+                                        aria-label="Ask again"
+                                    >
+                                        <RotateCcw className="h-3 w-3" />
+                                        Retry
+                                    </button>
+                                </div>
                             )}
                         </div>
                     </div>

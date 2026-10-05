@@ -98,3 +98,29 @@ describe('buildChatSuggestions', () => {
         expect(buildChatSuggestions(undefined)).toContain('Summarise where this engagement stands')
     })
 })
+
+describe('suggestions stay on the right side of the judgment boundary', () => {
+    /**
+     * Brio reports state; it does not decide. A suggested question that asks it to prioritise or
+     * recommend gets handed back to the user, which makes the chip a dead end — the exact failure
+     * seen when the model generated "Which of these four should be prioritized first?".
+     *
+     * This guards the static list against the same mistake as it grows.
+     */
+    it('never asks Brio to prioritise, recommend, or decide ownership', () => {
+        const everySuggestion = buildChatSuggestions(snapshot({
+            deliveryHealth: { overdueCount: 2, stalledInReview: 3 },
+            commentThreads: { unanswered: 1, flaggedOpen: 2 },
+            planningHygiene: { deliverableTotal: 5, deliverableWithDueDate: 0, docTotal: 10, docWithDueDate: 0, docWithAssignee: 0 },
+            pace: { deliveredPct: 10, timePct: 80, hasDeadline: true },
+            firstTimeRight: { firstTime: 1, reworked: 2, totalApproved: 3 },
+            sharesProgress: { inProgress: 2 },
+            documentsDueSoon: [{ documentId: 'd1', dueDate: '2026-10-16' }],
+            healthScore: { score: 62 },
+        }), new Set())
+
+        for (const s of everySuggestion) {
+            expect(s, s).not.toMatch(/\bshould I\b|\bprioriti[sz]e\b|\brecommend\b|\bwho should\b|\bwhat should\b/i)
+        }
+    })
+})

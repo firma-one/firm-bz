@@ -105,7 +105,23 @@ export async function POST(
             model: AI_MODEL,
             max_tokens: 700,
             temperature: 0.2,
-            system: `${CHAT_SYSTEM_PROMPT}\n\n--- ENGAGEMENT SNAPSHOT ---\n${context}`,
+            // The system prompt and snapshot are identical on every turn of a conversation and run
+            // to a few thousand tokens, so they are marked cacheable: a cache write costs 1.25x,
+            // every later read 0.1x. A multi-turn conversation therefore pays full price once
+            // instead of on each message.
+            //
+            // IMPORTANT: a cache hit requires a byte-identical prefix. `buildEngagementContext`
+            // carries `Today:` and day-granularity elapsed counts, which are stable across a
+            // session — do NOT add a timestamp of finer granularity to it, or every request will
+            // miss. The 5-minute default TTL refreshes on each hit, so an active conversation
+            // keeps the entry warm.
+            system: [
+                {
+                    type: 'text' as const,
+                    text: `${CHAT_SYSTEM_PROMPT}\n\n--- ENGAGEMENT SNAPSHOT ---\n${context}`,
+                    cache_control: { type: 'ephemeral' as const },
+                },
+            ],
             messages: [...history, { role: 'user' as const, content: question }],
             stream: true,
         })
@@ -116,11 +132,19 @@ export async function POST(
                 try {
                     // Streaming reports tokens across two events: the input count arrives with
                     // message_start, the output count with message_delta at the end.
+                    //
+                    // Cached tokens are reported SEPARATELY from `input_tokens`, so they are added
+                    // back here. Without this, enabling prompt caching would have made recorded
+                    // usage collapse — a cached turn reports only the handful of uncached tokens,
+                    // and the ledger would show a fraction of the real context size.
                     let inputTokens = 0
                     let outputTokens = 0
                     for await (const event of stream) {
                         if (event.type === 'message_start') {
-                            inputTokens = event.message.usage?.input_tokens ?? 0
+                            const u = event.message.usage
+                            inputTokens = (u?.input_tokens ?? 0)
+                                + (u?.cache_creation_input_tokens ?? 0)
+                                + (u?.cache_read_input_tokens ?? 0)
                         } else if (event.type === 'message_delta') {
                             outputTokens = event.usage?.output_tokens ?? 0
                         } else if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
