@@ -37,7 +37,9 @@ Rules:
 - Where things stand: the shape of the firm right now — active work, pipeline, recent movement.
 - Needs attention: what is most urgent or most at risk today. If nothing is, say so plainly.
 - Worth watching: what is not urgent yet but is trending the wrong way. If nothing is, say so.
-- Be specific. Name clients and engagements, give counts and values, say how many days overdue.
+- Be specific. Name clients and engagements, give counts, say how many days overdue.
+- You are NOT given monetary amounts, and must never state or estimate one. Pipeline is described
+  as a share of the total; report it that way or not at all.
 - Never invent a number, name, or date that is not in the snapshot. If it is sparse, write less.
 - Address the reader as "you". No greeting, and do not restate that this is a summary.
 
@@ -47,20 +49,12 @@ What you must NOT do:
 - Do not speculate about causes you cannot see in the data.
 - Do not comment on any individual's performance.`
 
-function money(val: number, symbol: string): string {
-    if (!val) return `${symbol}0`
-    if (val >= 1_000_000) return `${symbol}${(val / 1_000_000).toFixed(1)}M`
-    if (val >= 1_000) return `${symbol}${(val / 1_000).toFixed(0)}K`
-    return `${symbol}${val.toFixed(0)}`
-}
-
 /**
  * Flattens the insights response into a compact prose-ish snapshot. Sending the raw JSON
  * wastes tokens on keys the model does not need and buries the few fields that carry signal.
  * Empty categories are omitted entirely so the model does not narrate zeros.
  */
 export function buildSnapshot(data: FirmInsightsResponse): string {
-    const s = data.currencySymbol ?? ''
     const lines: string[] = []
 
     lines.push(
@@ -71,9 +65,22 @@ export function buildSnapshot(data: FirmInsightsResponse): string {
         `Engagements: ${data.activeEngagements} active of ${data.totalEngagementCount} total ` +
         `(${data.engagementStatusBreakdown.PLANNED} planned, ${data.engagementStatusBreakdown.PAUSED} paused).`
     )
+    // Pipeline is described by SHAPE, not by amount.
+    //
+    // The brief's job is "what needs attention today", and the advice is identical whether the
+    // at-risk figure is £8k or £800k — what matters is that a share of the pipeline is sitting with
+    // clients who have no active work. Sending the absolute sums put the firm's revenue into every
+    // request for no gain in the output, so only the proportions go now. Counts stay, because
+    // "4 clients dormant" is actionable in a way a percentage is not.
+    const pipelineTotal = data.pipelineValue || 0
+    const share = (part: number) =>
+        pipelineTotal > 0 ? `${Math.round((part / pipelineTotal) * 100)}% of pipeline` : 'none of the pipeline'
     lines.push(
-        `Pipeline value ${money(data.pipelineValue, s)}; closing within 30 days ${money(data.closingSoonValue, s)}; ` +
-        `revenue at risk ${money(data.revenueAtRisk, s)} (clients with history but no active engagement).`
+        `Pipeline: ${share(data.closingSoonValue ?? 0)} is closing within 30 days; ` +
+        `${share(data.revenueAtRisk ?? 0)} sits with clients that have history but no active engagement.` +
+        (data.clientPipelineBreakdown?.length
+            ? ` ${data.clientPipelineBreakdown.length} client(s) carry pipeline value.`
+            : '')
     )
 
     if (data.overdueDueDates > 0 || data.nearingDueDates > 0) {
@@ -122,14 +129,13 @@ export function buildSnapshot(data: FirmInsightsResponse): string {
         lines.push(`${data.pendingInvitations.length} invitation(s) still pending acceptance.`)
     }
 
-    if (data.clientPipelineBreakdown?.length) {
-        lines.push(
-            'Top clients by value: ' +
-            data.clientPipelineBreakdown.slice(0, 5)
-                .map((c) => `${c.clientName} ${money(c.value, s)}`)
-                .join('; ') + '.'
-        )
-    }
+    // Deliberately removed: the per-client revenue breakdown.
+    //
+    // It paired each client's NAME with the money they are worth — the most sensitive pairing in
+    // the whole payload — to support a line the brief is told not to write. The prompt forbids
+    // telling the reader what to do, so "Acme is worth £120k" can only become an observation the
+    // reader already knows from their own pipeline page. Concentration, which could change the
+    // advice, is covered by the client count above without naming anyone or pricing them.
 
     const w = data.weeklyActivity
     if (w && (w.newClients || w.newEngagements || w.invitationsSent || w.engagementsClosed)) {

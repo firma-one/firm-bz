@@ -12,8 +12,24 @@ import {
     buildEngagementContext,
     sanitizeHistory,
     MAX_QUESTION_LENGTH,
+    isObviouslyOutOfScope,
+    OUT_OF_SCOPE_REPLY,
 } from '@/lib/ai/engagement-chat'
+import { buildEngagementActivity } from '@/lib/ai/engagement-activity'
 import type { EngagementInsightsResponse } from '../insights/route'
+
+/**
+ * Did the stream end because the reader went away, rather than because generation failed?
+ *
+ * A cancelled ReadableStream surfaces as a TypeError on `enqueue` ("Invalid state: Controller is
+ * already closed") or as an AbortError, depending on runtime. Neither is an upstream failure, so
+ * neither should be logged as one — but both still represent tokens that were spent.
+ */
+function isClientDisconnect(error: unknown): boolean {
+    if (error instanceof DOMException && error.name === 'AbortError') return true
+    const message = error instanceof Error ? error.message : ''
+    return /invalid state|already closed|aborted|cancel/i.test(message)
+}
 
 /**
  * POST /api/projects/[projectId]/ai-chat
@@ -58,6 +74,15 @@ export async function POST(
         const question = body.question.trim().slice(0, MAX_QUESTION_LENGTH)
         const history = sanitizeHistory(body.history)
 
+        // The same gate the panel applies, repeated here because the panel's copy is bypassable —
+        // anything can POST to this route. Returned as a normal text stream so the client renders
+        // it like any other answer, and no credit is spent reaching the model.
+        if (isObviouslyOutOfScope(question)) {
+            return new Response(OUT_OF_SCOPE_REPLY, {
+                headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' },
+            })
+        }
+
         // Fetch insights server-side rather than trusting a client-supplied payload — otherwise a
         // caller could inject arbitrary "engagement data" for the model to treat as fact.
         const insightsRes = await fetch(new URL(`/api/projects/${projectId}/insights`, request.url), {
@@ -74,10 +99,15 @@ export async function POST(
             select: { name: true, client: { select: { name: true } } },
         })
 
+        // Audit-derived activity, appended to the snapshot. Event names and counts only — the
+        // module deliberately drops audit `metadata`, which carries file names, descriptions and
+        // emails written by users.
+        const activity = await buildEngagementActivity(projectId)
+
         const context = buildEngagementContext(insights, {
             clientName: names?.client?.name,
             engagementName: names?.name,
-        })
+        }) + (activity ? `\n${activity}` : '')
 
         // Gate and client in one call: over-budget throws before any tokens are spent.
         const scope = { firmId: ctx.firmId, userId: user.id, feature: 'chat' as const }
@@ -88,7 +118,23 @@ export async function POST(
             model: AI_MODEL,
             max_tokens: 700,
             temperature: 0.2,
-            system: `${CHAT_SYSTEM_PROMPT}\n\n--- ENGAGEMENT SNAPSHOT ---\n${context}`,
+            // The system prompt and snapshot are identical on every turn of a conversation and run
+            // to a few thousand tokens, so they are marked cacheable: a cache write costs 1.25x,
+            // every later read 0.1x. A multi-turn conversation therefore pays full price once
+            // instead of on each message.
+            //
+            // IMPORTANT: a cache hit requires a byte-identical prefix. `buildEngagementContext`
+            // carries `Today:` and day-granularity elapsed counts, which are stable across a
+            // session — do NOT add a timestamp of finer granularity to it, or every request will
+            // miss. The 5-minute default TTL refreshes on each hit, so an active conversation
+            // keeps the entry warm.
+            system: [
+                {
+                    type: 'text' as const,
+                    text: `${CHAT_SYSTEM_PROMPT}\n\n--- ENGAGEMENT SNAPSHOT ---\n${context}`,
+                    cache_control: { type: 'ephemeral' as const },
+                },
+            ],
             messages: [...history, { role: 'user' as const, content: question }],
             stream: true,
         })
@@ -96,23 +142,45 @@ export async function POST(
         const encoder = new TextEncoder()
         const body_ = new ReadableStream<Uint8Array>({
             async start(controller) {
+                // Declared outside the try so the catch can meter whatever was generated before a
+                // client disconnect cut the stream short.
+                let inputTokens = 0
+                let outputTokens = 0
                 try {
                     // Streaming reports tokens across two events: the input count arrives with
                     // message_start, the output count with message_delta at the end.
-                    let inputTokens = 0
-                    let outputTokens = 0
+                    //
+                    // Cached tokens are reported SEPARATELY from `input_tokens`, so they are added
+                    // back here. Without this, enabling prompt caching would have made recorded
+                    // usage collapse — a cached turn reports only the handful of uncached tokens,
+                    // and the ledger would show a fraction of the real context size.
                     for await (const event of stream) {
                         if (event.type === 'message_start') {
-                            inputTokens = event.message.usage?.input_tokens ?? 0
+                            const u = event.message.usage
+                            inputTokens = (u?.input_tokens ?? 0)
+                                + (u?.cache_creation_input_tokens ?? 0)
+                                + (u?.cache_read_input_tokens ?? 0)
                         } else if (event.type === 'message_delta') {
                             outputTokens = event.usage?.output_tokens ?? 0
                         } else if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
                             controller.enqueue(encoder.encode(event.delta.text))
                         }
                     }
-                    // Metered only on a complete stream: a failed answer is not a billable one.
                     await meterAiCall(scope, { inputTokens, outputTokens })
                 } catch (error) {
+                    // A client disconnect — the user pressed Stop, or closed the tab — surfaces
+                    // here when enqueue throws on a cancelled response. Those tokens were really
+                    // generated and really billed upstream, so they are metered rather than
+                    // written off: skipping them would let repeated ask-then-stop consume
+                    // inference indefinitely without ever touching the allowance, and nothing
+                    // would notice because the burst cap counts this same ledger.
+                    //
+                    // Input is charged in full regardless, since the request was already
+                    // processed; output is whatever had been generated when the stream ended.
+                    if (isClientDisconnect(error)) {
+                        await meterAiCall(scope, { inputTokens, outputTokens })
+                        return
+                    }
                     logger.error('AI chat stream error:', error as Error)
                     // Fail the stream rather than closing it cleanly. This response is raw text
                     // with no envelope to carry an error flag, so a clean close is byte-identical

@@ -188,26 +188,36 @@ function AiCreditsRow({ usage }: { usage: BillingPlanUsage | null | undefined })
                 segments are scaled against the ALLOWANCE so the unfilled remainder is the credits
                 still available. Without a cap there is no remainder to show, so the segments fill
                 the track and the bar reads as a pure composition of what was spent. */}
-            <div
-                className="mb-2.5 flex h-2 w-full overflow-hidden rounded-full bg-primary/10"
-                role="img"
-                aria-label={AI_FEATURES.map(({ key, label }) => `${label}: ${fmt(ai.byFeature[key] ?? 0)}`).join(', ')}
-            >
-                {AI_FEATURES.map(({ key, label, fill }) => {
-                    const value = ai.byFeature[key] ?? 0
-                    if (value <= 0) return null
-                    const denominator = hasLiveCap ? ai.allowance! : ai.used
-                    const pct = denominator > 0 ? (value / denominator) * 100 : 0
-                    return (
-                        <div
-                            key={key}
-                            className="h-full transition-all first:rounded-l-full last:rounded-r-full"
-                            style={{ width: `${pct}%`, backgroundColor: fill }}
-                            title={`${label}: ${fmt(value)} credit${value === 1 ? '' : 's'}`}
-                        />
-                    )
-                })}
-            </div>
+            <TooltipProvider delayDuration={150}>
+                <div
+                    className="mb-2.5 flex h-2 w-full overflow-hidden rounded-full bg-primary/10"
+                    role="img"
+                    aria-label={AI_FEATURES.map(({ key, label }) => `${label}: ${fmt(ai.byFeature[key] ?? 0)}`).join(', ')}
+                >
+                    {AI_FEATURES.map(({ key, label, fill }) => {
+                        const value = ai.byFeature[key] ?? 0
+                        if (value <= 0) return null
+                        const denominator = hasLiveCap ? ai.allowance! : ai.used
+                        const pct = denominator > 0 ? (value / denominator) * 100 : 0
+                        return (
+                            // The shared Radix tooltip rather than `title=`: on a 8px-tall segment
+                            // the native tooltip's delay makes the bar feel inert, and it is the
+                            // only way to read a segment too thin to label.
+                            <Tooltip key={key}>
+                                <TooltipTrigger asChild>
+                                    <div
+                                        className="h-full transition-all first:rounded-l-full last:rounded-r-full"
+                                        style={{ width: `${pct}%`, backgroundColor: fill }}
+                                    />
+                                </TooltipTrigger>
+                                <TooltipContent side="top">
+                                    {label}: {fmt(value)} credit{value === 1 ? '' : 's'}
+                                </TooltipContent>
+                            </Tooltip>
+                        )
+                    })}
+                </div>
+            </TooltipProvider>
             {/* Legend doubles as the per-feature readout, so the numbers that used to sit above
                 four separate bars are still here — one row instead of a grid of tracks. */}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">

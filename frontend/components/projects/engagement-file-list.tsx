@@ -3208,7 +3208,7 @@ const handleRefresh = async () => {
                                             htmlFor={`overwrite-${item.file.name}`}
                                             className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
                                         >
-                                            Rewrite "{item.file.name}"
+                                            Overwrite "{item.file.name}"
                                         </label>
                                         <p className="text-xs text-slate-500">
                                             {overwriteSelections.has(item.file.name)

@@ -66,14 +66,21 @@ export function createOneDriveContentAdapter(): IConnectorContentAdapter {
 
     async createUploadSession(connectionId, folderId, fileName, _mimeType, opts) {
       const [token, base] = await Promise.all([auth(connectionId), resolveOneDriveDriveBase(connectionId)])
-      const targetId = opts?.fileId ?? folderId
+      // Overwrite (opts.fileId) uploads new content onto the existing item, so it must say
+      // 'replace' and must NOT send `name`: Graph reads `name` on an existing item as a rename
+      // request, and with 'rename' it resolved that against the item's own name and created
+      // "<name> 1.pdf" instead of overwriting. New uploads keep 'rename' as a safety net — the
+      // caller has already renamed any file the user chose to keep both copies of.
       const path = opts?.fileId
-        ? `${base}/items/${targetId}/createUploadSession`
+        ? `${base}/items/${opts.fileId}/createUploadSession`
         : `${base}/items/${folderId}:/${encodeURIComponent(fileName)}:/createUploadSession`
+      const item = opts?.fileId
+        ? { '@microsoft.graph.conflictBehavior': 'replace' }
+        : { '@microsoft.graph.conflictBehavior': 'rename', name: fileName }
       const res = await fetch(path, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ item: { '@microsoft.graph.conflictBehavior': 'rename', name: fileName } }),
+        body: JSON.stringify({ item }),
       })
       if (!res.ok) {
         const err = await res.text()

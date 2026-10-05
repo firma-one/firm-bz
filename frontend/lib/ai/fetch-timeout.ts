@@ -31,6 +31,20 @@ export class AiTimeoutError extends Error {
 }
 
 /**
+ * Thrown when the CALLER aborted — a user pressing Stop, not a failure.
+ *
+ * Distinct from `AiTimeoutError` so the UI does not present a deliberate stop as an error. Both
+ * surface as the same `AbortError` from `fetch`, so the two causes are told apart by asking which
+ * signal fired.
+ */
+export class AiAbortedError extends Error {
+    constructor() {
+        super('Stopped')
+        this.name = 'AiAbortedError'
+    }
+}
+
+/**
  * `fetch` with an abort after `timeoutMs`.
  *
  * Note for streaming callers: the timer is cleared once headers arrive, so a long-running stream
@@ -41,20 +55,33 @@ export async function fetchWithTimeout(
     input: RequestInfo | URL,
     init: RequestInit = {},
     timeoutMs: number = AI_TIMEOUT_MS.brief,
+    /**
+     * Caller's own signal, for a user-initiated stop. Aborting it rejects with `AiAbortedError`
+     * rather than `AiTimeoutError`, so a deliberate stop is never presented as a failure.
+     */
+    externalSignal?: AbortSignal,
 ): Promise<Response> {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeoutMs)
 
+    // Forwarded rather than passed through, because only one signal can be given to fetch and the
+    // timeout needs its own. Checked first in case the caller aborted before we got here.
+    const onExternalAbort = () => controller.abort()
+    if (externalSignal) {
+        if (externalSignal.aborted) controller.abort()
+        else externalSignal.addEventListener('abort', onExternalAbort, { once: true })
+    }
+
     try {
         return await fetch(input, { ...init, signal: controller.signal })
     } catch (error) {
-        // An AbortError here is ours — no caller passes its own signal today. Translate it so the
-        // UI can say "took too long" rather than the browser's opaque abort message.
+        // Both causes surface as the same AbortError, so the caller's signal decides which it was.
         if (error instanceof DOMException && error.name === 'AbortError') {
-            throw new AiTimeoutError(timeoutMs)
+            throw externalSignal?.aborted ? new AiAbortedError() : new AiTimeoutError(timeoutMs)
         }
         throw error
     } finally {
         clearTimeout(timer)
+        externalSignal?.removeEventListener('abort', onExternalAbort)
     }
 }

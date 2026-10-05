@@ -1,7 +1,7 @@
 import { createHash } from 'crypto'
 import type { EngagementInsightsResponse } from '@/lib/insights/engagement-insights'
 import { completeText } from './client'
-import { buildEngagementContext } from './engagement-chat'
+import { buildEngagementContext, PLATFORM_DATA_MODEL } from './engagement-chat'
 
 /**
  * Approval state of a generated summary draft.
@@ -155,6 +155,8 @@ export const SUMMARY_SYSTEM_PROMPT = `You are writing the standing status summar
 
 This text is reviewed by the engagement lead and, once approved, is shown to everyone on the engagement including the client, and appears in exported PDF reports. Write accordingly.
 
+${PLATFORM_DATA_MODEL}
+
 Produce EXACTLY these seven sections, each on its own line as a markdown heading, in this order:
 
 ## Summary
@@ -188,6 +190,9 @@ Rules for the sections you write — Summary, Progress, Collaboration, Risks, Ne
   artefact; a name alone makes them hunt for it. If an item has no reference, use its name alone —
   never invent one.
 - Be specific with counts and dates. Never invent a number, name, or date not in the snapshot.
+- NEVER write the words "snapshot", "context", "data provided" or anything describing how you were
+  given this information. This text is shown to the client; they are reading about their
+  engagement, not about how it was assembled. Describe the engagement, never your inputs.
 - Professional and neutral. Not a pitch, not a warning.
 - Never comment on an individual's performance, and never name a team member.
 - Do not speculate about causes you cannot see. Report the state, not the reason.

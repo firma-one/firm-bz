@@ -3087,7 +3087,7 @@ export function EngagementInsightsDashboard({
                                             initial={{ opacity: 0 }}
                                             animate={{ opacity: 1 }}
                                             transition={{ duration: 0.15 }}
-                                            className="w-full text-sm text-gray-700 bg-white border border-primary/20 rounded px-3 py-2 leading-relaxed whitespace-pre-wrap h-[19.5rem] overflow-y-auto"
+                                            className="hover-scrollbar w-full text-sm text-gray-700 bg-white border border-primary/20 rounded px-3 py-2 leading-relaxed whitespace-pre-wrap h-[19.5rem] overflow-y-auto"
                                         >
                                             <StreamingText text={aiStreamText} />
                                             {/* Block caret, terminal style. Sized in `em` so it tracks the
@@ -3109,7 +3109,7 @@ export function EngagementInsightsDashboard({
                                             value={aiDraftEdit}
                                             onChange={(e) => setAiDraftEdit(e.target.value)}
                                             disabled={aiDraftBusy}
-                                            className="w-full text-sm text-gray-700 bg-white border border-primary/20 rounded px-3 py-2 leading-relaxed h-[19.5rem] resize-none overflow-y-scroll [scrollbar-gutter:stable] focus:outline-none focus:ring-1 focus:ring-primary/40 disabled:opacity-60"
+                                            className="hover-scrollbar w-full text-sm text-gray-700 bg-white border border-primary/20 rounded px-3 py-2 leading-relaxed h-[19.5rem] resize-none overflow-y-scroll [scrollbar-gutter:stable] focus:outline-none focus:ring-1 focus:ring-primary/40 disabled:opacity-60"
                                         />
                                     )}
 
@@ -3462,10 +3462,20 @@ export function EngagementInsightsDashboard({
                 )}
             </div>
 
-            {/* Right: Action Center, with the AI chat beneath it (internal roles only) */}
+            {/* Right: the AI chat first, then the Action Center (chat is internal roles only).
+                The chat used to sit beneath the full Action Center, which put it roughly 1400px
+                down the page — present but never seen. It leads now because asking a question is
+                the fastest route to an answer the Action Center takes scrolling to find. */}
             <div className="flex flex-col gap-6 min-w-0">
+                {data?.isInternalViewer && (
+                    <EngagementAiChat
+                        projectId={projectId}
+                        data={data}
+                        engagementName={engagementName}
+                        clientName={clientName}
+                    />
+                )}
                 <EngagementActionCenterV2 data={data} loading={loading} engagementBase={engagementBase} projectId={projectId} setRefreshTick={setRefreshTick} />
-                {data?.isInternalViewer && <EngagementAiChat projectId={projectId} />}
             </div>
 
         </div>
