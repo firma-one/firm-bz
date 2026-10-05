@@ -159,7 +159,15 @@ export function FloatingAiChat({
     return (
         <div
             ref={setPanelEl}
-            className={`fixed bottom-6 ${anchor} z-40 flex w-[min(26rem,calc(100vw-3rem))] flex-col rounded-lg border border-primary/25 bg-white shadow-2xl`}
+            /* Tall and narrow, not wide. Chat is a vertical medium — messages stack downward and
+               the eye tracks a column — and comfortable reading runs out past roughly 75
+               characters a line, which a wide panel blows through immediately. The scarce
+               resource is how much conversation is visible, so height is what gets spent.
+
+               `max-w-full` is load-bearing: the suggestion chips wrap with no width ceiling of
+               their own, and in a fixed element with nothing to push back they stretched the
+               panel to their full text width. */
+            className={`fixed bottom-6 ${anchor} z-40 flex w-[23rem] max-w-[calc(100vw-3rem)] flex-col overflow-hidden rounded-lg border border-primary/25 bg-white shadow-2xl`}
         >
             {/* The panel's own header carries the title; this strip owns only window controls, so
                 the two never compete to name the thing. */}

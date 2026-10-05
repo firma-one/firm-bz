@@ -692,7 +692,15 @@ export function EngagementAiChat({
                 </div>
             )}
 
-            <div ref={scrollRef} className="hover-scrollbar px-4 py-4 space-y-3 max-h-[480px] min-h-[180px] overflow-y-auto">
+            <div
+                ref={scrollRef}
+                /* Floating gets the taller window and no minimum: the overlay should hug an empty
+                   thread rather than reserve a blank 180px above the composer. In-column keeps the
+                   minimum, where a collapsing card would make the rail jump. */
+                className={`hover-scrollbar px-4 py-4 space-y-3 overflow-y-auto ${
+                    chrome === 'floating' ? 'max-h-[60vh]' : 'max-h-[480px] min-h-[180px]'
+                }`}
+            >
                 {messages.length === 0 && (
                     <p className="text-sm text-gray-500">
                         <Brio /> answers only from this engagement&apos;s data, and can&apos;t change anything.
@@ -774,7 +782,7 @@ export function EngagementAiChat({
                 // mid-word with no scrollbar and no affordance, so the options simply looked
                 // broken; at this column width two per line is the honest layout.
                 <TooltipProvider delayDuration={150}>
-                    <div className="flex flex-wrap gap-1.5 px-4 pb-2.5 pt-0.5">
+                    <div className="flex min-w-0 flex-wrap gap-1.5 px-4 pb-2.5 pt-0.5">
                         {suggestions.map((s) => (
                             // The shared Radix tooltip, not `title=`: the native one is slow to
                             // appear, unstyled, and sits outside the product's visual language.
