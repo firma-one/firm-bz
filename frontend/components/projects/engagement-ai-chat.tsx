@@ -658,8 +658,13 @@ export function EngagementAiChat({
                 thread down by its own height, so opening history scrolled the answer you were
                 reading off screen — and closing it jumped you back. */}
             {historyOpen && (
-                <div className="absolute inset-x-0 top-[2.75rem] z-20 border-b border-gray-200 bg-white px-4 py-2 shadow-md">
-                    <div className="mb-1.5 flex items-center justify-between">
+                /* `bottom-0` as well as `top`: anchored only from the top, the overlay had no
+                   height of its own and the panel's overflow-hidden clipped the list mid-line
+                   instead of letting it scroll. Bounding it to the panel gives the inner list a
+                   real height to scroll within. `min-h-0` lets that child actually shrink — a flex
+                   item defaults to min-content and would otherwise refuse to. */
+                <div className="absolute inset-x-0 bottom-0 top-[2.75rem] z-20 flex flex-col border-b border-gray-200 bg-white px-4 py-2 shadow-md">
+                    <div className="mb-1.5 flex shrink-0 items-center justify-between">
                         <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">
                             Recent questions
                         </span>
@@ -671,10 +676,9 @@ export function EngagementAiChat({
                             Clear
                         </button>
                     </div>
-                    {/* Scrolls past about five entries rather than growing. The list is capped at
-                        ten, and letting all ten render pushed the conversation out of the panel —
-                        the history is a lookup, not the main view. */}
-                    <div className="hover-scrollbar flex max-h-[9rem] flex-col gap-0.5 overflow-y-auto">
+                    {/* Takes the space the overlay has rather than a fixed ceiling, so a tall
+                        panel shows more of the ten entries and a short one still scrolls. */}
+                    <div className="hover-scrollbar flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
                         {history.map((h) => (
                             <button
                                 key={`${h.question}-${h.askedAt}`}
@@ -687,7 +691,7 @@ export function EngagementAiChat({
                             </button>
                         ))}
                     </div>
-                    <p className="mt-1.5 text-[10px] text-gray-400">
+                    <p className="mt-1.5 shrink-0 text-[10px] text-gray-400">
                         Answers are not stored — picking one asks it again against current data.
                     </p>
                 </div>
