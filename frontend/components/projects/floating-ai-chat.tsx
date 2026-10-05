@@ -32,8 +32,30 @@ type Side = 'right' | 'left'
 const SIDE_KEY = 'fm_ai_chat_side'
 /** Panel width, shared between the docked position and the drag clamp. */
 const PANEL_WIDTH_REM = 23
-/** Inset from the viewport edge when docked, and the clamp margin while dragging. */
+/**
+ * Inset from the viewport edge when docked, and the clamp margin while dragging.
+ *
+ * Matches the page's own `px-6` content gutter so the panel's edge lines up with the cards it
+ * floats over, rather than sitting a few pixels proud of them.
+ */
 const GUTTER = 24
+
+/**
+ * How far the page's right content edge sits inside the viewport.
+ *
+ * The page scrolls in an inner container, so that container's scrollbar is inside the content area
+ * and eats into the right edge. A panel positioned against the viewport would overhang the cards
+ * it floats over by exactly that much.
+ *
+ * Measured from the live element rather than assumed: scrollbar width differs by platform and is
+ * zero for macOS overlay scrollbars, so a hardcoded number would be wrong nearly everywhere.
+ */
+function rightContentInset(): number {
+    if (typeof document === 'undefined') return 0
+    const scroller = document.querySelector('.d-app .overflow-y-auto')
+    if (!(scroller instanceof HTMLElement)) return 0
+    return Math.max(0, scroller.offsetWidth - scroller.clientWidth)
+}
 /**
  * How far the pointer must travel before a drag flips the dock, as a share of viewport width.
  *
@@ -168,6 +190,16 @@ export function FloatingAiChat({
     const [mounted, setMounted] = useState(false)
     useEffect(() => setMounted(true), [])
 
+    // Re-measured on resize: a scrollbar appears and disappears as content changes, and the panel
+    // should stay flush with the cards either way.
+    const [rightInset, setRightInset] = useState(0)
+    useEffect(() => {
+        const measure = () => setRightInset(rightContentInset())
+        measure()
+        window.addEventListener('resize', measure)
+        return () => window.removeEventListener('resize', measure)
+    }, [])
+
     /**
      * The panel's left offset in pixels while a drag is in progress, null when idle.
      *
@@ -205,7 +237,7 @@ export function FloatingAiChat({
         const panelWidth = rect?.width ?? 0
 
         const clamp = (x: number) =>
-            Math.max(GUTTER, Math.min(x, window.innerWidth - panelWidth - GUTTER))
+            Math.max(GUTTER, Math.min(x, window.innerWidth - panelWidth - GUTTER - rightContentInset()))
 
         const onMove = (e: PointerEvent) => setDragLeft(clamp(e.clientX - grabOffset))
         const onUp = (e: PointerEvent) => {
@@ -257,8 +289,11 @@ export function FloatingAiChat({
                 /* Grows out of, and shrinks back into, the corner it is docked in, so opening
                    reads as the launcher becoming the panel rather than one thing being swapped
                    for another. */
-                style={{ transformOrigin: side === 'right' ? 'bottom right' : 'bottom left' }}
-                className={`fixed bottom-6 ${side === 'right' ? 'right-6' : 'left-6'} z-40 flex animate-in fade-in zoom-in-95 items-center gap-2 rounded-full border border-primary/20 bg-white py-2.5 pl-3 pr-4 shadow-lg duration-200 transition-shadow hover:shadow-xl hover:border-primary/40`}
+                style={{
+                    transformOrigin: side === 'right' ? 'bottom right' : 'bottom left',
+                    ...(side === 'right' ? { right: `${GUTTER + rightInset}px` } : { left: `${GUTTER}px` }),
+                }}
+                className={`fixed bottom-6 z-40 flex animate-in fade-in zoom-in-95 items-center gap-2 rounded-full border border-primary/20 bg-white py-2.5 pl-3 pr-4 shadow-lg duration-200 transition-shadow hover:shadow-xl hover:border-primary/40`}
                 aria-label="Open the engagement assistant"
             >
                 {/* Labelled rather than icon-only: a bare sparkle is now ambiguous beside the AI
@@ -293,7 +328,7 @@ export function FloatingAiChat({
                 left: dragging
                     ? `${dragLeft}px`
                     : side === 'right'
-                        ? `calc(100vw - ${PANEL_WIDTH_REM}rem - ${GUTTER}px)`
+                        ? `calc(100vw - ${PANEL_WIDTH_REM}rem - ${GUTTER + rightInset}px)`
                         : `${GUTTER}px`,
             }}
             /* The transition is suppressed while dragging so the panel tracks the pointer exactly;
