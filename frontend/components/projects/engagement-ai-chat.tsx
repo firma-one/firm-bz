@@ -584,7 +584,7 @@ export function EngagementAiChat({
     // inside the card, which is what we want — it should never spill over the Action Center below.
     return (
         <div className={`relative bg-white flex flex-col overflow-hidden ${
-            chrome === 'floating' ? 'rounded-b-lg' : 'border border-primary/25 rounded shadow-sm'
+            chrome === 'floating' ? 'min-h-0 flex-1 rounded-b-lg' : 'border border-primary/25 rounded shadow-sm'
         }`}>
             <div className="flex items-center gap-2 border-b border-primary/15 bg-primary/5 px-4 py-3">
                 {/* No separate sparkle: the Brio mark already carries one, and two side by side
@@ -703,7 +703,11 @@ export function EngagementAiChat({
                    thread rather than reserve a blank 180px above the composer. In-column keeps the
                    minimum, where a collapsing card would make the rail jump. */
                 className={`hover-scrollbar px-4 py-4 space-y-3 overflow-y-auto ${
-                    chrome === 'floating' ? 'max-h-[60vh]' : 'max-h-[480px] min-h-[180px]'
+                    chrome === 'floating'
+                        // Fills the frame's fixed height and scrolls inside it, rather than
+                        // setting the panel's height by growing.
+                        ? 'min-h-0 flex-1'
+                        : 'max-h-[480px] min-h-[180px]'
                 }`}
             >
                 {messages.length === 0 && (

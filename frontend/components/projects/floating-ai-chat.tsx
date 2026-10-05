@@ -236,7 +236,11 @@ export function FloatingAiChat({
             <button
                 type="button"
                 onClick={toggleOpen}
-                className={`fixed bottom-6 ${side === 'right' ? 'right-6' : 'left-6'} z-40 flex items-center gap-2 rounded-full border border-primary/20 bg-white py-2.5 pl-3 pr-4 shadow-lg transition-shadow hover:shadow-xl hover:border-primary/40`}
+                /* Grows out of, and shrinks back into, the corner it is docked in, so opening
+                   reads as the launcher becoming the panel rather than one thing being swapped
+                   for another. */
+                style={{ transformOrigin: side === 'right' ? 'bottom right' : 'bottom left' }}
+                className={`fixed bottom-6 ${side === 'right' ? 'right-6' : 'left-6'} z-40 flex animate-in fade-in zoom-in-95 items-center gap-2 rounded-full border border-primary/20 bg-white py-2.5 pl-3 pr-4 shadow-lg duration-200 transition-shadow hover:shadow-xl hover:border-primary/40`}
                 aria-label="Open the engagement assistant"
             >
                 {/* Labelled rather than icon-only: a bare sparkle is now ambiguous beside the AI
@@ -267,6 +271,7 @@ export function FloatingAiChat({
                property means one transition. */
             data-ai-chat-panel
             style={{
+                transformOrigin: side === 'right' ? 'bottom right' : 'bottom left',
                 left: dragging
                     ? `${dragLeft}px`
                     : side === 'right'
@@ -275,10 +280,15 @@ export function FloatingAiChat({
             }}
             /* The transition is suppressed while dragging so the panel tracks the pointer exactly;
                it animates only on release, which is what makes the snap read as magnetic. */
-            /* Width is a literal class, not interpolated: Tailwind extracts class names
-               statically, so `w-[${'$'}{PANEL_WIDTH_REM}rem]` would never be generated and the panel
-               would collapse to its content. PANEL_WIDTH_REM must be kept in step with it. */
-            className={`fixed bottom-6 z-40 flex w-[23rem] max-w-[calc(100vw-3rem)] flex-col overflow-hidden rounded-lg border border-primary/25 bg-white shadow-2xl ${
+            /* A DEFINITE height, not one derived from content. Without it anything inside could
+               grow the panel — opening the ten-entry history stretched it up the page — and a
+               floating window that resizes itself as you use it is unsettling to work in. Fixed
+               box, scrolling contents.
+
+               Width is a literal class, not interpolated: Tailwind extracts class names
+               statically, so an interpolated `w-[...]` would never be generated. PANEL_WIDTH_REM
+               must be kept in step with it. */
+            className={`fixed bottom-6 z-40 flex h-[32rem] max-h-[calc(100vh-6rem)] w-[23rem] max-w-[calc(100vw-3rem)] flex-col overflow-hidden rounded-lg border border-primary/25 bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-200 ${
                 dragging ? 'cursor-grabbing select-none' : 'transition-[left] duration-200 ease-out'
             }`}
         >
