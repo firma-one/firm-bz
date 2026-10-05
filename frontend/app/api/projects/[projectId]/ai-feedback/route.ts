@@ -7,6 +7,16 @@ import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * The ids go into uuid columns, so a malformed value would throw at the database rather than being
+ * ignored — and `recordAiFeedback` swallows that, silently losing the whole rating.
+ */
+function isUuid(value: unknown): value is string {
+    return typeof value === 'string' && UUID_RE.test(value)
+}
+
 /**
  * POST /api/projects/[projectId]/ai-feedback
  *
@@ -42,6 +52,8 @@ export async function POST(
             helpful?: unknown
             reason?: unknown
             question?: unknown
+            answerId?: unknown
+            threadId?: unknown
         } | null
 
         if (typeof body?.helpful !== 'boolean') {
@@ -55,9 +67,14 @@ export async function POST(
             feature: 'chat',
             helpful: body.helpful,
             // An unrecognised reason is dropped rather than rejected: the rating is the signal that
-            // matters, and failing the request would lose it over a stale enum value.
-            reason: isValidReason(body.reason) ? body.reason : null,
+            // matters, and failing the request would lose it over a stale enum value. Validated
+            // against the sign, since the positive and negative vocabularies share one column.
+            reason: isValidReason(body.reason, body.helpful) ? body.reason : null,
             question: typeof body.question === 'string' ? body.question : null,
+            // Minted in the browser — the chat endpoint is stateless, so there is no server-side
+            // thread to derive them from. Shape is checked but the values are otherwise opaque.
+            answerId: isUuid(body.answerId) ? body.answerId : null,
+            threadId: isUuid(body.threadId) ? body.threadId : null,
         })
 
         return NextResponse.json({ ok: true })

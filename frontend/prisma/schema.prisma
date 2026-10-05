@@ -903,10 +903,33 @@ model PlatformAiFeedback {
   /// The question asked. Null for surfaces with no question, such as the daily brief.
   question     String?
 
+  /// Client-minted identity of the single answer being rated.
+  ///
+  /// Nothing about the thread is persisted server-side, so this is generated in the browser when
+  /// an assistant turn settles and echoed back with the rating. It is an opaque name, never a
+  /// foreign key. Its only job is to make a rating replaceable: re-rating the same answer sends the
+  /// same id, and the unique index below turns the write into an update rather than a second row.
+  ///
+  /// Nullable because surfaces with no chat turn to key on (brief, summary) must still insert.
+  answerId     String?  @db.Uuid
+
+  /// Client-minted identity of the conversation an answer belongs to.
+  ///
+  /// Lets several ratings in one thread be read together — a run of good answers turning bad after
+  /// a topic shift is a different signal from four unrelated complaints. Minted once per mounted
+  /// chat panel and reset whenever the thread is, so it spans exactly the conversation the user
+  /// experienced. The server cannot mint this: the chat endpoint is stateless and would produce a
+  /// fresh id per request, which is the opposite of grouping.
+  threadId     String?  @db.Uuid
+
   group        Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
   @@index([groupId, createdAt])
   @@index([feature, helpful, createdAt])
+  @@index([threadId, createdAt])
+  /// One rating per answer per user, so correcting a rating replaces it instead of double-counting
+  /// in the efficacy report. Partial: rows without an answerId are unrelated surfaces, not duplicates.
+  @@unique([answerId, userId], map: "platform_ai_feedback_answer_user_key")
   @@map("platform_ai_feedback")
   @@schema("platform")
 }

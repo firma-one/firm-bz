@@ -9,7 +9,8 @@ import { fetchWithTimeout, AI_TIMEOUT_MS, AiTimeoutError } from '@/lib/ai/fetch-
 import { StreamingText } from '@/components/ui/streaming-text'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { getChatHistory, recordChatQuestion, clearChatHistory, type ChatHistoryEntry } from '@/lib/ai/chat-history'
-import { FEEDBACK_REASONS, type FeedbackReason } from '@/lib/ai/feedback-reasons'
+import { reasonsFor, type FeedbackReason } from '@/lib/ai/feedback-reasons'
+import { useToast } from '@/components/ui/toast'
 import { buildChatTranscript } from '@/lib/ai/chat-transcript'
 import { buildChatSuggestions } from '@/lib/ai/chat-suggestions'
 import { isObviouslyOutOfScope, OUT_OF_SCOPE_REPLY, parseChatReply } from '@/lib/ai/engagement-chat'
@@ -20,6 +21,15 @@ interface Message {
     content: string
     /** When the turn was created, for the relative timestamp in the action bar. */
     at: number
+    /**
+     * Stable identity for an assistant turn, minted here because nothing about the thread exists
+     * server-side — the chat endpoint is stateless and receives the whole array each turn.
+     *
+     * Sent with a rating so that correcting one replaces the stored row rather than adding a second
+     * and double-counting in the efficacy report. Lives only as long as the thread does, which is
+     * exactly the window in which an answer is on screen to be re-rated.
+     */
+    answerId?: string
 }
 
 /**
@@ -28,8 +38,15 @@ interface Message {
  */
 const MAX_COMPOSER_HEIGHT_PX = 72
 
-/** A rating already given on an answer. `null` means not yet rated. */
-type Rating = { helpful: boolean } | null
+/**
+ * A rating already given on an answer. `null`/`undefined` means not yet rated.
+ *
+ * `undefined` is in the type deliberately: the caller looks the rating up out of a sparse
+ * `Record<number, …>`, so an unrated answer arrives as `undefined`, not `null`. Typing this as
+ * `| null` alone made every `rating !== null` guard true on first paint and left both thumbs
+ * permanently disabled. Guards below test falsiness rather than a specific empty value.
+ */
+type Rating = { helpful: boolean; reason?: FeedbackReason } | null | undefined
 
 /**
  * Icon-only actions under a settled answer: copy, retry, and a thumbs rating.
@@ -37,6 +54,16 @@ type Rating = { helpful: boolean } | null
  * Labels were dropped because four actions with text crowded a narrow column and competed with the
  * answer for attention. Each icon carries the shared Radix tooltip and an `aria-label`, so the
  * meaning is available on hover and to a screen reader without taking horizontal space.
+ *
+ * ## Ratings stay editable
+ *
+ * A rating used to lock on the first click, to stop someone toggling and double-counting themselves
+ * in the efficacy report. That is now handled where it belongs — the server upserts on `answerId`,
+ * so a correction replaces the row — which frees the UI to let people fix a mistake.
+ *
+ * It matters because the chip panel opens *after* the thumb is clicked: a locked rating meant
+ * anyone who dismissed the panel was stuck with a reason-less rating they could never complete, and
+ * anyone who picked the wrong chip was stuck with the wrong one.
  */
 function AnswerActions({
     at, copied, rating, disabled, onCopy, onRetry, onRate,
@@ -49,10 +76,19 @@ function AnswerActions({
     onRetry: () => void
     onRate: (helpful: boolean, reason?: FeedbackReason) => void
 }) {
-    const [reasonOpen, setReasonOpen] = useState(false)
+    /** Which chip list is open, if any. Both signs have one, so this holds the sign rather than a flag. */
+    const [picking, setPicking] = useState<boolean | null>(null)
 
     const iconButton =
         'inline-flex h-6 w-6 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:opacity-40'
+
+    // Clicking a thumb records the rating immediately and opens its chips. Recording first means a
+    // user who ignores the chips has still been counted — the chip is detail, the thumb is the
+    // signal. Clicking the thumb that is already set just reopens its chips to change the answer.
+    const onThumb = (helpful: boolean) => {
+        if (rating?.helpful !== helpful) onRate(helpful, undefined)
+        setPicking((cur) => (cur === helpful ? null : helpful))
+    }
 
     return (
         <div className="mt-1.5 border-t border-gray-200/70 pt-1">
@@ -85,23 +121,20 @@ function AnswerActions({
                         <TooltipContent side="top">Ask again</TooltipContent>
                     </Tooltip>
 
-                    {/* A rating is final once given: re-rating the same answer would double-count it
-                        in the efficacy report, and the user has already said what they think. */}
                     <Tooltip>
                         <TooltipTrigger asChild>
                             <button
                                 type="button"
-                                onClick={() => { if (!rating) onRate(true) }}
-                                disabled={rating !== null}
+                                onClick={() => onThumb(true)}
                                 aria-label="Good response"
                                 aria-pressed={rating?.helpful === true}
-                                className={`${iconButton} ${rating?.helpful === true ? 'text-primary' : ''} disabled:opacity-100`}
+                                className={`${iconButton} ${rating?.helpful === true ? 'text-primary' : ''}`}
                             >
                                 <ThumbsUp className="h-3.5 w-3.5" />
                             </button>
                         </TooltipTrigger>
                         <TooltipContent side="top">
-                            {rating?.helpful === true ? 'Marked helpful' : 'Good response'}
+                            {rating?.helpful === true ? 'Marked helpful — click to change' : 'Good response'}
                         </TooltipContent>
                     </Tooltip>
 
@@ -109,49 +142,63 @@ function AnswerActions({
                         <TooltipTrigger asChild>
                             <button
                                 type="button"
-                                onClick={() => { if (!rating) setReasonOpen((o) => !o) }}
-                                disabled={rating !== null}
+                                onClick={() => onThumb(false)}
                                 aria-label="Bad response"
                                 aria-pressed={rating?.helpful === false}
-                                className={`${iconButton} ${rating?.helpful === false ? 'text-amber-600' : ''} disabled:opacity-100`}
+                                className={`${iconButton} ${rating?.helpful === false ? 'text-amber-600' : ''}`}
                             >
                                 <ThumbsDown className="h-3.5 w-3.5" />
                             </button>
                         </TooltipTrigger>
                         <TooltipContent side="top">
-                            {rating?.helpful === false ? 'Marked unhelpful' : 'Bad response'}
+                            {rating?.helpful === false ? 'Marked unhelpful — click to change' : 'Bad response'}
                         </TooltipContent>
                     </Tooltip>
                 </div>
             </TooltipProvider>
 
-            {/* Asked only on a thumbs-down, and skippable. A rating with no reason is still useful;
-                refusing to record one until the user categorises it would lose most of them. */}
-            {reasonOpen && !rating && (
+            {/* Single-select: one click records and closes. Each list is a single ordered axis whose
+                options are mutually exclusive, so "the strongest thing you felt" always has one
+                right answer — multi-select would need a confirm button and cost us ratings. */}
+            {picking !== null && (
                 <div className="mt-1.5 flex flex-wrap items-center gap-1">
-                    <span className="text-[10px] text-gray-500">What went wrong?</span>
-                    {FEEDBACK_REASONS.map((r) => (
-                        <button
-                            key={r.value}
-                            type="button"
-                            onClick={() => { onRate(false, r.value); setReasonOpen(false) }}
-                            className="rounded-full border border-gray-200 px-2 py-0.5 text-[10px] text-gray-600 transition-colors hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800"
-                        >
-                            {r.label}
-                        </button>
-                    ))}
+                    <span className="text-[10px] text-gray-500">
+                        {picking ? 'What was good about it?' : 'What went wrong?'}
+                    </span>
+                    {reasonsFor(picking).map((r) => {
+                        const active = rating?.helpful === picking && rating?.reason === r.value
+                        const tone = picking
+                            ? 'hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-800'
+                            : 'hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800'
+                        const activeTone = picking
+                            ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
+                            : 'border-amber-300 bg-amber-50 text-amber-800'
+                        return (
+                            <button
+                                key={r.value}
+                                type="button"
+                                onClick={() => {
+                                    onRate(picking, r.value as FeedbackReason)
+                                    setPicking(null)
+                                }}
+                                aria-pressed={active}
+                                className={`rounded-full border px-2 py-0.5 text-[10px] transition-colors ${
+                                    active ? activeTone : `border-gray-200 text-gray-600 ${tone}`
+                                }`}
+                            >
+                                {r.label}
+                            </button>
+                        )
+                    })}
+                    {/* The thumb is already recorded, so this only closes the panel. */}
                     <button
                         type="button"
-                        onClick={() => { onRate(false); setReasonOpen(false) }}
+                        onClick={() => setPicking(null)}
                         className="px-1 text-[10px] text-gray-400 underline transition-colors hover:text-gray-700"
                     >
                         Skip
                     </button>
                 </div>
-            )}
-
-            {rating?.helpful === false && (
-                <p className="mt-1 text-[10px] text-gray-400">Thanks — this helps us improve <Brio />.</p>
             )}
         </div>
     )
@@ -186,7 +233,23 @@ export function EngagementAiChat({
     const [transcriptCopied, setTranscriptCopied] = useState(false)
     // Ratings by message index. Session-only: the thumbs are an affordance on an answer still on
     // screen, and the durable record lives server-side in platform_ai_feedback.
-    const [ratings, setRatings] = useState<Record<number, { helpful: boolean }>>({})
+    const [ratings, setRatings] = useState<Record<number, { helpful: boolean; reason?: FeedbackReason }>>({})
+    const { addToast } = useToast()
+
+    /**
+     * Identity of this conversation, for grouping its ratings together in the efficacy dashboard —
+     * a run of good answers turning bad after a topic shift is a different signal from the same
+     * number of unrelated complaints.
+     *
+     * Minted here rather than server-side because the chat endpoint is stateless: it receives the
+     * whole message array each turn and holds no continuity, so a server-minted id would be fresh
+     * on every request, which is the opposite of grouping. Keyed on `projectId` so switching
+     * engagements starts a new thread rather than merging two conversations.
+     */
+    const threadIdRef = useRef<{ key: string; id: string } | null>(null)
+    if (threadIdRef.current?.key !== projectId) {
+        threadIdRef.current = { key: projectId, id: crypto.randomUUID() }
+    }
 
     useEffect(() => { setHistory(getChatHistory(projectId)) }, [projectId])
 
@@ -246,7 +309,7 @@ export function EngagementAiChat({
             setMessages((prev) => [
                 ...prev,
                 { role: 'user', content: trimmed, at: Date.now() },
-                { role: 'assistant', content: OUT_OF_SCOPE_REPLY, at: Date.now() },
+                { role: 'assistant', content: OUT_OF_SCOPE_REPLY, at: Date.now(), answerId: crypto.randomUUID() },
             ])
             inputRef.current?.focus()
             return
@@ -257,7 +320,7 @@ export function EngagementAiChat({
         setMessages((prev) => [
             ...prev,
             { role: 'user', content: trimmed, at: Date.now() },
-            { role: 'assistant', content: '', at: Date.now() },
+            { role: 'assistant', content: '', at: Date.now(), answerId: crypto.randomUUID() },
         ])
         setStreaming(true)
 
@@ -319,34 +382,83 @@ export function EngagementAiChat({
         const question = messages[assistantIndex - 1]
         if (question?.role !== 'user') return
         setMessages((prev) => prev.slice(0, assistantIndex - 1))
+        // Ratings are keyed by position in the message array, and the retried pair is about to be
+        // dropped — so every rating from here on would otherwise re-attach to whatever lands in its
+        // slot, showing a thumbs-down on an answer the user never saw. The stored rows are
+        // unaffected: they are keyed by answerId, not position.
+        setRatings((prev) => {
+            const next: typeof prev = {}
+            for (const [k, v] of Object.entries(prev)) {
+                if (Number(k) < assistantIndex - 1) next[Number(k)] = v
+            }
+            return next
+        })
         void ask(question.content)
     }, [messages, streaming, ask])
 
     /**
-     * Records a thumbs rating on an answer.
+     * Records or corrects a thumbs rating on an answer.
      *
-     * Optimistic: the UI marks it immediately and the request is fire-and-forget. A failed write
-     * costs one diagnostic data point, whereas an error toast would punish someone for trying to
-     * help — the same trade `recordAiFeedback` makes server-side by never throwing.
+     * Optimistic: the UI marks the rating immediately, because a thumb that waits on the network
+     * before responding feels broken. The toast then confirms what actually reached the server.
+     *
+     * The rating is written on the thumb click and again when a chip is picked. Both carry the same
+     * `answerId`, so the server upserts and the second write corrects the first rather than adding a
+     * row — which is what makes the rating editable without inflating the efficacy counts.
      *
      * The question is sent so a negative rating is actionable; without it a thumbs-down says only
      * that something was wrong, on an answer nobody can see. The answer itself is never sent.
      */
     const rate = useCallback(async (assistantIndex: number, helpful: boolean, reason?: FeedbackReason) => {
-        setRatings((prev) => ({ ...prev, [assistantIndex]: { helpful } }))
+        const previous = ratings[assistantIndex]
+        setRatings((prev) => ({ ...prev, [assistantIndex]: { helpful, reason } }))
+
         const question = messages[assistantIndex - 1]?.role === 'user'
             ? messages[assistantIndex - 1].content
             : undefined
+
         try {
-            await fetch(`/api/projects/${projectId}/ai-feedback`, {
+            const res = await fetch(`/api/projects/${projectId}/ai-feedback`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ helpful, reason, question }),
+                body: JSON.stringify({
+                    helpful,
+                    reason,
+                    question,
+                    answerId: messages[assistantIndex]?.answerId,
+                    threadId: threadIdRef.current?.id,
+                }),
+            })
+            if (!res.ok) throw new Error(String(res.status))
+
+            addToast({
+                type: 'success',
+                title: 'Thanks — feedback recorded',
+                // Only say what we actually do with it. This does not retrain anything, and the
+                // detail is what makes the rating usable rather than a bare tally.
+                message: reason
+                    ? 'It tells us which prompts to fix.'
+                    : helpful
+                        ? 'Tell us what was good about it to make it more useful.'
+                        : 'Tell us what went wrong to make it more useful.',
             })
         } catch {
-            // Deliberately silent — see above.
+            // Roll back so the UI does not claim a rating the server never took — the user can
+            // click again. Silent failure was acceptable when nothing confirmed success; now that
+            // a toast does, a thumb left marked after a failed write would be a lie.
+            setRatings((prev) => {
+                const next = { ...prev }
+                if (previous) next[assistantIndex] = previous
+                else delete next[assistantIndex]
+                return next
+            })
+            addToast({
+                type: 'error',
+                title: "Couldn't record that",
+                message: 'Your rating was not saved. Please try again.',
+            })
         }
-    }, [projectId, messages])
+    }, [projectId, messages, ratings, addToast])
 
     /**
      * Copies the whole conversation as Markdown.
