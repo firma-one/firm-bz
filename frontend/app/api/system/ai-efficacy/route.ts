@@ -1,0 +1,33 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/utils/supabase/server'
+import { isSysAdminUser } from '@/lib/system/user-data-map'
+import { getAiEfficacyReport } from '@/lib/ai/feedback'
+import { logger } from '@/lib/logger'
+
+export const dynamic = 'force-dynamic'
+
+/**
+ * GET /api/system/ai-efficacy?days=30
+ *
+ * Thumbs up/down rates across all firms, for the system admin tools. Answers one question: is Brio
+ * getting better or worse, and what is it bad at.
+ */
+export async function GET(request: NextRequest) {
+    try {
+        const supabase = await createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        if (!(await isSysAdminUser(user.id))) {
+            return NextResponse.json({ error: 'Forbidden: System admin access required' }, { status: 403 })
+        }
+
+        const raw = Number(request.nextUrl.searchParams.get('days') ?? 30)
+        // Clamped rather than rejected: a nonsense window should show a sensible report, not a 400.
+        const days = Number.isFinite(raw) ? Math.min(365, Math.max(1, Math.trunc(raw))) : 30
+
+        return NextResponse.json({ data: await getAiEfficacyReport(days) })
+    } catch (error) {
+        logger.error('[system/ai-efficacy] GET failed:', error as Error)
+        return NextResponse.json({ error: 'Could not load AI efficacy' }, { status: 500 })
+    }
+}

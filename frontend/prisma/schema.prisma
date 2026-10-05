@@ -217,6 +217,7 @@ model Group {
   members       GroupMember[]
   subscriptions Subscription[]
   aiUsage       PlatformAiUsage[]
+  aiFeedback    PlatformAiFeedback[]
 
   @@map("groups")
   @@schema("platform")
@@ -871,6 +872,42 @@ model PlatformAiUsage {
   @@index([firmId, createdAt])
   @@index([feature, createdAt])
   @@map("platform_ai_usage")
+  @@schema("platform")
+}
+
+/// Thumbs up/down on an individual AI answer.
+///
+/// Records the QUESTION but never the ANSWER. The question is text the user typed knowing it went
+/// to the assistant; the answer is derived from engagement data, so storing it would copy client
+/// data into a second table for no gain — the question plus timestamp is enough to reproduce it.
+/// This matches the boundary the AI context itself holds.
+///
+/// There is no feedback loop into the model: nothing here changes a future response automatically.
+/// Its purpose is to show which prompts and features are failing, so they can be fixed by hand.
+model PlatformAiFeedback {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+
+  groupId      String   @db.Uuid
+  firmId       String?  @db.Uuid
+  /// Engagement the answer was about, for chat and summary feedback.
+  engagementId String?  @db.Uuid
+  userId       String?  @db.Uuid
+
+  /// 'brief' | 'summary' | 'chat' | 'searchInterpret' — matches PlatformAiUsage.feature.
+  feature      String
+  /// true = good response, false = bad response.
+  helpful      Boolean
+  /// Optional category a user picks when marking an answer unhelpful, e.g. 'inaccurate'.
+  reason       String?
+  /// The question asked. Null for surfaces with no question, such as the daily brief.
+  question     String?
+
+  group        Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@index([groupId, createdAt])
+  @@index([feature, helpful, createdAt])
+  @@map("platform_ai_feedback")
   @@schema("platform")
 }
 
