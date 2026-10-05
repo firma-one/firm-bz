@@ -80,7 +80,7 @@ export function AiCreditsIndicator() {
                 <Link
                     href="/d/billing"
                     aria-label={`${used} AI credits used, allowance not configured`}
-                    className="w-10 h-10 flex items-center justify-center rounded-xl text-[#5A78FF] hover:bg-[#5A78FF]/10 transition-colors"
+                    className="w-10 h-10 flex items-center justify-center rounded-xl text-primary hover:bg-primary/10 transition-colors"
                 >
                     <Sparkles className="h-5 w-5" />
                 </Link>
@@ -105,7 +105,7 @@ export function AiCreditsIndicator() {
                 className={`w-10 h-10 flex items-center justify-center rounded-xl transition-colors ${
                     warn
                         ? 'text-amber-600 hover:bg-amber-500/10'
-                        : 'text-[#5A78FF] hover:bg-[#5A78FF]/10'
+                        : 'text-primary hover:bg-primary/10'
                 }`}
             >
                 <Sparkles className="h-5 w-5" />
