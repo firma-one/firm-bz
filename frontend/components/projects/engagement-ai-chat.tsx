@@ -45,6 +45,14 @@ interface Message {
 const MAX_COMPOSER_HEIGHT_PX = 72
 
 /**
+ * How far from the bottom still counts as "following along".
+ *
+ * Generous enough to survive a part-rendered line, small enough that a reader who has deliberately
+ * scrolled up is not dragged back down by the next token.
+ */
+const AUTOSCROLL_SLACK_PX = 80
+
+/**
  * A rating already given on an answer. `null`/`undefined` means not yet rated.
  *
  * `undefined` is in the type deliberately: the caller looks the rating up out of a sparse
@@ -316,9 +324,39 @@ export function EngagementAiChat({
 
     const suggestions = modelFollowUps.length > 0 ? modelFollowUps : dataSuggestions
 
+    /**
+     * Keeps the newest content in view as it arrives, and again once the turn settles.
+     *
+     * `streaming` is a dependency, not just `messages`: the action bar — copy, retry, the rating
+     * thumbs — renders only after streaming stops, in a render that no message change triggers. So
+     * scrolling on `messages` alone always landed a row short, leaving those controls just below
+     * the fold.
+     *
+     * The settled scroll runs after paint rather than inside the effect body, because the action
+     * bar has not been laid out yet at effect time and `scrollHeight` would still be the old value.
+     */
     useEffect(() => {
-        scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
-    }, [messages])
+        const el = scrollRef.current
+        if (!el) return
+
+        // Auto-follow only while the reader is already at the bottom. Yanking the view back while
+        // someone is scrolled up re-reading an earlier answer is worse than not following at all.
+        const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < AUTOSCROLL_SLACK_PX
+        if (!nearBottom && streaming) return
+
+        const toBottom = (behavior: ScrollBehavior) =>
+            el.scrollTo({ top: el.scrollHeight, behavior })
+
+        if (streaming) {
+            // Instant while tokens arrive: a smooth scroll is still animating when the next chunk
+            // lands, so each one restarts it and the view never catches up.
+            toBottom('auto')
+            return
+        }
+
+        const frame = requestAnimationFrame(() => toBottom('smooth'))
+        return () => cancelAnimationFrame(frame)
+    }, [messages, streaming])
 
     const ask = useCallback(async (question: string) => {
         const trimmed = question.trim()
