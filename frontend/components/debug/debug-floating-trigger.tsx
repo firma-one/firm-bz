@@ -29,7 +29,11 @@ export function DebugFloatingTrigger() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Debug context"
-        className="fixed bottom-6 right-6 z-40 flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white shadow-md hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-400"
+        /* Bottom-LEFT over the sidebar, sitting above the Next.js dev indicator which owns the
+           very corner. Both are developer tools and belong together, away from product chrome:
+           the right corner is spoken for by the Brio launcher, the toasts and the progress
+           panels. */
+        className="fixed bottom-20 left-4 z-40 flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white shadow-md hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-400"
       >
         <Bug className="h-5 w-5 text-slate-600" />
       </button>

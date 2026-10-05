@@ -45,6 +45,14 @@ interface Message {
 const MAX_COMPOSER_HEIGHT_PX = 72
 
 /**
+ * How far from the bottom still counts as "following along".
+ *
+ * Generous enough to survive a part-rendered line, small enough that a reader who has deliberately
+ * scrolled up is not dragged back down by the next token.
+ */
+const AUTOSCROLL_SLACK_PX = 80
+
+/**
  * A rating already given on an answer. `null`/`undefined` means not yet rated.
  *
  * `undefined` is in the type deliberately: the caller looks the rating up out of a sparse
@@ -221,6 +229,7 @@ export function EngagementAiChat({
     data,
     engagementName,
     clientName,
+    chrome = 'card',
 }: {
     projectId: string
     /** Insights payload the page already holds; drives data-aware suggestions. */
@@ -228,6 +237,12 @@ export function EngagementAiChat({
     /** Titles the exported transcript. Optional — it falls back to "this engagement". */
     engagementName?: string | null
     clientName?: string | null
+    /**
+     * 'card' (default) draws the panel's own border and shadow, for the in-column placement.
+     * 'floating' drops both, because the surrounding overlay already supplies them — two nested
+     * borders read as a box inside a box.
+     */
+    chrome?: 'card' | 'floating'
 }) {
     const [messages, setMessages] = useState<Message[]>([])
     const [input, setInput] = useState('')
@@ -309,9 +324,39 @@ export function EngagementAiChat({
 
     const suggestions = modelFollowUps.length > 0 ? modelFollowUps : dataSuggestions
 
+    /**
+     * Keeps the newest content in view as it arrives, and again once the turn settles.
+     *
+     * `streaming` is a dependency, not just `messages`: the action bar — copy, retry, the rating
+     * thumbs — renders only after streaming stops, in a render that no message change triggers. So
+     * scrolling on `messages` alone always landed a row short, leaving those controls just below
+     * the fold.
+     *
+     * The settled scroll runs after paint rather than inside the effect body, because the action
+     * bar has not been laid out yet at effect time and `scrollHeight` would still be the old value.
+     */
     useEffect(() => {
-        scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
-    }, [messages])
+        const el = scrollRef.current
+        if (!el) return
+
+        // Auto-follow only while the reader is already at the bottom. Yanking the view back while
+        // someone is scrolled up re-reading an earlier answer is worse than not following at all.
+        const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < AUTOSCROLL_SLACK_PX
+        if (!nearBottom && streaming) return
+
+        const toBottom = (behavior: ScrollBehavior) =>
+            el.scrollTo({ top: el.scrollHeight, behavior })
+
+        if (streaming) {
+            // Instant while tokens arrive: a smooth scroll is still animating when the next chunk
+            // lands, so each one restarts it and the view never catches up.
+            toBottom('auto')
+            return
+        }
+
+        const frame = requestAnimationFrame(() => toBottom('smooth'))
+        return () => cancelAnimationFrame(frame)
+    }, [messages, streaming])
 
     const ask = useCallback(async (question: string) => {
         const trimmed = question.trim()
@@ -555,7 +600,9 @@ export function EngagementAiChat({
     // question. Show it inert with an explanation instead.
     if (unavailable) {
         return (
-            <div className="bg-white border border-[#e5e7eb] rounded shadow-sm p-4">
+            <div className={`bg-white p-4 ${
+                chrome === 'floating' ? 'rounded-b-lg' : 'border border-[#e5e7eb] rounded shadow-sm'
+            }`}>
                 <div className="flex items-center gap-2 mb-1.5">
                     <span className="text-sm font-semibold text-gray-900">Ask</span>
                     <Brio className="text-sm text-gray-400" />
@@ -574,9 +621,12 @@ export function EngagementAiChat({
     // `relative` on the card anchors the history overlay; `overflow-hidden` then keeps that overlay
     // inside the card, which is what we want — it should never spill over the Action Center below.
     return (
-        <div className="relative bg-white border border-primary/25 rounded shadow-sm flex flex-col overflow-hidden">
+        <div className={`relative bg-white flex flex-col overflow-hidden ${
+            chrome === 'floating' ? 'min-h-0 flex-1 rounded-b-lg' : 'border border-primary/25 rounded shadow-sm'
+        }`}>
             <div className="flex items-center gap-2 border-b border-primary/15 bg-primary/5 px-4 py-3">
-                <Sparkles className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                {/* No separate sparkle: the Brio mark already carries one, and two side by side
+                    read as two different things rather than one brand. */}
                 <span className="text-sm font-semibold text-gray-900">Ask</span>
                 <Brio className="text-sm text-primary" />
                 <span className="ml-auto text-[10px] uppercase tracking-wider text-primary/70">
@@ -646,8 +696,13 @@ export function EngagementAiChat({
                 thread down by its own height, so opening history scrolled the answer you were
                 reading off screen — and closing it jumped you back. */}
             {historyOpen && (
-                <div className="absolute inset-x-0 top-[2.75rem] z-20 border-b border-gray-200 bg-white px-4 py-2 shadow-md">
-                    <div className="mb-1.5 flex items-center justify-between">
+                /* `bottom-0` as well as `top`: anchored only from the top, the overlay had no
+                   height of its own and the panel's overflow-hidden clipped the list mid-line
+                   instead of letting it scroll. Bounding it to the panel gives the inner list a
+                   real height to scroll within. `min-h-0` lets that child actually shrink — a flex
+                   item defaults to min-content and would otherwise refuse to. */
+                <div className="absolute inset-x-0 bottom-0 top-[2.75rem] z-20 flex flex-col border-b border-gray-200 bg-white px-4 py-2 shadow-md">
+                    <div className="mb-1.5 flex shrink-0 items-center justify-between">
                         <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">
                             Recent questions
                         </span>
@@ -659,10 +714,9 @@ export function EngagementAiChat({
                             Clear
                         </button>
                     </div>
-                    {/* Scrolls past about five entries rather than growing. The list is capped at
-                        ten, and letting all ten render pushed the conversation out of the panel —
-                        the history is a lookup, not the main view. */}
-                    <div className="hover-scrollbar flex max-h-[9rem] flex-col gap-0.5 overflow-y-auto">
+                    {/* Takes the space the overlay has rather than a fixed ceiling, so a tall
+                        panel shows more of the ten entries and a short one still scrolls. */}
+                    <div className="hover-scrollbar flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
                         {history.map((h) => (
                             <button
                                 key={`${h.question}-${h.askedAt}`}
@@ -675,13 +729,25 @@ export function EngagementAiChat({
                             </button>
                         ))}
                     </div>
-                    <p className="mt-1.5 text-[10px] text-gray-400">
+                    <p className="mt-1.5 shrink-0 text-[10px] text-gray-400">
                         Answers are not stored — picking one asks it again against current data.
                     </p>
                 </div>
             )}
 
-            <div ref={scrollRef} className="hover-scrollbar px-4 py-4 space-y-3 max-h-[480px] min-h-[180px] overflow-y-auto">
+            <div
+                ref={scrollRef}
+                /* Floating gets the taller window and no minimum: the overlay should hug an empty
+                   thread rather than reserve a blank 180px above the composer. In-column keeps the
+                   minimum, where a collapsing card would make the rail jump. */
+                className={`hover-scrollbar px-4 py-4 space-y-3 overflow-y-auto ${
+                    chrome === 'floating'
+                        // Fills the frame's fixed height and scrolls inside it, rather than
+                        // setting the panel's height by growing.
+                        ? 'min-h-0 flex-1'
+                        : 'max-h-[480px] min-h-[180px]'
+                }`}
+            >
                 {messages.length === 0 && (
                     <p className="text-sm text-gray-500">
                         <Brio /> answers only from this engagement&apos;s data, and can&apos;t change anything.
@@ -763,7 +829,7 @@ export function EngagementAiChat({
                 // mid-word with no scrollbar and no affordance, so the options simply looked
                 // broken; at this column width two per line is the honest layout.
                 <TooltipProvider delayDuration={150}>
-                    <div className="flex flex-wrap gap-1.5 px-4 pb-2.5 pt-0.5">
+                    <div className="flex min-w-0 flex-wrap gap-1.5 px-4 pb-2.5 pt-0.5">
                         {suggestions.map((s) => (
                             // The shared Radix tooltip, not `title=`: the native one is slow to
                             // appear, unstyled, and sits outside the product's visual language.

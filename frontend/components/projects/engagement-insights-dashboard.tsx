@@ -61,7 +61,7 @@ import { DocumentIcon } from '@/components/ui/document-icon'
 import type { EngagementInsightsResponse, UnansweredThreadItem, DocumentDueDateItem, RecentDocumentItem, SensitiveFileItem, DeliverableProgress, DeliverableStage, EngagementHealthScore, PlanningHygiene, CommentThreads, EngagementPace, FirstTimeRight } from '@/app/api/projects/[projectId]/insights/route'
 import { updateEngagementInsightsSummary, approveEngagementAiSummary, dismissEngagementAiSummary } from '@/lib/actions/project'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
-import { EngagementAiChat } from '@/components/projects/engagement-ai-chat'
+import { FloatingAiChat } from '@/components/projects/floating-ai-chat'
 import { ASSISTANT } from '@/lib/ai/assistant'
 import { fetchWithTimeout, AI_TIMEOUT_MS } from '@/lib/ai/fetch-timeout'
 import { Brio } from '@/components/ui/brio'
@@ -3462,23 +3462,30 @@ export function EngagementInsightsDashboard({
                 )}
             </div>
 
-            {/* Right: the AI chat first, then the Action Center (chat is internal roles only).
-                The chat used to sit beneath the full Action Center, which put it roughly 1400px
-                down the page — present but never seen. It leads now because asking a question is
-                the fastest route to an answer the Action Center takes scrolling to find. */}
+            {/* Right: the Action Center, now with the full column. The assistant used to lead this
+                rail — it had been buried beneath the Action Center, roughly 1400px down the page —
+                but occupying a column permanently cost this panel half its width whether or not
+                anyone was asking anything. It floats instead, below, and keeps its prominence
+                through a persistent launcher rather than through page real estate. */}
             <div className="flex flex-col gap-6 min-w-0">
-                {data?.isInternalViewer && (
-                    <EngagementAiChat
-                        projectId={projectId}
-                        data={data}
-                        engagementName={engagementName}
-                        clientName={clientName}
-                    />
-                )}
                 <EngagementActionCenterV2 data={data} loading={loading} engagementBase={engagementBase} projectId={projectId} setRefreshTick={setRefreshTick} />
             </div>
 
         </div>
+
+        {/* Outside the grid: a fixed overlay must not inherit the column's width or stacking
+            context. Open by default here — the assistant leads this page, and starting it
+            collapsed would undo the move that brought it out from under the Action Center.
+            Internal roles only, as before: external collaborators never see the assistant. */}
+        {data?.isInternalViewer && (
+            <FloatingAiChat
+                projectId={projectId}
+                data={data}
+                engagementName={engagementName}
+                clientName={clientName}
+                defaultOpen
+            />
+        )}
         </TooltipProvider>
     )
 }
