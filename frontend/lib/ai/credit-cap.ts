@@ -4,6 +4,7 @@ import { logger } from '@/lib/logger'
 import { parseEntitledAiCredits, applyEntitlementOverrides } from '@/lib/billing/subscription-metadata'
 import { getActiveSubscriptionForGroup } from '@/lib/billing/active-billing-subscription'
 import { CREDIT_WEIGHTS, creditsUsedSince, creditPeriodStart, type AiFeature } from './usage'
+import { maybeNotifyCreditPace } from './credit-pace-notify'
 
 /**
  * AI credit enforcement — two windows with different jobs.
@@ -167,7 +168,10 @@ export async function assertWithinAiCreditCap(params: {
     }
 
     const cost = CREDIT_WEIGHTS[params.feature]
-    const status = await aiCreditStatus(groupId)
+    const [status, sub] = await Promise.all([
+        aiCreditStatus(groupId),
+        getActiveSubscriptionForGroup(groupId),
+    ])
 
     if (status.burstLimit !== null && status.usedThisBurst + cost > status.burstLimit) {
         throw new AiCreditLimitError(
@@ -186,5 +190,16 @@ export async function assertWithinAiCreditCap(params: {
             status.usedThisPeriod,
         )
     }
+
+    // Warn the group admin when spending outruns the period. Deliberately after both limits pass:
+    // a refused request should not also produce a "running low" notification, since the user has
+    // already been told something stronger. Awaited but never throws, so it cannot fail the call.
+    const periodEnd = sub?.currentPeriodEnd ?? null
+    await maybeNotifyCreditPace({
+        groupId,
+        status,
+        periodStart: creditPeriodStart(periodEnd),
+        periodEnd,
+    })
 }
 

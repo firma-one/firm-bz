@@ -8,6 +8,7 @@ import { usePathname } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { supabase } from "@/lib/supabase"
 import { Bell, Bookmark, Briefcase, ChevronDown, ChevronRight, ChevronUp, History, Info, Megaphone, MapPinned as MapIcon, Search, Send, SquareX, Trash2, Users, X, ArrowUpRight } from "lucide-react"
+import { AiCreditsIndicator } from "@/components/app/ai-credits-indicator"
 import Link from "next/link"
 import { Tip } from "@/components/ui/tip"
 import { formatRelativeTime } from "@/lib/utils"
@@ -737,6 +738,9 @@ export function AppTopbar() {
             </div>
           ) : null}
         </div>
+        {/* AI credits sit left of the utility icons: a balance is status, not an action, and it is
+            the one item here that can change without the user doing anything in this tab. */}
+        <AiCreditsIndicator />
         <div className="relative bookmarks-container">
           <Tip label="Bookmarks" position="bottom">
           <button

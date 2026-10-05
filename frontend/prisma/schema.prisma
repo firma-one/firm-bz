@@ -716,6 +716,15 @@ model Notification {
   ctaUrl         String?
   metadata       Json     @default("{}")
   channels       Json     @default("{}")
+  /// Suppresses repeat notifications for the same underlying fact.
+  ///
+  /// Backed by a PARTIAL unique index created in migration 20261005220000, which is what makes
+  /// `skipDuplicates: true` in `createEventNotifications` do anything — without a constraint the
+  /// flag had nothing to act on and every key here was decorative.
+  ///
+  /// Not declared with `@unique` because Prisma can only express a full unique index, which would
+  /// show as permanent drift against the partial one. Same reason the reddit_screener embedding
+  /// index lives only in SQL.
   dedupeKey      String?
 
   readAt         DateTime? @db.Timestamptz(6)

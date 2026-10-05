@@ -367,6 +367,9 @@ export function EngagementAiChat({
         } finally {
             setStreaming(false)
             inputRef.current?.focus()
+            // Tells the top-bar balance to refresh. An event rather than a poll: credits only move
+            // when someone spends one, and this is the moment that happened.
+            window.dispatchEvent(new Event('firma-ai-credit-spent'))
         }
     }, [projectId, messages, streaming])
 
