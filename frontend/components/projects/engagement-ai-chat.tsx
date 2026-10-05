@@ -221,6 +221,7 @@ export function EngagementAiChat({
     data,
     engagementName,
     clientName,
+    chrome = 'card',
 }: {
     projectId: string
     /** Insights payload the page already holds; drives data-aware suggestions. */
@@ -228,6 +229,12 @@ export function EngagementAiChat({
     /** Titles the exported transcript. Optional — it falls back to "this engagement". */
     engagementName?: string | null
     clientName?: string | null
+    /**
+     * 'card' (default) draws the panel's own border and shadow, for the in-column placement.
+     * 'floating' drops both, because the surrounding overlay already supplies them — two nested
+     * borders read as a box inside a box.
+     */
+    chrome?: 'card' | 'floating'
 }) {
     const [messages, setMessages] = useState<Message[]>([])
     const [input, setInput] = useState('')
@@ -555,7 +562,9 @@ export function EngagementAiChat({
     // question. Show it inert with an explanation instead.
     if (unavailable) {
         return (
-            <div className="bg-white border border-[#e5e7eb] rounded shadow-sm p-4">
+            <div className={`bg-white p-4 ${
+                chrome === 'floating' ? 'rounded-b-lg' : 'border border-[#e5e7eb] rounded shadow-sm'
+            }`}>
                 <div className="flex items-center gap-2 mb-1.5">
                     <span className="text-sm font-semibold text-gray-900">Ask</span>
                     <Brio className="text-sm text-gray-400" />
@@ -574,7 +583,9 @@ export function EngagementAiChat({
     // `relative` on the card anchors the history overlay; `overflow-hidden` then keeps that overlay
     // inside the card, which is what we want — it should never spill over the Action Center below.
     return (
-        <div className="relative bg-white border border-primary/25 rounded shadow-sm flex flex-col overflow-hidden">
+        <div className={`relative bg-white flex flex-col overflow-hidden ${
+            chrome === 'floating' ? 'rounded-b-lg' : 'border border-primary/25 rounded shadow-sm'
+        }`}>
             <div className="flex items-center gap-2 border-b border-primary/15 bg-primary/5 px-4 py-3">
                 <Sparkles className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
                 <span className="text-sm font-semibold text-gray-900">Ask</span>

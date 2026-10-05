@@ -60,9 +60,12 @@ export function UploadProgressPanel() {
 
   return createPortal(
     <div className={cn(
-      'fixed bottom-4 right-4 bg-white rounded-lg shadow-xl border border-slate-200 z-[100] flex flex-col transition-all duration-300 w-[360px]',
+      'fixed right-4 bg-white rounded-lg shadow-xl border border-slate-200 z-[100] flex flex-col transition-all duration-300 w-[360px]',
       isUploadModalOpen ? 'h-auto max-h-[400px]' : 'h-10'
-    )}>
+    )}
+      /* Sits above the floating assistant when it occupies this corner, rather than over it. The
+         variable is 0px whenever the chat is closed or docked left, leaving the usual bottom-4. */
+      style={{ bottom: 'calc(1rem + var(--ai-chat-corner-offset, 0px))' }}>
       {/* Header */}
       <div
         className="flex items-center justify-between px-3 py-2 bg-primary/10 border-b border-primary/15 text-primary rounded-t-lg cursor-pointer"
