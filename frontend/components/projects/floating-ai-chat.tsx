@@ -1,8 +1,9 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Sparkles, X, PanelLeft, PanelRight } from 'lucide-react'
+import { Sparkles, ChevronDown, PanelLeft, PanelRight } from 'lucide-react'
 import { EngagementAiChat } from '@/components/projects/engagement-ai-chat'
+import { useSidebar } from '@/lib/sidebar-context'
 import { Brio } from '@/components/ui/brio'
 import type { EngagementInsightsResponse } from '@/lib/insights/engagement-insights'
 
@@ -67,6 +68,9 @@ export function FloatingAiChat({
      */
     defaultOpen?: boolean
 }) {
+    const { isCollapsed } = useSidebar()
+    const sidebarWidth = isCollapsed ? 64 : 256
+
     const [side, setSide] = useState<Side>('right')
     const [open, setOpen] = useState(defaultOpen)
 
@@ -134,14 +138,22 @@ export function FloatingAiChat({
     // something done IN the chat must not render behind it. Success toasts clear themselves in a
     // few seconds; errors persist until dismissed, so they are allowed to cover the panel header
     // rather than the composer.
-    const anchor = side === 'right' ? 'right-6' : 'left-6'
+    //
+    // Left-docking has to clear the app sidebar, which owns that edge: a plain `left-6` is measured
+    // from the viewport and slid the panel underneath it. The width is read from context rather
+    // than hardcoded so the panel follows the sidebar when it collapses.
+    const anchorClass = side === 'right' ? 'right-6' : ''
+    const anchorStyle = side === 'left'
+        ? { left: `${sidebarWidth + 24}px` }
+        : undefined
 
     if (!open) {
         return (
             <button
                 type="button"
                 onClick={toggleOpen}
-                className={`fixed bottom-6 ${anchor} z-40 flex items-center gap-2 rounded-full border border-primary/20 bg-white py-2.5 pl-3 pr-4 shadow-lg transition-all hover:shadow-xl hover:border-primary/40`}
+                className={`fixed bottom-6 ${anchorClass} z-40 flex items-center gap-2 rounded-full border border-primary/20 bg-white py-2.5 pl-3 pr-4 shadow-lg transition-all hover:shadow-xl hover:border-primary/40`}
+                style={anchorStyle}
                 aria-label="Open the engagement assistant"
             >
                 <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10">
@@ -167,7 +179,8 @@ export function FloatingAiChat({
                `max-w-full` is load-bearing: the suggestion chips wrap with no width ceiling of
                their own, and in a fixed element with nothing to push back they stretched the
                panel to their full text width. */
-            className={`fixed bottom-6 ${anchor} z-40 flex w-[23rem] max-w-[calc(100vw-3rem)] flex-col overflow-hidden rounded-lg border border-primary/25 bg-white shadow-2xl`}
+            className={`fixed bottom-6 ${anchorClass} z-40 flex w-[23rem] max-w-[calc(100vw-3rem)] flex-col overflow-hidden rounded-lg border border-primary/25 bg-white shadow-2xl`}
+            style={anchorStyle}
         >
             {/* The panel's own header carries the title; this strip owns only window controls, so
                 the two never compete to name the thing. */}
@@ -183,14 +196,17 @@ export function FloatingAiChat({
                         ? <PanelLeft className="h-3.5 w-3.5" />
                         : <PanelRight className="h-3.5 w-3.5" />}
                 </button>
+                {/* Collapse, not close: the conversation is kept and the panel returns to its
+                    launcher. An X claims the thread is being discarded, which would make people
+                    hesitate to put it away. */}
                 <button
                     type="button"
                     onClick={toggleOpen}
                     className="flex h-6 w-6 items-center justify-center rounded text-gray-400 transition-colors hover:bg-white hover:text-gray-700"
-                    aria-label="Close the assistant"
-                    title="Close"
+                    aria-label="Collapse the assistant"
+                    title="Collapse"
                 >
-                    <X className="h-3.5 w-3.5" />
+                    <ChevronDown className="h-4 w-4" />
                 </button>
             </div>
 
