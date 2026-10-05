@@ -1,11 +1,11 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { Send, Loader2, Sparkles, Copy, Check, RotateCcw, History, X, ThumbsUp, ThumbsDown, ClipboardList } from 'lucide-react'
+import { Send, Loader2, Sparkles, Copy, Check, RotateCcw, History, X, ThumbsUp, ThumbsDown, ClipboardList, Square } from 'lucide-react'
 import { ASSISTANT } from '@/lib/ai/assistant'
 import { Brio } from '@/components/ui/brio'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
-import { fetchWithTimeout, AI_TIMEOUT_MS, AiTimeoutError } from '@/lib/ai/fetch-timeout'
+import { fetchWithTimeout, AI_TIMEOUT_MS, AiTimeoutError, AiAbortedError } from '@/lib/ai/fetch-timeout'
 import { StreamingText } from '@/components/ui/streaming-text'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { getChatHistory, recordChatQuestion, clearChatHistory, type ChatHistoryEntry } from '@/lib/ai/chat-history'
@@ -30,6 +30,12 @@ interface Message {
      * exactly the window in which an answer is on screen to be re-rated.
      */
     answerId?: string
+    /**
+     * Set when the user stopped this answer mid-stream. The text is kept — the first paragraph is
+     * often the useful part — but the turn is marked so it is never presented as a complete answer,
+     * and so it cannot be rated: a thumbs-down on half an answer would poison the efficacy data.
+     */
+    stopped?: boolean
 }
 
 /**
@@ -66,12 +72,14 @@ type Rating = { helpful: boolean; reason?: FeedbackReason } | null | undefined
  * anyone who picked the wrong chip was stuck with the wrong one.
  */
 function AnswerActions({
-    at, copied, rating, disabled, onCopy, onRetry, onRate,
+    at, copied, rating, disabled, rateable = true, onCopy, onRetry, onRate,
 }: {
     at: number
     copied: boolean
     rating: Rating
     disabled: boolean
+    /** False for an answer the user stopped — see the call site. */
+    rateable?: boolean
     onCopy: () => void
     onRetry: () => void
     onRate: (helpful: boolean, reason?: FeedbackReason) => void
@@ -121,6 +129,8 @@ function AnswerActions({
                         <TooltipContent side="top">Ask again</TooltipContent>
                     </Tooltip>
 
+                    {rateable && (
+                    <>
                     <Tooltip>
                         <TooltipTrigger asChild>
                             <button
@@ -154,13 +164,15 @@ function AnswerActions({
                             {rating?.helpful === false ? 'Marked unhelpful — click to change' : 'Bad response'}
                         </TooltipContent>
                     </Tooltip>
+                    </>
+                    )}
                 </div>
             </TooltipProvider>
 
             {/* Single-select: one click records and closes. Each list is a single ordered axis whose
                 options are mutually exclusive, so "the strongest thing you felt" always has one
                 right answer — multi-select would need a confirm button and cost us ratings. */}
-            {picking !== null && (
+            {rateable && picking !== null && (
                 <div className="mt-1.5 flex flex-wrap items-center gap-1">
                     <span className="text-[10px] text-gray-500">
                         {picking ? 'What was good about it?' : 'What went wrong?'}
@@ -246,6 +258,15 @@ export function EngagementAiChat({
      * on every request, which is the opposite of grouping. Keyed on `projectId` so switching
      * engagements starts a new thread rather than merging two conversations.
      */
+    /**
+     * Aborts the in-flight turn when the user presses Stop.
+     *
+     * Worth having because a Brio turn costs a credit from a capped allowance: a question the user
+     * immediately realises was wrong should not have to run to completion. The server still meters
+     * whatever tokens were generated, so stopping is honest rather than free.
+     */
+    const abortRef = useRef<AbortController | null>(null)
+
     const threadIdRef = useRef<{ key: string; id: string } | null>(null)
     if (threadIdRef.current?.key !== projectId) {
         threadIdRef.current = { key: projectId, id: crypto.randomUUID() }
@@ -324,12 +345,15 @@ export function EngagementAiChat({
         ])
         setStreaming(true)
 
+        const controller = new AbortController()
+        abortRef.current = controller
+
         try {
             const res = await fetchWithTimeout(`/api/projects/${projectId}/ai-chat`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ question: trimmed, history }),
-            }, AI_TIMEOUT_MS.stream)
+            }, AI_TIMEOUT_MS.stream, controller.signal)
 
             if (!res.ok) {
                 if (res.status === 503) setUnavailable(true)
@@ -342,6 +366,12 @@ export function EngagementAiChat({
             const decoder = new TextDecoder()
 
             for (;;) {
+                // The fetch signal aborts the request, but a reader already handed out keeps
+                // resolving, so the stop is enforced here too: cancel the body and leave the loop.
+                if (controller.signal.aborted) {
+                    await reader.cancel().catch(() => {})
+                    throw new AiAbortedError()
+                }
                 const { done, value } = await reader.read()
                 if (done) break
                 const chunk = decoder.decode(value, { stream: true })
@@ -355,6 +385,19 @@ export function EngagementAiChat({
                 })
             }
         } catch (e) {
+            // A deliberate stop is not a failure, so it shows no error. Whatever had arrived is
+            // kept and marked stopped; if nothing had, the empty bubble is dropped like any other
+            // turn that produced no answer.
+            if (e instanceof AiAbortedError) {
+                setMessages((prev) => {
+                    if (!prev.length) return prev
+                    const last = prev[prev.length - 1]
+                    if (last.role !== 'assistant') return prev
+                    if (!last.content) return prev.slice(0, -1)
+                    return [...prev.slice(0, -1), { ...last, stopped: true }]
+                })
+                return
+            }
             // A timeout gets its own wording: "Could not get an answer" reads like a refusal,
             // when in fact nothing came back in time and retrying is worthwhile.
             setError(
@@ -365,6 +408,7 @@ export function EngagementAiChat({
             // Drop the empty assistant placeholder so a failed turn leaves no blank bubble.
             setMessages((prev) => (prev[prev.length - 1]?.content === '' ? prev.slice(0, -1) : prev))
         } finally {
+            abortRef.current = null
             setStreaming(false)
             inputRef.current?.focus()
             // Tells the top-bar balance to refresh. An event rather than a poll: credits only move
@@ -372,6 +416,16 @@ export function EngagementAiChat({
             window.dispatchEvent(new Event('firma-ai-credit-spent'))
         }
     }, [projectId, messages, streaming])
+
+    /**
+     * Stops the answer currently streaming.
+     *
+     * The server meters whatever was generated, so this saves the user the rest of the answer, not
+     * the whole credit — the request had already reached the model.
+     */
+    const stop = useCallback(() => {
+        abortRef.current?.abort()
+    }, [])
 
     /**
      * Re-asks the question that produced a given answer.
@@ -665,15 +719,28 @@ export function EngagementAiChat({
                                     <Brio /> is thinking
                                 </span>
                             )}
+                            {/* Says plainly that the answer is incomplete. Without this a stopped
+                                turn is indistinguishable from a finished one, and a half-answer
+                                about an engagement would read as the whole picture. */}
+                            {m.stopped && (
+                                <p className="mt-1 text-[11px] italic text-gray-400">
+                                    Stopped — this answer is incomplete.
+                                </p>
+                            )}
                             {/* Actions on a settled answer only. While streaming the text is still
                                 arriving, so copying it would capture a fragment and retrying would
-                                race the in-flight request. */}
+                                race the in-flight request.
+
+                                A stopped turn can be copied and re-asked but NOT rated: a thumbs
+                                down on an answer the user cut short measures their impatience, not
+                                the model, and would quietly corrupt the efficacy report. */}
                             {m.role === 'assistant' && m.content && !(streaming && i === messages.length - 1) && (
                                 <AnswerActions
                                     at={m.at}
                                     copied={copiedIndex === i}
                                     rating={ratings[i]}
                                     disabled={streaming}
+                                    rateable={!m.stopped}
                                     onCopy={() => void copyAnswer(i, m.content)}
                                     onRetry={() => retry(i)}
                                     onRate={(helpful, reason) => void rate(i, helpful, reason)}
@@ -752,16 +819,31 @@ export function EngagementAiChat({
                     style={{ maxHeight: MAX_COMPOSER_HEIGHT_PX }}
                     className="hover-scrollbar flex-1 resize-none overflow-y-auto bg-transparent text-sm leading-6 outline-none placeholder:text-gray-400 disabled:opacity-50"
                 />
-                    {/* Filled once there is something to send, so the affordance is obvious rather
-                        than a grey glyph that looks permanently disabled. */}
-                    <button
-                        type="submit"
-                        disabled={streaming || !input.trim()}
-                        className="mb-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary text-white transition-colors hover:brightness-105 disabled:bg-gray-100 disabled:text-gray-400"
-                        aria-label="Send question"
-                    >
-                        {streaming ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                    </button>
+                    {/* While streaming this becomes Stop rather than a spinner. A spinner says
+                        "wait"; a question the user already regrets should be stoppable, and a turn
+                        costs a credit. type="button" so it never submits the form. */}
+                    {streaming ? (
+                        <button
+                            type="button"
+                            onClick={stop}
+                            className="mb-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gray-900 text-white transition-colors hover:bg-gray-700"
+                            aria-label="Stop generating"
+                            title="Stop generating"
+                        >
+                            <Square className="h-3 w-3 fill-current" />
+                        </button>
+                    ) : (
+                        /* Filled once there is something to send, so the affordance is obvious
+                           rather than a grey glyph that looks permanently disabled. */
+                        <button
+                            type="submit"
+                            disabled={!input.trim()}
+                            className="mb-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary text-white transition-colors hover:brightness-105 disabled:bg-gray-100 disabled:text-gray-400"
+                            aria-label="Send question"
+                        >
+                            <Send className="h-3.5 w-3.5" />
+                        </button>
+                    )}
                 </div>
             </form>
         </div>

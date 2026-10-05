@@ -65,6 +65,30 @@ describe('buildChatTranscript', () => {
         expect(out).toMatch(/Figures may have changed since\.$/)
     })
 
+    /**
+     * A transcript outlives the chat panel: pasted into a client update, a stopped answer looks
+     * exactly like a finished one, and a half-answer about an engagement presented as whole is the
+     * same failure the staleness footer exists to prevent.
+     */
+    it('marks an answer the user stopped', () => {
+        const out = buildChatTranscript([
+            { role: 'user', content: "What's overdue?" },
+            { role: 'assistant', content: 'Three deliverables are', stopped: true },
+        ], { generatedAt: AT })
+
+        expect(out).toContain('Three deliverables are')
+        expect(out).toContain('_[stopped — incomplete answer]_')
+    })
+
+    it('leaves a completed answer unmarked', () => {
+        const out = buildChatTranscript([
+            { role: 'user', content: "What's overdue?" },
+            { role: 'assistant', content: 'Nothing is overdue.' },
+        ], { generatedAt: AT })
+
+        expect(out).not.toContain('stopped')
+    })
+
     /** Exporting mid-stream would leave a question with a blank answer beneath it. */
     it('skips the empty assistant turn while a reply is still streaming', () => {
         const out = buildChatTranscript([

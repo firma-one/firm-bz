@@ -22,6 +22,8 @@ import { parseChatReply } from './engagement-chat'
 export interface TranscriptMessage {
     role: 'user' | 'assistant'
     content: string
+    /** True for an answer the user stopped mid-stream; noted in the transcript rather than hidden. */
+    stopped?: boolean
 }
 
 export interface TranscriptMeta {
@@ -70,7 +72,13 @@ export function buildChatTranscript(
             // Parsed, so the follow-up sentinel never reaches the transcript — the same reason
             // per-answer Copy parses rather than copying raw stream text.
             const answer = parseChatReply(m.content).answer.trim()
-            if (answer) lines.push(answer, '')
+            if (answer) {
+                // Marked, because a transcript is pasted into client updates and notes: a stopped
+                // answer looks complete once it leaves the chat, and a half-answer about an
+                // engagement presented as whole is exactly the failure this file's footer guards
+                // against elsewhere.
+                lines.push(m.stopped ? `${answer}\n\n_[stopped — incomplete answer]_` : answer, '')
+            }
         }
     }
 

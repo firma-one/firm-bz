@@ -19,6 +19,19 @@ import { buildEngagementActivity } from '@/lib/ai/engagement-activity'
 import type { EngagementInsightsResponse } from '../insights/route'
 
 /**
+ * Did the stream end because the reader went away, rather than because generation failed?
+ *
+ * A cancelled ReadableStream surfaces as a TypeError on `enqueue` ("Invalid state: Controller is
+ * already closed") or as an AbortError, depending on runtime. Neither is an upstream failure, so
+ * neither should be logged as one — but both still represent tokens that were spent.
+ */
+function isClientDisconnect(error: unknown): boolean {
+    if (error instanceof DOMException && error.name === 'AbortError') return true
+    const message = error instanceof Error ? error.message : ''
+    return /invalid state|already closed|aborted|cancel/i.test(message)
+}
+
+/**
  * POST /api/projects/[projectId]/ai-chat
  *
  * Read-only Q&A over one engagement's insights. Firm users only — external collaborators and
@@ -129,6 +142,10 @@ export async function POST(
         const encoder = new TextEncoder()
         const body_ = new ReadableStream<Uint8Array>({
             async start(controller) {
+                // Declared outside the try so the catch can meter whatever was generated before a
+                // client disconnect cut the stream short.
+                let inputTokens = 0
+                let outputTokens = 0
                 try {
                     // Streaming reports tokens across two events: the input count arrives with
                     // message_start, the output count with message_delta at the end.
@@ -137,8 +154,6 @@ export async function POST(
                     // back here. Without this, enabling prompt caching would have made recorded
                     // usage collapse — a cached turn reports only the handful of uncached tokens,
                     // and the ledger would show a fraction of the real context size.
-                    let inputTokens = 0
-                    let outputTokens = 0
                     for await (const event of stream) {
                         if (event.type === 'message_start') {
                             const u = event.message.usage
@@ -151,9 +166,21 @@ export async function POST(
                             controller.enqueue(encoder.encode(event.delta.text))
                         }
                     }
-                    // Metered only on a complete stream: a failed answer is not a billable one.
                     await meterAiCall(scope, { inputTokens, outputTokens })
                 } catch (error) {
+                    // A client disconnect — the user pressed Stop, or closed the tab — surfaces
+                    // here when enqueue throws on a cancelled response. Those tokens were really
+                    // generated and really billed upstream, so they are metered rather than
+                    // written off: skipping them would let repeated ask-then-stop consume
+                    // inference indefinitely without ever touching the allowance, and nothing
+                    // would notice because the burst cap counts this same ledger.
+                    //
+                    // Input is charged in full regardless, since the request was already
+                    // processed; output is whatever had been generated when the stream ended.
+                    if (isClientDisconnect(error)) {
+                        await meterAiCall(scope, { inputTokens, outputTokens })
+                        return
+                    }
                     logger.error('AI chat stream error:', error as Error)
                     // Fail the stream rather than closing it cleanly. This response is raw text
                     // with no envelope to carry an error flag, so a clean close is byte-identical
