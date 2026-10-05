@@ -819,18 +819,27 @@ export function EngagementAiChat({
                     style={{ maxHeight: MAX_COMPOSER_HEIGHT_PX }}
                     className="hover-scrollbar flex-1 resize-none overflow-y-auto bg-transparent text-sm leading-6 outline-none placeholder:text-gray-400 disabled:opacity-50"
                 />
-                    {/* While streaming this becomes Stop rather than a spinner. A spinner says
-                        "wait"; a question the user already regrets should be stoppable, and a turn
-                        costs a credit. type="button" so it never submits the form. */}
+                    {/* While streaming, the spinner itself is the stop control: the ring carries the
+                        "working" signal and the small square inside it says it can be interrupted.
+                        A solid dark button read as a heavier commitment than stopping deserves, and
+                        competed with the answer arriving beside it.
+
+                        type="button" so it never submits the form. */}
                     {streaming ? (
                         <button
                             type="button"
                             onClick={stop}
-                            className="mb-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gray-900 text-white transition-colors hover:bg-gray-700"
+                            className="group mb-0.5 relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-gray-400 transition-colors hover:text-gray-700"
                             aria-label="Stop generating"
                             title="Stop generating"
                         >
-                            <Square className="h-3 w-3 fill-current" />
+                            {/* Ring drawn as a bordered circle with one darker edge, so it reads as
+                                a spinner without a second icon stacked over the square. */}
+                            <span
+                                aria-hidden
+                                className="absolute inset-0 animate-spin rounded-full border-2 border-gray-200 border-t-primary"
+                            />
+                            <Square className="h-2.5 w-2.5 fill-current" />
                         </button>
                     ) : (
                         /* Filled once there is something to send, so the affordance is obvious
