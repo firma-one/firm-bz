@@ -587,7 +587,8 @@ export function EngagementAiChat({
             chrome === 'floating' ? 'rounded-b-lg' : 'border border-primary/25 rounded shadow-sm'
         }`}>
             <div className="flex items-center gap-2 border-b border-primary/15 bg-primary/5 px-4 py-3">
-                <Sparkles className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                {/* No separate sparkle: the Brio mark already carries one, and two side by side
+                    read as two different things rather than one brand. */}
                 <span className="text-sm font-semibold text-gray-900">Ask</span>
                 <Brio className="text-sm text-primary" />
                 <span className="ml-auto text-[10px] uppercase tracking-wider text-primary/70">

@@ -1,9 +1,9 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Sparkles, ChevronDown, PanelLeft, PanelRight } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { ChevronDown, GripVertical } from 'lucide-react'
 import { EngagementAiChat } from '@/components/projects/engagement-ai-chat'
-import { useSidebar } from '@/lib/sidebar-context'
 import { Brio } from '@/components/ui/brio'
 import type { EngagementInsightsResponse } from '@/lib/insights/engagement-insights'
 
@@ -30,6 +30,17 @@ import type { EngagementInsightsResponse } from '@/lib/insights/engagement-insig
 type Side = 'right' | 'left'
 
 const SIDE_KEY = 'fm_ai_chat_side'
+/** Panel width, shared between the docked position and the drag clamp. */
+const PANEL_WIDTH_REM = 23
+/** Inset from the viewport edge when docked, and the clamp margin while dragging. */
+const GUTTER = 24
+/**
+ * How far the pointer must travel before a drag flips the dock, as a share of viewport width.
+ *
+ * A fifth is short enough that the gesture feels responsive from either side, and long enough that
+ * a nudge while grabbing the handle does not move the panel by accident.
+ */
+const SNAP_TRAVEL_FRACTION = 0.2
 /** Collapsed state is per engagement: whether you are mid-conversation is engagement-specific. */
 const openKeyFor = (projectId: string) => `fm_ai_chat_open_${projectId}`
 
@@ -68,9 +79,6 @@ export function FloatingAiChat({
      */
     defaultOpen?: boolean
 }) {
-    const { isCollapsed } = useSidebar()
-    const sidebarWidth = isCollapsed ? 64 : 256
-
     const [side, setSide] = useState<Side>('right')
     const [open, setOpen] = useState(defaultOpen)
 
@@ -126,49 +134,123 @@ export function FloatingAiChat({
         })
     }, [projectId])
 
-    const flipSide = useCallback(() => {
-        setSide((current) => {
-            const next: Side = current === 'right' ? 'left' : 'right'
-            writeStored(SIDE_KEY, next)
-            return next
-        })
-    }, [])
+    /**
+     * Drag the panel to the other side, snapping to whichever half it is released in.
+     *
+     * A drag handle rather than a left/right toggle button, which stated a direction the user had
+     * to translate into a result — "does PanelLeft mean it IS left, or SENDS it left?". Dragging
+     * says what will happen by doing it, the way the Next.js devtools widget works.
+     *
+     * The panel does not follow the cursor freely: there are two valid positions, so it tracks
+     * horizontally while held and lands in the nearer corner, which keeps the layout predictable
+     * and avoids a panel parked somewhere it overlaps the Action Center.
+     */
+    // Holds the side the pointer is currently over, not a pixel position: the panel snaps to a
+    // corner rather than following the cursor freely, so only which half matters. Null when not
+    // dragging. Resolved in the event handler so `window` is never read during render.
+    // createPortal needs document, which does not exist during the server render.
+    const [mounted, setMounted] = useState(false)
+    useEffect(() => setMounted(true), [])
+
+    /**
+     * The panel's left offset in pixels while a drag is in progress, null when idle.
+     *
+     * The panel follows the cursor rather than jumping corners the moment the midpoint is crossed —
+     * that made it vanish from under the user's hand. It stays beneath the pointer the whole way
+     * and snaps to the nearer corner on release, the way the Next.js devtools widget behaves.
+     */
+    const [dragLeft, setDragLeft] = useState<number | null>(null)
+
+    const startDrag = useCallback((event: React.PointerEvent<HTMLElement>) => {
+        event.preventDefault()
+
+        // Capture on the handle itself. Without it the pointer stream stops the moment the cursor
+        // leaves the button — which it does immediately, since the gesture is a drag across the
+        // window — so a drag from the left dock could never reach the right half and the panel
+        // appeared stuck on one side.
+        const handle = event.currentTarget
+        handle.setPointerCapture(event.pointerId)
+
+        // Travel, not absolute position. Deciding by the midpoint meant a drag that began at the
+        // left dock had to cross half the screen before it would commit — a long way to pull for a
+        // two-position control. A fifth of the viewport in either direction is a clear enough
+        // intent to flip, and anything shorter settles back where it started.
+        const startX = event.clientX
+        const sideAfterDrag = (x: number): Side => {
+            const travelled = x - startX
+            if (Math.abs(travelled) < window.innerWidth * SNAP_TRAVEL_FRACTION) return side
+            return travelled > 0 ? 'right' : 'left'
+        }
+
+        // Where the pointer sits within the panel, so it does not jump to align its edge with the
+        // cursor on the first move.
+        const rect = handle.closest('[data-ai-chat-panel]')?.getBoundingClientRect()
+        const grabOffset = rect ? event.clientX - rect.left : 0
+        const panelWidth = rect?.width ?? 0
+
+        const clamp = (x: number) =>
+            Math.max(GUTTER, Math.min(x, window.innerWidth - panelWidth - GUTTER))
+
+        const onMove = (e: PointerEvent) => setDragLeft(clamp(e.clientX - grabOffset))
+        const onUp = (e: PointerEvent) => {
+            handle.removeEventListener('pointermove', onMove)
+            handle.removeEventListener('pointerup', onUp)
+            handle.removeEventListener('pointercancel', onUp)
+            if (handle.hasPointerCapture(e.pointerId)) handle.releasePointerCapture(e.pointerId)
+            // Released: drop the pixel position so the panel animates into its docked corner.
+            setDragLeft(null)
+            const next = sideAfterDrag(e.clientX)
+            setSide((current) => {
+                if (current !== next) writeStored(SIDE_KEY, next)
+                return next
+            })
+        }
+
+        // Bound to the capturing element, not the window: with capture set, every subsequent
+        // pointer event for this gesture is retargeted here regardless of what is underneath.
+        handle.addEventListener('pointermove', onMove)
+        handle.addEventListener('pointerup', onUp)
+        handle.addEventListener('pointercancel', onUp)
+    }, [side])
+
+    const dragging = dragLeft !== null
 
     // z-40 keeps the panel under the toast stack (z-100), which is deliberate: a toast confirming
     // something done IN the chat must not render behind it. Success toasts clear themselves in a
     // few seconds; errors persist until dismissed, so they are allowed to cover the panel header
     // rather than the composer.
     //
-    // Left-docking has to clear the app sidebar, which owns that edge: a plain `left-6` is measured
-    // from the viewport and slid the panel underneath it. The width is read from context rather
-    // than hardcoded so the panel follows the sidebar when it collapses.
-    const anchorClass = side === 'right' ? 'right-6' : ''
-    const anchorStyle = side === 'left'
-        ? { left: `${sidebarWidth + 24}px` }
-        : undefined
+    // Left-docking deliberately overlays the app sidebar rather than being inset past it. The
+    // sidebar is z-20, so floating chrome sits above it the way the debug trigger already does,
+    // and insetting would waste 256px of the screen to avoid a collision that does not exist.
+
+    // Portalled to the body, like the upload and download panels. The layout's body row is
+    // `overflow-hidden`, and that clips a fixed descendant at the content area's edge — which is
+    // why the left-docked panel appeared sliced by the sidebar. It was never a z-index problem:
+    // the sidebar is z-20 and this is z-40, so once the panel escapes that container it paints
+    // over the sidebar correctly.
+    if (!mounted) return null
 
     if (!open) {
-        return (
+        return createPortal(
             <button
                 type="button"
                 onClick={toggleOpen}
-                className={`fixed bottom-6 ${anchorClass} z-40 flex items-center gap-2 rounded-full border border-primary/20 bg-white py-2.5 pl-3 pr-4 shadow-lg transition-all hover:shadow-xl hover:border-primary/40`}
-                style={anchorStyle}
+                className={`fixed bottom-6 ${side === 'right' ? 'right-6' : 'left-6'} z-40 flex items-center gap-2 rounded-full border border-primary/20 bg-white py-2.5 pl-3 pr-4 shadow-lg transition-shadow hover:shadow-xl hover:border-primary/40`}
                 aria-label="Open the engagement assistant"
             >
-                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10">
-                    <Sparkles className="h-4 w-4 text-primary" aria-hidden="true" />
-                </span>
                 {/* Labelled rather than icon-only: a bare sparkle is now ambiguous beside the AI
-                    credits indicator in the top bar. */}
+                    credits indicator in the top bar. The Brio mark is the only glyph — a second
+                    sparkle beside it reads as two things rather than one brand. */}
                 <span className="text-sm font-medium text-gray-900">
                     Ask <Brio className="text-sm text-primary" />
                 </span>
-            </button>
+            </button>,
+            document.body,
         )
     }
 
-    return (
+    return createPortal(
         <div
             ref={setPanelEl}
             /* Tall and narrow, not wide. Chat is a vertical medium — messages stack downward and
@@ -179,22 +261,45 @@ export function FloatingAiChat({
                `max-w-full` is load-bearing: the suggestion chips wrap with no width ceiling of
                their own, and in a fixed element with nothing to push back they stretched the
                panel to their full text width. */
-            className={`fixed bottom-6 ${anchorClass} z-40 flex w-[23rem] max-w-[calc(100vw-3rem)] flex-col overflow-hidden rounded-lg border border-primary/25 bg-white shadow-2xl`}
-            style={anchorStyle}
+            /* Positioned from the LEFT in both docks rather than swapping left-6 for right-6.
+               Swapping changes which property places the element, and the browser has nothing to
+               interpolate between them, so the panel teleported instead of sliding. One animatable
+               property means one transition. */
+            data-ai-chat-panel
+            style={{
+                left: dragging
+                    ? `${dragLeft}px`
+                    : side === 'right'
+                        ? `calc(100vw - ${PANEL_WIDTH_REM}rem - ${GUTTER}px)`
+                        : `${GUTTER}px`,
+            }}
+            /* The transition is suppressed while dragging so the panel tracks the pointer exactly;
+               it animates only on release, which is what makes the snap read as magnetic. */
+            /* Width is a literal class, not interpolated: Tailwind extracts class names
+               statically, so `w-[${'$'}{PANEL_WIDTH_REM}rem]` would never be generated and the panel
+               would collapse to its content. PANEL_WIDTH_REM must be kept in step with it. */
+            className={`fixed bottom-6 z-40 flex w-[23rem] max-w-[calc(100vw-3rem)] flex-col overflow-hidden rounded-lg border border-primary/25 bg-white shadow-2xl ${
+                dragging ? 'cursor-grabbing select-none' : 'transition-[left] duration-200 ease-out'
+            }`}
         >
             {/* The panel's own header carries the title; this strip owns only window controls, so
                 the two never compete to name the thing. */}
-            <div className="flex items-center justify-end gap-0.5 rounded-t-lg border-b border-primary/10 bg-primary/5 px-2 py-1">
+            <div className="flex items-center gap-0.5 rounded-t-lg border-b border-primary/10 bg-primary/5 px-1.5 py-1">
+                {/* Leading, and a wide target: a drag handle is grabbed rather than clicked, so it
+                    needs an area the hand can find without aiming. Dragging anywhere along the
+                    header bar would be more generous still, but that would swallow the collapse
+                    button's own pointer events. */}
                 <button
                     type="button"
-                    onClick={flipSide}
-                    className="flex h-6 w-6 items-center justify-center rounded text-gray-400 transition-colors hover:bg-white hover:text-gray-700"
-                    aria-label={side === 'right' ? 'Move to the left' : 'Move to the right'}
-                    title={side === 'right' ? 'Move to the left' : 'Move to the right'}
+                    onPointerDown={startDrag}
+                    className={`flex h-7 flex-1 cursor-grab items-center gap-1 rounded px-1.5 text-gray-400 transition-colors hover:bg-white/70 hover:text-gray-600 active:cursor-grabbing ${
+                        dragging ? 'bg-white/70 text-gray-600' : ''
+                    }`}
+                    aria-label="Drag to move the assistant to the other side"
+                    title="Drag to move"
                 >
-                    {side === 'right'
-                        ? <PanelLeft className="h-3.5 w-3.5" />
-                        : <PanelRight className="h-3.5 w-3.5" />}
+                    <GripVertical className="h-4 w-4 shrink-0" />
+                    <span className="text-[10px] uppercase tracking-wider">Drag</span>
                 </button>
                 {/* Collapse, not close: the conversation is kept and the panel returns to its
                     launcher. An X claims the thread is being discarded, which would make people
@@ -218,6 +323,7 @@ export function FloatingAiChat({
                 clientName={clientName}
                 chrome="floating"
             />
-        </div>
+        </div>,
+        document.body,
     )
 }
