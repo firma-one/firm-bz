@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect, useLayoutEffect, useRef, useMemo } from 'react'
-import { ZoomIn, ZoomOut, RotateCcw, RotateCw, ChevronUp, ChevronDown, ChevronsLeftRight, ChevronsDownUp } from 'lucide-react'
+import { ZoomIn, ZoomOut, RotateCcw, RotateCw, Undo2, ChevronUp, ChevronDown, ChevronsLeftRight, ChevronsDownUp, List, PanelLeft } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
@@ -25,9 +25,58 @@ const RENDER_AHEAD = 2
 const PAGE_GAP = 12
 const PAGE_INSET = 16
 
+/** Thumbnail column width, and the rendered width of a thumbnail inside it. */
+const SIDEBAR_WIDTH = 168
+const THUMB_WIDTH = 104
+
 interface DocumentPdfPreviewPaneProps {
     document: any
     projectId?: string
+}
+
+/** One bookmark, flattened to a page number at load so clicking is instant. */
+interface OutlineEntry {
+    title: string
+    pageNumber: number | null
+    depth: number
+}
+
+/**
+ * Resolve a bookmark destination to a 1-based page number. A destination is either a named
+ * string that has to be looked up, or an explicit array whose first element is a page ref.
+ */
+async function resolveDestination(pdf: PDFDocumentProxy, dest: string | any[] | null): Promise<number | null> {
+    try {
+        const explicit = typeof dest === 'string' ? await pdf.getDestination(dest) : dest
+        if (!Array.isArray(explicit) || !explicit.length) return null
+        const ref = explicit[0]
+        if (typeof ref === 'number') return ref + 1
+        if (ref && typeof ref === 'object' && 'num' in ref) return (await pdf.getPageIndex(ref)) + 1
+        return null
+    } catch {
+        // A bookmark pointing at a destination the document does not define is not worth
+        // failing the whole outline over — it just renders as non-clickable.
+        return null
+    }
+}
+
+/** Depth-first walk, resolving each node's destination. External-URL bookmarks are skipped:
+ *  this is an in-document navigator, not a link launcher. */
+async function flattenOutline(
+    pdf: PDFDocumentProxy,
+    nodes: any[],
+    depth = 0,
+    out: OutlineEntry[] = [],
+): Promise<OutlineEntry[]> {
+    for (const node of nodes) {
+        if (!node?.url) {
+            out.push({ title: node?.title?.trim() || 'Untitled', pageNumber: await resolveDestination(pdf, node?.dest ?? null), depth })
+        }
+        if (Array.isArray(node?.items) && node.items.length) {
+            await flattenOutline(pdf, node.items, depth + 1, out)
+        }
+    }
+    return out
 }
 
 interface BasePage {
@@ -100,6 +149,65 @@ function PdfPageCanvas({
     return <canvas ref={canvasRef} className="block" />
 }
 
+/**
+ * One thumbnail. The canvas is mounted only once the item scrolls into the strip, so a
+ * 200-page document does not raster 200 bitmaps to show a sidebar.
+ */
+function PdfThumb({
+    pdf,
+    pageNumber,
+    width,
+    height,
+    rotation,
+    scale,
+    active,
+    onSelect,
+}: {
+    pdf: PDFDocumentProxy
+    pageNumber: number
+    width: number
+    height: number
+    rotation: number
+    scale: number
+    active: boolean
+    onSelect: () => void
+}) {
+    const ref = useRef<HTMLButtonElement | null>(null)
+    const [visible, setVisible] = useState(false)
+
+    useEffect(() => {
+        const el = ref.current
+        if (!el || visible) return
+        const io = new IntersectionObserver(
+            (entries) => { if (entries.some((e) => e.isIntersecting)) setVisible(true) },
+            { root: el.closest('[data-thumb-strip]'), rootMargin: '200px' },
+        )
+        io.observe(el)
+        return () => io.disconnect()
+    }, [visible])
+
+    return (
+        <button
+            ref={ref}
+            type="button"
+            onClick={onSelect}
+            className="group w-full flex flex-col items-center gap-1 py-1.5 focus:outline-none"
+            aria-label={`Go to page ${pageNumber}`}
+            aria-current={active ? 'true' : undefined}
+        >
+            <div
+                className={`bg-white overflow-hidden ${active ? 'ring-2 ring-slate-500' : 'ring-1 ring-slate-200 group-hover:ring-slate-400'}`}
+                style={{ width, height }}
+            >
+                {visible && <PdfPageCanvas pdf={pdf} pageNumber={pageNumber} scale={scale} rotation={rotation} />}
+            </div>
+            <span className={`text-[10px] font-mono tabular-nums ${active ? 'text-slate-900 font-semibold' : 'text-slate-500'}`}>
+                {pageNumber}
+            </span>
+        </button>
+    )
+}
+
 export function DocumentPdfPreviewPane({ document, projectId }: DocumentPdfPreviewPaneProps) {
     const [zoom, setZoom] = useState(ZOOM_DEFAULT)
     const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null)
@@ -118,6 +226,9 @@ export function DocumentPdfPreviewPane({ document, projectId }: DocumentPdfPrevi
     const [fitMode, setFitMode] = useState<'width' | 'page'>('width')
     /** User rotation in degrees, composed on top of each page's intrinsic /Rotate. */
     const [rotation, setRotation] = useState(0)
+    const [outline, setOutline] = useState<OutlineEntry[]>([])
+    /** null = sidebar closed. One sidebar with two tabs rather than two competing panels. */
+    const [sidebarTab, setSidebarTab] = useState<'outline' | 'thumbnails' | null>(null)
 
     const scrollRef = useRef<HTMLDivElement | null>(null)
     /** Page to re-anchor on after a zoom change, applied once the new layout exists. */
@@ -128,6 +239,11 @@ export function DocumentPdfPreviewPane({ document, projectId }: DocumentPdfPrevi
 
     const effectiveProjectId = projectId ?? document?.projectId
     const documentId = document?.id
+
+    const totalPages = basePages.length
+    // The toolbar renders its final shape from the first frame: a zoom-only bar that later
+    // grows a page group reads as the old toolbar being swapped for a new one.
+    const ready = totalPages > 0
 
     // 1. Fetch the bytes once, then open them with pdf.js. The old pane re-fetched (and
     //    made the server re-convert) on every zoom step; here the document is loaded a
@@ -149,6 +265,8 @@ export function DocumentPdfPreviewPane({ document, projectId }: DocumentPdfPrevi
             setCurrentPage(1)
             setPageInput('1')
             setRotation(0)
+            setOutline([])
+            setSidebarTab(null)
 
             try {
                 const url = `/api/projects/${effectiveProjectId}/documents/${encodeURIComponent(documentId)}/preview`
@@ -195,6 +313,19 @@ export function DocumentPdfPreviewPane({ document, projectId }: DocumentPdfPrevi
                 setBasePages(pages)
                 setPdf(loadedPdf)
                 setLoading(false)
+
+                // Bookmarks are optional and must never hold up first paint, so they load
+                // after the pages are on screen. Word exports headings as bookmarks, so
+                // converted .docx files usually have a usable outline; many PDFs have none.
+                try {
+                    const raw = await loadedPdf.getOutline()
+                    if (!cancelled && Array.isArray(raw) && raw.length) {
+                        setOutline(await flattenOutline(loadedPdf, raw))
+                    }
+                } catch {
+                    /* no outline — the toggle stays hidden */
+                }
+
             } catch (err) {
                 if (cancelled) return
                 console.error('[pdf-preview] failed to open document', err)
@@ -353,9 +484,9 @@ export function DocumentPdfPreviewPane({ document, projectId }: DocumentPdfPrevi
 
     // Rotation and fit-mode reflow the document exactly like zoom does, so they re-anchor
     // on the current page through the same pending-page mechanism.
-    const rotate = useCallback(() => {
+    const rotate = useCallback((degrees: number) => {
         pendingPageRef.current = currentPage
-        setRotation((r) => (r + 90) % 360)
+        setRotation((r) => (r + degrees + 360) % 360)
     }, [currentPage])
 
     const toggleFitMode = useCallback(() => {
@@ -408,6 +539,39 @@ export function DocumentPdfPreviewPane({ document, projectId }: DocumentPdfPrevi
     const zoomOut = useCallback(() => applyZoom(Math.max(ZOOM_MIN, zoom - ZOOM_STEP)), [applyZoom, zoom])
     const zoomReset = useCallback(() => applyZoom(ZOOM_DEFAULT), [applyZoom])
 
+    // Shortcuts are bound to the scroll area, not the window, so the viewer never steals
+    // keys from the rest of the page. PageUp/Down move by page rather than by viewport
+    // height, which is what a paged document should do.
+    /** Thumbnails reuse the measured page dims, so they rotate with the document. */
+    const thumbScale = useMemo(() => {
+        if (!rotatedPages.length) return 0
+        const widest = Math.max(...rotatedPages.map((p) => p.width))
+        return THUMB_WIDTH / widest
+    }, [rotatedPages])
+
+    const onKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+        const target = e.target as HTMLElement
+        // Never swallow keys aimed at the page input or a focused button.
+        if (target.closest('input, textarea, button, [contenteditable]')) return
+        if (!ready) return
+
+        const handlers: Record<string, () => void> = {
+            PageDown: () => goToPage(currentPage + 1),
+            PageUp: () => goToPage(currentPage - 1),
+            Home: () => goToPage(1),
+            End: () => goToPage(totalPages),
+            '+': () => zoomIn(),
+            '=': () => zoomIn(),
+            '-': () => zoomOut(),
+            '0': () => zoomReset(),
+            ' ': () => goToPage(e.shiftKey ? currentPage - 1 : currentPage + 1),
+        }
+        const handler = handlers[e.key]
+        if (!handler) return
+        e.preventDefault()
+        handler()
+    }, [ready, currentPage, totalPages, goToPage, zoomIn, zoomOut, zoomReset])
+
     if (!effectiveProjectId || !documentId) {
         return (
             <div className="flex-1 flex items-center justify-center text-sm text-gray-500 p-6 text-center">
@@ -420,10 +584,6 @@ export function DocumentPdfPreviewPane({ document, projectId }: DocumentPdfPrevi
         return <DocumentBlobPreviewPane document={document} projectId={projectId} />
     }
 
-    const totalPages = basePages.length
-    // The toolbar renders its final shape from the first frame: a zoom-only bar that later
-    // grows a page group reads as the old toolbar being swapped for a new one.
-    const ready = totalPages > 0
     const firstVisible = Math.max(1, currentPage - RENDER_AHEAD)
     const lastVisible = Math.min(totalPages, currentPage + RENDER_AHEAD)
 
@@ -431,6 +591,26 @@ export function DocumentPdfPreviewPane({ document, projectId }: DocumentPdfPrevi
         <div className="flex-1 min-h-0 flex flex-col">
             {/* Toolbar: zoom on the left, page position on the right */}
             <div className="flex flex-wrap items-center justify-center gap-1 px-3 py-1.5 bg-white border-b border-[#e5e7eb] shrink-0">
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <button
+                            type="button"
+                            onClick={() => setSidebarTab((t) => (t ? null : outline.length ? 'outline' : 'thumbnails'))}
+                            disabled={!ready}
+                            className={`h-6 w-6 rounded inline-flex items-center justify-center hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed ${sidebarTab ? 'text-slate-900 bg-slate-100' : 'text-slate-500 hover:text-slate-700'}`}
+                            aria-label={sidebarTab ? 'Hide sidebar' : 'Show page thumbnails and bookmarks'}
+                            aria-pressed={Boolean(sidebarTab)}
+                        >
+                            <PanelLeft className="h-3.5 w-3.5" />
+                        </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="z-[110] text-xs">
+                        {sidebarTab ? 'Hide sidebar' : 'Thumbnails & bookmarks'}
+                    </TooltipContent>
+                </Tooltip>
+
+                <div className="w-px h-4 bg-slate-200 mx-1.5" aria-hidden="true" />
+
                 <Tooltip>
                     <TooltipTrigger asChild>
                         <button
@@ -495,7 +675,7 @@ export function DocumentPdfPreviewPane({ document, projectId }: DocumentPdfPrevi
                             className="h-6 w-6 rounded inline-flex items-center justify-center text-slate-500 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed"
                             aria-label="Reset zoom"
                         >
-                            <RotateCcw className="h-3.5 w-3.5" />
+                            <Undo2 className="h-3.5 w-3.5" />
                         </button>
                     </TooltipTrigger>
                     <TooltipContent side="bottom" className="z-[110] text-xs">Reset zoom</TooltipContent>
@@ -524,7 +704,22 @@ export function DocumentPdfPreviewPane({ document, projectId }: DocumentPdfPrevi
                     <TooltipTrigger asChild>
                         <button
                             type="button"
-                            onClick={rotate}
+                            onClick={() => rotate(-90)}
+                            disabled={!ready}
+                            className="h-6 w-6 rounded inline-flex items-center justify-center text-slate-500 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+                            aria-label="Rotate 90 degrees counter-clockwise"
+                        >
+                            <RotateCcw className="h-3.5 w-3.5" />
+                        </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="z-[110] text-xs">Rotate left</TooltipContent>
+                </Tooltip>
+
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <button
+                            type="button"
+                            onClick={() => rotate(90)}
                             disabled={!ready}
                             className="h-6 w-6 rounded inline-flex items-center justify-center text-slate-500 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed"
                             aria-label="Rotate 90 degrees clockwise"
@@ -532,7 +727,7 @@ export function DocumentPdfPreviewPane({ document, projectId }: DocumentPdfPrevi
                             <RotateCw className="h-3.5 w-3.5" />
                         </button>
                     </TooltipTrigger>
-                    <TooltipContent side="bottom" className="z-[110] text-xs">Rotate 90&deg;</TooltipContent>
+                    <TooltipContent side="bottom" className="z-[110] text-xs">Rotate right</TooltipContent>
                 </Tooltip>
 
                 <div className="w-px h-4 bg-slate-200 mx-1.5" aria-hidden="true" />
@@ -593,9 +788,77 @@ export function DocumentPdfPreviewPane({ document, projectId }: DocumentPdfPrevi
                     </TooltipTrigger>
                     <TooltipContent side="bottom" className="z-[110] text-xs">Next page</TooltipContent>
                 </Tooltip>
+
             </div>
 
-            {/* Page area */}
+            {/* Sidebar + page area */}
+            <div className="flex-1 min-h-0 flex">
+                {sidebarTab && ready && pdf && (
+                    <div
+                        className="shrink-0 flex flex-col border-r border-[#e5e7eb] bg-white"
+                        style={{ width: SIDEBAR_WIDTH }}
+                    >
+                        {/* Tabs. Outline is offered only when the document actually has one. */}
+                        <div className="flex shrink-0 border-b border-[#e5e7eb]">
+                            {outline.length > 0 && (
+                                <button
+                                    type="button"
+                                    onClick={() => setSidebarTab('outline')}
+                                    className={`flex-1 h-7 inline-flex items-center justify-center gap-1 text-[10px] font-medium ${sidebarTab === 'outline' ? 'text-slate-900 border-b-2 border-slate-700' : 'text-slate-500 hover:text-slate-700'}`}
+                                >
+                                    <List className="h-3 w-3" /> Bookmarks
+                                </button>
+                            )}
+                            <button
+                                type="button"
+                                onClick={() => setSidebarTab('thumbnails')}
+                                className={`flex-1 h-7 inline-flex items-center justify-center gap-1 text-[10px] font-medium ${sidebarTab === 'thumbnails' ? 'text-slate-900 border-b-2 border-slate-700' : 'text-slate-500 hover:text-slate-700'}`}
+                            >
+                                <PanelLeft className="h-3 w-3" /> Pages
+                            </button>
+                        </div>
+
+                        {sidebarTab === 'outline' ? (
+                            <div className="flex-1 min-h-0 overflow-auto py-1">
+                                {outline.map((entry, i) => (
+                                    <button
+                                        key={`${i}-${entry.title}`}
+                                        type="button"
+                                        onClick={() => entry.pageNumber && scrollToPage(entry.pageNumber)}
+                                        disabled={!entry.pageNumber}
+                                        title={entry.title}
+                                        className="w-full text-left px-2 py-1 text-[11px] leading-snug text-slate-700 hover:bg-slate-100 disabled:text-slate-400 disabled:hover:bg-transparent disabled:cursor-default flex gap-1.5"
+                                        style={{ paddingLeft: 8 + entry.depth * 10 }}
+                                    >
+                                        <span className="flex-1 truncate">{entry.title}</span>
+                                        {entry.pageNumber && (
+                                            <span className="shrink-0 text-[10px] font-mono tabular-nums text-slate-400">
+                                                {entry.pageNumber}
+                                            </span>
+                                        )}
+                                    </button>
+                                ))}
+                            </div>
+                        ) : (
+                            <div data-thumb-strip className="flex-1 min-h-0 overflow-auto px-2">
+                                {rotatedPages.map((p, i) => (
+                                    <PdfThumb
+                                        key={i + 1}
+                                        pdf={pdf}
+                                        pageNumber={i + 1}
+                                        width={Math.round(p.width * thumbScale)}
+                                        height={Math.round(p.height * thumbScale)}
+                                        rotation={rotation}
+                                        scale={thumbScale}
+                                        active={currentPage === i + 1}
+                                        onSelect={() => scrollToPage(i + 1)}
+                                    />
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
+
             <div className="flex-1 min-h-0 relative bg-[#f3f4f6]">
                 {loading && (
                     <div className="absolute inset-0 flex items-center justify-center bg-[#f3f4f6] z-10">
@@ -605,11 +868,13 @@ export function DocumentPdfPreviewPane({ document, projectId }: DocumentPdfPrevi
 
                 <div
                     ref={scrollRef}
+                    tabIndex={0}
+                    onKeyDown={onKeyDown}
                     onPointerDown={onPanStart}
                     onPointerMove={onPanMove}
                     onPointerUp={onPanEnd}
                     onPointerCancel={onPanEnd}
-                    className="absolute inset-0 overflow-auto"
+                    className="absolute inset-0 overflow-auto focus:outline-none"
                     // A reserved gutter keeps the measured width constant whether or not the
                     // vertical scrollbar is showing. Without it, fit-to-width scale and
                     // scrollbar visibility can chase each other on a document that lands
@@ -638,6 +903,7 @@ export function DocumentPdfPreviewPane({ document, projectId }: DocumentPdfPrevi
                             })}
                         </div>
                     )}
+                    </div>
                 </div>
             </div>
         </div>

@@ -164,3 +164,41 @@ focus, so it read as a dead control. Tooltips had the same bug, predating this w
 Raised to `z-[110]` **at these call sites only**; changing the shared primitives would
 reorder every dropdown and tooltip in the app against modals, sheets and toasts. The
 global cleanup is tracked separately.
+
+---
+
+## Round 3 — navigation aids
+
+- **Bookmarks / outline.** `getOutline()`, with every destination resolved to a page number
+  at load so clicking is instant. A bookmark pointing at a destination the document does
+  not define renders as non-clickable rather than failing the whole outline. External-URL
+  bookmarks are skipped — this is an in-document navigator. The tab appears only when the
+  document actually has bookmarks; Word exports headings as PDF bookmarks, so converted
+  .docx files usually do and many native PDFs do not.
+- **Thumbnails.** Share one tabbed sidebar with bookmarks rather than two panels competing
+  for width in a narrow dock. Each thumbnail mounts its canvas only once it scrolls into
+  the strip, so a 200-page document does not raster 200 bitmaps to open a sidebar. They
+  reuse the measured page dims, so they rotate with the document.
+- **Keyboard shortcuts.** PageUp/PageDown and Space/Shift+Space by page, Home/End,
+  `+`/`-`/`0`. Bound to the scroll area, not the window, so the viewer never steals keys
+  from the rest of the page; suppressed when focus is in the page input.
+- **Rotate left**, alongside rotate right.
+
+Opening the sidebar needed no extra wiring: the ResizeObserver already watches the scroll
+container, so the narrower container reflows the fit-to-width scale on its own.
+
+### Considered and removed: document properties
+Built as a `getMetadata()` popover, then cut entirely. PDF metadata describes the
+*conversion*, not the file — for a .docx the Producer is the converter and Author/Creator/
+Title carry whatever Word had, which can be stale or simply the wrong person's name next to
+a file in a client engagement. Trimming it to the two trustworthy fields left Name (already
+in the preview header) and Pages (already in the toolbar's `/ N`), i.e. a button that opens
+a menu to show what is already on screen. `getMetadata()` is not called at all.
+
+### Known gap
+The thumbnail strip does not auto-scroll to follow the current page as the document
+scrolls. Acrobat does this; left out deliberately.
+
+### Note
+Reset-zoom moved from `RotateCcw` to `Undo2`: rotate-left needed `RotateCcw`, and the same
+glyph cannot mean two things in one toolbar.
