@@ -6,9 +6,9 @@
     "node": ">=24.0.0"
   },
   "scripts": {
-    "dev": "DEV_SERVER_START_VERSION=dev-$(date +%s) next dev",
-    "dev:webpack": "DEV_SERVER_START_VERSION=dev-$(date +%s) next dev --webpack",
-    "build": "prisma generate && NEXT_PUBLIC_BUILD_TIMESTAMP=$(date +%s) next build --webpack",
+    "dev": "npm run copy:pdf-worker && DEV_SERVER_START_VERSION=dev-$(date +%s) next dev",
+    "dev:webpack": "npm run copy:pdf-worker && DEV_SERVER_START_VERSION=dev-$(date +%s) next dev --webpack",
+    "build": "npm run copy:pdf-worker && prisma generate && NEXT_PUBLIC_BUILD_TIMESTAMP=$(date +%s) next build --webpack",
     "postbuild": "prisma migrate deploy && npx prisma db seed",
     "start": "next start",
     "typecheck": "tsc --noEmit",
@@ -24,7 +24,8 @@
     "roadmap:sync-git": "node scripts/sync-roadmap-git.mjs",
     "release": "node scripts/release.mjs",
     "inngest:dev": "npx inngest-cli@latest dev",
-    "dev_as_prod": "rm -rf .next && npm run build && npx concurrently \"RUNNING_LOCALLY=true npm start\" \"npx inngest-cli@latest dev\""
+    "dev_as_prod": "rm -rf .next && npm run build && npx concurrently \"RUNNING_LOCALLY=true npm start\" \"npx inngest-cli@latest dev\"",
+    "copy:pdf-worker": "node scripts/copy-pdf-worker.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",
@@ -83,6 +84,7 @@
     "officeparser": "^7.2.3",
     "pdf-lib": "^1.17.1",
     "pdf-parse": "^2.4.5",
+    "pdfjs-dist": "^6.1.200",
     "postcss": "^8.4.38",
     "react": "^19.2.3",
     "react-countup": "^6.5.3",
