@@ -61,13 +61,25 @@ export function useSignInFlow() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    const emailParam = params.get('email')
+    // `#email=` is preferred over `?email=` by anything that can choose, because a fragment is
+    // never sent over HTTP and so never reaches request logs, log drains or Referer headers
+    // (see lib/actions/engagement-membership.ts). The query form is still read: Supabase owns
+    // the fragment on its own auth redirects, so lib/actions/system-admin-signup.ts cannot use
+    // one. Browsers carry a fragment across proxy.ts's 302 to this page (RFC 7231 7.1.2).
+    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+    const emailParam = hashParams.get('email') ?? params.get('email')
     if (emailParam) {
       setEmail(emailParam)
       try {
         sessionStorage.setItem(SIGNIN_EMAIL_KEY, emailParam)
       } catch {
         /* ignore */
+      }
+      // Consumed — drop it from the address bar so it is not left to be copied or shared onward.
+      if (hashParams.has('email')) {
+        hashParams.delete('email')
+        const rest = hashParams.toString()
+        window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${rest ? `#${rest}` : ''}`)
       }
       return
     }

@@ -83,6 +83,14 @@ function rightPanelHtml(opts: {
     const { referralCode, referralCount, siteOrigin, campaignId, email, newJoinerEmail } = opts
     const isPro = referralCount >= 5
     const referralUrl = `${siteOrigin}/waitlist/${campaignId}?ref=${referralCode}&utm_source=referral&utm_medium=email&utm_campaign=waitlist`
+    // TODO(pii): this puts the recipient's address in a query string, so it lands in request
+    // logs, log drains and Referer headers — and unlike a DB row, a logged address cannot be
+    // removed on an erasure request. Everywhere else that needs to carry an address through a
+    // URL now uses a `#email=` fragment instead, which is never sent over HTTP (see
+    // lib/actions/engagement-membership.ts and app/(app)/signin/use-sign-in-flow.ts).
+    // Left as-is deliberately: the waitlist flow is not operational, and converting it also
+    // means teaching app/(marketing)/waitlist/[campaignId] to read the fragment. Do that before
+    // this flow goes live.
     const waitlistUrl = `${siteOrigin}/waitlist/${campaignId}?email=${encodeURIComponent(email)}`
     const progressPct = Math.min(100, Math.round((referralCount / 5) * 100))
 

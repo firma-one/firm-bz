@@ -50,7 +50,9 @@ export function InviteLandingClient({ invitation, userEmail }: InviteLandingProp
                 setStatus('REDIRECTING')
                 const target = 'redirectUrl' in invitation && invitation.redirectUrl ? invitation.redirectUrl : '/d'
                 if (userEmail) router.push(target)
-                else router.push(`/signin?redirect=${encodeURIComponent(target)}&email=${encodeURIComponent(invitation.email)}`)
+                // Email goes in the fragment, never the query string — it is never sent over HTTP,
+                // so it stays out of request logs and Referer. use-sign-in-flow.ts reads it there.
+                else router.push(`/signin?redirect=${encodeURIComponent(target)}#email=${encodeURIComponent(invitation.email)}`)
                 return
             }
 
@@ -58,7 +60,8 @@ export function InviteLandingClient({ invitation, userEmail }: InviteLandingProp
             if (!userEmail) {
                 setStatus('REDIRECTING')
                 const returnUrl = `/invite/${invitation.token}`
-                router.replace(`/signin?next=${encodeURIComponent(returnUrl)}&email=${encodeURIComponent(invitation.email)}`)
+                // Fragment, not query string — see the JOINED branch above.
+                router.replace(`/signin?next=${encodeURIComponent(returnUrl)}#email=${encodeURIComponent(invitation.email)}`)
                 return
             }
 

@@ -101,6 +101,11 @@ async function sendInviteEmailAndGenerateLink(input: {
   const adminClient = createAdminClient()
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || ''
   const fullName = `${input.firstName} ${input.lastName}`.trim()
+  // Query string rather than the `#email=` fragment used everywhere else (see
+  // lib/actions/engagement-membership.ts): Supabase appends its own auth material to this
+  // redirect — `#access_token=...` on the implicit flow, `?code=...` on PKCE — so the fragment
+  // is not ours to occupy here and would be clobbered. The address therefore does reach request
+  // logs on this path; it is an internal system-admin signup rather than a customer flow.
   const redirectTo = `${appUrl}/signin?email=${encodeURIComponent(input.email)}`
 
   const { data, error } = await adminClient.auth.admin.generateLink({
