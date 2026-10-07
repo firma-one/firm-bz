@@ -5,7 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { prisma } from '@/lib/prisma'
-import { canViewProject, canManageProject } from '@/lib/permission-helpers'
+import { canViewProject, canManageProject, canEditProject } from '@/lib/permission-helpers'
 import { config } from '@/lib/config'
 import type { User } from '@supabase/supabase-js'
 
@@ -81,6 +81,36 @@ export async function requireProjectView(
 
   const canView = await canViewProject(data.ctx.orgId, data.ctx.clientId, data.ctx.projectId)
   if (!canView) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  return {
+    user,
+    project: data.project,
+    ctx: data.ctx,
+  }
+}
+
+/**
+ * Require auth + project EDIT permission.
+ *
+ * Distinct from requireProjectManage: `project:can_edit` is true for eng_member and
+ * eng_ext_collaborator and false for eng_viewer, which is precisely "who may change this
+ * engagement's content". `project:can_manage` is eng_admin-only and is about settings and
+ * membership. Routes that register or mutate a document want this one — gating them on
+ * can_manage locks out contributors who the upload route itself already lets through on
+ * bare membership, which is how uploaded files ended up with no EngagementDocument row.
+ */
+export async function requireProjectEdit(
+  request: NextRequest,
+  projectId: string
+): Promise<ProjectAuthResult | NextResponse> {
+  const user = await getAuthUser(request)
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const data = await getProjectWithContext(projectId)
+  if (!data) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+
+  const canEdit = await canEditProject(data.ctx.orgId, data.ctx.clientId, data.ctx.projectId)
+  if (!canEdit) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   return {
     user,

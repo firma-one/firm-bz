@@ -45,7 +45,7 @@ import { useSecureOpenDocument } from '@/lib/use-secure-open-document'
 import { logger } from '@/lib/logger'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import { DocumentDocCommentsPane } from '@/components/projects/document-doc-comments-pane'
-import { DocumentBlobPreviewPane } from '@/components/files/document-blob-preview-pane'
+import { DocumentPdfPreviewPane } from '@/components/files/document-pdf-preview-pane'
 import { formatDistanceToNow } from 'date-fns'
 import { cn, formatFullDate } from '@/lib/utils'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -1882,7 +1882,7 @@ export function EngagementSharesTab({
             rightPane.setHeaderSubtitle('')
             rightPane.setHeaderIcon(<ScanEye className="h-4 w-4" />)
             rightPane.setContent(
-              <DocumentBlobPreviewPane
+              <DocumentPdfPreviewPane
                 document={{ id: subtask.documentId, name: subtask.fileName }}
                 projectId={projectId}
               />
@@ -2211,7 +2211,7 @@ export function EngagementSharesTab({
       rightPane.setHeaderSubtitle('')
       rightPane.setHeaderIcon(<ScanEye className="h-4 w-4" />)
       rightPane.setContent(
-        <DocumentBlobPreviewPane
+        <DocumentPdfPreviewPane
           document={{ id: share.documentId, name: share.documentName }}
           projectId={share.projectId}
         />

@@ -39,3 +39,28 @@ Preview for `.txt` and `.csv` files is currently unsupported. It should be.
 
 ### 12. Preview has no page numbers and no way to jump to a page
 The file preview does not show page numbers and offers no way to jump to a specific page. Add either a left sidebar with page thumbnails, or at minimum a "Go to [x] of [y] pages" input for direct page navigation.
+
+### 13. `checkProjectPermission`'s DB fallback grants `can_manage` to every engagement role [HIGH]
+`lib/permission-helpers.ts`'s final DB fallback returns `true` for any member whose role is in
+`viewableEngagementRoles` (`eng_admin`, `eng_member`, `eng_ext_collaborator`, `eng_viewer`) —
+but it does so without checking the `privilege` argument, so it answers `can_manage` with a list
+whose name and comment say `can_view`. The fallback only runs on a `UserSettingsPlus` cache miss
+(the earlier `findProjectInPermissions` branch returns early and correctly), so the effect is
+that a freshly-invited `eng_member`/EC/EV transiently passes `requireProjectManage` on *every*
+route that uses it — not just the one found below. Narrow the fallback to the privilege actually
+being asked for. Found while fixing the `eng_member` upload gate (that fix does not address this).
+
+### 14. Doc ID not shown until a manual refresh after a successful upload [MEDIUM]
+Even as EL, where `index-file` returns 200 and the docId is assigned, the Files list shows `—`
+in the ID column until the refresh icon is clicked. Verified correct and therefore NOT the cause:
+client ordering (all three upload paths await the `index-file` POST before `fetchFiles`), server
+assignment (`await ensureDocIdEarly(...)` completes before the 200), `assignDocId` (awaited,
+atomic), the list route's docId enrich query (`{ engagementId, externalId: { in: driveIds } }` —
+no filter that could miss a fresh row), and rendering (`file.docId`, no memoization). Leading
+unproven suspect: `fetchFiles` has no request sequencing — no AbortController, no generation
+counter — and calls `setFiles` unconditionally from 7 call sites, so a fetch started before
+`index-file` finished can resolve after the post-upload one and overwrite the rows that had
+docIds. To confirm: upload as EL with DevTools open and inspect the LAST `linked-files` response —
+`docId: null` means server-side, a populated `docId` means client state is being clobbered.
+Distinct from the `eng_member` upload-gate bug (fixed separately) despite the identical `—`
+symptom: there the docId is never assigned, here it is assigned but not displayed.

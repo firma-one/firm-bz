@@ -269,7 +269,18 @@ export async function provisionAndNotifyExistingUser(
 ): Promise<{ redirectUrl: string; newEngagementMemberCreated: boolean }> {
     const result = await joinEngagementForUser(existingUserId, normalizedEmail, invite)
 
-    const engagementUrl = `${process.env.NEXT_PUBLIC_APP_URL}${result.redirectUrl}`
+    // Carry the recipient's address so the sign-in page can prefill it. This user is already a
+    // member, so the link must stay a durable /d/... URL — routing it through /invite/{token}
+    // would 404 once the token expires after 7 days, and would re-add the click-through #92
+    // deliberately removed. A bare deep link carries no identity, so a recipient without a live
+    // session is bounced by proxy.ts's auth guard to /signin with nothing to prefill.
+    //
+    // In the FRAGMENT, not the query string: fragments are never sent over HTTP, so the address
+    // stays out of request logs, log drains and Referer headers — and unlike a DB row, a logged
+    // address cannot be deleted on an erasure request. Browsers carry the fragment across the
+    // guard's 302 (RFC 7231 7.1.2), so it survives to /signin, where use-sign-in-flow.ts reads
+    // it. This also means proxy.ts needs no knowledge of it at all.
+    const engagementUrl = `${process.env.NEXT_PUBLIC_APP_URL}${result.redirectUrl}#email=${encodeURIComponent(normalizedEmail)}`
     try {
         const { subject, html } = renderAddedToEngagementEmail({
             firmName: projectOrg.client.firm.name ?? BRAND_NAME,

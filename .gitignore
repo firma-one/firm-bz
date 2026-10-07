@@ -275,3 +275,6 @@ frontend/supabase/snippets/**
 
 # Next.js dev-generated (rewritten by `next dev`, not needed in git)
 frontend/next-env.d.ts
+
+# pdf.js worker, copied from node_modules by frontend/scripts/copy-pdf-worker.js
+frontend/public/pdf.worker.min.mjs
