@@ -110,6 +110,15 @@ export function useEngagementUpload({
     } = useUploadProgress()
     const { addToast } = useToast()
 
+    // EC/EV submit through index-file-intake, which creates the EngagementDocument AND a PENDING
+    // sharing row without enqueuing Inngest — their uploads stay invisible to the engagement
+    // until an engagement lead approves the intake. So they must NOT call index-file, which
+    // indexes immediately. eng_member is deliberately not external: contributors upload and
+    // index straight away, no approval step. index-file also rejects external roles server-side;
+    // this skip just avoids firing a request that is designed to fail.
+    const isExternalPersona =
+        restrictToSharedOnly || viewAsPersonaSlug === 'eng_ext_collaborator' || viewAsPersonaSlug === 'eng_viewer'
+
     const [conflictItems, setConflictItems] = useState<ConflictItem[]>([])
     const [overwriteSelections, setOverwriteSelections] = useState<Set<string>>(new Set())
     const [uploadProgress, setUploadProgress] = useState(0)
@@ -160,7 +169,6 @@ export function useEngagementUpload({
             }
 
             // 2. Get Resumable Upload URL from our API
-            const isExternalPersona = restrictToSharedOnly || viewAsPersonaSlug === 'eng_ext_collaborator' || viewAsPersonaSlug === 'eng_viewer'
             const res = await fetch('/api/connectors/google-drive/upload', {
                 method: 'POST',
                 headers: {
@@ -217,7 +225,7 @@ export function useEngagementUpload({
                     // list shows the real docId immediately instead of "—" until a manual
                     // refresh (see conversation/PR notes on the docId race fix).
                     let docIdRequestSettled: Promise<void> | undefined
-                    if (triggerIndexing) {
+                    if (triggerIndexing && !isExternalPersona) {
                         docIdRequestSettled = fetch(`/api/projects/${projectId}/index-file`, {
                             method: 'POST',
                             headers: {
@@ -377,7 +385,7 @@ export function useEngagementUpload({
         // batch-indexing event, then returns. Awaiting this response does NOT wait for the
         // Inngest job (embeddings/summaries) to run — see docIdRequestSettled comment in
         // uploadFile above for the full explanation of why that split matters.
-        if (successfullyUploaded.length > 0) {
+        if (successfullyUploaded.length > 0 && !isExternalPersona) {
             await fetch(`/api/projects/${projectId}/index-file`, {
                 method: 'POST',
                 headers: {
@@ -645,7 +653,7 @@ export function useEngagementUpload({
         // one Inngest batch-indexing event, then returns; this does NOT wait for the Inngest
         // job itself. See docIdRequestSettled comment in uploadFile above for why that split
         // is what keeps this scalable to large folder uploads.
-        if (successfullyUploaded.length > 0) {
+        if (successfullyUploaded.length > 0 && !isExternalPersona) {
             logger.debug(`Triggering batch indexing for ${successfullyUploaded.length} files...`)
             await fetch(`/api/projects/${projectId}/index-file`, {
                 method: 'POST',

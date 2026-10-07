@@ -3,7 +3,8 @@ import { assertWithinDocumentCap } from '@/lib/billing/effective-billing-caps'
 import { prisma } from '@/lib/prisma'
 import { IndexingInterceptor } from '@/lib/services/indexing-interceptor'
 import { logger } from '@/lib/logger'
-import { requireProjectManage } from '@/lib/api/engagement-auth'
+import { requireProjectEdit } from '@/lib/api/engagement-auth'
+import { requireEngagementMember, isExternalEngagementRole } from '@/lib/engagement-access'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { assignDocId } from '@/lib/doc-id'
 
@@ -72,8 +73,27 @@ export async function POST(
             return NextResponse.json({ error: 'Missing externalId/fileName or files array' }, { status: 400 })
         }
 
-        const authResult = await requireProjectManage(request, projectId)
+        // can_edit, not can_manage. can_manage is eng_admin-only, but /connectors/.../upload
+        // admits any engagement member — so an eng_member ("Contributor with Full Access") could
+        // write the bytes and then 403 here, leaving a file visible in the connector listing with
+        // no EngagementDocument row. Every document operation resolves through getFileInfo, so
+        // those files 404 on preview, download, secure-open and sharing, permanently: nothing
+        // backfills the row later.
+        const authResult = await requireProjectEdit(request, projectId)
         if (authResult instanceof NextResponse) return authResult
+
+        // EC/EV keep going through index-file-intake instead, which creates the row AND writes a
+        // PENDING sharing row without enqueuing Inngest — their uploads must not be indexed until
+        // an engagement lead approves them. That deferral used to rest entirely on this route
+        // returning 403 to them; can_edit is true for eng_ext_collaborator, so widening the gate
+        // above would silently have started indexing EC uploads pre-approval. Make it explicit.
+        const member = await requireEngagementMember(projectId, authResult.user.id)
+        if (member && isExternalEngagementRole(member.role)) {
+            return NextResponse.json(
+                { error: 'External collaborators submit files via index-file-intake' },
+                { status: 403 },
+            )
+        }
 
         // `organizationId` is the old name for the firm; the local name follows current
         // terminology. The request-body key and `authResult.ctx.orgId` are left alone — one is a
