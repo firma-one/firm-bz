@@ -2563,6 +2563,7 @@ export function EngagementSharesTab({
         mimeType={secureModalData.mimeType}
         externalId={secureModalData.externalId}
         firmId={secureModalData.firmId}
+        documentUrl={secureModalData.documentUrl}
         mode={secureModalMode}
         isLoading={isRegrantLoading}
         error={regrantError}

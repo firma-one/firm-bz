@@ -23,6 +23,8 @@ export interface SecureOpenModalData {
   mimeType?: string
   externalId?: string
   firmId?: string
+  /** Set in 'blocked' mode so the modal can offer a real, user-clicked link. */
+  documentUrl?: string
 }
 
 /**
@@ -33,9 +35,12 @@ export interface SecureOpenModalData {
  *   provider, see handleSecureOpen below).
  * 'email' — Google Drive: grant succeeded, Google's own OTP is delivered via email — the modal
  *   stays open with "check your inbox" copy until the user dismisses it.
+ * 'blocked' — grant succeeded but the browser refused the new tab (see handleSecureOpen). The
+ *   modal stays open with a link the user clicks themselves, which always succeeds because the
+ *   click carries its own user activation.
  * 'error' — request failed.
  */
-export type SecureOpenModalMode = 'loading' | 'opening' | 'email' | 'error'
+export type SecureOpenModalMode = 'loading' | 'opening' | 'email' | 'blocked' | 'error'
 
 export interface UseSecureOpenDocumentOptions {
   /** When omitted, each call must provide doc.projectId (e.g. dashboard with mixed projects). */
@@ -106,6 +111,10 @@ export function useSecureOpenDocument({
         const timeout = new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error('timeout')), TIMEOUT_MS)
         )
+        // Elapsed time matters diagnostically: the browser only honours window.open() while
+        // transient user activation is alive (~5s in Chrome), so a slow regrant is the
+        // difference between the document opening and the new tab being silently blocked.
+        const startedAt = Date.now()
         const res = await Promise.race([
           fetch(
             `/api/projects/${effectiveProjectId}/documents/${encodeURIComponent(doc.documentId)}/sharing/regrant`,
@@ -113,11 +122,14 @@ export function useSecureOpenDocument({
           ),
           timeout,
         ])
+        const elapsedMs = Date.now() - startedAt
 
         if (!res.ok) {
           const status = res.status
           const errBody = await res.json().catch(() => ({} as { error?: string; code?: string }))
-          logger.debug('Regrant failed', logContext, { documentId: doc.documentId, status, code: errBody.code })
+          // warn, not debug — logger.debug is a no-op outside development, which made this
+          // branch invisible in production exactly when it mattered.
+          logger.warn('Regrant failed', logContext, { documentId: doc.documentId, status, code: errBody.code, elapsedMs })
           if (errBody.code === 'external_sharing_blocked' && errBody.error) {
             // Tenant-level SharePoint external sharing policy blocked this specific recipient —
             // confirmed live 2026-08-14 (works for internal-domain recipients on the same tenant,
@@ -144,8 +156,29 @@ export function useSecureOpenDocument({
           // components/files/document-edit-sheet.tsx's ReGrantEditorAccessButton for the
           // matching fix in the other "regrant" entry point, and
           // .claude/plans/connector-microsoft-impl.md.
+          // Browsers only allow window.open() while transient user activation is alive (~5s in
+          // Chrome). The regrant above runs sequential Graph round-trips and has been measured
+          // at 16.6s, by which point the activation from the user's click is long gone and the
+          // new tab is blocked — silently, returning null. Previously the return value was
+          // ignored, so the modal flipped to "opening", auto-closed 1.2s later, and the user saw
+          // the document simply never open with no error anywhere. Detect that and hand them a
+          // link to click instead: that click carries its own activation and always works.
+          const opened = typeof window !== 'undefined'
+            ? window.open(body.documentUrl, '_blank')
+            : null
+          const wasBlocked = !opened || opened.closed || typeof opened.closed === 'undefined'
+
+          if (wasBlocked) {
+            logger.warn('Secure access tab was blocked by the browser', logContext, {
+              documentId: doc.documentId,
+              elapsedMs,
+            })
+            setSecureModalData((prev) => ({ ...prev, documentUrl: body.documentUrl }))
+            setSecureModalMode('blocked')
+            return
+          }
+
           setSecureModalMode('opening')
-          if (typeof window !== 'undefined') window.open(body.documentUrl, '_blank')
           setTimeout(() => setSecureModalOpen(false), 1200)
           return
         }

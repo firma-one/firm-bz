@@ -23,8 +23,11 @@ interface SecureAccessModalProps {
     mimeType?: string
     externalId?: string
     firmId?: string
+    /** Target for the manual link shown in 'blocked' mode. */
+    documentUrl?: string
     /** 'loading' (generic, provider-neutral, shown before the provider is known) | 'opening'
-     *  (OneDrive/SharePoint — auto-closes) | 'email' (Google — stays open) | 'error'. Falls back
+     *  (OneDrive/SharePoint — auto-closes) | 'email' (Google — stays open) | 'blocked' (the
+     *  browser refused the new tab; user clicks the link themselves) | 'error'. Falls back
      *  to the old isLoading/error boolean props' behavior when omitted. */
     mode?: SecureOpenModalMode
     isLoading?: boolean
@@ -39,6 +42,7 @@ export function SecureAccessModal({
     mimeType,
     externalId,
     firmId,
+    documentUrl,
     mode,
     isLoading,
     error,
@@ -76,7 +80,7 @@ export function SecureAccessModal({
                     <div className="mt-0.5 h-7 w-7 rounded flex items-center justify-center shrink-0 bg-primary/10 ring-1 ring-primary/20">
                         {effectiveMode === 'error' ? (
                             <AlertCircle className="h-4 w-4 text-destructive" />
-                        ) : effectiveMode === 'opening' ? (
+                        ) : effectiveMode === 'opening' || effectiveMode === 'blocked' ? (
                             <ExternalLink className="h-4 w-4 text-primary" />
                         ) : effectiveMode === 'loading' ? (
                             <Loader2 className="h-4 w-4 text-primary animate-spin" />
@@ -88,6 +92,7 @@ export function SecureAccessModal({
                         <p className="text-[11px] font-headline font-bold tracking-widest uppercase text-[#1b1b1d] leading-tight">
                             {effectiveMode === 'error' ? 'Access Unavailable'
                                 : effectiveMode === 'opening' ? 'Opening Document'
+                                : effectiveMode === 'blocked' ? 'Ready To Open'
                                 : effectiveMode === 'loading' ? 'Preparing Secure Access'
                                 : 'Secure Access Request'}
                         </p>
@@ -95,6 +100,8 @@ export function SecureAccessModal({
                             <p className="text-xs text-destructive mt-0.5">Unable to complete secure access</p>
                         ) : effectiveMode === 'opening' ? (
                             <p className="text-xs text-[#45474c] mt-0.5">Opening in a new tab…</p>
+                        ) : effectiveMode === 'blocked' ? (
+                            <p className="text-xs text-[#45474c] mt-0.5">Your access is ready — one more click</p>
                         ) : effectiveMode === 'loading' ? (
                             <p className="text-xs text-[#45474c] mt-0.5">Verifying access, one moment…</p>
                         ) : (
@@ -132,13 +139,34 @@ export function SecureAccessModal({
                                         <DocumentIcon mimeType={mimeType} size={32} />
                                     </div>
                                 )}
-                                <p className="text-xs font-medium text-[#1b1b1d] truncate leading-snug">{fileName}</p>
+                                {/* min-w-0 lets this shrink below its content so `truncate` engages.
+                                    The dialog's own grid track is capped separately (see dialog.tsx)
+                                    — without that cap this alone is not enough, because the ancestor
+                                    grid item refuses to shrink and nothing here ever gets squeezed. */}
+                                <p className="min-w-0 text-xs font-medium text-[#1b1b1d] truncate leading-snug">{fileName}</p>
                             </div>
 
                             {effectiveMode === 'opening' ? (
                                 <p className="text-xs text-[#45474c] leading-relaxed">
                                     Your document is ready — it should open in a new tab momentarily.
                                 </p>
+                            ) : effectiveMode === 'blocked' ? (
+                                <div className="space-y-3">
+                                    <p className="text-xs text-[#45474c] leading-relaxed">
+                                        Access has been granted, but your browser blocked the new tab. Use the
+                                        button below to open the document.
+                                    </p>
+                                    {documentUrl && (
+                                        <Button
+                                            variant="blackCta"
+                                            onClick={() => window.open(documentUrl, '_blank')}
+                                            className="w-full rounded text-[10px] font-headline font-bold tracking-widest uppercase"
+                                        >
+                                            <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
+                                            Open Document
+                                        </Button>
+                                    )}
+                                </div>
                             ) : effectiveMode === 'loading' ? (
                                 <div className="space-y-1.5">
                                     <div className="h-3 w-full bg-[#e5e7eb] rounded animate-pulse" />
@@ -174,7 +202,7 @@ export function SecureAccessModal({
                             disabled={isBusy}
                             className="rounded text-[10px] font-headline font-bold tracking-widest uppercase disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            {effectiveMode === 'error' ? 'Close' : effectiveMode === 'loading' ? (
+                            {effectiveMode === 'error' || effectiveMode === 'blocked' ? 'Close' : effectiveMode === 'loading' ? (
                                 <span className="inline-flex items-center gap-1" aria-label="Please wait">
                                     <span className="w-1.5 h-1.5 bg-white rounded-full animate-bounce [animation-delay:-0.3s]" />
                                     <span className="w-1.5 h-1.5 bg-white rounded-full animate-bounce [animation-delay:-0.15s]" />

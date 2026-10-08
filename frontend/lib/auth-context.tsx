@@ -11,6 +11,28 @@ import { clearCheckoutHintSessionKeys } from './marketing/checkout-hint-session'
 /** Cooldown (ms) to avoid calling buildUserSettingsPlus multiple times in a short period (e.g. initial load + SIGNED_IN + Strict Mode). */
 const BUILD_SETTINGS_COOLDOWN_MS = 5000
 
+/**
+ * Tag Sentry events with the signed-in user so a support report ("it failed for this
+ * person") can actually be looked up. Without this, errors and session replays arrive
+ * anonymous and there is no way to filter to one user — which is exactly why the
+ * OneDrive regrant report could not be traced.
+ *
+ * Dynamically imported and failure-tolerant: Sentry is not initialised in development,
+ * and identification must never be able to break authentication.
+ */
+function identifyToSentry(user: User | null) {
+    if (process.env.NODE_ENV === 'development') return
+    import('@sentry/nextjs')
+        .then((Sentry) => {
+            if (user) {
+                Sentry.setUser({ id: user.id, email: user.email ?? undefined })
+            } else {
+                Sentry.setUser(null)
+            }
+        })
+        .catch(() => { /* Sentry unavailable — never block auth on telemetry */ })
+}
+
 interface AuthContextType {
   user: User | null
   session: Session | null
@@ -44,6 +66,7 @@ export function AuthProvider({ children, initialSession }: { children: ReactNode
 
   useEffect(() => {
     if (initialSession?.user) {
+      identifyToSentry(initialSession.user)
       maybeBuildUserSettingsPlus(initialSession.user.id)
     }
 
@@ -54,6 +77,7 @@ export function AuthProvider({ children, initialSession }: { children: ReactNode
         const { data: { session } } = await supabase.auth.getSession()
         setSession(session)
         setUser(session?.user ?? null)
+        identifyToSentry(session?.user ?? null)
         if (session?.user) {
           maybeBuildUserSettingsPlus(session.user.id)
         }
@@ -68,6 +92,7 @@ export function AuthProvider({ children, initialSession }: { children: ReactNode
         logger.debug('Auth state change', 'Auth', { event, hasUser: !!session?.user, hasSession: !!session, userId: session?.user?.id })
         setSession(session)
         setUser(session?.user ?? null)
+        identifyToSentry(session?.user ?? null)
 
         if (event === 'SIGNED_IN' && session?.user) {
           logger.info('User signed in successfully', 'Auth', { userId: session.user.id })
