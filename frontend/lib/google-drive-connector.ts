@@ -6,6 +6,7 @@ import { needsReEncryption, decrypt } from './encryption'
 import { createGoogleDriveAdapter, FIRMA_MANAGED_APP_PROPS, FIRMA_MANAGED_EXCLUDE_QUERY } from '@/lib/connectors/adapters/google-drive-adapter'
 import * as pockettStructure from '@/lib/connectors/pockett-structure.service'
 import { type IConnectorStorageAdapter, ConnectorContentError } from '@/lib/connectors/types'
+import { trimWorkbookToUsedRange, isSpreadsheetMime } from '@/lib/spreadsheet-print-trim'
 import { getGoogleDriveOAuthServerCredentials } from '@/lib/config'
 import { SUGGESTED_WORKSPACE_FOLDER_NAME } from './suggested-workspace-folder-name'
 import { generateWorkspaceFolderName, FIRMA_PARENT_FOLDER_NAME } from '@/lib/generate-unique-workspace-folder-name'
@@ -4239,6 +4240,95 @@ export class GoogleDriveConnector {
   }
 
   /**
+   * Second attempt at a PDF for a spreadsheet Drive refused to convert: download the raw
+   * workbook, trim every sheet to its populated range (see spreadsheet-print-trim.ts), upload
+   * the trimmed copy as a temporary Google Sheet, export *that* to PDF, then delete it.
+   *
+   * Mirrors convertViaTrimmedCopy in the OneDrive content adapter — the providers fail for
+   * different reasons (Microsoft rejects the page count, Drive caps the export at 10 MB) but
+   * the cause is the same empty-but-styled grid, and so is the remedy.
+   *
+   * The temp file is uploaded with a Google Sheets mime type so Drive converts on upload, and
+   * is always deleted, including on failure. Returns null when the retry is not applicable or
+   * did not work, so the caller reports the original conversion failure instead.
+   */
+  private async convertViaTrimmedCopy(
+    connectorId: string,
+    fileId: string,
+    accessToken: string,
+  ): Promise<Buffer | null> {
+    const rawRes = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    )
+    if (!rawRes.ok) {
+      logger.warn(`Preview: trim retry could not download ${fileId}: ${rawRes.status}`, 'GoogleDrive')
+      return null
+    }
+
+    const trimmed = await trimWorkbookToUsedRange(Buffer.from(await rawRes.arrayBuffer()))
+    if (!trimmed) {
+      logger.warn(`Preview: trim retry found nothing to trim in ${fileId}`, 'GoogleDrive')
+      return null
+    }
+
+    // Multipart upload: metadata names the Google Sheets mime type, so Drive converts the
+    // uploaded .xlsx on the way in and the result is directly exportable.
+    const boundary = `firma-${Date.now().toString(36)}`
+    const metadata = JSON.stringify({
+      name: `[FIRMA_TEMP] ${fileId}`,
+      mimeType: 'application/vnd.google-apps.spreadsheet',
+    })
+    const body = Buffer.concat([
+      Buffer.from(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n`),
+      Buffer.from(`--${boundary}\r\nContent-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\r\n\r\n`),
+      trimmed.buffer,
+      Buffer.from(`\r\n--${boundary}--`),
+    ])
+
+    const uploadRes = await fetch(
+      'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': `multipart/related; boundary=${boundary}`,
+        },
+        body: new Uint8Array(body),
+      }
+    )
+    if (!uploadRes.ok) {
+      logger.warn(`Preview: trim retry temp upload failed: ${uploadRes.status}`, 'GoogleDrive')
+      return null
+    }
+
+    const tempId: string | undefined = (await uploadRes.json())?.id
+    if (!tempId) return null
+
+    try {
+      const exportRes = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${tempId}/export?mimeType=application/pdf&supportsAllDrives=true`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      )
+      if (!exportRes.ok) {
+        logger.warn(`Preview: trim retry export still failed for ${fileId}: ${exportRes.status}`, 'GoogleDrive')
+        return null
+      }
+      logger.info(
+        `Preview: trim retry succeeded for ${fileId} (${trimmed.sheetsTrimmed} sheet(s) trimmed)`,
+        'GoogleDrive',
+      )
+      return Buffer.from(await exportRes.arrayBuffer())
+    } finally {
+      // Fire-and-forget cleanup — a leftover temp file must never block the preview.
+      fetch(`https://www.googleapis.com/drive/v3/files/${tempId}?supportsAllDrives=true`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }).catch((e) => logger.error('Failed to delete temp trim-retry file', e as Error, 'GoogleDrive', { tempId }))
+    }
+  }
+
+  /**
    * Resolve the best representation of a file for inline browser preview: raw bytes for
    * types the browser renders natively (PDF, images), PDF-converted bytes otherwise.
    * Also resolves Drive shortcuts and .gdoc/.gsheet/.gslides stub files transparently —
@@ -4352,10 +4442,16 @@ export class GoogleDriveConnector {
 
     if (pdfExportUrl && !isGoogleWorkspaceMime) {
       const contentRes = await fetch(pdfExportUrl, { headers: { Authorization: `Bearer ${accessToken}` } })
-      if (!contentRes.ok || !contentRes.body) {
-        throw new Error(`Failed to fetch document content from Google Drive: ${contentRes.status}`)
+      if (contentRes.ok && contentRes.body) {
+        return { stream: contentRes.body as unknown as ReadableStream, mimeType: 'application/pdf', fileName: finalName }
       }
-      return { stream: contentRes.body as unknown as ReadableStream, mimeType: 'application/pdf', fileName: finalName }
+      // Previously a hard throw, which surfaced as a 502 and skipped every path below.
+      // An export link failing does not mean the file cannot be previewed — fall through to
+      // the Office branch, which can still convert it (and retry via the trimmer).
+      logger.warn(
+        `Preview: exportLink fetch failed (${contentRes.status}) for ${resolvedExternalId}, falling through`,
+        'GoogleDrive',
+      )
     }
 
     if (isGoogleWorkspaceMime) {
@@ -4387,8 +4483,33 @@ export class GoogleDriveConnector {
       try {
         const pdfBytes = await this.exportFileToPdf(connectorId, resolvedExternalId)
         return { stream: bufferToReadableStream(pdfBytes), mimeType: 'application/pdf', fileName: finalName }
-      } catch {
-        logger.warn(`Preview: exportFileToPdf failed for ${mimeType} ${resolvedExternalId}`, 'GoogleDrive')
+      } catch (e) {
+        // This mime type IS previewable — the conversion of this particular file failed.
+        // Report that (with the cause) rather than falling through to 'unsupported', which
+        // would tell the user their file type can't be previewed when it can.
+        logger.error(
+          `Preview: exportFileToPdf failed for ${mimeType} ${resolvedExternalId}`,
+          e as Error,
+          'GoogleDrive',
+          { externalId: resolvedExternalId, mimeType },
+        )
+
+        // Same retry the OneDrive adapter performs, for the same reason: a spreadsheet
+        // carrying an empty-but-styled grid (the shape every Google Sheets export has)
+        // produces an enormous print range. Drive's files.export caps the exported file at
+        // 10 MB, so the conversion can fail on size where a trimmed copy succeeds.
+        if (isSpreadsheetMime(mimeType)) {
+          const retried = await this.convertViaTrimmedCopy(connectorId, resolvedExternalId, accessToken)
+            .catch((err) => {
+              logger.error('Preview: trim retry threw', err as Error, 'GoogleDrive', { externalId: resolvedExternalId })
+              return null
+            })
+          if (retried) {
+            return { stream: bufferToReadableStream(retried), mimeType: 'application/pdf', fileName: finalName }
+          }
+        }
+
+        throw new ConnectorContentError('conversion_failed', `Could not convert ${mimeType} to PDF`, mimeType)
       }
     }
 

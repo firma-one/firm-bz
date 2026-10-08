@@ -9,7 +9,22 @@ import { ConnectorContentError } from '@/lib/connectors/types'
 import { logger } from '@/lib/logger'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 
-function unsupportedPreviewHtml(mimeType: string): NextResponse {
+/**
+ * A first Office-to-PDF conversion runs ~5-10s. When the provider rejects it, the adapter
+ * trims the workbook and converts again (download + upload + a second conversion), so the
+ * worst case is roughly double that. Without an explicit limit this route inherits the
+ * account default, and a timeout would replace our own "preview could not be generated"
+ * card with the platform's 504 page inside the iframe.
+ */
+export const maxDuration = 60
+
+function escapeHtml(s: string): string {
+    return s.replace(/[&<>"']/g, (c) => (
+        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string
+    ))
+}
+
+function previewMessageHtml({ icon, title, body }: { icon: string; title: string; body: string }): NextResponse {
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -19,7 +34,7 @@ function unsupportedPreviewHtml(mimeType: string): NextResponse {
     body { margin: 0; display: flex; align-items: center; justify-content: center;
            height: 100vh; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
            background: #f8fafc; color: #475569; }
-    .card { text-align: center; padding: 2rem; max-width: 320px; }
+    .card { text-align: center; padding: 2rem; max-width: 340px; }
     .icon { font-size: 2.5rem; margin-bottom: 1rem; }
     h2 { margin: 0 0 0.5rem; font-size: 1rem; font-weight: 600; color: #1e293b; }
     p { margin: 0; font-size: 0.8125rem; line-height: 1.5; }
@@ -27,15 +42,37 @@ function unsupportedPreviewHtml(mimeType: string): NextResponse {
 </head>
 <body>
   <div class="card">
-    <div class="icon">📄</div>
-    <h2>Preview not available</h2>
-    <p>This file type (<code>${mimeType}</code>) cannot be displayed inline.<br/>Use the download button to access the file.</p>
+    <div class="icon">${icon}</div>
+    <h2>${title}</h2>
+    <p>${body}</p>
   </div>
 </body>
 </html>`
     return new NextResponse(html, {
         status: 200,
         headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
+    })
+}
+
+/** The file's *type* has no inline representation at all. */
+function unsupportedPreviewHtml(mimeType: string): NextResponse {
+    return previewMessageHtml({
+        icon: '📄',
+        title: 'Preview not available',
+        body: `This file type (<code>${escapeHtml(mimeType)}</code>) cannot be displayed inline.<br/>Use the download button to access the file.`,
+    })
+}
+
+/**
+ * The type IS previewable, but this particular file could not be converted — and the
+ * connector has already exhausted its retry. Say that plainly instead of blaming the
+ * file type, and point at the one action that always works.
+ */
+function conversionFailedHtml(detail?: string): NextResponse {
+    return previewMessageHtml({
+        icon: '⚠️',
+        title: 'Preview could not be generated',
+        body: `${detail ? `${escapeHtml(detail)}<br/><br/>` : ''}The file itself is intact — please use the download button to open it.`,
     })
 }
 
@@ -106,6 +143,9 @@ export async function GET(
                         error: 'Access denied to storage file',
                         details: 'The account linked to Pockett does not have permission to view this file.',
                     }, { status: 403 })
+                }
+                if (err.code === 'conversion_failed') {
+                    return conversionFailedHtml(err.detail)
                 }
                 return unsupportedPreviewHtml(err.mimeType ?? 'unknown')
             }

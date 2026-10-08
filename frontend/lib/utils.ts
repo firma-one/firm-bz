@@ -46,8 +46,11 @@ export function getFileTypeLabel(mimeType: string): string {
   if (mimeType.includes('audio')) return 'Audio'
   if (mimeType.includes('zip') || mimeType.includes('archive') || mimeType.includes('compressed') || mimeType.includes('tar') || mimeType.includes('rar') || mimeType.includes('7z')) return 'Archive'
   if (mimeType.includes('presentation') || mimeType.includes('powerpoint') || mimeType.includes('slides')) return 'Presentation'
-  if (mimeType.includes('document') || mimeType.includes('word')) return 'Doc'
+  // Sheets must be tested BEFORE documents: every OOXML mime type contains the substring
+  // "document" (as part of "officedocument"), so an .xlsx
+  // (…openxmlformats-officedocument.spreadsheetml.sheet) was being labelled "Doc".
   if (mimeType.includes('sheet') || mimeType.includes('excel') || mimeType.includes('csv')) return 'Sheet'
+  if (mimeType.includes('document') || mimeType.includes('word')) return 'Doc'
   if (mimeType.includes('text/')) return 'Text'
   return 'File'
 }

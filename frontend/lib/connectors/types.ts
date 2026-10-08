@@ -219,10 +219,19 @@ export interface IConnectorPermissionAdapter {
  * - unsupported: the file's type/state cannot be rendered (e.g. no export path available)
  */
 export class ConnectorContentError extends Error {
+  /**
+   * `unsupported` — the provider has no inline-viewable representation for this *type* of file.
+   * `conversion_failed` — the type IS previewable, but converting this particular file failed
+   *   (e.g. Microsoft's Office service rejecting a spreadsheet whose print range runs to
+   *   thousands of pages). Kept distinct from `unsupported` so the UI can tell the user what
+   *   actually went wrong instead of blaming the file type.
+   */
   constructor(
-    public readonly code: 'not_found' | 'forbidden' | 'unsupported',
+    public readonly code: 'not_found' | 'forbidden' | 'unsupported' | 'conversion_failed',
     message: string,
-    public readonly mimeType?: string
+    public readonly mimeType?: string,
+    /** Short, user-facing explanation of a `conversion_failed`, when one can be inferred. */
+    public readonly detail?: string
   ) {
     super(message)
     this.name = 'ConnectorContentError'

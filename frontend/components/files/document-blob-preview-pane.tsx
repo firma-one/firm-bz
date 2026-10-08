@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react'
 import { ZoomIn, ZoomOut, RotateCcw } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { PreviewLoadingState } from '@/components/files/preview-loading-state'
 
 const ZOOM_STEP = 15
 const ZOOM_MIN  = 50
@@ -106,10 +107,14 @@ export function DocumentBlobPreviewPane({ document, projectId }: DocumentBlobPre
 
       {/* iframe area */}
       <div className="flex-1 min-h-0 relative bg-[#f3f4f6]">
-        {/* Loading spinner — shown during the initial load and during every
-            zoom re-render (pendingZoom !== null) so the user always sees
-            progress while the iframe reloads, instead of a blank screen. */}
-        {(!initialLoaded || pendingZoom !== null) && (
+        {/* First load: the shared state, with file metadata and staged progress copy —
+            this is the one that can sit through a slow server-side conversion. */}
+        {!initialLoaded && <PreviewLoadingState document={document} />}
+
+        {/* Zoom re-render: the iframe reloads (key prop), so cover the blank frame. The
+            document is already converted by now, so a bare spinner is right — repeating
+            "Converting this file…" on every zoom step would be wrong. */}
+        {initialLoaded && pendingZoom !== null && (
           <div className="absolute inset-0 flex items-center justify-center bg-[#f3f4f6] z-10">
             <LoadingSpinner size="md" />
           </div>
