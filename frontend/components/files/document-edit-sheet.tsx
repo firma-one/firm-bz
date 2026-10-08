@@ -13,7 +13,8 @@ import { formatFileSize, formatSmartDateTime } from "@/lib/utils"
 import { useRightPane } from "@/lib/right-pane-context"
 import { useState } from "react"
 import { useToast } from "@/components/ui/toast"
-import { Loader2, MailCheck, ShieldCheck, Mail } from "lucide-react"
+import { logger } from "@/lib/logger"
+import { Loader2, MailCheck, ShieldCheck, Mail, ExternalLink } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -27,6 +28,8 @@ import { DocumentHeader } from "./document-header"
 export function ReGrantEditorAccessButton({ projectId, documentId, isGuest }: { projectId: string; documentId: string; isGuest?: boolean }) {
   const [isLoading, setIsLoading] = useState(false)
   const [showSuccessModal, setShowSuccessModal] = useState(false)
+  /** Set when the browser blocked the new tab, so we can offer a link the user clicks themselves. */
+  const [blockedUrl, setBlockedUrl] = useState<string | null>(null)
   const { addToast } = useToast()
 
   if (isGuest) return null // Guests only have read access, they don't need editor OTPs
@@ -58,7 +61,18 @@ export function ReGrantEditorAccessButton({ projectId, documentId, isGuest }: { 
         // unreliable for non-Microsoft recipients, and since access here never expires (only the
         // OTP-authenticated session does, after ~24h), an emailed link would offer no durability
         // benefit worth the detour. See onedrive-permission-adapter.ts / regrant/route.ts.
-        window.open(data.documentUrl, '_blank')
+        //
+        // The regrant above runs sequential Graph round-trips and has been measured at 16.6s,
+        // well past the ~5s transient user activation that lets a page call window.open(). Past
+        // that the browser blocks the tab and returns null. This is the OneDrive path only —
+        // Google Drive delivers its own OTP link by email below and never opens a tab — and it
+        // is the same failure the file list's secure-open had (see use-secure-open-document.ts).
+        // Unchecked, the user got nothing at all here: no tab, no error, no modal.
+        const opened = window.open(data.documentUrl, '_blank')
+        if (!opened || opened.closed || typeof opened.closed === 'undefined') {
+          logger.warn('Editor access tab was blocked by the browser', 'DocumentEditSheet', { documentId })
+          setBlockedUrl(data.documentUrl)
+        }
       } else {
         // Google Drive: unchanged — Google's own OTP is delivered via this email, so the
         // "check your inbox" step is the actual verification mechanism, not just a notification.
@@ -109,6 +123,33 @@ export function ReGrantEditorAccessButton({ projectId, documentId, isGuest }: { 
           <div className="flex justify-center mt-2">
             <Button onClick={() => setShowSuccessModal(false)} className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white">
               Got it, checking my email
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Access was granted but the browser refused the new tab. The user's own click on this
+          button carries fresh user activation, so opening from here always succeeds. */}
+      <Dialog open={blockedUrl !== null} onOpenChange={(open) => { if (!open) setBlockedUrl(null) }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-blue-100 mb-4">
+              <ExternalLink className="h-6 w-6 text-blue-600" />
+            </div>
+            <DialogTitle className="text-center text-xl">Your access is ready</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col items-center text-center space-y-4 py-4">
+            <p className="text-sm text-gray-500">
+              Editor access has been granted, but your browser blocked the new tab.
+            </p>
+          </div>
+          <div className="flex justify-center mt-2">
+            <Button
+              onClick={() => { if (blockedUrl) window.open(blockedUrl, '_blank'); setBlockedUrl(null) }}
+              className="w-full sm:w-auto"
+            >
+              <ExternalLink className="h-4 w-4 mr-2" />
+              Open document
             </Button>
           </div>
         </DialogContent>
