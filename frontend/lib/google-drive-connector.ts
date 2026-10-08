@@ -8,6 +8,7 @@ import * as pockettStructure from '@/lib/connectors/pockett-structure.service'
 import { type IConnectorStorageAdapter, ConnectorContentError } from '@/lib/connectors/types'
 import { trimWorkbookToUsedRange, isSpreadsheetMime } from '@/lib/spreadsheet-print-trim'
 import { isAnySpreadsheetMime, GOOGLE_SHEET_MIME } from '@/lib/spreadsheet-mimes'
+import { isClientRenderable, previewKind, needsRangeSupport } from '@/lib/preview-kinds'
 
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 import { getGoogleDriveOAuthServerCredentials } from '@/lib/config'
@@ -4380,10 +4381,13 @@ export class GoogleDriveConnector {
    * these are Drive-only indirection concepts with no equivalent in other providers.
    * Moved here from the preview route unchanged; behavior must remain identical.
    */
-  async getPreviewableContent(connectorId: string, fileId: string, opts?: { preferNative?: boolean }): Promise<{
+  async getPreviewableContent(connectorId: string, fileId: string, opts?: { preferNative?: boolean; range?: string }): Promise<{
     stream: ReadableStream
     mimeType: string
     fileName: string
+    httpStatus?: number
+    contentRange?: string
+    contentLength?: number
   }> {
     const accessToken = await this.getAccessToken(connectorId)
     if (!accessToken) {
@@ -4482,27 +4486,41 @@ export class GoogleDriveConnector {
     //
     // Every failure here falls through to the PDF branches below, so a sheet that cannot be
     // served natively still previews exactly as it does today.
-    if (opts?.preferNative && isAnySpreadsheetMime(mimeType)) {
+    const nativeKind = previewKind(mimeType, finalName)
+    if (opts?.preferNative && isClientRenderable(mimeType, finalName)) {
       try {
-        const nativeUrl = mimeType === GOOGLE_SHEET_MIME
-          ? (metadata.exportLinks?.[XLSX_MIME]
-              ?? `https://www.googleapis.com/drive/v3/files/${resolvedExternalId}/export?mimeType=${encodeURIComponent(XLSX_MIME)}&supportsAllDrives=true`)
-          : `https://www.googleapis.com/drive/v3/files/${resolvedExternalId}?alt=media&supportsAllDrives=true`
+        // A Google Sheet has no bytes of its own and must be exported to xlsx for the
+        // grid. Everything else client-renderable is already a real file.
+        let nativeUrl: string
+        let nativeMime = mimeType
+        if (mimeType === GOOGLE_SHEET_MIME) {
+          nativeMime = XLSX_MIME
+          nativeUrl = metadata.exportLinks?.[XLSX_MIME]
+            ?? `https://www.googleapis.com/drive/v3/files/${resolvedExternalId}/export?mimeType=${encodeURIComponent(XLSX_MIME)}&supportsAllDrives=true`
+        } else {
+          nativeUrl = `https://www.googleapis.com/drive/v3/files/${resolvedExternalId}?alt=media&supportsAllDrives=true`
+        }
 
-        const nativeRes = await fetch(nativeUrl, { headers: { Authorization: `Bearer ${accessToken}` } })
+        const nativeHeaders: Record<string, string> = { Authorization: `Bearer ${accessToken}` }
+        if (opts.range && needsRangeSupport(nativeKind)) nativeHeaders.Range = opts.range
+
+        const nativeRes = await fetch(nativeUrl, { headers: nativeHeaders })
         if (nativeRes.ok && nativeRes.body) {
           return {
             stream: nativeRes.body as unknown as ReadableStream,
-            mimeType: XLSX_MIME,
+            mimeType: nativeMime || 'application/octet-stream',
             fileName: finalName,
+            httpStatus: nativeRes.status === 206 ? 206 : undefined,
+            contentRange: nativeRes.headers.get('Content-Range') ?? undefined,
+            contentLength: Number(nativeRes.headers.get('Content-Length')) || undefined,
           }
         }
         logger.warn(
-          `Preview: native spreadsheet fetch failed for ${resolvedExternalId} (${nativeRes.status}); falling back to PDF`,
+          `Preview: native fetch failed for ${resolvedExternalId} (${nativeRes.status}); falling back to conversion`,
           'GoogleDrive',
         )
       } catch (e) {
-        logger.warn(`Preview: native spreadsheet fetch threw for ${resolvedExternalId}: ${e}`, 'GoogleDrive')
+        logger.warn(`Preview: native fetch threw for ${resolvedExternalId}: ${e}`, 'GoogleDrive')
       }
     }
 

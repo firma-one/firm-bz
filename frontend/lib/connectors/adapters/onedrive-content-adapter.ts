@@ -22,6 +22,7 @@ import { OneDriveConnector } from '@/lib/connectors/onedrive-connector'
 import { resolveOneDriveDriveBase } from './onedrive-adapter'
 import { ConnectorContentError, type IConnectorContentAdapter } from '../types'
 import { trimWorkbookToUsedRange, isSpreadsheetMime } from '@/lib/spreadsheet-print-trim'
+import { isClientRenderable, previewKind, needsRangeSupport } from '@/lib/preview-kinds'
 import { logger } from '@/lib/logger'
 
 const oneDrive = OneDriveConnector.getInstance()
@@ -223,16 +224,23 @@ export function createOneDriveContentAdapter(): IConnectorContentAdapter {
       const meta = await metaRes.json()
       const mimeType: string | undefined = meta.file?.mimeType
 
-      // A workbook the client will render itself is served as-is. OneDrive stores xlsx
-      // natively, so this is just the plain content endpoint with no conversion at all —
-      // no page-limit failure, no trim retry, no 5-10s wait.
-      const wantsNativeSheet = !!opts?.preferNative && isSpreadsheetMime(mimeType)
+      // Anything the client renders from the original bytes is served as-is, with no
+      // conversion at all — no page-limit failure, no trim retry, no 5-10s wait. OneDrive
+      // stores all of these natively.
+      const kind = previewKind(mimeType, meta.name)
+      const wantsNative = !!opts?.preferNative && isClientRenderable(mimeType, meta.name)
 
       const isInlineViewable = !!mimeType && INLINE_VIEWABLE_MIME_PREFIXES.some((p) => mimeType.startsWith(p))
-      const format = wantsNativeSheet || isInlineViewable ? 'native' : 'pdf'
+      const format = wantsNative || isInlineViewable ? 'native' : 'pdf'
 
       const contentUrl = format === 'pdf' ? `${base}/items/${fileId}/content?format=pdf` : `${base}/items/${fileId}/content`
-      const contentRes = await fetch(contentUrl, { headers: { Authorization: `Bearer ${token}` } })
+      const contentHeaders: Record<string, string> = { Authorization: `Bearer ${token}` }
+      // Forwarded only for media, where seeking is the point. Sending it elsewhere would
+      // invite a partial response for content the pane reads in full.
+      if (opts?.range && format === 'native' && needsRangeSupport(kind)) {
+        contentHeaders.Range = opts.range
+      }
+      const contentRes = await fetch(contentUrl, { headers: contentHeaders })
       if (!contentRes.ok) {
         const errorBody = await contentRes.text().catch(() => '<unreadable>')
         const officeCode = officeErrorCode(errorBody)
@@ -259,6 +267,19 @@ export function createOneDriveContentAdapter(): IConnectorContentAdapter {
         // claiming the file type cannot be previewed.
         throw conversionFailed(mimeType, officeCode)
       }
+      // A ranged response is streamed rather than buffered: the point of answering 206 is
+      // to avoid pulling the whole file into memory for every seek.
+      if (contentRes.status === 206 && contentRes.body) {
+        return {
+          stream: contentRes.body as unknown as ReadableStream,
+          mimeType: mimeType ?? 'application/octet-stream',
+          fileName: meta.name,
+          httpStatus: 206,
+          contentRange: contentRes.headers.get('Content-Range') ?? undefined,
+          contentLength: Number(contentRes.headers.get('Content-Length')) || undefined,
+        }
+      }
+
       const buffer = Buffer.from(await contentRes.arrayBuffer())
       return {
         stream: buffer,
