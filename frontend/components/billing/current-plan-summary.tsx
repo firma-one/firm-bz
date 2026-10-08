@@ -147,6 +147,7 @@ function AiCreditsRow({ usage }: { usage: BillingPlanUsage | null | undefined })
         { key: 'searchInterpret', label: 'Firm Doc Search', fill: 'hsl(161 70% 45%)' },
         { key: 'summary', label: 'Engagement summaries', fill: 'hsl(161 55% 62%)' },
         { key: 'chat', label: 'Engagement assistant chat', fill: 'hsl(161 45% 78%)' },
+        { key: 'filesAgent', label: 'Files agent', fill: 'hsl(161 35% 88%)' },
     ]
     const fmt = (n: number) => (n % 1 === 0 ? String(n) : n.toFixed(1))
     const since = new Date(ai.periodStartIso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })

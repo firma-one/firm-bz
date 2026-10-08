@@ -22,6 +22,7 @@ const FEATURE_LABELS: Record<string, string> = {
     summary: 'Engagement summaries',
     brief: 'Firm briefs',
     searchInterpret: 'Doc Search',
+    filesAgent: 'Files agent',
 }
 
 /**
