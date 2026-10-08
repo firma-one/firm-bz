@@ -370,7 +370,7 @@ export function DocumentSheetPreviewPane({ document, projectId, onFallback, onVi
     return (
         <div className="flex-1 min-h-0 flex flex-col bg-white">
             {onViewPrinted && (
-                <div className="flex shrink-0 items-center justify-end px-2 py-1 border-b border-[#e5e7eb] bg-white">
+                <div className="flex shrink-0 items-center justify-end gap-1.5 px-3 py-1.5 border-b border-[#e5e7eb] bg-white">
                     <Tooltip>
                         <TooltipTrigger asChild>
                             <button
@@ -379,11 +379,11 @@ export function DocumentSheetPreviewPane({ document, projectId, onFallback, onVi
                                 className="h-6 px-2 rounded inline-flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-slate-700 hover:bg-slate-100"
                             >
                                 <FileText className="h-3.5 w-3.5" />
-                                View as printed
+                                Switch to Print View
                             </button>
                         </TooltipTrigger>
                         <TooltipContent side="bottom" className="text-xs">
-                            Page layout, the only view that shows charts
+                            Page layout — the only view that renders charts
                         </TooltipContent>
                     </Tooltip>
                 </div>

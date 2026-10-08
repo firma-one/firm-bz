@@ -118,9 +118,10 @@ const THUMB_WIDTH = 104
 interface DocumentPdfPreviewPaneProps {
     document: any
     projectId?: string
-    /** Offered only when the caller has a grid view to go back to, i.e. for a spreadsheet
-     *  the user chose to see as a printed page. */
-    onViewGrid?: () => void
+    /** Offered for a spreadsheet the user chose to see as a printed page. Forwarded to the
+     *  iframe pane as well: this pane hands off to it for anything it cannot open, and the
+     *  reader must not lose the way back when that happens. */
+    onBackToSheet?: () => void
 }
 
 /** One bookmark, flattened to a page number at load so clicking is instant. */
@@ -451,7 +452,7 @@ function PdfPageHighlights({
     )
 }
 
-export function DocumentPdfPreviewPane({ document, projectId, onViewGrid }: DocumentPdfPreviewPaneProps) {
+export function DocumentPdfPreviewPane({ document, projectId, onBackToSheet }: DocumentPdfPreviewPaneProps) {
     const [zoom, setZoom] = useState(ZOOM_DEFAULT)
     const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null)
     const [basePages, setBasePages] = useState<BasePage[]>([])
@@ -556,6 +557,12 @@ export function DocumentPdfPreviewPane({ document, projectId, onViewGrid }: Docu
 
                     const contentType = res.headers.get('Content-Type') ?? ''
                     if (!res.ok || !contentType.includes('application/pdf')) {
+                        // Silent until now, which made a two-step degradation
+                        // (grid -> pdf.js -> iframe) impossible to tell apart from the
+                        // iframe pane simply being what was chosen.
+                        console.info(
+                            `[preview] pdf.js declined ${documentId}: status ${res.status}, content-type "${contentType}" — handing to the iframe pane`,
+                        )
                         // Images and the unsupported-type HTML page keep the legacy behaviour.
                         // Only a successful verdict is remembered — a transient 502 must not
                         // pin this document to the fallback pane for the rest of the session.
@@ -1018,7 +1025,7 @@ export function DocumentPdfPreviewPane({ document, projectId, onViewGrid }: Docu
     }
 
     if (fallback) {
-        return <DocumentBlobPreviewPane document={document} projectId={projectId} />
+        return <DocumentBlobPreviewPane document={document} projectId={projectId} onBackToSheet={onBackToSheet} />
     }
 
     // Declared once so the inline buttons and the overflow menu cannot drift apart.
@@ -1103,24 +1110,6 @@ export function DocumentPdfPreviewPane({ document, projectId, onViewGrid }: Docu
                     </TooltipTrigger>
                     <TooltipContent side="bottom" className="text-xs">Find in document</TooltipContent>
                 </Tooltip>
-
-                {onViewGrid && (
-                    <>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <button
-                                    type="button"
-                                    onClick={onViewGrid}
-                                    className="h-6 w-6 rounded inline-flex items-center justify-center text-slate-500 hover:text-slate-700 hover:bg-slate-100"
-                                    aria-label="Back to the spreadsheet grid"
-                                >
-                                    <Table2 className="h-3.5 w-3.5" />
-                                </button>
-                            </TooltipTrigger>
-                            <TooltipContent side="bottom" className="text-xs">Back to grid</TooltipContent>
-                        </Tooltip>
-                    </>
-                )}
 
                 <div className="w-px h-4 bg-slate-200 mx-1.5" aria-hidden="true" />
 
@@ -1283,6 +1272,24 @@ export function DocumentPdfPreviewPane({ document, projectId, onViewGrid }: Docu
                     <TooltipContent side="bottom" className="text-xs">Next page</TooltipContent>
                 </Tooltip>
 
+                {onBackToSheet && (
+                    <>
+                        {/* ml-auto on the group pins the separator, icon and label together
+                            against the right edge; the toolbar's flex-wrap drops the whole
+                            group to its own line only when there is no room for it. */}
+                        <div className="ml-auto flex items-center gap-1.5">
+                            <div className="w-px h-4 bg-slate-200" aria-hidden="true" />
+                            <button
+                                type="button"
+                                onClick={onBackToSheet}
+                                className="h-6 px-2 rounded inline-flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+                            >
+                                <Table2 className="h-3.5 w-3.5" />
+                                Switch to Sheet View
+                            </button>
+                        </div>
+                    </>
+                )}
             </div>
 
             {findOpen && (

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { ZoomIn, ZoomOut, RotateCcw } from 'lucide-react'
+import { ZoomIn, ZoomOut, RotateCcw, Table2 } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { PreviewLoadingState } from '@/components/files/preview-loading-state'
@@ -14,9 +14,11 @@ const ZOOM_DEFAULT = 100
 interface DocumentBlobPreviewPaneProps {
   document: any
   projectId?: string
+  /** Forwarded from the preview entry point for a spreadsheet being shown as a page. */
+  onBackToSheet?: () => void
 }
 
-export function DocumentBlobPreviewPane({ document, projectId }: DocumentBlobPreviewPaneProps) {
+export function DocumentBlobPreviewPane({ document, projectId, onBackToSheet }: DocumentBlobPreviewPaneProps) {
   const [zoom, setZoom] = useState(ZOOM_DEFAULT)
   // pendingZoom tracks the zoom level being loaded; null means initial load
   const [pendingZoom, setPendingZoom] = useState<number | null>(null)
@@ -103,6 +105,22 @@ export function DocumentBlobPreviewPane({ document, projectId }: DocumentBlobPre
           </TooltipTrigger>
           <TooltipContent side="bottom" className="text-xs">Reset zoom</TooltipContent>
         </Tooltip>
+
+        {onBackToSheet && (
+          <>
+            <div className="ml-auto flex items-center gap-1.5">
+              <div className="w-px h-4 bg-slate-200" aria-hidden="true" />
+              <button
+                type="button"
+                onClick={onBackToSheet}
+                className="h-6 px-2 rounded inline-flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+              >
+                <Table2 className="h-3.5 w-3.5" />
+                Switch to Sheet View
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
       {/* iframe area */}

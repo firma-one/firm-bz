@@ -53,13 +53,16 @@ export function DocumentPreviewPane({ document, projectId }: DocumentPreviewPane
         )
     }
 
+    // The control is handed to the renderer rather than drawn here, so it sits in the
+    // toolbar row with everything else. The PDF pane forwards it to the iframe pane it
+    // falls back to, so it survives that hand-off — losing it there was the original bug.
+    const canReturnToSheet = isSpreadsheet && !sheetFailed && printedRequested
+
     return (
         <DocumentPdfPreviewPane
             document={document}
             projectId={projectId}
-            // Only offered when there is a working grid to return to. After a parse
-            // failure there is nothing behind the button, so it is not shown.
-            onViewGrid={isSpreadsheet && !sheetFailed ? () => setPrintedRequested(false) : undefined}
+            onBackToSheet={canReturnToSheet ? () => setPrintedRequested(false) : undefined}
         />
     )
 }
