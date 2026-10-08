@@ -1,9 +1,13 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { isAnySpreadsheetMime } from '@/lib/spreadsheet-mimes'
+import { previewKind, documentName, type PreviewKind } from '@/lib/preview-kinds'
 import { DocumentPdfPreviewPane } from '@/components/files/document-pdf-preview-pane'
 import { DocumentSheetPreviewPane } from '@/components/files/document-sheet-preview-pane'
+import { DocumentTextPreviewPane } from '@/components/files/document-text-preview-pane'
+import { DocumentMediaPreviewPane } from '@/components/files/document-media-preview-pane'
+import { DocumentArchivePreviewPane } from '@/components/files/document-archive-preview-pane'
+import { DocumentImagePreviewPane } from '@/components/files/document-image-preview-pane'
 
 interface DocumentPreviewPaneProps {
     document: any
@@ -13,56 +17,85 @@ interface DocumentPreviewPaneProps {
 /**
  * Entry point for document preview: picks a renderer and owns the fallback between them.
  *
- * Spreadsheets render as a grid, because converting one to PDF produces a printed page of
- * something that has no pages — a sheet with no print setup becomes a single sheet-sized
- * page that is unreadable at any zoom. Everything else goes through pdf.js.
- *
- * The grid is best-effort. If the workbook cannot be fetched natively or cannot be parsed,
- * this falls back to the PDF pane, which still converts exactly as it did before — so the
- * worst case for a spreadsheet is the behaviour that shipped previously.
+ * Each specialised pane is best-effort. If it cannot fetch or parse the file it calls back
+ * here, and the PDF pane takes over with exactly the conversion path that shipped before —
+ * so the worst case for any file is the behaviour it had previously.
  */
 export function DocumentPreviewPane({ document, projectId }: DocumentPreviewPaneProps) {
-    const [sheetFailed, setSheetFailed] = useState(false)
-    /** The user asked for page layout. Distinct from `sheetFailed`: this one is reversible,
-     *  so the grid stays one click away. */
-    const [printedRequested, setPrintedRequested] = useState(false)
+    const [failed, setFailed] = useState(false)
+    /** The reader asked for the other view of this document. Reversible, unlike a failure. */
+    const [alternate, setAlternate] = useState(false)
 
-    const isSpreadsheet = isAnySpreadsheetMime(document?.mimeType)
+    const kind: PreviewKind = previewKind(document?.mimeType, documentName(document))
 
-    // A different document deserves its own attempt; one unparseable workbook must not
-    // condemn the next file opened into the same pane, and a choice made about one file
-    // should not silently apply to the next.
+    // A different document deserves its own attempt, and a choice made about one file
+    // should not silently carry to the next.
     useEffect(() => {
-        setSheetFailed(false)
-        setPrintedRequested(false)
+        setFailed(false)
+        setAlternate(false)
     }, [document?.id])
 
     const handleFallback = useCallback((reason: string) => {
-        console.info(`[preview] rendering ${document?.fileName ?? document?.id} as PDF: ${reason}`)
-        setSheetFailed(true)
-    }, [document?.fileName, document?.id])
+        console.info(`[preview] ${documentName(document) || document?.id}: falling back to the converted view — ${reason}`)
+        setFailed(true)
+    }, [document, document?.id])
 
-    if (isSpreadsheet && !sheetFailed && !printedRequested) {
-        return (
-            <DocumentSheetPreviewPane
-                document={document}
-                projectId={projectId}
-                onFallback={handleFallback}
-                onViewPrinted={() => setPrintedRequested(true)}
-            />
-        )
+    if (!failed && !alternate) {
+        switch (kind) {
+            case 'sheet':
+            case 'csv':
+                return (
+                    <DocumentSheetPreviewPane
+                        document={document}
+                        projectId={projectId}
+                        onFallback={handleFallback}
+                        // Only a real spreadsheet has a printed form worth offering; a
+                        // delimited file converts to the same unreadable page the grid
+                        // exists to replace.
+                        onViewPrinted={kind === 'sheet' ? () => setAlternate(true) : undefined}
+                    />
+                )
+            case 'text':
+            case 'markdown':
+            case 'html':
+                return (
+                    <DocumentTextPreviewPane
+                        document={document}
+                        projectId={projectId}
+                        kind={kind}
+                        onFallback={handleFallback}
+                    />
+                )
+            case 'zip':
+                return (
+                    <DocumentArchivePreviewPane
+                        document={document}
+                        projectId={projectId}
+                        onFallback={handleFallback}
+                    />
+                )
+            case 'video':
+            case 'audio':
+                return <DocumentMediaPreviewPane document={document} projectId={projectId} kind={kind} />
+            case 'image':
+                return <DocumentImagePreviewPane document={document} projectId={projectId} />
+            default:
+                break
+        }
     }
 
-    // The control is handed to the renderer rather than drawn here, so it sits in the
-    // toolbar row with everything else. The PDF pane forwards it to the iframe pane it
-    // falls back to, so it survives that hand-off — losing it there was the original bug.
-    const canReturnToSheet = isSpreadsheet && !sheetFailed && printedRequested
+    // Offered only for a spreadsheet the reader chose to see as a printed page. A Google
+    // Doc gets no alternate view: it already converts to PDF exactly as a .docx does, and
+    // every other rendering of it would have fewer capabilities, not more.
+    const alternateView = kind === 'sheet' && !failed && alternate
+        ? { label: 'Switch to Sheet View', onSelect: () => setAlternate(false) }
+        : undefined
 
     return (
         <DocumentPdfPreviewPane
             document={document}
             projectId={projectId}
-            onBackToSheet={canReturnToSheet ? () => setPrintedRequested(false) : undefined}
+            alternateView={alternateView}
         />
     )
 }

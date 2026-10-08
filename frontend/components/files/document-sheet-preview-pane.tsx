@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FileText } from 'lucide-react'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { documentName } from '@/lib/preview-kinds'
 
 /** Row height in px. Fixed, which is what makes windowing a matter of arithmetic. */
 const ROW_H = 24
@@ -108,6 +109,93 @@ function charsToPx(width: number | undefined): number {
     return Math.round(width * 7 + 5)
 }
 
+/**
+ * Split delimited text into rows. Handles quoted fields, doubled quotes inside them, and
+ * newlines within a quoted field — all of which appear in exported data often enough that a
+ * naive split on commas mangles real files.
+ */
+function parseDelimited(text: string, delimiter: string): string[][] {
+    const rows: string[][] = []
+    let row: string[] = []
+    let field = ''
+    let quoted = false
+
+    for (let i = 0; i < text.length; i++) {
+        const ch = text[i]
+
+        if (quoted) {
+            if (ch === '"') {
+                if (text[i + 1] === '"') { field += '"'; i++ } else { quoted = false }
+            } else {
+                field += ch
+            }
+            continue
+        }
+
+        if (ch === '"') { quoted = true; continue }
+        if (ch === delimiter) { row.push(field); field = ''; continue }
+        if (ch === '\r') continue
+        if (ch === '\n') { row.push(field); rows.push(row); row = []; field = ''; continue }
+        field += ch
+    }
+
+    if (field.length || row.length) { row.push(field); rows.push(row) }
+    return rows
+}
+
+/**
+ * Pick the delimiter from the first line by counting candidates. Exports from European
+ * locales are semicolon-separated often enough that assuming a comma turns the whole file
+ * into one column.
+ */
+function sniffDelimiter(text: string): string {
+    const firstLine = text.slice(0, text.indexOf('\n') === -1 ? text.length : text.indexOf('\n'))
+    const counts = [',', ';', '\t', '|'].map((d) => ({
+        d,
+        // Only separators outside quotes count, so a comma inside "Acme, Inc." does not
+        // win the vote for a semicolon-separated file.
+        n: firstLine.split('').reduce((acc, ch, i, arr) => {
+            let quoted = false
+            for (let k = 0; k < i; k++) if (arr[k] === '"') quoted = !quoted
+            return acc + (ch === d && !quoted ? 1 : 0)
+        }, 0),
+    }))
+    counts.sort((a, b) => b.n - a.n)
+    return counts[0].n > 0 ? counts[0].d : ','
+}
+
+/** Build the same model the workbook path produces, so one grid renders both. */
+function sheetFromDelimited(text: string, delimiter: string, name: string): SheetModel {
+    const rows = parseDelimited(text, delimiter)
+    const colCount = Math.min(rows.reduce((max, r) => Math.max(max, r.length), 0), MAX_COLS)
+    const rowCount = Math.min(rows.length, MAX_ROWS)
+
+    const cells = new Map<string, SheetCell>()
+    // Width each column to its widest value, within reason — a delimited file carries no
+    // column metadata, and leaving everything at the default makes most of them unreadable.
+    const widest = new Array(colCount).fill(0)
+
+    for (let r = 0; r < rowCount; r++) {
+        for (let c = 0; c < Math.min(rows[r].length, colCount); c++) {
+            const value = rows[r][c]
+            if (!value) continue
+            widest[c] = Math.max(widest[c], value.length)
+            const numeric = value !== '' && !Number.isNaN(Number(value))
+            cells.set(`${r + 1}:${c + 1}`, {
+                text: value,
+                // The first row of a delimited file is a header often enough to be worth
+                // showing as one; nothing in the format says so, so this is a guess.
+                bold: r === 0,
+                align: r === 0 ? 'left' : numeric ? 'right' : 'left',
+            })
+        }
+    }
+
+    const colWidths = widest.map((chars) => Math.min(Math.max(chars * 7 + 12, DEFAULT_COL_W), 420))
+
+    return { name, rowCount, colCount, colWidths, cells, merges: [], covered: new Set(), images: [] }
+}
+
 interface DocumentSheetPreviewPaneProps {
     document: any
     projectId?: string
@@ -149,16 +237,39 @@ export function DocumentSheetPreviewPane({ document, projectId, onFallback, onVi
                 if (cancelled) return
 
                 const contentType = res.headers.get('Content-Type') ?? ''
-                // The adapters fall back to a PDF conversion whenever they cannot serve the
-                // workbook, so anything that is not a spreadsheet means "render it the old
-                // way" rather than an error.
-                if (!res.ok || !/spreadsheetml|ms-excel/.test(contentType)) {
+                const name = documentName(document) || 'Sheet'
+
+                if (!res.ok) {
+                    onFallbackRef.current(`preview request failed (${res.status})`)
+                    return
+                }
+
+                // The adapters convert to PDF when they cannot serve the original, and the
+                // route answers with an HTML card when even that fails. Either means this
+                // pane is the wrong one.
+                if (/application\/pdf|text\/html/.test(contentType)) {
                     onFallbackRef.current('not served as a workbook')
                     return
                 }
 
                 const data = await res.arrayBuffer()
                 if (cancelled) return
+
+                // Decide from the bytes, not the name or the mime type. OneDrive reports a
+                // .csv as application/vnd.ms-excel, call sites disagree about which field
+                // holds the filename, and either mistake sends delimited text to a parser
+                // that only understands zip archives. Every xlsx is a zip, so it opens
+                // "PK"; nothing else does.
+                const signature = new Uint8Array(data.slice(0, 2))
+                const looksLikeWorkbook = signature[0] === 0x50 && signature[1] === 0x4b
+
+                if (!looksLikeWorkbook) {
+                    const text = new TextDecoder().decode(data)
+                    if (cancelled) return
+                    setSheets([sheetFromDelimited(text, sniffDelimiter(text), name)])
+                    setLoading(false)
+                    return
+                }
 
                 const ExcelJS = (await import('exceljs')).default
                 if (cancelled) return
