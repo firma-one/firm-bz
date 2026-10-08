@@ -92,6 +92,12 @@ describe('createGoogleDriveContentAdapter', () => {
     expect(result.stream).toBe(previewStream)
     expect(result.mimeType).toBe('application/pdf')
     expect(result.fileName).toBe('Report.pdf')
-    expect(mockGDrive.getPreviewableContent).toHaveBeenCalledWith('conn-1', 'file-1')
+    expect(mockGDrive.getPreviewableContent).toHaveBeenCalledWith('conn-1', 'file-1', undefined)
+  })
+
+  it('getPreviewableContent forwards preferNative', async () => {
+    const adapter = createGoogleDriveContentAdapter()
+    await adapter.getPreviewableContent('conn-1', 'file-1', { preferNative: true })
+    expect(mockGDrive.getPreviewableContent).toHaveBeenCalledWith('conn-1', 'file-1', { preferNative: true })
   })
 })

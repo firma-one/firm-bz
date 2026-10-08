@@ -268,7 +268,16 @@ export interface IConnectorContentAdapter {
    * a different question than "give me exactly this format." Throws ConnectorContentError with
    * code 'unsupported' (plus mimeType) when no inline-viewable representation exists.
    */
-  getPreviewableContent(connectionId: string, fileId: string): Promise<{ stream: ReadableStream | Buffer; mimeType: string; fileName: string }>
+  /**
+   * Resolve the best inline representation of a file.
+   *
+   * `opts.preferNative` asks for the original bytes instead of a PDF conversion, for
+   * formats the client can render itself. Only spreadsheets honour it today: a print
+   * conversion of a sheet is a page-shaped artefact of something that has no pages, so the
+   * viewer renders the workbook as a grid instead. Anything an adapter cannot serve
+   * natively falls back to the converted PDF, so a caller can always render the result.
+   */
+  getPreviewableContent(connectionId: string, fileId: string, opts?: { preferNative?: boolean }): Promise<{ stream: ReadableStream | Buffer; mimeType: string; fileName: string }>
   /**
    * Toggle copy/download restriction on a file, if the provider supports it.
    * Resolves silently as a no-op for providers without an equivalent concept.

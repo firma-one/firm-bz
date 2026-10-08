@@ -31,18 +31,8 @@
 import JSZip from 'jszip'
 import { logger } from '@/lib/logger'
 
-/**
- * Mime types whose conversion failures are worth retrying through the trimmer. Shared by the
- * OneDrive and Google Drive content adapters so the two providers agree on what is retryable.
- */
-export const SPREADSHEET_MIMES: readonly string[] = [
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'application/vnd.ms-excel',
-]
-
-export function isSpreadsheetMime(mimeType: string | undefined): boolean {
-    return !!mimeType && SPREADSHEET_MIMES.includes(mimeType)
-}
+// Mime types live in a dependency-free module so client components can use them too.
+export { SPREADSHEET_MIMES, isSpreadsheetMime } from '@/lib/spreadsheet-mimes'
 
 /** `<row …/>` or `<row …> … </row>` */
 const ROW_RE = /<row\b[^>]*\/>|<row\b[^>]*>[\s\S]*?<\/row>/g

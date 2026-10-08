@@ -214,7 +214,7 @@ export function createOneDriveContentAdapter(): IConnectorContentAdapter {
       }
     },
 
-    async getPreviewableContent(connectionId, fileId) {
+    async getPreviewableContent(connectionId, fileId, opts) {
       const [token, base] = await Promise.all([auth(connectionId), resolveOneDriveDriveBase(connectionId)])
       const metaRes = await fetch(`${base}/items/${fileId}?$select=id,name,file`, { headers: { Authorization: `Bearer ${token}` } })
       if (metaRes.status === 404) throw new ConnectorContentError('not_found', `File ${fileId} not found`)
@@ -223,8 +223,13 @@ export function createOneDriveContentAdapter(): IConnectorContentAdapter {
       const meta = await metaRes.json()
       const mimeType: string | undefined = meta.file?.mimeType
 
+      // A workbook the client will render itself is served as-is. OneDrive stores xlsx
+      // natively, so this is just the plain content endpoint with no conversion at all —
+      // no page-limit failure, no trim retry, no 5-10s wait.
+      const wantsNativeSheet = !!opts?.preferNative && isSpreadsheetMime(mimeType)
+
       const isInlineViewable = !!mimeType && INLINE_VIEWABLE_MIME_PREFIXES.some((p) => mimeType.startsWith(p))
-      const format = isInlineViewable ? 'native' : 'pdf'
+      const format = wantsNativeSheet || isInlineViewable ? 'native' : 'pdf'
 
       const contentUrl = format === 'pdf' ? `${base}/items/${fileId}/content?format=pdf` : `${base}/items/${fileId}/content`
       const contentRes = await fetch(contentUrl, { headers: { Authorization: `Bearer ${token}` } })

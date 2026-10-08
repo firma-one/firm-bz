@@ -129,7 +129,12 @@ export async function GET(
 
         let content: { stream: ReadableStream | Buffer; mimeType: string; fileName: string }
         try {
-            content = await contentAdapter.getPreviewableContent(connector.id, fileInfo.externalId)
+            // `?native=1` asks for the original workbook instead of a PDF conversion, for a
+            // client that renders spreadsheets as a grid. The adapters fall back to the
+            // converted PDF whenever they cannot serve one, so the response is always
+            // something the pane can render — it just checks what it got.
+            const preferNative = request.nextUrl.searchParams.get('native') === '1'
+            content = await contentAdapter.getPreviewableContent(connector.id, fileInfo.externalId, { preferNative })
         } catch (err) {
             if (err instanceof ConnectorContentError) {
                 if (err.code === 'not_found') {

@@ -7,6 +7,9 @@ import { createGoogleDriveAdapter, FIRMA_MANAGED_APP_PROPS, FIRMA_MANAGED_EXCLUD
 import * as pockettStructure from '@/lib/connectors/pockett-structure.service'
 import { type IConnectorStorageAdapter, ConnectorContentError } from '@/lib/connectors/types'
 import { trimWorkbookToUsedRange, isSpreadsheetMime } from '@/lib/spreadsheet-print-trim'
+import { isAnySpreadsheetMime, GOOGLE_SHEET_MIME } from '@/lib/spreadsheet-mimes'
+
+const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 import { getGoogleDriveOAuthServerCredentials } from '@/lib/config'
 import { SUGGESTED_WORKSPACE_FOLDER_NAME } from './suggested-workspace-folder-name'
 import { generateWorkspaceFolderName, FIRMA_PARENT_FOLDER_NAME } from '@/lib/generate-unique-workspace-folder-name'
@@ -4212,7 +4215,49 @@ export class GoogleDriveConnector {
         exportFileId = tempFileId
       }
 
-      // 4. Export the Google Workspace file as PDF
+      // 4. Export the Google Workspace file as PDF.
+      //
+      //    Spreadsheets go through a different endpoint first. Drive v3's /export takes no
+      //    layout parameters, so a sheet is converted using its own print setup — and a
+      //    Sheets-authored file has none, which produces one page sized to the entire used
+      //    range: a preview that is unreadable at any zoom the viewer offers. The
+      //    docs.google.com export URL accepts `fitw` (scale to page width) and an explicit
+      //    orientation, which turns that single unreadable page into several legible ones.
+      //
+      //    That endpoint is not part of the documented API, so a failure falls through to
+      //    the v3 export below rather than failing the preview. Worst case is today's
+      //    behaviour; best case is a readable spreadsheet.
+      const isSheet = isSpreadsheetMime(mimeType) || mimeType === 'application/vnd.google-apps.spreadsheet'
+      if (isSheet) {
+        try {
+          const params = new URLSearchParams({
+            format: 'pdf',
+            fitw: 'true',          // scale the sheet to the page width
+            portrait: 'false',     // sheets are wider than they are tall
+            sheetnames: 'false',
+            printtitle: 'false',
+            pagenumbers: 'false',
+            gridlines: 'true',
+          })
+          const sheetRes = await fetch(
+            `https://docs.google.com/spreadsheets/d/${exportFileId}/export?${params.toString()}`,
+            { headers: { Authorization: `Bearer ${accessToken}` } }
+          )
+          const type = sheetRes.headers.get('Content-Type') ?? ''
+          if (sheetRes.ok && type.includes('application/pdf')) {
+            return Buffer.from(await sheetRes.arrayBuffer())
+          }
+          // A sign-in page comes back as 200 text/html, so the content-type check above is
+          // what actually distinguishes success here, not the status.
+          logger.warn(
+            `Preview: fit-to-width sheet export unavailable for ${exportFileId} (${sheetRes.status} ${type}); using Drive export`,
+            'GoogleDrive',
+          )
+        } catch (e) {
+          logger.warn(`Preview: fit-to-width sheet export threw for ${exportFileId}: ${e}`, 'GoogleDrive')
+        }
+      }
+
       try {
         const exportRes = await fetch(
           `https://www.googleapis.com/drive/v3/files/${exportFileId}/export?mimeType=application/pdf&supportsAllDrives=true`,
@@ -4335,7 +4380,7 @@ export class GoogleDriveConnector {
    * these are Drive-only indirection concepts with no equivalent in other providers.
    * Moved here from the preview route unchanged; behavior must remain identical.
    */
-  async getPreviewableContent(connectorId: string, fileId: string): Promise<{
+  async getPreviewableContent(connectorId: string, fileId: string, opts?: { preferNative?: boolean }): Promise<{
     stream: ReadableStream
     mimeType: string
     fileName: string
@@ -4430,6 +4475,36 @@ export class GoogleDriveConnector {
     // that Google has processed/converted (DOCX, PPTX, XLSX etc.).
     const pdfExportUrl: string | undefined = metadata.exportLinks?.['application/pdf']
     const isGoogleWorkspaceMime = mimeType.startsWith('application/vnd.google-apps.')
+
+    // Workbook requested, because the client renders spreadsheets as a grid rather than as
+    // a printed page. An uploaded .xlsx is streamed as-is; a native Google Sheet has no
+    // file bytes at all, so it is exported to .xlsx — still no PDF anywhere in the path.
+    //
+    // Every failure here falls through to the PDF branches below, so a sheet that cannot be
+    // served natively still previews exactly as it does today.
+    if (opts?.preferNative && isAnySpreadsheetMime(mimeType)) {
+      try {
+        const nativeUrl = mimeType === GOOGLE_SHEET_MIME
+          ? (metadata.exportLinks?.[XLSX_MIME]
+              ?? `https://www.googleapis.com/drive/v3/files/${resolvedExternalId}/export?mimeType=${encodeURIComponent(XLSX_MIME)}&supportsAllDrives=true`)
+          : `https://www.googleapis.com/drive/v3/files/${resolvedExternalId}?alt=media&supportsAllDrives=true`
+
+        const nativeRes = await fetch(nativeUrl, { headers: { Authorization: `Bearer ${accessToken}` } })
+        if (nativeRes.ok && nativeRes.body) {
+          return {
+            stream: nativeRes.body as unknown as ReadableStream,
+            mimeType: XLSX_MIME,
+            fileName: finalName,
+          }
+        }
+        logger.warn(
+          `Preview: native spreadsheet fetch failed for ${resolvedExternalId} (${nativeRes.status}); falling back to PDF`,
+          'GoogleDrive',
+        )
+      } catch (e) {
+        logger.warn(`Preview: native spreadsheet fetch threw for ${resolvedExternalId}: ${e}`, 'GoogleDrive')
+      }
+    }
 
     // Priority:
     //   a) exportLinks['application/pdf'] exists  →  fetch & stream as PDF  (covers
