@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { ZoomIn, ZoomOut, RotateCcw } from 'lucide-react'
+import { ZoomIn, ZoomOut, RotateCcw, Table2 } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { PreviewLoadingState } from '@/components/files/preview-loading-state'
 
 const ZOOM_STEP = 15
 const ZOOM_MIN  = 50
@@ -13,9 +14,11 @@ const ZOOM_DEFAULT = 100
 interface DocumentBlobPreviewPaneProps {
   document: any
   projectId?: string
+  /** Forwarded from the preview entry point for a spreadsheet being shown as a page. */
+  onBackToSheet?: () => void
 }
 
-export function DocumentBlobPreviewPane({ document, projectId }: DocumentBlobPreviewPaneProps) {
+export function DocumentBlobPreviewPane({ document, projectId, onBackToSheet }: DocumentBlobPreviewPaneProps) {
   const [zoom, setZoom] = useState(ZOOM_DEFAULT)
   // pendingZoom tracks the zoom level being loaded; null means initial load
   const [pendingZoom, setPendingZoom] = useState<number | null>(null)
@@ -102,14 +105,34 @@ export function DocumentBlobPreviewPane({ document, projectId }: DocumentBlobPre
           </TooltipTrigger>
           <TooltipContent side="bottom" className="text-xs">Reset zoom</TooltipContent>
         </Tooltip>
+
+        {onBackToSheet && (
+          <>
+            <div className="ml-auto flex items-center gap-1.5">
+              <div className="w-px h-4 bg-slate-200" aria-hidden="true" />
+              <button
+                type="button"
+                onClick={onBackToSheet}
+                className="h-6 px-2 rounded inline-flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+              >
+                <Table2 className="h-3.5 w-3.5" />
+                Switch to Sheet View
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
       {/* iframe area */}
       <div className="flex-1 min-h-0 relative bg-[#f3f4f6]">
-        {/* Loading spinner — shown during the initial load and during every
-            zoom re-render (pendingZoom !== null) so the user always sees
-            progress while the iframe reloads, instead of a blank screen. */}
-        {(!initialLoaded || pendingZoom !== null) && (
+        {/* First load: the shared state, with file metadata and staged progress copy —
+            this is the one that can sit through a slow server-side conversion. */}
+        {!initialLoaded && <PreviewLoadingState document={document} />}
+
+        {/* Zoom re-render: the iframe reloads (key prop), so cover the blank frame. The
+            document is already converted by now, so a bare spinner is right — repeating
+            "Converting this file…" on every zoom step would be wrong. */}
+        {initialLoaded && pendingZoom !== null && (
           <div className="absolute inset-0 flex items-center justify-center bg-[#f3f4f6] z-10">
             <LoadingSpinner size="md" />
           </div>

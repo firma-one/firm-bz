@@ -709,6 +709,7 @@ export function FileReviewModal({
                     mimeType={secureModalData.mimeType}
                     externalId={secureModalData.externalId}
                     firmId={secureModalData.firmId}
+                    documentUrl={secureModalData.documentUrl}
                     mode={secureModalMode}
                 />
             </SheetContent>

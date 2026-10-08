@@ -12,7 +12,7 @@ import { DocumentIcon } from '@/components/ui/document-icon'
 import { SharedFolderIcon } from '@/components/ui/folder-shared-icon'
 import { DocumentActionMenu } from '@/components/ui/document-action-menu'
 import { DocumentPreviewPanelContent } from '@/components/files/document-edit-sheet'
-import { DocumentPdfPreviewPane } from '@/components/files/document-pdf-preview-pane'
+import { DocumentPreviewPane } from '@/components/files/document-preview-pane'
 import { DocumentDocCommentsPane } from '@/components/projects/document-doc-comments-pane'
 import { formatFileSize } from '@/lib/utils'
 import { clientTabPath, firmSettingsPath } from '@/lib/navigation/firm-paths'
@@ -329,7 +329,7 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
             rightPane.setHeaderIcon(null)
             rightPane.setHeaderSubtitle('')
             rightPane.setPaneSize('medium')
-            rightPane.setContent(<DocumentPdfPreviewPane key={nextKey} document={file} projectId={projectId} />)
+            rightPane.setContent(<DocumentPreviewPane key={nextKey} document={file} projectId={projectId} />)
         },
         [rightPane, projectId]
     )
@@ -3328,6 +3328,7 @@ const handleRefresh = async () => {
                     mimeType={secureModalData.mimeType}
                     externalId={secureModalData.externalId}
                     firmId={secureModalData.firmId}
+                    documentUrl={secureModalData.documentUrl}
                     mode={secureModalMode}
                     isLoading={isRegrantLoading}
                     error={regrantError}

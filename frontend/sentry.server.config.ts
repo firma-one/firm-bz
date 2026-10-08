@@ -12,8 +12,18 @@ if (process.env.NODE_ENV !== 'development') {
         // This allows filtering errors by environment in Sentry
         environment: process.env.NEXT_PUBLIC_VERCEL_ENV || process.env.NODE_ENV || 'development',
 
-        // Adjust this value in production, or use tracesSampler for greater control
-        tracesSampleRate: 0.1, // 10% of transactions for performance monitoring
+        // 10% everywhere by default, but 100% for the few routes whose *latency* is the
+        // diagnosis rather than a side note. The secure-access regrant runs sequential Graph
+        // round-trips and has been measured at 16.6s; past ~5s the browser's transient user
+        // activation expires and the new tab it opens is silently blocked, so the duration of
+        // this request is the difference between working and failing. At 10% sampling nine out
+        // of ten reports had no trace to look at. Document preview is included for the same
+        // reason — it may now run a second, slower conversion attempt.
+        tracesSampler: (ctx: { name?: string; attributes?: Record<string, unknown> }) => {
+            const route = `${ctx.name ?? ''} ${String(ctx.attributes?.['http.route'] ?? '')}`
+            if (route.includes('/sharing/regrant') || route.includes('/preview')) return 1.0
+            return 0.1
+        },
 
         // Setting this option to true will print useful information to the console while you're setting up Sentry.
         debug: false,

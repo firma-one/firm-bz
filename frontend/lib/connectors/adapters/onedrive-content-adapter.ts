@@ -21,6 +21,7 @@
 import { OneDriveConnector } from '@/lib/connectors/onedrive-connector'
 import { resolveOneDriveDriveBase } from './onedrive-adapter'
 import { ConnectorContentError, type IConnectorContentAdapter } from '../types'
+import { trimWorkbookToUsedRange, isSpreadsheetMime } from '@/lib/spreadsheet-print-trim'
 import { logger } from '@/lib/logger'
 
 const oneDrive = OneDriveConnector.getInstance()
@@ -33,6 +34,103 @@ async function auth(connectionId: string): Promise<string> {
 
 /** Content types the browser can render natively — same set the preview route treats as passthrough for Google. */
 const INLINE_VIEWABLE_MIME_PREFIXES = ['application/pdf', 'image/']
+
+/**
+ * Graph reports Office-service conversion failures as a 406 whose body carries an
+ * `ErrorCode=` from the Office service itself. `XLSPageLimitExceeded` is the one we can
+ * actually do something about: the workbook's print range is too many pages, which is
+ * almost always an empty-but-styled grid left behind by a Google Sheets export.
+ */
+function isPageLimitError(body: string): boolean {
+  return body.includes('XLSPageLimitExceeded')
+}
+
+/** Pull the Office service's own error code out of a Graph 406 body, for logging and messaging. */
+function officeErrorCode(body: string): string | undefined {
+  return body.match(/ErrorCode=(\w+)/)?.[1]
+}
+
+function conversionFailed(mimeType: string | undefined, officeCode: string | undefined): ConnectorContentError {
+  const detail = officeCode === 'XLSPageLimitExceeded'
+    ? 'This spreadsheet’s print layout spans too many pages for the preview service to render.'
+    : undefined
+  return new ConnectorContentError(
+    'conversion_failed',
+    `Office conversion failed${officeCode ? ` (${officeCode})` : ''}`,
+    mimeType,
+    detail,
+  )
+}
+
+/**
+ * Second attempt at a PDF for a spreadsheet Microsoft refused to convert: download the raw
+ * workbook, trim every sheet to its populated range (see spreadsheet-print-trim.ts), upload
+ * the trimmed copy to a temporary item, convert *that*, then delete it.
+ *
+ * The temp item goes in the drive root rather than the file's own folder so it never lands
+ * inside an engagement folder the indexer watches. It is always deleted, including on failure.
+ *
+ * Returns null when the retry is not applicable or did not work — the caller then surfaces
+ * the original conversion failure rather than retrying any further.
+ */
+async function convertViaTrimmedCopy(
+  token: string,
+  base: string,
+  fileId: string,
+  fileName: string,
+): Promise<Buffer | null> {
+  const rawRes = await fetch(`${base}/items/${fileId}/content`, { headers: { Authorization: `Bearer ${token}` } })
+  if (!rawRes.ok) {
+    logger.warn(`[onedrive-content-adapter] trim retry: could not download ${fileId}: ${rawRes.status}`, 'onedrive-content-adapter')
+    return null
+  }
+
+  const trimmed = await trimWorkbookToUsedRange(Buffer.from(await rawRes.arrayBuffer()))
+  if (!trimmed) {
+    logger.warn(`[onedrive-content-adapter] trim retry: nothing to trim in ${fileId}`, 'onedrive-content-adapter')
+    return null
+  }
+
+  const tempName = `~firma-preview-${fileId}-${Date.now()}.xlsx`
+  const uploadRes = await fetch(`${base}/root:/${encodeURIComponent(tempName)}:/content`, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    },
+    body: new Uint8Array(trimmed.buffer),
+  })
+  if (!uploadRes.ok) {
+    logger.warn(`[onedrive-content-adapter] trim retry: temp upload failed: ${uploadRes.status}`, 'onedrive-content-adapter')
+    return null
+  }
+
+  const tempId: string | undefined = (await uploadRes.json())?.id
+  if (!tempId) return null
+
+  try {
+    const pdfRes = await fetch(`${base}/items/${tempId}/content?format=pdf`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!pdfRes.ok) {
+      const body = await pdfRes.text().catch(() => '<unreadable>')
+      logger.warn(
+        `[onedrive-content-adapter] trim retry: conversion still failed for ${fileId}: ${pdfRes.status} ${officeErrorCode(body) ?? ''}`,
+        'onedrive-content-adapter',
+      )
+      return null
+    }
+    logger.info(
+      `[onedrive-content-adapter] trim retry succeeded for ${fileName} (${trimmed.sheetsTrimmed} sheet(s) trimmed)`,
+      'onedrive-content-adapter',
+    )
+    return Buffer.from(await pdfRes.arrayBuffer())
+  } finally {
+    // Fire-and-forget cleanup — a leftover temp item must never block the preview.
+    fetch(`${base}/items/${tempId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
+      .catch((e) => logger.error('[onedrive-content-adapter] failed to delete temp preview item', e as Error, 'onedrive-content-adapter', { tempId }))
+  }
+}
 
 export function createOneDriveContentAdapter(): IConnectorContentAdapter {
   return {
@@ -116,7 +214,7 @@ export function createOneDriveContentAdapter(): IConnectorContentAdapter {
       }
     },
 
-    async getPreviewableContent(connectionId, fileId) {
+    async getPreviewableContent(connectionId, fileId, opts) {
       const [token, base] = await Promise.all([auth(connectionId), resolveOneDriveDriveBase(connectionId)])
       const metaRes = await fetch(`${base}/items/${fileId}?$select=id,name,file`, { headers: { Authorization: `Bearer ${token}` } })
       if (metaRes.status === 404) throw new ConnectorContentError('not_found', `File ${fileId} not found`)
@@ -125,20 +223,41 @@ export function createOneDriveContentAdapter(): IConnectorContentAdapter {
       const meta = await metaRes.json()
       const mimeType: string | undefined = meta.file?.mimeType
 
+      // A workbook the client will render itself is served as-is. OneDrive stores xlsx
+      // natively, so this is just the plain content endpoint with no conversion at all —
+      // no page-limit failure, no trim retry, no 5-10s wait.
+      const wantsNativeSheet = !!opts?.preferNative && isSpreadsheetMime(mimeType)
+
       const isInlineViewable = !!mimeType && INLINE_VIEWABLE_MIME_PREFIXES.some((p) => mimeType.startsWith(p))
-      const format = isInlineViewable ? 'native' : 'pdf'
+      const format = wantsNativeSheet || isInlineViewable ? 'native' : 'pdf'
 
       const contentUrl = format === 'pdf' ? `${base}/items/${fileId}/content?format=pdf` : `${base}/items/${fileId}/content`
       const contentRes = await fetch(contentUrl, { headers: { Authorization: `Bearer ${token}` } })
       if (!contentRes.ok) {
         const errorBody = await contentRes.text().catch(() => '<unreadable>')
+        const officeCode = officeErrorCode(errorBody)
         logger.error(
           `[onedrive-content-adapter] format=pdf conversion failed: ${contentRes.status} ${contentRes.statusText}`,
           undefined,
           'onedrive-content-adapter',
-          { fileId, mimeType, status: contentRes.status, body: errorBody },
+          { fileId, mimeType, status: contentRes.status, officeCode, body: errorBody },
         )
-        throw new ConnectorContentError('unsupported', `No inline-viewable representation for file ${fileId}`, mimeType)
+
+        // A spreadsheet rejected for page count is retryable: trim it to its populated
+        // range and convert the trimmed copy. See convertViaTrimmedCopy.
+        if (format === 'pdf' && isSpreadsheetMime(mimeType) && isPageLimitError(errorBody)) {
+          const retried = await convertViaTrimmedCopy(token, base, fileId, meta.name).catch((e) => {
+            logger.error('[onedrive-content-adapter] trim retry threw', e as Error, 'onedrive-content-adapter', { fileId })
+            return null
+          })
+          if (retried) {
+            return { stream: retried, mimeType: 'application/pdf', fileName: `${meta.name}.pdf` }
+          }
+        }
+
+        // Nothing more to try — report the conversion failure honestly rather than
+        // claiming the file type cannot be previewed.
+        throw conversionFailed(mimeType, officeCode)
       }
       const buffer = Buffer.from(await contentRes.arrayBuffer())
       return {

@@ -173,6 +173,96 @@ describe('GoogleDriveConnector.getPreviewableContent', () => {
     expect(g.exportFileToPdf).toHaveBeenCalledWith(connectorId, fileId)
   })
 
+  it('falls through to exportFileToPdf when the exportLink fetch fails, instead of erroring out', async () => {
+    const fetchSpy = vi.spyOn(global, 'fetch')
+    fetchSpy.mockResolvedValueOnce(
+      jsonResponse({
+        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        name: 'Contract.docx',
+        exportLinks: { 'application/pdf': 'https://export.example/pdf' },
+      })
+    )
+    // The export link itself fails — previously a hard throw that surfaced as a 502.
+    fetchSpy.mockResolvedValueOnce({ ok: false, status: 500 } as Response)
+    vi.spyOn(g, 'exportFileToPdf').mockResolvedValue(Buffer.from('pdf-bytes'))
+
+    const result = await g.getPreviewableContent(connectorId, fileId)
+
+    expect(result.mimeType).toBe('application/pdf')
+    expect(g.exportFileToPdf).toHaveBeenCalledWith(connectorId, fileId)
+  })
+
+  it('reports conversion_failed (not unsupported) when an Office file cannot be converted', async () => {
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce(
+      jsonResponse({ mimeType: 'application/msword', name: 'Old.doc' })
+    )
+    vi.spyOn(g, 'exportFileToPdf').mockRejectedValue(new Error('export exploded'))
+
+    // Non-spreadsheet, so no trim retry is attempted — it fails straight through.
+    await expect(g.getPreviewableContent(connectorId, fileId)).rejects.toMatchObject({
+      code: 'conversion_failed',
+      mimeType: 'application/msword',
+    })
+  })
+
+  it('retries a failed spreadsheet conversion through a trimmed copy, then cleans the temp file up', async () => {
+    const fetchSpy = vi.spyOn(global, 'fetch')
+    fetchSpy.mockResolvedValueOnce(
+      jsonResponse({
+        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        name: 'Calendar.xlsx',
+      })
+    )
+    vi.spyOn(g, 'exportFileToPdf').mockRejectedValue(new Error('exportSizeLimitExceeded'))
+
+    // Build a workbook with an oversized styled grid so the trimmer has something to do.
+    const JSZip = (await import('jszip')).default
+    const zip = new JSZip()
+    const rows = Array.from({ length: 300 }, (_, i) =>
+      `<row r="${i + 1}">${i < 2 ? `<c r="A${i + 1}"><v>1</v></c>` : `<c r="A${i + 1}" s="1"/>`}</row>`
+    ).join('')
+    zip.file('xl/worksheets/sheet1.xml', `<worksheet><dimension ref="A1:Z300"/><sheetData>${rows}</sheetData></worksheet>`)
+    const workbook = await zip.generateAsync({ type: 'nodebuffer' })
+
+    // 2. raw download of the original workbook
+    fetchSpy.mockResolvedValueOnce({ ok: true, arrayBuffer: async () => workbook } as unknown as Response)
+    // 3. multipart upload of the trimmed copy
+    fetchSpy.mockResolvedValueOnce(jsonResponse({ id: 'temp-1' }))
+    // 4. export of the temp Google Sheet
+    fetchSpy.mockResolvedValueOnce({ ok: true, arrayBuffer: async () => Buffer.from('trimmed-pdf') } as unknown as Response)
+    // 5. temp cleanup
+    fetchSpy.mockResolvedValueOnce(jsonResponse({}))
+
+    const result = await g.getPreviewableContent(connectorId, fileId)
+    expect(result.mimeType).toBe('application/pdf')
+    expect(result.fileName).toBe('Calendar.xlsx')
+
+    const urls = fetchSpy.mock.calls.map((c) => String(c[0]))
+    expect(urls.some((u) => u.includes('uploadType=multipart'))).toBe(true)
+    expect(urls.some((u) => u.includes('/export?mimeType=application/pdf'))).toBe(true)
+    // The temporary Google Sheet must always be deleted.
+    const deleteCall = fetchSpy.mock.calls.find((c) => (c[1] as RequestInit)?.method === 'DELETE')
+    expect(String(deleteCall?.[0])).toContain('temp-1')
+  })
+
+  it('reports conversion_failed when the trimmed retry also fails', async () => {
+    const fetchSpy = vi.spyOn(global, 'fetch')
+    fetchSpy.mockResolvedValueOnce(
+      jsonResponse({
+        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        name: 'Calendar.xlsx',
+      })
+    )
+    vi.spyOn(g, 'exportFileToPdf').mockRejectedValue(new Error('exportSizeLimitExceeded'))
+    // Raw download fails, so there is nothing to trim and no second attempt to make.
+    fetchSpy.mockResolvedValueOnce({ ok: false, status: 500 } as Response)
+
+    await expect(g.getPreviewableContent(connectorId, fileId)).rejects.toMatchObject({
+      code: 'conversion_failed',
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    })
+  })
+
   it('throws ConnectorContentError("unsupported") for a mimetype with no preview path', async () => {
     vi.spyOn(global, 'fetch').mockResolvedValueOnce(
       jsonResponse({ mimeType: 'application/x-zip-compressed', name: 'Archive.zip' })

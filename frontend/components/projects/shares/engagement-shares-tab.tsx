@@ -45,7 +45,7 @@ import { useSecureOpenDocument } from '@/lib/use-secure-open-document'
 import { logger } from '@/lib/logger'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import { DocumentDocCommentsPane } from '@/components/projects/document-doc-comments-pane'
-import { DocumentPdfPreviewPane } from '@/components/files/document-pdf-preview-pane'
+import { DocumentPreviewPane } from '@/components/files/document-preview-pane'
 import { formatDistanceToNow } from 'date-fns'
 import { cn, formatFullDate } from '@/lib/utils'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -1882,7 +1882,7 @@ export function EngagementSharesTab({
             rightPane.setHeaderSubtitle('')
             rightPane.setHeaderIcon(<ScanEye className="h-4 w-4" />)
             rightPane.setContent(
-              <DocumentPdfPreviewPane
+              <DocumentPreviewPane
                 document={{ id: subtask.documentId, name: subtask.fileName }}
                 projectId={projectId}
               />
@@ -2211,7 +2211,7 @@ export function EngagementSharesTab({
       rightPane.setHeaderSubtitle('')
       rightPane.setHeaderIcon(<ScanEye className="h-4 w-4" />)
       rightPane.setContent(
-        <DocumentPdfPreviewPane
+        <DocumentPreviewPane
           document={{ id: share.documentId, name: share.documentName }}
           projectId={share.projectId}
         />
@@ -2563,6 +2563,7 @@ export function EngagementSharesTab({
         mimeType={secureModalData.mimeType}
         externalId={secureModalData.externalId}
         firmId={secureModalData.firmId}
+        documentUrl={secureModalData.documentUrl}
         mode={secureModalMode}
         isLoading={isRegrantLoading}
         error={regrantError}

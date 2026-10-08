@@ -52,7 +52,7 @@ export function createGoogleDriveContentAdapter(): IConnectorContentAdapter {
       await g.patchFileProperties(connectionId, fileId, { copyRequiresWriterPermission: restricted })
     },
 
-    getPreviewableContent: (connectionId, fileId) =>
-      g.getPreviewableContent(connectionId, fileId),
+    getPreviewableContent: (connectionId, fileId, opts) =>
+      g.getPreviewableContent(connectionId, fileId, opts),
   }
 }

@@ -219,10 +219,19 @@ export interface IConnectorPermissionAdapter {
  * - unsupported: the file's type/state cannot be rendered (e.g. no export path available)
  */
 export class ConnectorContentError extends Error {
+  /**
+   * `unsupported` — the provider has no inline-viewable representation for this *type* of file.
+   * `conversion_failed` — the type IS previewable, but converting this particular file failed
+   *   (e.g. Microsoft's Office service rejecting a spreadsheet whose print range runs to
+   *   thousands of pages). Kept distinct from `unsupported` so the UI can tell the user what
+   *   actually went wrong instead of blaming the file type.
+   */
   constructor(
-    public readonly code: 'not_found' | 'forbidden' | 'unsupported',
+    public readonly code: 'not_found' | 'forbidden' | 'unsupported' | 'conversion_failed',
     message: string,
-    public readonly mimeType?: string
+    public readonly mimeType?: string,
+    /** Short, user-facing explanation of a `conversion_failed`, when one can be inferred. */
+    public readonly detail?: string
   ) {
     super(message)
     this.name = 'ConnectorContentError'
@@ -259,7 +268,16 @@ export interface IConnectorContentAdapter {
    * a different question than "give me exactly this format." Throws ConnectorContentError with
    * code 'unsupported' (plus mimeType) when no inline-viewable representation exists.
    */
-  getPreviewableContent(connectionId: string, fileId: string): Promise<{ stream: ReadableStream | Buffer; mimeType: string; fileName: string }>
+  /**
+   * Resolve the best inline representation of a file.
+   *
+   * `opts.preferNative` asks for the original bytes instead of a PDF conversion, for
+   * formats the client can render itself. Only spreadsheets honour it today: a print
+   * conversion of a sheet is a page-shaped artefact of something that has no pages, so the
+   * viewer renders the workbook as a grid instead. Anything an adapter cannot serve
+   * natively falls back to the converted PDF, so a caller can always render the result.
+   */
+  getPreviewableContent(connectionId: string, fileId: string, opts?: { preferNative?: boolean }): Promise<{ stream: ReadableStream | Buffer; mimeType: string; fileName: string }>
   /**
    * Toggle copy/download restriction on a file, if the provider supports it.
    * Resolves silently as a no-op for providers without an equivalent concept.
