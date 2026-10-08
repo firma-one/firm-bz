@@ -6,6 +6,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { PreviewLoadingState } from '@/components/files/preview-loading-state'
 import { DocumentBlobPreviewPane } from '@/components/files/document-blob-preview-pane'
+import { cacheRead, cacheWrite } from '@/lib/preview-cache'
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from 'pdfjs-dist'
 
 const ZOOM_MIN = 50
@@ -44,61 +45,6 @@ const RENDER_AHEAD_EXTREME_ZOOM = 0
 const MAX_CANVAS_PIXELS = 67_108_864
 const MAX_CANVAS_EDGE = 16_384
 
-/**
- * Converted previews, held for the life of the tab.
- *
- * Converting an Office file to PDF costs 5-10s on the provider, and the pane remounts on
- * every open (the file list bumps a `key`), so reopening the same document paid that again
- * from scratch. The bytes are kept here instead.
- *
- * Keyed on the provider's `modifiedTime`, so an edit upstream produces a different key and
- * the old entry is simply never read again — a stale file cannot be served. Caveat: that
- * timestamp comes from the file list, so an entry can only be as fresh as the listing the
- * user is looking at; refreshing the list changes the key. Documents with no timestamp are
- * not cached at all rather than risk it.
- *
- * Memory only, never disk, so this does not weaken the download-discouragement posture the
- * preview route sets up. Dies with the tab.
- */
-const PREVIEW_CACHE_BUDGET_BYTES = 128 * 1024 * 1024
-interface CachedPreview {
-    contentType: string
-    /** null for a type we hand to the iframe pane — remembering the verdict still saves the
-     *  round trip needed to discover it is not a PDF. */
-    bytes: ArrayBuffer | null
-}
-const previewCache = new Map<string, CachedPreview>()
-
-function cacheRead(key: string): CachedPreview | undefined {
-    const hit = previewCache.get(key)
-    if (!hit) return undefined
-    // Re-insert so Map iteration order doubles as least-recently-used.
-    previewCache.delete(key)
-    previewCache.set(key, hit)
-    return hit
-}
-
-function cacheWrite(key: string, value: CachedPreview) {
-    previewCache.set(key, value)
-
-    // forEach walks in insertion order, so `keys` is oldest-first. (No for..of: the
-    // project targets es5 and Map iterators are not available.)
-    const keys: string[] = []
-    let total = 0
-    previewCache.forEach((entry, k) => {
-        keys.push(k)
-        total += entry.bytes?.byteLength ?? 0
-    })
-
-    let i = 0
-    while (total > PREVIEW_CACHE_BUDGET_BYTES && previewCache.size > 1 && i < keys.length) {
-        const oldest = keys[i++]
-        if (oldest === key) continue // never evict the entry just written
-        total -= previewCache.get(oldest)?.bytes?.byteLength ?? 0
-        previewCache.delete(oldest)
-    }
-}
-
 /** Shared empty list, so a page with no hits passes a stable reference to the overlay. */
 const EMPTY_HITS: Array<{ match: Match; index: number }> = []
 
@@ -118,10 +64,10 @@ const THUMB_WIDTH = 104
 interface DocumentPdfPreviewPaneProps {
     document: any
     projectId?: string
-    /** Offered for a spreadsheet the user chose to see as a printed page. Forwarded to the
-     *  iframe pane as well: this pane hands off to it for anything it cannot open, and the
-     *  reader must not lose the way back when that happens. */
-    onBackToSheet?: () => void
+    /** A second way to read this document, shown at the right of the toolbar. Forwarded to
+     *  the iframe pane as well: this pane hands off to it for anything it cannot open, and
+     *  the reader must not lose the alternative when that happens. */
+    alternateView?: { label: string; onSelect: () => void }
 }
 
 /** One bookmark, flattened to a page number at load so clicking is instant. */
@@ -452,7 +398,7 @@ function PdfPageHighlights({
     )
 }
 
-export function DocumentPdfPreviewPane({ document, projectId, onBackToSheet }: DocumentPdfPreviewPaneProps) {
+export function DocumentPdfPreviewPane({ document, projectId, alternateView }: DocumentPdfPreviewPaneProps) {
     const [zoom, setZoom] = useState(ZOOM_DEFAULT)
     const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null)
     const [basePages, setBasePages] = useState<BasePage[]>([])
@@ -1025,7 +971,7 @@ export function DocumentPdfPreviewPane({ document, projectId, onBackToSheet }: D
     }
 
     if (fallback) {
-        return <DocumentBlobPreviewPane document={document} projectId={projectId} onBackToSheet={onBackToSheet} />
+        return <DocumentBlobPreviewPane document={document} projectId={projectId} alternateView={alternateView} />
     }
 
     // Declared once so the inline buttons and the overflow menu cannot drift apart.
@@ -1272,7 +1218,7 @@ export function DocumentPdfPreviewPane({ document, projectId, onBackToSheet }: D
                     <TooltipContent side="bottom" className="text-xs">Next page</TooltipContent>
                 </Tooltip>
 
-                {onBackToSheet && (
+                {alternateView && (
                     <>
                         {/* ml-auto on the group pins the separator, icon and label together
                             against the right edge; the toolbar's flex-wrap drops the whole
@@ -1281,11 +1227,11 @@ export function DocumentPdfPreviewPane({ document, projectId, onBackToSheet }: D
                             <div className="w-px h-4 bg-slate-200" aria-hidden="true" />
                             <button
                                 type="button"
-                                onClick={onBackToSheet}
+                                onClick={alternateView.onSelect}
                                 className="h-6 px-2 rounded inline-flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-slate-700 hover:bg-slate-100"
                             >
                                 <Table2 className="h-3.5 w-3.5" />
-                                Switch to Sheet View
+                                {alternateView.label}
                             </button>
                         </div>
                     </>

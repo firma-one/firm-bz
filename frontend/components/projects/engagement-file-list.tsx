@@ -13,6 +13,7 @@ import { SharedFolderIcon } from '@/components/ui/folder-shared-icon'
 import { DocumentActionMenu } from '@/components/ui/document-action-menu'
 import { DocumentPreviewPanelContent } from '@/components/files/document-edit-sheet'
 import { DocumentPreviewPane } from '@/components/files/document-preview-pane'
+import { evictPreview } from '@/lib/preview-cache'
 import { DocumentDocCommentsPane } from '@/components/projects/document-doc-comments-pane'
 import { formatFileSize } from '@/lib/utils'
 import { clientTabPath, firmSettingsPath } from '@/lib/navigation/firm-paths'
@@ -196,7 +197,10 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
     const [activeActivityDocId, setActiveActivityDocId] = useState<string | null>(null)
     const [activeVersionDocId, setActiveVersionDocId] = useState<string | null>(null)
     const [activePreviewDocId, setActivePreviewDocId] = useState<string | null>(null)
-    const [previewKey, setPreviewKey] = useState(0)
+    /** Mints a fresh key per preview mount. A ref, not state: the value is never rendered,
+     *  and a state updater is not a safe place to do this — React may run it during the
+     *  render phase, where touching another component's state throws. */
+    const previewKeyRef = useRef(0)
     const lastHandledDeeplinkHashRef = useRef<string>('')
     // Cache resolve-deeplink/file-info results per hash to avoid re-fetching on every effect re-run.
     const deeplinkResolvedCacheRef = useRef<Record<string, {
@@ -313,26 +317,59 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
         (fileId: string, file: DriveFile) => {
             if (!rightPane.hasRightPane) return
             setActivePreviewDocId(fileId)
-            // rightPane.set* calls must stay out of the setPreviewKey updater — that updater
-            // can run during React's render phase, and calling another component's setState
-            // (RightPaneProvider) from there triggers "Cannot update a component while
-            // rendering a different component". Compute nextKey with the functional form for
-            // correctness under StrictMode/concurrent re-invocation, then fire the rightPane
-            // updates as ordinary calls in the event-handler body, which is always safe.
-            let nextKey = 0
-            setPreviewKey(k => {
-                nextKey = k + 1
-                return nextKey
-            })
-            rightPane.setTitle(file.name || 'Preview')
-            rightPane.setHeaderActions(null)
+            // Every rightPane.set* call has to happen here, in the event handler, and never
+            // inside a state updater: React may run an updater during the render phase, and
+            // calling another component's setState from there throws "Cannot update a
+            // component while rendering a different component".
+            const nextKey = ++previewKeyRef.current
             rightPane.setHeaderIcon(null)
             rightPane.setHeaderSubtitle('')
             rightPane.setPaneSize('medium')
-            rightPane.setContent(<DocumentPreviewPane key={nextKey} document={file} projectId={projectId} />)
+            renderPreviewRef.current(file, nextKey)
         },
         [rightPane, projectId]
     )
+
+    /**
+     * Put a document in the right panel, with a reload action in its header.
+     *
+     * Held in a ref rather than a useCallback because reload re-invokes it: a plain
+     * callback would have to close over itself. Deliberately does not touch the pane size,
+     * so reloading does not collapse a panel the reader expanded.
+     *
+     * Assigned after commit rather than during render: a render React discards would
+     * otherwise leave the ref holding a closure from a version of the tree that never
+     * existed. Only event handlers call it, all of which run after the first commit.
+     */
+    const renderPreviewRef = useRef<(file: any, key: number) => void>(() => {})
+    const renderPreview = (file: any, key: number) => {
+        rightPane.setTitle(file.name || 'Preview')
+        rightPane.setHeaderActions(
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            // Conversion results are cached for the tab, so without this the
+                            // reload would hand back the same bytes and look like a no-op.
+                            if (projectId && file?.id) evictPreview(projectId, file.id)
+                            renderPreviewRef.current(file, ++previewKeyRef.current)
+                        }}
+                        className="h-8 w-8 rounded inline-flex items-center justify-center text-[#45474c] hover:text-[#1b1b1d] bg-[#f4f4f5] hover:bg-[#e9e9eb]"
+                        aria-label="Reload preview"
+                    >
+                        <RefreshCw className="h-4 w-4" />
+                    </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">Reload preview</TooltipContent>
+            </Tooltip>
+        )
+        rightPane.setContent(<DocumentPreviewPane key={key} document={file} projectId={projectId} />)
+    }
+
+    useEffect(() => {
+        renderPreviewRef.current = renderPreview
+    })
 
     const fetchSharedIds = useCallback(() => {
         if (!projectId) return
