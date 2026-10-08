@@ -127,14 +127,24 @@ export async function GET(
             return NextResponse.json({ error: 'No content adapter available for connector' }, { status: 400 })
         }
 
-        let content: { stream: ReadableStream | Buffer; mimeType: string; fileName: string }
+        let content: {
+            stream: ReadableStream | Buffer
+            mimeType: string
+            fileName: string
+            httpStatus?: number
+            contentRange?: string
+            contentLength?: number
+        }
         try {
             // `?native=1` asks for the original workbook instead of a PDF conversion, for a
             // client that renders spreadsheets as a grid. The adapters fall back to the
             // converted PDF whenever they cannot serve one, so the response is always
             // something the pane can render — it just checks what it got.
             const preferNative = request.nextUrl.searchParams.get('native') === '1'
-            content = await contentAdapter.getPreviewableContent(connector.id, fileInfo.externalId, { preferNative })
+            // Forwarded so a video or audio player can seek. The adapters only pass it
+            // upstream for media; everything else is read in full.
+            const range = request.headers.get('range') ?? undefined
+            content = await contentAdapter.getPreviewableContent(connector.id, fileInfo.externalId, { preferNative, range })
         } catch (err) {
             if (err instanceof ConnectorContentError) {
                 if (err.code === 'not_found') {
@@ -162,6 +172,24 @@ export async function GET(
 
         const headers = new Headers()
         headers.set('Content-Type', content.mimeType)
+
+        // SVG is script-bearing markup, not a picture. Served inline from our own origin it
+        // would run in that origin — so it is never rendered as a document. The pane draws
+        // images in an <img>, which does not execute embedded script; this header makes the
+        // guarantee hold even if something loads the URL directly.
+        if (content.mimeType === 'image/svg+xml' || content.mimeType === 'text/html' || content.mimeType === 'application/xhtml+xml') {
+            headers.set('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:; sandbox")
+            headers.set('X-Content-Type-Options', 'nosniff')
+        }
+
+        if (content.httpStatus === 206) {
+            headers.set('Accept-Ranges', 'bytes')
+            if (content.contentRange) headers.set('Content-Range', content.contentRange)
+            if (content.contentLength) headers.set('Content-Length', String(content.contentLength))
+        } else if (content.mimeType.startsWith('video/') || content.mimeType.startsWith('audio/')) {
+            // Advertised so the player issues range requests in the first place.
+            headers.set('Accept-Ranges', 'bytes')
+        }
         headers.set('Content-Disposition', 'inline')
         headers.set('Cache-Control', 'no-store')
         // Discourage browser save/download/print via Permissions-Policy
@@ -177,7 +205,7 @@ export async function GET(
             .fireAndForget()
 
         const body = Buffer.isBuffer(content.stream) ? new Uint8Array(content.stream) : content.stream
-        return new NextResponse(body, { status: 200, headers })
+        return new NextResponse(body, { status: content.httpStatus ?? 200, headers })
 
     } catch (error) {
         logger.error('Preview proxy error:', error as Error)

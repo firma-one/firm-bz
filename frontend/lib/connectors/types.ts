@@ -277,7 +277,23 @@ export interface IConnectorContentAdapter {
    * viewer renders the workbook as a grid instead. Anything an adapter cannot serve
    * natively falls back to the converted PDF, so a caller can always render the result.
    */
-  getPreviewableContent(connectionId: string, fileId: string, opts?: { preferNative?: boolean }): Promise<{ stream: ReadableStream | Buffer; mimeType: string; fileName: string }>
+  getPreviewableContent(
+    connectionId: string,
+    fileId: string,
+    opts?: {
+      preferNative?: boolean
+      /** Raw `Range` header, forwarded upstream so a player can seek without the whole file. */
+      range?: string
+    },
+  ): Promise<{
+    stream: ReadableStream | Buffer
+    mimeType: string
+    fileName: string
+    /** Set when the provider answered a range request, so the route can mirror 206. */
+    httpStatus?: number
+    contentRange?: string
+    contentLength?: number
+  }>
   /**
    * Toggle copy/download restriction on a file, if the provider supports it.
    * Resolves silently as a no-op for providers without an equivalent concept.
