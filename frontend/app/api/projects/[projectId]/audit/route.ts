@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { resolveAgentIdentity } from '@/lib/ai/files-agent/agent-identity'
 import { prisma } from '@/lib/prisma'
 import { resolveProjectContext } from '@/lib/resolve-project-context'
 import { canViewProject } from '@/lib/permission-helpers'
@@ -91,6 +92,15 @@ export async function GET(
       )
       await Promise.all(
         uniqueActorIds.map(async (actorId) => {
+          // Brio has no auth record to look up — deliberately, so there is no account to sign in
+          // to — so its identity is resolved before Supabase is asked about an id it has never
+          // seen. Without this an agent-performed change shows a blank actor.
+          const agent = resolveAgentIdentity(actorId)
+          if (agent) {
+            actorEmailMap[actorId] = ''
+            actorNameMap[actorId] = agent.fullName
+            return
+          }
           try {
             const { data: { user: u } } = await supabaseAdmin.auth.admin.getUserById(actorId)
             actorEmailMap[actorId] = u?.email ?? ''

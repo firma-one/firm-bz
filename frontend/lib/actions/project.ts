@@ -1,6 +1,7 @@
 'use server'
 
 import { prisma } from '@/lib/prisma'
+import { agentUserId } from '@/lib/ai/files-agent/agent-identity'
 import { type EngagementStatus, DocumentSharingPermissionStatus } from '@prisma/client'
 import { createClient as createSupabaseClient } from '@/utils/supabase/server'
 import { upsertFollowUpReminder } from '@/lib/actions/user-reminders'
@@ -196,6 +197,24 @@ export async function createEngagement(firmSlug: string, clientSlug: string, dat
                 }
             })
         }
+
+        // Brio joins as a member so its file operations are attributable to it rather than to the
+        // lead who approved them — the Audit tab renders by actor, and a flag in the metadata
+        // would read as the lead's own work.
+        //
+        // It is not a Supabase auth user: there is no account here to sign in to. `eng_admin`
+        // because file mutations are gated on `project:can_manage`; the identity resolver is what
+        // makes it render as "Brio PMO" wherever members and actors are listed.
+        await tx.engagementMember.create({
+            data: {
+                engagementId: project.id,
+                userId: agentUserId(firm.id),
+                role: 'eng_admin',
+                createdBy: user.id,
+                updatedBy: user.id,
+            }
+        })
+
         return project
     })
 

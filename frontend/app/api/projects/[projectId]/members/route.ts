@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { resolveAgentIdentity } from '@/lib/ai/files-agent/agent-identity'
 import { createClient } from '@/utils/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { prisma } from '@/lib/prisma'
@@ -39,6 +40,20 @@ export async function GET(
     const enriched = (
       await Promise.all(
         members.map(async (m) => {
+          // Resolved before Supabase: Brio has no auth record, and this mapper drops anyone
+          // without an email — so without this it would vanish from the Members list rather than
+          // appearing as the agent it is.
+          const agent = resolveAgentIdentity(m.userId)
+          if (agent) {
+            return {
+              userId: m.userId,
+              email: '',
+              name: agent.fullName,
+              role: m.role,
+              avatarUrl: null,
+              isAgent: true,
+            }
+          }
           try {
             const { data } = await supabaseAdmin.auth.admin.getUserById(m.userId)
             const email = data?.user?.email
@@ -52,7 +67,7 @@ export async function GET(
           }
         })
       )
-    ).filter(Boolean) as { userId: string; email: string; name: string; role: string; avatarUrl: string | null }[]
+    ).filter(Boolean) as { userId: string; email: string; name: string; role: string; avatarUrl: string | null; isAgent?: boolean }[]
 
     return NextResponse.json({ members: enriched })
   } catch (e) {

@@ -91,11 +91,27 @@ export function FloatingAiChat({
     engagementName,
     clientName,
     defaultOpen = false,
+    title,
+    extra,
 }: {
     projectId: string
     data?: EngagementInsightsResponse | null
     engagementName?: string | null
     clientName?: string | null
+    /**
+     * Distinguishes one page's launcher from another's when the panel appears on more than one.
+     * Without it, two "Ask Brio" pills would be indistinguishable in a screenshot or a support
+     * conversation.
+     */
+    title?: string
+    /**
+     * Page-specific content shown above the conversation — the Files page uses it for the
+     * organisation review and its approval list.
+     *
+     * A slot rather than a prop per feature: the chat below it is identical everywhere, and
+     * threading Files-specific state through the chat component would couple the two.
+     */
+    extra?: React.ReactNode
     /**
      * Whether the panel starts open before the user has expressed a preference. Overview passes
      * true — the assistant leads that page today and collapsing it by default would re-bury it.
@@ -315,6 +331,7 @@ export function FloatingAiChat({
                     sparkle beside it reads as two things rather than one brand. */}
                 <span className="text-sm font-medium text-gray-900">
                     Ask <Brio className="text-sm text-primary" />
+                    {title ? <span className="ml-1 text-gray-400">· {title}</span> : null}
                 </span>
             </button>,
             document.body,
@@ -405,6 +422,12 @@ export function FloatingAiChat({
                     <ChevronDown className="h-4 w-4" />
                 </button>
             </div>
+
+            {extra ? (
+                <div className="border-b border-primary/10 bg-primary/[0.03] px-4 py-3">
+                    {extra}
+                </div>
+            ) : null}
 
             {/* Kept mounted while open so the thread, ratings and suggestions survive a dock flip. */}
             <EngagementAiChat

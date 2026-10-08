@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
+import { FloatingAiChat } from '@/components/projects/floating-ai-chat'
+import { FilesAgentPanel } from '@/components/projects/files-agent-panel'
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { CoffeeIcon, type CoffeeIconHandle } from "@/components/ui/coffee-icon"
@@ -3371,6 +3373,34 @@ const handleRefresh = async () => {
                     error={regrantError}
                 />
             </div>
+
+            {/* The agent panel is for the Engagement Lead and firm admins only: `canManage` maps to
+                `project:can_manage`, which is eng_admin-exclusive with a firm_admin fallback. The
+                route enforces the same boundary — this only decides whether to show the entry
+                point, and a hidden button is not an access control.
+
+                Collapsed by default, unlike Overview: on Files the assistant is secondary to the
+                file tree it is commenting on. */}
+            {(canManage || isFirmAdmin) && (
+                <FloatingAiChat
+                    projectId={projectId}
+                    engagementName={projectName}
+                    clientName={clientName}
+                    title="Files"
+                    extra={
+                        <FilesAgentPanel
+                            projectId={projectId}
+                            // Refreshes the folder the user is looking at, so applied renames and
+                            // moves appear without a manual reload. No-ops before a folder has
+                            // resolved, which cannot happen while the panel is reachable.
+                            onApplied={() => {
+                                const folderId = currentFolderIdRef.current
+                                if (folderId) void fetchFiles(folderId)
+                            }}
+                        />
+                    }
+                />
+            )}
 
         </div>
     )
