@@ -138,7 +138,7 @@ function ToastContainer({ toasts, removeToast }: { toasts: Toast[], removeToast:
 
   return (
     <div
-      className="fixed bottom-5 right-5 z-[100] w-[320px]"
+      className="fixed bottom-5 right-5 z-[150] w-[320px]"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
