@@ -202,3 +202,39 @@ scrolls. Acrobat does this; left out deliberately.
 ### Note
 Reset-zoom moved from `RotateCcw` to `Undo2`: rotate-left needed `RotateCcw`, and the same
 glyph cannot mean two things in one toolbar.
+
+---
+
+## Round 4 — 400% ceiling
+
+Raised from 200% because zoom here is relative to fit-width, so the useful ceiling depends
+on page size: a Google Sheet exported to XLSX converts to one page sized to the whole used
+range, which is illegible at 200%.
+
+Not a one-line change, because an unguarded 400% raster is large enough to fail:
+
+- **Canvas budget.** 64M device px and 16k per edge; past that the backing store renders
+  below device resolution and CSS upscales, so the page goes soft rather than blank
+  (browsers refuse the allocation outright otherwise). Sized so a retina A4 at the old 200%
+  ceiling lands just inside it — nothing that renders sharply today starts rendering softly.
+  Measured at a 1700px pane, retina: A4 keeps 2.0x at 200%, drops to 1.38x at 300% and
+  1.03x at 400%; a sheet-sized page keeps 2.0x through 300% and eases to 1.53x at 400%.
+- **Coarser steps above 200%** (50, not 15), so 400 is not twenty clicks. 200<->250
+  round-trips cleanly.
+- **Render window tightened to +/-1 above 200%**, since one canvas up there can be ~256MB.
+
+Known trade-off: at the cap a single canvas is ~256MB and up to three can be live. A
+tighter budget would have softened A4 at 200%, judged the worse regression. If memory
+bites in practice, dropping render-ahead to 0 above 300% is the lever.
+
+### Root cause this does not fix
+Neither connector passes any layout parameters to its converter — OneDrive sends
+`/content?format=pdf`, Drive sends `files/{id}/export?mimeType=application/pdf` (and
+copy-converts an uploaded XLSX to a Google Sheet first). Page size, orientation, scaling
+and sheet breaks are all decided by the provider from the workbook's own print setup, and a
+Sheets-authored file has none. Zoom treats the symptom.
+
+Drive could be fixed properly: `docs.google.com/spreadsheets/d/{id}/export?format=pdf`
+accepts `fitw`, `portrait`, `gid`, gridlines and margins — a different endpoint from the
+Drive v3 `/export` used today, which accepts none of them. Graph exposes no equivalent, so
+this would improve spreadsheets on Drive and leave OneDrive unchanged. Decide deliberately.

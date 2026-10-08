@@ -4,21 +4,42 @@ import { useState, useCallback, useEffect, useLayoutEffect, useRef, useMemo } fr
 import { ZoomIn, ZoomOut, RotateCcw, RotateCw, Undo2, ChevronUp, ChevronDown, ChevronsLeftRight, ChevronsDownUp, List, PanelLeft } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu'
-import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { PreviewLoadingState } from '@/components/files/preview-loading-state'
 import { DocumentBlobPreviewPane } from '@/components/files/document-blob-preview-pane'
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from 'pdfjs-dist'
 
-const ZOOM_STEP = 15
 const ZOOM_MIN = 50
-const ZOOM_MAX = 200
+const ZOOM_MAX = 400
 const ZOOM_DEFAULT = 100
 /** Offered in the zoom dropdown. Kept inside ZOOM_MIN..ZOOM_MAX so the +/- buttons, the
  *  dropdown and the reset button can never disagree about the allowed range. */
-const ZOOM_PRESETS = [50, 75, 100, 125, 150, 200]
+const ZOOM_PRESETS = [50, 75, 100, 125, 150, 200, 300, 400]
+
+/** Zoom is relative to fit-width, so the useful ceiling depends on how big the page is: a
+ *  spreadsheet exported as one giant page needs several hundred percent before it is
+ *  legible, where a normal page does not. Step coarsely up there so reaching 400 is not
+ *  twenty clicks. */
+function zoomStep(from: number): number {
+    return from >= 200 ? 50 : 15
+}
 
 /** Pages rendered to canvas on either side of the current page. Everything else is a
- *  correctly-sized placeholder, so scrolling never shifts and memory stays bounded. */
+ *  correctly-sized placeholder, so scrolling never shifts and memory stays bounded.
+ *  Tightened past 200%, where a single canvas can be hundreds of megabytes. */
 const RENDER_AHEAD = 2
+const RENDER_AHEAD_HIGH_ZOOM = 1
+
+/** Backing-store ceiling for one page canvas, in device pixels. Browsers refuse to
+ *  allocate beyond roughly 16k on an edge, and a canvas is 4 bytes a pixel, so an
+ *  unbounded 400% render of a sheet-sized page fails outright or evicts the tab. Past
+ *  this the backing store is rendered below device resolution and upscaled by CSS: the
+ *  page goes soft rather than blank.
+ *
+ *  Sized so it does not bite on anything reachable before 400% existed — a retina A4 at
+ *  the old 200% ceiling lands just inside it — so no document that renders sharply today
+ *  starts rendering softly. */
+const MAX_CANVAS_PIXELS = 67_108_864
+const MAX_CANVAS_EDGE = 16_384
 
 /** Vertical gap between pages, and the horizontal breathing room used when fitting a
  *  page to the pane width. Both in CSS px. */
@@ -119,12 +140,25 @@ function PdfPageCanvas({
                 // user's rotation alone. Compose the two.
                 const viewport = page.getViewport({ scale, rotation: page.rotate + rotation })
                 // Render at device resolution, then scale back down via CSS, so text stays
-                // sharp on retina displays instead of being upscaled from a 1x bitmap.
-                const dpr = window.devicePixelRatio || 1
-                canvas.width = Math.floor(viewport.width * dpr)
-                canvas.height = Math.floor(viewport.height * dpr)
-                canvas.style.width = `${Math.floor(viewport.width)}px`
-                canvas.style.height = `${Math.floor(viewport.height)}px`
+                // sharp on retina displays instead of being upscaled from a 1x bitmap —
+                // but never past what the browser will allocate. Both the per-edge and the
+                // total-area limits bite on a large page at high zoom, so take whichever
+                // is stricter and drop below 1x if even that is too big.
+                const cssW = viewport.width
+                const cssH = viewport.height
+                const dpr = Math.max(
+                    0.1,
+                    Math.min(
+                        window.devicePixelRatio || 1,
+                        MAX_CANVAS_EDGE / cssW,
+                        MAX_CANVAS_EDGE / cssH,
+                        Math.sqrt(MAX_CANVAS_PIXELS / (cssW * cssH)),
+                    ),
+                )
+                canvas.width = Math.floor(cssW * dpr)
+                canvas.height = Math.floor(cssH * dpr)
+                canvas.style.width = `${Math.floor(cssW)}px`
+                canvas.style.height = `${Math.floor(cssH)}px`
 
                 task = page.render({
                     canvas,
@@ -535,8 +569,8 @@ export function DocumentPdfPreviewPane({ document, projectId }: DocumentPdfPrevi
         setPanning(false)
     }, [])
 
-    const zoomIn = useCallback(() => applyZoom(Math.min(ZOOM_MAX, zoom + ZOOM_STEP)), [applyZoom, zoom])
-    const zoomOut = useCallback(() => applyZoom(Math.max(ZOOM_MIN, zoom - ZOOM_STEP)), [applyZoom, zoom])
+    const zoomIn = useCallback(() => applyZoom(Math.min(ZOOM_MAX, zoom + zoomStep(zoom))), [applyZoom, zoom])
+    const zoomOut = useCallback(() => applyZoom(Math.max(ZOOM_MIN, zoom - zoomStep(zoom - 1))), [applyZoom, zoom])
     const zoomReset = useCallback(() => applyZoom(ZOOM_DEFAULT), [applyZoom])
 
     // Shortcuts are bound to the scroll area, not the window, so the viewer never steals
@@ -584,8 +618,9 @@ export function DocumentPdfPreviewPane({ document, projectId }: DocumentPdfPrevi
         return <DocumentBlobPreviewPane document={document} projectId={projectId} />
     }
 
-    const firstVisible = Math.max(1, currentPage - RENDER_AHEAD)
-    const lastVisible = Math.min(totalPages, currentPage + RENDER_AHEAD)
+    const renderAhead = zoom > 200 ? RENDER_AHEAD_HIGH_ZOOM : RENDER_AHEAD
+    const firstVisible = Math.max(1, currentPage - renderAhead)
+    const lastVisible = Math.min(totalPages, currentPage + renderAhead)
 
     return (
         <div className="flex-1 min-h-0 flex flex-col">
@@ -860,11 +895,7 @@ export function DocumentPdfPreviewPane({ document, projectId }: DocumentPdfPrevi
                 )}
 
             <div className="flex-1 min-h-0 relative bg-[#f3f4f6]">
-                {loading && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-[#f3f4f6] z-10">
-                        <LoadingSpinner size="md" />
-                    </div>
-                )}
+                {loading && <PreviewLoadingState document={document} />}
 
                 <div
                     ref={scrollRef}
