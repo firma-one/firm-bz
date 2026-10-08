@@ -10,6 +10,7 @@ import { canAccessRbacAdmin } from '@/lib/permission-helpers'
 import { getSharedAndAncestorIdsForPersona, isFolderUnderSharedFolderDB } from '@/lib/engagement-sharing-ids'
 import { safeInngestSend } from '@/lib/inngest/client'
 import { logger } from '@/lib/logger'
+import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { GoogleDriveAuthError } from '@/lib/google-drive-connector'
 import { blockIfEngagementFileMutationForbidden } from '@/lib/engagement-access'
 import { resolveEngagementConnector } from '@/lib/connectors/resolve-client-connector'
@@ -1038,6 +1039,17 @@ export async function POST(request: NextRequest) {
                 })
             }
 
+            // DOCUMENT_MOVED: also declared and never emitted until now. The destination id alone
+            // is not readable in an audit list, so the resolved name is recorded alongside it.
+            audit(AUDIT_EVENT.DOCUMENT_MOVED)
+                .firm(engagement.firmId).client(engagement.clientId).engagement(engagement.id)
+                .actor(user.id).scope(AUDIT_SCOPE.DOCUMENT)
+                .meta({
+                    fileName: meta?.name ?? fileId,
+                    toFolderId: destinationFolderId,
+                })
+                .fireAndForget()
+
             return NextResponse.json({ success: true, id: result.id })
         }
 
@@ -1301,10 +1313,26 @@ export async function POST(request: NextRequest) {
             if (!engagement) return NextResponse.json({ error: 'Engagement not found' }, { status: 404 })
             if (!connector) return NextResponse.json({ error: 'No active storage connector found' }, { status: 404 })
 
+            // Read before the mutation: afterwards the old name is gone, and "renamed to X" without
+            // "from Y" is the half of the fact nobody needs.
+            const priorName = (await prisma.engagementDocument.findFirst({
+                where: { engagementId: bodyEngagementId, externalId: fileId },
+                select: { fileName: true },
+            }))?.fileName ?? null
+
             const result = isOneDrive(connector)
                 ? await renameOneDriveFile(connector.id, fileId, newName.trim())
                 : await googleDriveConnector.renameFile(connector.id, fileId, newName.trim())
             if (!result) return NextResponse.json({ error: 'Failed to rename file' }, { status: 500 })
+
+            // DOCUMENT_CHANGED was declared in the audit constants but never emitted, so a rename
+            // left no trace at all. Agent-performed renames need to be reviewable, and a trail
+            // that covers only those would be a worse record than one that covers neither.
+            audit(AUDIT_EVENT.DOCUMENT_CHANGED)
+                .firm(engagement.firmId).client(engagement.clientId).engagement(engagement.id)
+                .actor(user.id).scope(AUDIT_SCOPE.DOCUMENT)
+                .meta({ fileName: result.name, previousName: priorName ?? undefined })
+                .fireAndForget()
 
             // Update vector index with new name
             await safeInngestSend('file.index.requested', {
