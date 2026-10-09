@@ -22,7 +22,7 @@
 /**
  * Hard ceiling on model turns in one run.
  *
- * Eight is enough for the analyse-then-propose shape this agent actually has — one call to phrase
+ * Eight is enough for the analyze-then-propose shape this agent actually has — one call to phrase
  * findings, a few to refine proposals against a large tree — while being far below the point where
  * a loop could do real damage. A run that hits the cap returns what it has rather than failing, so
  * the user gets partial value for credits already spent.

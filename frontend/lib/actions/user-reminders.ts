@@ -1,6 +1,7 @@
 'use server'
 
 import { prisma } from '@/lib/prisma'
+import { isAgentUserIdAsync } from '@/lib/ai/agent-email'
 import { createClient } from '@/utils/supabase/server'
 import { safeInngestSend } from '@/lib/inngest/client'
 import { getFirmReminderConfig } from '@/lib/actions/firms'
@@ -246,6 +247,12 @@ export async function upsertFollowUpReminder(params: {
     ctaUrl: string | null
     note?: string | null
 }): Promise<void> {
+    // Agents are firm members, so "remind every lead" lists include Brio — and writing a reminder
+    // for it would create a UserPersonalization row that nothing ever reads or clears. Guarded in
+    // the shared helper rather than at each caller: there are many, and a new one would otherwise
+    // have to remember.
+    if (await isAgentUserIdAsync(params.userId)) return
+
     // Serialised per user: updateProject fires due/kickoff/follow-up upserts for one
     // save, and without this they race on the shared reminders JSON array and drop
     // each other's writes.

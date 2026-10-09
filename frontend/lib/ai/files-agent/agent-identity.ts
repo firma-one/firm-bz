@@ -2,6 +2,7 @@ import 'server-only'
 import { randomBytes } from 'crypto'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { logger } from '@/lib/logger'
+import { AGENT_EMAIL_DOMAIN, isAgentEmail } from '@/lib/ai/agent-email'
 
 /**
  * Brio's identity as a member of a firm.
@@ -38,29 +39,27 @@ import { logger } from '@/lib/logger'
  * correctness requirement.
  */
 
-/**
- * The domain agent accounts live on.
- *
- * Deliberately a subdomain with no mail exchanger: an address nobody can receive at is what makes
- * the password reset path unusable. Overridable so a self-hosted deployment can point it at its
- * own non-routable domain.
- */
-const AGENT_EMAIL_DOMAIN = process.env.AI_AGENT_EMAIL_DOMAIN ?? 'agents.firma.bz'
 
 /** Marks an auth account as an agent, readable from `user_metadata`. */
 export const AGENT_METADATA_KEY = 'firma_agent'
 
-export const AGENT_DISPLAY_NAME = 'Brio PMO'
+export { isAgentEmail }
+
+/**
+ * How the agent is named wherever a person appears: the Audit tab, member lists, avatars.
+ *
+ * "Executive Assistant" rather than a product name, because every place this renders is a place
+ * that otherwise names a colleague, and the question a reader is asking there is what ROLE acted,
+ * not which feature. Chief of staff to the firm admin, which is also how its permissions are
+ * modelled.
+ */
+export const AGENT_DISPLAY_NAME = 'Brio — Executive Assistant, PMO'
 
 /** The address for a firm's agent. Stable, derived, and not routable. */
 export function agentEmail(firmId: string): string {
     return `brio+${firmId}@${AGENT_EMAIL_DOMAIN}`
 }
 
-/** True when an email belongs to an agent account. */
-export function isAgentEmail(email: string | null | undefined): boolean {
-    return typeof email === 'string' && email.endsWith(`@${AGENT_EMAIL_DOMAIN}`)
-}
 
 /**
  * Ids known to belong to agents, for the synchronous check below.
@@ -70,7 +69,7 @@ export function isAgentEmail(email: string | null | undefined): boolean {
  */
 const knownAgentIds = new Set<string>()
 
-/** Registers an id as an agent's, so {@link isAgentUserId} recognises it. */
+/** Registers an id as an agent's, so {@link isAgentUserId} recognizes it. */
 export function rememberAgentId(userId: string): void {
     knownAgentIds.add(userId)
 }
@@ -118,6 +117,10 @@ export async function ensureFirmAgentUser(firmId: string): Promise<string | null
         const existing = await findAgentByEmail(email)
         if (existing) {
             rememberAgentId(existing)
+            // Accounts provisioned before a rename keep the name they were created with, and this
+            // name is what renders in the Audit tab and member lists. Reconciled here rather than
+            // in a migration so it converges without one, on whatever the current constant says.
+            await reconcileAgentName(existing)
             return existing
         }
 
@@ -170,4 +173,39 @@ export async function ensureFirmAgentUser(firmId: string): Promise<string | null
 async function findAgentByEmail(email: string): Promise<string | null> {
     const { findAuthUserIdByEmail } = await import('@/lib/actions/auth-user-lookup')
     return findAuthUserIdByEmail(email)
+}
+
+/**
+ * Brings an existing agent account's name in line with {@link AGENT_DISPLAY_NAME}.
+ *
+ * The displayed name is NOT this constant — it is `auth.users.user_metadata.full_name`, which every
+ * member list, avatar and audit row resolves from (see `lib/actions/members.ts`). The constant only
+ * seeds that field at provisioning, so changing it renames nothing that already exists.
+ *
+ * Reconciling on resolve rather than in a migration means the name converges wherever the agent is
+ * actually used, needs no backfill run, and stays correct through any later rename.
+ *
+ * Writes only on a mismatch: this sits on the path of every agent operation, and an unconditional
+ * update would mean an auth write per file change for no gain. Failure is logged and swallowed —
+ * a stale display name must never fail the operation the agent was asked to perform.
+ */
+async function reconcileAgentName(userId: string): Promise<void> {
+    try {
+        const admin = createAdminClient()
+        const { data } = await admin.auth.admin.getUserById(userId)
+        const current = data?.user?.user_metadata?.full_name
+        if (current === AGENT_DISPLAY_NAME) return
+
+        await admin.auth.admin.updateUserById(userId, {
+            // Merged, not replaced: `user_metadata` also carries the agent marker, and a bare
+            // `{ full_name }` would drop it and with it every `isAgentUser` check.
+            user_metadata: {
+                ...(data?.user?.user_metadata ?? {}),
+                full_name: AGENT_DISPLAY_NAME,
+                [AGENT_METADATA_KEY]: true,
+            },
+        })
+    } catch (error) {
+        logger.warn(`[agent] could not reconcile display name: ${(error as Error).message}`)
+    }
 }

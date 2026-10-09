@@ -1,5 +1,4 @@
 import { prisma } from '@/lib/prisma'
-import { isAgentUserId } from '@/lib/ai/files-agent/agent-identity'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { sendEmail } from '@/lib/email'
 import { logger } from '@/lib/logger'
@@ -88,13 +87,10 @@ export async function sendPlatformMaintenanceNotification(
   config: PlatformMaintenanceConfig
 ): Promise<void> {
   // One notification per unique user (PLATFORM scope — no firmId required)
-  const members = (await prisma.firmMember.findMany({
+  const members = await prisma.firmMember.findMany({
     select: { userId: true },
     distinct: ['userId'],
-  })).filter((m) => !isAgentUserId(m.userId))
-  // Filtered here rather than in the shared dispatcher because this path writes to Prisma
-  // directly. An agent is a firm member for permissions and attribution, but nothing reads a
-  // notification addressed to it.
+  })
   if (members.length === 0) return
 
   const title = type === 'on'

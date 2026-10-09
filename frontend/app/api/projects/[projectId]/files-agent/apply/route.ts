@@ -7,9 +7,12 @@ import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { moveOneDriveFile, renameOneDriveFile } from '@/lib/connectors/adapters/onedrive-file-ops'
 import { verifyApprovalToken } from '@/lib/ai/files-agent/approval'
 import { ensureFirmAgentUser } from '@/lib/ai/files-agent/agent-identity'
-import type { Proposal } from '@/lib/ai/files-agent/tools'
+import { agentApprovalMeta } from '@/lib/ai/files-agent/agent-audit'
+import { DESTRUCTIVE_REFUSAL, isPermittedAgentOperation } from '@/lib/ai/agent-capabilities'
+import { isValidRenameTarget, proposalKey, type Proposal } from '@/lib/ai/files-agent/tools'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { safeInngestSend } from '@/lib/inngest/client'
+import { agentCreateFolder } from '@/lib/ai/files-agent/safe-ops'
 import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
@@ -39,7 +42,7 @@ interface ApplyOutcome {
  *
  * ## Attribution
  *
- * Every change is audited as Brio PMO, not as the approving lead. The lead decided; the agent
+ * Every change is audited as the Brio agent, not as the approving lead. The lead decided; the agent
  * acted. A reader of the Audit tab should be able to tell those apart without knowing this
  * feature exists.
  *
@@ -60,10 +63,30 @@ export async function POST(
         const body = await request.json().catch(() => null) as {
             token?: unknown
             proposals?: unknown
+            overrides?: unknown
         } | null
 
         const token = typeof body?.token === 'string' ? body.token : ''
         const proposals = Array.isArray(body?.proposals) ? body!.proposals as Proposal[] : []
+
+        /**
+         * Replacement names the user typed instead of accepting the agent's suggestion.
+         *
+         * Kept OUT of the proposals themselves on purpose. The approval token signs each proposal's
+         * exact content, so an edited proposal is rejected as an altered batch — correctly, since
+         * that is the check stopping a client from applying something that was never reviewed. An
+         * override rides alongside the signed proposal instead and is re-validated here under the
+         * same rules the agent's own names pass: same extension, actually different, legal on both
+         * providers. A name failing those is dropped, and the signed suggestion is NOT silently
+         * applied in its place — the user asked for something specific.
+         */
+        const overrides: Record<string, string> =
+            body?.overrides && typeof body.overrides === 'object' && !Array.isArray(body.overrides)
+                ? Object.fromEntries(
+                    Object.entries(body.overrides as Record<string, unknown>)
+                        .filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+                )
+                : {}
 
         if (!token || proposals.length === 0) {
             return NextResponse.json({ error: 'Nothing to apply' }, { status: 400 })
@@ -93,6 +116,12 @@ export async function POST(
         // approving user when the agent account cannot be resolved — an unattributed change is
         // worse than one attributed to the person who authorised it.
         const actorId = (await ensureFirmAgentUser(ctx.orgId)) ?? user.id
+
+        // Who authorized this batch. The agent acted; a named person approved. See agent-audit.ts
+        // for why the approver is inseparable from the agent marker, and why it comes from the
+        // verified session rather than the request body.
+        const agentMeta = agentApprovalMeta(user)
+
         const outcomes: ApplyOutcome[] = []
 
         // Folders first: a move may target a folder this batch creates, and a destination that
@@ -104,25 +133,74 @@ export async function POST(
 
         for (const proposal of ordered) {
             try {
+                // The capability boundary, checked at the only place that can execute.
+                //
+                // The three branches below happen to be reversible, which is correct but holds
+                // only because nobody has written a fourth. This makes it a rule: an operation the
+                // permitted list does not name cannot run, whatever a proposal claims to be and
+                // however it reached here. See `lib/ai/agent-capabilities.ts` for why the line is
+                // reversibility.
+                const operation = proposal.kind === 'folder' ? 'create-folder' : proposal.kind
+                if (!isPermittedAgentOperation(operation)) {
+                    logger.error(
+                        '[files-agent/apply] refused a non-permitted operation',
+                        new Error(`operation=${operation}`), 'Agent', { projectId },
+                    )
+                    outcomes.push({ proposal, ok: false, error: DESTRUCTIVE_REFUSAL })
+                    continue
+                }
+
                 if (proposal.kind === 'rename') {
+                    // The user's own name wins over the agent's suggestion, but only after passing
+                    // the same validation. An override that fails it is refused outright rather
+                    // than falling back to the suggestion — they asked for something specific, and
+                    // quietly applying a different name would be worse than applying none.
+                    const override = overrides[proposalKey(proposal)]
+                    if (override !== undefined) {
+                        // Checked against the folder as it stands NOW, not as it stood when the
+                        // review ran: minutes may have passed, and a name that was free then may
+                        // have been taken since.
+                        const siblings = await prisma.engagementDocument.findMany({
+                            where: {
+                                engagementId: projectId,
+                                parentId: (await prisma.engagementDocument.findFirst({
+                                    where: { engagementId: projectId, externalId: proposal.externalId },
+                                    select: { parentId: true },
+                                }))?.parentId ?? undefined,
+                                externalId: { not: proposal.externalId },
+                            },
+                            select: { fileName: true },
+                        })
+                        if (!isValidRenameTarget(
+                            proposal.currentName, override, siblings.map((s) => s.fileName),
+                        )) {
+                            throw new Error('That name is already used in this folder')
+                        }
+                    }
+                    const targetName = override?.trim() || proposal.proposedName
+
                     const result = isOneDrive(connector)
-                        ? await renameOneDriveFile(connector.id, proposal.externalId, proposal.proposedName)
-                        : await googleDriveConnector.renameFile(connector.id, proposal.externalId, proposal.proposedName)
+                        ? await renameOneDriveFile(connector.id, proposal.externalId, targetName)
+                        : await googleDriveConnector.renameFile(connector.id, proposal.externalId, targetName)
                     if (!result) throw new Error('Provider rejected the rename')
 
                     await prisma.engagementDocument.updateMany({
                         where: { engagementId: projectId, externalId: proposal.externalId },
-                        data: { fileName: proposal.proposedName, updatedBy: actorId },
+                        data: { fileName: targetName, updatedBy: actorId },
                     })
 
                     audit(AUDIT_EVENT.DOCUMENT_CHANGED)
                         .firm(ctx.orgId).client(ctx.clientId).engagement(projectId)
                         .actor(actorId).scope(AUDIT_SCOPE.DOCUMENT)
                         .meta({
-                            fileName: proposal.proposedName,
+                            fileName: targetName,
                             previousName: proposal.currentName,
-                            reason: proposal.reason,
-                            viaAgent: true,
+                            // Whether the applied name was the agent's or the approver's own. An
+                            // audit reader should not have to guess which of the two they are
+                            // looking at.
+                            reason: override ? 'name chosen by approver' : proposal.reason,
+                            nameSource: override ? 'approver' : 'agent',
+                            ...agentMeta,
                         })
                         .fireAndForget()
 
@@ -150,7 +228,7 @@ export async function POST(
                             toFolderId: proposal.destinationFolderId,
                             toFolderName: proposal.destinationName,
                             reason: proposal.reason,
-                            viaAgent: true,
+                            ...agentMeta,
                         })
                         .fireAndForget()
                 }
@@ -164,12 +242,15 @@ export async function POST(
 
                     // findOrCreate rather than create: a batch applied twice, or a folder the user
                     // made themselves in between, should not produce a duplicate.
-                    const newId = await adapter.findOrCreateFolder(connector.id, parentId, proposal.name)
+                    // Through the agent wrapper, never the adapter directly: see safe-ops.ts —
+                    // `findOrCreateFolder` deletes duplicate siblings for one reserved name, and
+                    // the agent must not be able to cause that even indirectly.
+                    const newId = await agentCreateFolder(adapter, connector.id, parentId, proposal.name)
 
                     audit(AUDIT_EVENT.DOCUMENT_CREATED)
                         .firm(ctx.orgId).client(ctx.clientId).engagement(projectId)
                         .actor(actorId).scope(AUDIT_SCOPE.DOCUMENT)
-                        .meta({ fileName: proposal.name, parentId, folderId: newId, viaAgent: true })
+                        .meta({ fileName: proposal.name, parentId, folderId: newId, ...agentMeta })
                         .fireAndForget()
                 }
 

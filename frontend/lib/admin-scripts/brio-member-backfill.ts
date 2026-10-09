@@ -3,7 +3,7 @@ import { ensureFirmAgentUser } from '@/lib/ai/files-agent/agent-identity'
 import type { ScriptResult, ModelSummary } from './index'
 
 /**
- * Adds Brio PMO to firms and engagements that predate the agent.
+ * Adds the Brio Executive Assistant agent to firms and engagements that predate it.
  *
  * Two rows per firm, doing different jobs. The FIRM row is the real grant: `firm_admin` there
  * means `checkProjectPermission` falls back to firm-level access across every client and

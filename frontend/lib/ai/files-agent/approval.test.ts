@@ -6,10 +6,13 @@ beforeAll(() => {
     process.env.AI_AGENT_TOKEN_SECRET = 'test-secret-for-signing-only'
 })
 
+/** docId and path are display-only and absent from the canonical form — see the test below. */
+const where = { docId: null, path: '' }
+
 const batch: Proposal[] = [
-    { kind: 'rename', externalId: 'f1', currentName: 'a.docx', proposedName: '01-A.docx', reason: 'r' },
-    { kind: 'rename', externalId: 'f2', currentName: 'b.docx', proposedName: '02-B.docx', reason: 'r' },
-    { kind: 'move', externalId: 'f3', fileName: 'c.docx', destinationFolderId: 'd1', destinationName: 'D', reason: 'r' },
+    { kind: 'rename', externalId: 'f1', currentName: 'a.docx', proposedName: '01-A.docx', reason: 'r', ...where },
+    { kind: 'rename', externalId: 'f2', currentName: 'b.docx', proposedName: '02-B.docx', reason: 'r', ...where },
+    { kind: 'move', externalId: 'f3', fileName: 'c.docx', destinationFolderId: 'd1', destinationName: 'D', reason: 'r', ...where },
 ]
 
 const ctx = { engagementId: 'eng-1', userId: 'user-1' }
@@ -31,7 +34,7 @@ describe('approval tokens', () => {
     it('refuses a proposal that was not signed', () => {
         const smuggled: Proposal = {
             kind: 'rename', externalId: 'f9', currentName: 'x.docx',
-            proposedName: 'owned.docx', reason: 'r',
+            proposedName: 'owned.docx', reason: 'r', ...where,
         }
         expect(verifyApprovalToken({ token: issue(), ...ctx, proposals: [...batch, smuggled] }))
             .toEqual({ ok: false, reason: 'altered-batch' })
@@ -95,5 +98,26 @@ describe('approval tokens', () => {
                 .toBe(false)
             expect(verifyApprovalToken({ token, ...ctx, proposals: batch }).ok).toBe(true)
         })
+    })
+})
+
+
+describe('display fields do not affect the signature', () => {
+    /**
+     * `docId` and `path` exist so a question can say WHICH file it means. They describe the file,
+     * not the change, so they are absent from the canonical form — otherwise re-rendering a
+     * proposal with a resolved path would invalidate a token the user had already been issued.
+     */
+    it('verifies a proposal whose docId and path differ from the signed one', () => {
+        const token = issue()
+        const relabelled: Proposal[] = batch.map((p) => ({ ...p, docId: 'QSR-99', path: 'Internal/Working' }))
+        expect(verifyApprovalToken({ ...ctx, token, proposals: relabelled }).ok).toBe(true)
+    })
+
+    /** The fields that DO determine the effect must still be covered. */
+    it('still rejects an altered target name', () => {
+        const token = issue()
+        const altered: Proposal[] = [{ ...batch[0], proposedName: 'something-else.docx' } as Proposal]
+        expect(verifyApprovalToken({ ...ctx, token, proposals: altered }).ok).toBe(false)
     })
 })

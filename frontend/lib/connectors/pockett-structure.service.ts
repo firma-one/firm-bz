@@ -62,6 +62,69 @@ export async function ensureRootMetaInFolder(
   await writeMetaInFolder(adapter, connectionId, rootFolderId, { type: 'root', version: 1 })
 }
 
+/**
+ * The scaffold fingerprint, stored in the engagement root's `.meta`.
+ *
+ * ## Why here and not in the agent
+ *
+ * The agent is forbidden from writing to `.meta` — `findOrCreateFolder` deletes duplicates of that
+ * folder, so letting the agent name it would be letting it cause a delete. The mark still belongs
+ * in `.meta`, because that is the durable record that travels with the folder tree: it survives
+ * audit retention expiring (a billing entitlement, where 0 means no history), it survives the
+ * engagement row being rebuilt, and it is where a reader looking at the Drive would expect to find
+ * out how this structure came to exist.
+ *
+ * So the agent ASKS and this code WRITES. The boundary holds because the reserved name never
+ * leaves platform code.
+ */
+export interface ScaffoldFingerprint {
+    /** ISO timestamp of the run. */
+    at: string
+    /** How many folders it created. */
+    folderCount: number
+    /** The answers it was built from, so a later reader can see what was chosen. */
+    answers: Record<string, string>
+}
+
+const SCAFFOLD_META_KEY = 'filesScaffold'
+
+/** The scaffold fingerprint in a folder's `.meta`, or null if it has never been scaffolded. */
+export async function readScaffoldFingerprint(
+  adapter: IConnectorStorageAdapter,
+  connectionId: string,
+  rootFolderId: string
+): Promise<ScaffoldFingerprint | null> {
+  const meta = await readMetaFromFolder(adapter, connectionId, rootFolderId)
+  const mark = meta?.[SCAFFOLD_META_KEY]
+  if (!mark || typeof mark !== 'object') return null
+  const { at, folderCount, answers } = mark as Record<string, unknown>
+  if (typeof at !== 'string') return null
+  return {
+    at,
+    folderCount: typeof folderCount === 'number' ? folderCount : 0,
+    answers: (answers && typeof answers === 'object' ? answers : {}) as Record<string, string>,
+  }
+}
+
+/**
+ * Records a scaffold run in the folder's `.meta`.
+ *
+ * MERGED into the existing meta, never written over it: that file also carries the connector's own
+ * `type` and `version`, and replacing it would strip them.
+ */
+export async function writeScaffoldFingerprint(
+  adapter: IConnectorStorageAdapter,
+  connectionId: string,
+  rootFolderId: string,
+  fingerprint: ScaffoldFingerprint
+): Promise<void> {
+  const existing = (await readMetaFromFolder(adapter, connectionId, rootFolderId)) ?? {}
+  await writeMetaInFolder(adapter, connectionId, rootFolderId, {
+    ...existing,
+    [SCAFFOLD_META_KEY]: fingerprint,
+  })
+}
+
 function restrictIfSupported(
   adapter: IConnectorStorageAdapter,
   connectionId: string,
