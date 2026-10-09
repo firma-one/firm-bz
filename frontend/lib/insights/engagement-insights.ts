@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { assessOrganization } from '@/lib/ai/files-agent/assess'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 
 
@@ -338,78 +339,59 @@ const SENSITIVE_PATTERN =
   /password|credential|\.env|contract|invoice|medical|ssn|passport|visa|tax|confidential|secret|private/i
 
 // Build tree from documents and compute folder depth
-function buildFolderHealthReport(docs: { id: string; externalId: string; isFolder: boolean; parentId: string | null; fileSize: number | null }[]): FolderHealthReport {
-  // Drive-synced docs store parentId as the Drive externalId of the parent folder,
-  // not the platform UUID. Build a reverse map so both forms resolve to the platform id.
-  const toPlatformId = new Map<string, string>()
-  for (const d of docs) {
-    toPlatformId.set(d.id, d.id)
-    toPlatformId.set(d.externalId, d.id)
-  }
+/**
+ * Folder Health, computed by the SHARED assessment the Files agent uses.
+ *
+ * This used to be its own traversal with its own rules, which is how Overview came to call a folder
+ * at depth 3 "deeply nested" while the agent reviewing the same tree called it fine. Both now go
+ * through `assessOrganization`, so a rule added to one applies to the other by construction rather
+ * than by somebody remembering.
+ *
+ * The returned shape is unchanged — the dashboard reads these fields — but every number in it now
+ * comes from the same pass that produces the findings the Files tab shows.
+ */
+function buildFolderHealthReport(docs: { id: string; externalId: string; isFolder: boolean; parentId: string | null; fileSize: number | null; fileName: string }[]): FolderHealthReport {
+    const assessment = assessOrganization(docs.map((d) => ({
+        externalId: d.externalId,
+        fileName: d.fileName,
+        isFolder: d.isFolder,
+        parentId: d.parentId,
+    })))
 
-  const childrenMap = new Map<string | null, string[]>()
-  for (const d of docs) {
-    const parent = d.parentId ? (toPlatformId.get(d.parentId) ?? null) : null
-    if (!childrenMap.has(parent)) childrenMap.set(parent, [])
-    childrenMap.get(parent)!.push(d.id)
-  }
-
-  const docMap = new Map(docs.map((d) => [d.id, d]))
-  const folderIds = new Set(docs.filter((d) => d.isFolder).map((d) => d.id))
-
-  // Compute depth for each node (BFS from root)
-  const depthMap = new Map<string, number>()
-  const queue: { id: string; depth: number }[] = []
-  for (const id of (childrenMap.get(null) ?? [])) queue.push({ id, depth: 0 })
-  while (queue.length > 0) {
-    const { id, depth } = queue.shift()!
-    depthMap.set(id, depth)
-    for (const childId of (childrenMap.get(id) ?? [])) {
-      queue.push({ id: childId, depth: depth + 1 })
+    const issues: FolderHealthIssue[] = assessment.issues.map((i) => ({
+        // The dashboard's issue vocabulary predates the agent's, so the shared kinds are mapped
+        // onto it rather than widening a type the UI switches on.
+        type: i.kind === 'loose-at-root' ? 'orphaned_files' as const
+            : i.kind === 'flat-folder' ? 'too_many_root_files' as const
+            // Duplicates and naming outliers have no member of their own in the dashboard's
+            // vocabulary. They carry a full label, so the type only picks the icon; widening the
+            // union would mean touching every switch that reads it for no gain here.
+            : 'too_deep' as const,
+        severity: i.severity,
+        label: i.label,
+        count: i.count,
+    }))
+    if (assessment.emptyFolderCount > 0) {
+        issues.push({
+            type: 'empty_folder',
+            severity: 'info',
+            label: `${assessment.emptyFolderCount} empty folder${assessment.emptyFolderCount > 1 ? 's' : ''}`,
+            count: assessment.emptyFolderCount,
+        })
     }
-  }
 
-  let maxDepth = 0
-  let deeplyNestedFolders = 0
-  let emptyFolders = 0
-
-  for (const [id, depth] of Array.from(depthMap.entries())) {
-    if (depth > maxDepth) maxDepth = depth
-    if (folderIds.has(id)) {
-      // Count files directly under this folder (not subfolders)
-      const directChildren = childrenMap.get(id) ?? []
-      const hasAnyChildren = directChildren.length > 0
-      if (!hasAnyChildren) emptyFolders++
-      if (depth >= 3) deeplyNestedFolders++
+    return {
+        score: assessment.score,
+        totalFolders: assessment.folderCount,
+        totalFiles: assessment.fileCount,
+        maxDepth: assessment.maxDepth,
+        orphanedFiles: assessment.looseAtRootCount,
+        deeplyNestedFolders: assessment.issues
+            .filter((i) => i.kind === 'deep-nesting').reduce((n, i) => n + i.count, 0),
+        emptyFolders: assessment.emptyFolderCount,
+        issues,
+        penalties: [] as FolderHealthPenalty[],
     }
-  }
-
-  // Orphaned files: non-folder docs with no resolvable parent (at project root)
-  const orphanedFiles = docs.filter((d) => !d.isFolder && (d.parentId === null || !toPlatformId.has(d.parentId))).length
-  const totalFolders = docs.filter((d) => d.isFolder).length
-  const totalFiles = docs.filter((d) => !d.isFolder).length
-
-  // Score calculation — penalties applied by caller after all metrics are known
-  let score = 100
-  score -= Math.min(25, deeplyNestedFolders * 5)
-  if (orphanedFiles > 5) score -= 10
-  if (orphanedFiles > 15) score -= 10
-  if (emptyFolders > 3) score -= 5
-  if (maxDepth >= 6) score -= 15
-  score = Math.max(0, Math.min(100, score))
-
-  const issues: FolderHealthIssue[] = []
-  if (deeplyNestedFolders > 0) {
-    issues.push({ type: 'too_deep', severity: 'warning', label: `${deeplyNestedFolders} deeply nested folder${deeplyNestedFolders > 1 ? 's' : ''} (3+ levels)`, count: deeplyNestedFolders })
-  }
-  if (orphanedFiles > 0) {
-    issues.push({ type: 'orphaned_files', severity: orphanedFiles > 5 ? 'warning' : 'info', label: `${orphanedFiles} file${orphanedFiles > 1 ? 's' : ''} at root without a folder`, count: orphanedFiles })
-  }
-  if (emptyFolders > 0) {
-    issues.push({ type: 'empty_folder', severity: 'info', label: `${emptyFolders} empty folder${emptyFolders > 1 ? 's' : ''}`, count: emptyFolders })
-  }
-
-  return { score, totalFolders, totalFiles, maxDepth, orphanedFiles, deeplyNestedFolders, emptyFolders, issues, penalties: [] as FolderHealthPenalty[] }
 }
 
 function normalizeBaseName(fileName: string): string {
@@ -707,6 +689,7 @@ export async function computeEngagementInsights(
     const folderHealth = buildFolderHealthReport(docs.map((d) => ({
       id: d.id,
       externalId: d.externalId,
+      fileName: d.fileName,
       isFolder: d.isFolder,
       parentId: d.parentId,
       fileSize: d.fileSize != null ? Number(d.fileSize) : null,
