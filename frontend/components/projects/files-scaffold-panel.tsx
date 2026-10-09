@@ -1,8 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Loader2, Check, X, FolderTree, ChevronRight } from 'lucide-react'
-import { useToast } from '@/components/ui/toast'
+import { AlertCircle, Loader2, Check, X, FolderTree, ChevronRight } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
 import { AgentPromptCard } from '@/components/ui/agent-prompt-card'
 import { ElapsedTime } from '@/components/ui/elapsed-time'
@@ -35,10 +34,12 @@ export function FilesScaffoldPanel({
 }) {
     const { session } = useAuth()
     const token = session?.access_token
-    const { addToast } = useToast()
 
     const [answers, setAnswers] = useState<ScaffoldAnswers>({})
     const [creating, setCreating] = useState(false)
+
+    /** What the run did, once it has finished. Shown here rather than as a toast. */
+    const [outcome, setOutcome] = useState<{ ok: boolean; message: string } | null>(null)
 
     const answer = useCallback((id: ScaffoldQuestionId, value: string) => {
         setAnswers((prev) => ({ ...prev, [id]: value }))
@@ -92,7 +93,7 @@ export function FilesScaffoldPanel({
 
     const create = useCallback(async () => {
         if (!token) {
-            addToast({ type: 'error', title: 'Session expired', message: 'Reload the page and try again.' })
+            setOutcome({ ok: false, message: 'Your session has expired. Reload the page and try again.' })
             return
         }
         setCreating(true)
@@ -105,24 +106,27 @@ export function FilesScaffoldPanel({
             })
             const body = await res.json().catch(() => ({}))
             if (!res.ok) {
-                addToast({ type: 'error', title: 'Could not create folders', message: body.error ?? 'Please try again.' })
+                setOutcome({ ok: false, message: body.error ?? 'Please try again.' })
                 return
             }
             const { created, failed } = body.data
-            addToast({
-                type: failed > 0 ? 'warning' : 'success',
-                title: failed > 0 ? `Created ${created}, ${failed} failed` : `Created ${created} folders`,
-                message: 'Recorded in the audit trail as Brio, your Executive Assistant.',
+            // In the thread, and the panel stays open. Closing it on success took the result away
+            // with the questions that produced it, leaving a toast as the only record of what
+            // happened — in a panel whose whole job is to be the record.
+            setOutcome({
+                ok: failed === 0,
+                message: failed > 0
+                    ? `Created ${created} folder${created === 1 ? '' : 's'}, ${failed} could not be created.`
+                    : `Created ${created} folder${created === 1 ? '' : 's'}, recorded in the audit trail as `
+                        + 'Brio, your Executive Assistant.',
             })
-            setAnswers({})
-            onClose()
             onCreated?.()
         } catch {
-            addToast({ type: 'error', title: 'Could not create folders', message: 'Please try again.' })
+            setOutcome({ ok: false, message: 'Please try again.' })
         } finally {
             setCreating(false)
         }
-    }, [projectId, token, answers, approval, addToast, onClose, onCreated])
+    }, [projectId, token, answers, approval, onCreated])
 
     if (!open) return null
 
@@ -163,7 +167,7 @@ export function FilesScaffoldPanel({
         <div className="space-y-2">
             {SCAFFOLD_QUESTIONS.map((q, i) => {
                 // One question on screen at a time — see the agent panel for why.
-                if (i !== pendingIndex) return null
+                if (i !== pendingIndex || outcome) return null
                 return (
                     <AgentPromptCard
                         key={q.id}
@@ -188,7 +192,22 @@ export function FilesScaffoldPanel({
             {/* While creating, the preview gives way to a progress block: the tree is already
                 agreed, so showing it again with a disabled button underneath says less than naming
                 what is being made. Same shape as the file review's, for the same reason. */}
-            {complete && creating && (
+            {/* What the run did. Stays in place, so the thread records the interview and its
+                result as one exchange rather than a panel that empties itself. */}
+            {outcome && (
+                <div className="flex items-start gap-2">
+                    {outcome.ok
+                        ? <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
+                        : <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" aria-hidden />}
+                    <p className={`min-w-0 flex-1 text-xs leading-relaxed ${
+                        outcome.ok ? 'text-gray-700' : 'text-amber-800'
+                    }`}>
+                        {outcome.message}
+                    </p>
+                </div>
+            )}
+
+            {complete && creating && !outcome && (
                 <div className="space-y-1">
                     <div className="flex items-center gap-2">
                         <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" />
@@ -210,7 +229,7 @@ export function FilesScaffoldPanel({
                 </div>
             )}
 
-            {complete && !creating && (
+            {complete && !creating && !outcome && (
                 <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
                     <div className="flex items-start gap-2 px-3.5 pb-2.5 pt-3">
                         <p className="min-w-0 flex-1 font-headline text-[13px] leading-snug text-gray-900">

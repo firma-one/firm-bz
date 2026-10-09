@@ -1,9 +1,8 @@
 'use client'
 
-import { useCallback, useState } from 'react'
-import { Loader2, X, Sparkles } from 'lucide-react'
+import { useCallback, useRef, useState } from 'react'
+import { AlertCircle, Check, Loader2, X, Sparkles } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
-import { useToast } from '@/components/ui/toast'
 import { proposalKey, type Proposal } from '@/lib/ai/files-agent/tools'
 import { AgentPromptCard, type AgentPromptOption } from '@/components/ui/agent-prompt-card'
 import { ChatMarkdown } from '@/components/ui/chat-markdown'
@@ -113,6 +112,22 @@ function commentaryFor(p: Proposal, decision: string | undefined): string {
     }
     if (p.kind === 'move') return `${p.fileName} → ${p.destinationName}`
     return `New folder: ${p.name}`
+}
+
+/** How an answer reads back in the thread. */
+function answerLabel(p: Proposal, value: string): string {
+    if (value === DECLINE) {
+        return p.kind === 'rename' ? 'Keep the current name'
+            : p.kind === 'move' ? 'Leave it where it is'
+            : "Don't create it"
+    }
+    if (value === ACCEPT) {
+        return p.kind === 'rename' ? `Rename to "${p.proposedName}"`
+            : p.kind === 'move' ? `Move to ${p.destinationName}`
+            : `Create "${p.name}"`
+    }
+    // Typed. Quoted so it reads as the user's own words rather than a label.
+    return `"${value}"`
 }
 
 function questionFor(p: Proposal): string {
@@ -231,6 +246,7 @@ export function FilesAgentPanel({
     review,
     setReview,
     render,
+    onThreadTurn,
 }: {
     projectId: string
     /** Called after a successful apply so the file list can refresh. */
@@ -245,6 +261,14 @@ export function FilesAgentPanel({
     setReview: (r: ReviewData | null) => void
     /** Which half to draw. */
     render: 'trigger' | 'results'
+    /**
+     * Posts the exchange into the conversation.
+     *
+     * Each question and the answer given go into the thread as they happen, so the record reads as
+     * a conversation and survives reload with everything else. Without it the decisions lived only
+     * as state here and disappeared on refresh.
+     */
+    onThreadTurn?: (role: 'user' | 'assistant', content: string) => void
 }) {
     // Both routes authenticate through `getAuthUser`, which reads an Authorization header and
     // returns null without one — a cookie-only fetch comes back 401 "Unauthorized", which is what
@@ -269,8 +293,18 @@ export function FilesAgentPanel({
      * the card so the thread records what they actually asked for.
      */
     const [notes, setNotes] = useState<Record<string, string>>({})
+
+    /**
+     * Whether the run has already been started for this review.
+     *
+     * A ref, not state: it must be true the instant the last answer lands, before any re-render,
+     * or a second trigger slips through in the gap.
+     */
+    const applyStarted = useRef(false)
+
+    /** What the run did, once it has finished. Shown in the thread rather than as a toast. */
+    const [outcome, setOutcome] = useState<{ ok: boolean; message: string } | null>(null)
     const [error, setError] = useState<string | null>(null)
-    const { addToast } = useToast()
 
     const runReview = useCallback(async () => {
         if (!token) {
@@ -281,6 +315,8 @@ export function FilesAgentPanel({
         setError(null)
         setDecisions({})
         setNotes({})
+        setOutcome(null)
+        applyStarted.current = false
         try {
             const res = await fetch(`/api/projects/${projectId}/files-agent`, {
                 method: 'POST',
@@ -340,28 +376,35 @@ export function FilesAgentPanel({
             })
             const body = await res.json().catch(() => ({}))
             if (!res.ok) {
-                addToast({ type: 'error', title: 'Could not apply', message: body.error ?? 'Please try again.' })
+                setOutcome({ ok: false, message: body.error ?? 'Please try again.' })
                 return
             }
 
             const { applied, failed } = body.data
-            addToast({
-                type: failed > 0 ? 'warning' : 'success',
-                title: failed > 0 ? `Applied ${applied}, ${failed} failed` : `Applied ${applied} change${applied === 1 ? '' : 's'}`,
-                message: failed > 0
-                    ? 'The rest were applied. Run the review again to retry.'
-                    : 'Recorded in the audit trail as Brio, your Executive Assistant.',
-            })
+            // Reported IN THE THREAD, not as a toast.
+            //
+            // This is a conversation: the user answered a question and the answer had an effect,
+            // so the effect belongs where the question was, in the record they can scroll back
+            // through. A toast says the same thing somewhere else, for four seconds, and then
+            // takes it away — and when two fired at once the panel contradicted itself in the
+            // corner of the screen while the thread said nothing at all.
+            const summary = failed > 0
+                ? `Applied ${applied}, ${failed} could not be applied. Run the review again to retry those.`
+                : `Applied ${applied} change${applied === 1 ? '' : 's'}, recorded in the audit trail as `
+                    + 'Brio, your Executive Assistant.'
+            setOutcome({ ok: failed === 0, message: summary })
+            onThreadTurn?.('assistant', summary)
 
-            // The token is spent whatever the outcome, so the review is over either way.
-            setReview(null)
+            // The review stays on screen. Clearing it unmounted the panel the moment the work
+            // finished, so the result disappeared with the questions that produced it — the user
+            // saw the thread empty itself and had to take the toast's word for what happened.
             onApplied?.()
         } catch {
-            addToast({ type: 'error', title: 'Could not apply', message: 'Please try again.' })
+            setOutcome({ ok: false, message: 'Please try again.' })
         } finally {
             setState('idle')
         }
-    }, [projectId, review, addToast, onApplied, token])
+    }, [projectId, review, onApplied, token, onThreadTurn])
 
     /**
      * Records an answer, deciding what a TYPED one means for this kind of proposal.
@@ -377,20 +420,34 @@ export function FilesAgentPanel({
         const decision = executable ? value : DECLINE
         if (!executable) setNotes((prev) => ({ ...prev, [key]: value }))
 
-        setDecisions((prev) => {
-            const next = { ...prev, [key]: decision }
-            // The last answer IS the confirmation. Asking again with an Apply button would be
-            // asking the user to agree to what they just agreed to, one question at a time.
-            //
-            // Started from inside the updater so it sees the answer that completes the set:
-            // `decisions` in this closure is still the previous value. Deferred a tick so the
-            // state commit is not interleaved with a fetch.
-            if (review && Object.keys(next).length === review.proposals.length) {
-                setTimeout(() => void apply(next), 0)
-            }
-            return next
-        })
-    }, [review, apply])
+        // The complete set, computed HERE rather than read from state: `decisions` in this
+        // closure is still the previous value, so it would be one answer short.
+        const next = { ...decisions, [key]: decision }
+        setDecisions(next)
+
+        // Into the thread: the question as the assistant asked it, then the answer in the user's
+        // own words — the chosen label, or the text they typed.
+        onThreadTurn?.('assistant', questionFor(p))
+        onThreadTurn?.('user', answerLabel(p, value))
+
+        // The last answer IS the confirmation — asking again with an Apply button would be asking
+        // the user to agree to what they just agreed to, one question at a time.
+        //
+        // Fired OUTSIDE the state updater. It was inside, which looked like the natural place to
+        // see the completed set, but React may invoke an updater more than once for a single
+        // update — it does so in StrictMode by default — so apply() ran twice. The first call
+        // succeeded and the second was refused by the single-use token, producing "Applied 2
+        // changes" and "These changes have already been applied" side by side. A state updater
+        // must be pure; a network call in one is a bug whatever it reads correctly.
+        //
+        // `applyStarted` is the second guard: a ref rather than state, because it has to be true
+        // immediately and survive the re-render that `setDecisions` triggers.
+        if (review && !applyStarted.current
+            && Object.keys(next).length === review.proposals.length) {
+            applyStarted.current = true
+            void apply(next)
+        }
+    }, [review, apply, decisions, onThreadTurn])
 
     // The trigger: one more chip in the suggestion row, in the primary color because unlike its
     // neighbours it does not ask a question — it starts work that ends in file changes, and that
@@ -453,7 +510,7 @@ export function FilesAgentPanel({
                 Answering is now what commits the change, so the consequence has to be on screen
                 while the user is deciding — telling them afterwards would be telling them about
                 something they can no longer choose. */}
-            {review.proposals.length > 0 && !allAnswered && (
+            {review.proposals.length > 0 && !allAnswered && !outcome && (
                 <p className="text-[10px] leading-relaxed text-gray-400">
                     Your answers apply directly to your Drive, recorded in the audit trail as Brio,
                     your Executive Assistant, with your name as the approver. Nothing is deleted —
@@ -472,7 +529,7 @@ export function FilesAgentPanel({
                 // ONLY the question being asked. Answered ones are not kept on screen: looking at
                 // question 2 while question 1 sits above it is noise, and the decision is already
                 // recorded in `decisions` either way.
-                if (i !== pendingIndex) return null
+                if (i !== pendingIndex || outcome) return null
                 return (
                     <AgentPromptCard
                         key={key}
@@ -493,6 +550,21 @@ export function FilesAgentPanel({
                     />
                 )
             })}
+
+            {/* What the run did. Stays in the thread, so scrolling back shows the questions, the
+                answers and the result as one exchange. */}
+            {outcome && (
+                <div className="flex items-start gap-2">
+                    {outcome.ok
+                        ? <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
+                        : <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" aria-hidden />}
+                    <p className={`min-w-0 flex-1 text-xs leading-relaxed ${
+                        outcome.ok ? 'text-gray-700' : 'text-amber-800'
+                    }`}>
+                        {outcome.message}
+                    </p>
+                </div>
+            )}
 
             {/* While applying. There is no Apply button: answering the last question IS the
                 confirmation, so the run starts on that answer and this reports it. */}
