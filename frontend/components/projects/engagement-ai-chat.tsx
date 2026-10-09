@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { Send, Loader2, Sparkles, Copy, Check, RotateCcw, History, X, ThumbsUp, ThumbsDown, ClipboardList, Square, Clock } from 'lucide-react'
 import { ASSISTANT } from '@/lib/ai/assistant'
 import { Brio } from '@/components/ui/brio'
@@ -8,6 +8,7 @@ import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import { fetchWithTimeout, AI_TIMEOUT_MS, AiTimeoutError, AiAbortedError } from '@/lib/ai/fetch-timeout'
 import { StreamingText } from '@/components/ui/streaming-text'
 import { ChatMarkdown } from '@/components/ui/chat-markdown'
+import { readThread, writeThread } from '@/lib/ai/chat-thread-store'
 import { ElapsedTime } from '@/components/ui/elapsed-time'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { getChatHistory, recordChatQuestion, clearChatHistory, type ChatHistoryEntry } from '@/lib/ai/chat-history'
@@ -18,6 +19,12 @@ import { buildChatTranscript } from '@/lib/ai/chat-transcript'
 import { buildChatSuggestions } from '@/lib/ai/chat-suggestions'
 import { isObviouslyOutOfScope, OUT_OF_SCOPE_REPLY, parseChatReply } from '@/lib/ai/engagement-chat'
 import type { EngagementInsightsResponse } from '@/lib/insights/engagement-insights'
+
+/** What a panel rendered inside the thread can do to it. */
+export interface ChatThreadApi {
+    /** Appends a turn. Persisted and rendered exactly like a typed question or a streamed answer. */
+    append: (role: 'user' | 'assistant', content: string) => void
+}
 
 interface Message {
     role: 'user' | 'assistant'
@@ -239,6 +246,8 @@ export function EngagementAiChat({
     placeholder,
     emptyStateNote,
     capabilityNote,
+    surface = 'overview',
+    threadRef,
 }: {
     projectId: string
     /** Insights payload the page already holds; drives data-aware suggestions. */
@@ -295,10 +304,64 @@ export function EngagementAiChat({
      * them.
      */
     capabilityNote?: React.ReactNode
+    /**
+     * Which page this panel is on, for thread persistence.
+     *
+     * Overview and Files hold different conversations about the same engagement, so they keep
+     * separate threads — see `lib/ai/chat-thread-store.ts`.
+     */
+    surface?: string
+    /**
+     * Handed a way to post turns into this thread.
+     *
+     * An agent confirmation is a question the assistant asked and an answer the user gave, so it
+     * belongs in the conversation like any other exchange — visible in the record, scrollable, and
+     * persisted with everything else. Without this the answers lived as state inside the panel and
+     * vanished on reload, leaving a thread that showed the review happening but not what was
+     * decided.
+     */
+    threadRef?: React.MutableRefObject<ChatThreadApi | null>
 }) {
     const [messages, setMessages] = useState<Message[]>([])
+
+    /**
+     * Restores the thread on mount, so it survives navigation and reload within the session.
+     *
+     * In an effect rather than the initializer: this component renders on the server, where
+     * sessionStorage does not exist, and reading it during the first client render would mismatch
+     * the server's markup.
+     */
+    useEffect(() => {
+        const stored = readThread(projectId, surface)
+        if (stored.length > 0) {
+            setMessages(stored)
+            // Everything restored was produced before this page load, so the divider sits above it.
+            setRestoredCount(stored.length)
+        }
+    }, [projectId, surface])
+
+    /** How many leading turns came from storage, so the divider knows where "now" begins. */
+    const [restoredCount, setRestoredCount] = useState(0)
+
+    // Published once, so a panel rendered in `aboveThread` can write into the conversation it sits
+    // in. A ref rather than a callback prop because the consumer is a sibling, not a child.
+    useEffect(() => {
+        if (!threadRef) return
+        threadRef.current = {
+            append: (role, content) =>
+                setMessages((prev) => [...prev, { role, content, at: Date.now() }]),
+        }
+        return () => { threadRef.current = null }
+    }, [threadRef])
+
     const [input, setInput] = useState('')
     const [streaming, setStreaming] = useState(false)
+    // Persisted on every settled change. Not while streaming: a half-written answer would be
+    // stored truncated and restored with no sign it was cut off.
+    useEffect(() => {
+        if (streaming) return
+        writeThread(projectId, surface, messages)
+    }, [messages, streaming, projectId, surface])
     const [error, setError] = useState<string | null>(null)
     // Set when the API reports AI is unavailable (no key) — hides the panel entirely.
     const [unavailable, setUnavailable] = useState(false)
@@ -872,7 +935,23 @@ export function EngagementAiChat({
                 )}
 
                 {messages.map((m, i) => (
-                    <div key={i} className={m.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>
+                    <React.Fragment key={i}>
+                    {/* Marks where the restored thread ends and this visit begins.
+                        Restored answers were true when produced and may not be now — "3
+                        deliverables are overdue" was right an hour ago. Dropping them on reload
+                        loses the conversation; restoring them silently presents a stale figure as
+                        current. The time each turn was produced is shown, so the reader can judge
+                        rather than be told. */}
+                    {restoredCount > 0 && i === restoredCount && (
+                        <div className="flex items-center gap-2 py-1">
+                            <div className="h-px flex-1 bg-gray-200" />
+                            <span className="shrink-0 text-[10px] text-gray-400">
+                                Earlier · figures were current when asked
+                            </span>
+                            <div className="h-px flex-1 bg-gray-200" />
+                        </div>
+                    )}
+                    <div className={m.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>
                         <div
                             className={
                                 m.role === 'user'
@@ -956,6 +1035,7 @@ export function EngagementAiChat({
                             )}
                         </div>
                     </div>
+                    </React.Fragment>
                 ))}
 
                 {error && <p className="text-xs text-red-600">{error}</p>}

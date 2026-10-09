@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown, GripVertical } from 'lucide-react'
-import { EngagementAiChat } from '@/components/projects/engagement-ai-chat'
+import { EngagementAiChat, type ChatThreadApi } from '@/components/projects/engagement-ai-chat'
 import { Brio } from '@/components/ui/brio'
 import type { EngagementInsightsResponse } from '@/lib/insights/engagement-insights'
 
@@ -135,6 +135,8 @@ export function FloatingAiChat({
     defaultOpen = false,
     title,
     aboveThread,
+    surface,
+    threadRef,
     suggestionsOverride,
     suggestionActions,
     placeholder,
@@ -153,6 +155,10 @@ export function FloatingAiChat({
     title?: string
     /** Agent output rendered inside the thread — see EngagementAiChat. */
     aboveThread?: React.ReactNode
+    /** Which page this is, so each keeps its own persisted thread. */
+    surface?: string
+    /** Lets `aboveThread` post turns into the conversation — see EngagementAiChat. */
+    threadRef?: React.MutableRefObject<ChatThreadApi | null>
     /** Starting prompts for the host page, replacing the engagement-derived set. */
     suggestionsOverride?: string[]
     /** An action chip for the suggestion row — see EngagementAiChat. */
@@ -626,6 +632,8 @@ export function FloatingAiChat({
                 suggestionsOverride={suggestionsOverride}
                 suggestionActions={suggestionActions}
                 aboveThread={aboveThread}
+                surface={surface}
+                threadRef={threadRef}
                 placeholder={placeholder}
                 emptyStateNote={emptyStateNote}
                 capabilityNote={capabilityNote}

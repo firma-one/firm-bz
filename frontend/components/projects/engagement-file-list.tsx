@@ -4,6 +4,7 @@ import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMe
 import { createPortal } from 'react-dom'
 import { FloatingAiChat } from '@/components/projects/floating-ai-chat'
 import { FilesAgentPanel, type FilesAgentReview } from '@/components/projects/files-agent-panel'
+import type { ChatThreadApi } from '@/components/projects/engagement-ai-chat'
 import { FilesScaffoldPanel, FilesScaffoldTrigger } from '@/components/projects/files-scaffold-panel'
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
@@ -546,6 +547,18 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
 
     /** Whether the folder-structure interview is open. */
     const [scaffoldOpen, setScaffoldOpen] = useState(false)
+
+    /**
+     * The chat thread, so the agent panels can write their exchanges into it.
+     *
+     * Published by the chat and consumed by its siblings in `aboveThread`, which is why it is a
+     * ref rather than a prop: they are not children of the chat, they render inside it.
+     */
+    const chatThread = useRef<ChatThreadApi | null>(null)
+    const postToThread = useCallback(
+        (role: 'user' | 'assistant', content: string) => chatThread.current?.append(role, content),
+        [],
+    )
 
     /**
      * Refreshes the folder the user is looking at, so applied renames and moves appear without a
@@ -3476,6 +3489,8 @@ const handleRefresh = async () => {
                     // review's report and its questions render IN THE THREAD, where any other
                     // answer would — not in a band above the panel, which put output above the
                     // header that introduces it.
+                    surface="files"
+                    threadRef={chatThread}
                     aboveThread={
                         agentReview || scaffoldOpen ? (
                             <>
@@ -3486,6 +3501,7 @@ const handleRefresh = async () => {
                                         review={agentReview}
                                         setReview={setAgentReview}
                                         onApplied={refreshCurrentFolder}
+                                        onThreadTurn={postToThread}
                                     />
                                 )}
                                 <FilesScaffoldPanel
