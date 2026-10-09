@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
 import { sendPushToUser } from '@/lib/push'
+import { isAgentUserId } from '@/lib/ai/files-agent/agent-identity'
 
 /**
  * Shared dispatch helpers for the per-event notification toggles in Firm Settings
@@ -29,6 +30,11 @@ export type EventNotificationRow = {
  * Never throws — logs and swallows.
  */
 export async function createEventNotifications(rows: EventNotificationRow[]): Promise<void> {
+  // Agents are members for permission and attribution, which means they appear in recipient lists
+  // computed from membership — and some of those lists apply no role filter at all. Dropping them
+  // here rather than at each of the ~15 call sites means a new sender cannot forget: there is no
+  // inbox behind an agent id, and a notification written for one would never be read or cleared.
+  rows = rows.filter((row) => !isAgentUserId(row.userId))
   if (rows.length === 0) return
   try {
     await prisma.notification.createMany({
@@ -63,6 +69,9 @@ export async function sendEventEmailToUser(
   userId: string,
   render: () => { subject: string; html: string }
 ): Promise<void> {
+  // Same reason as above, and more pointed: an agent has no email address at all, so this would
+  // resolve to nothing and send nowhere — but only after doing the admin lookup to find that out.
+  if (isAgentUserId(userId)) return
   try {
     const { createAdminClient } = await import('@/utils/supabase/admin')
     const { sendEmail } = await import('@/lib/email')

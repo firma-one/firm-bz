@@ -39,6 +39,16 @@ export const adminScripts: AdminScript[] = [
       'members who are already tenant-internal. Safe to run multiple times.',
     run: () => import('./onedrive-guest-backfill').then((m) => m.run()),
   },
+  {
+    id: 'brio-member-backfill',
+    name: 'Brio PMO Member Backfill',
+    description:
+      'Provisions the Brio PMO agent account for each firm and adds it as a firm member and to '
+      + 'every engagement, so its file operations are attributable in the Audit tab. The account '
+      + 'is a locked Supabase user on a no-inbox domain with sign-in banned. New firms and '
+      + 'engagements get this automatically. Skips what already has it. Safe to run multiple times.',
+    run: () => import('./brio-member-backfill').then((m) => m.run()),
+  },
 ]
 
 export function findScript(id: string): AdminScript | undefined {

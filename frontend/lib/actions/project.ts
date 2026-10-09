@@ -1,7 +1,7 @@
 'use server'
 
 import { prisma } from '@/lib/prisma'
-import { agentUserId } from '@/lib/ai/files-agent/agent-identity'
+import { ensureFirmAgentUser } from '@/lib/ai/files-agent/agent-identity'
 import { type EngagementStatus, DocumentSharingPermissionStatus } from '@prisma/client'
 import { createClient as createSupabaseClient } from '@/utils/supabase/server'
 import { upsertFollowUpReminder } from '@/lib/actions/user-reminders'
@@ -198,25 +198,34 @@ export async function createEngagement(firmSlug: string, clientSlug: string, dat
             })
         }
 
-        // Brio joins as a member so its file operations are attributable to it rather than to the
-        // lead who approved them — the Audit tab renders by actor, and a flag in the metadata
-        // would read as the lead's own work.
-        //
-        // It is not a Supabase auth user: there is no account here to sign in to. `eng_admin`
-        // because file mutations are gated on `project:can_manage`; the identity resolver is what
-        // makes it render as "Brio PMO" wherever members and actors are listed.
-        await tx.engagementMember.create({
-            data: {
-                engagementId: project.id,
-                userId: agentUserId(firm.id),
-                role: 'eng_admin',
-                createdBy: user.id,
-                updatedBy: user.id,
-            }
-        })
-
         return project
     })
+
+    // Brio joins the engagement so its file operations are attributable to it rather than to the
+    // lead who approved them — the Audit tab renders by actor, and a flag in the metadata would
+    // read as the lead's own work.
+    //
+    // The firm-level membership is what actually grants access; this row is what puts Brio in the
+    // engagement's Members tab, which reads EngagementMember specifically.
+    //
+    // Outside the transaction and non-fatal: an engagement that exists without its agent is
+    // repairable by the backfill, while one that could not be created at all is not.
+    try {
+        const agentId = await ensureFirmAgentUser(firm.id)
+        if (agentId) {
+            await prisma.engagementMember.create({
+                data: {
+                    engagementId: newProject.id,
+                    userId: agentId,
+                    role: 'eng_admin',
+                    createdBy: user.id,
+                    updatedBy: user.id,
+                },
+            })
+        }
+    } catch (error) {
+        logger.error('Failed to add agent to engagement', error as Error, 'Agent', { engagementId: newProject.id })
+    }
 
     // 7. Google Drive folder structure — required when a connector exists; failure rolls back the engagement
     const { connectorId } = await resolveClientConnector(client.id)

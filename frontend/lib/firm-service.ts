@@ -1,4 +1,5 @@
 import { prisma } from './prisma'
+import { ensureFirmAgentUser } from '@/lib/ai/files-agent/agent-identity'
 import { User } from '@supabase/supabase-js'
 import { logger } from './logger'
 import { assertWithinFirmGroupCap } from '@/lib/billing/effective-billing-caps'
@@ -151,6 +152,33 @@ export class FirmService {
         include: { members: true, group: { select: { slug: true } } },
       })
     })
+
+    // Brio joins as a chief of staff to the firm admin: it acts on the admin's authority, across
+    // the firm, and is a known member rather than a hidden tool. firm_admin because
+    // `checkProjectPermission` falls back to firm-level personas, so one row grants access to
+    // every client and engagement without a row in each — which is what firm-level agentic work
+    // will need, not just today's per-engagement file operations.
+    //
+    // After the transaction, not inside it: provisioning the auth account is an external call
+    // that is not transactional, and holding a database transaction open across it would be the
+    // wrong trade. A failure here leaves a working firm without an agent, which the backfill
+    // script repairs — a firm that cannot be created at all would be far worse.
+    const agentId = await ensureFirmAgentUser(id)
+    if (agentId) {
+      await (prisma as any).firmMember.create({
+        data: {
+          userId: agentId,
+          firmId: id,
+          role: 'firm_admin',
+          membershipType: 'internal',
+          isDefault: false,
+          createdBy: data.userId,
+          updatedBy: data.userId,
+        },
+      }).catch((error: unknown) => {
+        logger.error('Failed to add firm agent as member', error as Error, 'Agent', { firmId: id })
+      })
+    }
 
     return this.mapToInterface(firm)
   }

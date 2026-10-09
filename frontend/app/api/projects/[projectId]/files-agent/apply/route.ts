@@ -6,7 +6,7 @@ import { getStorageAdapter } from '@/lib/connectors/registry'
 import { googleDriveConnector } from '@/lib/google-drive-connector'
 import { moveOneDriveFile, renameOneDriveFile } from '@/lib/connectors/adapters/onedrive-file-ops'
 import { verifyApprovalToken } from '@/lib/ai/files-agent/approval'
-import { agentUserId } from '@/lib/ai/files-agent/agent-identity'
+import { ensureFirmAgentUser } from '@/lib/ai/files-agent/agent-identity'
 import type { Proposal } from '@/lib/ai/files-agent/tools'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { safeInngestSend } from '@/lib/inngest/client'
@@ -88,7 +88,11 @@ export async function POST(
             return NextResponse.json({ error: 'No storage connector for this engagement' }, { status: 404 })
         }
 
-        const actorId = agentUserId(ctx.orgId)
+        // Attributed to Brio, not to the lead who approved: the lead decided, the agent acted,
+        // and a reader of the Audit tab should be able to tell those apart. Falls back to the
+        // approving user when the agent account cannot be resolved — an unattributed change is
+        // worse than one attributed to the person who authorised it.
+        const actorId = (await ensureFirmAgentUser(ctx.orgId)) ?? user.id
         const outcomes: ApplyOutcome[] = []
 
         // Folders first: a move may target a folder this batch creates, and a destination that
