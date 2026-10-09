@@ -1,14 +1,17 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { Send, Loader2, Sparkles, Copy, Check, RotateCcw, History, X, ThumbsUp, ThumbsDown, ClipboardList, Square } from 'lucide-react'
+import { Send, Loader2, Sparkles, Copy, Check, RotateCcw, History, X, ThumbsUp, ThumbsDown, ClipboardList, Square, Clock } from 'lucide-react'
 import { ASSISTANT } from '@/lib/ai/assistant'
 import { Brio } from '@/components/ui/brio'
 import { RelativeDateTime } from '@/components/ui/relative-date-time'
 import { fetchWithTimeout, AI_TIMEOUT_MS, AiTimeoutError, AiAbortedError } from '@/lib/ai/fetch-timeout'
 import { StreamingText } from '@/components/ui/streaming-text'
+import { ChatMarkdown } from '@/components/ui/chat-markdown'
+import { ElapsedTime } from '@/components/ui/elapsed-time'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { getChatHistory, recordChatQuestion, clearChatHistory, type ChatHistoryEntry } from '@/lib/ai/chat-history'
+import { formatRelativeTime, formatDateTimeWithTZ } from '@/lib/utils'
 import { reasonsFor, type FeedbackReason } from '@/lib/ai/feedback-reasons'
 import { useToast } from '@/components/ui/toast'
 import { buildChatTranscript } from '@/lib/ai/chat-transcript'
@@ -230,6 +233,12 @@ export function EngagementAiChat({
     engagementName,
     clientName,
     chrome = 'card',
+    suggestionsOverride,
+    suggestionActions,
+    aboveThread,
+    placeholder,
+    emptyStateNote,
+    capabilityNote,
 }: {
     projectId: string
     /** Insights payload the page already holds; drives data-aware suggestions. */
@@ -243,6 +252,49 @@ export function EngagementAiChat({
      * borders read as a box inside a box.
      */
     chrome?: 'card' | 'floating'
+    /**
+     * Starting prompts supplied by the host page, replacing the engagement-derived set.
+     *
+     * The Files page needs questions about files, and has no insights payload to derive the
+     * engagement ones from anyway. Passed in rather than branched on inside, so this component
+     * stays unaware of which page it is on.
+     */
+    suggestionsOverride?: string[]
+    /**
+     * Rendered as the last chip in the suggestion row.
+     *
+     * A caller-supplied ACTION, not a question — the Files page puts "Review file organization"
+     * here so it reads as one of the things you can ask for, in the place the eye already goes for
+     * them, rather than as a banner above the conversation.
+     */
+    suggestionActions?: React.ReactNode
+    /**
+     * Agent output, rendered INSIDE the thread at the top.
+     *
+     * Not above the panel: a review rendered outside the conversation appeared before the "Ask
+     * Brio" header that introduces it, so the panel read as output-then-title. Anything the
+     * assistant produces belongs in the message area, below that header and scrolling with the
+     * rest of the conversation.
+     */
+    aboveThread?: React.ReactNode
+    /**
+     * Overrides the composer's prompt text.
+     *
+     * The default names the engagement, which is right on Overview and wrong on Files — a panel
+     * that answers questions about folders and due dates should say so, since the placeholder is
+     * the one hint a user reads before typing anything.
+     */
+    placeholder?: string
+    /** Replaces the default empty-state line where a surface needs different wording. */
+    emptyStateNote?: React.ReactNode
+    /**
+     * One line in the header saying what this panel can do here.
+     *
+     * Page-specific, because the answer differs: on Overview Brio only answers questions, while on
+     * Files it can also reorganize and scaffold. A single hardcoded line would be wrong on one of
+     * them.
+     */
+    capabilityNote?: React.ReactNode
 }) {
     const [messages, setMessages] = useState<Message[]>([])
     const [input, setInput] = useState('')
@@ -314,7 +366,17 @@ export function EngagementAiChat({
     // After an answer the model's own follow-ups win, because only it knows what it just said. They
     // arrive on a sentinel line in the same stream, so they cost no extra call. Falling back to the
     // data-driven list keeps the row populated if a reply omits the marker.
-    const dataSuggestions = useMemo(() => buildChatSuggestions(data, asked), [data, asked])
+    //
+    // `suggestionsOverride` is honoured even when EMPTY. A caller that supplies its own prompts
+    // asynchronously (Files fetches them server-side) passes `[]` while they load, and showing the
+    // engagement set in that gap made the chips visibly swap out from under the user. An absent
+    // override — Overview, which has no prompts of its own — still gets the engagement chips.
+    const dataSuggestions = useMemo(
+        () => suggestionsOverride
+            ? suggestionsOverride.filter((q) => !asked.has(q))
+            : buildChatSuggestions(data, asked),
+        [suggestionsOverride, data, asked],
+    )
 
     const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant')
     const modelFollowUps = useMemo(() => {
@@ -624,12 +686,26 @@ export function EngagementAiChat({
         <div className={`relative bg-white flex flex-col overflow-hidden ${
             chrome === 'floating' ? 'min-h-0 flex-1 rounded-b-lg' : 'border border-primary/25 rounded shadow-sm'
         }`}>
-            <div className="flex items-center gap-2 border-b border-primary/15 bg-primary/5 px-4 py-3">
-                {/* No separate sparkle: the Brio mark already carries one, and two side by side
-                    read as two different things rather than one brand. */}
-                <span className="text-sm font-semibold text-gray-900">Ask</span>
-                <Brio className="text-sm text-primary" />
-                <span className="ml-auto text-[10px] uppercase tracking-wider text-primary/70">
+            <div className="flex items-start gap-2 border-b border-primary/15 bg-primary/5 px-4 py-3">
+                <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                        {/* No separate sparkle: the Brio mark already carries one, and two side by
+                            side read as two different things rather than one brand. */}
+                        <span className="text-sm font-semibold text-gray-900">Ask</span>
+                        <Brio className="text-sm text-primary" />
+                    </div>
+                    {/* What this panel can DO, under the name rather than in the thread.
+                        As an empty-state line it was the first thing in the conversation and the
+                        first thing pushed out of it — the one moment a user wants to know what is
+                        on offer is before they have asked anything, and it vanished the instant
+                        they did. In the header it stays. */}
+                    {capabilityNote && (
+                        <p className="mt-0.5 text-[11px] leading-snug text-gray-500">
+                            {capabilityNote}
+                        </p>
+                    )}
+                </div>
+                <span className="shrink-0 pt-0.5 text-[10px] uppercase tracking-wider text-primary/70">
                     This engagement
                 </span>
                 {/* Only offered once there is something to recall. Questions survive reload;
@@ -715,20 +791,48 @@ export function EngagementAiChat({
                         </button>
                     </div>
                     {/* Takes the space the overlay has rather than a fixed ceiling, so a tall
-                        panel shows more of the ten entries and a short one still scrolls. */}
-                    <div className="hover-scrollbar flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
-                        {history.map((h) => (
-                            <button
-                                key={`${h.question}-${h.askedAt}`}
-                                type="button"
-                                onClick={() => ask(h.question)}
-                                disabled={streaming}
-                                className="truncate rounded px-1.5 py-1 text-left text-xs text-gray-600 transition-colors hover:bg-white hover:text-primary disabled:opacity-50"
-                            >
-                                {h.question}
-                            </button>
-                        ))}
-                    </div>
+                        panel shows more of the ten entries and a short one still scrolls.
+
+                        Chips, matching the suggestion row below: as plain stacked lines these read
+                        as prose rather than as things to click, and a truncated line with no border
+                        looked like broken text instead of a shortened label. Wrapping chips make
+                        each entry a discrete target, and the short ones share a row instead of each
+                        taking a full line. */}
+                    <TooltipProvider delayDuration={150}>
+                        <div className="hover-scrollbar flex min-h-0 flex-1 flex-wrap content-start gap-1.5 overflow-y-auto">
+                            {history.map((h) => (
+                                // Same Radix tooltip as the suggestion chips: the questions a user
+                                // typed are often longer than the panel is wide, so truncation is
+                                // the norm here and the full text has to stay reachable on hover.
+                                <Tooltip key={`${h.question}-${h.askedAt}`}>
+                                    <TooltipTrigger asChild>
+                                        <button
+                                            type="button"
+                                            onClick={() => ask(h.question)}
+                                            disabled={streaming}
+                                            className="flex max-w-full items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 py-1.5 pl-2.5 pr-3 text-left text-xs text-gray-600 transition-colors hover:border-primary/30 hover:bg-primary/5 hover:text-primary disabled:opacity-50"
+                                        >
+                                            {/* When it was last asked, inside the chip rather than
+                                                on a second line: these answers are regenerated
+                                                against live data, so how stale the previous one was
+                                                is the thing that decides whether to re-ask. */}
+                                            <Clock className="h-3 w-3 shrink-0 text-gray-400" aria-hidden />
+                                            <span className="shrink-0 text-[10px] tabular-nums text-gray-400">
+                                                {formatRelativeTime(new Date(h.askedAt))}
+                                            </span>
+                                            <span className="truncate">{h.question}</span>
+                                        </button>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="max-w-xs">
+                                        {h.question}
+                                        <span className="mt-0.5 block text-[10px] opacity-70">
+                                            Last asked {formatDateTimeWithTZ(new Date(h.askedAt))}
+                                        </span>
+                                    </TooltipContent>
+                                </Tooltip>
+                            ))}
+                        </div>
+                    </TooltipProvider>
                     <p className="mt-1.5 shrink-0 text-[10px] text-gray-400">
                         Answers are not stored — picking one asks it again against current data.
                     </p>
@@ -748,9 +852,22 @@ export function EngagementAiChat({
                         : 'max-h-[480px] min-h-[180px]'
                 }`}
             >
-                {messages.length === 0 && (
+                {aboveThread}
+
+                {/* Shown only where the header does not already say what this panel does.
+                    "Without your consent" rather than a flat "can't change anything": the latter
+                    was true when Brio only answered questions and became false the moment it could
+                    rename a file. The promise worth making is not that it cannot act — it is that
+                    it never acts unasked, which holds on every surface and stays true as the agent
+                    gains more it can do. */}
+                {messages.length === 0 && !aboveThread && !capabilityNote && (
                     <p className="text-sm text-gray-500">
-                        <Brio /> answers only from this engagement&apos;s data, and can&apos;t change anything.
+                        {emptyStateNote ?? (
+                            <>
+                                <Brio /> answers from this engagement&apos;s data, and never changes
+                                anything without your consent.
+                            </>
+                        )}
                     </p>
                 )}
 
@@ -764,8 +881,18 @@ export function EngagementAiChat({
                                     // instead of the answer. Kept light enough that black text
                                     // clears the 4.5:1 contrast minimum — a genuinely dark grey
                                     // would sit near 1.6:1 and be unreadable.
-                                    ? 'bg-gray-200 text-gray-900 text-sm rounded-lg rounded-br-sm px-3 py-2 max-w-[85%]'
-                                    : 'bg-gray-50 border border-gray-100 text-gray-800 text-sm rounded-lg rounded-bl-sm px-3 py-2 max-w-[85%] whitespace-pre-line leading-relaxed'
+                                    // An absolute ceiling as well as the percentage: 85% of a
+                                    // resized panel is still 85%, so without it a widened panel
+                                    // produces bubbles of 150-character lines. The percentage keeps
+                                    // bubbles off the opposite edge at narrow widths; the rem value
+                                    // keeps the line readable at wide ones.
+                                    ? 'bg-gray-200 text-gray-900 text-sm rounded-lg rounded-br-sm px-3 py-2 max-w-[85%] sm:max-w-[38rem]'
+                                    // The ASSISTANT bubble takes the full width, and the cap moves
+                                    // inside it (see ChatMarkdown): its prose is capped at the same
+                                    // measure, but a table must be free to use the width the user
+                                    // widened the panel for. Capping the bubble would make the
+                                    // table scroll inside a 38rem box in a 56rem panel.
+                                    : 'bg-gray-50 border border-gray-100 text-gray-800 text-sm rounded-lg rounded-bl-sm px-3 py-2 w-full whitespace-pre-line leading-relaxed'
                             }
                         >
                             {m.content ? (
@@ -775,14 +902,29 @@ export function EngagementAiChat({
                                 // Assistant text is parsed rather than shown raw: the reply carries
                                 // its follow-up questions after a sentinel, and parseChatReply also
                                 // hides a half-streamed marker so "<<FOLL" never flashes mid-answer.
-                                <StreamingText
-                                    text={m.role === 'assistant' ? parseChatReply(m.content).answer : m.content}
-                                    animate={m.role === 'assistant' && streaming && i === messages.length - 1}
-                                />
+                                m.role === 'assistant' && !(streaming && i === messages.length - 1) ? (
+                                    // Settled assistant turns render as Markdown, so an answer can
+                                    // carry a table or a list instead of needing a purpose-built
+                                    // card per kind of structured output.
+                                    <ChatMarkdown content={parseChatReply(m.content).answer} />
+                                ) : (
+                                    // Still streaming, or a user turn. Markdown is not rendered
+                                    // mid-stream: a half-written table is a wall of pipes, and the
+                                    // word animation needs plain text to tokenise.
+                                    <StreamingText
+                                        text={m.role === 'assistant' ? parseChatReply(m.content).answer : m.content}
+                                        animate={m.role === 'assistant' && streaming && i === messages.length - 1}
+                                    />
+                                )
                             ) : (
+                                // Elapsed time but no commentary: an answer is one model call, so
+                                // there are no steps to narrate — listing them would be inventing
+                                // detail. The timer still earns its place, since it is what tells a
+                                // waiting user whether a slow answer is slow or stuck.
                                 <span className="inline-flex items-center gap-1.5 text-gray-400">
                                     <Loader2 className="w-3 h-3 animate-spin" />
                                     <Brio /> is thinking
+                                    <ElapsedTime className="text-[10px] text-gray-400" />
                                 </span>
                             )}
                             {/* Says plainly that the answer is incomplete. Without this a stopped
@@ -824,12 +966,17 @@ export function EngagementAiChat({
                 meant clicking one destroyed the other three with no way back short of a reload —
                 turning a discovery aid into a single use. Each chip disappears once asked, so the
                 row stays useful rather than repeating what is already answered above. */}
-            {suggestions.length > 0 && !streaming && (
+            {(suggestions.length > 0 || suggestionActions) && !streaming && (
                 // Wraps rather than scrolling horizontally. A scroll row clipped the second chip
                 // mid-word with no scrollbar and no affordance, so the options simply looked
                 // broken; at this column width two per line is the honest layout.
                 <TooltipProvider delayDuration={150}>
-                    <div className="flex min-w-0 flex-wrap gap-1.5 px-4 pb-2.5 pt-0.5">
+                    {/* A rule above the chips, marking where the conversation ends and the
+                        controls begin. Without it the row sat flush against the scrolling thread
+                        and read as the tail of the last answer rather than a set of actions.
+                        Hairline, not a heavy divider: it separates two things that belong to the
+                        same panel. */}
+                    <div className="flex min-w-0 flex-wrap gap-1.5 border-t border-gray-100 px-4 pb-2.5 pt-2.5">
                         {suggestions.map((s) => (
                             // The shared Radix tooltip, not `title=`: the native one is slow to
                             // appear, unstyled, and sits outside the product's visual language.
@@ -847,6 +994,7 @@ export function EngagementAiChat({
                                 </TooltipContent>
                             </Tooltip>
                         ))}
+                        {suggestionActions}
                     </div>
                 </TooltipProvider>
             )}
@@ -876,7 +1024,7 @@ export function EngagementAiChat({
                             void ask(input)
                         }
                     }}
-                    placeholder={`Ask ${ASSISTANT.name} about this engagement…`}
+                    placeholder={placeholder ?? `Ask ${ASSISTANT.name} about this engagement…`}
                     disabled={streaming}
                     maxLength={1000}
                     rows={1}

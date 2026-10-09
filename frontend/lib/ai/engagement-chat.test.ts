@@ -99,7 +99,7 @@ describe('isObviouslyOutOfScope', () => {
         for (const q of [
             "What's overdue right now?",
             'Which deliverables are at risk?',
-            'Summarise where this engagement stands',
+            'Summarize where this engagement stands',
             'Can you explain the health score?',
             'Why is the health score 85?',
             'What needs my attention this week?',

@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { logger } from '@/lib/logger'
 
 /**
- * Recent activity for one engagement, summarised from the audit log for the AI chat.
+ * Recent activity for one engagement, summarized from the audit log for the AI chat.
  *
  * ## What this sends, and what it deliberately does not
  *
@@ -23,7 +23,7 @@ import { logger } from '@/lib/logger'
  */
 
 /**
- * How far back the chat may summarise engagement activity, in days.
+ * How far back the chat may summarize engagement activity, in days.
  *
  * **The single place to change this window.** Exported so the value is adjustable from one spot
  * and assertable in tests, rather than being a number buried in a query.

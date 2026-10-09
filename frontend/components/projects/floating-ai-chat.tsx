@@ -68,6 +68,45 @@ const EXIT_MS = 200
 /** Collapsed state is per engagement: whether you are mid-conversation is engagement-specific. */
 const openKeyFor = (projectId: string) => `fm_ai_chat_open_${projectId}`
 
+/**
+ * Panel height in px, resizable by dragging the top edge.
+ *
+ * A fixed height keeps the window from shifting under you as messages arrive, which is right for a
+ * conversation but wrong for the occasional answer that is MUCH larger than the rest — a review
+ * with a summary table and a proposal list has no business being read through a 32rem keyhole.
+ * Auto-growing on content would reintroduce the jumping; letting the user set the height once does
+ * not, and they keep it.
+ *
+ * Height, not width: the panel is deliberately narrow for line length (see the panel comment), so
+ * widening it would make reading worse. Height is the axis where more is simply more.
+ */
+const DEFAULT_HEIGHT_PX = 512
+/**
+ * Panel WIDTH in px, resizable by dragging the panel's inner edge.
+ *
+ * The default is the floor, as with height: narrower than this and the suggestion chips wrap to one
+ * per line and the composer stops holding a sentence. Widening is for content the default cannot
+ * show well — a four-column table in a 23rem column is unreadable whatever the prose does.
+ *
+ * Capped rather than unbounded: past about half a wide screen the panel stops being a panel and
+ * starts covering the file list it is commenting on.
+ */
+const MIN_WIDTH_PX = PANEL_WIDTH_REM * 16
+const MAX_WIDTH_PX = 900
+const WIDTH_KEY = 'fm_ai_chat_width'
+/**
+ * The floor is the DEFAULT: the panel grows, never shrinks.
+ *
+ * A shorter panel is not a smaller version of this one, it is a worse one — the thread, the
+ * suggestion row and the composer all have to fit, and below the default the conversation is
+ * reduced to a couple of visible lines while the chrome stays the same size. Resizing exists for
+ * the answer that is too big for the default, which is a one-way need.
+ */
+const MIN_HEIGHT_PX = DEFAULT_HEIGHT_PX
+/** Leaves room for the top bar, so the panel cannot be dragged up behind it. */
+const HEIGHT_VIEWPORT_MARGIN = 96
+const HEIGHT_KEY = 'fm_ai_chat_height'
+
 function readStored(key: string): string | null {
     try {
         return window.localStorage.getItem(key)
@@ -90,9 +129,17 @@ export function FloatingAiChat({
     data,
     engagementName,
     clientName,
+    // Collapsed everywhere. The assistant is never the reason a page was opened, so it starts as a
+    // launcher and waits to be asked for; a panel that opens itself covers the content the user
+    // actually came for.
     defaultOpen = false,
     title,
-    extra,
+    aboveThread,
+    suggestionsOverride,
+    suggestionActions,
+    placeholder,
+    emptyStateNote,
+    capabilityNote,
 }: {
     projectId: string
     data?: EngagementInsightsResponse | null
@@ -104,14 +151,18 @@ export function FloatingAiChat({
      * conversation.
      */
     title?: string
-    /**
-     * Page-specific content shown above the conversation — the Files page uses it for the
-     * organisation review and its approval list.
-     *
-     * A slot rather than a prop per feature: the chat below it is identical everywhere, and
-     * threading Files-specific state through the chat component would couple the two.
-     */
-    extra?: React.ReactNode
+    /** Agent output rendered inside the thread — see EngagementAiChat. */
+    aboveThread?: React.ReactNode
+    /** Starting prompts for the host page, replacing the engagement-derived set. */
+    suggestionsOverride?: string[]
+    /** An action chip for the suggestion row — see EngagementAiChat. */
+    suggestionActions?: React.ReactNode
+    /** Composer prompt text — see EngagementAiChat. */
+    placeholder?: string
+    /** Replaces the default empty-state line where it is not accurate. */
+    emptyStateNote?: React.ReactNode
+    /** One line in the header saying what this panel can do here — see EngagementAiChat. */
+    capabilityNote?: React.ReactNode
     /**
      * Whether the panel starts open before the user has expressed a preference. Overview passes
      * true — the assistant leads that page today and collapsing it by default would re-bury it.
@@ -221,8 +272,105 @@ export function FloatingAiChat({
         return () => window.removeEventListener('resize', measure)
     }, [])
 
-    /** Panel width in pixels, for the docked-position arithmetic. */
-    const panelPx = PANEL_WIDTH_REM * 16
+    const [width, setWidth] = useState(MIN_WIDTH_PX)
+    useEffect(() => {
+        const stored = Number(readStored(WIDTH_KEY))
+        if (Number.isFinite(stored) && stored >= MIN_WIDTH_PX) setWidth(Math.min(stored, MAX_WIDTH_PX))
+    }, [])
+
+    const [resizingWidth, setResizingWidth] = useState(false)
+
+    /**
+     * Panel width in pixels, for the docked-position arithmetic.
+     *
+     * The LIVE width, not the constant: a right-docked panel is positioned by `left`, so a stale
+     * width here would leave it hanging off the gutter the moment it was resized — the same class
+     * of bug as computing the dock from 100vw.
+     */
+    const panelPx = width
+
+    /**
+     * Panel height, user-set by dragging the top edge and remembered across engagements.
+     *
+     * Read on mount rather than in the initializer: this component renders on the server, where
+     * localStorage does not exist, and reading it during the first client render would mismatch
+     * the server's markup.
+     */
+    const [height, setHeight] = useState(DEFAULT_HEIGHT_PX)
+    useEffect(() => {
+        const stored = Number(readStored(HEIGHT_KEY))
+        if (Number.isFinite(stored) && stored >= MIN_HEIGHT_PX) setHeight(stored)
+    }, [])
+
+    /** Live height during a resize drag; null when idle. */
+    const [resizing, setResizing] = useState(false)
+
+    const startResizeWidth = useCallback((event: React.PointerEvent<HTMLElement>) => {
+        event.preventDefault()
+        const handle = event.currentTarget
+        handle.setPointerCapture(event.pointerId)
+        setResizingWidth(true)
+
+        // The panel is anchored at its DOCKED edge, so the free edge is the inner one: dragging it
+        // toward the middle of the screen grows the panel. Which direction that is depends on the
+        // dock, hence the sign flip — on the right the inner edge is the left one, so width
+        // increases as clientX decreases.
+        const startX = event.clientX
+        const startWidth = handle.closest('[data-ai-chat-panel]')?.getBoundingClientRect().width
+            ?? MIN_WIDTH_PX
+        const sign = side === 'right' ? -1 : 1
+
+        const clampWidth = (value: number) => Math.max(
+            MIN_WIDTH_PX,
+            Math.min(value, MAX_WIDTH_PX, document.documentElement.clientWidth - GUTTER * 2),
+        )
+
+        const onMove = (e: PointerEvent) =>
+            setWidth(clampWidth(startWidth + sign * (e.clientX - startX)))
+        const onUp = (e: PointerEvent) => {
+            const final = clampWidth(startWidth + sign * (e.clientX - startX))
+            setWidth(final)
+            writeStored(WIDTH_KEY, String(Math.round(final)))
+            setResizingWidth(false)
+            handle.removeEventListener('pointermove', onMove)
+            handle.removeEventListener('pointerup', onUp)
+        }
+        handle.addEventListener('pointermove', onMove)
+        handle.addEventListener('pointerup', onUp)
+    }, [side])
+
+    const startResize = useCallback((event: React.PointerEvent<HTMLElement>) => {
+        event.preventDefault()
+        const handle = event.currentTarget
+        handle.setPointerCapture(event.pointerId)
+        setResizing(true)
+
+        // The panel is anchored at the BOTTOM, so dragging the top edge upward must grow it:
+        // height increases as clientY decreases, which is why this subtracts rather than adds.
+        const startY = event.clientY
+        const startHeight = handle.closest('[data-ai-chat-panel]')?.getBoundingClientRect().height
+            ?? DEFAULT_HEIGHT_PX
+
+        // Max applied LAST, so on a viewport shorter than the default the floor still wins and the
+        // panel is never clamped to something smaller than it renders at. `max-h` on the element
+        // keeps it inside the window in that case.
+        const clampHeight = (value: number) => Math.max(
+            MIN_HEIGHT_PX,
+            Math.min(value, window.innerHeight - HEIGHT_VIEWPORT_MARGIN),
+        )
+
+        const onMove = (e: PointerEvent) => setHeight(clampHeight(startHeight - (e.clientY - startY)))
+        const onUp = (e: PointerEvent) => {
+            const final = clampHeight(startHeight - (e.clientY - startY))
+            setHeight(final)
+            writeStored(HEIGHT_KEY, String(Math.round(final)))
+            setResizing(false)
+            handle.removeEventListener('pointermove', onMove)
+            handle.removeEventListener('pointerup', onUp)
+        }
+        handle.addEventListener('pointermove', onMove)
+        handle.addEventListener('pointerup', onUp)
+    }, [])
 
     /**
      * The panel's left offset in pixels while a drag is in progress, null when idle.
@@ -318,10 +466,12 @@ export function FloatingAiChat({
                 /* Grows out of, and shrinks back into, the corner it is docked in, so opening
                    reads as the launcher becoming the panel rather than one thing being swapped
                    for another. */
+                /* No `height` here. The panel's user-set height belongs to the PANEL; applying it
+                   to the launcher stretched the pill into a tall rounded column the full height of
+                   the open panel. The launcher is sized by its own padding and content. */
                 style={{
                     transformOrigin: side === 'right' ? 'bottom right' : 'bottom left',
                     ...(side === 'right' ? { right: `${GUTTER + rightInset}px` } : { left: `${GUTTER}px` }),
-
                 }}
                 className={`fixed bottom-6 z-40 flex animate-in fade-in zoom-in-95 items-center gap-2 rounded-full border border-primary/20 bg-white py-2.5 pl-3 pr-4 shadow-lg duration-200 transition-shadow hover:shadow-xl hover:border-primary/40`}
                 aria-label="Open the engagement assistant"
@@ -355,6 +505,10 @@ export function FloatingAiChat({
                property means one transition. */
             data-ai-chat-panel
             style={{
+                height: `${height}px`,
+                // Width is a style, not a class: Tailwind extracts class names statically, so an
+                // interpolated `w-[...]` would never be generated.
+                width: `${width}px`,
                 transformOrigin: side === 'right' ? 'bottom right' : 'bottom left',
                 // Always positioned by `left`, which is what lets the dock change animate: swapping
                 // to `right` would mean the browser had no single property to interpolate and the
@@ -377,10 +531,14 @@ export function FloatingAiChat({
                floating window that resizes itself as you use it is unsettling to work in. Fixed
                box, scrolling contents.
 
+               The height is now the USER'S, set by dragging the top edge and remembered, because a
+               single fixed value cannot serve both a two-line answer and a file review carrying a
+               summary table and a proposal list. The window still never resizes itself.
+
                Width is a literal class, not interpolated: Tailwind extracts class names
                statically, so an interpolated `w-[...]` would never be generated. PANEL_WIDTH_REM
                must be kept in step with it. */
-            className={`fixed bottom-6 z-40 flex h-[32rem] max-h-[calc(100vh-6rem)] w-[23rem] max-w-[calc(100vw-3rem)] flex-col overflow-hidden rounded-lg border border-primary/25 bg-white shadow-2xl duration-200 ${
+            className={`fixed bottom-6 z-40 flex max-h-[calc(100vh-6rem)] ${resizing || resizingWidth ? 'select-none' : ''} max-w-[calc(100vw-3rem)] flex-col overflow-hidden rounded-lg border border-primary/25 bg-white shadow-2xl duration-200 ${
                 closing
                     // pointer-events-none so a fast click cannot land on a control in a panel that
                     // is on its way out.
@@ -390,6 +548,41 @@ export function FloatingAiChat({
                 dragging ? 'cursor-grabbing select-none' : 'transition-[left] duration-200 ease-out'
             }`}
         >
+            {/* Resize grip along the INNER vertical edge — left when docked right, right when
+                docked left. The docked edge is pinned to the gutter, so the inner one is the only
+                edge that can move; putting the handle on the outer edge would look draggable and
+                do nothing. */}
+            <div
+                onPointerDown={startResizeWidth}
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Drag to resize the assistant"
+                title="Drag to resize"
+                className={`absolute inset-y-0 z-10 w-1.5 cursor-ew-resize touch-none transition-colors ${
+                    side === 'right' ? 'left-0' : 'right-0'
+                } ${resizingWidth ? 'bg-primary/40' : 'hover:bg-primary/25'}`}
+            />
+
+            {/* Resize grip along the TOP edge, because the panel is anchored at the bottom: the top
+                edge is the one that can move. Four pixels tall with no visible weight until
+                hovered — a window chrome affordance should be findable by the cursor rather than
+                occupy the layout.
+
+                `touch-none` stops a touch drag from scrolling the page underneath instead of
+                resizing, which is what pointer capture alone does not prevent. */}
+            <div
+                onPointerDown={startResize}
+                role="separator"
+                aria-orientation="horizontal"
+                aria-label="Drag to resize the assistant"
+                title="Drag to resize"
+                // `n-resize`, not `ns-resize`: the panel only grows upward from its default, and a
+                // two-headed cursor would promise a direction that does nothing.
+                className={`absolute inset-x-0 top-0 z-10 h-1.5 cursor-n-resize touch-none transition-colors ${
+                    resizing ? 'bg-primary/40' : 'hover:bg-primary/25'
+                }`}
+            />
+
             {/* The panel's own header carries the title; this strip owns only window controls, so
                 the two never compete to name the thing. */}
             <div className="flex items-center gap-0.5 rounded-t-lg border-b border-primary/10 bg-primary/5 px-1.5 py-1">
@@ -423,12 +616,6 @@ export function FloatingAiChat({
                 </button>
             </div>
 
-            {extra ? (
-                <div className="border-b border-primary/10 bg-primary/[0.03] px-4 py-3">
-                    {extra}
-                </div>
-            ) : null}
-
             {/* Kept mounted while open so the thread, ratings and suggestions survive a dock flip. */}
             <EngagementAiChat
                 projectId={projectId}
@@ -436,6 +623,12 @@ export function FloatingAiChat({
                 engagementName={engagementName}
                 clientName={clientName}
                 chrome="floating"
+                suggestionsOverride={suggestionsOverride}
+                suggestionActions={suggestionActions}
+                aboveThread={aboveThread}
+                placeholder={placeholder}
+                emptyStateNote={emptyStateNote}
+                capabilityNote={capabilityNote}
             />
         </div>,
         document.body,

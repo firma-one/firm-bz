@@ -16,6 +16,7 @@ import {
     OUT_OF_SCOPE_REPLY,
 } from '@/lib/ai/engagement-chat'
 import { buildEngagementActivity } from '@/lib/ai/engagement-activity'
+import { buildFilesContext, loadEngagementFiles } from '@/lib/ai/files-context'
 import type { EngagementInsightsResponse } from '../insights/route'
 
 /**
@@ -104,10 +105,16 @@ export async function POST(
         // emails written by users.
         const activity = await buildEngagementActivity(projectId)
 
+        // File names reach the model here, which `buildEngagementContext` deliberately omits.
+        // The boundary moved when the Files agent appeared beside this chat: the assistant would
+        // report "2 duplicates exist" and be unable to name them while the button above it could.
+        // Still names and structure only — no document content, no comment bodies, no emails.
+        const files = buildFilesContext(await loadEngagementFiles(projectId))
+
         const context = buildEngagementContext(insights, {
             clientName: names?.client?.name,
             engagementName: names?.name,
-        }) + (activity ? `\n${activity}` : '')
+        }) + (activity ? `\n${activity}` : '') + (files ? `\n${files}` : '')
 
         // Gate and client in one call: over-budget throws before any tokens are spent.
         const scope = { firmId: ctx.firmId, userId: user.id, feature: 'chat' as const }
@@ -128,6 +135,10 @@ export async function POST(
             // session — do NOT add a timestamp of finer granularity to it, or every request will
             // miss. The 5-minute default TTL refreshes on each hit, so an active conversation
             // keeps the entry warm.
+            //
+            // The FILES listing is ordered deterministically for the same reason, so repeated
+            // turns render byte-identically. Uploading a file mid-conversation invalidates the
+            // entry once, which is correct: the next answer should see the new file.
             system: [
                 {
                     type: 'text' as const,

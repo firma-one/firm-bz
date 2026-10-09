@@ -7,7 +7,7 @@
  *
  * Safe to import from client components: this file holds no secrets and no SDK.
  */
-/** firmä brand green — the fixed colour for Brio on marketing, demo and other static surfaces. */
+/** firmä brand green — the fixed color for Brio on marketing, demo and other static surfaces. */
 export const BRIO_GREEN = '#049669'
 
 export const ASSISTANT = {
@@ -33,4 +33,13 @@ export const ASSISTANT_POLICY = {
         + 'by design.',
     /** Shown where generated text is awaiting a human before it goes anywhere. */
     reviewGate: 'Reviewed by a person before anyone else sees it.',
+    /**
+     * The promise on surfaces where Brio CAN act — the Files agent renames, moves and creates.
+     *
+     * "Never without your consent" rather than "cannot change anything". The latter was true while
+     * Brio only answered questions, and became false the moment it could rename a file; a promise
+     * that expires when the product grows is worse than none. What holds, and is designed to keep
+     * holding, is that nothing changes unasked.
+     */
+    consent: `${ASSISTANT.name} never changes anything without your consent.`,
 } as const
