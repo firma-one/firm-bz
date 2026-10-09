@@ -19,7 +19,7 @@ interface DocumentPreviewPaneProps {
  *
  * Each specialised pane is best-effort. If it cannot fetch or parse the file it calls back
  * here, and the PDF pane takes over with exactly the conversion path that shipped before —
- * so the worst case for any file is the behaviour it had previously.
+ * so the worst case for any file is the behavior it had previously.
  */
 export function DocumentPreviewPane({ document, projectId }: DocumentPreviewPaneProps) {
     const [failed, setFailed] = useState(false)

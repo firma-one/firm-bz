@@ -118,7 +118,7 @@ function PricingMatrixCell({ value, standardHighlight }: { value: PlanValue; sta
         )
     }
     // Deliberately no auto-sparkle on cell values. This used to paint a bare Sparkles in
-    // marketing blue whenever a cell contained "AI" — the wrong icon and the wrong colour against
+    // marketing blue whenever a cell contained "AI" — the wrong icon and the wrong color against
     // FeatureIcon's green Brio mark on the row label. Branding belongs on the row, once.
     return (
         <span

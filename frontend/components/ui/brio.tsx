@@ -16,7 +16,7 @@ export function Brio({
     className = '',
     /** Drop the sparkle and render the name alone. */
     noIcon = false,
-    /** Pin to firmä green instead of following the surrounding text colour. */
+    /** Pin to firmä green instead of following the surrounding text color. */
     fixedColor = false,
 }: {
     className?: string
@@ -45,11 +45,11 @@ export function Brio({
 
     return (
         <span className={cn('whitespace-nowrap', className)}>
-            {/* The sparkle is centred on the name's own line box rather than nudged by a fixed
+            {/* The sparkle is centerd on the name's own line box rather than nudged by a fixed
                 offset. A magic `translateY` was tuned against Inter and sat too high in Space
-                Grotesk on the landing page, whose cap height differs — this centres correctly in
+                Grotesk on the landing page, whose cap height differs — this centers correctly in
                 any face. `inline-flex` here is safe: the wrapper below keeps the mark on the
-                surrounding baseline, and only the icon is centred within it. */}
+                surrounding baseline, and only the icon is centerd within it. */}
             <span className="inline-flex h-[1em] w-[0.82em] shrink-0 items-center justify-center align-baseline">
                 <Sparkles
                     strokeWidth={2}

@@ -1,5 +1,5 @@
 /**
- * Tests for storeConnection's create-vs-update behaviour in GoogleDriveConnector.
+ * Tests for storeConnection's create-vs-update behavior in GoogleDriveConnector.
  *
  * Post-2026-08-06 refactor: storeConnection no longer dedupes by
  * (type, userId, externalAccountId) via findFirst — that silently merged "Add new

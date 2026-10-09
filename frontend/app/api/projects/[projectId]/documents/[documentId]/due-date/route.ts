@@ -119,7 +119,7 @@ export async function PATCH(
           boardUrl,
         })
       } else {
-        // Non-deliverable: immediate email if within 24h (existing behaviour)
+        // Non-deliverable: immediate email if within 24h (existing behavior)
         const hours = (dueDate.getTime() - Date.now()) / (1000 * 60 * 60)
         if (hours <= 24) {
           const admin = createAdminClient()

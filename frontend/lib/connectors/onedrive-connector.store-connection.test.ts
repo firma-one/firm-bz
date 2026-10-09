@@ -1,5 +1,5 @@
 /**
- * Tests for storeConnection's create-vs-update behaviour in OneDriveConnector.
+ * Tests for storeConnection's create-vs-update behavior in OneDriveConnector.
  *
  * Mirrors app/api/connectors/google-drive/store-connection.test.ts — see that file's header
  * comment for the full rationale. Post-2026-08-06 refactor: storeConnection no longer dedupes

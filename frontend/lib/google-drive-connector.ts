@@ -4227,7 +4227,7 @@ export class GoogleDriveConnector {
       //
       //    That endpoint is not part of the documented API, so a failure falls through to
       //    the v3 export below rather than failing the preview. Worst case is today's
-      //    behaviour; best case is a readable spreadsheet.
+      //    behavior; best case is a readable spreadsheet.
       const isSheet = isSpreadsheetMime(mimeType) || mimeType === 'application/vnd.google-apps.spreadsheet'
       if (isSheet) {
         try {

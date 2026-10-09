@@ -10,6 +10,16 @@ After changes, offer to: 1) run build, 2) commit/push. **Never auto-execute**—
 
 **NEVER commit or push without explicit user approval.** Always present the proposed commit message and ask before running any `git commit` or `git push` command.
 
+## Language
+
+Use **American English** everywhere — code, comments, UI copy, docs and commit messages.
+`organization` not `organisation`, `analyze` not `analyse`, `color`, `center`, `license`,
+`summarize`, `recognize`, `prioritize`, `behavior`.
+
+Exception: never rewrite a string that is an external contract — third-party API values and
+webhook payloads keep their own spelling (e.g. Polar sends `cancelled`, matched verbatim in
+`lib/billing/polar-webhook-sync.ts`).
+
 ## Prisma Migrations
 
 - **Always create a migration file** for any schema change — never apply SQL directly to the DB.

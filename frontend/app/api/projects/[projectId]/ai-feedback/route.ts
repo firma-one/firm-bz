@@ -66,7 +66,7 @@ export async function POST(
             userId: user.id,
             feature: 'chat',
             helpful: body.helpful,
-            // An unrecognised reason is dropped rather than rejected: the rating is the signal that
+            // An unrecognized reason is dropped rather than rejected: the rating is the signal that
             // matters, and failing the request would lose it over a stale enum value. Validated
             // against the sign, since the positive and negative vocabularies share one column.
             reason: isValidReason(body.reason, body.helpful) ? body.reason : null,
