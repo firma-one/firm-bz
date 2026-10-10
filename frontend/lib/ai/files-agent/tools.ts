@@ -234,6 +234,66 @@ function pathOf(node: FileNode | undefined, byId: Map<string, FileNode>): string
     return parts.join('/')
 }
 
+/**
+ * Characters used in a disambiguating suffix.
+ *
+ * No vowels, so the suffix cannot accidentally spell a word, and no 0/1/l/o, which are the pairs
+ * people mistype when reading a name back to a colleague.
+ */
+const SUFFIX_ALPHABET = '23456789bcdfghjkmnpqrstvwxz'
+
+/**
+ * Length of the suffix.
+ *
+ * Five of this alphabet is ~14 million combinations — enough that a clash within one folder is
+ * not worth thinking about, and still short enough to read out loud or type.
+ */
+const SUFFIX_LENGTH = 5
+
+/**
+ * A name that does not collide, by appending a short random suffix.
+ *
+ * ## Why random rather than a counter
+ *
+ * "-2" requires knowing what else exists and is wrong the moment two runs race. A random suffix
+ * needs no coordination and is checked against the folder anyway, so the only cost of a clash is
+ * drawing again.
+ *
+ * ## Why a suffix at all
+ *
+ * The alternative is refusing the operation, which abandons work the user explicitly approved
+ * because of a name clash they did not create. The suffix is visibly a disambiguator — a short
+ * unpronounceable token nobody mistakes for part of the filename — so a reader can see which file
+ * was adjusted and why.
+ *
+ * Inserted before the extension, never after: "Report-k3mqx.docx", not "Report.docx-k3mqx", which
+ * would stop the file opening.
+ */
+export function disambiguate(
+    fileName: string,
+    taken: readonly string[],
+    randomChar: () => string = () => SUFFIX_ALPHABET[Math.floor(Math.random() * SUFFIX_ALPHABET.length)],
+): string {
+    const lower = new Set(taken.map((n) => n.toLowerCase()))
+    if (!lower.has(fileName.toLowerCase())) return fileName
+
+    const dot = fileName.lastIndexOf('.')
+    const stem = dot > 0 ? fileName.slice(0, dot) : fileName
+    const ext = dot > 0 ? fileName.slice(dot) : ''
+
+    // Bounded: with half a million combinations a second attempt is already vanishingly unlikely,
+    // but an unbounded loop on a pathological folder would hang the request.
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+        const suffix = Array.from({ length: SUFFIX_LENGTH }, randomChar).join('')
+        const candidate = `${stem}-${suffix}${ext}`
+        if (!lower.has(candidate.toLowerCase())) return candidate
+    }
+    // Every draw collided, which means something is wrong with the inputs rather than with luck.
+    // Returning the original lets the caller's own collision check refuse it, rather than
+    // returning a name this function cannot vouch for.
+    return fileName
+}
+
 export function proposalKey(p: Proposal): string {
     return p.kind === 'rename' ? `r:${p.externalId}`
         : p.kind === 'move' ? `m:${p.externalId}`

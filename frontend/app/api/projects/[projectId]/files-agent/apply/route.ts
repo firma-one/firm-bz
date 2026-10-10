@@ -9,7 +9,7 @@ import { verifyApprovalToken } from '@/lib/ai/files-agent/approval'
 import { ensureFirmAgentUser } from '@/lib/ai/files-agent/agent-identity'
 import { agentApprovalMeta } from '@/lib/ai/files-agent/agent-audit'
 import { DESTRUCTIVE_REFUSAL, isPermittedAgentOperation } from '@/lib/ai/agent-capabilities'
-import { isValidRenameTarget, proposalKey, type Proposal } from '@/lib/ai/files-agent/tools'
+import { disambiguate, isValidRenameTarget, proposalKey, type Proposal } from '@/lib/ai/files-agent/tools'
 import { audit, AUDIT_EVENT, AUDIT_SCOPE } from '@/lib/audit'
 import { safeInngestSend } from '@/lib/inngest/client'
 import { agentCreateFolder } from '@/lib/ai/files-agent/safe-ops'
@@ -24,6 +24,12 @@ interface ApplyOutcome {
     proposal: Proposal
     ok: boolean
     error?: string
+    /**
+     * The name actually used, when a collision forced a disambiguating suffix.
+     *
+     * Null when the approved name was applied as-is, which is the usual case.
+     */
+    appliedAs?: string | null
 }
 
 /**
@@ -49,6 +55,54 @@ interface ApplyOutcome {
  * Operations run sequentially and independently: one failure does not abort the rest, because a
  * half-applied batch the user cannot see is worse than a fully-reported partial one.
  */
+/**
+ * Failures whose message was written for the user and is safe to show.
+ *
+ * A name collision is no longer one of these — collisions are resolved with a suffix rather than
+ * refused. What remains is the case a suffix cannot fix: a name that breaks the format rules, such
+ * as a changed extension or a reserved folder name.
+ *
+ * Matched on shape rather than tagged with an error class because these are thrown inline;
+ * anything unrecognized falls back to the generic line, so a provider error cannot leak internals
+ * into the panel.
+ */
+const KNOWN_FAILURE = /cannot be used|reserved/i
+
+/**
+ * Names currently in a folder, excluding one file.
+ *
+ * Read at APPLY time, not review time. A review can sit on screen for minutes while someone else
+ * uploads or renames, so a name that was free when the proposal was made may be taken by the time
+ * it is approved.
+ *
+ * Case-insensitive at the comparison site: both Drive and OneDrive treat "Report.docx" and
+ * "REPORT.docx" as one name.
+ */
+async function siblingNames(
+    projectId: string,
+    parentId: string | null,
+    excludeExternalId: string,
+): Promise<string[]> {
+    const rows = await prisma.engagementDocument.findMany({
+        where: {
+            engagementId: projectId,
+            parentId: parentId ?? undefined,
+            externalId: { not: excludeExternalId },
+        },
+        select: { fileName: true },
+    })
+    return rows.map((r) => r.fileName)
+}
+
+/** The folder a file is in right now, by its connector id. */
+async function currentParentId(projectId: string, externalId: string): Promise<string | null> {
+    const row = await prisma.engagementDocument.findFirst({
+        where: { engagementId: projectId, externalId },
+        select: { parentId: true },
+    })
+    return row?.parentId ?? null
+}
+
 export async function POST(
     request: NextRequest,
     { params }: { params: Promise<{ projectId: string }> },
@@ -132,6 +186,14 @@ export async function POST(
         ]
 
         for (const proposal of ordered) {
+            /**
+             * The name actually used, when a collision forced a suffix.
+             *
+             * Reported back so the user knows what the file is called: they approved one name and
+             * a different one was applied, and finding that out by opening the folder is not good
+             * enough.
+             */
+            let appliedAs: string | null = null
             try {
                 // The capability boundary, checked at the only place that can execute.
                 //
@@ -151,50 +213,59 @@ export async function POST(
                 }
 
                 if (proposal.kind === 'rename') {
+                    /** Set when a collision forced a disambiguating suffix, for the report. */
+                    let suffixed = false
                     // The user's own name wins over the agent's suggestion, but only after passing
                     // the same validation. An override that fails it is refused outright rather
                     // than falling back to the suggestion — they asked for something specific, and
                     // quietly applying a different name would be worse than applying none.
                     const override = overrides[proposalKey(proposal)]
-                    if (override !== undefined) {
-                        // Checked against the folder as it stands NOW, not as it stood when the
-                        // review ran: minutes may have passed, and a name that was free then may
-                        // have been taken since.
-                        const siblings = await prisma.engagementDocument.findMany({
-                            where: {
-                                engagementId: projectId,
-                                parentId: (await prisma.engagementDocument.findFirst({
-                                    where: { engagementId: projectId, externalId: proposal.externalId },
-                                    select: { parentId: true },
-                                }))?.parentId ?? undefined,
-                                externalId: { not: proposal.externalId },
-                            },
-                            select: { fileName: true },
-                        })
-                        if (!isValidRenameTarget(
-                            proposal.currentName, override, siblings.map((s) => s.fileName),
-                        )) {
-                            throw new Error('That name is already used in this folder')
-                        }
-                    }
                     const targetName = override?.trim() || proposal.proposedName
 
+                    // Checked for EVERY rename, not only a user-typed one. The agent's own
+                    // suggestion was validated against the tree as it stood when the review ran,
+                    // and a review can sit on screen for minutes — long enough for someone to
+                    // upload a file with that name. Only the override was re-checked, so an
+                    // agent-proposed name could still collide.
+                    const siblings = await siblingNames(
+                        projectId,
+                        await currentParentId(projectId, proposal.externalId),
+                        proposal.externalId,
+                    )
+
+                    // A collision gets a suffix rather than a refusal. The user approved renaming
+                    // this file; abandoning that over a name clash they did not create would make
+                    // them run the review again to reach the same decision.
+                    const finalName = disambiguate(targetName, siblings)
+                    if (finalName !== targetName) {
+                        suffixed = true
+                        appliedAs = finalName
+                    }
+
+                    // The format rules still apply, and are not something a suffix can fix: a
+                    // wrong extension or a reserved name is refused whatever it is called.
+                    if (!isValidRenameTarget(proposal.currentName, finalName, siblings)) {
+                        throw new Error(`"${finalName}" cannot be used in this folder`)
+                    }
+
                     const result = isOneDrive(connector)
-                        ? await renameOneDriveFile(connector.id, proposal.externalId, targetName)
-                        : await googleDriveConnector.renameFile(connector.id, proposal.externalId, targetName)
+                        ? await renameOneDriveFile(connector.id, proposal.externalId, finalName)
+                        : await googleDriveConnector.renameFile(connector.id, proposal.externalId, finalName)
                     if (!result) throw new Error('Provider rejected the rename')
 
                     await prisma.engagementDocument.updateMany({
                         where: { engagementId: projectId, externalId: proposal.externalId },
-                        data: { fileName: targetName, updatedBy: actorId },
+                        data: { fileName: finalName, updatedBy: actorId },
                     })
 
                     audit(AUDIT_EVENT.DOCUMENT_CHANGED)
                         .firm(ctx.orgId).client(ctx.clientId).engagement(projectId)
                         .actor(actorId).scope(AUDIT_SCOPE.DOCUMENT)
                         .meta({
-                            fileName: targetName,
+                            fileName: finalName,
                             previousName: proposal.currentName,
+                            // Recorded, because the applied name is not the one that was approved.
+                            ...(suffixed ? { disambiguated: true, requestedName: targetName } : {}),
                             // Whether the applied name was the agent's or the approver's own. An
                             // audit reader should not have to guess which of the two they are
                             // looking at.
@@ -210,6 +281,35 @@ export async function POST(
                 }
 
                 if (proposal.kind === 'move') {
+                    // A file carries its name into the destination, so a folder already holding
+                    // that name is the same collision a rename would cause. The provider would
+                    // either refuse the move or leave two files sharing a name, and the agent
+                    // cannot merge them — it does not delete.
+                    //
+                    // So the arriving file takes a disambiguating suffix. The move the user
+                    // approved still happens, and the two files stay distinguishable. Named in
+                    // the report, because the file is no longer called what they saw.
+                    const atDestination = await siblingNames(
+                        projectId, proposal.destinationFolderId, proposal.externalId,
+                    )
+                    const movedName = disambiguate(proposal.fileName, atDestination)
+                    const renamedOnArrival = movedName !== proposal.fileName
+                    if (renamedOnArrival) appliedAs = movedName
+
+                    // Renamed BEFORE the move, not after. Moving first would briefly put two
+                    // files of one name in the folder, which is the state the provider refuses —
+                    // and if the rename then failed, it would be the state we are left in.
+                    if (renamedOnArrival) {
+                        const renamed = isOneDrive(connector)
+                            ? await renameOneDriveFile(connector.id, proposal.externalId, movedName)
+                            : await googleDriveConnector.renameFile(connector.id, proposal.externalId, movedName)
+                        if (!renamed) throw new Error('Provider rejected the rename before the move')
+                        await prisma.engagementDocument.updateMany({
+                            where: { engagementId: projectId, externalId: proposal.externalId },
+                            data: { fileName: movedName, updatedBy: actorId },
+                        })
+                    }
+
                     const result = isOneDrive(connector)
                         ? await moveOneDriveFile(connector.id, proposal.externalId, proposal.destinationFolderId)
                         : await googleDriveConnector.moveFile(connector.id, proposal.externalId, proposal.destinationFolderId)
@@ -224,7 +324,10 @@ export async function POST(
                         .firm(ctx.orgId).client(ctx.clientId).engagement(projectId)
                         .actor(actorId).scope(AUDIT_SCOPE.DOCUMENT)
                         .meta({
-                            fileName: proposal.fileName,
+                            fileName: movedName,
+                            ...(renamedOnArrival
+                                ? { disambiguated: true, requestedName: proposal.fileName }
+                                : {}),
                             toFolderId: proposal.destinationFolderId,
                             toFolderName: proposal.destinationName,
                             reason: proposal.reason,
@@ -254,13 +357,18 @@ export async function POST(
                         .fireAndForget()
                 }
 
-                outcomes.push({ proposal, ok: true })
+                outcomes.push({ proposal, ok: true, appliedAs })
             } catch (error) {
-                logger.warn(`[files-agent] proposal failed: ${(error as Error).message}`)
+                const message = (error as Error).message
+                logger.warn(`[files-agent] proposal failed: ${message}`)
                 outcomes.push({
                     proposal,
                     ok: false,
-                    error: 'Could not apply this change',
+                    // The REASON, where we wrote it ourselves. A collision is something the user
+                    // can act on, where we wrote the message ourselves. Provider and runtime
+                    // errors still collapse to the generic line, since their text is not written
+                    // for a reader and may carry internals.
+                    error: KNOWN_FAILURE.test(message) ? message : 'Could not apply this change',
                 })
             }
         }

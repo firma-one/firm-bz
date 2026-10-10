@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { validateProposals, isValidRenameTarget, proposalKey, losesInformation } from './tools'
+import { validateProposals, isValidRenameTarget, proposalKey, losesInformation, disambiguate } from './tools'
 import type { FileNode } from './analyze'
 
 const nodes: FileNode[] = [
@@ -358,5 +358,97 @@ describe('docId and path on proposals', () => {
             renames: [{ externalId: 'x1', proposedName: 'Renamed.docx', reason: 'x' }],
         }, [...nodes, { externalId: 'x1', fileName: 'no-id.docx', isFolder: false, parentId: 'ROOT' }]).proposals
         expect(p.docId).toBeNull()
+    })
+})
+
+describe('isValidRenameTarget with live siblings', () => {
+    /**
+     * Apply-time collisions. A review can sit on screen for minutes, so the siblings the proposal
+     * was validated against are not necessarily the siblings at the moment it is approved.
+     */
+    it('refuses a name taken since the review ran', () => {
+        expect(isValidRenameTarget('Report (1).docx', 'Report.docx', ['Report.docx'])).toBe(false)
+    })
+
+    it('allows the name when nothing holds it', () => {
+        expect(isValidRenameTarget('Report (1).docx', 'Report.docx', ['Other.docx'])).toBe(true)
+    })
+
+    /** Both providers treat these as one name. */
+    it('compares case-insensitively', () => {
+        expect(isValidRenameTarget('a.docx', 'Report.docx', ['REPORT.DOCX'])).toBe(false)
+    })
+
+    it('still applies the format rules alongside the sibling check', () => {
+        expect(isValidRenameTarget('Report.docx', 'Report.pdf', [])).toBe(false)
+        expect(isValidRenameTarget('Report.docx', '.hidden.docx', [])).toBe(false)
+    })
+
+    /** An empty list is "nothing else in the folder", not "skip the check". */
+    it('accepts an empty sibling list', () => {
+        expect(isValidRenameTarget('a.docx', 'b.docx', [])).toBe(true)
+    })
+})
+
+describe('disambiguate', () => {
+    /** A fixed draw, so the assertions are about the logic rather than the dice. */
+    const fixed = (chars: string) => {
+        let i = 0
+        return () => chars[i++ % chars.length]
+    }
+
+    it('leaves a name alone when nothing holds it', () => {
+        expect(disambiguate('Report.docx', ['Other.docx'], fixed('k'))).toBe('Report.docx')
+    })
+
+    /** Before the extension, never after: a suffix past the dot stops the file opening. */
+    it('inserts the suffix before the extension', () => {
+        expect(disambiguate('Report.docx', ['Report.docx'], fixed('k3mqx')))
+            .toBe('Report-k3mqx.docx')
+    })
+
+    it('handles a name with no extension', () => {
+        expect(disambiguate('README', ['README'], fixed('k3mqx'))).toBe('README-k3mqx')
+    })
+
+    /** Both providers treat these as one name. */
+    it('treats a case-different name as taken', () => {
+        expect(disambiguate('Report.docx', ['REPORT.DOCX'], fixed('k3mqx')))
+            .toBe('Report-k3mqx.docx')
+    })
+
+    it('keeps a multi-dot name intact up to the last dot', () => {
+        expect(disambiguate('Report.v2.docx', ['Report.v2.docx'], fixed('k3mqx')))
+            .toBe('Report.v2-k3mqx.docx')
+    })
+
+    /** Drawing again on a clash is the whole reason the suffix is random. */
+    it('draws again when the first suffix is also taken', () => {
+        let call = 0
+        const draw = () => {
+            // First five characters spell the taken suffix, the next five a free one.
+            const seq = 'aaaaabbbbb'
+            return seq[call++ % seq.length]
+        }
+        expect(disambiguate('R.docx', ['R.docx', 'R-aaaaa.docx'], draw)).toBe('R-bbbbb.docx')
+    })
+
+    /** Returns the original so the caller's own check refuses it, rather than a name it cannot
+     *  vouch for. */
+    it('gives up after bounded attempts rather than looping', () => {
+        const taken = ['R.docx', 'R-kkkkk.docx']
+        expect(disambiguate('R.docx', taken, fixed('k'))).toBe('R.docx')
+    })
+
+    /** A suffix that spells a word in a client-facing filename is the failure this avoids. */
+    it('uses an alphabet with no vowels', () => {
+        const suffixes = Array.from({ length: 200 }, () =>
+            disambiguate('R.docx', ['R.docx']).slice(2, -5))
+        for (const suffix of suffixes) expect(suffix).not.toMatch(/[aeiou]/)
+    })
+
+    it('produces a suffix of the documented length', () => {
+        const name = disambiguate('R.docx', ['R.docx'])
+        expect(name).toMatch(/^R-[2-9bcdfghjkmnpqrstvwxz]{5}\.docx$/)
     })
 })
