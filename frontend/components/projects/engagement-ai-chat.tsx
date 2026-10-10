@@ -648,16 +648,15 @@ export function EngagementAiChat({
      * `answerId`, so the server upserts and the second write corrects the first rather than adding a
      * row — which is what makes the rating editable without inflating the efficacy counts.
      *
-     * The question is sent so a negative rating is actionable; without it a thumbs-down says only
-     * that something was wrong, on an answer nobody can see. The answer itself is never sent.
+     * Neither the question nor the answer is sent. The rating and its chip are the whole payload:
+     * "Got facts wrong" on the chat feature is a signal that can be counted without holding what
+     * anyone typed, and the typed question never let a failure be reproduced anyway, since the
+     * answer is not stored either.
      */
     const rate = useCallback(async (assistantIndex: number, helpful: boolean, reason?: FeedbackReason) => {
         const previous = ratings[assistantIndex]
         setRatings((prev) => ({ ...prev, [assistantIndex]: { helpful, reason } }))
 
-        const question = messages[assistantIndex - 1]?.role === 'user'
-            ? messages[assistantIndex - 1].content
-            : undefined
 
         try {
             const res = await fetch(`/api/projects/${projectId}/ai-feedback`, {
@@ -666,7 +665,6 @@ export function EngagementAiChat({
                 body: JSON.stringify({
                     helpful,
                     reason,
-                    question,
                     answerId: messages[assistantIndex]?.answerId,
                     threadId: threadIdRef.current?.id,
                 }),

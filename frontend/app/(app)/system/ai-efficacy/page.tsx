@@ -294,10 +294,15 @@ export default function AiEfficacyPage() {
                                                     {new Date(n.createdAt).toLocaleString()}
                                                 </span>
                                             </div>
+                                            {/* Questions are no longer stored, so this is empty on
+                                                every new row and populated only on rows written
+                                                before that change. The reason chip is the signal
+                                                now; the question was text a user typed and could
+                                                name a client. */}
                                             {n.question ? (
                                                 <p className="mt-0.5 text-sm text-gray-700">{n.question}</p>
                                             ) : (
-                                                <p className="mt-0.5 text-sm italic text-gray-400">No question (generated surface)</p>
+                                                <p className="mt-0.5 text-sm italic text-gray-400">Question not recorded</p>
                                             )}
                                             {/* Who to talk to and what about. Names are joined at
                                                 read time from ids — the feedback table itself

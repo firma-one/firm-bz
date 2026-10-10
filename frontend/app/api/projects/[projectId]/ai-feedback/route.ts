@@ -51,7 +51,6 @@ export async function POST(
         const body = await request.json().catch(() => null) as {
             helpful?: unknown
             reason?: unknown
-            question?: unknown
             answerId?: unknown
             threadId?: unknown
         } | null
@@ -70,7 +69,18 @@ export async function POST(
             // matters, and failing the request would lose it over a stale enum value. Validated
             // against the sign, since the positive and negative vocabularies share one column.
             reason: isValidReason(body.reason, body.helpful) ? body.reason : null,
-            question: typeof body.question === 'string' ? body.question : null,
+            // The question the user typed is deliberately NOT stored.
+            //
+            // It was, so a negative rating could be diagnosed — but it never achieved that: the
+            // answer is not stored either, so the question alone narrows a search without
+            // answering it, against data that has since changed. That is a poor trade for text
+            // that can name a client.
+            //
+            // The chips carry the signal instead. "Got facts wrong" on the chat feature, counted
+            // over time, says what Brio is unreliable at without holding anyone's words. If that
+            // turns out to be too coarse, collect more then and update the policy to match —
+            // collecting first and justifying later is the wrong order.
+            question: null,
             // Minted in the browser — the chat endpoint is stateless, so there is no server-side
             // thread to derive them from. Shape is checked but the values are otherwise opaque.
             answerId: isUuid(body.answerId) ? body.answerId : null,
