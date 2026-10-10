@@ -65,8 +65,6 @@ function rightContentInset(): number {
 const SNAP_TRAVEL_FRACTION = 0.2
 /** Exit animation duration; must match the `duration-200` on the panel. */
 const EXIT_MS = 200
-/** Collapsed state is per engagement: whether you are mid-conversation is engagement-specific. */
-const openKeyFor = (projectId: string) => `fm_ai_chat_open_${projectId}`
 
 /**
  * Panel height in px, resizable by dragging the top edge.
@@ -129,10 +127,6 @@ export function FloatingAiChat({
     data,
     engagementName,
     clientName,
-    // Collapsed everywhere. The assistant is never the reason a page was opened, so it starts as a
-    // launcher and waits to be asked for; a panel that opens itself covers the content the user
-    // actually came for.
-    defaultOpen = false,
     title,
     aboveThread,
     surface,
@@ -169,24 +163,28 @@ export function FloatingAiChat({
     emptyStateNote?: React.ReactNode
     /** One line in the header saying what this panel can do here — see EngagementAiChat. */
     capabilityNote?: React.ReactNode
-    /**
-     * Whether the panel starts open before the user has expressed a preference. Overview passes
-     * true — the assistant leads that page today and collapsing it by default would re-bury it.
-     * Files and Board will pass false, where it is secondary.
-     */
-    defaultOpen?: boolean
 }) {
     const [side, setSide] = useState<Side>('right')
-    const [open, setOpen] = useState(defaultOpen)
+    /**
+     * Always starts collapsed, on every page and every load.
+     *
+     * Not a prop. It was one, defaulting to false, which looked harmless — but a prop invites a
+     * caller to pass true, and the rule is that the assistant never opens itself. It is never the
+     * reason a page was opened, and a panel that appears unasked covers the content the user
+     * actually came for.
+     */
+    const [open, setOpen] = useState(false)
 
     // Read after mount rather than lazily in useState: localStorage is unavailable during SSR, and
     // seeding from it would make the server and client markup disagree.
+    //
+    // The DOCK SIDE is restored; the open state deliberately is not. A panel that reopens itself on
+    // every page load covers the content the user came for — they opened it once, for one question,
+    // and that is not a standing preference. Collapsing is also how someone puts it away, and an
+    // assistant that returns uninvited after being dismissed is the behaviour people disable.
     useEffect(() => {
         const storedSide = readStored(SIDE_KEY)
         if (storedSide === 'left' || storedSide === 'right') setSide(storedSide)
-
-        const storedOpen = readStored(openKeyFor(projectId))
-        if (storedOpen !== null) setOpen(storedOpen === '1')
     }, [projectId])
 
     /**
@@ -234,16 +232,19 @@ export function FloatingAiChat({
     const [closing, setClosing] = useState(false)
 
     const toggleOpen = useCallback(() => {
-        setOpen((wasOpen) => {
-            writeStored(openKeyFor(projectId), wasOpen ? '0' : '1')
-            if (wasOpen) {
-                // Keep it on screen until the exit finishes, then let the launcher take over.
-                setClosing(true)
-                window.setTimeout(() => setClosing(false), EXIT_MS)
-            }
-            return !wasOpen
-        })
-    }, [projectId])
+        // Read from state rather than from inside the updater, and schedule the exit outside it.
+        // An updater must be pure — React may call it more than once for a single update, and does
+        // so in StrictMode — so a timer started in there can fire twice.
+        //
+        // The open state is no longer persisted: the panel always starts collapsed, so there is
+        // nothing to write.
+        if (open) {
+            // Keep it on screen until the exit finishes, then let the launcher take over.
+            setClosing(true)
+            window.setTimeout(() => setClosing(false), EXIT_MS)
+        }
+        setOpen(!open)
+    }, [open])
 
     /**
      * Drag the panel to the other side, snapping to whichever half it is released in.
@@ -285,6 +286,9 @@ export function FloatingAiChat({
     }, [])
 
     const [resizingWidth, setResizingWidth] = useState(false)
+
+    /** Whether the chat is mid-answer, so the collapsed launcher can say so. */
+    const [busy, setBusy] = useState(false)
 
     /**
      * Panel width in pixels, for the docked-position arithmetic.
@@ -464,8 +468,7 @@ export function FloatingAiChat({
 
     // While closing, the panel is still rendered (playing its exit) and the launcher is withheld,
     // so the two never overlap in the same corner.
-    if (!open && !closing) {
-        return createPortal(
+    const launcher = !open && !closing ? (
             <button
                 type="button"
                 onClick={toggleOpen}
@@ -489,13 +492,39 @@ export function FloatingAiChat({
                     Ask <Brio className="text-sm text-primary" />
                     {title ? <span className="ml-1 text-gray-400">· {title}</span> : null}
                 </span>
-            </button>,
-            document.body,
-        )
-    }
+                {/* Something is still running behind the collapsed pill. Without this the panel
+                    looks idle while an answer is arriving, and the user has no reason to reopen
+                    it — the work finishes unseen. */}
+                {busy && (
+                    <span className="relative flex h-2 w-2 shrink-0" aria-hidden>
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60" />
+                        <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+                    </span>
+                )}
+                {busy && <span className="sr-only">Working on your answer</span>}
+            </button>
+    ) : null
 
+    // The panel is rendered in BOTH states, hidden while collapsed rather than unmounted.
+    //
+    // Unmounting threw away any answer still arriving: React discards the state updates of a
+    // component that no longer exists, so collapsing mid-answer silently lost the reply and the
+    // credit spent on it — and the thread, the history and the agent's open questions with it.
+    // Hidden, the request finishes and everything is there when the panel reopens.
+    //
+    // One mount site, not one per branch: two would unmount and remount across a toggle, which is
+    // the thing this exists to avoid.
     return createPortal(
+        <>
+        {launcher}
         <div
+            /* `aria-hidden` and `inert` only: the actual hiding is the `hidden` CLASS below.
+               The `hidden` ATTRIBUTE sets display:none at the lowest precedence, and this element
+               carries `flex`, which overrides it — so the panel stayed on screen when collapsed and
+               the minimise button appeared to do nothing. `inert` is what keeps its controls out of
+               the tab order while it is away. */
+            aria-hidden={!open && !closing}
+            inert={!open && !closing}
             ref={setPanelEl}
             /* Tall and narrow, not wide. Chat is a vertical medium — messages stack downward and
                the eye tracks a column — and comfortable reading runs out past roughly 75
@@ -544,7 +573,7 @@ export function FloatingAiChat({
                Width is a literal class, not interpolated: Tailwind extracts class names
                statically, so an interpolated `w-[...]` would never be generated. PANEL_WIDTH_REM
                must be kept in step with it. */
-            className={`fixed bottom-6 z-40 flex max-h-[calc(100vh-6rem)] ${resizing || resizingWidth ? 'select-none' : ''} max-w-[calc(100vw-3rem)] flex-col overflow-hidden rounded-lg border border-primary/25 bg-white shadow-2xl duration-200 ${
+            className={`${!open && !closing ? 'hidden' : 'flex'} fixed bottom-6 z-40 max-h-[calc(100vh-6rem)] ${resizing || resizingWidth ? 'select-none' : ''} max-w-[calc(100vw-3rem)] flex-col overflow-hidden rounded-lg border border-primary/25 bg-white shadow-2xl duration-200 ${
                 closing
                     // pointer-events-none so a fast click cannot land on a control in a panel that
                     // is on its way out.
@@ -637,8 +666,10 @@ export function FloatingAiChat({
                 placeholder={placeholder}
                 emptyStateNote={emptyStateNote}
                 capabilityNote={capabilityNote}
+                onBusyChange={setBusy}
             />
-        </div>,
+        </div>
+        </>,
         document.body,
     )
 }

@@ -545,6 +545,19 @@ export function EngagementFileList({ projectId, connectorRootFolderId, clientCon
     /** Shared by the agent panel's trigger chip and its results block, which render apart. */
     const [agentReview, setAgentReview] = useState<FilesAgentReview | null>(null)
 
+    /**
+     * Whether the current review's questions are all answered.
+     *
+     * Here rather than inside the panel because BOTH instances need it: the results block knows
+     * the answers, the trigger needs to know whether to offer a fresh review. Each instance has
+     * its own `decisions`, so the trigger could never work this out for itself.
+     */
+    const [agentAnswered, setAgentAnswered] = useState(false)
+    // A new review starts with nothing answered. Reset here rather than relying on the results
+    // block to report it: that block mounts only once `agentReview` is set, so on the first run it
+    // does not exist yet to say so.
+    useEffect(() => { setAgentAnswered(false) }, [agentReview])
+
     /** Whether the folder-structure interview is open. */
     const [scaffoldOpen, setScaffoldOpen] = useState(false)
 
@@ -3502,6 +3515,7 @@ const handleRefresh = async () => {
                                         setReview={setAgentReview}
                                         onApplied={refreshCurrentFolder}
                                         onThreadTurn={postToThread}
+                                        onAnsweredChange={setAgentAnswered}
                                     />
                                 )}
                                 <FilesScaffoldPanel
@@ -3520,11 +3534,18 @@ const handleRefresh = async () => {
                                 projectId={projectId}
                                 review={agentReview}
                                 setReview={setAgentReview}
+                                answered={agentAnswered}
                                 onApplied={refreshCurrentFolder}
+                                // The TRIGGER instance is the one that runs the review, so it is
+                                // the one that must be able to post the report. The results
+                                // instance below does not exist until a review has returned, so
+                                // wiring it only there meant the report went nowhere.
+                                onThreadTurn={postToThread}
                             />
-                            {/* Hidden while either flow is open: starting a second one would leave
-                                two sets of questions competing for the same answer. */}
-                            {!scaffoldOpen && !agentReview && (
+                            {/* Hidden only while the scaffold interview is actually open. It was
+                                also hidden whenever a review existed, which left no way back to
+                                folder setup short of reloading the page. */}
+                            {!scaffoldOpen && (
                                 <FilesScaffoldTrigger onClick={() => setScaffoldOpen(true)} />
                             )}
                         </>

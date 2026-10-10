@@ -248,6 +248,7 @@ export function EngagementAiChat({
     capabilityNote,
     surface = 'overview',
     threadRef,
+    onBusyChange,
 }: {
     projectId: string
     /** Insights payload the page already holds; drives data-aware suggestions. */
@@ -321,6 +322,13 @@ export function EngagementAiChat({
      * decided.
      */
     threadRef?: React.MutableRefObject<ChatThreadApi | null>
+    /**
+     * Reports whether an answer is in flight.
+     *
+     * Lifted so the collapsed launcher can show that something is still running — the panel is
+     * kept mounted but hidden while collapsed, so the work continues where the user cannot see it.
+     */
+    onBusyChange?: (busy: boolean) => void
 }) {
     const [messages, setMessages] = useState<Message[]>([])
 
@@ -356,6 +364,8 @@ export function EngagementAiChat({
 
     const [input, setInput] = useState('')
     const [streaming, setStreaming] = useState(false)
+    useEffect(() => { onBusyChange?.(streaming) }, [streaming, onBusyChange])
+
     // Persisted on every settled change. Not while streaming: a half-written answer would be
     // stored truncated and restored with no sign it was cut off.
     useEffect(() => {
@@ -459,6 +469,11 @@ export function EngagementAiChat({
      *
      * The settled scroll runs after paint rather than inside the effect body, because the action
      * bar has not been laid out yet at effect time and `scrollHeight` would still be the old value.
+     *
+     * `aboveThread` is a dependency too: an agent question renders there, not as a message, so a
+     * new one arriving changed neither `messages` nor `streaming` and the view stayed where it was
+     * — the question appeared below the fold and the user had to scroll to find what they were
+     * being asked.
      */
     useEffect(() => {
         const el = scrollRef.current
@@ -481,7 +496,7 @@ export function EngagementAiChat({
 
         const frame = requestAnimationFrame(() => toBottom('smooth'))
         return () => cancelAnimationFrame(frame)
-    }, [messages, streaming])
+    }, [messages, streaming, aboveThread])
 
     const ask = useCallback(async (question: string) => {
         const trimmed = question.trim()
@@ -915,8 +930,6 @@ export function EngagementAiChat({
                         : 'max-h-[480px] min-h-[180px]'
                 }`}
             >
-                {aboveThread}
-
                 {/* Shown only where the header does not already say what this panel does.
                     "Without your consent" rather than a flat "can't change anything": the latter
                     was true when Brio only answered questions and became false the moment it could
@@ -943,12 +956,14 @@ export function EngagementAiChat({
                         current. The time each turn was produced is shown, so the reader can judge
                         rather than be told. */}
                     {restoredCount > 0 && i === restoredCount && (
-                        <div className="flex items-center gap-2 py-1">
-                            <div className="h-px flex-1 bg-gray-200" />
+                        // A wave rather than a straight rule — see `.fm-wave-rule` in
+                        // globals.css for why, and why it is CSS rather than an inline SVG.
+                        <div className="flex items-center gap-2 py-1 text-gray-300">
+                            <div className="fm-wave-rule flex-1" aria-hidden />
                             <span className="shrink-0 text-[10px] text-gray-400">
                                 Earlier · figures were current when asked
                             </span>
-                            <div className="h-px flex-1 bg-gray-200" />
+                            <div className="fm-wave-rule flex-1" aria-hidden />
                         </div>
                     )}
                     <div className={m.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>
@@ -1037,6 +1052,13 @@ export function EngagementAiChat({
                     </div>
                     </React.Fragment>
                 ))}
+
+                {/* Agent questions render LAST, after the messages.
+                    A conversation runs top to bottom with the newest turn at the bottom, and an
+                    open question is the newest thing in it — the agent has just asked and is
+                    waiting. Rendered first, the question sat above the report that prompted it,
+                    so the exchange read backwards. */}
+                {aboveThread}
 
                 {error && <p className="text-xs text-red-600">{error}</p>}
             </div>
