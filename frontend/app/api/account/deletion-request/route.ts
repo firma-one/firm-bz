@@ -4,6 +4,8 @@ import { prisma } from '@/lib/prisma'
 import { createClient } from '@/utils/supabase/server'
 import { submitErrorTicket } from '@/app/actions/submit-ticket'
 import { logger } from '@/lib/logger'
+import { sendEmail } from '@/lib/email'
+import { PLATFORM_NOTIFICATION_EMAIL } from '@/config/platform-emails'
 import { DELETION_REQUEST_KIND } from '@/lib/account/deletion-plan'
 
 export const dynamic = 'force-dynamic'
@@ -73,6 +75,29 @@ export async function POST(request: NextRequest) {
         if (!result.success || !result.ticketNumber) {
             return NextResponse.json({ error: 'Could not raise the request' }, { status: 500 })
         }
+
+        // Someone has to be told, or this is a write-only queue: the request sets no firmId — so
+        // it never lands in a firm's support list — and creating a ticket notifies nobody. A user
+        // told "we will email you" while the request sits unseen is worse than no feature at all.
+        //
+        // Fire-and-forget: a mail failure must not fail a request the user has already made, and
+        // the row is the record of record either way.
+        void sendEmail(
+            PLATFORM_NOTIFICATION_EMAIL,
+            `Account deletion requested — ${result.ticketNumber}`,
+            [
+                '<p>An account deletion has been requested.</p>',
+                `<p><strong>Ticket:</strong> ${result.ticketNumber}<br>`,
+                `<strong>User:</strong> ${user.email ?? '(no email)'}<br>`,
+                `<strong>User id:</strong> ${user.id}</p>`,
+                reason ? `<p><strong>Reason given:</strong> ${reason}</p>` : '',
+                '<p>Review what this would touch before fulfilling:<br>',
+                `<code>GET /api/system/account-deletion/plan?userId=${user.id}</code></p>`,
+                '<p>The privacy policy commits to confirming by email within 45 days.</p>',
+            ].join('\n'),
+        ).catch((error: unknown) => {
+            logger.error('[account/deletion-request] notification failed:', error as Error)
+        })
 
         return NextResponse.json({
             data: { ticketNumber: result.ticketNumber, requestedAt: new Date().toISOString(), alreadyOpen: false },

@@ -217,6 +217,12 @@ export function ProfilePageClient({
                         {saving ? 'Saving…' : 'Save'}
                     </Button>
                 </div>
+
+                {/* Export and deletion. In BOTH branches, not only the standalone one: the
+                    Personalization page renders this component with `hideChrome`, which returns
+                    here — so a card added below the other return was unreachable from the only
+                    route that renders the page. */}
+                <DataPrivacyCard />
             </div>
         )
     }
