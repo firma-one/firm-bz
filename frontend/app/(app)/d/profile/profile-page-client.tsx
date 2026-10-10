@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Copy, Mail, User } from 'lucide-react'
+import { DataPrivacyCard } from '@/components/account/data-privacy-card'
 import { ProfileBubblePopupContent } from '@/components/ui/profile-bubble-popup'
 import { profileCopy } from '@/lib/profile-copy'
 import { updateProfileNames } from '@/lib/actions/profile'
@@ -249,6 +250,11 @@ export function ProfilePageClient({
                     footer={accountForm}
                 />
             </div>
+
+            {/* Export and deletion. Below the profile rather than inside it: these act on the
+                account as a whole, not on the fields above them, and the privacy policy points
+                users here by name. */}
+            <DataPrivacyCard />
         </div>
     )
 }
