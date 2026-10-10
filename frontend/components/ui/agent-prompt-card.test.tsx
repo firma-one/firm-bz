@@ -198,3 +198,61 @@ describe('recommendation', () => {
         expect(screen.getAllByText('Recommended')).toHaveLength(1)
     })
 })
+
+describe('leaving the flow', () => {
+    /**
+     * The × is findable when looking for it and invisible when the question in mind is "do I want
+     * any of this?" — by then the reader is working down the options and the header is out of
+     * their reading path.
+     */
+    it('offers the exit in the footer when labelled', () => {
+        render(
+            <AgentPromptCard
+                question="Q" options={OPTIONS} onAnswer={() => {}}
+                onDismiss={() => {}} dismissLabel="Not now" onSkip={() => {}}
+            />,
+        )
+        expect(screen.getByText('Not now')).toBeTruthy()
+        expect(screen.getByText('Skip')).toBeTruthy()
+    })
+
+    it('leaves the footer exit out when unlabelled', () => {
+        render(
+            <AgentPromptCard
+                question="Q" options={OPTIONS} onAnswer={() => {}}
+                onDismiss={() => {}} onSkip={() => {}}
+            />,
+        )
+        expect(screen.queryByText('Not now')).toBeNull()
+        // The header × is still there for a single question.
+        expect(screen.getByLabelText('Dismiss this question')).toBeTruthy()
+    })
+
+    /** Skip answers this question; the exit abandons the flow. They are not the same act. */
+    it('calls dismiss, not skip, from the footer exit', () => {
+        let dismissed = false
+        let skipped = false
+        render(
+            <AgentPromptCard
+                question="Q" options={OPTIONS} onAnswer={() => {}}
+                onDismiss={() => { dismissed = true }}
+                dismissLabel="Not now"
+                onSkip={() => { skipped = true }}
+            />,
+        )
+        fireEvent.click(screen.getByText('Not now'))
+        expect(dismissed).toBe(true)
+        expect(skipped).toBe(false)
+    })
+
+    it('shows the footer for an exit even with no skip', () => {
+        render(
+            <AgentPromptCard
+                question="Q" options={OPTIONS} onAnswer={() => {}}
+                onDismiss={() => {}} dismissLabel="Not now"
+            />,
+        )
+        expect(screen.getByText('Not now')).toBeTruthy()
+        expect(screen.queryByText('Skip')).toBeNull()
+    })
+})

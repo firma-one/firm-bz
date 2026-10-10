@@ -72,6 +72,7 @@ export function AgentPromptCard({
     step,
     stepCount,
     onDismiss,
+    dismissLabel,
     onSkip,
     freeTextLabel = 'Something else',
     freeTextPlaceholder = 'Type your answer',
@@ -97,6 +98,14 @@ export function AgentPromptCard({
     step?: number
     stepCount?: number
     onDismiss?: () => void
+    /**
+     * Words for leaving the flow, shown in the footer beside Skip.
+     *
+     * Omitted, only the header × offers the exit — right for a single question, wrong for a
+     * sequence, where someone deciding they want none of it should not have to go hunting in the
+     * chrome.
+     */
+    dismissLabel?: string
     onSkip?: () => void
     freeTextLabel?: string
     freeTextPlaceholder?: string
@@ -198,23 +207,37 @@ export function AgentPromptCard({
                                         {i + 1}
                                     </span>
                                     <span className="min-w-0 flex-1">
-                                        <span className="block text-xs leading-snug text-gray-800">
+                                        <span className="block text-xs font-medium leading-snug text-gray-900">
                                             {option.label}
+                                            {/* Inline with the label, not in its own column.
+                                                As a sibling of the text block it took a fixed
+                                                column of the row, squeezing the description into a
+                                                narrow strip that wrapped over four lines. Here it
+                                                flows with the label and costs nothing when the
+                                                label is short.
+
+                                                Said in words, not only in shading: a tinted row
+                                                tells a screen reader nothing, and a user who cannot
+                                                see the tint cannot tell which answer is advised. */}
+                                            {isRecommended && (
+                                                <span className="ml-1.5 whitespace-nowrap rounded-full bg-primary/10 px-1.5 py-0.5 align-middle text-[9px] font-medium uppercase tracking-wide text-primary">
+                                                    Recommended
+                                                </span>
+                                            )}
                                         </span>
+                                        {/* Same size as the label, only a lighter colour.
+                                            It was 11px grey, on the assumption a description is a
+                                            short clause. The agent's reasons are full sentences,
+                                            and a sentence set two steps smaller than the words
+                                            above it reads as fine print rather than as the rest of
+                                            the thought. Hierarchy here comes from weight and
+                                            colour, not from shrinking the text. */}
                                         {option.description && (
-                                            <span className="mt-0.5 block text-[11px] leading-snug text-gray-500">
+                                            <span className="mt-0.5 block text-xs leading-snug text-gray-500">
                                                 {option.description}
                                             </span>
                                         )}
                                     </span>
-                                    {/* Said in words, not only in shading: a tinted row does not
-                                        tell a screen reader anything, and a user who cannot see the
-                                        tint cannot tell which answer is advised. */}
-                                    {isRecommended && (
-                                        <span className="shrink-0 rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-primary">
-                                            Recommended
-                                        </span>
-                                    )}
                                     {/* On hover only: a permanent arrow on every row reads as
                                         several competing calls to action. */}
                                     <ArrowRight
@@ -285,16 +308,35 @@ export function AgentPromptCard({
                     </ul>
 
                     {/* Declining is a different act from answering, so it sits apart. */}
-                    {onSkip && (
-                        <div className="flex justify-end border-t border-gray-100 px-3.5 py-2.5">
-                            <button
-                                type="button"
-                                onClick={onSkip}
-                                disabled={disabled}
-                                className="rounded-lg border border-gray-200 px-3.5 py-1.5 text-[11px] text-gray-600 transition-colors hover:border-gray-300 hover:bg-gray-50 hover:text-gray-900 disabled:opacity-50"
-                            >
-                                Skip
-                            </button>
+                    {(onSkip || dismissLabel) && (
+                        <div className="flex items-center justify-between gap-2 border-t border-gray-100 px-3.5 py-2.5">
+                            {/* Leaving the flow sits HERE, beside Skip, not only as the × in the
+                                header. Once the reader is working down a list of options the
+                                header is out of their reading path entirely — the × is findable
+                                when looking for it and invisible when the question in mind is
+                                "do I want any of this?".
+
+                                Left-aligned and quiet: it is an escape, not a third answer. */}
+                            {dismissLabel && onDismiss ? (
+                                <button
+                                    type="button"
+                                    onClick={onDismiss}
+                                    disabled={disabled}
+                                    className="rounded-lg px-2 py-1.5 text-[11px] text-gray-500 transition-colors hover:text-gray-900 disabled:opacity-50"
+                                >
+                                    {dismissLabel}
+                                </button>
+                            ) : <span />}
+                            {onSkip && (
+                                <button
+                                    type="button"
+                                    onClick={onSkip}
+                                    disabled={disabled}
+                                    className="rounded-lg border border-gray-200 px-3.5 py-1.5 text-[11px] text-gray-600 transition-colors hover:border-gray-300 hover:bg-gray-50 hover:text-gray-900 disabled:opacity-50"
+                                >
+                                    Skip
+                                </button>
+                            )}
                         </div>
                     )}
                 </>

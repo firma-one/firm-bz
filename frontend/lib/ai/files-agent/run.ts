@@ -105,7 +105,13 @@ Rules:
    than a complete set the lead has to audit line by line.
 6. Do not propose moving or renaming anything a finding did not raise.
 7. Reasons are one short clause, written for the lead: "matches 01-Scope-Note pattern", not
-   "improves file organization and discoverability".`
+   "improves file organization and discoverability".
+8. QUOTE every name that came from the firm's own data — files, folders, deliverables, clients —
+   in reasons as well as everywhere else: 'belongs in "Internal" with the other working files',
+   not 'belongs in Internal folder'. Without quotes a reader cannot tell where a multi-word name
+   ends and the sentence resumes, and a folder called "Final" or "Internal" reads as an ordinary
+   adjective. Do not quote the app's own vocabulary — folder, deliverable, engagement — which is
+   English, not a name.`
 
 /** Caps how much tree goes into the prompt. Beyond this the findings matter, not every file. */
 const MAX_FILES_IN_PROMPT = 400

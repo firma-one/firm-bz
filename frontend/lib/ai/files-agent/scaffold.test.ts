@@ -75,11 +75,19 @@ describe('buildScaffold', () => {
         expect(names({ workingPapers: 'no' })).not.toContain('Working Papers')
     })
 
-    /** A client scanning the folder should meet the work before the back office. */
-    it('puts Internal last, and only when the client has access', () => {
-        const shared = names({ clientFacing: 'shared' })
-        expect(shared[shared.length - 1]).toBe('Internal')
-        expect(names({ clientFacing: 'internal' })).not.toContain('Internal')
+    /**
+     * Always created, whatever else was answered.
+     *
+     * It used to depend on "Will the client have access?", which was the wrong question at setup:
+     * sharing is a deliberate act after work is ready, and the engagement that is internal-only
+     * today is shared later — with no folder for the work that should never have gone out.
+     */
+    it('always creates Internal, and puts it last', () => {
+        for (const answers of [{}, { engagementKind: 'audit' }, { workingPapers: 'yes' }]) {
+            const built = names(answers)
+            expect(built).toContain('Internal')
+            expect(built[built.length - 1]).toBe('Internal')
+        }
     })
 
     it('numbers the top level in order', () => {
@@ -105,7 +113,7 @@ describe('flattenScaffold', () => {
     })
 
     it('gives every folder a purpose to show in the preview', () => {
-        for (const f of flattenScaffold(buildScaffold({ clientFacing: 'shared', workingPapers: 'yes' }))) {
+        for (const f of flattenScaffold(buildScaffold({ workingPapers: 'yes' }))) {
             expect(f.purpose.length).toBeGreaterThan(0)
         }
     })
@@ -134,8 +142,7 @@ describe('typed answers', () => {
 
     it('builds a usable tree when every answer is typed', () => {
         const tree = buildScaffold({
-            engagementKind: 'a', clientFacing: 'b', reviewStages: 'c',
-            workingPapers: 'd', numbering: 'e',
+            engagementKind: 'a', reviewStages: 'c', workingPapers: 'd', numbering: 'e',
         })
         expect(tree.length).toBeGreaterThan(0)
         expect(flattenScaffold(tree).length).toBeGreaterThan(0)
@@ -154,7 +161,7 @@ describe('unusedAnswers', () => {
 
     it('reports nothing when every answer is a known option', () => {
         expect(unusedAnswers({
-            engagementKind: 'audit', clientFacing: 'shared', reviewStages: 'single',
+            engagementKind: 'audit', reviewStages: 'single',
             workingPapers: 'yes', numbering: 'plain',
         })).toEqual([])
     })

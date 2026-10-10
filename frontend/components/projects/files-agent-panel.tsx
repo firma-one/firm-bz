@@ -1,7 +1,7 @@
 'use client'
 
-import { useCallback, useRef, useState } from 'react'
-import { AlertCircle, Check, Loader2, X, Sparkles } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { AlertCircle, Check, Loader2, Sparkles } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
 import { proposalKey, type Proposal } from '@/lib/ai/files-agent/tools'
 import { AgentPromptCard, type AgentPromptOption } from '@/components/ui/agent-prompt-card'
@@ -64,6 +64,17 @@ const DECLINE = '\u0000decline'
  * known, and would introduce a way for a click to be misread.
  */
 /**
+ * File and folder names are QUOTED wherever they appear.
+ *
+ * "Move to Internal" reads as a sentence with a stray capitalised word; `Move to "Internal"` reads
+ * as a folder. Without the quotes a reader has to work out which words are names and which are
+ * English, and names containing spaces — "Launch Readiness Kit" — are genuinely ambiguous.
+ *
+ * Quoting rather than bolding because these strings are plain text: they go into the card, the
+ * thread and the audit trail, and only one of those renders markup.
+ */
+
+/**
  * The file, named the way it is named everywhere else: `name (DOC-ID, in Folder)`.
  *
  * In the question itself rather than on a second line. A filename alone does not identify one item
@@ -72,8 +83,8 @@ const DECLINE = '\u0000decline'
  * question one sentence instead of a title with a subtitle under it.
  */
 function named(name: string, p: Proposal): string {
-    const detail = [p.docId, p.path ? `in ${p.path}` : null].filter(Boolean).join(', ')
-    return detail ? `${name} (${detail})` : name
+    const detail = [p.docId, p.path ? `in "${p.path}"` : null].filter(Boolean).join(', ')
+    return detail ? `"${name}" (${detail})` : `"${name}"`
 }
 
 /**
@@ -123,7 +134,7 @@ function answerLabel(p: Proposal, value: string): string {
     }
     if (value === ACCEPT) {
         return p.kind === 'rename' ? `Rename to "${p.proposedName}"`
-            : p.kind === 'move' ? `Move to ${p.destinationName}`
+            : p.kind === 'move' ? `Move to "${p.destinationName}"`
             : `Create "${p.name}"`
     }
     // Typed. Quoted so it reads as the user's own words rather than a label.
@@ -132,8 +143,8 @@ function answerLabel(p: Proposal, value: string): string {
 
 function questionFor(p: Proposal): string {
     if (p.kind === 'rename') return `Rename ${named(p.currentName, p)}?`
-    if (p.kind === 'move') return `Move ${named(p.fileName, p)} into ${p.destinationName}?`
-    return `Create the folder "${p.name}"${p.path ? ` in ${p.path}` : ''}?`
+    if (p.kind === 'move') return `Move ${named(p.fileName, p)} into "${p.destinationName}"?`
+    return `Create the folder "${p.name}"${p.path ? ` in "${p.path}"` : ''}?`
 }
 
 /**
@@ -153,7 +164,7 @@ function optionsFor(p: Proposal): AgentPromptOption[] {
     }
     if (p.kind === 'move') {
         return [
-            { value: ACCEPT, label: `Move to ${p.destinationName}`, description: p.reason, recommended: true },
+            { value: ACCEPT, label: `Move to "${p.destinationName}"`, description: p.reason, recommended: true },
             { value: DECLINE, label: 'Leave it where it is' },
         ]
     }
@@ -247,6 +258,8 @@ export function FilesAgentPanel({
     setReview,
     render,
     onThreadTurn,
+    answered = false,
+    onAnsweredChange,
 }: {
     projectId: string
     /** Called after a successful apply so the file list can refresh. */
@@ -261,6 +274,14 @@ export function FilesAgentPanel({
     setReview: (r: ReviewData | null) => void
     /** Which half to draw. */
     render: 'trigger' | 'results'
+    /**
+     * Whether every question in the current review has been answered.
+     *
+     * Owned by the parent because both instances need it and each has its own `decisions`.
+     */
+    answered?: boolean
+    /** Reports progress up, so the parent can tell the trigger whether questions remain. */
+    onAnsweredChange?: (answered: boolean) => void
     /**
      * Posts the exchange into the conversation.
      *
@@ -302,6 +323,14 @@ export function FilesAgentPanel({
      */
     const applyStarted = useRef(false)
 
+    // Reported up so the trigger — a sibling with its own state — knows whether questions remain.
+    const allDecided = review != null
+        && review.proposals.length > 0
+        && review.proposals.every((p) => proposalKey(p) in decisions)
+    useEffect(() => {
+        if (render === 'results') onAnsweredChange?.(allDecided)
+    }, [render, allDecided, onAnsweredChange])
+
     /** What the run did, once it has finished. Shown in the thread rather than as a toast. */
     const [outcome, setOutcome] = useState<{ ok: boolean; message: string } | null>(null)
     const [error, setError] = useState<string | null>(null)
@@ -329,12 +358,17 @@ export function FilesAgentPanel({
                 return
             }
             setReview(body.data)
+            // The report goes into the conversation, where it persists with everything else. The
+            // panel keeps only the questions, because those are a control and the report is not.
+            if (body.data?.summaryMarkdown) {
+                onThreadTurn?.('assistant', body.data.summaryMarkdown)
+            }
         } catch {
             setError('Could not review the files')
         } finally {
             setState('idle')
         }
-    }, [projectId, token])
+    }, [projectId, token, onThreadTurn])
 
     const decide = useCallback((key: string, value: string) => {
         setDecisions((prev) => ({ ...prev, [key]: value }))
@@ -388,10 +422,39 @@ export function FilesAgentPanel({
             // through. A toast says the same thing somewhere else, for four seconds, and then
             // takes it away — and when two fired at once the panel contradicted itself in the
             // corner of the screen while the thread said nothing at all.
-            const summary = failed > 0
-                ? `Applied ${applied}, ${failed} could not be applied. Run the review again to retry those.`
-                : `Applied ${applied} change${applied === 1 ? '' : 's'}, recorded in the audit trail as `
-                    + 'Brio, your Executive Assistant.'
+            // Each failure with its own reason, not just a count. A collision names the file and
+            // the folder, which is what makes it something the user can resolve; "1 could not be
+            // applied" leaves them opening folders to find out which.
+            const outcomes: Array<{ ok: boolean; error?: string; appliedAs?: string | null }> =
+                body.data.outcomes ?? []
+
+            const reasons = outcomes
+                .filter((o) => !o.ok)
+                .map((o) => o.error)
+                .filter((e): e is string => typeof e === 'string')
+
+            // Names that had to change because the folder already held them. Said plainly: the
+            // user approved one name and a different one was applied, and they should not have to
+            // open the folder to discover that.
+            const renamed = outcomes
+                .filter((o) => o.ok && typeof o.appliedAs === 'string')
+                .map((o) => o.appliedAs as string)
+
+            const lines = [
+                failed > 0
+                    ? `Applied ${applied}, ${failed} could not be applied.`
+                    : `Applied ${applied} change${applied === 1 ? '' : 's'}, recorded in the audit `
+                        + 'trail as Brio, your Executive Assistant.',
+                ...reasons.map((r) => `- ${r}`),
+            ]
+            if (renamed.length > 0) {
+                lines.push(
+                    `${renamed.length === 1 ? 'One name was' : `${renamed.length} names were`} `
+                    + 'already taken, so a short suffix was added: '
+                    + renamed.join(', '),
+                )
+            }
+            const summary = lines.join('\n')
             setOutcome({ ok: failed === 0, message: summary })
             onThreadTurn?.('assistant', summary)
 
@@ -453,7 +516,21 @@ export function FilesAgentPanel({
     // neighbours it does not ask a question — it starts work that ends in file changes, and that
     // difference is worth seeing before you click.
     if (render === 'trigger') {
-        if (review) return null
+        // Hidden only while there are questions still to answer — offering a fresh review then
+        // would abandon decisions the user is part-way through making, and the approval token
+        // would be stale by the time they finished.
+        //
+        // Available again once the review is answered or has nothing to ask, so re-running after
+        // tidying something up does not mean reloading the page. Reviewing is read-only and free:
+        // there is no reason to ration it.
+        // Hidden only while questions are still unanswered — offering a fresh review mid-decision
+        // would abandon choices in progress and stale the approval token.
+        //
+        // `answered` comes from the PARENT, not from this instance's own `decisions`: there are
+        // two instances of this component, the trigger and the results block, and the trigger's
+        // local copy is always empty. Testing it made the chip disappear for good once a review
+        // existed.
+        if (review != null && review.proposals.length > 0 && !answered) return null
         return (
             <>
                 <button
@@ -484,27 +561,11 @@ export function FilesAgentPanel({
 
     return (
         <div className="space-y-3">
-            {/* The review's own report, as an ordinary Markdown message rather than a bespoke
-                stats panel. A table renders in the normal message flow and serves any later answer
-                that reports the same few fields across several rows; a purpose-built card serves
-                exactly one. */}
-            {review.summaryMarkdown && (
-                // No card around it: this is the assistant's answer, so it reads like one. Only
-                // the question below keeps a border, because that one is a control.
-                <div className="flex items-start gap-2">
-                    <div className="min-w-0 flex-1">
-                        <ChatMarkdown content={review.summaryMarkdown} />
-                    </div>
-                    <button
-                        type="button"
-                        onClick={() => setReview(null)}
-                        className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
-                        aria-label="Dismiss this review"
-                    >
-                        <X className="h-3.5 w-3.5" />
-                    </button>
-                </div>
-            )}
+            {/* The report is NOT rendered here. It is posted into the thread as an assistant turn
+                the moment the review returns, so it scrolls, persists and reads like any other
+                answer — and has no close button, because a turn in a conversation is not something
+                you dismiss. Only the questions and the result of acting on them live in this
+                panel, which is the part that is a control rather than a record. */}
 
             {/* Stated BEFORE the first question, not after the last.
                 Answering is now what commits the change, so the consequence has to be on screen
@@ -541,6 +602,11 @@ export function FilesAgentPanel({
                         disabled={state === 'applying'}
                         onAnswer={(value) => answerProposal(p, value)}
                         onSkip={() => decide(key, DECLINE)}
+                        // A way out of the whole run, not just this file. Skip declines ONE
+                        // change; someone who has seen enough should not have to decline each
+                        // remaining file individually to get their panel back.
+                        onDismiss={() => setReview(null)}
+                        dismissLabel="Stop reviewing"
                         freeTextLabel={freeTextLabelFor(p)}
                         freeTextPlaceholder={freeTextPlaceholderFor(p)}
                         // What they typed, where it could not be executed. The card shows the
@@ -558,7 +624,7 @@ export function FilesAgentPanel({
                     {outcome.ok
                         ? <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
                         : <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" aria-hidden />}
-                    <p className={`min-w-0 flex-1 text-xs leading-relaxed ${
+                    <p className={`min-w-0 flex-1 whitespace-pre-line text-xs leading-relaxed ${
                         outcome.ok ? 'text-gray-700' : 'text-amber-800'
                     }`}>
                         {outcome.message}

@@ -7,7 +7,7 @@ import { AgentPromptCard } from '@/components/ui/agent-prompt-card'
 import { ElapsedTime } from '@/components/ui/elapsed-time'
 import {
     SCAFFOLD_QUESTIONS, buildScaffold, flattenScaffold, unusedAnswers,
-    type ScaffoldAnswers, type ScaffoldQuestionId,
+    type ScaffoldAnswers, type ScaffoldQuestion, type ScaffoldQuestionId,
 } from '@/lib/ai/files-agent/scaffold'
 
 /**
@@ -20,6 +20,11 @@ import {
  * Costs no credits. The questions are fixed and the tree is computed, so nothing here reaches a
  * model; see `lib/ai/files-agent/scaffold.ts`.
  */
+/** What Skip answers with: the recommended option, or the first where none is marked. */
+function recommendedValue(q: ScaffoldQuestion): string {
+    return (q.options.find((o) => o.recommended) ?? q.options[0]).value
+}
+
 export function FilesScaffoldPanel({
     projectId,
     open,
@@ -180,8 +185,16 @@ export function FilesScaffoldPanel({
                         onAnswer={(value) => answer(q.id, value)}
                         // Skipping takes the default for that question rather than leaving a hole:
                         // the tree still has to be buildable, and `buildScaffold` falls back safely.
-                        onSkip={() => answer(q.id, q.options[0].value)}
-                        onDismiss={i === 0 ? onClose : undefined}
+                        // Skip takes the recommended answer where there is one, the first option
+                        // otherwise. It means "you choose", not "stop" — stopping is the × above,
+                        // which is offered on EVERY question rather than only the first. Having
+                        // the exit vanish after question one left the only way out as answering
+                        // every remaining question.
+                        onSkip={() => answer(q.id, recommendedValue(q))}
+                        onDismiss={onClose}
+                        // Worded as a decision, not as closing a window: "Not now" answers the
+                        // question the user is actually asking themselves at this point.
+                        dismissLabel="Not now"
                         freeTextPlaceholder="Describe what you need instead"
                     />
                 )
@@ -291,14 +304,28 @@ export function FilesScaffoldPanel({
                     </p>
 
                     <div className="flex items-center justify-between gap-2 border-t border-gray-100 px-3.5 py-2.5">
-                        <button
-                            type="button"
-                            onClick={() => setAnswers({})}
-                            disabled={creating}
-                            className="rounded-lg border border-gray-200 px-3 py-1.5 text-[11px] text-gray-600 transition-colors hover:border-gray-300 hover:bg-gray-50 disabled:opacity-50"
-                        >
-                            Start over
-                        </button>
+                        {/* Two ways out, not one. "Start over" loops back to the same questions,
+                            which is the wrong escape for someone who has decided they do not want
+                            a folder structure after all — it was the only non-committing option,
+                            so the flow had no exit except answering everything again. */}
+                        <div className="flex items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                disabled={creating}
+                                className="rounded-lg px-2 py-1.5 text-[11px] text-gray-500 transition-colors hover:text-gray-900 disabled:opacity-50"
+                            >
+                                Not now
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setAnswers({})}
+                                disabled={creating}
+                                className="rounded-lg border border-gray-200 px-3 py-1.5 text-[11px] text-gray-600 transition-colors hover:border-gray-300 hover:bg-gray-50 disabled:opacity-50"
+                            >
+                                Start over
+                            </button>
+                        </div>
                         <button
                             type="button"
                             onClick={() => void create()}

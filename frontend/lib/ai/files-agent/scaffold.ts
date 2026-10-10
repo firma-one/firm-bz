@@ -25,7 +25,6 @@ import type { FolderProposal } from './tools'
 
 export type ScaffoldQuestionId =
     | 'engagementKind'
-    | 'clientFacing'
     | 'reviewStages'
     | 'workingPapers'
     | 'numbering'
@@ -55,16 +54,6 @@ export const SCAFFOLD_QUESTIONS: ScaffoldQuestion[] = [
             { value: 'audit', label: 'Audit or assurance', description: 'Testing, evidence, a signed opinion' },
             { value: 'implementation', label: 'Implementation or delivery', description: 'Build, migrate, roll out' },
             { value: 'retainer', label: 'Ongoing retainer', description: 'Recurring work with no fixed end' },
-        ],
-    },
-    {
-        id: 'clientFacing',
-        // Recommended: separating internal work costs one folder and prevents the failure that
-        // cannot be undone — a client reaching material meant for the team.
-        question: 'Will the client have access to this folder?',
-        options: [
-            { value: 'shared', label: 'Yes — they will see shared folders', description: 'Internal work is kept separate', recommended: true },
-            { value: 'internal', label: 'No — internal only for now' },
         ],
     },
     {
@@ -206,17 +195,25 @@ export function buildScaffold(answers: ScaffoldAnswers): ScaffoldFolder[] {
         tree.push({ name: 'Working Papers', purpose: 'Source data and workings, kept out of the deliverables' })
     }
 
-    // Internal last, so a client scanning the shared folder meets the work before the back office.
-    if (answers.clientFacing === 'shared') {
-        tree.push({
-            name: 'Internal',
-            purpose: 'Not shared with the client',
-            children: [
-                { name: 'Admin', purpose: 'Fees, scheduling and correspondence' },
-                { name: 'Notes', purpose: 'Internal discussion and drafts' },
-            ],
-        })
-    }
+    // ALWAYS created, and last, so a client scanning the folder meets the work before the back
+    // office.
+    //
+    // This used to be conditional on a question — "Will the client have access to this folder?" —
+    // which was the wrong question to ask at setup. Sharing is a deliberate act after work is
+    // ready, not a property decided before any work exists, and the answer did not control
+    // sharing anyway: it only decided whether this folder got made.
+    //
+    // Separating internal work from client work is right regardless of who can see what today.
+    // The engagement that is internal-only now is shared later, and the folder that should have
+    // existed from the start is the one nobody made.
+    tree.push({
+        name: 'Internal',
+        purpose: 'Fees, notes and working discussion — never shared with the client',
+        children: [
+            { name: 'Admin', purpose: 'Fees, scheduling and correspondence' },
+            { name: 'Notes', purpose: 'Internal discussion and drafts' },
+        ],
+    })
 
     return tree.map((folder, i) => ({
         ...folder,
