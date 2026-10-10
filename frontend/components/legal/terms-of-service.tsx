@@ -198,9 +198,77 @@ function TermsOfServicePageView() {
           </div>
         </section>
 
+        <section
+          id="ai"
+          className="scroll-mt-36 grid grid-cols-1 items-start gap-10 lg:grid-cols-12 lg:gap-12"
+        >
+          <div className="lg:col-span-4">
+            <SectionHeading n="04" title="AI assistant" />
+            <p className="mt-4 text-sm leading-relaxed text-[#45474c]">
+              What Brio does, what it will not do, and who is accountable for the result.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:col-span-8">
+            <TechnicalCard>
+              <div className="mb-4 flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 shrink-0 text-[#5a78ff]" aria-hidden />
+                <h3 className={cn("text-[10px] font-bold uppercase tracking-widest", headline)}>
+                  Output may be wrong
+                </h3>
+              </div>
+              <p className="text-sm leading-relaxed text-[#45474c]">
+                Brio generates its answers, and generated answers can be incomplete or incorrect
+                even when they read as confident. Treat them as a starting point, not as a
+                professional conclusion. You remain responsible for checking anything you rely on,
+                and for the advice you give your own clients.
+              </p>
+            </TechnicalCard>
+            <TechnicalCard>
+              <div className="mb-4 flex items-center gap-2">
+                <Check className="h-5 w-5 shrink-0 text-[#5a78ff]" aria-hidden />
+                <h3 className={cn("text-[10px] font-bold uppercase tracking-widest", headline)}>
+                  You approve every change
+                </h3>
+              </div>
+              <p className="text-sm leading-relaxed text-[#45474c]">
+                Brio can rename and move files and create folders. It proposes; you approve each
+                change before anything happens, and nothing happens without that approval. A change
+                you approve is your decision and your responsibility — it is recorded in your audit
+                trail against both the assistant and your account.
+              </p>
+            </TechnicalCard>
+            <TechnicalCard>
+              <div className="mb-4 flex items-center gap-2">
+                <HardDrive className="h-5 w-5 shrink-0 text-[#5a78ff]" aria-hidden />
+                <h3 className={cn("text-[10px] font-bold uppercase tracking-widest", headline)}>
+                  It never deletes
+                </h3>
+              </div>
+              <p className="text-sm leading-relaxed text-[#45474c]">
+                Brio performs reversible operations only. It will not delete, trash or archive a
+                file, a folder or a member, and it will not remove anyone&apos;s access. Asked to,
+                it declines and points you to where you can do it yourself.
+              </p>
+            </TechnicalCard>
+            <TechnicalCard>
+              <div className="mb-4 flex items-center gap-2">
+                <CreditCard className="h-5 w-5 shrink-0 text-[#5a78ff]" aria-hidden />
+                <h3 className={cn("text-[10px] font-bold uppercase tracking-widest", headline)}>
+                  AI credits
+                </h3>
+              </div>
+              <p className="text-sm leading-relaxed text-[#45474c]">
+                AI features consume credits included with your plan. Credits reset each billing
+                period, do not carry over, and are not separately refundable. When they run out, AI
+                features pause until the next period; everything else keeps working.
+              </p>
+            </TechnicalCard>
+          </div>
+        </section>
+
         <section className="grid grid-cols-1 items-start gap-10 lg:grid-cols-12 lg:gap-12">
           <div className="lg:col-span-4">
-            <SectionHeading n="04" title="Intellectual property" />
+            <SectionHeading n="05" title="Intellectual property" />
             <p className="mt-4 text-sm leading-relaxed text-[#45474c]">Our platform and your responsibilities.</p>
           </div>
           <div className="lg:col-span-8">
@@ -220,7 +288,7 @@ function TermsOfServicePageView() {
 
         <section className="grid grid-cols-1 items-start gap-10 lg:grid-cols-12 lg:gap-12">
           <div className="lg:col-span-4">
-            <SectionHeading n="05" title="Contact" />
+            <SectionHeading n="06" title="Contact" />
             <p className="mt-4 text-sm leading-relaxed text-[#45474c]">Questions about these Terms.</p>
           </div>
           <div className="lg:col-span-8">
@@ -345,9 +413,62 @@ function TermsOfServiceEmbedded() {
           </div>
         </div>
 
-        <div className="flex gap-4">
+        <div id="ai" className="scroll-mt-36 flex gap-4">
           <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-900 text-sm font-bold text-white">
             4
+          </div>
+          <div>
+            <h3 className="mb-4 mt-0 text-xl font-bold text-slate-900">AI Assistant</h3>
+            <ul className="ml-1 mt-2 space-y-3">
+              <li className="flex items-start gap-3">
+                <div className="mt-1">
+                  <Check className="h-4 w-4 text-purple-600" />
+                </div>
+                <span>
+                  <strong>Output may be wrong:</strong> Brio generates its answers, and generated
+                  answers can be incomplete or incorrect even when they read as confident. You
+                  remain responsible for checking anything you rely on, and for the advice you give
+                  your own clients.
+                </span>
+              </li>
+              <li className="flex items-start gap-3">
+                <div className="mt-1">
+                  <Check className="h-4 w-4 text-purple-600" />
+                </div>
+                <span>
+                  <strong>You approve every change:</strong> Brio proposes renames, moves and new
+                  folders; nothing happens until you approve each one. A change you approve is your
+                  decision, recorded in your audit trail against both the assistant and your
+                  account.
+                </span>
+              </li>
+              <li className="flex items-start gap-3">
+                <div className="mt-1">
+                  <Check className="h-4 w-4 text-purple-600" />
+                </div>
+                <span>
+                  <strong>It never deletes:</strong> Brio performs reversible operations only. It
+                  will not delete, trash or archive a file, folder or member, and will not remove
+                  anyone&apos;s access.
+                </span>
+              </li>
+              <li className="flex items-start gap-3">
+                <div className="mt-1">
+                  <Check className="h-4 w-4 text-purple-600" />
+                </div>
+                <span>
+                  <strong>AI credits:</strong> AI features consume credits included with your plan.
+                  Credits reset each billing period, do not carry over, and are not separately
+                  refundable. When they run out, AI features pause until the next period.
+                </span>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <div className="flex gap-4">
+          <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-900 text-sm font-bold text-white">
+            5
           </div>
           <div>
             <h3 className="mb-4 mt-0 text-xl font-bold text-slate-900">Intellectual Property Rights</h3>
@@ -360,7 +481,7 @@ function TermsOfServiceEmbedded() {
 
         <div className="flex gap-4">
           <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-900 text-sm font-bold text-white">
-            5
+            6
           </div>
           <div>
             <h3 className="mb-4 mt-0 text-xl font-bold text-slate-900">Contact Information</h3>
