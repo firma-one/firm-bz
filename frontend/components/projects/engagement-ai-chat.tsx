@@ -546,7 +546,21 @@ export function EngagementAiChat({
 
     /** Pinned conversations are listed on their own tab; recents shows the rest. */
     const pinnedConversations = useMemo(() => conversations.filter((c) => c.pinned), [conversations])
-    const recentConversations = useMemo(() => conversations.filter((c) => !c.pinned), [conversations])
+    /**
+     * ALL conversations, pinned ones first — not the unpinned remainder.
+     *
+     * Pinning used to move a conversation out of this list, which made pinning your only
+     * conversation empty the tab that lists conversations: it read as deletion. A pin is an
+     * attribute of a conversation, not a different kind of thing, so it stays where it was and
+     * the row's pin icon marks it. The pin tab is a filtered view for when there are many.
+     */
+    const allConversations = useMemo(
+        () => [...conversations].sort((a, b) => {
+            if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1
+            return b.updatedAt - a.updatedAt
+        }),
+        [conversations],
+    )
 
     // Grow the composer with its content, up to three lines.
     //
@@ -1116,7 +1130,9 @@ export function EngagementAiChat({
                     setConversations(clearConversations(projectId, scope))
                     startNewConversation()
                 }}
-                disabled={recentConversations.length === 0}
+                // Clearing only removes the unpinned ones, so there is nothing to do when
+                // every conversation is pinned.
+                disabled={conversations.every((c) => c.pinned)}
                 className="flex h-5 w-5 items-center justify-center rounded text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:pointer-events-none disabled:opacity-30"
                 aria-label="Clear recent conversations. Pinned conversations are kept."
                 title="Clear recents (pins are kept)"
@@ -1124,15 +1140,15 @@ export function EngagementAiChat({
                 <Trash2 className="h-3.5 w-3.5" />
             </button>
         ),
-        footer: `Kept on this browser for ${MAX_AGE_DAYS} days. Answers show the date they were given.`,
-        children: recentConversations.length === 0 ? (
+        // Says "unpinned" because pinned rows are in this list too and are exempt from the
+        // age-out — a flat "kept for 30 days" would be wrong about half of what is shown.
+        footer: `Unpinned conversations are kept on this browser for ${MAX_AGE_DAYS} days.`,
+        children: allConversations.length === 0 ? (
             <p className="text-[11px] leading-snug text-gray-400">
-                {pinnedConversations.length > 0
-                    ? 'Nothing recent. Your pinned conversations are on the pin tab.'
-                    : 'Conversations you have here will show up in this list.'}
+                Conversations you have here will show up in this list.
             </p>
         ) : (
-            <>{recentConversations.map(renderConversationRow)}</>
+            <>{allConversations.map(renderConversationRow)}</>
         ),
     })
 
@@ -1197,7 +1213,7 @@ export function EngagementAiChat({
                     composer, where the eye already is when deciding what to ask, and a copy in
                     here was simply the same four chips shown twice. */}
                 {([
-                    { id: 'recents', label: 'Conversations', icon: History, count: recentConversations.length },
+                    { id: 'recents', label: 'Conversations', icon: History, count: allConversations.length },
                     { id: 'pins', label: 'Pinned conversations', icon: Pin, count: pinnedConversations.length },
                 ] as const).map(({ id, label, icon: Icon, count }) => (
                     <Tooltip key={id}>
