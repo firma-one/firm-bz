@@ -23,6 +23,14 @@ export function ChatMarkdown({ content, className }: { content: string; classNam
         <div
             className={cn(
                 'text-sm leading-relaxed',
+                // Wrap long unbreakable tokens rather than overflowing the column.
+                //
+                // Answers name files, and a filename is one word to the line breaker:
+                // `01_ICP_Firmographics_&_Persona_Data.xlsx` has no break opportunity in it. Any
+                // column narrower than the longest name would otherwise push text past its edge,
+                // where the panel clips it. `break-words` only breaks tokens that do not fit, so
+                // ordinary prose still wraps between words.
+                'break-words',
                 // Prose is capped at a readable measure while TABLES are not.
                 //
                 // The panel is resizable, and widening it is usually for a table that does not fit

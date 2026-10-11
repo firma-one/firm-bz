@@ -162,6 +162,60 @@ Consequences you must respect:
 - The client sits above the engagement, so client-wide or firm-wide questions ("how are all our
   clients doing") are outside this snapshot — say so rather than answering from this engagement.`
 
+/**
+ * What the user is looking at when they ask.
+ *
+ * Until now the same snapshot and the same prompt went to the model from every page, so an
+ * answer on Overview and an answer on Files were shaped identically — the model had no idea
+ * which one the reader was on, and pointed people at tabs they were already standing on.
+ *
+ * Scope does two jobs: it trims the payload (see `FilesContextDetail`) and it tells the model
+ * what the reader can see, so "you'll find them in Files" is only ever said to someone who is
+ * not already there.
+ *
+ * Deliberately a small closed union rather than a free string: it is part of the CACHED prompt
+ * prefix, so an unexpected value would silently halve the cache hit rate rather than fail.
+ */
+export type ChatScope = 'overview' | 'files'
+
+export const CHAT_SCOPES: readonly ChatScope[] = ['overview', 'files'] as const
+
+/** Narrows an untrusted value, defaulting to the broader scope. */
+export function parseChatScope(raw: unknown): ChatScope {
+    return CHAT_SCOPES.includes(raw as ChatScope) ? (raw as ChatScope) : 'overview'
+}
+
+/**
+ * The scope-specific half of the system prompt, appended to the shared rules.
+ *
+ * Kept to what actually differs. Both scopes answer from the same engagement and obey the same
+ * boundaries; what changes is which detail the reader has in front of them and therefore what
+ * an answer should lead with and where it should point.
+ */
+export function chatScopeGuidance(scope: ChatScope): string {
+    if (scope === 'files') {
+        return `--- WHAT THE READER IS LOOKING AT ---
+They are on the FILES tab, with the folder tree and file list visible.
+
+- Lead with files, folders and deliverables. Naming, placement, duplicates, due dates on
+  documents and what is missing from a folder are the subject here.
+- Name files and folders explicitly. The reader can see them, so "01_ICP_Firmographics.xlsx is
+  in the wrong folder" is useful where "one file is misplaced" is not.
+- Do NOT tell them to "go to Files" or "check the Files tab" — they are there.
+- Engagement-level questions are still in scope. Answer them, then relate the answer back to
+  what is on this page where there is a genuine connection.`
+    }
+    return `--- WHAT THE READER IS LOOKING AT ---
+They are on the OVERVIEW tab, with engagement health, deliverables and the manager's note
+visible. They cannot see individual file names from here.
+
+- Lead with engagement status: progress, due dates, ownership, what is at risk.
+- Individual file names are not in front of you for this scope. Where a question needs them,
+  say what is true at the deliverable level and point to the Files tab for the detail. Never
+  invent a file name.
+- Deliverables and their due dates ARE engagement status, not file detail — use them freely.`
+}
+
 export const CHAT_SYSTEM_PROMPT = `You are ${ASSISTANT.name}, an analyst assistant for a professional services firm, answering questions about one engagement.
 
 ${PLATFORM_DATA_MODEL}

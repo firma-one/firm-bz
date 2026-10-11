@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown, GripVertical } from 'lucide-react'
+import type { ChatScope } from '@/lib/ai/engagement-chat'
 import { EngagementAiChat, type ChatThreadApi } from '@/components/projects/engagement-ai-chat'
 import { Brio } from '@/components/ui/brio'
 import type { EngagementInsightsResponse } from '@/lib/insights/engagement-insights'
@@ -30,8 +31,24 @@ import type { EngagementInsightsResponse } from '@/lib/insights/engagement-insig
 type Side = 'right' | 'left'
 
 const SIDE_KEY = 'fm_ai_chat_side'
+/**
+ * Width of the conversation column — the part that holds readable text.
+ *
+ * Tuned for line length, so it is the number that must not move when chrome is added beside it.
+ */
+const CONVERSATION_WIDTH_REM = 23
+/**
+ * The always-visible icon rail on the panel's docked edge (Hints, Recents).
+ *
+ * Kept OUT of the conversation's width budget: the rail is permanent, so taking it out of the
+ * column would permanently narrow the thread to pay for chrome, undoing the line-length tuning
+ * above. The panel is wider at rest instead, and the text keeps exactly the measure it had.
+ *
+ * Must match the rail's `w-10` class.
+ */
+const RAIL_WIDTH_REM = 2.5
 /** Panel width, shared between the docked position and the drag clamp. */
-const PANEL_WIDTH_REM = 23
+const PANEL_WIDTH_REM = CONVERSATION_WIDTH_REM + RAIL_WIDTH_REM
 /**
  * Inset from the viewport edge when docked, and the clamp margin while dragging.
  *
@@ -86,6 +103,9 @@ const DEFAULT_HEIGHT_PX = 512
  * per line and the composer stops holding a sentence. Widening is for content the default cannot
  * show well — a four-column table in a 23rem column is unreadable whatever the prose does.
  *
+ * Includes the icon rail, so the floor still leaves the conversation its full
+ * `CONVERSATION_WIDTH_REM` rather than the rail eating into it at the narrowest size.
+ *
  * Capped rather than unbounded: past about half a wide screen the panel stops being a panel and
  * starts covering the file list it is commenting on.
  */
@@ -134,7 +154,6 @@ export function FloatingAiChat({
     suggestionsOverride,
     suggestionActions,
     placeholder,
-    emptyStateNote,
     capabilityNote,
 }: {
     projectId: string
@@ -150,7 +169,7 @@ export function FloatingAiChat({
     /** Agent output rendered inside the thread — see EngagementAiChat. */
     aboveThread?: React.ReactNode
     /** Which page this is, so each keeps its own persisted thread. */
-    surface?: string
+    surface?: ChatScope
     /** Lets `aboveThread` post turns into the conversation — see EngagementAiChat. */
     threadRef?: React.MutableRefObject<ChatThreadApi | null>
     /** Starting prompts for the host page, replacing the engagement-derived set. */
@@ -159,8 +178,6 @@ export function FloatingAiChat({
     suggestionActions?: React.ReactNode
     /** Composer prompt text — see EngagementAiChat. */
     placeholder?: string
-    /** Replaces the default empty-state line where it is not accurate. */
-    emptyStateNote?: React.ReactNode
     /** One line in the header saying what this panel can do here — see EngagementAiChat. */
     capabilityNote?: React.ReactNode
 }) {
@@ -291,13 +308,38 @@ export function FloatingAiChat({
     const [busy, setBusy] = useState(false)
 
     /**
+     * Whether the recent-questions pane is open, and by how much the panel grows for it.
+     *
+     * The pane is a column beside the conversation rather than a sheet over it, so at the panel's
+     * usual 23rem it would leave the thread 6rem wide. Growing by the pane's own width keeps the
+     * conversation exactly as readable as it was — the pane costs screen space, not content.
+     */
+    const [historyOpen, setHistoryOpen] = useState(false)
+    const HISTORY_PANE_PX = 272
+
+    // `inert` driven imperatively: see the note on the panel element. A collapsed panel is kept
+    // mounted so an in-flight answer survives, and its controls must leave the tab order while it
+    // is away — but they must come back the instant it opens, which is the half a prop gets
+    // wrong.
+    useEffect(() => {
+        if (!panelEl) return
+        if (!open && !closing) panelEl.setAttribute('inert', '')
+        else panelEl.removeAttribute('inert')
+    }, [panelEl, open, closing])
+
+    /**
      * Panel width in pixels, for the docked-position arithmetic.
      *
      * The LIVE width, not the constant: a right-docked panel is positioned by `left`, so a stale
      * width here would leave it hanging off the gutter the moment it was resized — the same class
      * of bug as computing the dock from 100vw.
      */
-    const panelPx = width
+    const panelPx = Math.min(
+        width + (historyOpen ? HISTORY_PANE_PX : 0),
+        // Never wider than the window allows, so a wide panel on a narrow screen does not run off
+        // the edge rather than growing inward.
+        Math.max(width, viewportWidth - GUTTER * 2),
+    )
 
     /**
      * Panel height, user-set by dragging the top edge and remembered across engagements.
@@ -518,13 +560,22 @@ export function FloatingAiChat({
         <>
         {launcher}
         <div
-            /* `aria-hidden` and `inert` only: the actual hiding is the `hidden` CLASS below.
-               The `hidden` ATTRIBUTE sets display:none at the lowest precedence, and this element
-               carries `flex`, which overrides it — so the panel stayed on screen when collapsed and
-               the minimise button appeared to do nothing. `inert` is what keeps its controls out of
-               the tab order while it is away. */
-            aria-hidden={!open && !closing}
-            inert={!open && !closing}
+            /* The actual hiding is the `hidden` CLASS below. The `hidden` ATTRIBUTE sets
+               display:none at the lowest precedence, and this element carries `flex`, which
+               overrides it — so the panel stayed on screen when collapsed and the minimise button
+               appeared to do nothing.
+
+               `inert` is set as a real attribute via a ref rather than as a prop. As a prop it
+               must be REMOVED when the panel opens, and a stale `inert` leaves everything inside
+               unclickable — the composer looked disabled for no visible reason. Setting and
+               removing it directly makes that a statement rather than something React has to
+               undo correctly across a transition.
+
+               No `aria-hidden`. The `hidden` class already removes a collapsed panel from the
+               accessibility tree, so the attribute added nothing — and it is applied to a
+               CONTAINER, so a stale one hides every control inside it from assistive technology
+               and stops some engines painting the composer's placeholder at all. Two attributes
+               doing one job, where the redundant one fails louder than the one that works. */
             ref={setPanelEl}
             /* Tall and narrow, not wide. Chat is a vertical medium — messages stack downward and
                the eye tracks a column — and comfortable reading runs out past roughly 75
@@ -543,7 +594,7 @@ export function FloatingAiChat({
                 height: `${height}px`,
                 // Width is a style, not a class: Tailwind extracts class names statically, so an
                 // interpolated `w-[...]` would never be generated.
-                width: `${width}px`,
+                width: `${panelPx}px`,
                 transformOrigin: side === 'right' ? 'bottom right' : 'bottom left',
                 // Always positioned by `left`, which is what lets the dock change animate: swapping
                 // to `right` would mean the browser had no single property to interpolate and the
@@ -580,7 +631,13 @@ export function FloatingAiChat({
                     ? 'animate-out fade-out zoom-out-95 fill-mode-forwards pointer-events-none'
                     : 'animate-in fade-in zoom-in-95'
             } ${
-                dragging ? 'cursor-grabbing select-none' : 'transition-[left] duration-200 ease-out'
+                // Width animates with `left`, so opening the recents pane reads as the panel
+                // growing to make room rather than snapping to a new size. Both are suppressed
+                // while dragging or resizing: there the panel must track the pointer exactly, and
+                // an easing curve would make it lag behind the cursor.
+                dragging || resizingWidth
+                    ? 'cursor-grabbing select-none'
+                    : 'transition-[left,width] duration-200 ease-out'
             }`}
         >
             {/* Resize grip along the INNER vertical edge — left when docked right, right when
@@ -618,39 +675,6 @@ export function FloatingAiChat({
                 }`}
             />
 
-            {/* The panel's own header carries the title; this strip owns only window controls, so
-                the two never compete to name the thing. */}
-            <div className="flex items-center gap-0.5 rounded-t-lg border-b border-primary/10 bg-primary/5 px-1.5 py-1">
-                {/* Leading, and a wide target: a drag handle is grabbed rather than clicked, so it
-                    needs an area the hand can find without aiming. Dragging anywhere along the
-                    header bar would be more generous still, but that would swallow the collapse
-                    button's own pointer events. */}
-                <button
-                    type="button"
-                    onPointerDown={startDrag}
-                    className={`flex h-7 flex-1 cursor-grab items-center gap-1 rounded px-1.5 text-gray-400 transition-colors hover:bg-white/70 hover:text-gray-600 active:cursor-grabbing ${
-                        dragging ? 'bg-white/70 text-gray-600' : ''
-                    }`}
-                    aria-label="Drag to move the assistant to the other side"
-                    title="Drag to move"
-                >
-                    <GripVertical className="h-4 w-4 shrink-0" />
-                    <span className="text-[10px] uppercase tracking-wider">Drag</span>
-                </button>
-                {/* Collapse, not close: the conversation is kept and the panel returns to its
-                    launcher. An X claims the thread is being discarded, which would make people
-                    hesitate to put it away. */}
-                <button
-                    type="button"
-                    onClick={toggleOpen}
-                    className="flex h-6 w-6 items-center justify-center rounded text-gray-400 transition-colors hover:bg-white hover:text-gray-700"
-                    aria-label="Collapse the assistant"
-                    title="Collapse"
-                >
-                    <ChevronDown className="h-4 w-4" />
-                </button>
-            </div>
-
             {/* Kept mounted while open so the thread, ratings and suggestions survive a dock flip. */}
             <EngagementAiChat
                 projectId={projectId}
@@ -662,9 +686,23 @@ export function FloatingAiChat({
                 suggestionActions={suggestionActions}
                 aboveThread={aboveThread}
                 surface={surface}
+                // Derived, not a second prop for callers to set: a page that said
+                // surface="files" and switchable={true} would be self-contradictory. The Files
+                // page IS the file scope and stays there; the broader page is the one that may
+                // want to reach into the detail without navigating away.
+                scopeSwitchable={(surface ?? 'overview') === 'overview'}
                 threadRef={threadRef}
+                onStartDrag={startDrag}
+                dragging={dragging}
+                onCollapse={toggleOpen}
+                // The same word the collapsed pill shows, so the panel names one scope rather
+                // than two depending on whether it is open.
+                scopeLabel={title}
+                onHistoryOpenChange={setHistoryOpen}
+                // So the pane opens on the docked edge, leaving the inner edge —
+                // and the resize grip that lives on it — clear.
+                dockSide={side}
                 placeholder={placeholder}
-                emptyStateNote={emptyStateNote}
                 capabilityNote={capabilityNote}
                 onBusyChange={setBusy}
             />

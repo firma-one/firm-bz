@@ -74,7 +74,21 @@ function pathOf(node: FileNode, byId: Map<string, FileNode>): string {
  * duplicated here" are both questions about neighbours, and a flat list makes the model infer the
  * grouping it needs from a column of paths.
  */
-export function buildFilesContext(nodes: FileNode[]): string {
+/**
+ * How much of the file tree to spell out.
+ *
+ * `full` lists every file under its folder — what the Files page needs, where naming, placement
+ * and duplicates are the subject.
+ *
+ * `summary` keeps the counts and the deliverable folders with their due dates, and drops the
+ * per-file listing. On Overview the question is how the engagement is tracking, and forty file
+ * names are both noise in the answer and the largest single block in a cached prompt that is
+ * paid for on every conversation. Deliverables stay because their due dates ARE engagement
+ * status, not file detail.
+ */
+export type FilesContextDetail = 'full' | 'summary'
+
+export function buildFilesContext(nodes: FileNode[], detail: FilesContextDetail = 'full'): string {
     if (nodes.length === 0) return ''
 
     const byId = new Map(nodes.map((n) => [n.externalId, n]))
@@ -101,6 +115,16 @@ export function buildFilesContext(nodes: FileNode[]): string {
                 : 'NO DUE DATE'
             lines.push(`  ${f.docId} — ${f.fileName} (${due})`)
         }
+    }
+
+    // Everything below is the per-file listing, which the summary form omits. The model is told
+    // the files exist (the count above) and where to look, so it can say "you'll find them in
+    // Files" rather than inventing names it was not given.
+    if (detail === 'summary') {
+        if (files.length > 0) {
+            lines.push('Individual file names are not listed here — they are on the Files tab.')
+        }
+        return lines.join('\n')
     }
 
     const grouped = new Map<string, FileNode[]>()

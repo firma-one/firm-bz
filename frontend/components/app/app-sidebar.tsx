@@ -8,6 +8,7 @@ import { useSidebar } from "@/lib/sidebar-context"
 import {
   Users,
   ChevronDown,
+  PanelLeft,
   Briefcase,
   BarChart3,
   Building2,
@@ -643,15 +644,13 @@ export function AppSidebar({ variant = 'fixed', isSystemAdmin = false }: AppSide
               className="absolute right-0 top-4 translate-x-1/2 z-[500] w-8 h-8 rounded-full bg-white text-[#45474c] hover:bg-[#f3f4f6] flex items-center justify-center shadow-sm border border-[#e5e7eb] cursor-pointer"
               aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             >
-              {isCollapsed ? (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-                  <path d="M3 18h18v-2H3zm0-5h18v-2H3zm0-7v2h18V6z"/>
-                </svg>
-              ) : (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-                  <path d="M3 18h13v-2H3zm0-5h10v-2H3zm0-7v2h13V6zm18 9.59L17.42 12 21 8.41 19.59 7l-5 5 5 5z"/>
-                </svg>
-              )}
+              {/* ONE icon for both states, matching the assistant panel's side panes.
+                  Swapping between a hamburger and a menu-with-arrow made the control look like
+                  two different buttons depending on the state, and the hamburger in particular
+                  reads as "open a menu" rather than "this panel toggles". The panel glyph names
+                  the thing being toggled; `aria-label` carries the direction, which is where a
+                  state change belongs. */}
+              <PanelLeft className="h-3.5 w-3.5" aria-hidden />
             </button>
 
             <div className="flex-1 min-h-0 flex flex-col overflow-hidden">

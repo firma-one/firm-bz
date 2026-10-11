@@ -103,3 +103,40 @@ describe('buildFilesContext', () => {
         expect(buildFilesContext(nodes)).toBe(buildFilesContext(nodes))
     })
 })
+
+describe('summary detail', () => {
+    const nodes: FileNode[] = [
+        folder('f1', '01__Market Report'),
+        file('d1', 'Secret_Client_Pricing.xlsx', 'f1'),
+        file('d2', 'Interview_Notes.docx', 'f1'),
+    ]
+
+    it('keeps counts but omits individual file names', () => {
+        const out = buildFilesContext(nodes, 'summary')
+        expect(out).toContain('2 files in 1 folder')
+        expect(out).not.toContain('Secret_Client_Pricing.xlsx')
+        expect(out).not.toContain('Interview_Notes.docx')
+        // Says where the detail is, so the model points there instead of inventing names.
+        expect(out).toContain('Files tab')
+    })
+
+    it('keeps deliverable folders and their due dates — those are engagement status', () => {
+        const withDeliverable: FileNode[] = [
+            { externalId: 'f2', fileName: 'QSR-9 Report', isFolder: true, parentId: null, docId: 'QSR-9', dueDate: '2026-10-16' },
+            file('d3', 'draft.docx', 'f2'),
+        ]
+        const out = buildFilesContext(withDeliverable, 'summary')
+        expect(out).toContain('QSR-9')
+        expect(out).toContain('2026-10-16')
+        expect(out).not.toContain('draft.docx')
+    })
+
+    it('defaults to the full listing', () => {
+        expect(buildFilesContext(nodes)).toContain('Interview_Notes.docx')
+        expect(buildFilesContext(nodes, 'full')).toContain('Interview_Notes.docx')
+    })
+
+    it('is empty for an empty tree, whatever the detail', () => {
+        expect(buildFilesContext([], 'summary')).toBe('')
+    })
+})

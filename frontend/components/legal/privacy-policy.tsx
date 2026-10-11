@@ -331,8 +331,11 @@ function PrivacyPolicyPageView() {
                 </h3>
               </div>
               <p className="text-sm leading-relaxed text-[#45474c]">
-                Conversations with Brio are not stored on our servers — they live in your browser
-                for the session and are gone when you close the tab. When you rate an answer, we
+                Conversations with Brio are not stored on our servers — they are saved in your
+                browser, on the device you used, so you can reopen them. They are kept for up to
+                30 days unless you pin them, and you can delete any of them, or all of them, from
+                the assistant panel at any time. Clearing your browser data removes them too. When
+                you rate an answer, we
                 record the rating and the category you pick, never the question you asked or the
                 answer you received. We also record how many AI requests an account makes, to apply
                 plan limits and bill correctly.
@@ -694,7 +697,8 @@ function PrivacyPolicyEmbedded() {
                 </div>
                 <span>
                   <strong>What we keep:</strong> conversations are not stored on our servers — they
-                  live in your browser for the session. When you rate an answer we record the
+                  are saved in your browser for up to 30 days, and you can delete them there. When
+                  you rate an answer we record the
                   rating and the category you pick, never the question or the answer. We also count
                   AI requests to apply plan limits.
                 </span>
